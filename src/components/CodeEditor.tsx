@@ -18,7 +18,11 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 }) => {
   const dispatch = useDispatch();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const recordingIntervalRef = useRef<number | null>(null);
+  const lastRecordedStateRef = useRef<{
+    content: string;
+    selection: monaco.Selection | null;
+    viewState: monaco.editor.ICodeEditorViewState | null;
+  } | null>(null);
   const { isRecording } = useSelector((state: RootState) => state.recording);
   const { isPlaying, editorState } = useSelector((state: RootState) => state.replay);
 
@@ -27,43 +31,86 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   };
   
   const handleEditorChange: OnChange = () => {
-    // Recording handled by interval
+    // State change recording handled by useEffect
   };
   
-  // Interval-based recording with minimal interval
-  useEffect(() => {
+  // State-change-based recording - only record when editor state actually changes
+  const recordStateChange = React.useCallback(() => {
     if (isRecording && !isPlaying && editorRef.current) {
-      recordingIntervalRef.current = setInterval(() => {
-        const editor = editorRef.current;
-        if (editor) {
-          const content = editor.getValue();
-          const selection = editor.getSelection();
-          const viewState = editor.saveViewState();
-          
-          if (selection && viewState) {
-            dispatch(addSnapshot({
-              state: {
-                content,
-                selection,
-                viewState,
-              }
-            }));
-          }
-        }
-      }, 16); // ~60fps - minimal interval for smooth recording
+      const editor = editorRef.current;
+      const content = editor.getValue();
+      const selection = editor.getSelection();
+      const viewState = editor.saveViewState();
       
-      return () => {
-        if (recordingIntervalRef.current) {
-          clearInterval(recordingIntervalRef.current);
-        }
+      // Check if state has actually changed
+      const currentState = {
+        content,
+        selection,
+        viewState,
       };
-    } else {
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
-        recordingIntervalRef.current = null;
+      
+      const lastState = lastRecordedStateRef.current;
+      const hasChanged = !lastState || 
+        lastState.content !== content ||
+        !lastState.selection ||
+        !selection ||
+        lastState.selection.startLineNumber !== selection.startLineNumber ||
+        lastState.selection.startColumn !== selection.startColumn ||
+        lastState.selection.endLineNumber !== selection.endLineNumber ||
+        lastState.selection.endColumn !== selection.endColumn;
+      
+      if (hasChanged && selection && viewState) {
+        dispatch(addSnapshot({
+          state: {
+            content,
+            selection,
+            viewState,
+          }
+        }));
+        
+        // Update the last recorded state
+        lastRecordedStateRef.current = currentState;
       }
     }
   }, [isRecording, isPlaying, dispatch]);
+  
+  // Set up Monaco editor change listeners for recording
+  useEffect(() => {
+    if (isRecording && !isPlaying && editorRef.current) {
+      const editor = editorRef.current;
+      
+      // Listen to content changes
+      const contentDisposable = editor.onDidChangeModelContent(() => {
+        recordStateChange();
+      });
+      
+      // Listen to cursor/selection changes
+      const selectionDisposable = editor.onDidChangeCursorSelection(() => {
+        recordStateChange();
+      });
+      
+      // Listen to view state changes (scroll, etc.)
+      const scrollDisposable = editor.onDidScrollChange(() => {
+        recordStateChange();
+      });
+      
+      // Record initial state when recording starts
+      recordStateChange();
+      
+      return () => {
+        contentDisposable.dispose();
+        selectionDisposable.dispose();
+        scrollDisposable.dispose();
+      };
+    }
+  }, [isRecording, isPlaying, recordStateChange]);
+  
+  // Reset last recorded state when recording starts
+  useEffect(() => {
+    if (isRecording && !isPlaying) {
+      lastRecordedStateRef.current = null;
+    }
+  }, [isRecording, isPlaying]);
   
   // Apply replay state to editor
   useEffect(() => {
