@@ -18,11 +18,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 }) => {
   const dispatch = useDispatch();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const lastRecordedStateRef = useRef<{
-    content: string;
-    selection: monaco.Selection | null;
-    viewState: monaco.editor.ICodeEditorViewState | null;
-  } | null>(null);
   const { isRecording } = useSelector((state: RootState) => state.recording);
   const { isPlaying, editorState } = useSelector((state: RootState) => state.replay);
 
@@ -31,35 +26,38 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   };
   
   const handleEditorChange: OnChange = () => {
-    // State change recording handled by useEffect
+    console.log('onChange triggered');
+    triggerStateChange();
   };
   
-  // State-change-based recording - only record when editor state actually changes
-  const recordStateChange = React.useCallback(() => {
-    if (isRecording && !isPlaying && editorRef.current) {
+  // State to trigger useEffect when changes occur
+  const [stateChangeCounter, setStateChangeCounter] = React.useState(0);
+  
+  // Function to trigger state change
+  const triggerStateChange = React.useCallback(() => {
+    if (isRecording && !isPlaying) {
+      setStateChangeCounter(prev => prev + 1);
+    }
+  }, [isRecording, isPlaying]);
+  
+  // useEffect to create snapshots with exact timestamps when state changes
+  useEffect(() => {
+    if (isRecording && !isPlaying && editorRef.current && stateChangeCounter > 0) {
       const editor = editorRef.current;
       const content = editor.getValue();
+      console.log('editor',editor);
+      console.log('content',content);
       const selection = editor.getSelection();
       const viewState = editor.saveViewState();
       
-      // Check if state has actually changed
-      const currentState = {
-        content,
+      console.log('Creating snapshot at exact timestamp:', {
+        stateChangeCounter,
+        content: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
         selection,
-        viewState,
-      };
+        viewState
+      });
       
-      const lastState = lastRecordedStateRef.current;
-      const hasChanged = !lastState || 
-        lastState.content !== content ||
-        !lastState.selection ||
-        !selection ||
-        lastState.selection.startLineNumber !== selection.startLineNumber ||
-        lastState.selection.startColumn !== selection.startColumn ||
-        lastState.selection.endLineNumber !== selection.endLineNumber ||
-        lastState.selection.endColumn !== selection.endColumn;
-      
-      if (hasChanged && selection && viewState) {
+      if (selection && viewState) {
         dispatch(addSnapshot({
           state: {
             content,
@@ -67,50 +65,40 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
             viewState,
           }
         }));
-        
-        // Update the last recorded state
-        lastRecordedStateRef.current = currentState;
       }
     }
-  }, [isRecording, isPlaying, dispatch]);
+  }, [stateChangeCounter, isRecording, isPlaying, dispatch]);
   
-  // Set up Monaco editor change listeners for recording
+  // Reset state change counter when recording starts
+  useEffect(() => {
+    if (isRecording && !isPlaying) {
+      setStateChangeCounter(0);
+    }
+  }, [isRecording, isPlaying]);
+  
+  // Also capture selection and scroll changes
   useEffect(() => {
     if (isRecording && !isPlaying && editorRef.current) {
       const editor = editorRef.current;
       
-      // Listen to content changes
-      const contentDisposable = editor.onDidChangeModelContent(() => {
-        recordStateChange();
-      });
-      
       // Listen to cursor/selection changes
       const selectionDisposable = editor.onDidChangeCursorSelection(() => {
-        recordStateChange();
+        console.log('Selection changed');
+        triggerStateChange();
       });
       
-      // Listen to view state changes (scroll, etc.)
+      // Listen to scroll changes
       const scrollDisposable = editor.onDidScrollChange(() => {
-        recordStateChange();
+        console.log('Scroll changed');
+        triggerStateChange();
       });
-      
-      // Record initial state when recording starts
-      recordStateChange();
       
       return () => {
-        contentDisposable.dispose();
         selectionDisposable.dispose();
         scrollDisposable.dispose();
       };
     }
-  }, [isRecording, isPlaying, recordStateChange]);
-  
-  // Reset last recorded state when recording starts
-  useEffect(() => {
-    if (isRecording && !isPlaying) {
-      lastRecordedStateRef.current = null;
-    }
-  }, [isRecording, isPlaying]);
+  }, [isRecording, isPlaying, triggerStateChange]);
   
   // Apply replay state to editor
   useEffect(() => {
