@@ -299,9 +299,11 @@ function EditorWithProgress() {
 
 ### 📚 Available Examples
 
-- **[Basic Recording](./examples/basic)** - Simple editor recording without audio
-- **[Perfect Audio Sync](./examples/with-audio)** - Audio recording with millisecond-precise synchronization  
-- **[Complete Demo](./examples/perfect-sync)** - Full-featured demo showcasing master timeline architecture
+- **Basic Recording** - Simple editor recording without audio
+- **Perfect Audio Sync** - Audio recording with millisecond-precise synchronization  
+- **Complete Demo** - Full-featured demo showcasing master timeline architecture
+
+See the `/examples` folder in this package for complete implementation examples.
 
 ### 🎯 Perfect Synchronization
 

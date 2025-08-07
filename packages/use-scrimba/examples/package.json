@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "dependencies": {
-    "use-scrimba": "^1.0.2"
+    "use-scrimba": "^1.0.7"
   },
   "devDependencies": {
     "@monaco-editor/react": "^4.6.0",
