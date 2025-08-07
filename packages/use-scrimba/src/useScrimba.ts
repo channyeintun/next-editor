@@ -227,11 +227,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     setCurrentTime(targetTime);
     
-    // Update playback start time if playing
-    if (isPlaying) {
-      playbackStartTimeRef.current = Date.now() - targetTime / playbackSpeed;
-    }
-    
     // Find the last snapshot before or at the target time
     let lastSnapshot: EditorSnapshot | null = null;
     
@@ -246,21 +241,67 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     if (lastSnapshot) {
       setCurrentSnapshot(lastSnapshot);
-      setEditorState({
+      const newState = {
         content: lastSnapshot.state.content,
         selection: lastSnapshot.state.selection,
         position: lastSnapshot.state.position,
         viewState: lastSnapshot.state.viewState,
-      });
+      };
+      setEditorState(newState);
+      
+      // Apply the state immediately to the editor, even when not playing
+      applyEditorState(newState);
     }
     
     onSeek?.(targetTime);
     
-    // Resume playback if it was playing
+    // If playing, update playback start time and continue playback
     if (isPlaying) {
-      play();
+      playbackStartTimeRef.current = Date.now() - targetTime / playbackSpeed;
+      
+      // Continue the playback timeline from new position
+      const updatePlayback = () => {
+        if (!playbackStartTimeRef.current) return;
+        
+        const elapsed = Date.now() - playbackStartTimeRef.current;
+        const adjustedTime = elapsed * playbackSpeed;
+        
+        setCurrentTime(adjustedTime);
+        
+        // Find current snapshot to apply
+        const currentSnapshotToApply = loadedRecording.snapshots
+          .filter(s => s.timestamp <= adjustedTime)
+          .pop();
+        
+        if (currentSnapshotToApply && currentSnapshotToApply !== currentSnapshot) {
+          setCurrentSnapshot(currentSnapshotToApply);
+          setEditorState({
+            content: currentSnapshotToApply.state.content,
+            selection: currentSnapshotToApply.state.selection,
+            position: currentSnapshotToApply.state.position,
+            viewState: currentSnapshotToApply.state.viewState,
+          });
+        }
+        
+        // Check if playback is complete
+        if (adjustedTime >= loadedRecording.duration) {
+          setIsPlaying(false);
+          setHasEnded(true);
+          setCurrentTime(loadedRecording.duration);
+          if (playbackTimerRef.current) {
+            clearInterval(playbackTimerRef.current);
+            playbackTimerRef.current = null;
+          }
+          return;
+        }
+        
+        // Continue playback
+        playbackTimerRef.current = setTimeout(updatePlayback, 16); // ~60fps
+      };
+      
+      updatePlayback();
     }
-  }, [loadedRecording, onSeek, isPlaying, playbackSpeed, play]);
+  }, [loadedRecording, onSeek, isPlaying, playbackSpeed, currentSnapshot, applyEditorState]);
 
   const setPlaybackSpeed = useCallback((speed: number) => {
     setPlaybackSpeedState(speed);
