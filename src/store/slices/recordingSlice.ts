@@ -6,6 +6,7 @@ export interface EditorSnapshot {
   state: {
     content: string;
     selection: monaco.Selection;
+    position: monaco.Position;
     viewState: monaco.editor.ICodeEditorViewState | null;
   };
 }

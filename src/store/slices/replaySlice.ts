@@ -13,6 +13,7 @@ interface ReplayState {
   editorState: {
     content: string;
     selection: monaco.Selection;
+    position: monaco.Position;
     viewState: monaco.editor.ICodeEditorViewState | null;
   };
 }
@@ -28,6 +29,7 @@ const initialState: ReplayState = {
   editorState: {
     content: '',
     selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as monaco.Selection,
+    position: { lineNumber: 1, column: 1 } as monaco.Position,
     viewState: null,
   },
 };
@@ -47,6 +49,7 @@ const replaySlice = createSlice({
       state.editorState = {
         content: '',
         selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as monaco.Selection,
+        position: { lineNumber: 1, column: 1 } as monaco.Position,
         viewState: null,
       };
     },
@@ -71,6 +74,7 @@ const replaySlice = createSlice({
       state.editorState = {
         content: '',
         selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as monaco.Selection,
+        position: { lineNumber: 1, column: 1 } as monaco.Position,
         viewState: null,
       };
     },
@@ -99,6 +103,7 @@ const replaySlice = createSlice({
           state.editorState = {
             content: lastSnapshot.state.content,
             selection: lastSnapshot.state.selection,
+            position: lastSnapshot.state.position,
             viewState: lastSnapshot.state.viewState,
           };
         }
@@ -120,6 +125,7 @@ const replaySlice = createSlice({
       state.editorState = {
         content: snapshot.state.content,
         selection: snapshot.state.selection,
+        position: snapshot.state.position,
         viewState: snapshot.state.viewState,
       };
     },

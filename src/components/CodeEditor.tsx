@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import type * as monaco from 'monaco-editor';
 import type { RootState } from '../store';
 import { addSnapshot } from '../store/slices/recordingSlice';
+import { pause } from '../store/slices/replaySlice';
 
 interface CodeEditorProps {
   language?: string;
@@ -18,6 +19,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 }) => {
   const dispatch = useDispatch();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const programmaticFocusRef = useRef(false);
   const { isRecording } = useSelector((state: RootState) => state.recording);
   const { isPlaying, editorState } = useSelector((state: RootState) => state.replay);
 
@@ -48,20 +50,24 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       console.log('editor',editor);
       console.log('content',content);
       const selection = editor.getSelection();
+      const position = editor.getPosition();
+      console.log('position', position);
       const viewState = editor.saveViewState();
-      
+
       console.log('Creating snapshot at exact timestamp:', {
         stateChangeCounter,
         content: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
         selection,
+        position,
         viewState
       });
       
-      if (selection && viewState) {
+      if (selection && position && viewState) {
         dispatch(addSnapshot({
           state: {
             content,
             selection,
+            position,
             viewState,
           }
         }));
@@ -81,6 +87,12 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     if (isRecording && !isPlaying && editorRef.current) {
       const editor = editorRef.current;
       
+      // Listen to cursor position changes
+      const positionDisposable = editor.onDidChangeCursorPosition(() => {
+        console.log('Cursor position changed');
+        triggerStateChange();
+      });
+      
       // Listen to cursor/selection changes
       const selectionDisposable = editor.onDidChangeCursorSelection(() => {
         console.log('Selection changed');
@@ -94,11 +106,59 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       });
       
       return () => {
+        positionDisposable.dispose();
         selectionDisposable.dispose();
         scrollDisposable.dispose();
       };
     }
   }, [isRecording, isPlaying, triggerStateChange]);
+  
+  // Add focus listener during replay to pause when user interacts
+  useEffect(() => {
+    if (isPlaying && editorRef.current) {
+      const editor = editorRef.current;
+      
+      // Listen for user interactions during replay
+      const mouseDisposable = editor.onMouseDown(() => {
+        console.log('User clicked in editor during replay - pausing');
+        dispatch(pause());
+      });
+      
+      const keyDisposable = editor.onKeyDown(() => {
+        console.log('User pressed key in editor during replay - pausing');
+        dispatch(pause());
+      });
+      
+      return () => {
+        mouseDisposable.dispose();
+        keyDisposable.dispose();
+      };
+    }
+  }, [isPlaying, dispatch]);
+  
+  // Prevent content changes during replay
+  useEffect(() => {
+    if (isPlaying && editorRef.current) {
+      const editor = editorRef.current;
+      
+      // Intercept content changes during replay and revert them
+      const contentDisposable = editor.onDidChangeModelContent(() => {
+        if (isPlaying) {
+          // Revert any user changes during replay
+          const currentContent = editor.getValue();
+          if (currentContent !== editorState.content) {
+            editor.setValue(editorState.content);
+            editor.setPosition(editorState.position);
+            editor.setSelection(editorState.selection);
+          }
+        }
+      });
+      
+      return () => {
+        contentDisposable.dispose();
+      };
+    }
+  }, [isPlaying, editorState, dispatch]);
   
   // Apply replay state to editor
   useEffect(() => {
@@ -110,8 +170,15 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         editor.setValue(editorState.content);
       }
       
+      console.log('position', editorState.position);
+      // Update cursor position
+      editor.setPosition(editorState.position);
+      
       // Update selection
       editor.setSelection(editorState.selection);
+      
+      // Force cursor visibility during replay
+      editor.focus();
       
       // Restore full view state if available
       if (editorState.viewState) {
@@ -134,8 +201,10 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         lineNumbers: 'on',
         roundedSelection: false,
         scrollBeyondLastLine: false,
-        readOnly: isPlaying, // Make editor read-only during replay
+        readOnly: false, // Keep editor writable to allow cursor blinking
         cursorStyle: 'line',
+        cursorBlinking: 'blink',
+        renderValidationDecorations: 'on',
         automaticLayout: true,
         // Disable code suggestions and IntelliSense
         quickSuggestions: false,
