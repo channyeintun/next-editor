@@ -4,7 +4,11 @@
       "Bash(npm install)",
       "Bash(npm run build:*)",
       "Bash(npm install:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(find:*)",
+      "Bash(./scripts/test-simple.sh:*)",
+      "Bash(npm run type-check:*)"
     ],
     "deny": []
   }
