@@ -42,9 +42,8 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "react": ">=16.8.0",
-    "monaco-editor": ">=0.30.0",
-    "@monaco-editor/react": ">=4.0.0"
+    "@monaco-editor/react": ">=4.0.0",
+    "react": ">=16.8.0"
   },
   "peerDependenciesMeta": {
     "@monaco-editor/react": {
@@ -76,7 +75,9 @@
     "tslib": "^2.6.2",
     "typescript": "^5.3.3"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.8.2"
+  },
   "engines": {
     "node": ">=14.0.0"
   },

@@ -67,6 +67,11 @@ export interface UseScrimbaConfig {
   onSeek?: (time: number) => void;
   onError?: (error: Error) => void;
   
+  // New granular callbacks
+  onSnapshot?: (snapshot: EditorSnapshot) => void;
+  onStateChange?: (state: EditorState) => void;
+  onPlaybackUpdate?: (currentTime: number, snapshot: EditorSnapshot | null) => void;
+  
   // Storage
   storage?: StorageProvider;
 }
@@ -124,4 +129,34 @@ export interface UseScrimbaReturn {
   // Advanced
   getEditorState: () => EditorState | null;
   applyEditorState: (state: EditorState) => void;
+  
+  // New granular controls
+  getSnapshot: (timestamp?: number) => EditorSnapshot | null;
+  getCurrentState: () => { 
+    recording: {
+      isRecording: boolean;
+      recordingStartTime: number | null;
+      currentRecording: { snapshots: EditorSnapshot[]; duration: number; audioBlob?: Blob } | null;
+    };
+    playback: {
+      isPlaying: boolean;
+      isPaused: boolean;
+      hasEnded: boolean;
+      currentTime: number;
+      playbackSpeed: number;
+      loadedRecording: Recording | null;
+      currentSnapshot: EditorSnapshot | null;
+      editorState: EditorState;
+    };
+    recordings: {
+      recordings: Recording[];
+    };
+  };
+  dispatch: (action: any) => void;
+  subscribe: (callback: () => void) => () => void;
+  
+  // Batch operations
+  loadMultipleRecordings: (recordings: Recording[]) => void;
+  exportRecording: (id: string, format?: 'json' | 'compressed') => string | null;
+  importRecording: (data: string, format?: 'json' | 'compressed') => Recording | null;
 }
