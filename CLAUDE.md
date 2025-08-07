@@ -36,13 +36,17 @@ Designed to support saving recordings to a database and retrieving them for repl
 
 2. **Replay Phase**:
    - Load recorded session data (snapshots + audio blob)
-   - Audio plays via AudioPlayer component while editor state reconstructs chronologically
-   - Each timestamped snapshot triggers corresponding Monaco Editor state change
-   - Seeking instantly rebuilds editor state up to target timestamp
+   - **Independent Master Timeline**: Uses `performance.now()` as single source of truth
+   - Both audio playback and editor state are synchronized to master timeline
+   - **Perfect Synchronization**: Audio and editor updates happen in same `requestAnimationFrame`
+   - Direct Monaco Editor manipulation eliminates React re-render delays
+   - Seeking instantly rebuilds editor state and resets master timeline
    - Progress bar shows current position and allows scrubbing
 
 3. **State Management**:
-   - useScrimba hook: manages recording, playback, events, and recordings library
+   - useScrimba hook: manages recording, playbook, events, and recordings library
+   - **Master Timeline Architecture**: Independent `performance.now()` based timing
+   - Audio and editor are slaves to master timeline (no circular dependencies)
    - React Context: provides useScrimba functionality to all components
    - Local storage persistence through useScrimba's storage interface
    - Audio recording managed in ScrimbaProvider with MediaRecorder API
@@ -60,7 +64,7 @@ Designed to support saving recordings to a database and retrieving them for repl
 
 ## Key Components
 - `CodeEditor.tsx`: Monaco Editor wrapper integrated with useScrimba hook
-- `AudioPlayer.tsx`: Hidden audio element with synchronized playback control
+- `AudioPlayer.tsx`: Hidden audio element managed by master timeline
 - `MediaControls.tsx`: Play/pause/seek interface with audio recording indicators
 - `RecordingsList.tsx`: Saved recordings library with audio status indicators
 - `PlaybackManager.tsx`: Manages synchronized audio + editor playback
@@ -78,8 +82,33 @@ Designed to support saving recordings to a database and retrieving them for repl
 - 🎬 **Editor Replay**: Frame-perfect reconstruction of coding sessions
 - ⏯️ **Media Controls**: Play, pause, stop, seek with speed control
 - 💾 **Local Storage**: Automatic persistence of recordings with audio
-- 🔄 **Real-time Sync**: Audio and editor changes perfectly synchronized
+- 🔄 **Perfect Sync**: Millisecond-precise audio/editor synchronization via independent master timeline
 - 📱 **Responsive UI**: Clean interface with visual recording indicators
+
+## Synchronization Architecture
+
+### Master Timeline Design
+The core innovation of this platform is the **Independent Master Timeline** that eliminates circular dependencies between audio and editor state:
+
+```
+performance.now() Master Timeline
+    ├─ Audio Element (slave)
+    └─ Editor State (slave)
+```
+
+### Key Architectural Benefits:
+- **Zero Latency**: Audio and editor updates happen in same `requestAnimationFrame`
+- **Perfect Seeking**: Timeline resets maintain sync during scrubbing operations  
+- **No Drift**: High-precision `performance.now()` prevents timing accumulation errors
+- **Clean Audio Handling**: Proper pause/stop prevents audio artifacts at playback end
+- **Direct Monaco Manipulation**: Bypasses React re-render delays for instant editor updates
+
+### Implementation Flow:
+1. Master timeline calculates current time from `performance.now()`
+2. Audio element position synced to master time
+3. Editor state applied directly to Monaco Editor synchronously
+4. Redux state updated for UI components
+5. All operations complete in single execution frame
 
 ## Package Structure
 This project uses a monorepo structure with the core functionality extracted into a reusable package:
@@ -93,7 +122,10 @@ This project uses a monorepo structure with the core functionality extracted int
 ### use-scrimba Package (`/packages/use-scrimba/`)
 - Standalone npm package with core recording/replay logic
 - Monaco Editor event capture and state management
-- Timeline-based playback system with seeking support
+- **Independent Master Timeline**: `performance.now()` based synchronization
+- **Native Audio Sync**: Built-in audioRef support for perfect timing
+- Direct Monaco manipulation for zero-latency editor updates
+- Timeline-based playback system with robust seeking support
 - TypeScript types and interfaces
 - Examples demonstrating usage patterns
 
