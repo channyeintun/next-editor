@@ -9,6 +9,7 @@ import type {
 } from './types';
 import { useRecording } from './hooks/useRecording';
 import { usePlayback } from './hooks/usePlayback';
+import { isValidSnapshotState, isEditorReady } from './utils/validation';
 
 /**
  * Main useScrimba hook - provides Scrimba-like recording and playback functionality
@@ -208,14 +209,19 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       if (currentSnapshotToApply && 
           currentSnapshotToApply !== currentSnapshot && 
           currentSnapshotToApply.state) {
-        setCurrentSnapshot(currentSnapshotToApply);
-        const newState = {
-          content: currentSnapshotToApply.state.content || '',
-          selection: currentSnapshotToApply.state.selection,
-          position: currentSnapshotToApply.state.position,
-          viewState: currentSnapshotToApply.state.viewState,
-        };
-        setEditorState(newState);
+        // Validate snapshot state before applying
+        if (isValidSnapshotState(currentSnapshotToApply.state)) {
+          setCurrentSnapshot(currentSnapshotToApply);
+          const newState = {
+            content: currentSnapshotToApply.state.content || '',
+            selection: currentSnapshotToApply.state.selection,
+            position: currentSnapshotToApply.state.position,
+            viewState: currentSnapshotToApply.state.viewState,
+          };
+          setEditorState(newState);
+        } else {
+          console.warn('Invalid snapshot state structure during playback:', currentSnapshotToApply.state);
+        }
       }
       
       // Continue playback
@@ -321,14 +327,30 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     setCurrentSnapshot(lastSnapshot);
     setEditorState(stateToApply);
     
-    // Single error boundary for editor state application
-    if (!applyEditorStateSafely(stateToApply)) {
-      console.warn('Failed to apply editor state during seek');
-      onError?.(new Error('Failed to apply editor state during seek'));
+    // Only apply content during seeking - skip position/selection to avoid Monaco errors
+    if (editorRef.current && stateToApply.content !== undefined) {
+      const editor = editorRef.current;
+      
+      // Check if editor is ready before applying state
+      if (!isEditorReady(editor)) {
+        console.warn('Editor not ready during seek, skipping content application');
+        onSeek?.(clampedTime);
+        return;
+      }
+      
+      try {
+        const currentContent = editor.getValue();
+        if (currentContent !== stateToApply.content) {
+          editor.setValue(stateToApply.content);
+        }
+      } catch (error) {
+        console.warn('Failed to apply content during seek:', error);
+        // Don't call onError for Monaco internal issues - just log and continue
+      }
     }
     
     onSeek?.(clampedTime);
-  }, [loadedRecording, onSeek, isPlaying, onError]);
+  }, [loadedRecording, onSeek, isPlaying, onError, editorRef]);
 
   const setPlaybackSpeed = useCallback((speed: number) => {
     // Input validation for playback speed

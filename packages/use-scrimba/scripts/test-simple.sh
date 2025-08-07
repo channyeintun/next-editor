@@ -270,8 +270,7 @@ createAwesome();`}
                 style={{
                   width: `${Math.min((currentTime / currentRecording.duration) * 100, 100)}%`,
                   height: '100%',
-                  backgroundColor: '#ff4444',
-                  transition: 'width 0.1s ease'
+                  backgroundColor: '#ff4444'
                 }}
               />
               <div style={{

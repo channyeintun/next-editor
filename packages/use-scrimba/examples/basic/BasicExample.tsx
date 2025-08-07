@@ -152,7 +152,7 @@ const BasicExample: React.FC = () => {
                 className="w-full h-2 bg-gray-500 rounded-full cursor-pointer relative"
               >
                 <div
-                  className="h-full bg-blue-500 rounded-full transition-all duration-100"
+                  className="h-full bg-blue-500 rounded-full"
                   style={{ width: `${(currentTime / currentRecording.duration) * 100}%` }}
                 >
                   <div className="absolute -right-2 -top-1.5 w-4 h-4 bg-blue-500 rounded-full border-2 border-white" />
