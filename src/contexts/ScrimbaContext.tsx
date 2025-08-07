@@ -13,12 +13,14 @@ interface ScrimbaProviderProps {
  */
 export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const audioChunksRef = useRef<Blob[]>([]);
   
   const originalScrimbaHook = useScrimba({
     editorRef,
+    audioRef,
     onRecordingStart: async () => {
       console.log('📹 Recording started');
       // Start audio recording when editor recording starts
@@ -81,9 +83,9 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
   };
 
   return (
-    <ScrimbaContext.Provider value={{ ...scrimbaHook, editorRef }}>
+    <ScrimbaContext value={{ ...scrimbaHook, editorRef, audioRef }}>
       {children}
-    </ScrimbaContext.Provider>
+    </ScrimbaContext>
   );
 };
 

@@ -8,7 +8,8 @@ import type { UseScrimbaReturn } from 'use-scrimba';
  * This replaces useSelector and useDispatch from Redux
  */
 export const useScrimbaContext = (): UseScrimbaReturn & { 
-  editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null> 
+  editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
+  audioRef: RefObject<HTMLAudioElement | null>;
 } => {
   const context = useContext(ScrimbaContext);
   if (!context) {

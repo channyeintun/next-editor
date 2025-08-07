@@ -39,6 +39,7 @@ import {
 export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const {
     editorRef,
+    audioRef,
     captureEvents = {},
     pauseOnUserInteraction = true,
     onRecordingStart,
@@ -76,6 +77,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   // Playback timeline refs
   const playbackTimerRef = useRef<NodeJS.Timeout | null>(null);
   const playbackStartTimeRef = useRef<number | null>(null);
+  const audioTimeUpdateRef = useRef<(() => void) | null>(null);
 
   // Callback for handling new snapshots
   const handleSnapshot = useCallback((snapshot: EditorSnapshot) => {
@@ -174,6 +176,41 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     }
   }, [store]);
 
+  // Audio synchronization effect
+  useEffect(() => {
+    if (audioRef?.current && playback.loadedRecording?.audioBlob) {
+      const audio = audioRef.current;
+      
+      // Set up audio time update handler
+      const handleAudioTimeUpdate = () => {
+        if (playback.isPlaying) {
+          const audioTime = audio.currentTime * 1000; // Convert to milliseconds
+          if (Math.abs(audioTime - playback.currentTime) > 50) {
+            store.dispatch(updateCurrentTime(audioTime));
+          }
+        }
+      };
+
+      const handleAudioEnded = () => {
+        if (playback.isPlaying) {
+          store.dispatch(end());
+        }
+      };
+
+      // Store reference for cleanup
+      audioTimeUpdateRef.current = handleAudioTimeUpdate;
+      
+      audio.addEventListener('timeupdate', handleAudioTimeUpdate);
+      audio.addEventListener('ended', handleAudioEnded);
+      
+      return () => {
+        audio.removeEventListener('timeupdate', handleAudioTimeUpdate);
+        audio.removeEventListener('ended', handleAudioEnded);
+        audioTimeUpdateRef.current = null;
+      };
+    }
+  }, [audioRef, playback.loadedRecording?.audioBlob, playback.isPlaying, playback.currentTime, store]);
+
   // Playback controls
   const play = useCallback(() => {
     if (!playback.loadedRecording?.snapshots?.length) {
@@ -182,7 +219,16 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     }
     
     store.dispatch(playAction());
-    playbackStartTimeRef.current = Date.now() - playback.currentTime;
+    const hasAudio = playback.loadedRecording.audioBlob && audioRef?.current;
+    
+    // Start audio playback if available
+    if (hasAudio) {
+      audioRef!.current!.currentTime = playback.currentTime / 1000;
+      audioRef!.current!.play().catch(console.error);
+    } else {
+      // For non-audio playback, use internal timer
+      playbackStartTimeRef.current = Date.now() - playback.currentTime;
+    }
     
     onPlaybackStart?.();
 
@@ -190,15 +236,19 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     const updatePlayback = () => {
       const currentState = store.getState().playback;
       
-      if (!playbackStartTimeRef.current || !currentState.loadedRecording) {
+      if (!currentState.loadedRecording) {
         cleanupPlayback();
         return;
       }
       
-      const elapsed = Date.now() - playbackStartTimeRef.current;
-      const adjustedTime = elapsed * currentState.playbackSpeed;
-      
-      store.dispatch(updateCurrentTime(adjustedTime));
+      // For audio playback, time is managed by audio element
+      const adjustedTime = hasAudio ? currentState.currentTime : (() => {
+        if (!playbackStartTimeRef.current) return 0;
+        const elapsed = Date.now() - playbackStartTimeRef.current;
+        const newTime = elapsed * currentState.playbackSpeed;
+        store.dispatch(updateCurrentTime(newTime));
+        return newTime;
+      })();
       
       // Check if playback is complete first
       if (adjustedTime >= currentState.loadedRecording.duration) {
@@ -244,27 +294,38 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     };
     
     updatePlayback();
-  }, [store, playback.loadedRecording, playback.currentTime, playback.playbackSpeed, playback.currentSnapshot, onPlaybackStart, onError, cleanupPlayback]);
+  }, [store, playback.loadedRecording, playback.currentTime, playback.playbackSpeed, playback.currentSnapshot, onPlaybackStart, onError, cleanupPlayback, audioRef]);
 
   const pause = useCallback(() => {
     store.dispatch(pauseAction());
     
-    // Clear playback timer
-    if (playbackTimerRef.current) {
-      clearTimeout(playbackTimerRef.current);
-      playbackTimerRef.current = null;
+    // Pause audio if available
+    if (audioRef?.current && playback.loadedRecording?.audioBlob) {
+      audioRef.current.pause();
     }
-  }, [store]);
-
-  const stop = useCallback(() => {
-    store.dispatch(stopAction());
     
     // Clear playback timer
     if (playbackTimerRef.current) {
       clearTimeout(playbackTimerRef.current);
       playbackTimerRef.current = null;
     }
-  }, [store]);
+  }, [store, audioRef, playback.loadedRecording?.audioBlob]);
+
+  const stop = useCallback(() => {
+    store.dispatch(stopAction());
+    
+    // Stop audio if available
+    if (audioRef?.current && playback.loadedRecording?.audioBlob) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    
+    // Clear playback timer
+    if (playbackTimerRef.current) {
+      clearTimeout(playbackTimerRef.current);
+      playbackTimerRef.current = null;
+    }
+  }, [store, audioRef, playback.loadedRecording?.audioBlob]);
 
   const seekTo = useCallback((targetTime: number) => {
     if (!playback.loadedRecording) return;
@@ -286,6 +347,10 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     const wasPlaying = playback.isPlaying;
     if (wasPlaying) {
       store.dispatch(pauseAction());
+      // Pause audio if available
+      if (audioRef?.current && playback.loadedRecording.audioBlob) {
+        audioRef.current.pause();
+      }
     }
     
     // Clear current playback timer
@@ -296,6 +361,11 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     // Set the seek position in Redux state
     store.dispatch(seekToAction(clampedTime));
+    
+    // Update audio position if available
+    if (audioRef?.current && playback.loadedRecording.audioBlob) {
+      audioRef.current.currentTime = clampedTime / 1000;
+    }
     
     // Find the last snapshot before or at the target time
     let lastSnapshot: EditorSnapshot | null = null;
@@ -347,11 +417,16 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     }
     
     onSeek?.(clampedTime);
-  }, [store, playback.loadedRecording, onSeek, editorRef]);
+  }, [store, playback.loadedRecording, onSeek, editorRef, audioRef]);
 
   const setPlaybackSpeed = useCallback((speed: number) => {
     store.dispatch(setPlaybackSpeedAction(speed));
-  }, [store]);
+    
+    // Update audio playback rate if available
+    if (audioRef?.current && playback.loadedRecording?.audioBlob) {
+      audioRef.current.playbackRate = speed;
+    }
+  }, [store, audioRef, playback.loadedRecording?.audioBlob]);
 
   // Recording management
   const loadRecording = useCallback((recording: Recording) => {
@@ -376,13 +451,21 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     store.dispatch(loadRecordingAction(recording));
     
+    // Set up audio if available
+    if (audioRef?.current && recording.audioBlob) {
+      const audioUrl = URL.createObjectURL(recording.audioBlob);
+      audioRef.current.src = audioUrl;
+      audioRef.current.currentTime = 0;
+      audioRef.current.playbackRate = playback.playbackSpeed;
+    }
+    
     // Apply initial state - single error boundary
     const initialState = store.getState().playback.editorState;
     if (!applyEditorStateSafely(initialState)) {
       console.warn('Failed to apply initial state when loading recording');
       onError?.(new Error('Failed to apply initial state when loading recording'));
     }
-  }, [store, applyEditorStateSafely, cleanupPlayback, onError]);
+  }, [store, applyEditorStateSafely, cleanupPlayback, onError, audioRef, playback.playbackSpeed]);
 
   const deleteRecording = useCallback((id: string) => {
     if (!id || typeof id !== 'string') {

@@ -51,6 +51,9 @@ export interface UseScrimbaConfig {
   // Required
   editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   
+  // Optional Audio Sync
+  audioRef?: React.RefObject<HTMLAudioElement | null>;
+  
   // Recording Options
   captureEvents?: CaptureEvents;
   
