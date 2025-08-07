@@ -12,17 +12,7 @@ export const createScrimbaStore = () => {
     },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
-        serializableCheck: {
-          // Ignore blob serialization warnings
-          ignoredActions: [
-            'recording/stopRecording',
-            'recordings/addRecording',
-          ],
-          ignoredPaths: [
-            'recording.currentRecording.audioBlob',
-            'recordings.recordings',
-          ],
-        },
+        serializableCheck: false,
       }),
   });
 };

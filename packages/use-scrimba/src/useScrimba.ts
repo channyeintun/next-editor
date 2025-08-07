@@ -282,13 +282,20 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     const clampedTime = Math.min(Math.max(targetTime, 0), playback.loadedRecording.duration);
     
-    store.dispatch(seekToAction(clampedTime));
+    // ALWAYS pause first to prevent Monaco internal state conflicts
+    const wasPlaying = playback.isPlaying;
+    if (wasPlaying) {
+      store.dispatch(pauseAction());
+    }
     
     // Clear current playback timer
     if (playbackTimerRef.current) {
       clearTimeout(playbackTimerRef.current);
       playbackTimerRef.current = null;
     }
+    
+    // Set the seek position in Redux state
+    store.dispatch(seekToAction(clampedTime));
     
     // Find the last snapshot before or at the target time
     let lastSnapshot: EditorSnapshot | null = null;
