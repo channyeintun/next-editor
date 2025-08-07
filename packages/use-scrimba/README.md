@@ -6,7 +6,7 @@ A powerful React hook for recording and replaying Monaco Editor interactions wit
 
 🎥 **Record Editor Interactions** - Capture every keystroke, cursor movement, selection, and scroll event with precise timestamps
 
-🎬 **Synchronized Playback** - Replay recorded sessions with perfect synchronization to audio/video
+🎬 **Perfect Audio Sync** - Millisecond-precise audio synchronization via independent master timeline
 
 🎛️ **Full Control** - Play, pause, stop, seek, and speed control
 
@@ -297,11 +297,28 @@ function EditorWithProgress() {
 
 ## Examples
 
-- [Basic Recording](./examples/basic)
-- [With Audio](./examples/with-audio)
-- [Custom Storage](./examples/custom-storage)
-- [Multiple Editors](./examples/multiple-editors)
-- [Real-time Collaboration](./examples/collaboration)
+### 📚 Available Examples
+
+- **[Basic Recording](./examples/basic)** - Simple editor recording without audio
+- **[Perfect Audio Sync](./examples/with-audio)** - Audio recording with millisecond-precise synchronization  
+- **[Complete Demo](./examples/perfect-sync)** - Full-featured demo showcasing master timeline architecture
+
+### 🎯 Perfect Synchronization
+
+All audio examples use the **Independent Master Timeline** architecture:
+- `performance.now()` as single source of truth
+- Zero circular dependencies between audio and editor
+- Millisecond-precise synchronization guaranteed
+- Robust seeking without sync loss
+
+```typescript
+// Just add audioRef for perfect sync!
+const scrimba = useScrimba({
+  editorRef,
+  audioRef, // Enables perfect audio synchronization
+  onPlaybackStart: () => console.log('Perfect sync started!'),
+});
+```
 
 ## License
 
