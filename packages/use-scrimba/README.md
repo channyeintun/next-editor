@@ -2,6 +2,10 @@
 
 A powerful React hook for recording and replaying Monaco Editor interactions with Scrimba-like functionality.
 
+## Demo
+
+🎬 **[Live Demo](https://use-scrimba.vercel.app/)** - See use-scrimba in action with recording and playback features!
+
 ## Features
 
 🎥 **Record Editor Interactions** - Capture every keystroke, cursor movement, selection, and scroll event with precise timestamps
