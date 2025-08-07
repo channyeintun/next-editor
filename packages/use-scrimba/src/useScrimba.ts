@@ -78,6 +78,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const playbackTimerRef = useRef<NodeJS.Timeout | null>(null);
   const playbackStartTimeRef = useRef<number | null>(null);
   const audioTimeUpdateRef = useRef<(() => void) | null>(null);
+  const masterTimelineStartRef = useRef<{ perfTime: number; currentTime: number } | null>(null);
 
   // Callback for handling new snapshots
   const handleSnapshot = useCallback((snapshot: EditorSnapshot) => {
@@ -171,45 +172,186 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const cleanupPlayback = useCallback(() => {
     store.dispatch(pauseAction());
     if (playbackTimerRef.current) {
-      clearTimeout(playbackTimerRef.current);
+      if (typeof playbackTimerRef.current === 'number') {
+        cancelAnimationFrame(playbackTimerRef.current);
+      } else {
+        clearTimeout(playbackTimerRef.current);
+      }
       playbackTimerRef.current = null;
     }
   }, [store]);
 
-  // Audio synchronization effect
+  // Master timeline synchronization - independent of both audio and editor
   useEffect(() => {
-    if (audioRef?.current && playback.loadedRecording?.audioBlob) {
-      const audio = audioRef.current;
+    if (!playback.isPlaying || !playback.loadedRecording) return;
+    
+    const hasAudio = audioRef?.current && playback.loadedRecording.audioBlob;
+    const hasEditor = editorRef?.current && isEditorReady(editorRef.current);
+    
+    if (hasAudio) {
+      // For audio playback, use independent timeline with performance.now()
+      const audio = audioRef.current!;
+      const editor = editorRef?.current;
+      const snapshots = playback.loadedRecording.snapshots;
       
-      // Set up audio time update handler
-      const handleAudioTimeUpdate = () => {
-        if (playback.isPlaying) {
-          const audioTime = audio.currentTime * 1000; // Convert to milliseconds
-          if (Math.abs(audioTime - playback.currentTime) > 50) {
-            store.dispatch(updateCurrentTime(audioTime));
+      // Initialize or update master timeline reference
+      if (!masterTimelineStartRef.current) {
+        masterTimelineStartRef.current = {
+          perfTime: performance.now(),
+          currentTime: playback.currentTime
+        };
+      }
+      
+      const masterTimelineUpdate = () => {
+        const currentState = store.getState().playback;
+        if (!currentState.isPlaying || !masterTimelineStartRef.current) return;
+        
+        // MASTER TIMELINE: Independent time source using performance.now()
+        const elapsed = performance.now() - masterTimelineStartRef.current.perfTime;
+        const masterTime = masterTimelineStartRef.current.currentTime + (elapsed * currentState.playbackSpeed);
+        
+        // Update Redux state
+        store.dispatch(updateCurrentTime(masterTime));
+        
+        // Sync audio to master timeline
+        const expectedAudioTime = masterTime / 1000;
+        if (Math.abs(audio.currentTime - expectedAudioTime) > 0.1) {
+          audio.currentTime = expectedAudioTime;
+        }
+        
+        // Apply editor state changes synchronously
+        if (hasEditor && editor) {
+          const validSnapshots = snapshots.filter(s => s?.timestamp !== undefined);
+          const currentSnapshotToApply = validSnapshots
+            .filter(s => s.timestamp <= masterTime)
+            .pop();
+          
+          if (currentSnapshotToApply && 
+              currentSnapshotToApply !== store.getState().playback.currentSnapshot && 
+              currentSnapshotToApply.state &&
+              isValidSnapshotState(currentSnapshotToApply.state)) {
+            
+            store.dispatch(updateCurrentSnapshot(currentSnapshotToApply));
+            const newState = {
+              content: currentSnapshotToApply.state.content || '',
+              selection: currentSnapshotToApply.state.selection,
+              position: currentSnapshotToApply.state.position,
+              viewState: currentSnapshotToApply.state.viewState,
+            };
+            store.dispatch(updateEditorState(newState));
+            
+            // Apply to Monaco directly and synchronously
+            try {
+              const currentContent = editor.getValue();
+              if (currentContent !== newState.content) {
+                editor.setValue(newState.content);
+              }
+              
+              if (editor.getValue() === newState.content) {
+                const model = editor.getModel();
+                if (model) {
+                  const lineCount = model.getLineCount();
+                  const safeLineNumber = Math.min(Math.max(newState.position.lineNumber, 1), lineCount);
+                  const lineLength = model.getLineLength(safeLineNumber);
+                  if (lineLength >= 0) {
+                    const maxColumn = Math.max(1, lineLength + 1);
+                    const validPosition = {
+                      lineNumber: safeLineNumber,
+                      column: Math.min(Math.max(newState.position.column, 1), maxColumn)
+                    };
+                    editor.setPosition(validPosition);
+                    editor.setSelection(newState.selection);
+                    
+                    if (newState.viewState) {
+                      try {
+                        editor.restoreViewState(newState.viewState);
+                      } catch (error) {
+                        // Ignore view state errors
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn('Editor sync error:', error);
+            }
+            
+            onStateChange?.(newState);
+            onPlaybackUpdate?.(masterTime, currentSnapshotToApply);
           }
         }
-      };
-
-      const handleAudioEnded = () => {
-        if (playback.isPlaying) {
+        
+        // Check if playback complete
+        if (masterTime >= currentState.loadedRecording!.duration) {
           store.dispatch(end());
+          // Stop audio cleanly to prevent broken sounds
+          audio.pause();
+          masterTimelineStartRef.current = null;
+          return;
+        }
+        
+        // Continue master timeline
+        playbackTimerRef.current = requestAnimationFrame(masterTimelineUpdate) as any;
+      };
+      
+      // Start master timeline
+      masterTimelineUpdate();
+      
+      // Handle audio ended - stop cleanly
+      const handleAudioEnded = () => {
+        const state = store.getState().playback;
+        if (state.isPlaying) {
+          store.dispatch(end());
+          masterTimelineStartRef.current = null;
         }
       };
-
-      // Store reference for cleanup
-      audioTimeUpdateRef.current = handleAudioTimeUpdate;
       
-      audio.addEventListener('timeupdate', handleAudioTimeUpdate);
       audio.addEventListener('ended', handleAudioEnded);
       
       return () => {
-        audio.removeEventListener('timeupdate', handleAudioTimeUpdate);
         audio.removeEventListener('ended', handleAudioEnded);
-        audioTimeUpdateRef.current = null;
+        if (playbackTimerRef.current) {
+          cancelAnimationFrame(playbackTimerRef.current as unknown as number);
+          playbackTimerRef.current = null;
+        }
+        masterTimelineStartRef.current = null;
       };
     }
-  }, [audioRef, playback.loadedRecording?.audioBlob, playback.isPlaying, playback.currentTime, store]);
+  }, [playback.isPlaying, playback.loadedRecording, audioRef, editorRef, store, onStateChange, onPlaybackUpdate]);
+
+  // Editor state synchronization for non-audio playback only
+  useEffect(() => {
+    // Only handle non-audio playback - audio playback is handled synchronously above
+    if (!playback.loadedRecording?.snapshots?.length || 
+        !playback.isPlaying || 
+        (audioRef?.current && playback.loadedRecording?.audioBlob)) {
+      return;
+    }
+
+    const currentTime = playback.currentTime;
+    const validSnapshots = playback.loadedRecording.snapshots.filter(s => s?.timestamp !== undefined);
+    const currentSnapshotToApply = validSnapshots
+      .filter(s => s.timestamp <= currentTime)
+      .pop();
+    
+    if (currentSnapshotToApply && 
+        currentSnapshotToApply !== playback.currentSnapshot && 
+        currentSnapshotToApply.state) {
+      // Validate snapshot state before applying
+      if (isValidSnapshotState(currentSnapshotToApply.state)) {
+        store.dispatch(updateCurrentSnapshot(currentSnapshotToApply));
+        const newState = {
+          content: currentSnapshotToApply.state.content || '',
+          selection: currentSnapshotToApply.state.selection,
+          position: currentSnapshotToApply.state.position,
+          viewState: currentSnapshotToApply.state.viewState,
+        };
+        store.dispatch(updateEditorState(newState));
+        onStateChange?.(newState);
+        onPlaybackUpdate?.(currentTime, currentSnapshotToApply);
+      }
+    }
+  }, [playback.currentTime, playback.isPlaying, playback.loadedRecording, playback.currentSnapshot, store, onStateChange, onPlaybackUpdate, audioRef]);
 
   // Playback controls
   const play = useCallback(() => {
@@ -221,80 +363,44 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     store.dispatch(playAction());
     const hasAudio = playback.loadedRecording.audioBlob && audioRef?.current;
     
-    // Start audio playback if available
     if (hasAudio) {
+      // Start audio playback - master timeline will handle synchronization
       audioRef!.current!.currentTime = playback.currentTime / 1000;
+      audioRef!.current!.playbackRate = playback.playbackSpeed;
       audioRef!.current!.play().catch(console.error);
+      onPlaybackStart?.();
+      // Master timeline effect will handle the rest
     } else {
-      // For non-audio playback, use internal timer
+      // Non-audio playback - use requestAnimationFrame for smooth timing
       playbackStartTimeRef.current = Date.now() - playback.currentTime;
-    }
-    
-    onPlaybackStart?.();
+      onPlaybackStart?.();
 
-    // Start the playback timeline
-    const updatePlayback = () => {
-      const currentState = store.getState().playback;
-      
-      if (!currentState.loadedRecording) {
-        cleanupPlayback();
-        return;
-      }
-      
-      // For audio playback, time is managed by audio element
-      const adjustedTime = hasAudio ? currentState.currentTime : (() => {
-        if (!playbackStartTimeRef.current) return 0;
-        const elapsed = Date.now() - playbackStartTimeRef.current;
-        const newTime = elapsed * currentState.playbackSpeed;
-        store.dispatch(updateCurrentTime(newTime));
-        return newTime;
-      })();
-      
-      // Check if playback is complete first
-      if (adjustedTime >= currentState.loadedRecording.duration) {
-        store.dispatch(end());
-        cleanupPlayback();
-        return;
-      }
-      
-      // Find and apply current snapshot
-      const validSnapshots = currentState.loadedRecording.snapshots.filter(s => s?.timestamp !== undefined);
-      const currentSnapshotToApply = validSnapshots
-        .filter(s => s.timestamp <= adjustedTime)
-        .pop();
-      
-      if (currentSnapshotToApply && 
-          currentSnapshotToApply !== currentState.currentSnapshot && 
-          currentSnapshotToApply.state) {
-        // Validate snapshot state before applying
-        if (isValidSnapshotState(currentSnapshotToApply.state)) {
-          store.dispatch(updateCurrentSnapshot(currentSnapshotToApply));
-          const newState = {
-            content: currentSnapshotToApply.state.content || '',
-            selection: currentSnapshotToApply.state.selection,
-            position: currentSnapshotToApply.state.position,
-            viewState: currentSnapshotToApply.state.viewState,
-          };
-          store.dispatch(updateEditorState(newState));
-          onStateChange?.(newState);
-          onPlaybackUpdate?.(adjustedTime, currentSnapshotToApply);
-        } else {
-          console.warn('Invalid snapshot state structure during playback:', currentSnapshotToApply.state);
+      const updatePlayback = () => {
+        const currentState = store.getState().playback;
+        
+        if (!currentState.loadedRecording || !currentState.isPlaying) {
+          return;
         }
-      }
+        
+        if (!playbackStartTimeRef.current) return;
+        const elapsed = Date.now() - playbackStartTimeRef.current;
+        const adjustedTime = elapsed * currentState.playbackSpeed;
+        
+        store.dispatch(updateCurrentTime(adjustedTime));
+        
+        // Check if playback is complete
+        if (adjustedTime >= currentState.loadedRecording.duration) {
+          store.dispatch(end());
+          return;
+        }
+        
+        // Continue non-audio playback
+        playbackTimerRef.current = requestAnimationFrame(updatePlayback) as any;
+      };
       
-      // Continue playback
-      try {
-        playbackTimerRef.current = setTimeout(updatePlayback, 16); // ~60fps
-      } catch (error) {
-        console.error('Error scheduling next playback update:', error);
-        cleanupPlayback();
-        onError?.(error instanceof Error ? error : new Error('Playback scheduling failed'));
-      }
-    };
-    
-    updatePlayback();
-  }, [store, playback.loadedRecording, playback.currentTime, playback.playbackSpeed, playback.currentSnapshot, onPlaybackStart, onError, cleanupPlayback, audioRef]);
+      updatePlayback();
+    }
+  }, [store, playback.loadedRecording, playback.currentTime, playback.playbackSpeed, onPlaybackStart, audioRef]);
 
   const pause = useCallback(() => {
     store.dispatch(pauseAction());
@@ -304,11 +410,17 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       audioRef.current.pause();
     }
     
-    // Clear playback timer
+    // Clear playback timer (for non-audio playback)
     if (playbackTimerRef.current) {
-      clearTimeout(playbackTimerRef.current);
+      if (typeof playbackTimerRef.current === 'number') {
+        cancelAnimationFrame(playbackTimerRef.current);
+      } else {
+        clearTimeout(playbackTimerRef.current);
+      }
       playbackTimerRef.current = null;
     }
+    
+    // Keep master timeline reference for resume
   }, [store, audioRef, playback.loadedRecording?.audioBlob]);
 
   const stop = useCallback(() => {
@@ -320,11 +432,18 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       audioRef.current.currentTime = 0;
     }
     
-    // Clear playback timer
+    // Clear playback timer (for non-audio playback)
     if (playbackTimerRef.current) {
-      clearTimeout(playbackTimerRef.current);
+      if (typeof playbackTimerRef.current === 'number') {
+        cancelAnimationFrame(playbackTimerRef.current);
+      } else {
+        clearTimeout(playbackTimerRef.current);
+      }
       playbackTimerRef.current = null;
     }
+    
+    // Reset master timeline reference
+    masterTimelineStartRef.current = null;
   }, [store, audioRef, playback.loadedRecording?.audioBlob]);
 
   const seekTo = useCallback((targetTime: number) => {
@@ -347,10 +466,11 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     const wasPlaying = playback.isPlaying;
     if (wasPlaying) {
       store.dispatch(pauseAction());
-      // Pause audio if available
-      if (audioRef?.current && playback.loadedRecording.audioBlob) {
-        audioRef.current.pause();
-      }
+    }
+    
+    // Always pause audio during seek regardless of playing state
+    if (audioRef?.current && playback.loadedRecording.audioBlob) {
+      audioRef.current.pause();
     }
     
     // Clear current playback timer
@@ -361,6 +481,14 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     // Set the seek position in Redux state
     store.dispatch(seekToAction(clampedTime));
+    
+    // Reset master timeline reference for seek
+    if (masterTimelineStartRef.current) {
+      masterTimelineStartRef.current = {
+        perfTime: performance.now(),
+        currentTime: clampedTime
+      };
+    }
     
     // Update audio position if available
     if (audioRef?.current && playback.loadedRecording.audioBlob) {
