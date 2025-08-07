@@ -8,7 +8,12 @@
       "Bash(mkdir:*)",
       "Bash(find:*)",
       "Bash(./scripts/test-simple.sh:*)",
-      "Bash(npm run type-check:*)"
+      "Bash(npm run type-check:*)",
+      "Bash(npm run clean:*)",
+      "Bash(npm cache clean:*)",
+      "Bash(npm pack:*)",
+      "Bash(./publish.sh)",
+      "Bash(npm publish:*)"
     ],
     "deny": []
   }

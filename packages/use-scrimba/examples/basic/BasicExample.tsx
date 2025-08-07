@@ -3,12 +3,9 @@ import Editor from '@monaco-editor/react';
 import type * as monaco from 'monaco-editor';
 import { useScrimba, type Recording } from 'use-scrimba';
 
-/**
- * Basic example demonstrating core useScrimba functionality
- */
-export const BasicExample: React.FC = () => {
+const BasicExample: React.FC = () => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  
+
   const scrimbaHook = useScrimba({
     editorRef,
     onRecordingStart: () => console.log('📹 Recording started'),
@@ -17,7 +14,6 @@ export const BasicExample: React.FC = () => {
     onPlaybackPause: () => console.log('⏸️ Playback paused'),
   });
 
-  // Destructure with explicit typing
   const {
     isRecording,
     isPlaying,
@@ -44,106 +40,27 @@ export const BasicExample: React.FC = () => {
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!currentRecording) return;
-    
+
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = clickX / rect.width;
     const targetTime = percentage * currentRecording.duration;
-    
+
     seekTo(targetTime);
   };
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <h1>🎬 useScrimba Basic Example</h1>
-      
-      {/* Recording Controls */}
-      <div style={{ marginBottom: '20px' }}>
-        <h2>Recording Controls</h2>
-        <button 
-          onClick={startRecording} 
-          disabled={isRecording}
-          style={{ marginRight: '10px', padding: '8px 16px' }}
-        >
-          {isRecording ? '🔴 Recording...' : '📹 Start Recording'}
-        </button>
-        <button 
-          onClick={() => stopRecording()} 
-          disabled={!isRecording}
-          style={{ padding: '8px 16px' }}
-        >
-          ⏹️ Stop Recording
-        </button>
-      </div>
+    <div className="min-h-screen bg-gray-900 text-white p-6 font-sans">
+      <h1 className="text-2xl font-bold mb-6">Code Recorder</h1>
 
-      {/* Playback Controls */}
-      <div style={{ marginBottom: '20px' }}>
-        <h2>Playback Controls</h2>
-        <button 
-          onClick={play} 
-          disabled={!currentRecording || isPlaying}
-          style={{ marginRight: '10px', padding: '8px 16px' }}
-        >
-          ▶️ Play
-        </button>
-        <button 
-          onClick={pause} 
-          disabled={!isPlaying}
-          style={{ marginRight: '10px', padding: '8px 16px' }}
-        >
-          ⏸️ Pause
-        </button>
-        <button 
-          onClick={stop} 
-          disabled={!currentRecording}
-          style={{ marginRight: '10px', padding: '8px 16px' }}
-        >
-          ⏹️ Stop
-        </button>
-        
-        {currentRecording && (
-          <span style={{ marginLeft: '20px' }}>
-            {formatTime(currentTime)} / {formatTime(currentRecording.duration)}
-          </span>
-        )}
-      </div>
-
-      {/* Progress Bar */}
-      {currentRecording && (
-        <div style={{ marginBottom: '20px' }}>
-          <div 
-            onClick={handleSeek}
-            style={{ 
-              width: '100%', 
-              height: '8px', 
-              backgroundColor: '#ddd',
-              cursor: 'pointer',
-              borderRadius: '4px',
-              overflow: 'hidden'
-            }}
-          >
-            <div 
-              style={{
-                width: `${(currentTime / currentRecording.duration) * 100}%`,
-                height: '100%',
-                backgroundColor: '#007acc',
-                transition: 'width 0.1s'
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Monaco Editor */}
-      <div style={{ marginBottom: '20px' }}>
+      <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
         <Editor
           height="400px"
           language="javascript"
           theme="vs-dark"
-          defaultValue="// Start typing to record your coding session!\n// Click to pause during playback\n\nconst greeting = 'Hello, useScrimba!';\nconsole.log(greeting);"
-          onMount={(editor) => { 
-            editorRef.current = editor; 
-            handleEditorMount(editor); 
+          onMount={(editor) => {
+            editorRef.current = editor;
+            handleEditorMount(editor);
           }}
           onChange={handleEditorChange}
           options={{
@@ -151,48 +68,133 @@ export const BasicExample: React.FC = () => {
             fontSize: 14,
             lineNumbers: 'on',
             automaticLayout: true,
+            // Disable code suggestions and IntelliSense
+            quickSuggestions: false,
+            suggestOnTriggerCharacters: false,
+            acceptSuggestionOnEnter: 'off',
+            tabCompletion: 'off',
+            wordBasedSuggestions: 'off',
+            parameterHints: { enabled: false },
+            hover: { enabled: false },
+            contextmenu: false,
           }}
         />
+
+        <div className="bg-gray-700 p-4 border-t border-gray-600">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={play}
+                disabled={!currentRecording || isPlaying}
+                className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+                title="Play"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </button>
+              <button
+                onClick={pause}
+                disabled={!isPlaying}
+                className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+                title="Pause"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg>
+              </button>
+              <button
+                onClick={stop}
+                disabled={!currentRecording}
+                className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+                title="Stop"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 6h12v12H6z" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={startRecording}
+                disabled={isRecording}
+                className={`p-2 rounded-full ${isRecording ? 'bg-red-600 animate-pulse' : 'bg-red-500 hover:bg-red-600'} disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors`}
+                title={isRecording ? 'Recording...' : 'Start Recording'}
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+              </button>
+              <button
+                onClick={() => stopRecording()}
+                disabled={!isRecording}
+                className="p-2 rounded-full bg-red-500 hover:bg-red-600 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+                title="Stop Recording"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 6h12v12H6z" />
+                </svg>
+              </button>
+            </div>
+
+            {currentRecording && (
+              <span className="text-sm">
+                {formatTime(currentTime)} / {formatTime(currentRecording.duration)}
+              </span>
+            )}
+          </div>
+
+          {currentRecording && (
+            <div className="mt-3">
+              <div
+                onClick={handleSeek}
+                className="w-full h-2 bg-gray-500 rounded-full cursor-pointer relative"
+              >
+                <div
+                  className="h-full bg-blue-500 rounded-full transition-all duration-100"
+                  style={{ width: `${(currentTime / currentRecording.duration) * 100}%` }}
+                >
+                  <div className="absolute -right-2 -top-1.5 w-4 h-4 bg-blue-500 rounded-full border-2 border-white" />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Recordings List */}
-      <div>
-        <h2>Saved Recordings ({recordings.length})</h2>
+      <div className="mt-6">
+        <h2 className="text-xl font-semibold mb-4">Saved Recordings ({recordings.length})</h2>
         {recordings.length === 0 ? (
-          <p style={{ color: '#666' }}>No recordings yet. Start recording to create your first session!</p>
+          <p className="text-gray-400">No recordings yet. Start recording to create your first session!</p>
         ) : (
-          <div style={{ display: 'grid', gap: '10px' }}>
+          <div className="grid gap-4">
             {recordings.map((recording) => (
-              <div 
+              <div
                 key={recording.id}
-                style={{ 
-                  padding: '15px', 
-                  border: '1px solid #ddd', 
-                  borderRadius: '8px',
-                  backgroundColor: currentRecording?.id === recording.id ? '#f0f8ff' : '#fff'
-                }}
+                className={`p-4 rounded-lg border ${currentRecording?.id === recording.id ? 'bg-blue-900/30 border-blue-500' : 'bg-gray-800 border-gray-600'}`}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="flex justify-between items-center">
                   <div>
-                    <h3 style={{ margin: '0 0 5px 0' }}>{recording.name}</h3>
-                    <p style={{ margin: '0', color: '#666', fontSize: '14px' }}>
-                      Duration: {formatTime(recording.duration)} | 
-                      Snapshots: {recording.snapshots.length} | 
+                    <h3 className="font-medium">{recording.name}</h3>
+                    <p className="text-sm text-gray-400">
+                      Duration: {formatTime(recording.duration)} |
+                      Snapshots: {recording.snapshots.length} |
                       Created: {new Date(recording.createdAt).toLocaleString()}
                     </p>
                   </div>
-                  <div>
-                    <button 
+                  <div className="flex gap-2">
+                    <button
                       onClick={() => loadRecording(recording)}
-                      style={{ marginRight: '10px', padding: '6px 12px' }}
+                      className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors"
                     >
-                      📂 Load
+                      Load
                     </button>
-                    <button 
+                    <button
                       onClick={() => deleteRecording(recording.id)}
-                      style={{ padding: '6px 12px', backgroundColor: '#ff4444', color: 'white', border: 'none', borderRadius: '4px' }}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors"
                     >
-                      🗑️ Delete
+                      Delete
                     </button>
                   </div>
                 </div>
