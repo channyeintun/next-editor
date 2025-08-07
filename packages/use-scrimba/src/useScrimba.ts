@@ -144,80 +144,92 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     }
   }, [currentRecording, recordingStartTime, recordings.length, storage, onRecordingStop, onError]);
 
+  // Helper function to safely apply editor state
+  const applyEditorStateSafely = useCallback((state: EditorState): boolean => {
+    try {
+      applyEditorState(state);
+      return true;
+    } catch (error) {
+      console.warn('Error applying editor state:', error);
+      return false;
+    }
+  }, [applyEditorState]);
+
+  // Helper function for safe playback cleanup
+  const cleanupPlayback = useCallback(() => {
+    setIsPlaying(false);
+    if (playbackTimerRef.current) {
+      clearTimeout(playbackTimerRef.current);
+      playbackTimerRef.current = null;
+    }
+  }, []);
+
   // Playback controls
   const play = useCallback(() => {
-    if (!loadedRecording || !loadedRecording.snapshots || loadedRecording.snapshots.length === 0) {
+    if (!loadedRecording?.snapshots?.length) {
       console.warn('Cannot play: no recording or snapshots available');
       return;
     }
     
-    try {
-      setIsPlaying(true);
-      setIsPaused(false);
-      setHasEnded(false);
-      playbackStartTimeRef.current = Date.now() - currentTime;
-      
-      onPlaybackStart?.();
+    setIsPlaying(true);
+    setIsPaused(false);
+    setHasEnded(false);
+    playbackStartTimeRef.current = Date.now() - currentTime;
+    
+    onPlaybackStart?.();
 
-      // Start the playback timeline
-      const updatePlayback = () => {
-        if (!playbackStartTimeRef.current || !loadedRecording) return;
-        
-        try {
-          const elapsed = Date.now() - playbackStartTimeRef.current;
-          const adjustedTime = elapsed * playbackSpeed;
-          
-          setCurrentTime(adjustedTime);
-          
-          // Find current snapshot to apply with null safety
-          const validSnapshots = loadedRecording.snapshots.filter(s => s && typeof s.timestamp === 'number');
-          const currentSnapshotToApply = validSnapshots
-            .filter(s => s.timestamp <= adjustedTime)
-            .pop();
-          
-          if (currentSnapshotToApply && 
-              currentSnapshotToApply !== currentSnapshot && 
-              currentSnapshotToApply.state) {
-            setCurrentSnapshot(currentSnapshotToApply);
-            setEditorState({
-              content: currentSnapshotToApply.state.content || '',
-              selection: currentSnapshotToApply.state.selection,
-              position: currentSnapshotToApply.state.position,
-              viewState: currentSnapshotToApply.state.viewState,
-            });
-          }
-          
-          // Check if playback is complete
-          if (adjustedTime >= loadedRecording.duration) {
-            setIsPlaying(false);
-            setHasEnded(true);
-            setCurrentTime(loadedRecording.duration);
-            if (playbackTimerRef.current) {
-              clearTimeout(playbackTimerRef.current);
-              playbackTimerRef.current = null;
-            }
-            return;
-          }
-          
-          // Continue playback
-          playbackTimerRef.current = setTimeout(updatePlayback, 16); // ~60fps
-        } catch (error) {
-          console.error('Error during playback update:', error);
-          setIsPlaying(false);
-          if (playbackTimerRef.current) {
-            clearTimeout(playbackTimerRef.current);
-            playbackTimerRef.current = null;
-          }
-          onError?.(error instanceof Error ? error : new Error('Playback update failed'));
-        }
-      };
+    // Start the playback timeline
+    const updatePlayback = () => {
+      if (!playbackStartTimeRef.current || !loadedRecording) {
+        cleanupPlayback();
+        return;
+      }
       
-      updatePlayback();
-    } catch (error) {
-      console.error('Error starting playback:', error);
-      onError?.(error instanceof Error ? error : new Error('Failed to start playback'));
-    }
-  }, [loadedRecording, currentTime, playbackSpeed, currentSnapshot, onPlaybackStart, onError]);
+      const elapsed = Date.now() - playbackStartTimeRef.current;
+      const adjustedTime = elapsed * playbackSpeed;
+      
+      setCurrentTime(adjustedTime);
+      
+      // Check if playback is complete first
+      if (adjustedTime >= loadedRecording.duration) {
+        setIsPlaying(false);
+        setHasEnded(true);
+        setCurrentTime(loadedRecording.duration);
+        cleanupPlayback();
+        return;
+      }
+      
+      // Find and apply current snapshot
+      const validSnapshots = loadedRecording.snapshots.filter(s => s?.timestamp !== undefined);
+      const currentSnapshotToApply = validSnapshots
+        .filter(s => s.timestamp <= adjustedTime)
+        .pop();
+      
+      if (currentSnapshotToApply && 
+          currentSnapshotToApply !== currentSnapshot && 
+          currentSnapshotToApply.state) {
+        setCurrentSnapshot(currentSnapshotToApply);
+        const newState = {
+          content: currentSnapshotToApply.state.content || '',
+          selection: currentSnapshotToApply.state.selection,
+          position: currentSnapshotToApply.state.position,
+          viewState: currentSnapshotToApply.state.viewState,
+        };
+        setEditorState(newState);
+      }
+      
+      // Continue playback
+      try {
+        playbackTimerRef.current = setTimeout(updatePlayback, 16); // ~60fps
+      } catch (error) {
+        console.error('Error scheduling next playback update:', error);
+        cleanupPlayback();
+        onError?.(error instanceof Error ? error : new Error('Playback scheduling failed'));
+      }
+    };
+    
+    updatePlayback();
+  }, [loadedRecording, currentTime, playbackSpeed, currentSnapshot, onPlaybackStart, onError, cleanupPlayback]);
 
   const pause = useCallback(() => {
     setIsPlaying(false);
@@ -255,91 +267,68 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const seekTo = useCallback((targetTime: number) => {
     if (!loadedRecording) return;
     
-    // Input validation
+    // Input validation - early returns instead of nested logic
     if (typeof targetTime !== 'number' || !isFinite(targetTime) || targetTime < 0) {
       console.warn('Invalid targetTime provided to seekTo:', targetTime);
       return;
     }
     
-    // Bounds checking
+    if (!loadedRecording.snapshots || loadedRecording.snapshots.length === 0) {
+      console.warn('No snapshots available for seeking');
+      return;
+    }
+    
     const clampedTime = Math.min(Math.max(targetTime, 0), loadedRecording.duration);
     
-    try {
-      // Pause playback when seeking
-      if (isPlaying) {
-        setIsPlaying(false);
-        setIsPaused(true);
-      }
-      
-      // Clear current playback timer
-      if (playbackTimerRef.current) {
-        clearTimeout(playbackTimerRef.current);
-        playbackTimerRef.current = null;
-      }
-      
-      setCurrentTime(clampedTime);
-      
-      // Handle edge case: no snapshots available
-      if (!loadedRecording.snapshots || loadedRecording.snapshots.length === 0) {
-        console.warn('No snapshots available for seeking');
-        onSeek?.(clampedTime);
-        return;
-      }
-      
-      // Find the last snapshot before or at the target time
-      let lastSnapshot: EditorSnapshot | null = null;
-      
-      for (let i = 0; i < loadedRecording.snapshots.length; i++) {
-        const snapshot = loadedRecording.snapshots[i];
-        if (snapshot && snapshot.timestamp <= clampedTime) {
-          lastSnapshot = snapshot;
-        } else {
-          break;
-        }
-      }
-      
-      // Apply the snapshot state if found
-      if (lastSnapshot && lastSnapshot.state) {
-        setCurrentSnapshot(lastSnapshot);
-        const newState = {
-          content: lastSnapshot.state.content || '',
-          selection: lastSnapshot.state.selection,
-          position: lastSnapshot.state.position,
-          viewState: lastSnapshot.state.viewState,
-        };
-        setEditorState(newState);
-        
-        // Apply the state immediately to the editor with error handling
-        try {
-          applyEditorState(newState);
-        } catch (error) {
-          console.warn('Error applying editor state during seek:', error);
-          onError?.(error instanceof Error ? error : new Error('Failed to apply editor state'));
-        }
-      } else {
-        // Fallback: reset to initial state if no valid snapshot found
-        const initialState = {
-          content: '',
-          selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as monaco.Selection,
-          position: { lineNumber: 1, column: 1 } as monaco.Position,
-          viewState: null,
-        };
-        setCurrentSnapshot(null);
-        setEditorState(initialState);
-        
-        try {
-          applyEditorState(initialState);
-        } catch (error) {
-          console.warn('Error applying initial state during seek:', error);
-        }
-      }
-      
-      onSeek?.(clampedTime);
-    } catch (error) {
-      console.error('Error in seekTo:', error);
-      onError?.(error instanceof Error ? error : new Error('Seek operation failed'));
+    // Pause playback when seeking
+    if (isPlaying) {
+      setIsPlaying(false);
+      setIsPaused(true);
     }
-  }, [loadedRecording, onSeek, isPlaying, applyEditorState, onError]);
+    
+    // Clear current playback timer
+    if (playbackTimerRef.current) {
+      clearTimeout(playbackTimerRef.current);
+      playbackTimerRef.current = null;
+    }
+    
+    setCurrentTime(clampedTime);
+    
+    // Find the last snapshot before or at the target time
+    let lastSnapshot: EditorSnapshot | null = null;
+    for (let i = 0; i < loadedRecording.snapshots.length; i++) {
+      const snapshot = loadedRecording.snapshots[i];
+      if (snapshot && snapshot.timestamp <= clampedTime) {
+        lastSnapshot = snapshot;
+      } else {
+        break;
+      }
+    }
+    
+    // Apply snapshot state or fallback to initial state
+    const stateToApply = lastSnapshot?.state ? {
+      content: lastSnapshot.state.content || '',
+      selection: lastSnapshot.state.selection,
+      position: lastSnapshot.state.position,
+      viewState: lastSnapshot.state.viewState,
+    } : {
+      content: '',
+      selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as monaco.Selection,
+      position: { lineNumber: 1, column: 1 } as monaco.Position,
+      viewState: null,
+    };
+    
+    setCurrentSnapshot(lastSnapshot);
+    setEditorState(stateToApply);
+    
+    // Single error boundary for editor state application
+    if (!applyEditorStateSafely(stateToApply)) {
+      console.warn('Failed to apply editor state during seek');
+      onError?.(new Error('Failed to apply editor state during seek'));
+    }
+    
+    onSeek?.(clampedTime);
+  }, [loadedRecording, onSeek, isPlaying, onError]);
 
   const setPlaybackSpeed = useCallback((speed: number) => {
     // Input validation for playback speed
@@ -359,12 +348,12 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
   // Recording management
   const loadRecording = useCallback((recording: Recording) => {
+    // Early validation with early returns
     if (!recording) {
       console.warn('Cannot load null/undefined recording');
       return;
     }
     
-    // Validate recording structure
     if (!recording.snapshots || !Array.isArray(recording.snapshots)) {
       console.warn('Recording has invalid snapshots array');
       return;
@@ -375,40 +364,32 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       return;
     }
     
-    try {
-      // Clear any existing playback
-      if (playbackTimerRef.current) {
-        clearTimeout(playbackTimerRef.current);
-        playbackTimerRef.current = null;
-      }
-      
-      setLoadedRecording(recording);
-      setCurrentTime(0);
-      setIsPlaying(false);
-      setIsPaused(false);
-      setHasEnded(false);
-      setCurrentSnapshot(null);
-      
-      // Reset editor state
-      const initialState = {
-        content: '',
-        selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as monaco.Selection,
-        position: { lineNumber: 1, column: 1 } as monaco.Position,
-        viewState: null,
-      };
-      setEditorState(initialState);
-      
-      // Apply initial state to editor
-      try {
-        applyEditorState(initialState);
-      } catch (error) {
-        console.warn('Error applying initial state when loading recording:', error);
-      }
-    } catch (error) {
-      console.error('Error loading recording:', error);
-      onError?.(error instanceof Error ? error : new Error('Failed to load recording'));
+    // Clear any existing playback
+    cleanupPlayback();
+    
+    // Update state
+    setLoadedRecording(recording);
+    setCurrentTime(0);
+    setIsPlaying(false);
+    setIsPaused(false);
+    setHasEnded(false);
+    setCurrentSnapshot(null);
+    
+    // Reset editor to initial state
+    const initialState = {
+      content: '',
+      selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as monaco.Selection,
+      position: { lineNumber: 1, column: 1 } as monaco.Position,
+      viewState: null,
+    };
+    setEditorState(initialState);
+    
+    // Apply initial state - single error boundary
+    if (!applyEditorStateSafely(initialState)) {
+      console.warn('Failed to apply initial state when loading recording');
+      onError?.(new Error('Failed to apply initial state when loading recording'));
     }
-  }, [applyEditorState, onError]);
+  }, [applyEditorStateSafely, cleanupPlayback, onError]);
 
   const deleteRecording = useCallback((id: string) => {
     if (!id || typeof id !== 'string') {
@@ -416,12 +397,14 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       return;
     }
     
-    try {
-      setRecordings(prev => prev.filter(r => r.id !== id));
-      storage?.delete?.(id).catch(error => onError?.(error));
-    } catch (error) {
-      console.error('Error deleting recording:', error);
-      onError?.(error instanceof Error ? error : new Error('Failed to delete recording'));
+    setRecordings(prev => prev.filter(r => r.id !== id));
+    
+    // Handle storage deletion separately with its own error handling
+    if (storage?.delete) {
+      storage.delete(id).catch(error => {
+        console.warn('Failed to delete recording from storage:', error);
+        onError?.(error instanceof Error ? error : new Error('Storage deletion failed'));
+      });
     }
   }, [storage, onError]);
 
