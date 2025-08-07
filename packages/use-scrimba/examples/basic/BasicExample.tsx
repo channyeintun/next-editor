@@ -1,12 +1,13 @@
 import React, { useRef } from 'react';
 import Editor from '@monaco-editor/react';
+import type * as monaco from 'monaco-editor';
 import { useScrimba, type Recording } from 'use-scrimba';
 
 /**
  * Basic example demonstrating core useScrimba functionality
  */
 export const BasicExample: React.FC = () => {
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   
   const scrimbaHook = useScrimba({
     editorRef,
@@ -142,7 +143,7 @@ export const BasicExample: React.FC = () => {
           defaultValue="// Start typing to record your coding session!\n// Click to pause during playback\n\nconst greeting = 'Hello, useScrimba!';\nconsole.log(greeting);"
           onMount={(editor) => { 
             editorRef.current = editor; 
-            handleEditorMount(editor as any); 
+            handleEditorMount(editor); 
           }}
           onChange={handleEditorChange}
           options={{

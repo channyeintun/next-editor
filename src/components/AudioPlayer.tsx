@@ -1,24 +1,13 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { useDispatch } from 'react-redux';
-import { updateCurrentTime } from '../store/slices/replaySlice';
+import { useScrimbaContext } from '../hooks/useScrimbaContext';
 
 interface AudioPlayerProps {
   audioBlob: Blob | null;
-  isPlaying: boolean;
-  currentTime: number;
-  playbackSpeed: number;
-  hasEnded: boolean;
 }
 
-const AudioPlayer: React.FC<AudioPlayerProps> = ({
-  audioBlob,
-  isPlaying,
-  currentTime,
-  playbackSpeed,
-  hasEnded,
-}) => {
+const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBlob }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const dispatch = useDispatch();
+  const { isPlaying, currentTime, playbackSpeed, hasEnded } = useScrimbaContext();
   
   // Create audio URL from blob
   useEffect(() => {
@@ -63,11 +52,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   
   // Update current time during playback
   const handleTimeUpdate = useCallback(() => {
-    if (audioRef.current) {
-      const currentTimeMs = audioRef.current.currentTime * 1000;
-      dispatch(updateCurrentTime(currentTimeMs));
-    }
-  }, [dispatch]);
+    // Time updates are now handled by useScrimba hook
+  }, []);
 
   // Handle when audio ends
   const handleAudioEnded = useCallback(() => {

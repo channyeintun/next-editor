@@ -1,10 +1,6 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { useSelector } from 'react-redux';
-import type * as monaco from 'monaco-editor';
-import type { RootState } from '../store';
-import { useEditorRecording } from '../hooks/useEditorRecording';
-import { useEditorReplay } from '../hooks/useEditorReplay';
+import { useScrimbaContext } from '../hooks/useScrimbaContext';
 
 interface CodeEditorProps {
   language?: string;
@@ -31,13 +27,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   theme = 'vs-dark',
   height = '600px'
 }) => {
-  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const { isRecording } = useSelector((state: RootState) => state.recording);
-  const { isPlaying, editorState } = useSelector((state: RootState) => state.replay);
-
-  // Custom hooks for recording and replay functionality
-  const { handleEditorChange } = useEditorRecording(editorRef, isRecording, isPlaying);
-  useEditorReplay(editorRef, isPlaying, editorState);
+  // Use the useScrimba context instead of Redux and custom hooks
+  const { handleEditorMount, handleEditorChange, editorRef } = useScrimbaContext();
 
   /**
    * Handle Monaco Editor mount event
@@ -45,6 +36,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
    */
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
+    handleEditorMount(editor);
   };
   
   return (
@@ -52,7 +44,21 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       height={height}
       language={language}
       theme={theme}
-      value={isPlaying ? editorState.content : undefined}
+      defaultValue="// 🎬 Scrimba-like Recording Demo
+// Use the media controls to record and replay your coding sessions!
+
+function createAwesome() {
+  const features = [
+    'Real-time recording',
+    'Cursor position tracking', 
+    'Text selection replay',
+    'Smooth playback'
+  ];
+  
+  return features.map(f => `✨ ${f}`);
+}
+
+createAwesome();"
       onMount={handleEditorDidMount}
       onChange={handleEditorChange}
       options={{

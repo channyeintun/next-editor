@@ -1,12 +1,13 @@
 import React, { useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
+import type * as monaco from 'monaco-editor';
 import { useScrimba } from 'use-scrimba';
 
 /**
  * Example with audio recording integration
  */
 export const AudioExample: React.FC = () => {
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -80,8 +81,9 @@ export const AudioExample: React.FC = () => {
   };
 
   const playAudio = () => {
-    if (currentRecording && 'audioBlob' in currentRecording && currentRecording.audioBlob) {
-      const audio = new Audio(URL.createObjectURL(currentRecording.audioBlob));
+    const recording = currentRecording as { audioBlob?: Blob };
+    if (recording?.audioBlob) {
+      const audio = new Audio(URL.createObjectURL(recording.audioBlob));
       audio.play();
     }
   };
@@ -193,7 +195,7 @@ export const AudioExample: React.FC = () => {
           ⏹️ Stop
         </button>
 
-        {currentRecording && 'audioBlob' in currentRecording && currentRecording.audioBlob && (
+        {(currentRecording as { audioBlob?: Blob })?.audioBlob && (
           <button 
             onClick={playAudio}
             style={{ 
@@ -210,7 +212,7 @@ export const AudioExample: React.FC = () => {
       </div>
 
       {/* Audio Info */}
-      {currentRecording && 'audioBlob' in currentRecording && currentRecording.audioBlob && (
+      {(currentRecording as { audioBlob?: Blob })?.audioBlob && (
         <div style={{ 
           marginBottom: '20px', 
           padding: '15px', 
@@ -219,7 +221,7 @@ export const AudioExample: React.FC = () => {
           border: '1px solid #ffcc02'
         }}>
           <h3>🎵 Audio Available</h3>
-          <p>This recording includes audio narration. Audio size: {currentRecording && (currentRecording as any).audioBlob ? ((currentRecording as any).audioBlob.size / 1024).toFixed(1) : '0'} KB</p>
+          <p>This recording includes audio narration. Audio size: {((currentRecording as { audioBlob?: Blob })?.audioBlob?.size ?? 0) / 1024} KB</p>
         </div>
       )}
 
@@ -251,7 +253,7 @@ function createTutorial() {
 const tutorial = createTutorial();`}
           onMount={(editor) => { 
             editorRef.current = editor; 
-            handleEditorMount(editor as any); 
+            handleEditorMount(editor); 
           }}
           onChange={handleEditorChange}
           options={{

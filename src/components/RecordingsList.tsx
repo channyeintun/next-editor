@@ -1,13 +1,9 @@
 import React from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import type { RootState } from '../store';
-import { deleteRecording } from '../store/slices/recordingSlice';
-import { loadRecording } from '../store/slices/replaySlice';
+import { useScrimbaContext } from '../hooks/useScrimbaContext';
+import type { Recording } from 'use-scrimba';
 
 const RecordingsList: React.FC = () => {
-  const dispatch = useDispatch();
-  const { recordings } = useSelector((state: RootState) => state.recording);
-  const { currentRecording } = useSelector((state: RootState) => state.replay);
+  const { recordings, currentRecording, loadRecording, deleteRecording } = useScrimbaContext();
 
   const formatDate = (timestamp: number): string => {
     return new Date(timestamp).toLocaleString();
@@ -20,14 +16,14 @@ const RecordingsList: React.FC = () => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const handleLoadRecording = (recording: typeof recordings[0]) => {
-    dispatch(loadRecording(recording));
+  const handleLoadRecording = (recording: Recording) => {
+    loadRecording(recording);
   };
 
   const handleDeleteRecording = (id: string, event: React.MouseEvent) => {
     event.stopPropagation(); // Prevent loading the recording when deleting
     if (window.confirm('Are you sure you want to delete this recording?')) {
-      dispatch(deleteRecording(id));
+      deleteRecording(id);
     }
   };
 

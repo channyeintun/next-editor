@@ -294,11 +294,15 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   }, []);
 
   // Monaco Editor integration helper
-  const handleEditorMount = useCallback((_editor: monaco.editor.IStandaloneCodeEditor) => {
-    // User needs to assign editor to their ref manually
-    // This function is provided for convenience but doesn't do the assignment
-    // Example usage: onMount={(editor) => { editorRef.current = editor; scrimba.handleEditorMount(editor); }}
-  }, []);
+  const handleEditorMount = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    (_editor: monaco.editor.IStandaloneCodeEditor) => {
+      // User needs to assign editor to their ref manually
+      // This function is provided for convenience but doesn't do the assignment
+      // Example usage: onMount={(editor) => { editorRef.current = editor; scrimba.handleEditorMount(editor); }}
+    },
+    []
+  );
 
   // Load recordings from storage on mount
   useEffect(() => {

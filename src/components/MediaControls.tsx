@@ -1,7 +1,5 @@
 import React from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import type { RootState } from '../store';
-import { play, pause, stop, seekTo, setPlaybackSpeed } from '../store/slices/replaySlice';
+import { useScrimbaContext } from '../hooks/useScrimbaContext';
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -9,14 +7,20 @@ interface MediaControlsProps {
 }
 
 const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording }) => {
-  const dispatch = useDispatch();
-  const { isRecording } = useSelector((state: RootState) => state.recording);
   const { 
+    isRecording,
     isPlaying, 
     currentTime, 
     playbackSpeed,
-    currentRecording 
-  } = useSelector((state: RootState) => state.replay);
+    currentRecording,
+    startRecording,
+    stopRecording,
+    play,
+    pause,
+    stop,
+    seekTo,
+    setPlaybackSpeed
+  } = useScrimbaContext();
 
   const formatTime = (milliseconds: number): string => {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -26,25 +30,35 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
   };
 
   const handlePlay = () => {
-    dispatch(play());
+    play();
   };
 
   const handlePause = () => {
-    dispatch(pause());
+    pause();
   };
 
   const handleStop = () => {
-    dispatch(stop());
+    stop();
   };
 
   const handleSeek = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = parseInt(event.target.value);
-    dispatch(seekTo(newTime));
+    seekTo(newTime);
   };
 
   const handleSpeedChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const newSpeed = parseFloat(event.target.value);
-    dispatch(setPlaybackSpeed(newSpeed));
+    setPlaybackSpeed(newSpeed);
+  };
+
+  const handleStartRecording = () => {
+    startRecording();
+    onRecord?.();
+  };
+
+  const handleStopRecording = () => {
+    stopRecording();
+    onStopRecording?.();
   };
 
   const duration = currentRecording?.duration || 0;
@@ -54,19 +68,25 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
       <div className="mb-4">
         {!isRecording ? (
           <button 
-            onClick={onRecord}
+            onClick={handleStartRecording}
             className="px-6 py-3 text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-md font-medium transition-colors"
             disabled={isPlaying}
           >
-            🔴 Start Recording
+            🎤 Start Recording (Code + Audio)
           </button>
         ) : (
-          <button 
-            onClick={onStopRecording}
-            className="px-6 py-3 text-white bg-gray-600 hover:bg-gray-700 rounded-md font-medium transition-colors"
-          >
-            ⏹️ Stop Recording
-          </button>
+          <div className="flex flex-col items-start gap-2">
+            <button 
+              onClick={handleStopRecording}
+              className="px-6 py-3 text-white bg-gray-600 hover:bg-gray-700 rounded-md font-medium transition-colors"
+            >
+              ⏹️ Stop Recording
+            </button>
+            <div className="flex items-center gap-2 text-sm text-red-400">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+              Recording audio + code changes...
+            </div>
+          </div>
         )}
       </div>
 
