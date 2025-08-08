@@ -1,15 +1,19 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import type * as monaco from 'monaco-editor';
 import { useScrimba, type Recording } from 'use-scrimba';
 
 const BasicExample: React.FC = () => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const [recordings, setRecordings] = useState<Recording[]>([]);
 
   const scrimbaHook = useScrimba({
     editorRef,
     onRecordingStart: () => console.log('📹 Recording started'),
-    onRecordingStop: (recording: Recording) => console.log('⏹️ Recording stopped', recording),
+    onRecordingStop: (recording: Recording) => {
+      console.log('⏹️ Recording stopped', recording);
+      setRecordings(prev => [...prev, recording]);
+    },
     onPlaybackStart: () => console.log('▶️ Playback started'),
     onPlaybackPause: () => console.log('⏸️ Playback paused'),
   });
@@ -18,7 +22,7 @@ const BasicExample: React.FC = () => {
     isRecording,
     isPlaying,
     currentTime,
-    recordings,
+    // recordings removed - handled locally
     currentRecording,
     startRecording,
     stopRecording,
@@ -27,7 +31,7 @@ const BasicExample: React.FC = () => {
     stop,
     seekTo,
     loadRecording,
-    deleteRecording,
+    // deleteRecording removed - handled locally
     handleEditorMount,
     handleEditorChange,
   } = scrimbaHook;
@@ -191,7 +195,7 @@ const BasicExample: React.FC = () => {
                       Load
                     </button>
                     <button
-                      onClick={() => deleteRecording(recording.id)}
+                      onClick={() => setRecordings(prev => prev.filter(r => r.id !== recording.id))}
                       className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors"
                     >
                       Delete

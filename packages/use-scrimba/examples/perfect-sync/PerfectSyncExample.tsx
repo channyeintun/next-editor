@@ -13,6 +13,7 @@ export const PerfectSyncExample: React.FC = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const audioChunksRef = useRef<Blob[]>([]);
+  const [recordings, setRecordings] = useState<Recording[]>([]);
   
   const scrimba = useScrimba({
     editorRef,
@@ -53,6 +54,7 @@ export const PerfectSyncExample: React.FC = () => {
     },
     onRecordingStop: (recording: Recording) => {
       console.log('⏹️ Recording stopped:', recording);
+      setRecordings(prev => [...prev, recording]);
       if (mediaRecorderRef.current && isRecordingAudio) {
         mediaRecorderRef.current.stop();
         setIsRecordingAudio(false);
@@ -80,7 +82,7 @@ export const PerfectSyncExample: React.FC = () => {
     hasEnded,
     currentTime,
     playbackSpeed,
-    recordings,
+    // recordings removed - handled locally
     currentRecording,
     startRecording,
     stopRecording,
@@ -90,7 +92,7 @@ export const PerfectSyncExample: React.FC = () => {
     seekTo,
     setPlaybackSpeed,
     loadRecording,
-    deleteRecording,
+    // deleteRecording removed - handled locally
     handleEditorMount,
     handleEditorChange,
   } = scrimba;
@@ -447,7 +449,7 @@ console.log('Independent master timeline created!');`}
                       Load
                     </button>
                     <button
-                      onClick={() => deleteRecording(recording.id)}
+                      onClick={() => setRecordings(prev => prev.filter(r => r.id !== recording.id))}
                       style={{
                         padding: '8px 16px',
                         backgroundColor: '#e53e3e',

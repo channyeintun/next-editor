@@ -56,7 +56,6 @@ function MyCodeEditor() {
     seekTo,
     
     // Data
-    recordings,
     currentRecording,
     
     // Handler for Monaco Editor
@@ -151,12 +150,8 @@ interface UseScrimbaConfig {
   onStateChange?: (state: EditorState) => void;
   onPlaybackUpdate?: (currentTime: number, snapshot: EditorSnapshot | null) => void;
   
-  // Storage
-  storage?: {
-    save?: (recording: Recording) => Promise<void>;
-    load?: () => Promise<Recording[]>;
-    delete?: (id: string) => Promise<void>;
-  };
+  // Storage - Removed in latest version
+  // Handle storage in your application layer
 }
 ```
 
@@ -176,7 +171,6 @@ interface UseScrimbaReturn {
   playbackSpeed: number;
   
   // Data
-  recordings: Recording[];
   currentRecording: Recording | null;
   currentSnapshot: EditorSnapshot | null;
   
@@ -193,8 +187,6 @@ interface UseScrimbaReturn {
   
   // Recording Management
   loadRecording: (recording: Recording) => void;
-  deleteRecording: (id: string) => void;
-  clearRecordings: () => void;
   
   // Monaco Editor Integration
   handleEditorMount: (editor: monaco.editor.IStandaloneCodeEditor) => void;
@@ -206,14 +198,25 @@ interface UseScrimbaReturn {
   
   // New granular controls
   getSnapshot: (timestamp?: number) => EditorSnapshot | null;
-  getCurrentState: () => any;
-  dispatch: (action: any) => void;
+  getCurrentState: () => { 
+    recording: {
+      isRecording: boolean;
+      recordingStartTime: number | null;
+      currentRecording: { snapshots: EditorSnapshot[]; duration: number; audioBlob?: Blob } | null;
+    };
+    playback: {
+      isPlaying: boolean;
+      isPaused: boolean;
+      hasEnded: boolean;
+      currentTime: number;
+      playbackSpeed: number;
+      loadedRecording: Recording | null;
+      currentSnapshot: EditorSnapshot | null;
+      editorState: EditorState;
+    };
+  };
+  dispatch: (action: ScrimbaAction) => void;
   subscribe: (callback: () => void) => () => void;
-  
-  // Batch operations
-  loadMultipleRecordings: (recordings: Recording[]) => void;
-  exportRecording: (id: string, format?: 'json' | 'compressed') => string | null;
-  importRecording: (data: string, format?: 'json' | 'compressed') => Recording | null;
 }
 ```
 
