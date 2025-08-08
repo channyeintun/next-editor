@@ -5,7 +5,8 @@ import type {
   UseScrimbaReturn, 
   Recording, 
   EditorSnapshot,
-  EditorState 
+  EditorState,
+  ScrimbaAction 
 } from './types';
 import { useRecording } from './hooks/useRecording';
 import { usePlayback } from './hooks/usePlayback';
@@ -285,7 +286,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         }
         
         // Continue master timeline
-        playbackTimerRef.current = requestAnimationFrame(masterTimelineUpdate) as any;
+        playbackTimerRef.current = requestAnimationFrame(masterTimelineUpdate) as unknown as NodeJS.Timeout;
       };
       
       // Start master timeline
@@ -398,12 +399,12 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         }
         
         // Continue non-audio playback
-        playbackTimerRef.current = requestAnimationFrame(updatePlayback) as any;
+        playbackTimerRef.current = requestAnimationFrame(updatePlayback) as unknown as NodeJS.Timeout;
       };
       
       updatePlayback();
     }
-  }, [store, playback.loadedRecording, playback.currentTime, playback.playbackSpeed, playback.hasEnded, onPlaybackStart, audioRef]);
+  }, [store, playback.loadedRecording, playback.hasEnded, onPlaybackStart, audioRef]);
 
   const pause = useCallback(() => {
     store.dispatch(pauseAction());
@@ -545,7 +546,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     }
     
     onSeek?.(clampedTime);
-  }, [store, playback.loadedRecording, onSeek, editorRef, audioRef]);
+  }, [store, playback.loadedRecording, playback.isPlaying, onSeek, editorRef, audioRef]);
 
   const setPlaybackSpeed = useCallback((speed: number) => {
     store.dispatch(setPlaybackSpeedAction(speed));
@@ -630,7 +631,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     return store.getState();
   }, [store]);
 
-  const dispatch = useCallback((action: any) => {
+  const dispatch = useCallback((action: ScrimbaAction) => {
     store.dispatch(action);
   }, [store]);
 

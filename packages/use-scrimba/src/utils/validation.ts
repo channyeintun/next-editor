@@ -4,35 +4,49 @@ import type { EditorState } from '../types';
 /**
  * Validates that an editor state object has all required properties with correct types
  */
-export const isValidEditorState = (state: any): state is EditorState => {
+export const isValidEditorState = (state: unknown): state is EditorState => {
   if (!state || typeof state !== 'object') {
     return false;
   }
 
+  const obj = state as Record<string, unknown>;
+
   // Validate content
-  if (state.content === undefined || state.content === null) {
+  if (obj.content === undefined || obj.content === null) {
     return false;
   }
 
   // Validate position structure
-  if (!state.position || 
-      typeof state.position.lineNumber !== 'number' || 
-      typeof state.position.column !== 'number' ||
-      !isFinite(state.position.lineNumber) ||
-      !isFinite(state.position.column)) {
+  if (!obj.position || 
+      typeof obj.position !== 'object' ||
+      obj.position === null) {
+    return false;
+  }
+  
+  const position = obj.position as Record<string, unknown>;
+  if (typeof position.lineNumber !== 'number' || 
+      typeof position.column !== 'number' ||
+      !isFinite(position.lineNumber) ||
+      !isFinite(position.column)) {
     return false;
   }
 
   // Validate selection structure
-  if (!state.selection ||
-      typeof state.selection.startLineNumber !== 'number' ||
-      typeof state.selection.startColumn !== 'number' ||
-      typeof state.selection.endLineNumber !== 'number' ||
-      typeof state.selection.endColumn !== 'number' ||
-      !isFinite(state.selection.startLineNumber) ||
-      !isFinite(state.selection.startColumn) ||
-      !isFinite(state.selection.endLineNumber) ||
-      !isFinite(state.selection.endColumn)) {
+  if (!obj.selection ||
+      typeof obj.selection !== 'object' ||
+      obj.selection === null) {
+    return false;
+  }
+  
+  const selection = obj.selection as Record<string, unknown>;
+  if (typeof selection.startLineNumber !== 'number' ||
+      typeof selection.startColumn !== 'number' ||
+      typeof selection.endLineNumber !== 'number' ||
+      typeof selection.endColumn !== 'number' ||
+      !isFinite(selection.startLineNumber) ||
+      !isFinite(selection.startColumn) ||
+      !isFinite(selection.endLineNumber) ||
+      !isFinite(selection.endColumn)) {
     return false;
   }
 
@@ -42,7 +56,7 @@ export const isValidEditorState = (state: any): state is EditorState => {
 /**
  * Validates snapshot state structure from recording data
  */
-export const isValidSnapshotState = (state: any): boolean => {
+export const isValidSnapshotState = (state: unknown): boolean => {
   return isValidEditorState(state);
 };
 
