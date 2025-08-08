@@ -35,14 +35,6 @@ export interface CaptureEvents {
   scroll?: boolean;
 }
 
-/**
- * Storage interface for persistence
- */
-export interface StorageProvider {
-  save?: (recording: Recording) => Promise<void>;
-  load?: () => Promise<Recording[]>;
-  delete?: (id: string) => Promise<void>;
-}
 
 /**
  * Configuration options for useScrimba hook
@@ -74,9 +66,6 @@ export interface UseScrimbaConfig {
   onSnapshot?: (snapshot: EditorSnapshot) => void;
   onStateChange?: (state: EditorState) => void;
   onPlaybackUpdate?: (currentTime: number, snapshot: EditorSnapshot | null) => void;
-  
-  // Storage
-  storage?: StorageProvider;
 }
 
 /**
@@ -88,6 +77,26 @@ export interface EditorState {
   position: monaco.Position;
   viewState: monaco.editor.ICodeEditorViewState | null;
 }
+
+/**
+ * Available Redux actions for the useScrimba store
+ * Derived from the actual slice actions to maintain single source of truth
+ */
+export type ScrimbaAction = 
+  | ReturnType<typeof import('./store/recordingSlice').recordingSlice.actions.startRecording>
+  | ReturnType<typeof import('./store/recordingSlice').recordingSlice.actions.stopRecording>
+  | ReturnType<typeof import('./store/recordingSlice').recordingSlice.actions.addSnapshot>
+  | ReturnType<typeof import('./store/recordingSlice').recordingSlice.actions.clearCurrentRecording>
+  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.play>
+  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.pause>
+  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.stop>
+  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.end>
+  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.updateCurrentTime>
+  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.seekTo>
+  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.setPlaybackSpeed>
+  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.loadRecording>
+  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.updateCurrentSnapshot>
+  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.updateEditorState>;
 
 /**
  * Return type of useScrimba hook
@@ -105,7 +114,6 @@ export interface UseScrimbaReturn {
   playbackSpeed: number;
   
   // Data
-  recordings: Recording[];
   currentRecording: Recording | null;
   currentSnapshot: EditorSnapshot | null;
   
@@ -122,8 +130,6 @@ export interface UseScrimbaReturn {
   
   // Recording Management
   loadRecording: (recording: Recording) => void;
-  deleteRecording: (id: string) => void;
-  clearRecordings: () => void;
   
   // Monaco Editor Integration
   handleEditorMount: (editor: monaco.editor.IStandaloneCodeEditor) => void;
@@ -151,15 +157,8 @@ export interface UseScrimbaReturn {
       currentSnapshot: EditorSnapshot | null;
       editorState: EditorState;
     };
-    recordings: {
-      recordings: Recording[];
-    };
   };
-  dispatch: (action: any) => void;
+  dispatch: (action: ScrimbaAction) => void;
   subscribe: (callback: () => void) => () => void;
   
-  // Batch operations
-  loadMultipleRecordings: (recordings: Recording[]) => void;
-  exportRecording: (id: string, format?: 'json' | 'compressed') => string | null;
-  importRecording: (data: string, format?: 'json' | 'compressed') => Recording | null;
 }

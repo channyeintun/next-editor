@@ -1,14 +1,12 @@
 import { configureStore } from '@reduxjs/toolkit';
 import recordingReducer from './recordingSlice';
 import playbackReducer from './playbackSlice';
-import recordingsReducer from './recordingsSlice';
 
 export const createScrimbaStore = () => {
   return configureStore({
     reducer: {
       recording: recordingReducer,
       playback: playbackReducer,
-      recordings: recordingsReducer,
     },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
@@ -24,4 +22,3 @@ export type AppDispatch = ScrimbaStore['dispatch'];
 // Re-export actions
 export * from './recordingSlice';
 export * from './playbackSlice';
-export * from './recordingsSlice';

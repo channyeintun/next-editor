@@ -27,10 +27,6 @@ import {
   loadRecording as loadRecordingAction,
   updateCurrentSnapshot,
   updateEditorState,
-  addRecording,
-  deleteRecording as deleteRecordingAction,
-  clearRecordings as clearRecordingsAction,
-  setRecordings,
 } from './store';
 
 /**
@@ -49,7 +45,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     onPlaybackPause,
     onSeek,
     onError,
-    storage,
     // New granular callbacks
     onSnapshot,
     onStateChange,
@@ -73,7 +68,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
   // Get current state from store
   const state = store.getState();
-  const { recording, playback, recordings } = state;
+  const { recording, playback } = state;
 
   // Playback timeline refs
   const playbackTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -136,18 +131,16 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         if (currentRecordingData) {
           const recordingData: Recording = {
             id: Date.now().toString(),
-            name: `Recording ${recordings.recordings.length + 1}`,
+            name: `Recording ${Date.now()}`,
             createdAt: Date.now(),
             snapshots: currentRecordingData.snapshots,
             duration: currentRecordingData.duration,
             audioBlob: currentRecordingData.audioBlob,
           };
 
-          store.dispatch(addRecording(recordingData));
+          // Just call the callback with the recording data
+          // The main project will handle storage
           store.dispatch(clearCurrentRecording());
-          
-          // Save to storage if provided
-          storage?.save?.(recordingData).catch(error => onError?.(error));
           
           onRecordingStop?.(recordingData);
         }
@@ -155,7 +148,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     } catch (error) {
       onError?.(error as Error);
     }
-  }, [store, recording.currentRecording, recordingStartTime, recordings.recordings.length, storage, onRecordingStop, onError]);
+  }, [store, recording.currentRecording, recordingStartTime, onRecordingStop, onError]);
 
   // Helper function to safely apply editor state
   const applyEditorStateSafely = useCallback((state: EditorState): boolean => {
@@ -602,26 +595,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     }
   }, [store, applyEditorStateSafely, cleanupPlayback, onError, audioRef, playback.playbackSpeed]);
 
-  const deleteRecording = useCallback((id: string) => {
-    if (!id || typeof id !== 'string') {
-      console.warn('Invalid recording ID provided for deletion:', id);
-      return;
-    }
-    
-    store.dispatch(deleteRecordingAction(id));
-    
-    // Handle storage deletion separately with its own error handling
-    if (storage?.delete) {
-      storage.delete(id).catch(error => {
-        console.warn('Failed to delete recording from storage:', error);
-        onError?.(error instanceof Error ? error : new Error('Storage deletion failed'));
-      });
-    }
-  }, [store, storage, onError]);
-
-  const clearRecordings = useCallback(() => {
-    store.dispatch(clearRecordingsAction());
-  }, [store]);
 
   // Monaco Editor integration helper
   const handleEditorMount = useCallback(
@@ -634,16 +607,9 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     []
   );
 
-  // Load recordings from storage on mount
-  useEffect(() => {
-    if (storage?.load) {
-      storage.load()
-        .then(loadedRecordings => {
-          store.dispatch(setRecordings(loadedRecordings));
-        })
-        .catch(error => onError?.(error));
-    }
-  }, [storage, store, onError]);
+  // Note: Removed automatic storage loading on mount
+  // Storage will only be accessed when explicitly needed (save/delete operations)
+  // or when user explicitly loads recordings
 
   // New granular control APIs
   const getSnapshot = useCallback((timestamp?: number): EditorSnapshot | null => {
@@ -672,84 +638,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     return store.subscribe(callback);
   }, [store]);
 
-  const loadMultipleRecordings = useCallback((recordings: Recording[]) => {
-    store.dispatch(setRecordings(recordings));
-  }, [store]);
-
-  const exportRecording = useCallback((id: string, format: 'json' | 'compressed' = 'json'): string | null => {
-    const recording = recordings.recordings.find(r => r.id === id);
-    if (!recording) {
-      console.warn(`Recording with id ${id} not found`);
-      return null;
-    }
-
-    try {
-      if (format === 'json') {
-        return JSON.stringify(recording, null, 2);
-      } else if (format === 'compressed') {
-        // Simple compression: remove whitespace and optional properties
-        const compressed = {
-          ...recording,
-          snapshots: recording.snapshots.map(s => ({
-            t: s.timestamp,
-            s: {
-              c: s.state.content,
-              sel: [s.state.selection.startLineNumber, s.state.selection.startColumn, s.state.selection.endLineNumber, s.state.selection.endColumn],
-              pos: [s.state.position.lineNumber, s.state.position.column],
-              v: s.state.viewState
-            }
-          }))
-        };
-        return JSON.stringify(compressed);
-      }
-    } catch (error) {
-      console.error('Error exporting recording:', error);
-      onError?.(error instanceof Error ? error : new Error('Export failed'));
-    }
-    
-    return null;
-  }, [recordings.recordings, onError]);
-
-  const importRecording = useCallback((data: string, format: 'json' | 'compressed' = 'json'): Recording | null => {
-    try {
-      const parsed = JSON.parse(data);
-      
-      if (format === 'compressed') {
-        // Decompress the data
-        const recording: Recording = {
-          ...parsed,
-          snapshots: parsed.snapshots.map((s: any) => ({
-            timestamp: s.t,
-            state: {
-              content: s.s.c,
-              selection: {
-                startLineNumber: s.s.sel[0],
-                startColumn: s.s.sel[1],
-                endLineNumber: s.s.sel[2],
-                endColumn: s.s.sel[3]
-              } as monaco.Selection,
-              position: {
-                lineNumber: s.s.pos[0],
-                column: s.s.pos[1]
-              } as monaco.Position,
-              viewState: s.s.v
-            }
-          }))
-        };
-        return recording;
-      } else {
-        // Validate it's a proper recording
-        if (parsed.id && parsed.snapshots && Array.isArray(parsed.snapshots)) {
-          return parsed as Recording;
-        }
-      }
-    } catch (error) {
-      console.error('Error importing recording:', error);
-      onError?.(error instanceof Error ? error : new Error('Import failed'));
-    }
-    
-    return null;
-  }, [onError]);
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -773,7 +661,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     playbackSpeed: playback.playbackSpeed,
     
     // Data
-    recordings: recordings.recordings,
     currentRecording: playback.loadedRecording,
     currentSnapshot: playback.currentSnapshot,
     
@@ -790,8 +677,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     // Recording Management
     loadRecording,
-    deleteRecording,
-    clearRecordings,
     
     // Monaco Editor Integration
     handleEditorMount,
@@ -807,9 +692,5 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     dispatch,
     subscribe,
     
-    // Batch operations
-    loadMultipleRecordings,
-    exportRecording,
-    importRecording,
   };
 };

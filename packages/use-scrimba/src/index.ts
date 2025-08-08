@@ -6,10 +6,10 @@ export type {
   EditorSnapshot,
   Recording,
   CaptureEvents,
-  StorageProvider,
   UseScrimbaConfig,
   UseScrimbaReturn,
   EditorState,
+  ScrimbaAction,
 } from './types';
 
 // Re-export internal hooks for advanced users
