@@ -10,6 +10,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
   const { 
     isRecording,
     isPlaying, 
+    hasEnded,
     currentTime, 
     playbackSpeed,
     currentRecording,
@@ -29,12 +30,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const handlePlay = () => {
-    play();
-  };
-
-  const handlePause = () => {
-    pause();
+  const handlePlayPause = () => {
+    if (isPlaying) {
+      pause();
+    } else {
+      // Just call play() - useScrimba handles restarting if ended
+      play();
+    }
   };
 
   const handleStop = () => {
@@ -101,23 +103,19 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
               ⏹️
             </button>
             
-            {isPlaying ? (
-              <button 
-                onClick={handlePause} 
-                disabled={isRecording}
-                className="w-12 h-12 text-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-full flex items-center justify-center transition-colors"
-              >
-                ⏸️
-              </button>
-            ) : (
-              <button 
-                onClick={handlePlay} 
-                disabled={isRecording}
-                className="w-12 h-12 text-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-full flex items-center justify-center transition-colors"
-              >
-                ▶️
-              </button>
-            )}
+            <button 
+              onClick={handlePlayPause} 
+              disabled={isRecording}
+              className="w-12 h-12 text-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-full flex items-center justify-center transition-colors"
+            >
+              {isPlaying ? (
+                '⏸️'
+              ) : hasEnded ? (
+                '🔄'
+              ) : (
+                '▶️'
+              )}
+            </button>
           </div>
 
           <div className="flex items-center gap-4">

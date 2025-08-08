@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 
 interface UseAudioRecordingReturn {
-  isRecording: boolean;
+  isRecordingAudio: boolean;
   audioBlob: Blob | null;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<Blob | null>;
@@ -9,7 +9,7 @@ interface UseAudioRecordingReturn {
 }
 
 export const useAudioRecording = (): UseAudioRecordingReturn => {
-  const [isRecording, setIsRecording] = useState(false);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [error, setError] = useState<string | null>(null);
   
@@ -31,8 +31,13 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
         }
       };
       
+      mediaRecorder.onstop = () => {
+        // Stop all tracks to release microphone
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
       mediaRecorder.start();
-      setIsRecording(true);
+      setIsRecordingAudio(true);
     } catch (err) {
       setError('Failed to start recording. Please check microphone permissions.');
       console.error('Error starting recording:', err);
@@ -41,18 +46,11 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
   
   const stopRecording = useCallback((): Promise<Blob | null> => {
     return new Promise((resolve) => {
-      if (mediaRecorderRef.current && isRecording) {
+      if (mediaRecorderRef.current && isRecordingAudio) {
         mediaRecorderRef.current.onstop = () => {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           setAudioBlob(audioBlob);
-          setIsRecording(false);
-          
-          // Stop all tracks to release microphone
-          const stream = mediaRecorderRef.current?.stream;
-          if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-          }
-          
+          setIsRecordingAudio(false);
           resolve(audioBlob);
         };
         
@@ -61,10 +59,10 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
         resolve(null);
       }
     });
-  }, [isRecording]);
+  }, [isRecordingAudio]);
   
   return {
-    isRecording,
+    isRecordingAudio,
     audioBlob,
     startRecording,
     stopRecording,

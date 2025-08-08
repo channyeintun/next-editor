@@ -13,7 +13,8 @@
       "Bash(npm cache clean:*)",
       "Bash(npm pack:*)",
       "Bash(./publish.sh)",
-      "Bash(npm publish:*)"
+      "Bash(npm publish:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": []
   }
