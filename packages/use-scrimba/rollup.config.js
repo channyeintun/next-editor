@@ -1,6 +1,7 @@
 const resolve = require('@rollup/plugin-node-resolve');
 const commonjs = require('@rollup/plugin-commonjs');
 const typescript = require('@rollup/plugin-typescript');
+const terser = require('@rollup/plugin-terser');
 const { default: dts } = require('rollup-plugin-dts');
 const { readFileSync } = require('fs');
 
@@ -36,6 +37,18 @@ module.exports = [
         declaration: false, // We'll generate declarations separately
         declarationMap: false, // Disable since declaration is false
         sourceMap: true,
+      }),
+      terser({
+        compress: {
+          drop_console: true, // Remove console.log statements
+          drop_debugger: true, // Remove debugger statements
+        },
+        mangle: {
+          reserved: ['useScrimba'], // Keep hook name readable
+        },
+        format: {
+          comments: false, // Remove comments
+        },
       }),
     ],
   },
