@@ -65,6 +65,8 @@ export const playbackSlice = createSlice({
     seekTo: (state, action: PayloadAction<number>) => {
       const targetTime = action.payload;
       state.currentTime = targetTime;
+      // Reset hasEnded when seeking to any position
+      state.hasEnded = false;
       if (state.isPlaying) {
         state.isPlaying = false;
         state.isPaused = true;
