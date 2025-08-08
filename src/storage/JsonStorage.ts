@@ -158,7 +158,7 @@ export class JsonStorage {
         
         try {
           const text = await file.text();
-          let parsed: any;
+          let parsed: unknown;
           
           // Try SuperJSON first, then fall back to regular JSON for compatibility
           try {
@@ -207,15 +207,18 @@ export class JsonStorage {
   /**
    * Validate if an object is a valid Recording
    */
-  private isValidRecording(obj: any): obj is Recording {
+  private isValidRecording(obj: unknown): obj is Recording {
+    if (!obj || typeof obj !== 'object') {
+      return false;
+    }
+    
+    const record = obj as Record<string, unknown>;
     return (
-      obj &&
-      typeof obj === 'object' &&
-      typeof obj.id === 'string' &&
-      typeof obj.name === 'string' &&
-      Array.isArray(obj.snapshots) &&
-      typeof obj.duration === 'number' &&
-      typeof obj.createdAt === 'number'
+      typeof record.id === 'string' &&
+      typeof record.name === 'string' &&
+      Array.isArray(record.snapshots) &&
+      typeof record.duration === 'number' &&
+      typeof record.createdAt === 'number'
     );
   }
 

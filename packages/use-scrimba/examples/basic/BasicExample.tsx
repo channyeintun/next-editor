@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, react-refresh/only-export-components */
 import React, { useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import type * as monaco from 'monaco-editor';

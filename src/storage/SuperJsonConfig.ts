@@ -1,12 +1,14 @@
 import superjson from 'superjson';
+import type { Recording } from 'use-scrimba';
 
 /**
  * Serializable Blob representation for SuperJSON
+ * Extends Record to satisfy JSONValue constraint
  */
-interface SerializableBlob {
+interface SerializableBlob extends Record<string, string | boolean> {
   data: string;
   type: string;
-  [key: string]: any; // Index signature for JSONObject compatibility
+  __isSerializableBlob: boolean;
 }
 
 /**
@@ -47,7 +49,7 @@ export const blobHelpers = {
           data: base64, 
           type: blob.type,
           __isSerializableBlob: true 
-        } as SerializableBlob & { __isSerializableBlob: true });
+        } as SerializableBlob);
       };
       reader.onerror = reject;
       reader.readAsDataURL(blob);
@@ -57,11 +59,15 @@ export const blobHelpers = {
   /**
    * Pre-process Recording object to convert Blobs
    */
-  async prepareRecordingForSerialization(recording: any): Promise<any> {
+  async prepareRecordingForSerialization(recording: Recording): Promise<Recording> {
     const prepared = { ...recording };
     
     if (recording.audioBlob instanceof Blob) {
-      prepared.audioBlob = await this.blobToSerializable(recording.audioBlob);
+      // Replace Blob with SerializableBlob for JSON compatibility
+      const serialized = await this.blobToSerializable(recording.audioBlob);
+      // TypeScript workaround: we're replacing the Blob with SerializableBlob
+      delete (prepared as { audioBlob?: unknown }).audioBlob;
+      (prepared as { audioBlob?: SerializableBlob }).audioBlob = serialized;
     }
     
     return prepared;

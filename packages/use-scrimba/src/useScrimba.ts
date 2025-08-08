@@ -259,7 +259,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
                     if (newState.viewState) {
                       try {
                         editor.restoreViewState(newState.viewState);
-                      } catch (error) {
+                      } catch {
                         // Ignore view state errors
                       }
                     }
@@ -312,6 +312,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         masterTimelineStartRef.current = null;
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playback.isPlaying, playback.loadedRecording, audioRef, editorRef, store, onStateChange, onPlaybackUpdate]);
 
   // Editor state synchronization for non-audio playback only

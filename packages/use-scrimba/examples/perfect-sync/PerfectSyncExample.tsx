@@ -168,7 +168,7 @@ export const PerfectSyncExample: React.FC = () => {
             <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
               {formatTime(currentTime)} / {formatTime(currentRecording.duration)}
             </div>
-            {(currentRecording as any).audioBlob && (
+            {(currentRecording as Recording & { audioBlob?: Blob })?.audioBlob && (
               <div style={{ fontSize: '12px', color: '#48bb78', marginTop: '4px' }}>
                 🎵 Perfect Audio Sync Available
               </div>
@@ -429,7 +429,7 @@ console.log('Independent master timeline created!');`}
                     <div style={{ display: 'flex', gap: '20px', fontSize: '14px', color: '#718096' }}>
                       <span>⏱️ {formatTime(recording.duration)}</span>
                       <span>📸 {recording.snapshots.length} snapshots</span>
-                      {(recording as any).audioBlob && <span style={{ color: '#48bb78' }}>🎵 Perfect Sync</span>}
+                      {(recording as Recording & { audioBlob?: Blob })?.audioBlob && <span style={{ color: '#48bb78' }}>🎵 Perfect Sync</span>}
                       <span>📅 {new Date(recording.createdAt).toLocaleString()}</span>
                     </div>
                   </div>
