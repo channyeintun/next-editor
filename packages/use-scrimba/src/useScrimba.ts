@@ -77,7 +77,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   // Playback timeline refs
   const playbackTimerRef = useRef<NodeJS.Timeout | null>(null);
   const playbackStartTimeRef = useRef<number | null>(null);
-  const audioTimeUpdateRef = useRef<(() => void) | null>(null);
   const masterTimelineStartRef = useRef<{ perfTime: number; currentTime: number } | null>(null);
 
   // Callback for handling new snapshots
