@@ -1,7 +1,7 @@
 import CodeEditor from './components/CodeEditor';
 import MediaControls from './components/MediaControls';
 import RecordingsList from './components/RecordingsList';
-import PlaybackManager from './components/PlaybackManager';
+import AudioPlayer from './components/AudioPlayer';
 import { ScrimbaProvider } from './contexts/ScrimbaContext.tsx';
 import './App.css'
 
@@ -46,8 +46,8 @@ function App() {
           </div>
         </div>
         
-        {/* Playback Manager - handles audio sync */}
-        <PlaybackManager />
+        {/* Audio Player - handles audio sync */}
+        <AudioPlayer />
       </div>
     </ScrimbaProvider>
   );
