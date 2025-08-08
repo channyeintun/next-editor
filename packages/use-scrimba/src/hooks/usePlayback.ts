@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type * as monaco from 'monaco-editor';
 import type { EditorState } from '../types';
 import { isValidEditorState, isEditorReady } from '../utils/validation';
+import { applyContentDiff } from '../utils/editorDiff';
 
 /**
  * Internal hook for handling Monaco Editor playback functionality
@@ -50,7 +51,7 @@ export const usePlayback = (
           // Revert any user changes during replay
           const currentContent = editor.getValue();
           if (currentContent !== editorState.content) {
-            editor.setValue(editorState.content);
+            applyContentDiff(editor, editorState.content);
             editor.setPosition(editorState.position);
             editor.setSelection(editorState.selection);
           }
@@ -88,7 +89,7 @@ export const usePlayback = (
         const currentContent = editor.getValue();
         if (currentContent !== editorState.content) {
           try {
-            editor.setValue(editorState.content);
+            applyContentDiff(editor, editorState.content);
           } catch (error) {
             console.warn('Error setting editor content during playback:', error);
             return;
@@ -199,10 +200,7 @@ export const usePlayback = (
     
     // Skip if content is the same to avoid triggering Monaco's internal events
     try {
-      const currentContent = editor.getValue();
-      if (currentContent !== state.content) {
-        editor.setValue(state.content);
-      }
+      applyContentDiff(editor, state.content);
     } catch (error) {
       console.warn('Failed to set editor content:', error);
       return;

@@ -10,6 +10,7 @@ import type {
 import { useRecording } from './hooks/useRecording';
 import { usePlayback } from './hooks/usePlayback';
 import { isValidSnapshotState, isEditorReady } from './utils/validation';
+import { applyContentDiff } from './utils/editorDiff';
 import { 
   createScrimbaStore,
   startRecording as startRecordingAction,
@@ -244,10 +245,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
             
             // Apply to Monaco directly and synchronously
             try {
-              const currentContent = editor.getValue();
-              if (currentContent !== newState.content) {
-                editor.setValue(newState.content);
-              }
+              applyContentDiff(editor, newState.content);
               
               if (editor.getValue() === newState.content) {
                 const model = editor.getModel();
@@ -546,10 +544,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       }
       
       try {
-        const currentContent = editor.getValue();
-        if (currentContent !== stateToApply.content) {
-          editor.setValue(stateToApply.content);
-        }
+        applyContentDiff(editor, stateToApply.content);
       } catch (error) {
         console.warn('Failed to apply content during seek:', error);
         // Don't call onError for Monaco internal issues - just log and continue
