@@ -1,46 +1,67 @@
-import type { StorageProvider, Recording } from 'use-scrimba';
+import type { Recording } from 'use-scrimba';
+import { superjson, blobHelpers } from './SuperJsonConfig';
 
 /**
  * JSON Storage Interface for use-scrimba
  * Provides export/import functionality for recordings as JSON files
  */
-export class JsonStorage implements StorageProvider {
+export class JsonStorage {
   private localStorageKey = 'scrimba-recordings';
 
   /**
-   * Save recording to localStorage
+   * Save recording to localStorage using SuperJSON
    */
   async save(recording: Recording): Promise<void> {
     try {
       const existingRecordings = await this.load();
       
-      // Convert recording to serializable format
-      const serializableRecording = await this.recordingToSerializable(recording);
-      const updatedRecordings = [...existingRecordings.filter(r => r.id !== recording.id), serializableRecording];
+      // Prepare recording for SuperJSON serialization (handle Blobs)
+      const preparedRecording = await blobHelpers.prepareRecordingForSerialization(recording);
+      const updatedRecordings = [...existingRecordings.filter(r => r.id !== recording.id), preparedRecording];
       
-      localStorage.setItem(this.localStorageKey, JSON.stringify(updatedRecordings));
+      // Use SuperJSON for serialization
+      const serializedData = superjson.stringify(updatedRecordings);
+      localStorage.setItem(this.localStorageKey, serializedData);
     } catch (error) {
       throw new Error(`Failed to save recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   /**
-   * Load all recordings from localStorage
+   * Load all recordings from localStorage using SuperJSON
    */
   async load(): Promise<Recording[]> {
     try {
       const stored = localStorage.getItem(this.localStorageKey);
       if (!stored) return [];
       
-      const parsed = JSON.parse(stored);
-      if (!Array.isArray(parsed)) return [];
+      // Use SuperJSON for deserialization
+      const recordings = superjson.parse(stored);
+      const recordingsArray = Array.isArray(recordings) ? recordings : [];
       
-      // Convert serializable format back to Recording objects with Blobs
-      const recordings = await Promise.all(
-        parsed.map(item => this.serializableToRecording(item))
-      );
+      // Convert SerializableBlob back to Blob for each recording
+      const processedRecordings = recordingsArray.map(recording => {
+        if (recording.audioBlob && recording.audioBlob.__isSerializableBlob) {
+          const { data, type } = recording.audioBlob;
+          if (data && data !== 'BLOB_PLACEHOLDER') {
+            const byteCharacters = atob(data);
+            const byteNumbers = new Array(byteCharacters.length);
+            
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            
+            const byteArray = new Uint8Array(byteNumbers);
+            recording.audioBlob = new Blob([byteArray], { type });
+          } else {
+            // Remove invalid audioBlob
+            delete recording.audioBlob;
+          }
+        }
+        return recording;
+      });
       
-      return recordings;
+      return processedRecordings;
     } catch (error) {
       console.warn('Failed to load recordings from localStorage:', error);
       return [];
@@ -48,26 +69,32 @@ export class JsonStorage implements StorageProvider {
   }
 
   /**
-   * Delete recording from localStorage
+   * Delete recording from localStorage using SuperJSON
    */
   async delete(id: string): Promise<void> {
     try {
       const recordings = await this.load();
       const filtered = recordings.filter(r => r.id !== id);
-      localStorage.setItem(this.localStorageKey, JSON.stringify(filtered));
+      
+      // Prepare filtered recordings for SuperJSON serialization
+      const preparedRecordings = await Promise.all(
+        filtered.map(recording => blobHelpers.prepareRecordingForSerialization(recording))
+      );
+      const serializedData = superjson.stringify(preparedRecordings);
+      localStorage.setItem(this.localStorageKey, serializedData);
     } catch (error) {
       throw new Error(`Failed to delete recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   /**
-   * Export recording as JSON file download
+   * Export recording as JSON file download using SuperJSON
    */
   async exportAsFile(recording: Recording, filename?: string): Promise<void> {
     try {
-      // Convert recording to serializable format (handles Blob properly)
-      const serializableRecording = await this.recordingToSerializable(recording);
-      const jsonString = JSON.stringify(serializableRecording, null, 2);
+      // Prepare recording for SuperJSON export (handles Blob properly)
+      const preparedRecording = await blobHelpers.prepareRecordingForSerialization(recording);
+      const jsonString = superjson.stringify(preparedRecording);
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       
@@ -86,16 +113,16 @@ export class JsonStorage implements StorageProvider {
   }
 
   /**
-   * Export all recordings as JSON file download
+   * Export all recordings as JSON file download using SuperJSON
    */
   async exportAllAsFile(filename?: string): Promise<void> {
     try {
       const recordings = await this.load();
-      // Convert all recordings to serializable format (handles Blobs properly)
-      const serializableRecordings = await Promise.all(
-        recordings.map(recording => this.recordingToSerializable(recording))
+      // Prepare all recordings for SuperJSON export (handles Blobs properly)
+      const preparedRecordings = await Promise.all(
+        recordings.map(recording => blobHelpers.prepareRecordingForSerialization(recording))
       );
-      const jsonString = JSON.stringify(serializableRecordings, null, 2);
+      const jsonString = superjson.stringify(preparedRecordings);
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       
@@ -114,7 +141,7 @@ export class JsonStorage implements StorageProvider {
   }
 
   /**
-   * Import recordings from JSON file
+   * Import recordings from JSON file using SuperJSON
    */
   importFromFile(): Promise<Recording[]> {
     return new Promise((resolve, reject) => {
@@ -131,7 +158,14 @@ export class JsonStorage implements StorageProvider {
         
         try {
           const text = await file.text();
-          const parsed = JSON.parse(text);
+          let parsed: any;
+          
+          // Try SuperJSON first, then fall back to regular JSON for compatibility
+          try {
+            parsed = superjson.parse(text);
+          } catch {
+            parsed = JSON.parse(text); // Fallback for older exports
+          }
           
           // Validate the imported data
           let recordings: Recording[];
@@ -143,22 +177,21 @@ export class JsonStorage implements StorageProvider {
             throw new Error('Invalid recording format');
           }
           
-          // Handle imported recordings - they might already be in serialized format
-          const existingStoredRecordings = localStorage.getItem(this.localStorageKey);
-          const existingParsed = existingStoredRecordings ? JSON.parse(existingStoredRecordings) : [];
-          const existingRecordings = Array.isArray(existingParsed) ? existingParsed : [];
-          
+          // Load existing recordings using SuperJSON
+          const existingRecordings = await this.load();
           const processedRecordings = [];
           
           for (const recording of recordings) {
             // Process the recording for storage
-            const processedForStorage = await this.processImportedRecording(recording);
+            const processedForStorage = await blobHelpers.prepareRecordingForSerialization(recording);
             const updatedRecordings = [...existingRecordings.filter(r => r.id !== processedForStorage.id), processedForStorage];
-            localStorage.setItem(this.localStorageKey, JSON.stringify(updatedRecordings));
             
-            // Convert back to Recording with Blob for return value
-            const processedForReturn = await this.serializableToRecording(processedForStorage);
-            processedRecordings.push(processedForReturn);
+            // Use SuperJSON for storage
+            const serializedData = superjson.stringify(updatedRecordings);
+            localStorage.setItem(this.localStorageKey, serializedData);
+            
+            // The processed recording already has the correct format for return
+            processedRecordings.push(recording);
           }
           
           resolve(processedRecordings);
@@ -194,100 +227,16 @@ export class JsonStorage implements StorageProvider {
   }
 
   /**
-   * Convert Recording with Blob to serializable format
-   */
-  private async recordingToSerializable(recording: Recording): Promise<any> {
-    const serializable: any = { ...recording };
-    
-    if (recording.audioBlob) {
-      // Convert Blob to base64 string
-      serializable.audioData = await this.blobToBase64(recording.audioBlob);
-      serializable.audioType = recording.audioBlob.type;
-      delete serializable.audioBlob; // Remove non-serializable Blob
-    }
-    
-    return serializable;
-  }
-
-  /**
-   * Convert serializable format back to Recording with Blob
-   */
-  private async serializableToRecording(serializable: any): Promise<Recording> {
-    const recording: Recording = { ...serializable };
-    
-    if (serializable.audioData && serializable.audioType) {
-      // Convert base64 string back to Blob
-      recording.audioBlob = this.base64ToBlob(serializable.audioData, serializable.audioType);
-      delete (recording as any).audioData; // Remove serialized data
-      delete (recording as any).audioType; // Remove type info
-    }
-    
-    return recording;
-  }
-
-  /**
-   * Convert Blob to base64 string
-   */
-  private blobToBase64(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        // Remove data URL prefix (e.g., "data:audio/webm;base64,")
-        const base64 = result.split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  /**
-   * Convert base64 string to Blob
-   */
-  private base64ToBlob(base64: string, type: string): Blob {
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type });
-  }
-
-  /**
-   * Process imported recording to handle different formats
-   */
-  private async processImportedRecording(importedRecording: any): Promise<any> {
-    // If it already has audioData/audioType (serialized format), use it directly
-    if (importedRecording.audioData && importedRecording.audioType) {
-      return importedRecording; // Already in serializable format
-    }
-    
-    // If it has audioBlob (but it's likely just JSON data), remove it
-    if (importedRecording.audioBlob) {
-      const cleanRecording = { ...importedRecording };
-      delete cleanRecording.audioBlob; // Remove invalid audioBlob data
-      return cleanRecording;
-    }
-    
-    // If it's a regular Recording with a real Blob, convert it
-    if (importedRecording.audioBlob instanceof Blob) {
-      return await this.recordingToSerializable(importedRecording);
-    }
-    
-    // No audio data, return as-is
-    return importedRecording;
-  }
-
-  /**
-   * Get storage statistics
+   * Get storage statistics using SuperJSON
    */
   async getStats(): Promise<{ count: number; totalSize: string }> {
     const recordings = await this.load();
-    const jsonString = JSON.stringify(recordings);
+    
+    // Prepare recordings for accurate size calculation
+    const preparedRecordings = await Promise.all(
+      recordings.map(recording => blobHelpers.prepareRecordingForSerialization(recording))
+    );
+    const jsonString = superjson.stringify(preparedRecordings);
     const sizeInBytes = new Blob([jsonString]).size;
     
     // Convert to human-readable format
