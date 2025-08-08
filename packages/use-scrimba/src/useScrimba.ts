@@ -212,10 +212,13 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         // Update Redux state
         store.dispatch(updateCurrentTime(masterTime));
         
-        // Sync audio to master timeline
+        // Sync audio to master timeline with bounds checking
         const expectedAudioTime = masterTime / 1000;
-        if (Math.abs(audio.currentTime - expectedAudioTime) > 0.1) {
-          audio.currentTime = expectedAudioTime;
+        const audioDuration = audio.duration;
+        const safeAudioTime = Math.min(expectedAudioTime, audioDuration - 0.01); // Leave 10ms buffer
+        
+        if (Math.abs(audio.currentTime - safeAudioTime) > 0.1 && safeAudioTime < audioDuration) {
+          audio.currentTime = safeAudioTime;
         }
         
         // Apply editor state changes synchronously
@@ -280,8 +283,9 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
           }
         }
         
-        // Check if playback complete
-        if (masterTime >= currentState.loadedRecording!.duration) {
+        // Check if playback complete with small buffer to prevent overplay
+        const recordingDuration = currentState.loadedRecording!.duration;
+        if (masterTime >= recordingDuration - 10) { // Stop 10ms before to prevent glitch
           store.dispatch(end());
           // Stop audio cleanly to prevent broken sounds
           audio.pause();
@@ -396,8 +400,8 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         
         store.dispatch(updateCurrentTime(adjustedTime));
         
-        // Check if playback is complete
-        if (adjustedTime >= currentState.loadedRecording.duration) {
+        // Check if playback is complete with small buffer to prevent overplay
+        if (adjustedTime >= currentState.loadedRecording.duration - 10) {
           store.dispatch(end());
           return;
         }
