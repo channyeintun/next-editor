@@ -2,9 +2,19 @@
 
 ## Prerequisites
 
-1. **NPM Account**: Create an account at [npmjs.com](https://www.npmjs.com)
-2. **NPM CLI**: Make sure you have npm installed
-3. **Git Repository**: Push your code to GitHub/GitLab first
+1. **Node.js Version**: **Use Node.js 22 LTS** (avoid Node.js 23 due to a build bug where 'dist' becomes 'ist' in output paths)
+   ```bash
+   # Check your Node version
+   node --version
+   # Should be v22.x.x
+   
+   # If using nvm to manage Node versions:
+   nvm install 22
+   nvm use 22
+   ```
+2. **NPM Account**: Create an account at [npmjs.com](https://www.npmjs.com)
+3. **NPM CLI**: Make sure you have npm installed
+4. **Git Repository**: Push your code to GitHub/GitLab first
 
 ## Step-by-Step Publishing Process
 
@@ -238,7 +248,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
       - run: npm ci
       - run: npm run build

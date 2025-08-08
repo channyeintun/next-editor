@@ -35,10 +35,11 @@ pnpm add use-scrimba
 ```tsx
 import React, { useRef } from 'react';
 import Editor from '@monaco-editor/react';
-import { useScrimba } from 'use-scrimba';
+import type * as monaco from 'monaco-editor';
+import { useScrimba, type Recording } from 'use-scrimba';
 
 function MyCodeEditor() {
-  const editorRef = useRef(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   
   const {
     // Recording
@@ -65,8 +66,9 @@ function MyCodeEditor() {
     editorRef,
     // Optional configuration
     onRecordingStart: () => console.log('Recording started'),
-    onRecordingStop: (recording) => console.log('Recording stopped', recording),
-    onPlaybackEnd: () => console.log('Playback ended'),
+    onRecordingStop: (recording: Recording) => console.log('Recording stopped', recording),
+    onPlaybackStart: () => console.log('Playback started'),
+    onPlaybackPause: () => console.log('Playback paused'),
     pauseOnUserInteraction: true,
   });
 
@@ -120,6 +122,9 @@ interface UseScrimbaConfig {
   // Required
   editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   
+  // Optional Audio Sync
+  audioRef?: React.RefObject<HTMLAudioElement | null>;
+  
   // Recording Options
   captureEvents?: {
     content?: boolean;          // Default: true
@@ -139,6 +144,12 @@ interface UseScrimbaConfig {
   onPlaybackPause?: () => void;
   onPlaybackEnd?: () => void;
   onSeek?: (time: number) => void;
+  onError?: (error: Error) => void;
+  
+  // New granular callbacks
+  onSnapshot?: (snapshot: EditorSnapshot) => void;
+  onStateChange?: (state: EditorState) => void;
+  onPlaybackUpdate?: (currentTime: number, snapshot: EditorSnapshot | null) => void;
   
   // Storage
   storage?: {
@@ -192,6 +203,17 @@ interface UseScrimbaReturn {
   // Advanced
   getEditorState: () => EditorState | null;
   applyEditorState: (state: EditorState) => void;
+  
+  // New granular controls
+  getSnapshot: (timestamp?: number) => EditorSnapshot | null;
+  getCurrentState: () => any;
+  dispatch: (action: any) => void;
+  subscribe: (callback: () => void) => () => void;
+  
+  // Batch operations
+  loadMultipleRecordings: (recordings: Recording[]) => void;
+  exportRecording: (id: string, format?: 'json' | 'compressed') => string | null;
+  importRecording: (data: string, format?: 'json' | 'compressed') => Recording | null;
 }
 ```
 
@@ -222,33 +244,92 @@ const scrimba = useScrimba({
 });
 ```
 
-### Audio Integration
+### Audio Integration with Perfect Sync
 
 ```tsx
+import React, { useRef, useState } from 'react';
+import type * as monaco from 'monaco-editor';
+import { useScrimba, type Recording } from 'use-scrimba';
+
 function AudioIntegratedEditor() {
-  const [audioBlob, setAudioBlob] = useState(null);
-  const mediaRecorderRef = useRef(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const audioChunksRef = useRef<Blob[]>([]);
   
   const scrimba = useScrimba({
     editorRef,
-    onRecordingStart: () => {
+    audioRef, // Enable perfect audio synchronization
+    onRecordingStart: async () => {
       // Start audio recording
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(stream => {
-          mediaRecorderRef.current = new MediaRecorder(stream);
-          mediaRecorderRef.current.start();
-        });
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        
+        audioChunksRef.current = [];
+        
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            audioChunksRef.current.push(e.data);
+          }
+        };
+        
+        mediaRecorder.onstop = () => {
+          stream.getTracks().forEach(track => track.stop());
+        };
+        
+        mediaRecorder.start();
+        setIsRecordingAudio(true);
+        
+      } catch (error) {
+        console.error('Failed to start audio recording:', error);
+      }
     },
-    onRecordingStop: (recording) => {
-      // Stop audio recording and attach to recording
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.ondataavailable = (e) => {
-        scrimba.stopRecording({ audioBlob: e.data });
-      };
+    onRecordingStop: (recording: Recording) => {
+      if (mediaRecorderRef.current && isRecordingAudio) {
+        mediaRecorderRef.current.stop();
+        setIsRecordingAudio(false);
+      }
     },
   });
   
-  // ... rest of component
+  // Custom stop recording with audio
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current && isRecordingAudio) {
+      mediaRecorderRef.current.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        scrimba.stopRecording({ audioBlob });
+      };
+      mediaRecorderRef.current.stop();
+      setIsRecordingAudio(false);
+    } else {
+      scrimba.stopRecording();
+    }
+  };
+  
+  // Audio playback is automatically synchronized via audioRef!
+  
+  return (
+    <div>
+      {/* Hidden Audio Element - Managed by useScrimba for perfect sync */}
+      <audio ref={audioRef} style={{ display: 'none' }} />
+      
+      <button onClick={scrimba.startRecording}>Start Recording</button>
+      <button onClick={handleStopRecording}>Stop Recording</button>
+      <button onClick={scrimba.play}>Play</button>
+      
+      {/* Editor */}
+      <Editor
+        onMount={(editor) => {
+          editorRef.current = editor;
+          scrimba.handleEditorMount(editor);
+        }}
+        onChange={scrimba.handleEditorChange}
+      />
+    </div>
+  );
 }
 ```
 
@@ -318,11 +399,15 @@ All audio examples use the **Independent Master Timeline** architecture:
 - Robust seeking without sync loss
 
 ```typescript
-// Just add audioRef for perfect sync!
+// Perfect synchronization with just audioRef!
+const audioRef = useRef<HTMLAudioElement | null>(null);
 const scrimba = useScrimba({
   editorRef,
-  audioRef, // Enables perfect audio synchronization
+  audioRef, // Enables millisecond-precise audio synchronization
   onPlaybackStart: () => console.log('Perfect sync started!'),
+  onPlaybackUpdate: (currentTime, snapshot) => {
+    console.log(`Master time: ${currentTime}ms, Snapshot: ${snapshot?.timestamp}ms`);
+  },
 });
 ```
 

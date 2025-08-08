@@ -360,19 +360,28 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       return;
     }
     
+    // If playback has ended, restart from the beginning
+    if (playback.hasEnded) {
+      store.dispatch(stopAction()); // Reset to beginning
+      // Reset master timeline reference for fresh start
+      masterTimelineStartRef.current = null;
+    }
+    
     store.dispatch(playAction());
-    const hasAudio = playback.loadedRecording.audioBlob && audioRef?.current;
+    // Get fresh state after dispatching actions
+    const currentState = store.getState().playback;
+    const hasAudio = currentState.loadedRecording?.audioBlob && audioRef?.current;
     
     if (hasAudio) {
       // Start audio playback - master timeline will handle synchronization
-      audioRef!.current!.currentTime = playback.currentTime / 1000;
-      audioRef!.current!.playbackRate = playback.playbackSpeed;
+      audioRef!.current!.currentTime = currentState.currentTime / 1000;
+      audioRef!.current!.playbackRate = currentState.playbackSpeed;
       audioRef!.current!.play().catch(console.error);
       onPlaybackStart?.();
       // Master timeline effect will handle the rest
     } else {
       // Non-audio playback - use requestAnimationFrame for smooth timing
-      playbackStartTimeRef.current = Date.now() - playback.currentTime;
+      playbackStartTimeRef.current = Date.now() - currentState.currentTime;
       onPlaybackStart?.();
 
       const updatePlayback = () => {
@@ -400,7 +409,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       
       updatePlayback();
     }
-  }, [store, playback.loadedRecording, playback.currentTime, playback.playbackSpeed, onPlaybackStart, audioRef]);
+  }, [store, playback.loadedRecording, playback.currentTime, playback.playbackSpeed, playback.hasEnded, onPlaybackStart, audioRef]);
 
   const pause = useCallback(() => {
     store.dispatch(pauseAction());
