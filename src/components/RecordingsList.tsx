@@ -14,9 +14,9 @@ const RecordingsList: React.FC = () => {
   } = useScrimbaContext();
   
   const [recordings, setRecordings] = useState<Recording[]>([]);
-  const [storageStats, setStorageStats] = useState<{ count: number; totalSize: string }>({ count: 0, totalSize: '0 B' });
+  const [storageStats, setStorageStats] = useState<{ count: number; totalSize: string; compressedSize?: string; compressionRatio?: string }>({ count: 0, totalSize: '0 B' });
 
-  // Load recordings from storage on mount
+  // Load recordings from storage on mount and periodically refresh
   useEffect(() => {
     const loadRecordings = async () => {
       try {
@@ -30,6 +30,23 @@ const RecordingsList: React.FC = () => {
     };
     
     loadRecordings();
+    
+    // Listen for localStorage changes from other tabs/windows
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'scrimba-recordings') {
+        loadRecordings();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Refresh every 5 seconds to catch new recordings from current tab
+    const interval = setInterval(loadRecordings, 5000);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, [loadRecordingsFromStorage, getStorageStats]);
 
   const formatDate = (timestamp: number): string => {
@@ -104,10 +121,10 @@ const RecordingsList: React.FC = () => {
             onClick={handleImportRecording}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-colors"
           >
-            📁 Import JSON
+            📁 Import
           </button>
         </div>
-        <p className="text-gray-400 italic">No recordings yet. Start recording or import a JSON file to get started!</p>
+        <p className="text-gray-400 italic">No recordings yet. Start recording or import a .scrimba/.json file to get started!</p>
       </div>
     );
   }
@@ -119,12 +136,17 @@ const RecordingsList: React.FC = () => {
         <div className="flex gap-2">
           <div className="text-gray-400 text-xs">
             Storage: {storageStats.totalSize}
+            {storageStats.compressionRatio && (
+              <span className="ml-1 text-green-400">
+                ({storageStats.compressionRatio} saved)
+              </span>
+            )}
           </div>
           <button
             onClick={handleImportRecording}
             className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition-colors"
           >
-            📁 Import JSON
+            📁 Import
           </button>
         </div>
       </div>
@@ -146,7 +168,7 @@ const RecordingsList: React.FC = () => {
                 <button
                   className="text-base p-1 rounded hover:bg-green-600/10 transition-colors"
                   onClick={(e) => handleExportRecording(recording, e)}
-                  title="Export as JSON"
+                  title="Export as compressed .scrimba file"
                 >
                   📤
                 </button>

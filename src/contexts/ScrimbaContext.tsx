@@ -30,15 +30,16 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
         console.warn('This might be due to missing microphone permissions');
       });
     },
-    onRecordingStop: (recording) => {
+    onRecordingStop: async (recording) => {
       console.log('⏹️ Recording stopped', recording);
       console.log('🎤 Has audioBlob:', !!recording.audioBlob, recording.audioBlob ? `(${recording.audioBlob.size} bytes)` : '');
-      // Save recording to storage asynchronously without blocking
-      setTimeout(() => {
-        jsonStorage.current.save(recording).catch((error) => {
-          console.warn('Failed to save recording to storage:', error);
-        });
-      }, 0);
+      // Save recording to storage immediately
+      try {
+        await jsonStorage.current.save(recording);
+        console.log('✅ Recording saved successfully');
+      } catch (error) {
+        console.error('❌ Failed to save recording to storage:', error);
+      }
     },
     onPlaybackStart: () => {
       console.log('▶️ Playback started');
