@@ -215,7 +215,7 @@ const scrimba = useScrimba({
   pauseOnUserInteraction: true,
   onSnapshot: (snapshot) => logSnapshot(snapshot),
   onStateChange: (state) => updateUI(state),
-  storage: customStorageProvider
+  onRecordingStop: (recording) => saveRecording(recording)
 });
 ```
 
@@ -299,7 +299,7 @@ function ScrimbaProvider({ children }) {
   const scrimba = useScrimba({
     editorRef,
     audioRef,
-    storage: myStorageProvider
+    onRecordingStop: (recording) => handleRecordingSave(recording)
   });
   
   return (

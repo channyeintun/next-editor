@@ -222,29 +222,30 @@ interface UseScrimbaReturn {
 
 ## Advanced Usage
 
-### Custom Storage Provider
+### Recording Management
+
+Handle storage in your application layer:
 
 ```tsx
-const storage = {
-  save: async (recording) => {
-    await fetch('/api/recordings', {
-      method: 'POST',
-      body: JSON.stringify(recording),
-    });
-  },
-  load: async () => {
-    const response = await fetch('/api/recordings');
-    return response.json();
-  },
-  delete: async (id) => {
-    await fetch(`/api/recordings/${id}`, { method: 'DELETE' });
-  },
-};
-
 const scrimba = useScrimba({
   editorRef,
-  storage,
+  onRecordingStop: (recording) => {
+    // Save to your preferred storage solution
+    saveRecording(recording);
+  },
 });
+
+// Example storage functions (implement as needed)
+const saveRecording = async (recording) => {
+  // Local storage
+  localStorage.setItem(`recording-${recording.id}`, JSON.stringify(recording));
+  
+  // Or API
+  await fetch('/api/recordings', {
+    method: 'POST',
+    body: JSON.stringify(recording),
+  });
+};
 ```
 
 ### Audio Integration with Perfect Sync

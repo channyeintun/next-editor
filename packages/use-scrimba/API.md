@@ -42,8 +42,6 @@ interface UseScrimbaConfig {
   onSeek?: (time: number) => void;
   onError?: (error: Error) => void;
   
-  // Optional Storage
-  storage?: StorageProvider;
 }
 ```
 
@@ -57,18 +55,6 @@ interface CaptureEvents {
   cursorPosition?: boolean;   // Default: true - Cursor movements
   selection?: boolean;        // Default: true - Text selections
   scroll?: boolean;           // Default: true - Scroll changes
-}
-```
-
-### StorageProvider
-
-Interface for custom storage implementations:
-
-```typescript
-interface StorageProvider {
-  save?: (recording: Recording) => Promise<void>;
-  load?: () => Promise<Recording[]>;
-  delete?: (id: string) => Promise<void>;
 }
 ```
 
@@ -182,36 +168,17 @@ const scrimba = useScrimba({
 });
 ```
 
-### Storage Integration
+### Recording Management
 
 ```typescript
-const storage: StorageProvider = {
-  save: async (recording) => {
-    const response = await fetch('/api/recordings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(recording),
-    });
-    if (!response.ok) throw new Error('Failed to save');
-  },
-  
-  load: async () => {
-    const response = await fetch('/api/recordings');
-    if (!response.ok) throw new Error('Failed to load');
-    return response.json();
-  },
-  
-  delete: async (id) => {
-    const response = await fetch(`/api/recordings/${id}`, {
-      method: 'DELETE'
-    });
-    if (!response.ok) throw new Error('Failed to delete');
-  },
-};
-
 const scrimba = useScrimba({
   editorRef,
-  storage,
+  onRecordingStop: (recording) => {
+    // Handle storage in your application
+    saveToDatabase(recording);
+    // or
+    localStorage.setItem('recordings', JSON.stringify(recording));
+  },
 });
 ```
 

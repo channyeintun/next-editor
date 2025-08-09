@@ -360,7 +360,7 @@ npm test
 
 ### 2. **Dependency Injection**
 - Editor and audio refs passed as configuration
-- Storage provider can be injected
+- Storage handled via callbacks
 - Callbacks enable custom behaviors
 
 ### 3. **Event-Driven Architecture**

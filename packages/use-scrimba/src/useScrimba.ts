@@ -609,10 +609,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     []
   );
 
-  // Note: Removed automatic storage loading on mount
-  // Storage will only be accessed when explicitly needed (save/delete operations)
-  // or when user explicitly loads recordings
-
   // New granular control APIs
   const getSnapshot = useCallback((timestamp?: number): EditorSnapshot | null => {
     if (!playback.loadedRecording?.snapshots?.length) return null;
