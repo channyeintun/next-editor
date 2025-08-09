@@ -3,14 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "dev": "vite",
     "start": "vite",
-    "build": "cd packages/use-scrimba && npm run build && cd ../.. && tsc -b && vite build",
-    "postinstall": "cd packages/use-scrimba && npm install && npm run build",
+    "build": "tsc -b && vite build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
@@ -22,7 +18,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "superjson": "^2.2.2",
-    "use-scrimba": "workspace:*"
+    "use-scrimba": "^1.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",

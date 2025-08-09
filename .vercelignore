@@ -1,16 +1,5 @@
-# Ignore development files from use-scrimba package but keep dist/
-packages/use-scrimba/src/
-packages/use-scrimba/examples/
-packages/use-scrimba/docs/
-packages/use-scrimba/scripts/
-packages/use-scrimba/.eslintrc.js
-packages/use-scrimba/jest.config.js
-packages/use-scrimba/rollup.config.js
-packages/use-scrimba/publish.sh
-packages/use-scrimba/node_modules/
-packages/use-scrimba/*.md
-# Keep: packages/use-scrimba/dist/ (needed for imports)
-# Keep: packages/use-scrimba/package.json (needed for package info)
+# Ignore the use-scrimba package from deployment
+packages/use-scrimba/
 
 # Ignore development files
 *.md
