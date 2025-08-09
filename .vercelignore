@@ -1,22 +1,8 @@
-# Ignore the use-scrimba package from deployment
-packages/use-scrimba/
-
 # Ignore development files
 *.md
 docs/
 .vscode/
 .git/
-
-# Ignore test files
-**/*.test.*
-**/*.spec.*
-**/tests/
-**/test/
-
-# Ignore build artifacts from sub-packages
-**/dist/
-**/build/
-**/coverage/
 
 # Ignore npm/yarn files
 **/node_modules/
