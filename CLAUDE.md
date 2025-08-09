@@ -48,8 +48,15 @@ Designed to support saving recordings to a database and retrieving them for repl
    - **Master Timeline Architecture**: Independent `performance.now()` based timing
    - Audio and editor are slaves to master timeline (no circular dependencies)
    - React Context: provides useScrimba functionality to all components
-   - Local storage persistence through useScrimba's storage interface
+   - Local storage persistence through optimized binary format
    - Audio recording managed in ScrimbaProvider with MediaRecorder API
+
+4. **Storage Format**:
+   - **Binary Format (.scrimba)**: Optimized file format with 25-30% space savings
+   - **Audio Separation**: Raw binary audio data stored separately from JSON metadata
+   - **Compression**: JSON metadata compressed with pako deflate algorithm
+   - **Structure**: Header + Compressed JSON + Raw Audio Data
+   - **Efficiency**: Zero encoding overhead on audio data (no base64)
 
 ## Technology Stack
 - React with TypeScript
@@ -81,9 +88,10 @@ Designed to support saving recordings to a database and retrieving them for repl
 - 🎤 **Audio Recording**: Simultaneous microphone capture during coding sessions
 - 🎬 **Editor Replay**: Frame-perfect reconstruction of coding sessions
 - ⏯️ **Media Controls**: Play, pause, stop, seek with speed control
-- 💾 **Local Storage**: Automatic persistence of recordings with audio
+- 💾 **Optimized Storage**: Binary format with 25-30% space savings
 - 🔄 **Perfect Sync**: Millisecond-precise audio/editor synchronization via independent master timeline
 - 📱 **Responsive UI**: Clean interface with visual recording indicators
+- 📦 **Efficient Export**: .scrimba files with zero audio encoding overhead
 
 ## Synchronization Architecture
 
@@ -109,6 +117,47 @@ performance.now() Master Timeline
 3. Editor state applied directly to Monaco Editor synchronously
 4. Redux state updated for UI components
 5. All operations complete in single execution frame
+
+## Storage Format (.scrimba)
+
+### Binary Format Structure
+The application uses an optimized binary format that separates audio data from JSON metadata for maximum efficiency:
+
+```
+[Header: 8 bytes]
+├─ Magic: "SCRM" (4 bytes) - File format identifier
+├─ Version: 1 (2 bytes) - Format version for future compatibility  
+├─ JSON Length: N (2 bytes) - Size of compressed JSON data
+
+[Compressed JSON: N bytes]
+├─ Recording metadata (snapshots, timestamps, settings)
+├─ Audio placeholders with offset/size information
+├─ Compressed using pako deflate (level 9)
+
+[Raw Audio Data: remaining bytes]  
+├─ Concatenated binary audio data (WebM/Opus format)
+├─ Zero encoding overhead (no base64 conversion)
+├─ Direct blob reconstruction during import
+```
+
+### Storage Optimization Benefits
+- **25-30% Space Savings**: Eliminates base64 encoding overhead on audio data
+- **Faster Processing**: Direct binary operations instead of string encoding/decoding  
+- **Memory Efficient**: No intermediate base64 conversions during save/load operations
+- **Future Proof**: Versioned header supports format evolution
+
+### Audio Placeholder System
+Instead of storing large audio blobs in JSON, the format uses lightweight placeholders:
+```typescript
+{
+  __audio_offset: 1234,    // Byte offset in audio section
+  __audio_size: 5678,      // Size of audio data in bytes  
+  __audio_type: "audio/webm" // MIME type for blob reconstruction
+}
+```
+
+### Compression Statistics
+The UI displays real-time compression statistics comparing the current efficient format against the theoretical size of a traditional JSON+base64 approach, showing the actual space savings achieved.
 
 ## Package Structure
 This project uses a monorepo structure with the core functionality extracted into a reusable package:
