@@ -124,7 +124,7 @@ const RecordingsList: React.FC = () => {
             📁 Import
           </button>
         </div>
-        <p className="text-gray-400 italic">No recordings yet. Start recording or import a .scrimba/.json file to get started!</p>
+        <p className="text-gray-400 italic">No recordings yet. Start recording or import a .scrimba file to get started!</p>
       </div>
     );
   }
