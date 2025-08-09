@@ -8,15 +8,6 @@ export default defineConfig({
     // Enable minification for production builds
     minify: 'terser',
     terserOptions: {
-      compress: {
-        // Remove console.log statements in production
-        drop_console: true,
-        drop_debugger: true,
-        // Remove unused code
-        dead_code: true,
-        // Optimize boolean expressions
-        booleans_as_integers: true,
-      },
       mangle: {
         // Mangle function and variable names for smaller bundle size
         toplevel: true,
