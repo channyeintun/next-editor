@@ -4,7 +4,7 @@ A powerful React hook for recording and replaying Monaco Editor interactions wit
 
 ## Demo
 
-🎬 **[Live Demo](https://use-scrimba.vercel.app/)** - See use-scrimba in action with recording and playback features!
+🎬 **[Live Demo](https://scrim-demo.netlify.app/)** - See use-scrimba in action with recording and playback features!
 
 ## Features
 
