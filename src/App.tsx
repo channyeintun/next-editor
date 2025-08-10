@@ -3,6 +3,7 @@ import MediaControls from './components/MediaControls';
 import AudioPlayer from './components/AudioPlayer';
 import { ScrimbaProvider } from './contexts/ScrimbaContext.tsx';
 import './App.css'
+import CursorComponent from './components/Cursor.tsx';
 
 function App() {
   return (
@@ -14,11 +15,9 @@ function App() {
           </div>
         </div>
         
-        {/* Bottom Media Controls */}
         <MediaControls />
-        
-        {/* Audio Player - handles audio sync */}
         <AudioPlayer />
+        <CursorComponent />
       </div>
     </ScrimbaProvider>
   );
