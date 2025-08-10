@@ -94,6 +94,11 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   // Callback for handling playback pause
   const handlePlaybackPause = useCallback(() => {
     store.dispatch(pauseAction());
+
+    // Pause audio if available
+    if (audioRef?.current && playback.loadedRecording?.audioBlob) {
+      audioRef.current.pause();
+    }
     
     // Clear playback timer
     if (playbackTimerRef.current) {
