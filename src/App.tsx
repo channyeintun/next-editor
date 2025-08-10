@@ -2,6 +2,7 @@ import CodeEditor from './components/CodeEditor';
 import MediaControls from './components/MediaControls';
 import RecordingsList from './components/RecordingsList';
 import AudioPlayer from './components/AudioPlayer';
+import CursorComponent from './components/CursorComponent';
 import { ScrimbaProvider } from './contexts/ScrimbaContext.tsx';
 import './App.css'
 
@@ -48,6 +49,9 @@ function App() {
         
         {/* Audio Player - handles audio sync */}
         <AudioPlayer />
+        
+        {/* Cursor Component - displays fake cursor during playback */}
+        <CursorComponent />
       </div>
     </ScrimbaProvider>
   );

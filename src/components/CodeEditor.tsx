@@ -44,21 +44,26 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       height={height}
       language={language}
       theme={theme}
-      defaultValue="// 🎬 Scrimba-like Recording Demo
+      defaultValue="// 🎬 Scrimba-like Recording Demo with Mouse Cursor
 // Use the media controls to record and replay your coding sessions!
+// Move your mouse around while recording to see the cursor replay!
 
 function createAwesome() {
   const features = [
     'Real-time recording',
-    'Cursor position tracking', 
+    'Mouse cursor tracking',
+    'Text caret position tracking', 
     'Text selection replay',
-    'Smooth playback'
+    'Smooth playback with cursor'
   ];
   
   return features.map(f => `✨ ${f}`);
 }
 
-createAwesome();"
+createAwesome();
+
+// Move your mouse around while recording
+// Watch the cursor replay during playback!"
       onMount={handleEditorDidMount}
       onChange={handleEditorChange}
       options={{
