@@ -79,7 +79,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     : (currentRecording ? duration - currentTime : currentTime);
 
   return (
-    <div className="bg-slate-800 border-t border-slate-700 px-4 py-3">
+    <div className="fixed bottom-0 left-0 right-0 px-4 py-3 z-50">
       <div className="flex items-center gap-3 w-full h-6">
         {/* Record button - always show */}
         <button
@@ -122,7 +122,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
                 max={duration}
                 value={currentTime}
                 onChange={handleSeek}
-                className="w-full h-1 bg-slate-600 rounded appearance-none cursor-pointer hover:h-1.5 transition-all duration-150"
+                className="w-full h-[2px] bg-slate-600 rounded appearance-none cursor-pointer hover:h-1.5 transition-all duration-150"
                 style={{
                   background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${duration > 0 ? (currentTime / duration) * 100 : 0}%, #475569 ${duration > 0 ? (currentTime / duration) * 100 : 0}%, #475569 100%)`,
                   margin: '0'

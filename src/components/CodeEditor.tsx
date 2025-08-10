@@ -68,7 +68,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   };
   
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-screen flex flex-col">
       {/* Title Bar with Import/Export buttons */}
       <div className="bg-gray-700 px-4 py-2 flex items-center justify-between">
         <span className="text-sm font-medium text-gray-300">use-scrimba</span>
