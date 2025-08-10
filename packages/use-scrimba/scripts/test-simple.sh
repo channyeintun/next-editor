@@ -51,6 +51,13 @@ cat > index.html << 'EOF'
     <title>use-scrimba Test</title>
     <style>
       body { margin: 0; padding: 0; }
+      
+      /* Scrimba cursor styles */
+      .PointerView > .pointer-body {
+        position: absolute;
+        transition: opacity .1s ease-out;
+        opacity: .99;
+      }
     </style>
   </head>
   <body>
@@ -125,21 +132,64 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 )
 EOF
 
-# Create the test App.tsx with video player layout
+# Create the test App.tsx with video player layout and cursor functionality
 cat > src/App.tsx << 'EOF'
 import React, { useRef } from 'react';
 import Editor from '@monaco-editor/react';
-import { useScrimba, type Recording } from 'use-scrimba';
+import { useScrimba, type Recording, type MouseCursorPosition } from 'use-scrimba';
+
+// Fake cursor component for playback
+interface FakeCursorProps {
+  position: MouseCursorPosition;
+}
+
+const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
+  if (!position.visible) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        left: position.x,
+        top: position.y,
+        width: 24,
+        height: 24,
+        pointerEvents: 'none',
+        zIndex: 9999,
+        transform: 'translate(0, 0)',
+      }}
+    >
+      {/* Cursor icon using Unicode arrow */}
+      <svg 
+        width="24" 
+        height="24" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        style={{ 
+          filter: 'drop-shadow(1px 1px 2px rgba(0,0,0,0.5))'
+        }}
+      >
+        <path 
+          d="M3 3L10.07 19.97L12.58 12.58L19.97 10.07L3 3Z" 
+          fill="white" 
+          stroke="black" 
+          strokeWidth="1"
+        />
+      </svg>
+    </div>
+  );
+};
 
 function App() {
   const editorRef = useRef(null);
+  const [recordings, setRecordings] = React.useState<Recording[]>([]);
   
   const {
     isRecording,
     isPlaying,
     currentTime,
-    recordings,
     currentRecording,
+    currentCursor,
     startRecording,
     stopRecording,
     play,
@@ -147,12 +197,38 @@ function App() {
     stop,
     seekTo,
     loadRecording,
-    deleteRecording,
     handleEditorMount,
     handleEditorChange,
   } = useScrimba({
     editorRef,
+    onRecordingStop: (recording) => {
+      // Save recording to local state
+      setRecordings(prev => [...prev, recording]);
+      console.log('Recording saved:', recording);
+    },
+    onStateChange: (state) => {
+      // You can access mouse cursor data here
+      if (isRecording) {
+        console.log('Recording state change:', {
+          hasMouseCursor: !!state.mouseCursor,
+          mouseCursor: state.mouseCursor,
+          content: state.content.substring(0, 50) + '...'
+        });
+      }
+    },
   });
+
+  // Helper functions for recording management
+  const handleLoadRecording = (recording: Recording) => {
+    loadRecording(recording);
+  };
+
+  const handleDeleteRecording = (recordingId: string) => {
+    setRecordings(prev => prev.filter(r => r.id !== recordingId));
+    if (currentRecording?.id === recordingId) {
+      stop();
+    }
+  };
 
   const formatTime = (time: number) => {
     const seconds = Math.floor(time / 1000);
@@ -197,37 +273,48 @@ function App() {
   };
 
   return (
-    <div style={{ 
-      height: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      fontFamily: 'Arial, sans-serif',
-      backgroundColor: '#1e1e1e'
-    }}>
-      
-      {/* Main Video/Editor Area */}
-      <div style={{ flex: 1, padding: '20px', paddingBottom: '10px' }}>
+    <>
+      {/* Fake Cursor - Fixed to viewport during playback */}
+      {isPlaying && currentCursor && currentCursor.visible && (
+        <FakeCursor position={currentCursor} />
+      )}
+
+      <div style={{ 
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: 'Arial, sans-serif',
+        backgroundColor: '#1e1e1e'
+      }}>
+        
+        {/* Main Video/Editor Area */}
+      <div style={{ flex: 1, padding: '20px', paddingBottom: '10px', position: 'relative' }}>
         <Editor
           height="100%"
           language="javascript"
           theme="vs-dark"
-          defaultValue={`// 🎬 Scrimba-like Recording Demo
+          defaultValue={`// 🎬 Scrimba-like Recording Demo with Mouse Cursor
 // 1. Click the red record button below
-// 2. Type, move cursor, select text
+// 2. Type, move your mouse around, select text
 // 3. Stop recording and play it back!
+// 4. Watch the red cursor follow your recorded movements!
 
 function createAwesome() {
   const features = [
     'Real-time recording',
-    'Cursor position tracking', 
+    'Mouse cursor tracking', 
+    'Text caret position tracking',
     'Text selection replay',
-    'Smooth playback'
+    'Smooth playback with cursor'
   ];
   
   return features.map(f => \`✨ \${f}\`);
 }
 
-createAwesome();`}
+createAwesome();
+
+// Move your mouse around while recording
+// The red cursor will replay your movements!`}
           onMount={(editor) => { 
             editorRef.current = editor; 
             handleEditorMount(editor); 
@@ -242,6 +329,7 @@ createAwesome();`}
             scrollBeyondLastLine: false,
           }}
         />
+        
       </div>
 
       {/* Video Player Controls */}
@@ -353,6 +441,18 @@ createAwesome();`}
                 '⏸️ Ready'
               )}
             </div>
+            
+            {/* Mouse Cursor Info During Playback */}
+            {isPlaying && currentCursor && (
+              <div style={{ 
+                color: '#ff4444', 
+                fontSize: '12px', 
+                marginLeft: '16px',
+                fontFamily: 'monospace'
+              }}>
+                🖱️ ({Math.round(currentCursor.x)}, {Math.round(currentCursor.y)})
+              </div>
+            )}
           </div>
 
           {/* Right: Recording List */}
@@ -366,7 +466,7 @@ createAwesome();`}
                 value={currentRecording?.id || ''}
                 onChange={(e) => {
                   const recording = recordings.find(r => r.id === e.target.value);
-                  if (recording) loadRecording(recording);
+                  if (recording) handleLoadRecording(recording);
                 }}
                 style={{
                   backgroundColor: '#444',
@@ -389,7 +489,7 @@ createAwesome();`}
             
             {currentRecording && (
               <button 
-                onClick={() => deleteRecording(currentRecording.id)}
+                onClick={() => handleDeleteRecording(currentRecording.id)}
                 style={{
                   ...smallButtonStyle,
                   backgroundColor: '#ff4444',
@@ -403,7 +503,8 @@ createAwesome();`}
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 

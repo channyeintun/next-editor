@@ -18,12 +18,6 @@ export const PerfectSyncExample: React.FC = () => {
   const scrimba = useScrimba({
     editorRef,
     audioRef, // Enable perfect audio synchronization
-    captureEvents: {
-      content: true,
-      cursorPosition: true,
-      selection: true,
-      scroll: true
-    },
     pauseOnUserInteraction: true,
     onRecordingStart: async () => {
       console.log('🚀 Recording started with independent master timeline');

@@ -26,8 +26,8 @@ interface UseScrimbaConfig {
   // Required
   editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   
-  // Optional Recording Settings
-  captureEvents?: CaptureEvents;
+  // Optional Audio Sync
+  audioRef?: React.RefObject<HTMLAudioElement | null>;
   
   // Optional Playback Settings
   pauseOnUserInteraction?: boolean;
@@ -45,18 +45,14 @@ interface UseScrimbaConfig {
 }
 ```
 
-### CaptureEvents
+### Recording Events
 
-Control which editor events are captured during recording:
-
-```typescript
-interface CaptureEvents {
-  content?: boolean;          // Default: true - Content changes
-  cursorPosition?: boolean;   // Default: true - Cursor movements
-  selection?: boolean;        // Default: true - Text selections
-  scroll?: boolean;           // Default: true - Scroll changes
-}
-```
+All editor events are captured by default internally:
+- Content changes (text modifications)
+- Cursor movements (position changes) 
+- Text selections
+- Scroll changes
+- Mouse cursor movements
 
 ## Return Value
 
@@ -154,19 +150,9 @@ interface EditorState {
 
 ## Advanced Usage
 
-### Custom Event Capture
+### Event Capture
 
-```typescript
-const scrimba = useScrimba({
-  editorRef,
-  captureEvents: {
-    content: true,        // Capture text changes
-    cursorPosition: true, // Capture cursor movements
-    selection: false,     // Skip text selections
-    scroll: false,        // Skip scroll changes
-  },
-});
-```
+All editor events are captured automatically for complete recording fidelity.
 
 ### Recording Management
 

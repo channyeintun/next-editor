@@ -18,6 +18,7 @@ const initialEditorState: EditorState = {
   selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as monaco.Selection,
   position: { lineNumber: 1, column: 1 } as monaco.Position,
   viewState: null,
+  mouseCursor: undefined,
 };
 
 const initialState: PlaybackState = {

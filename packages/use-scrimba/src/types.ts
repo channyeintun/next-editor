@@ -1,6 +1,15 @@
 import type * as monaco from 'monaco-editor';
 
 /**
+ * Mouse cursor position relative to editor container
+ */
+export interface MouseCursorPosition {
+  x: number;
+  y: number;
+  visible: boolean; // Whether cursor is within editor bounds
+}
+
+/**
  * Editor snapshot containing the complete state at a specific timestamp
  */
 export interface EditorSnapshot {
@@ -8,8 +17,9 @@ export interface EditorSnapshot {
   state: {
     content: string;
     selection: monaco.Selection;
-    position: monaco.Position;
+    position: monaco.Position; // Text caret position
     viewState: monaco.editor.ICodeEditorViewState | null;
+    mouseCursor?: MouseCursorPosition; // Mouse cursor position
   };
 }
 
@@ -33,6 +43,7 @@ export interface CaptureEvents {
   cursorPosition?: boolean;
   selection?: boolean;
   scroll?: boolean;
+  mouseCursor?: boolean;
 }
 
 
@@ -76,6 +87,7 @@ export interface EditorState {
   selection: monaco.Selection;
   position: monaco.Position;
   viewState: monaco.editor.ICodeEditorViewState | null;
+  mouseCursor?: MouseCursorPosition;
 }
 
 /**
@@ -115,7 +127,7 @@ export interface UseScrimbaReturn {
   
   // Data
   currentRecording: Recording | null;
-  currentSnapshot: EditorSnapshot | null;
+  currentCursor: MouseCursorPosition | null;
   
   // Recording Controls
   startRecording: () => void;

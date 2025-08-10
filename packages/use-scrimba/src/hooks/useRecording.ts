@@ -1,6 +1,6 @@
-import { useEffect, useCallback, useState, useMemo } from 'react';
+import { useEffect, useCallback, useState, useMemo, useRef } from 'react';
 import type * as monaco from 'monaco-editor';
-import type { EditorSnapshot, CaptureEvents } from '../types';
+import type { EditorSnapshot, CaptureEvents, MouseCursorPosition } from '../types';
 
 /**
  * Internal hook for handling Monaco Editor recording functionality
@@ -14,6 +14,7 @@ export const useRecording = (
 ) => {
   const [stateChangeCounter, setStateChangeCounter] = useState(0);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
+  const currentMouseCursor = useRef<MouseCursorPosition>({ x: 0, y: 0, visible: false });
 
   // Default capture settings (memoized to prevent dependency changes)
   const settings = useMemo(() => ({
@@ -21,6 +22,7 @@ export const useRecording = (
     cursorPosition: true,
     selection: true,
     scroll: true,
+    mouseCursor: true,
     ...captureEvents,
   }), [captureEvents]);
 
@@ -55,13 +57,14 @@ export const useRecording = (
             selection,
             position,
             viewState,
+            mouseCursor: settings.mouseCursor ? { ...currentMouseCursor.current } : undefined,
           }
         };
 
         onSnapshot?.(snapshot);
       }
     }
-  }, [stateChangeCounter, isRecording, isPlaying, editorRef, recordingStartTime, onSnapshot]);
+  }, [stateChangeCounter, isRecording, isPlaying, editorRef, recordingStartTime, onSnapshot, settings.mouseCursor]);
 
   // Reset state change counter when recording starts
   useEffect(() => {
@@ -101,6 +104,42 @@ export const useRecording = (
             triggerStateChange();
           })
         );
+      }
+      
+      // Mouse cursor tracking
+      if (settings.mouseCursor) {
+        const editorDomNode = editor.getDomNode();
+        if (editorDomNode) {
+          const handleMouseMove = (event: MouseEvent) => {
+            // Record viewport coordinates, not editor-relative coordinates
+            currentMouseCursor.current = {
+              x: event.clientX,
+              y: event.clientY,
+              visible: true
+            };
+            triggerStateChange();
+          };
+
+          const handleMouseEnter = () => {
+            currentMouseCursor.current.visible = true;
+          };
+
+          const handleMouseLeave = () => {
+            currentMouseCursor.current.visible = false;
+            triggerStateChange();
+          };
+
+          editorDomNode.addEventListener('mousemove', handleMouseMove);
+          editorDomNode.addEventListener('mouseenter', handleMouseEnter);
+          editorDomNode.addEventListener('mouseleave', handleMouseLeave);
+
+          return () => {
+            disposables.forEach(d => d.dispose());
+            editorDomNode.removeEventListener('mousemove', handleMouseMove);
+            editorDomNode.removeEventListener('mouseenter', handleMouseEnter);
+            editorDomNode.removeEventListener('mouseleave', handleMouseLeave);
+          };
+        }
       }
       
       return () => {

@@ -138,8 +138,7 @@ interface EditorSnapshot {
 // Main hook configuration
 interface UseScrimbaConfig {
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
-  audioRef?: RefObject<HTMLAudioElement | null>; // NEW: Audio sync support
-  captureEvents?: CaptureEvents;
+  audioRef?: RefObject<HTMLAudioElement | null>; // Audio sync support
   pauseOnUserInteraction?: boolean;
   // Callbacks for granular control
   onRecordingStart?: () => void;
@@ -211,7 +210,7 @@ const scrimba = useScrimba({
 const scrimba = useScrimba({
   editorRef,
   audioRef,
-  captureEvents: { content: true, cursorPosition: true },
+  // All events captured by default internally
   pauseOnUserInteraction: true,
   onSnapshot: (snapshot) => logSnapshot(snapshot),
   onStateChange: (state) => updateUI(state),

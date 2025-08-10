@@ -72,7 +72,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const { recording, playback } = state;
 
   // Playback timeline refs
-  const playbackTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const playbackTimerRef = useRef<number | null>(null);
   const playbackStartTimeRef = useRef<number | null>(null);
   const masterTimelineStartRef = useRef<{ perfTime: number; currentTime: number } | null>(null);
 
@@ -102,7 +102,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     // Clear playback timer
     if (playbackTimerRef.current) {
-      clearTimeout(playbackTimerRef.current);
+      cancelAnimationFrame(playbackTimerRef.current);
       playbackTimerRef.current = null;
     }
     
@@ -171,11 +171,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const cleanupPlayback = useCallback(() => {
     store.dispatch(pauseAction());
     if (playbackTimerRef.current) {
-      if (typeof playbackTimerRef.current === 'number') {
-        cancelAnimationFrame(playbackTimerRef.current);
-      } else {
-        clearTimeout(playbackTimerRef.current);
-      }
+      cancelAnimationFrame(playbackTimerRef.current);
       playbackTimerRef.current = null;
     }
   }, [store]);
@@ -239,6 +235,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
               selection: currentSnapshotToApply.state.selection,
               position: currentSnapshotToApply.state.position,
               viewState: currentSnapshotToApply.state.viewState,
+              mouseCursor: currentSnapshotToApply.state.mouseCursor,
             };
             store.dispatch(updateEditorState(newState));
             
@@ -291,7 +288,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         }
         
         // Continue master timeline
-        playbackTimerRef.current = requestAnimationFrame(masterTimelineUpdate) as unknown as NodeJS.Timeout;
+        playbackTimerRef.current = requestAnimationFrame(masterTimelineUpdate);
       };
       
       // Start master timeline
@@ -310,8 +307,10 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       
       return () => {
         audio.removeEventListener('ended', handleAudioEnded);
+        // Ensure audio is properly paused during cleanup
+        audio.pause();
         if (playbackTimerRef.current) {
-          cancelAnimationFrame(playbackTimerRef.current as unknown as number);
+          cancelAnimationFrame(playbackTimerRef.current);
           playbackTimerRef.current = null;
         }
         masterTimelineStartRef.current = null;
@@ -346,6 +345,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
           selection: currentSnapshotToApply.state.selection,
           position: currentSnapshotToApply.state.position,
           viewState: currentSnapshotToApply.state.viewState,
+          mouseCursor: currentSnapshotToApply.state.mouseCursor,
         };
         store.dispatch(updateEditorState(newState));
         onStateChange?.(newState);
@@ -380,6 +380,9 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     const hasAudio = currentState.loadedRecording?.audioBlob && audioRef?.current;
     
     if (hasAudio) {
+      // Ensure audio is properly paused before starting new playback
+      audioRef!.current!.pause();
+      
       // Start audio playback - master timeline will handle synchronization
       audioRef!.current!.currentTime = currentState.currentTime / 1000;
       audioRef!.current!.playbackRate = currentState.playbackSpeed;
@@ -411,7 +414,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         }
         
         // Continue non-audio playback
-        playbackTimerRef.current = requestAnimationFrame(updatePlayback) as unknown as NodeJS.Timeout;
+        playbackTimerRef.current = requestAnimationFrame(updatePlayback);
       };
       
       updatePlayback();
@@ -428,11 +431,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     // Clear playback timer (for non-audio playback)
     if (playbackTimerRef.current) {
-      if (typeof playbackTimerRef.current === 'number') {
-        cancelAnimationFrame(playbackTimerRef.current);
-      } else {
-        clearTimeout(playbackTimerRef.current);
-      }
+      cancelAnimationFrame(playbackTimerRef.current);
       playbackTimerRef.current = null;
     }
     
@@ -450,11 +449,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     // Clear playback timer (for non-audio playback)
     if (playbackTimerRef.current) {
-      if (typeof playbackTimerRef.current === 'number') {
-        cancelAnimationFrame(playbackTimerRef.current);
-      } else {
-        clearTimeout(playbackTimerRef.current);
-      }
+      cancelAnimationFrame(playbackTimerRef.current);
       playbackTimerRef.current = null;
     }
     
@@ -491,7 +486,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     // Clear current playback timer
     if (playbackTimerRef.current) {
-      clearTimeout(playbackTimerRef.current);
+      cancelAnimationFrame(playbackTimerRef.current);
       playbackTimerRef.current = null;
     }
     
@@ -528,11 +523,13 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       selection: lastSnapshot.state.selection,
       position: lastSnapshot.state.position,
       viewState: lastSnapshot.state.viewState,
+      mouseCursor: lastSnapshot.state.mouseCursor,
     } : {
       content: '',
       selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 } as monaco.Selection,
       position: { lineNumber: 1, column: 1 } as monaco.Position,
       viewState: null,
+      mouseCursor: undefined,
     };
     
     store.dispatch(updateCurrentSnapshot(lastSnapshot));
@@ -594,6 +591,11 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     // Set up audio if available
     if (audioRef?.current && recording.audioBlob) {
+      // Clean up previous blob URL to prevent memory leaks
+      if (audioRef.current.src && audioRef.current.src.startsWith('blob:')) {
+        URL.revokeObjectURL(audioRef.current.src);
+      }
+      
       const audioUrl = URL.createObjectURL(recording.audioBlob);
       audioRef.current.src = audioUrl;
       audioRef.current.currentTime = 0;
@@ -652,7 +654,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   useEffect(() => {
     return () => {
       if (playbackTimerRef.current) {
-        clearTimeout(playbackTimerRef.current);
+        cancelAnimationFrame(playbackTimerRef.current);
       }
     };
   }, []);
@@ -671,7 +673,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     
     // Data
     currentRecording: playback.loadedRecording,
-    currentSnapshot: playback.currentSnapshot,
+    currentCursor: playback.currentSnapshot?.state?.mouseCursor || null,
     
     // Recording Controls
     startRecording,

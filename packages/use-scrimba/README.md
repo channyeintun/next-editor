@@ -8,7 +8,7 @@ A powerful React hook for recording and replaying Monaco Editor interactions wit
 
 ## Features
 
-🎥 **Record Editor Interactions** - Capture every keystroke, cursor movement, selection, and scroll event with precise timestamps
+🎥 **Record Editor Interactions** - Capture every keystroke, text cursor movement, selection, scroll event, and mouse cursor movements with precise timestamps
 
 🎬 **Perfect Audio Sync** - Millisecond-precise audio synchronization via independent master timeline
 
@@ -36,7 +36,7 @@ pnpm add use-scrimba
 import React, { useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import type * as monaco from 'monaco-editor';
-import { useScrimba, type Recording } from 'use-scrimba';
+import { useScrimba, type Recording, type MouseCursorPosition } from 'use-scrimba';
 
 function MyCodeEditor() {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -124,13 +124,7 @@ interface UseScrimbaConfig {
   // Optional Audio Sync
   audioRef?: React.RefObject<HTMLAudioElement | null>;
   
-  // Recording Options
-  captureEvents?: {
-    content?: boolean;          // Default: true
-    cursorPosition?: boolean;   // Default: true
-    selection?: boolean;        // Default: true
-    scroll?: boolean;           // Default: true
-  };
+  // Recording Options - All events are captured by default internally
   
   // Playback Options
   pauseOnUserInteraction?: boolean;  // Default: true
@@ -172,7 +166,7 @@ interface UseScrimbaReturn {
   
   // Data
   currentRecording: Recording | null;
-  currentSnapshot: EditorSnapshot | null;
+  currentCursor: MouseCursorPosition | null;
   
   // Recording Controls
   startRecording: () => void;
@@ -337,6 +331,93 @@ function AudioIntegratedEditor() {
 }
 ```
 
+### Mouse Cursor Recording & Playback
+
+```tsx
+import React, { useRef } from 'react';
+import type * as monaco from 'monaco-editor';
+import { useScrimba, type MouseCursorPosition } from 'use-scrimba';
+
+// Fake cursor component for playback visualization
+interface FakeCursorProps {
+  position: MouseCursorPosition;
+}
+
+const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
+  if (!position.visible) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed', // Fixed to viewport
+        left: position.x,
+        top: position.y,
+        width: 24,
+        height: 24,
+        pointerEvents: 'none',
+        zIndex: 9999,
+      }}
+    >
+      {/* Custom cursor icon */}
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <path 
+          d="M3 3L10.07 19.97L12.58 12.58L19.97 10.07L3 3Z" 
+          fill="white" 
+          stroke="black" 
+          strokeWidth="1"
+        />
+      </svg>
+    </div>
+  );
+};
+
+function EditorWithMouseCursor() {
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  
+  const scrimba = useScrimba({
+    editorRef,
+    // Mouse cursor recording is enabled by default
+    onStateChange: (state) => {
+      // Access real-time cursor data during recording
+      if (state.mouseCursor) {
+        console.log('Mouse at:', state.mouseCursor);
+      }
+    },
+  });
+  
+  return (
+    <>
+      {/* Fake cursor during playback - positioned on viewport */}
+      {scrimba.isPlaying && scrimba.currentCursor && scrimba.currentCursor.visible && (
+        <FakeCursor position={scrimba.currentCursor} />
+      )}
+      
+      <div>
+        <button onClick={scrimba.startRecording}>Start Recording</button>
+        <button onClick={scrimba.stopRecording}>Stop Recording</button>
+        <button onClick={scrimba.play}>Play</button>
+        
+        {/* Show cursor coordinates during playback */}
+        {scrimba.isPlaying && scrimba.currentCursor && (
+          <div>
+            🖱️ Cursor: ({scrimba.currentCursor.x}, {scrimba.currentCursor.y})
+          </div>
+        )}
+        
+        <Editor
+          height="400px"
+          onMount={(editor) => { 
+            editorRef.current = editor; 
+            scrimba.handleEditorMount(editor); 
+          }}
+          onChange={scrimba.handleEditorChange}
+        />
+      </div>
+    </>
+  );
+}
+```
+
 ### Seeking with Progress Bar
 
 ```tsx
@@ -390,6 +471,7 @@ function EditorWithProgress() {
 
 - **Basic Recording** - Simple editor recording without audio
 - **Perfect Audio Sync** - Audio recording with millisecond-precise synchronization  
+- **Mouse Cursor Recording** - Complete example with fake cursor during playback
 - **Complete Demo** - Full-featured demo showcasing master timeline architecture
 
 See the `/examples` folder in this package for complete implementation examples.
