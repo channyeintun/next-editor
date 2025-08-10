@@ -37,6 +37,10 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
       try {
         await jsonStorage.current.save(recording);
         console.log('✅ Recording saved successfully');
+        
+        // Load the recording for immediate playback
+        originalScrimbaHook.loadRecording(recording);
+        console.log('📺 Recording loaded for playback');
       } catch (error) {
         console.error('❌ Failed to save recording to storage:', error);
       }

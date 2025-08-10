@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useScrimbaContext } from '../hooks/useScrimbaContext';
 
 interface MediaControlsProps {
@@ -7,21 +7,39 @@ interface MediaControlsProps {
 }
 
 const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording }) => {
-  const { 
+  const {
     isRecording,
-    isPlaying, 
-    hasEnded,
-    currentTime, 
+    isPlaying,
+    currentTime,
+    recordingStartTime,
     playbackSpeed,
     currentRecording,
     startRecording,
     stopRecording,
     play,
     pause,
-    stop,
     seekTo,
     setPlaybackSpeed
   } = useScrimbaContext();
+
+  const [showSettings, setShowSettings] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+
+  // Update recording time every 100ms when recording
+  useEffect(() => {
+    let interval: number;
+    if (isRecording && recordingStartTime !== null) {
+      interval = setInterval(() => {
+        setRecordingTime(Date.now() - recordingStartTime);
+      }, 100);
+    } else {
+      setRecordingTime(0);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRecording, recordingStartTime]);
 
   const formatTime = (milliseconds: number): string => {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -30,17 +48,22 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  const handleRecordToggle = () => {
+    if (isRecording) {
+      stopRecording();
+      onStopRecording?.();
+    } else {
+      startRecording();
+      onRecord?.();
+    }
+  };
+
   const handlePlayPause = () => {
     if (isPlaying) {
       pause();
     } else {
-      // Just call play() - useScrimba handles restarting if ended
       play();
     }
-  };
-
-  const handleStop = () => {
-    stop();
   };
 
   const handleSeek = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,115 +71,112 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     seekTo(newTime);
   };
 
-  const handleSpeedChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const newSpeed = parseFloat(event.target.value);
-    setPlaybackSpeed(newSpeed);
-  };
-
-  const handleStartRecording = () => {
-    startRecording();
-    onRecord?.();
-  };
-
-  const handleStopRecording = () => {
-    stopRecording();
-    onStopRecording?.();
-  };
-
   const duration = currentRecording?.duration || 0;
 
+  // Calculate the time to display
+  const displayTime = isRecording 
+    ? recordingTime 
+    : (currentRecording ? duration - currentTime : currentTime);
+
   return (
-    <div className="p-5 bg-gray-800 rounded-lg">
-      <div className="mb-4">
-        {!isRecording ? (
-          <button 
-            onClick={handleStartRecording}
-            className="px-6 py-3 text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-md font-medium transition-colors"
-            disabled={isPlaying}
+    <div className="bg-slate-800 border-t border-slate-700 px-4 py-3">
+      <div className="flex items-center gap-3 w-full">
+        {/* Record button - always show */}
+        <button
+            onClick={handleRecordToggle}
+            className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-2 before:content-['']"
           >
-            🎤 Start Recording (Code + Audio)
-          </button>
-        ) : (
-          <div className="flex flex-col items-start gap-2">
-            <button 
-              onClick={handleStopRecording}
-              className="px-6 py-3 text-white bg-gray-600 hover:bg-gray-700 rounded-md font-medium transition-colors"
+            {isRecording ? (
+              <div className="w-2 h-2 bg-red-500 rounded-sm"></div>
+            ) : (
+              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+            )}
+        </button>
+
+        {/* Show playback controls only if recording exists and not currently recording */}
+        {currentRecording && !isRecording && (
+          <>
+            {/* Play/Pause button */}
+            <button
+              onClick={handlePlayPause}
+              className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-2 before:content-['']"
             >
-              ⏹️ Stop Recording
+              <div className="w-3 flex items-center justify-center">
+                {isPlaying ? (
+                  <div className="flex gap-0.5">
+                    <div className="w-0.5 h-3 bg-white"></div>
+                    <div className="w-0.5 h-3 bg-white"></div>
+                  </div>
+                ) : (
+                  <div className="w-0 h-0 border-l-[12px] border-l-white border-y-[6px] border-y-transparent"></div>
+                )}
+              </div>
             </button>
-            <div className="flex items-center gap-2 text-sm text-red-400">
-              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-              Recording audio + code changes...
+
+            {/* Progress bar */}
+            <div className="flex-1 mx-1 flex items-center">
+              <input
+                type="range"
+                min="0"
+                max={duration}
+                value={currentTime}
+                onChange={handleSeek}
+                className="w-full h-1 bg-slate-600 rounded appearance-none cursor-pointer hover:h-1.5 transition-all duration-150"
+                style={{
+                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${duration > 0 ? (currentTime / duration) * 100 : 0}%, #475569 ${duration > 0 ? (currentTime / duration) * 100 : 0}%, #475569 100%)`,
+                  margin: '0'
+                }}
+              />
             </div>
-          </div>
+
+            {/* Settings button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-2 before:content-['']"
+              >
+                <div className="w-4 h-4 flex flex-col justify-center gap-0.5">
+                  <div className="w-full h-0.5 bg-slate-400"></div>
+                  <div className="w-full h-0.5 bg-slate-400"></div>
+                  <div className="w-full h-0.5 bg-slate-400"></div>
+                </div>
+              </button>
+
+              {/* Settings Popup */}
+              {showSettings && (
+                <div className="absolute bottom-full right-0 mb-2 bg-white rounded-lg shadow-lg p-4 min-w-[200px] z-50">
+                  <div className="text-gray-800">
+                    <div className="mb-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Speed
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-gray-500 min-w-[32px]">{playbackSpeed}x</span>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="2"
+                          step="0.25"
+                          value={playbackSpeed}
+                          onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                          className="flex-1 h-1 bg-gray-300 rounded appearance-none cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Time display - show only during recording or playback */}
+        {(isRecording || currentRecording) && (
+          <span className="text-slate-400 text-sm font-mono">
+            {isRecording ? formatTime(displayTime) : `-${formatTime(displayTime)}`}
+          </span>
         )}
       </div>
-
-      {currentRecording && (
-        <div className="flex flex-col gap-4">
-          <div className="flex gap-3">
-            <button 
-              onClick={handleStop} 
-              disabled={isRecording}
-              className="w-12 h-12 text-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-full flex items-center justify-center transition-colors"
-            >
-              ⏹️
-            </button>
-            
-            <button 
-              onClick={handlePlayPause} 
-              disabled={isRecording}
-              className="w-12 h-12 text-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-full flex items-center justify-center transition-colors"
-            >
-              {isPlaying ? (
-                '⏸️'
-              ) : hasEnded ? (
-                '🔄'
-              ) : (
-                '▶️'
-              )}
-            </button>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="text-gray-300 font-mono text-sm min-w-[40px] text-center">
-              {formatTime(currentTime)}
-            </span>
-            
-            <input
-              type="range"
-              min="0"
-              max={duration}
-              value={currentTime}
-              onChange={handleSeek}
-              className="flex-1 h-2 bg-gray-600 rounded-sm outline-none slider"
-              disabled={isRecording}
-            />
-            
-            <span className="text-gray-300 font-mono text-sm min-w-[40px] text-center">
-              {formatTime(duration)}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <label htmlFor="speed-select" className="text-gray-300">Speed:</label>
-            <select
-              id="speed-select"
-              value={playbackSpeed}
-              onChange={handleSpeedChange}
-              disabled={isRecording}
-              className="px-3 py-1 border border-gray-600 rounded bg-gray-700 text-gray-300 disabled:bg-gray-600 disabled:cursor-not-allowed"
-            >
-              <option value={0.5}>0.5x</option>
-              <option value={0.75}>0.75x</option>
-              <option value={1}>1x</option>
-              <option value={1.25}>1.25x</option>
-              <option value={1.5}>1.5x</option>
-              <option value={2}>2x</option>
-            </select>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

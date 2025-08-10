@@ -1,11 +1,10 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { useScrimbaContext } from '../hooks/useScrimbaContext';
 
 interface CodeEditorProps {
   language?: string;
   theme?: string;
-  height?: string;
 }
 
 /**
@@ -19,16 +18,45 @@ interface CodeEditorProps {
  * 
  * @param language - Programming language for syntax highlighting (default: 'javascript')
  * @param theme - Monaco editor theme (default: 'vs-dark')
- * @param height - Editor height (default: '600px')
  */
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
   language = 'javascript',
-  theme = 'vs-dark',
-  height = '600px'
+  theme = 'vs-dark'
 }) => {
   // Use the useScrimba context instead of Redux and custom hooks
-  const { handleEditorMount, handleEditorChange, editorRef } = useScrimbaContext();
+  const { 
+    handleEditorMount, 
+    handleEditorChange, 
+    editorRef,
+    currentRecording,
+    exportAsFile,
+    importFromFile,
+    loadRecording
+  } = useScrimbaContext();
+
+
+  const handleExport = async () => {
+    if (currentRecording) {
+      await exportAsFile(currentRecording);
+    }
+  };
+
+  const handleImport = async () => {
+    try {
+      const importedRecordings = await importFromFile();
+      console.log('Successfully imported recordings:', importedRecordings);
+      
+      // Load the first imported recording for playback
+      if (importedRecordings.length > 0) {
+        loadRecording(importedRecordings[0]);
+        console.log(`Imported ${importedRecordings.length} recording(s) and loaded the first one for playback`);
+      }
+    } catch (error) {
+      console.error('Import failed:', error);
+      alert('Failed to import recording. Please check the file format.');
+    }
+  };
 
   /**
    * Handle Monaco Editor mount event
@@ -40,57 +68,77 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   };
   
   return (
-    <Editor
-      height={height}
-      language={language}
-      theme={theme}
-      defaultValue="// 🎬 Scrimba-like Recording Demo
-// Use the media controls to record and replay your coding sessions!
+    <div className="h-full flex flex-col">
+      {/* Title Bar with Import/Export buttons */}
+      <div className="bg-gray-700 px-4 py-2 flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-300">use-scrimba</span>
+        <div className="flex items-center space-x-2">
+          {/* Import/Export buttons */}
+          <button
+            onClick={handleImport}
+            className="px-3 py-1 text-xs text-gray-300 hover:text-white bg-gray-600 hover:bg-gray-500 rounded transition-colors"
+          >
+            Import
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={!currentRecording}
+            className="px-3 py-1 text-xs text-gray-300 hover:text-white bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed rounded transition-colors"
+          >
+            Export
+          </button>
+        </div>
+      </div>
 
-function createAwesome() {
-  const features = [
-    'Real-time recording',
-    'Cursor position tracking', 
-    'Text selection replay',
-    'Smooth playback'
-  ];
-  
-  return features.map(f => `✨ ${f}`);
+      {/* Monaco Editor */}
+      <div className="flex-1">
+        <Editor
+          height="100%"
+          language={language}
+          theme={theme}
+          defaultValue="// 🎬 Interactive Coding Platform
+// Record your coding sessions and replay them!
+
+function hello() {
+  console.log('Hello World!');
 }
 
-createAwesome();"
-      onMount={handleEditorDidMount}
-      onChange={handleEditorChange}
-      options={{
-        minimap: { enabled: false },
-        fontSize: 14,
-        lineNumbers: 'on',
-        roundedSelection: false,
-        scrollBeyondLastLine: false,
-        readOnly: false, // Keep editor writable to allow cursor blinking
-        cursorStyle: 'line',
-        cursorBlinking: 'blink',
-        renderValidationDecorations: 'on',
-        automaticLayout: true,
-        // Disable code suggestions and IntelliSense
-        quickSuggestions: false,
-        suggestOnTriggerCharacters: false,
-        acceptSuggestionOnEnter: 'off',
-        tabCompletion: 'off',
-        wordBasedSuggestions: 'off',
-        parameterHints: { enabled: false },
-        hover: { enabled: false },
-        contextmenu: false,
-        // Disable other distracting features
-        folding: false,
-        foldingHighlight: false,
-        unfoldOnClickAfterEndOfLine: false,
-        showUnused: false,
-        occurrencesHighlight: 'off',
-        selectionHighlight: false,
-        renderLineHighlight: 'none',
-      }}
-    />
+hello();"
+          onMount={handleEditorDidMount}
+          onChange={handleEditorChange}
+          options={{
+            minimap: { enabled: false },
+            fontSize: 14,
+            lineNumbers: 'on',
+            roundedSelection: false,
+            scrollBeyondLastLine: false,
+            readOnly: false, // Keep editor writable to allow cursor blinking
+            cursorStyle: 'line',
+            cursorBlinking: 'blink',
+            renderValidationDecorations: 'on',
+            automaticLayout: true,
+            // Disable code suggestions and IntelliSense
+            quickSuggestions: false,
+            suggestOnTriggerCharacters: false,
+            acceptSuggestionOnEnter: 'off',
+            tabCompletion: 'off',
+            wordBasedSuggestions: 'off',
+            parameterHints: { enabled: false },
+            hover: { enabled: false },
+            contextmenu: false,
+            // Disable other distracting features
+            folding: false,
+            foldingHighlight: false,
+            unfoldOnClickAfterEndOfLine: false,
+            showUnused: false,
+            occurrencesHighlight: 'off',
+            selectionHighlight: false,
+            renderLineHighlight: 'none',
+          }}
+        />
+      </div>
+
+    </div>
   );
 };
 
