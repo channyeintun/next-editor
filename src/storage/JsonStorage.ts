@@ -334,31 +334,36 @@ export class JsonStorage {
         }
         
         try {
+          // Read file as text and validate it's not empty/undefined
           const text = await file.text();
-          const binaryData = this.base64ToBinary(text);
-          const importedRecordings = await this.decompressBinaryToRecordings(binaryData);
-          
-          // Merge with existing recordings
-          const existingRecordings = await this.load();
-          const allRecordings = [...existingRecordings];
-          
-          for (const recording of importedRecordings) {
-            const existingIndex = allRecordings.findIndex(r => r.id === recording.id);
-            if (existingIndex >= 0) {
-              allRecordings[existingIndex] = recording; // Replace existing
-            } else {
-              allRecordings.push(recording); // Add new
-            }
+          if (!text || text.trim().length === 0) {
+            reject(new Error('File appears to be empty or corrupted'));
+            return;
           }
           
-          // Save merged recordings
-          const binaryData2 = await this.compressRecordingsToBinary(allRecordings);
-          const base64Data = this.binaryToBase64(binaryData2);
-          localStorage.setItem(this.localStorageKey, base64Data);
+          // Validate base64 format before attempting to decode
+          const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
+          if (!base64Pattern.test(text.trim())) {
+            reject(new Error('File does not contain valid base64 data'));
+            return;
+          }
           
+          const binaryData = this.base64ToBinary(text.trim());
+          const importedRecordings = await this.decompressBinaryToRecordings(binaryData);
+          
+          // Validate imported recordings
+          if (!Array.isArray(importedRecordings) || importedRecordings.length === 0) {
+            reject(new Error('No valid recordings found in file'));
+            return;
+          }
+          
+          // Don't save to localStorage to avoid quota issues with large files
+          // Just return the imported recordings for immediate use
           resolve(importedRecordings);
         } catch (error) {
-          reject(new Error(`Failed to import recordings: ${error instanceof Error ? error.message : 'Invalid file format'}`));
+          console.error('Import error details:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Invalid file format';
+          reject(new Error(`Failed to import recordings: ${errorMessage}`));
         }
       };
       
