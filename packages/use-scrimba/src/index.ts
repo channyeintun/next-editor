@@ -3,6 +3,7 @@ export { useScrimba } from './useScrimba';
 
 // Type exports for users
 export type {
+  MouseCursorPosition,
   EditorSnapshot,
   Recording,
   CaptureEvents,
