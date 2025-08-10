@@ -8,4 +8,8 @@ tsconfig.json
 *.log
 .DS_Store
 CLAUDE.md
+ARCHITECTURE.md
+API.md
+PROJECT_STRUCTURE.md
+PUBLISHING.md
 .claude/*
