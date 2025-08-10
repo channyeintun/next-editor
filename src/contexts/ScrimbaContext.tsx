@@ -33,17 +33,7 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
     onRecordingStop: async (recording) => {
       console.log('⏹️ Recording stopped', recording);
       console.log('🎤 Has audioBlob:', !!recording.audioBlob, recording.audioBlob ? `(${recording.audioBlob.size} bytes)` : '');
-      // Save recording to storage immediately
-      try {
-        await jsonStorage.current.save(recording);
-        console.log('✅ Recording saved successfully');
-        
-        // Load the recording for immediate playback
-        originalScrimbaHook.loadRecording(recording);
-        console.log('📺 Recording loaded for playback');
-      } catch (error) {
-        console.error('❌ Failed to save recording to storage:', error);
-      }
+      originalScrimbaHook.loadRecording(recording);
     },
     onPlaybackStart: () => {
       console.log('▶️ Playback started');
