@@ -356,8 +356,14 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
   // Playback controls
   const play = useCallback(() => {
-    if (!playback.loadedRecording?.snapshots?.length) {
-      console.warn('Cannot play: no recording or snapshots available');
+    if (!playback.loadedRecording) {
+      console.warn('Cannot play: no recording loaded');
+      return;
+    }
+    
+    // Allow playback if there's audio even without snapshots
+    if (!playback.loadedRecording.snapshots?.length && !playback.loadedRecording.audioBlob) {
+      console.warn('Cannot play: no recording content (snapshots or audio) available');
       return;
     }
     
