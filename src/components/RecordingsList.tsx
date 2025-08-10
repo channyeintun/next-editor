@@ -189,9 +189,6 @@ const RecordingsList: React.FC = () => {
               <p className="text-blue-400 text-sm">
                 Duration: {formatDuration(recording.duration)}
               </p>
-              <p className="text-green-400 text-sm">
-                {recording.snapshots.length} snapshots
-              </p>
             </div>
             
             {recording.audioBlob && (
