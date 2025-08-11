@@ -99,17 +99,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     }
   };
 
-  const toggleMute = () => {
-    if (audioRef.current) {
-      if (isMuted) {
-        audioRef.current.volume = volume;
-        setIsMuted(false);
-      } else {
-        audioRef.current.volume = 0;
-        setIsMuted(true);
-      }
-    }
-  };
 
   const duration = currentRecording?.duration || 0;
 
