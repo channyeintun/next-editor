@@ -70,13 +70,6 @@ const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
 const CursorComponent: React.FC = () => {
   const { isPlaying, currentCursor } = useScrimbaContext();
 
-  // Debug logging
-  console.log('CursorComponent render:', {
-    isPlaying,
-    currentCursor,
-    shouldShow: isPlaying && currentCursor && currentCursor.visible
-  });
-
   // Render fake cursor during playback - fixed to viewport
   return (
     <>
