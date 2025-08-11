@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useScrimbaContext } from '../hooks/useScrimbaContext';
+import ReplayIcon from './icon/Replay';
+import PlayIcon from './icon/Play';
+import PauseIcon from './icon/Pause';
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -19,7 +22,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     play,
     pause,
     seekTo,
-    setPlaybackSpeed
+    setPlaybackSpeed,
+    hasEnded,
   } = useScrimbaContext();
 
   const [showSettings, setShowSettings] = useState(false);
@@ -100,16 +104,15 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
             {/* Play/Pause button */}
             <button
               onClick={handlePlayPause}
-              className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-2 before:content-['']"
+              className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-[2px] before:content-['']"
             >
-              <div className="w-3 flex items-center justify-center">
+              <div className="w-6 flex items-center justify-center">
                 {isPlaying ? (
-                  <div className="flex gap-0.5">
-                    <div className="w-0.5 h-3 bg-white"></div>
-                    <div className="w-0.5 h-3 bg-white"></div>
-                  </div>
+                  <PauseIcon />
+                ) : hasEnded ? (
+                  <ReplayIcon />
                 ) : (
-                  <div className="w-0 h-0 border-l-[12px] border-l-white border-y-[6px] border-y-transparent"></div>
+                  <PlayIcon />
                 )}
               </div>
             </button>
