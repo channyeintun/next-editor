@@ -68,10 +68,6 @@ export const playbackSlice = createSlice({
       state.currentTime = targetTime;
       // Reset hasEnded when seeking to any position
       state.hasEnded = false;
-      if (state.isPlaying) {
-        state.isPlaying = false;
-        state.isPaused = true;
-      }
     },
     setPlaybackSpeed: (state, action: PayloadAction<number>) => {
       const speed = action.payload;

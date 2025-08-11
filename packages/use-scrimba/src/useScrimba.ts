@@ -555,7 +555,14 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     }
     
     onSeek?.(clampedTime);
-  }, [store, playback.loadedRecording, playback.isPlaying, onSeek, editorRef, audioRef]);
+    
+    // Resume playback after seek
+    if (wasPlaying) {
+      setTimeout(() => {
+        play();
+      }, 0);
+    }
+  }, [store, playback.loadedRecording, playback.isPlaying, onSeek, editorRef, audioRef, play]);
 
   const setPlaybackSpeed = useCallback((speed: number) => {
     store.dispatch(setPlaybackSpeedAction(speed));
