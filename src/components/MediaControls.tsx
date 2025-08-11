@@ -25,10 +25,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     seekTo,
     setPlaybackSpeed,
     hasEnded,
+    audioRef,
   } = useScrimbaContext();
 
   const [showSettings, setShowSettings] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
 
   // Update recording time every 100ms when recording
   useEffect(() => {
@@ -45,6 +48,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
       if (interval) clearInterval(interval);
     };
   }, [isRecording, recordingStartTime]);
+
+  // Initialize audio volume when audio element is available
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [audioRef, volume]);
 
   const formatTime = (milliseconds: number): string => {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -74,6 +84,31 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
   const handleSeek = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = parseInt(event.target.value);
     seekTo(newTime);
+  };
+
+  const handleVolumeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = parseFloat(event.target.value);
+    setVolume(newVolume);
+    if (audioRef.current) {
+      audioRef.current.volume = newVolume;
+    }
+    if (newVolume === 0) {
+      setIsMuted(true);
+    } else {
+      setIsMuted(false);
+    }
+  };
+
+  const toggleMute = () => {
+    if (audioRef.current) {
+      if (isMuted) {
+        audioRef.current.volume = volume;
+        setIsMuted(false);
+      } else {
+        audioRef.current.volume = 0;
+        setIsMuted(true);
+      }
+    }
   };
 
   const duration = currentRecording?.duration || 0;
@@ -160,6 +195,23 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
                           step="0.25"
                           value={playbackSpeed}
                           onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                          className="flex-1 h-1 bg-gray-300 rounded appearance-none cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Volume
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-gray-500 min-w-[32px]">{Math.round((isMuted ? 0 : volume) * 100)}</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.1"
+                          value={isMuted ? 0 : volume}
+                          onChange={handleVolumeChange}
                           className="flex-1 h-1 bg-gray-300 rounded appearance-none cursor-pointer"
                         />
                       </div>
