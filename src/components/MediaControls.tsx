@@ -3,6 +3,7 @@ import { useScrimbaContext } from '../hooks/useScrimbaContext';
 import ReplayIcon from './icon/Replay';
 import PlayIcon from './icon/Play';
 import PauseIcon from './icon/Pause';
+import SettingIcon from './icon/Setting';
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -78,8 +79,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
   const duration = currentRecording?.duration || 0;
 
   // Calculate the time to display
-  const displayTime = isRecording 
-    ? recordingTime 
+  const displayTime = isRecording
+    ? recordingTime
     : (currentRecording ? duration - currentTime : currentTime);
 
   return (
@@ -87,15 +88,15 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
       <div className="flex items-center gap-3 w-full h-6">
         {/* Record button - always show */}
         <button
-            onClick={handleRecordToggle}
-            title={isRecording ? "Stop recording" : "Start recording"}
-            className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-2 before:content-[''] after:absolute after:inset-0 after:bg-red-500/50 after:rounded-full after:scale-0 hover:after:scale-200 after:transition-transform after:duration-200"
-          >
-            {isRecording ? (
-              <div className="w-2 h-2 bg-red-500 rounded-sm"></div>
-            ) : (
-              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-            )}
+          onClick={handleRecordToggle}
+          title={isRecording ? "Stop recording" : "Start recording"}
+          className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-2 before:content-[''] after:absolute after:inset-0 after:bg-red-500/50 after:rounded-full after:scale-0 hover:after:scale-200 after:transition-transform after:duration-200"
+        >
+          {isRecording ? (
+            <div className="w-2 h-2 bg-red-500 rounded-sm"></div>
+          ) : (
+            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+          )}
         </button>
 
         {/* Show playback controls only if recording exists and not currently recording */}
@@ -136,14 +137,10 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
             {/* Settings button */}
             <div className="relative">
               <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-2 before:content-['']"
+                onClick={() => setShowSettings(prev => !prev)}
+                className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-[2px] before:content-['']"
               >
-                <div className="w-4 h-4 flex flex-col justify-center gap-0.5">
-                  <div className="w-full h-0.5 bg-slate-400"></div>
-                  <div className="w-full h-0.5 bg-slate-400"></div>
-                  <div className="w-full h-0.5 bg-slate-400"></div>
-                </div>
+                <SettingIcon />
               </button>
 
               {/* Settings Popup */}
