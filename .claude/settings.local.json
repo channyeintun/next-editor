@@ -14,7 +14,8 @@
       "Bash(npm pack:*)",
       "Bash(./publish.sh)",
       "Bash(npm publish:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(npm run typecheck:*)"
     ],
     "deny": []
   }

@@ -58,6 +58,7 @@ export class JsonStorage {
     // Create recording with placeholder
     const recordingWithPlaceholders: Recording = {
       ...recording,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       audioBlob: placeholder as any // Type assertion for compatibility
     };
 
@@ -78,6 +79,7 @@ export class JsonStorage {
         
         if (audioData) {
           // Update placeholder with actual offset
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (recordingWithPlaceholders.audioBlob as any).__audio_offset = currentOffset;
           audioChunks.push(audioData);
           currentOffset += audioData.length;
@@ -161,6 +163,7 @@ export class JsonStorage {
     const audioData = binaryData.slice(audioDataStart);
 
     return recordings.map(recording => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const audioPlaceholder = recording.audioBlob as any;
       
       if (audioPlaceholder && audioPlaceholder.__audio_offset !== undefined) {
