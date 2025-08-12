@@ -59,7 +59,6 @@ function MyCodeEditor() {
     currentRecording,
     
     // Handler for Monaco Editor
-    handleEditorMount,
     handleEditorChange,
   } = useScrimba({
     editorRef,
@@ -99,7 +98,6 @@ function MyCodeEditor() {
         theme="vs-dark"
         onMount={(editor) => { 
           editorRef.current = editor; 
-          handleEditorMount(editor); 
         }}
         onChange={handleEditorChange}
       />
@@ -183,7 +181,6 @@ interface UseScrimbaReturn {
   loadRecording: (recording: Recording) => void;
   
   // Monaco Editor Integration
-  handleEditorMount: (editor: monaco.editor.IStandaloneCodeEditor) => void;
   handleEditorChange: () => void;
   
   // Advanced
@@ -322,7 +319,6 @@ function AudioIntegratedEditor() {
       <Editor
         onMount={(editor) => {
           editorRef.current = editor;
-          scrimba.handleEditorMount(editor);
         }}
         onChange={scrimba.handleEditorChange}
       />
@@ -408,7 +404,6 @@ function EditorWithMouseCursor() {
           height="400px"
           onMount={(editor) => { 
             editorRef.current = editor; 
-            scrimba.handleEditorMount(editor); 
           }}
           onChange={scrimba.handleEditorChange}
         />
@@ -457,7 +452,7 @@ function EditorWithProgress() {
       
       {/* Editor */}
       <Editor
-        onMount={scrimba.handleEditorMount}
+        onMount={(editor) => { editorRef.current = editor; }}
         onChange={scrimba.handleEditorChange}
       />
     </div>

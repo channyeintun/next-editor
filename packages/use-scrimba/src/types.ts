@@ -144,7 +144,6 @@ export interface UseScrimbaReturn {
   loadRecording: (recording: Recording) => void;
   
   // Monaco Editor Integration
-  handleEditorMount: (editor: monaco.editor.IStandaloneCodeEditor) => void;
   handleEditorChange: () => void;
   
   // Advanced

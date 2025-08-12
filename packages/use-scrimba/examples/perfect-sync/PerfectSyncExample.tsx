@@ -87,7 +87,6 @@ export const PerfectSyncExample: React.FC = () => {
     setPlaybackSpeed,
     loadRecording,
     // deleteRecording removed - handled locally
-    handleEditorMount,
     handleEditorChange,
   } = scrimba;
 
@@ -220,7 +219,6 @@ const timeline = new MasterTimeline();
 console.log('Independent master timeline created!');`}
           onMount={(editor) => { 
             editorRef.current = editor; 
-            handleEditorMount(editor); 
           }}
           onChange={handleEditorChange}
           options={{

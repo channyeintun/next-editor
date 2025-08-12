@@ -107,7 +107,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     }
     
     onPlaybackPause?.();
-  }, [store, onPlaybackPause]);
+  }, [store, audioRef, playback.loadedRecording?.audioBlob, onPlaybackPause]);
 
   // Internal playback hook
   const { getEditorState, applyEditorState } = usePlayback(
@@ -618,16 +618,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   }, [store, applyEditorStateSafely, cleanupPlayback, onError, audioRef, playback.playbackSpeed]);
 
 
-  // Monaco Editor integration helper
-  const handleEditorMount = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    (_editor: monaco.editor.IStandaloneCodeEditor) => {
-      // User needs to assign editor to their ref manually
-      // This function is provided for convenience but doesn't do the assignment
-      // Example usage: onMount={(editor) => { editorRef.current = editor; scrimba.handleEditorMount(editor); }}
-    },
-    []
-  );
 
   // New granular control APIs
   const getSnapshot = useCallback((timestamp?: number): EditorSnapshot | null => {
@@ -697,7 +687,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     loadRecording,
     
     // Monaco Editor Integration
-    handleEditorMount,
     handleEditorChange,
     
     // Advanced

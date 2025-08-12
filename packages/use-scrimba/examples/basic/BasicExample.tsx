@@ -33,7 +33,6 @@ const BasicExample: React.FC = () => {
     seekTo,
     loadRecording,
     // deleteRecording removed - handled locally
-    handleEditorMount,
     handleEditorChange,
   } = scrimbaHook;
 
@@ -65,7 +64,6 @@ const BasicExample: React.FC = () => {
           theme="vs-dark"
           onMount={(editor) => {
             editorRef.current = editor;
-            handleEditorMount(editor);
           }}
           onChange={handleEditorChange}
           options={{

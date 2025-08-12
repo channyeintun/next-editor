@@ -67,7 +67,6 @@ export const AudioExample: React.FC = () => {
     play,
     pause,
     stop,
-    handleEditorMount,
     handleEditorChange,
   } = scrimbaHook;
 
@@ -246,7 +245,6 @@ function createTutorial() {
 const tutorial = createTutorial();`}
           onMount={(editor) => { 
             editorRef.current = editor; 
-            handleEditorMount(editor); 
           }}
           onChange={handleEditorChange}
           options={{
