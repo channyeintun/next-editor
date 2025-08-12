@@ -31,7 +31,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
   const [showSettings, setShowSettings] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
 
   // Update recording time every 100ms when recording
   useEffect(() => {
@@ -91,11 +90,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     setVolume(newVolume);
     if (audioRef.current) {
       audioRef.current.volume = newVolume;
-    }
-    if (newVolume === 0) {
-      setIsMuted(true);
-    } else {
-      setIsMuted(false);
     }
   };
 
@@ -193,13 +187,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
                         Volume
                       </label>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm text-gray-500 min-w-[32px]">{Math.round((isMuted ? 0 : volume) * 100)}</span>
+                        <span className="text-sm text-gray-500 min-w-[32px]">{Math.round(volume * 100)}</span>
                         <input
                           type="range"
                           min="0"
                           max="1"
                           step="0.1"
-                          value={isMuted ? 0 : volume}
+                          value={volume}
                           onChange={handleVolumeChange}
                           className="flex-1 h-1 bg-gray-300 rounded appearance-none cursor-pointer"
                         />
