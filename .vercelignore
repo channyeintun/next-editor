@@ -1,9 +1,0 @@
-# Ignore development files
-*.md
-docs/
-.vscode/
-.git/
-
-# Ignore npm/yarn files
-**/node_modules/
-**/*.log
