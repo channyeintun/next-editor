@@ -29,7 +29,9 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
         }
       });
 
-      const mediaRecorder = new MediaRecorder(stream);
+      const mediaRecorder = new MediaRecorder(stream, {
+        audioBitsPerSecond: 64000
+      });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
