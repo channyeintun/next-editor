@@ -197,7 +197,6 @@ function App() {
     stop,
     seekTo,
     loadRecording,
-    handleEditorMount,
     handleEditorChange,
   } = useScrimba({
     editorRef,
@@ -316,8 +315,7 @@ createAwesome();
 // Move your mouse around while recording
 // The red cursor will replay your movements!`}
           onMount={(editor) => { 
-            editorRef.current = editor; 
-            handleEditorMount(editor); 
+            editorRef.current = editor;
           }}
           onChange={handleEditorChange}
           options={{
