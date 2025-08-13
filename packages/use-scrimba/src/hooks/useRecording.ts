@@ -81,7 +81,7 @@ export const useRecording = (
     if (isRecording && !isPlaying && editorRef.current) {
       const editor = editorRef.current;
       const disposables: monaco.IDisposable[] = [];
-      
+
       if (settings.cursorPosition) {
         disposables.push(
           editor.onDidChangeCursorPosition(() => {
@@ -89,7 +89,7 @@ export const useRecording = (
           })
         );
       }
-      
+
       if (settings.selection) {
         disposables.push(
           editor.onDidChangeCursorSelection(() => {
@@ -97,7 +97,7 @@ export const useRecording = (
           })
         );
       }
-      
+
       if (settings.scroll) {
         disposables.push(
           editor.onDidScrollChange(() => {
@@ -105,43 +105,35 @@ export const useRecording = (
           })
         );
       }
-      
+
       // Mouse cursor tracking
       if (settings.mouseCursor) {
-        const editorDomNode = editor.getDomNode();
-        if (editorDomNode) {
-          const handleMouseMove = (event: MouseEvent) => {
-            // Record viewport coordinates, not editor-relative coordinates
-            currentMouseCursor.current = {
-              x: event.clientX,
-              y: event.clientY,
-              visible: true
-            };
-            triggerStateChange();
+        const handleMouseMove = (event: MouseEvent) => {
+          // Record viewport coordinates
+          currentMouseCursor.current = {
+            x: event.clientX,
+            y: event.clientY,
+            visible: true
           };
+          triggerStateChange();
+        };
 
-          const handleMouseEnter = () => {
-            currentMouseCursor.current.visible = true;
-          };
+        const handleMouseLeave = () => {
+          currentMouseCursor.current.visible = false;
+          triggerStateChange();
+        };
 
-          const handleMouseLeave = () => {
-            currentMouseCursor.current.visible = false;
-            triggerStateChange();
-          };
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseleave', handleMouseLeave);
 
-          editorDomNode.addEventListener('mousemove', handleMouseMove);
-          editorDomNode.addEventListener('mouseenter', handleMouseEnter);
-          editorDomNode.addEventListener('mouseleave', handleMouseLeave);
-
-          return () => {
-            disposables.forEach(d => d.dispose());
-            editorDomNode.removeEventListener('mousemove', handleMouseMove);
-            editorDomNode.removeEventListener('mouseenter', handleMouseEnter);
-            editorDomNode.removeEventListener('mouseleave', handleMouseLeave);
-          };
-        }
+        disposables.push({
+          dispose: () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseleave', handleMouseLeave);
+          }
+        });
       }
-      
+
       return () => {
         disposables.forEach(d => d.dispose());
       };
