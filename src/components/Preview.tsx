@@ -2,8 +2,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useScrimbaContext } from '../hooks/useScrimbaContext';
 
+type PreviewSize = 'small' | 'medium' | 'large';
+
 export default function Preview() {
-  const [isMinimized, setIsMinimized] = useState(true);
+  const [size, setSize] = useState<PreviewSize>('small');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastContentRef = useRef<string>('');
   const { editorRef } = useScrimbaContext();
@@ -190,7 +192,7 @@ export default function Preview() {
 
   // Update content when iframe becomes visible or size changes
   useEffect(() => {
-    if (isMinimized) return;
+    if (size === 'small') return;
 
     const editor = editorRef.current;
     if (!editor) return;
@@ -202,7 +204,7 @@ export default function Preview() {
     }, 50);
 
     return () => clearTimeout(timer);
-  }, [isMinimized]);
+  }, [size]);
 
   // Also ensure iframe loads properly
   useEffect(() => {
@@ -224,34 +226,61 @@ export default function Preview() {
     };
   }, [editorRef.current]);
 
+  const getSizeClasses = () => {
+    switch (size) {
+      case 'small':
+        return 'top-16 right-4 w-48 h-32 origin-top-right';
+      case 'medium':
+        return 'top-20 right-4 w-80 h-96 origin-top-right';
+      case 'large':
+        return 'w-[800px] h-[600px] origin-center';
+    }
+  };
+
+  const getSizeStyles = () => {
+    if (size === 'large') {
+      return {
+        top: '50%',
+        right: '50%',
+        transform: 'translate(50%, -50%)'
+      };
+    }
+    return {};
+  };
+
+  const handleClick = () => {
+    if (size === 'small') {
+      setSize('medium');
+    }
+  };
+
+  const handleMinimize = () => {
+    setSize('small');
+  };
+
+  const handleMaximize = () => {
+    setSize(size === 'large' ? 'medium' : 'large');
+  };
+
   return (
     <>
-      {/* Overlay for click-outside-to-minimize */}
-      {!isMinimized && (
+      {/* Overlay for click-outside-to-minimize - only for large size */}
+      {size === 'large' && (
         <div
           className="fixed inset-0 z-39"
-          onClick={() => setIsMinimized(true)}
+          onClick={handleMinimize}
         />
       )}
 
       <div
-        className={`fixed bg-white rounded shadow-lg z-40 transition-all duration-500 ease-in-out origin-top-right ${isMinimized
-            ? 'top-16 right-4 w-48 h-32'
-            : 'w-[800px] h-[600px]'
-          }`}
+        className={`fixed bg-white rounded shadow-lg z-40 transition-all duration-500 ease-in-out ${getSizeClasses()}`}
         style={{
           border: '1px solid #ccc',
-          ...(!isMinimized && {
-            top: '50%',
-            right: '50%',
-            transform: 'translate(50%, -50%)'
-          })
+          ...getSizeStyles()
         }}
         onClick={(e) => {
           e.stopPropagation();
-          if (isMinimized) {
-            setIsMinimized(false);
-          }
+          handleClick();
         }}
       >
         {/* Browser-style header */}
@@ -259,14 +288,20 @@ export default function Preview() {
           {/* Window controls */}
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setIsMinimized(!isMinimized)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMinimize();
+              }}
               className="w-3 h-3 rounded-full bg-yellow-400 hover:bg-yellow-500"
-              title={isMinimized ? 'Maximize' : 'Minimize'}
+              title="Minimize"
             />
             <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMaximize();
+              }}
               className="w-3 h-3 rounded-full bg-green-400 hover:bg-green-500"
-              title="Maximize"
-              onClick={() => setIsMinimized(false)}
+              title={size === 'large' ? 'Medium Size' : 'Maximize'}
             />
           </div>
 
@@ -275,8 +310,8 @@ export default function Preview() {
 
         <iframe
           ref={iframeRef}
-          className={`w-full border-0 rounded-b-lg ${isMinimized ? 'h-40' : ''}`}
-          style={{ height: isMinimized ? 'calc(100% - 40px)' : 'calc(100% - 48px)' }}
+          className="w-full border-0 rounded-b-lg"
+          style={{ height: 'calc(100% - 48px)' }}
           title="Code Preview"
           sandbox="allow-scripts allow-same-origin"
         />
