@@ -25,8 +25,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 }) => {
   const selectedLanguage = 'html';
   // Use the useScrimba context instead of Redux and custom hooks
-  const { 
-    handleEditorMount, 
+  const {
     handleEditorChange, 
     editorRef,
     currentRecording,
@@ -68,7 +67,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
    */
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
-    handleEditorMount(editor);
   };
   
   return (
