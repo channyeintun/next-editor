@@ -2,6 +2,7 @@ import CodeEditor from './components/CodeEditor';
 import MediaControls from './components/MediaControls';
 import AudioPlayer from './components/AudioPlayer';
 import DragDropOverlay from './components/DragDropOverlay';
+import Preview from './components/Preview.tsx';
 import { ScrimbaProvider } from './contexts/ScrimbaContext.tsx';
 import { useDragAndDropUrl } from './hooks/useDragAndDropUrl';
 import { useUrlQuery } from './hooks/useUrlQuery';
@@ -30,6 +31,7 @@ function AppContent() {
       <MediaControls />
       <AudioPlayer />
       <CursorComponent />
+      <Preview />
       
       <DragDropOverlay isDragging={isDragging} isLoading={isLoading} />
     </div>

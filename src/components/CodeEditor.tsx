@@ -21,9 +21,9 @@ interface CodeEditorProps {
  */
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
-  language = 'javascript',
   theme = 'vs-dark'
 }) => {
+  const selectedLanguage = 'html';
   // Use the useScrimba context instead of Redux and custom hooks
   const { 
     handleEditorMount, 
@@ -57,6 +57,10 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       alert('Failed to import recording. Please check the file format.');
     }
   };
+
+  const defaultContent = `<html>
+    <h1>Hello world</h1>
+</html>`;
 
   /**
    * Handle Monaco Editor mount event
@@ -94,16 +98,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       <div className="flex-1">
         <Editor
           height="100%"
-          language={language}
+          language={selectedLanguage}
           theme={theme}
-          defaultValue="// 🎬 Interactive Coding Platform
-// Record your coding sessions and replay them!
-
-function hello() {
-  console.log('Hello World!');
-}
-
-hello();"
+          defaultValue={defaultContent}
           onMount={handleEditorDidMount}
           onChange={handleEditorChange}
           options={{
