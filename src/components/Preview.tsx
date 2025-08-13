@@ -233,7 +233,7 @@ export default function Preview() {
       case 'medium':
         return 'top-20 right-4 w-80 h-96 origin-top-right';
       case 'large':
-        return 'w-[800px] h-[600px] origin-center';
+        return 'w-[800px] max-w-[90vw] h-[600px] max-h-[90vh] origin-center';
     }
   };
 
