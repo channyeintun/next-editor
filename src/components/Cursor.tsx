@@ -1,6 +1,6 @@
 import React from 'react';
 import { useScrimbaContext } from '../hooks/useScrimbaContext';
-import type { MouseCursorPosition } from '../use-scrimba';
+import type { MouseCursorPosition } from '../use-scrimba/src';
 
 /**
  * Fake cursor component for playback visualization

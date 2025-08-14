@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import type * as monaco from 'monaco-editor';
-import { useScrimba } from '../use-scrimba';
+import { useScrimba } from '../use-scrimba/src';
 import { ScrimbaContext } from './ScrimbaContext';
 import { createJsonStorage } from '../storage/JsonStorage';
 

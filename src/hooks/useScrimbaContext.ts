@@ -1,7 +1,7 @@
 import { useContext, type RefObject } from 'react';
 import type * as monaco from 'monaco-editor';
 import { ScrimbaContext } from '../contexts/ScrimbaContext';
-import type { UseScrimbaReturn, Recording } from '../use-scrimba';
+import type { UseScrimbaReturn, Recording } from '../use-scrimba/src';
 
 /**
  * Hook to access useScrimba functionality from any component

@@ -1,5 +1,5 @@
 import { createContext, type RefObject } from 'react';
-import type { UseScrimbaReturn, Recording } from 'use-scrimba';
+import type { UseScrimbaReturn, Recording } from '../use-scrimba/src';
 import type * as monaco from 'monaco-editor';
 
 // Create context for useScrimba functionality with editor ref and JSON storage
