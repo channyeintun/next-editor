@@ -10,7 +10,7 @@ A powerful React hook for recording and replaying Monaco Editor interactions wit
 
 🎥 **Record Editor Interactions** - Capture every keystroke, text cursor movement, selection, scroll event, and mouse cursor movements with precise timestamps
 
-🎬 **Perfect Audio Sync** - Millisecond-precise audio synchronization via independent master timeline
+🎬 **Built-in Synchronized Audio Recording** - Millisecond-precise audio synchronization with zero drift
 
 🎛️ **Full Control** - Play, pause, stop, seek, and speed control
 
@@ -36,14 +36,16 @@ pnpm add use-scrimba
 import React, { useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import type * as monaco from 'monaco-editor';
-import { useScrimba, type Recording, type MouseCursorPosition } from 'use-scrimba';
+import { useScrimba, type Recording } from 'use-scrimba';
 
 function MyCodeEditor() {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   
   const {
     // Recording
     isRecording,
+    isRecordingAudio,
     startRecording,
     stopRecording,
     
@@ -62,8 +64,9 @@ function MyCodeEditor() {
     handleEditorChange,
   } = useScrimba({
     editorRef,
-    // Optional configuration
-    onRecordingStart: () => console.log('Recording started'),
+    audioRef,
+    enableAudioRecording: true, // Enable built-in synchronized audio recording
+    onRecordingStart: () => console.log('Synchronized recording started'),
     onRecordingStop: (recording: Recording) => console.log('Recording stopped', recording),
     onPlaybackStart: () => console.log('Playback started'),
     onPlaybackPause: () => console.log('Playback paused'),
@@ -75,7 +78,7 @@ function MyCodeEditor() {
       {/* Controls */}
       <div>
         <button onClick={startRecording} disabled={isRecording}>
-          Start Recording
+          {isRecording ? `Recording${isRecordingAudio ? ' + Audio' : ''}` : 'Start Recording'}
         </button>
         <button onClick={stopRecording} disabled={!isRecording}>
           Stop Recording
@@ -90,6 +93,9 @@ function MyCodeEditor() {
           Stop
         </button>
       </div>
+
+      {/* Hidden Audio Element for synchronized playback */}
+      <audio ref={audioRef} style={{ display: 'none' }} />
 
       {/* Monaco Editor */}
       <Editor
@@ -119,10 +125,12 @@ interface UseScrimbaConfig {
   // Required
   editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   
-  // Optional Audio Sync
+  // Optional Audio Recording
   audioRef?: React.RefObject<HTMLAudioElement | null>;
+  enableAudioRecording?: boolean;    // Enable built-in synchronized audio recording
   
-  // Recording Options - All events are captured by default internally
+  // Recording Options
+  captureEvents?: CaptureEvents;     // Customize what events to capture
   
   // Playback Options
   pauseOnUserInteraction?: boolean;  // Default: true
@@ -153,6 +161,7 @@ interface UseScrimbaConfig {
 interface UseScrimbaReturn {
   // Recording State
   isRecording: boolean;
+  isRecordingAudio: boolean;         // Built-in audio recording state
   recordingStartTime: number | null;
   
   // Playback State
@@ -167,8 +176,8 @@ interface UseScrimbaReturn {
   currentCursor: MouseCursorPosition | null;
   
   // Recording Controls
-  startRecording: () => void;
-  stopRecording: (options?: { audioBlob?: Blob }) => void;
+  startRecording: () => Promise<void>; // Now async for synchronized audio
+  stopRecording: (options?: { audioBlob?: Blob; masterDuration?: number }) => Promise<void>;
   
   // Playback Controls
   play: () => void;
@@ -239,93 +248,77 @@ const saveRecording = async (recording) => {
 };
 ```
 
-### Audio Integration with Perfect Sync
+### Built-in Synchronized Audio Recording
 
 ```tsx
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import type * as monaco from 'monaco-editor';
 import { useScrimba, type Recording } from 'use-scrimba';
 
 function AudioIntegratedEditor() {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
-  const audioChunksRef = useRef<Blob[]>([]);
   
-  const scrimba = useScrimba({
+  const {
+    isRecording,
+    isRecordingAudio,
+    startRecording,
+    stopRecording,
+    play,
+    handleEditorChange,
+    currentRecording
+  } = useScrimba({
     editorRef,
-    audioRef, // Enable perfect audio synchronization
-    onRecordingStart: async () => {
-      // Start audio recording
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
-        mediaRecorderRef.current = mediaRecorder;
-        
-        audioChunksRef.current = [];
-        
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) {
-            audioChunksRef.current.push(e.data);
-          }
-        };
-        
-        mediaRecorder.onstop = () => {
-          stream.getTracks().forEach(track => track.stop());
-        };
-        
-        mediaRecorder.start();
-        setIsRecordingAudio(true);
-        
-      } catch (error) {
-        console.error('Failed to start audio recording:', error);
-      }
+    audioRef,
+    enableAudioRecording: true, // Enable built-in synchronized audio recording
+    onRecordingStart: () => {
+      console.log('🎬 Synchronized recording started');
     },
     onRecordingStop: (recording: Recording) => {
-      if (mediaRecorderRef.current && isRecordingAudio) {
-        mediaRecorderRef.current.stop();
-        setIsRecordingAudio(false);
-      }
+      console.log('⏹️ Synchronized recording stopped');
+      console.log('🎵 Audio included:', !!recording.audioBlob);
+      console.log('📏 Duration:', recording.duration, 'ms (synchronized)');
     },
   });
-  
-  // Custom stop recording with audio
-  const handleStopRecording = () => {
-    if (mediaRecorderRef.current && isRecordingAudio) {
-      mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        scrimba.stopRecording({ audioBlob });
-      };
-      mediaRecorderRef.current.stop();
-      setIsRecordingAudio(false);
-    } else {
-      scrimba.stopRecording();
-    }
-  };
-  
-  // Audio playback is automatically synchronized via audioRef!
   
   return (
     <div>
       {/* Hidden Audio Element - Managed by useScrimba for perfect sync */}
       <audio ref={audioRef} style={{ display: 'none' }} />
       
-      <button onClick={scrimba.startRecording}>Start Recording</button>
-      <button onClick={handleStopRecording}>Stop Recording</button>
-      <button onClick={scrimba.play}>Play</button>
+      <div>
+        <button onClick={startRecording} disabled={isRecording}>
+          {isRecording ? `Recording${isRecordingAudio ? ' + Audio' : ''}` : 'Start Recording'}
+        </button>
+        <button onClick={stopRecording} disabled={!isRecording}>
+          Stop Recording
+        </button>
+        <button onClick={play} disabled={!currentRecording}>
+          Play Synchronized
+        </button>
+      </div>
       
       {/* Editor */}
       <Editor
+        height="400px"
         onMount={(editor) => {
           editorRef.current = editor;
         }}
-        onChange={scrimba.handleEditorChange}
+        onChange={handleEditorChange}
       />
     </div>
   );
 }
 ```
+
+### Master Timeline Architecture
+
+The built-in audio recording uses a **Master Timeline** approach:
+
+- **Single Start Timestamp**: Both audio and snapshot recording start with identical `masterStartTime`
+- **Single Stop Timestamp**: Both recordings stop with identical `masterStopTime`  
+- **Zero Drift**: Timeline duration = `stopTime - startTime` (same for both systems)
+- **Perfect Synchronization**: No async timing mismatches between audio and snapshots
 
 ### Mouse Cursor Recording & Playback
 
@@ -471,26 +464,34 @@ function EditorWithProgress() {
 
 See the `/examples` folder in this package for complete implementation examples.
 
-### 🎯 Perfect Synchronization
+### 🎯 Synchronized Recording Architecture
 
-All audio examples use the **Independent Master Timeline** architecture:
-- `performance.now()` as single source of truth
-- Zero circular dependencies between audio and editor
-- Millisecond-precise synchronization guaranteed
-- Robust seeking without sync loss
+**Master Timeline Synchronization**:
+- Single `masterStartTime` for both audio and snapshot recording start
+- Single `masterStopTime` for both audio and snapshot recording stop
+- Identical duration calculation: `masterStopTime - masterStartTime`
+- Zero drift between audio and code changes
 
 ```typescript
-// Perfect synchronization with just audioRef!
+// Built-in synchronized recording with master timeline
 const audioRef = useRef<HTMLAudioElement | null>(null);
 const scrimba = useScrimba({
   editorRef,
-  audioRef, // Enables millisecond-precise audio synchronization
-  onPlaybackStart: () => console.log('Perfect sync started!'),
-  onPlaybackUpdate: (currentTime, snapshot) => {
-    console.log(`Master time: ${currentTime}ms, Snapshot: ${snapshot?.timestamp}ms`);
+  audioRef,
+  enableAudioRecording: true, // Enables synchronized audio recording
+  onRecordingStart: () => console.log('🎬 Master timeline started'),
+  onRecordingStop: (recording) => {
+    console.log('📏 Synchronized duration:', recording.duration, 'ms');
+    console.log('🎵 Audio synchronized:', !!recording.audioBlob);
   },
 });
 ```
+
+**Key Benefits**:
+- **Rearchitected Solution**: Audio recording moved into use-scrimba package
+- **Breaking Change**: No more separate audio recording logic needed in main project
+- **Master Timeline**: Single source of truth for recording timing
+- **Zero Configuration**: Just set `enableAudioRecording: true`
 
 ## License
 
