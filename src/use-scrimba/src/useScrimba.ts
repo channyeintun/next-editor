@@ -21,6 +21,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const {
     editorRef,
     enableAudioRecording = false,
+    pauseOnUserInteraction = true,
     onRecordingStart,
     onRecordingStop,
     onPlaybackStart,
@@ -82,8 +83,8 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const calculateDurationFromFileReader = useCallback(async (audioBlob: Blob): Promise<number> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      
-      reader.onload = function(e) {
+
+      reader.onload = function (e) {
         try {
           const arrayBuffer = e.target?.result as ArrayBuffer;
           const audioContext = new window.AudioContext();
@@ -448,9 +449,9 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
           if (validSnapshots[i].timestamp <= timelinePosition) {
             const snapshotToApply = validSnapshots[i];
             if (snapshotToApply &&
-                snapshotToApply !== currentSnapshot &&
-                snapshotToApply.state &&
-                isValidSnapshotState(snapshotToApply.state)) {
+              snapshotToApply !== currentSnapshot &&
+              snapshotToApply.state &&
+              isValidSnapshotState(snapshotToApply.state)) {
               applyEditorState(snapshotToApply);
               onPlaybackUpdate?.(timelinePosition, snapshotToApply);
             }
@@ -596,6 +597,32 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
     onPlaybackPause?.();
   }, [onPlaybackPause]);
+
+  // Setup user interaction listeners during playback
+  useEffect(() => {
+    if (isPlaying && pauseOnUserInteraction && editorRef.current) {
+      const editor = editorRef.current;
+      const disposables: monaco.IDisposable[] = [];
+
+      // Listen for user mouse clicks during replay
+      disposables.push(
+        editor.onMouseDown(() => {
+          pause();
+        })
+      );
+
+      // Listen for user keyboard input during replay
+      disposables.push(
+        editor.onKeyDown(() => {
+          pause();
+        })
+      );
+
+      return () => {
+        disposables.forEach(d => d.dispose());
+      };
+    }
+  }, [isPlaying, pauseOnUserInteraction, editorRef, pause]);
 
   const stop = useCallback(() => {
     setIsPlaying(false);
