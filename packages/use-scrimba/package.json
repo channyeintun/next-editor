@@ -1,6 +1,6 @@
 {
   "name": "use-scrimba",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "A powerful React hook for recording and replaying Monaco Editor interactions with Scrimba-like functionality",
   "main": "./dist/index.js",
   "module": "./dist/index.esm.js",
