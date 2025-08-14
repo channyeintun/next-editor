@@ -206,13 +206,6 @@ interface UseScrimbaReturn {
 ### ✅ Zero Configuration
 - Just set `enableAudioRecording: true`
 - No external audio element management
-- Built-in duration calculation using FileReader
-
-### ✅ Working Demo Architecture
-- Uses native `Audio` instead of audio elements with refs
-- `timeupdate` as single source of truth for audio and snapshots
-- Custom progress bar implementation (no input type=range)
-- Exact duration calculation with `calculateDurationFromFileReader`
 
 ## License
 
