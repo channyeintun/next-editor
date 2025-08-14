@@ -16,6 +16,7 @@
       "Bash(npm publish:*)",
       "Bash(npm run dev:*)"
     ],
-    "deny": []
+    "deny": [],
+    "defaultMode": "acceptEdits"
   }
 }

@@ -201,21 +201,12 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         const currentState = store.getState().playback;
         if (!currentState.isPlaying || !masterTimelineStartRef.current) return;
         
-        // MASTER TIMELINE: Independent time source using performance.now()
-        const elapsed = performance.now() - masterTimelineStartRef.current.perfTime;
-        const masterTime = masterTimelineStartRef.current.currentTime + (elapsed * currentState.playbackSpeed);
+        // MASTER TIMELINE: Use audio's native currentTime as the source of truth
+        const audioCurrentTime = audio.currentTime * 1000; // Convert to milliseconds
+        const masterTime = audioCurrentTime;
         
-        // Update Redux state
+        // Update Redux state based on audio timing
         store.dispatch(updateCurrentTime(masterTime));
-        
-        // Sync audio to master timeline with bounds checking
-        const expectedAudioTime = masterTime / 1000;
-        const audioDuration = audio.duration;
-        const safeAudioTime = Math.min(expectedAudioTime, audioDuration - 0.01); // Leave 10ms buffer
-        
-        if (Math.abs(audio.currentTime - safeAudioTime) > 0.1 && safeAudioTime < audioDuration) {
-          audio.currentTime = safeAudioTime;
-        }
         
         // Apply editor state changes synchronously
         if (hasEditor && editor) {
@@ -277,12 +268,10 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
           }
         }
         
-        // Check if playback complete with small buffer to prevent overplay
+        // Check if playback complete - let audio handle its own ending
         const recordingDuration = currentState.loadedRecording!.duration;
-        if (masterTime >= recordingDuration - 10) { // Stop 10ms before to prevent glitch
+        if (masterTime >= recordingDuration) {
           store.dispatch(end());
-          // Stop audio cleanly to prevent broken sounds
-          audio.pause();
           masterTimelineStartRef.current = null;
           return;
         }
@@ -294,19 +283,33 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       // Start master timeline
       masterTimelineUpdate();
       
-      // Handle audio ended - stop cleanly
+      // Handle audio events - only essential ones
       const handleAudioEnded = () => {
         const state = store.getState().playback;
         if (state.isPlaying) {
           store.dispatch(end());
           masterTimelineStartRef.current = null;
+          if (playbackTimerRef.current) {
+            cancelAnimationFrame(playbackTimerRef.current);
+            playbackTimerRef.current = null;
+          }
+        }
+      };
+      
+      const handleAudioPause = () => {
+        // Only handle if we didn't initiate the pause
+        const state = store.getState().playback;
+        if (state.isPlaying) {
+          handlePlaybackPause();
         }
       };
       
       audio.addEventListener('ended', handleAudioEnded);
+      audio.addEventListener('pause', handleAudioPause);
       
       return () => {
         audio.removeEventListener('ended', handleAudioEnded);
+        audio.removeEventListener('pause', handleAudioPause);
         // Ensure audio is properly paused during cleanup
         audio.pause();
         if (playbackTimerRef.current) {
@@ -383,12 +386,12 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       // Ensure audio is properly paused before starting new playback
       audioRef!.current!.pause();
       
-      // Start audio playback - master timeline will handle synchronization
+      // Set audio position and playback rate, then let it play naturally
       audioRef!.current!.currentTime = currentState.currentTime / 1000;
       audioRef!.current!.playbackRate = currentState.playbackSpeed;
       audioRef!.current!.play().catch(console.error);
       onPlaybackStart?.();
-      // Master timeline effect will handle the rest
+      // Audio will now control its own timing, master timeline will follow
     } else {
       // Non-audio playback - use requestAnimationFrame for smooth timing
       playbackStartTimeRef.current = Date.now() - currentState.currentTime;
@@ -493,15 +496,10 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     // Set the seek position in Redux state
     store.dispatch(seekToAction(clampedTime));
     
-    // Reset master timeline reference for seek
-    if (masterTimelineStartRef.current) {
-      masterTimelineStartRef.current = {
-        perfTime: performance.now(),
-        currentTime: clampedTime
-      };
-    }
+    // Reset master timeline reference for seek - not needed since audio controls timing
+    masterTimelineStartRef.current = null;
     
-    // Update audio position if available
+    // Update audio position if available - this is the only time we set audio currentTime
     if (audioRef?.current && playback.loadedRecording.audioBlob) {
       audioRef.current.currentTime = clampedTime / 1000;
     }
