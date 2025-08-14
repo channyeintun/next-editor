@@ -150,11 +150,11 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
                 type="range"
                 min="0"
                 max={duration}
-                value={currentTime}
+                value={Math.min(currentTime, duration)} 
                 onChange={handleSeek}
                 className="w-full h-[2px] bg-slate-600 rounded appearance-none cursor-pointer hover:h-1.5 transition-all duration-150"
                 style={{
-                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${duration > 0 ? (currentTime / duration) * 100 : 0}%, #475569 ${duration > 0 ? (currentTime / duration) * 100 : 0}%, #475569 100%)`,
+                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0}%, #475569 ${duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0}%, #475569 100%)`,
                   margin: '0'
                 }}
               />

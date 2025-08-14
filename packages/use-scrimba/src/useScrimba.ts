@@ -28,7 +28,6 @@ import {
   loadRecording as loadRecordingAction,
   updateCurrentSnapshot,
   updateEditorState,
-  updateLoadedRecordingDuration,
 } from './store';
 
 /**
@@ -724,18 +723,21 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
           console.log('🎵 Audio loaded - recorded duration:', recordedDuration, 'ms');
           console.log('🎵 Audio loaded - actual duration:', actualAudioDuration, 'ms');
           
-          // If durations don't match, update immediately to prevent progress jumps
+          // If durations don't match, only update when NOT playing to prevent first-time pause
           if (Math.abs(actualAudioDuration - recordedDuration) > 100) { // 100ms threshold
-            console.log('⚠️ Duration mismatch - applying immediate correction to prevent progress jumps');
+            console.log('⚠️ Duration mismatch detected');
             
-            const updatedRecording = {
-              ...recording,
-              duration: actualAudioDuration // Use audio's actual duration
-            };
-            
-            // Update immediately regardless of playback state to ensure smooth progress
-            store.dispatch(loadRecordingAction(updatedRecording));
-            console.log('✅ Duration corrected immediately for smooth progress');
+            const currentPlaybackState = store.getState().playback;
+            if (!currentPlaybackState.isPlaying) {
+              console.log('✅ Safe to update duration - not playing');
+              const updatedRecording = {
+                ...recording,
+                duration: actualAudioDuration
+              };
+              store.dispatch(loadRecordingAction(updatedRecording));
+            } else {
+              console.log('⏸️ Skipping duration update during playback to prevent pause');
+            }
           }
         }
         
