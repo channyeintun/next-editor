@@ -34,7 +34,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
 
   // Update recording time every 100ms when recording
   useEffect(() => {
-    let interval: number;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let interval: any;
     if (isRecording && recordingStartTime !== null) {
       interval = setInterval(() => {
         setRecordingTime(Date.now() - recordingStartTime);
@@ -96,6 +97,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
 
   const duration = currentRecording?.duration || 0;
 
+  // Add audio element debugging
+  if (audioRef.current && isPlaying) {
+    console.log('audio.duration:', audioRef.current.duration * 1000, 'ms');
+    console.log('audio.currentTime:', audioRef.current.currentTime * 1000, 'ms');
+    console.log('audio.ended:', audioRef.current.ended);
+  }
+
   // Calculate the time to display
   const displayTime = isRecording
     ? recordingTime
@@ -142,11 +150,11 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
                 type="range"
                 min="0"
                 max={duration}
-                value={currentTime}
+                value={Math.min(currentTime, duration)} 
                 onChange={handleSeek}
                 className="w-full h-[2px] bg-slate-600 rounded appearance-none cursor-pointer hover:h-1.5 transition-all duration-150"
                 style={{
-                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${duration > 0 ? (currentTime / duration) * 100 : 0}%, #475569 ${duration > 0 ? (currentTime / duration) * 100 : 0}%, #475569 100%)`,
+                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0}%, #475569 ${duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0}%, #475569 100%)`,
                   margin: '0'
                 }}
               />
