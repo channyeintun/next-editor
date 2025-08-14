@@ -90,6 +90,11 @@ export const playbackSlice = createSlice({
     updateEditorState: (state, action: PayloadAction<EditorState>) => {
       state.editorState = action.payload;
     },
+    updateLoadedRecordingDuration: (state, action: PayloadAction<number>) => {
+      if (state.loadedRecording) {
+        state.loadedRecording.duration = action.payload;
+      }
+    },
   },
 });
 
@@ -104,6 +109,7 @@ export const {
   loadRecording,
   updateCurrentSnapshot,
   updateEditorState,
+  updateLoadedRecordingDuration,
 } = playbackSlice.actions;
 
 export default playbackSlice.reducer;

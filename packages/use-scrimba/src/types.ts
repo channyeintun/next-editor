@@ -131,7 +131,7 @@ export interface UseScrimbaReturn {
   
   // Recording Controls
   startRecording: () => void;
-  stopRecording: (options?: { audioBlob?: Blob }) => void;
+  stopRecording: (options?: { audioBlob?: Blob; masterDuration?: number }) => void;
   
   // Playback Controls
   play: () => void;
