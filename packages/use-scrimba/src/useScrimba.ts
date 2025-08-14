@@ -77,7 +77,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const playbackStartTimeRef = useRef<number | null>(null);
   const masterTimelineStartRef = useRef<{ perfTime: number; currentTime: number } | null>(null);
   const endingSynchronizedRef = useRef<boolean>(false);
-  const pendingDurationUpdateRef = useRef<number | null>(null);
 
   // Callback for handling new snapshots
   const handleSnapshot = useCallback((snapshot: EditorSnapshot) => {
@@ -232,14 +231,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         await Promise.allSettled([
           // End the playback state (don't force update currentTime)
           Promise.resolve(store.dispatch(end())),
-          // Apply any pending duration updates now that playback has ended
-          Promise.resolve().then(() => {
-            if (pendingDurationUpdateRef.current) {
-              console.log('⚡ Applying pending duration update after natural end:', pendingDurationUpdateRef.current, 'ms');
-              store.dispatch(updateLoadedRecordingDuration(pendingDurationUpdateRef.current));
-              pendingDurationUpdateRef.current = null;
-            }
-          }),
           // Clean up timeline
           Promise.resolve().then(() => {
             masterTimelineStartRef.current = null;
@@ -282,19 +273,8 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         // Update Redux state with audio's natural timing
         store.dispatch(updateCurrentTime(masterTime));
         
-        // Store pending duration updates but DON'T apply them during active playback
-        const playbackState = store.getState().playback;
-        if (playbackState.loadedRecording && audio.duration && isFinite(audio.duration)) {
-          const actualAudioDuration = audio.duration * 1000;
-          if (Math.abs(actualAudioDuration - playbackState.loadedRecording.duration) > 100) {
-            // Duration mismatch detected - defer update to prevent first-time pause
-            if (!pendingDurationUpdateRef.current) {
-              console.log('📦 Storing pending duration update for later:', actualAudioDuration, 'ms');
-              pendingDurationUpdateRef.current = actualAudioDuration;
-            }
-            // Never apply duration updates during active playback to prevent pause issues
-          }
-        }
+        // Remove live duration adjustment completely to prevent any interference
+        // Duration corrections now happen immediately when audio loads via handleAudioLoaded
         
         // Apply editor state changes synchronously
         if (hasEditor && editor) {
@@ -563,12 +543,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     // Reset synchronized ending when pausing
     endingSynchronizedRef.current = false;
     
-    // Apply any pending duration updates now that playback is paused
-    if (pendingDurationUpdateRef.current && playback.loadedRecording) {
-      console.log('⚡ Applying pending duration update after pause:', pendingDurationUpdateRef.current, 'ms');
-      store.dispatch(updateLoadedRecordingDuration(pendingDurationUpdateRef.current));
-      pendingDurationUpdateRef.current = null;
-    }
     
     // Keep master timeline reference for resume
   }, [store, audioRef, playback.loadedRecording]);
@@ -588,12 +562,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       playbackTimerRef.current = null;
     }
     
-    // Apply any pending duration updates now that playback is stopped
-    if (pendingDurationUpdateRef.current && playback.loadedRecording) {
-      console.log('⚡ Applying pending duration update after stop:', pendingDurationUpdateRef.current, 'ms');
-      store.dispatch(updateLoadedRecordingDuration(pendingDurationUpdateRef.current));
-      pendingDurationUpdateRef.current = null;
-    }
     
     // Reset master timeline reference and synchronized ending
     masterTimelineStartRef.current = null;
@@ -756,27 +724,18 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
           console.log('🎵 Audio loaded - recorded duration:', recordedDuration, 'ms');
           console.log('🎵 Audio loaded - actual duration:', actualAudioDuration, 'ms');
           
-          // If durations don't match, update duration but DON'T interfere with active playback
+          // If durations don't match, update immediately to prevent progress jumps
           if (Math.abs(actualAudioDuration - recordedDuration) > 100) { // 100ms threshold
-            console.log('⚠️ Duration mismatch, updating recording to match audio');
+            console.log('⚠️ Duration mismatch - applying immediate correction to prevent progress jumps');
             
-            // Check if we're currently playing - if so, defer update to prevent interference
-            const currentPlaybackState = store.getState().playback;
-            if (currentPlaybackState.isPlaying) {
-              console.log('🔄 Playback active - deferring duration update to prevent first-time pause');
-              pendingDurationUpdateRef.current = actualAudioDuration;
-              return; // Don't do ANY updates during active playback
-            }
-            
-            // Only update duration when NOT playing to avoid first-time pause issues
             const updatedRecording = {
               ...recording,
               duration: actualAudioDuration // Use audio's actual duration
             };
             
-            // Safe to reload since we're not playing
+            // Update immediately regardless of playback state to ensure smooth progress
             store.dispatch(loadRecordingAction(updatedRecording));
-            console.log('✅ Duration updated safely during idle state');
+            console.log('✅ Duration corrected immediately for smooth progress');
           }
         }
         

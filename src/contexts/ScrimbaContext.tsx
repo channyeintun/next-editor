@@ -5,13 +5,13 @@ import { useAudioRecording } from '../hooks/useAudioRecording';
 import { ScrimbaContext } from './ScrimbaContext';
 import { createJsonStorage } from '../storage/JsonStorage';
 
+let timeoutId: NodeJS.Timeout;
+
 // Function to get audio duration from blob
 const getAudioDuration = (audioBlob: Blob): Promise<number> => {
   return new Promise((resolve, reject) => {
     const audio = new Audio();
     const url = URL.createObjectURL(audioBlob);
-    
-    let timeoutId: NodeJS.Timeout;
     
     const cleanup = () => {
       URL.revokeObjectURL(url);
@@ -116,7 +116,7 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
         masterDuration = await getAudioDuration(audioBlob);
         console.log('🎵 Audio duration is master:', masterDuration, 'ms');
       } catch (error) {
-        console.warn('⚠️ Failed to get audio duration, falling back to snapshot duration');
+        console.warn('⚠️ Failed to get audio duration, falling back to snapshot duration',error);
         const currentRecording = originalScrimbaHook.getCurrentState?.()?.recording?.currentRecording;
         masterDuration = currentRecording?.duration || 0;
       }
