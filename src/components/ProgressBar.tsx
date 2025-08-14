@@ -77,7 +77,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     cursor: 'pointer',
     position: 'relative',
     borderRadius: '4px',
-    overflow: 'hidden',
+    overflow: 'visible',
     transition: 'height 150ms ease',
     ...style,
   };
@@ -87,7 +87,19 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     height: '100%',
     backgroundColor: progressColor,
     borderRadius: 'inherit',
-    transition: 'width 0.1s ease-out',
+  };
+
+  const thumbStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '50%',
+    left: `${Math.max(0, Math.min(progress, 100))}%`,
+    width: '12px',
+    height: '12px',
+    backgroundColor: progressColor,
+    borderRadius: '50%',
+    transform: 'translate(-50%, -50%)',
+    pointerEvents: 'none',
+    zIndex: 10,
   };
 
   return (
@@ -112,6 +124,10 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       <div
         className="scrimba-progress-bar"
         style={progressStyle}
+      />
+      <div
+        className="scrimba-progress-thumb"
+        style={thumbStyle}
       />
     </div>
   );

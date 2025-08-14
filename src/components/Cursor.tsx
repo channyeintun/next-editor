@@ -1,6 +1,6 @@
 import React from 'react';
 import { useScrimbaContext } from '../hooks/useScrimbaContext';
-import type { MouseCursorPosition } from 'use-scrimba';
+import type { MouseCursorPosition } from '../use-scrimba';
 
 /**
  * Fake cursor component for playback visualization
@@ -11,8 +11,11 @@ interface FakeCursorProps {
 }
 
 const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
-  if (!position.visible) return null;
-
+  // if (!position.visible) return null;
+  console.log({
+    left: position.x,
+    top: position.y,
+  })
   return (
     <div
       style={{
@@ -23,7 +26,7 @@ const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
         height: 24,
         pointerEvents: 'none',
         zIndex: 9999,
-        transform: 'translate(0, 0)',
+        transform: 'translate(-30%, -20%)',
       }}
     >
       <svg
@@ -70,7 +73,7 @@ const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
 const CursorComponent: React.FC = () => {
   const { isPlaying, currentCursor } = useScrimbaContext();
 
-  // Render fake cursor during playback - fixed to viewport
+  // Render fake cursor during playback - fixed to viewport with smooth transitions
   return (
     <>
       {isPlaying && currentCursor && currentCursor.visible && (

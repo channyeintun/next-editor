@@ -5,9 +5,8 @@ export interface UseAudioRecordingReturn {
   isRecordingAudio: boolean;
   audioBlob: Blob | null;
   startRecording: () => Promise<void>;
-  stopRecording: () => void;
+  stopRecording: () => Promise<Blob | null>;
   error: string | null;
-  getRecordingDuration: () => number | null;
   calculateExactDuration: (audioBlob: Blob) => Promise<number>;
 }
 
@@ -53,24 +52,6 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
         }
       };
 
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach(track => track.stop());
-        
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        
-        try {
-          const recordingDuration = await calculateDurationFromFileReader(audioBlob);
-          console.log('🎤 Audio recording stopped');
-          console.log('🎤 Calculated exact duration:', recordingDuration, 'seconds');
-          setAudioBlob(audioBlob);
-        } catch (error) {
-          console.error('Failed to calculate duration:', error);
-          setAudioBlob(audioBlob);
-        }
-        
-        setIsRecordingAudio(false);
-      };
-
       // Start recording
       mediaRecorder.start();
       setIsRecordingAudio(true);
@@ -83,17 +64,40 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
     }
   }, []);
 
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecordingAudio) {
-      mediaRecorderRef.current.stop();
-    }
+  const stopRecording = useCallback((): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      if (mediaRecorderRef.current && isRecordingAudio) {
+        // Store the original onstop callback
+        const mediaRecorder = mediaRecorderRef.current;
+        const stream = mediaRecorder.stream as MediaStream;
+        
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(track => track.stop());
+          
+          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm; codecs=opus" });
+          
+          try {
+            const recordingDuration = await calculateDurationFromFileReader(audioBlob);
+            console.log('🎤 Audio recording stopped');
+            console.log('🎤 Calculated exact duration:', recordingDuration, 'seconds');
+            setAudioBlob(audioBlob);
+            resolve(audioBlob);
+          } catch (error) {
+            console.error('Failed to calculate duration:', error);
+            setAudioBlob(audioBlob);
+            resolve(audioBlob);
+          }
+          
+          setIsRecordingAudio(false);
+        };
+        
+        mediaRecorder.stop();
+      } else {
+        resolve(null);
+      }
+    });
   }, [isRecordingAudio]);
 
-  const getRecordingDuration = useCallback((): number | null => {
-    // Duration is now calculated using FileReader for accuracy
-    // This function is kept for backward compatibility
-    return null;
-  }, []);
 
   const calculateExactDuration = useCallback(async (audioBlob: Blob): Promise<number> => {
     return await calculateDurationFromFileReader(audioBlob);
@@ -105,7 +109,6 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
     startRecording,
     stopRecording,
     error,
-    getRecordingDuration,
     calculateExactDuration,
   };
 };

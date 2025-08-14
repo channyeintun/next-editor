@@ -28,6 +28,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     hasEnded,
     volume,
     setVolume,
+    actualDuration,
   } = useScrimbaContext();
 
   const [showSettings, setShowSettings] = useState(false);
@@ -88,6 +89,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
 
 
   const duration = currentRecording?.duration || 0;
+  
+  // Use actualDuration for progress calculation (like the demo)
+  const progressDuration = actualDuration > 0 ? actualDuration * 1000 : duration; // Convert to ms if needed
 
   // Calculate the time to display
   const displayTime = isRecording
@@ -104,7 +108,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
           className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-2 before:content-[''] after:absolute after:inset-0 after:bg-red-500/50 after:rounded-full after:scale-0 hover:after:scale-200 after:transition-transform after:duration-200"
         >
           {isRecording ? (
-            <div className="w-2 h-2 bg-red-500 rounded-sm"></div>
+            <div className="w-3 h-3 bg-red-500 rounded-sm animate-pulse"></div>
           ) : (
             <div className="w-2 h-2 bg-red-500 rounded-full"></div>
           )}
@@ -132,8 +136,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
             {/* Progress bar */}
             <div className="flex-1 mx-1 flex items-center">
               <ProgressBar
-                progress={duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0}
-                duration={duration}
+                progress={progressDuration > 0 ? Math.min((currentTime / progressDuration) * 100, 100) : 0}
+                duration={progressDuration}
                 currentTime={currentTime}
                 onSeek={handleSeek}
                 backgroundColor="#475569"

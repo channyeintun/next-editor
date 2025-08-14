@@ -109,6 +109,7 @@ export interface UseScrimbaReturn {
   // Data
   currentRecording: Recording | null;
   currentCursor: MouseCursorPosition | null;
+  actualDuration: number;
   
   // Recording Controls
   startRecording: () => void;

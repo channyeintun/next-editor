@@ -10,6 +10,9 @@ import { useAudioRecording } from './hooks/useAudioRecording';
 import { isValidSnapshotState, isEditorReady } from './utils/validation';
 import { applyContentDiff } from './utils/editorDiff';
 
+// Extended HTMLAudioElement type for demo compatibility
+type AudioElementWithDuration = HTMLAudioElement & { _actualDuration?: number };
+
 /**
  * Main useScrimba hook - provides Scrimba-like recording and playback functionality
  * Uses simple React state management like the demo
@@ -45,12 +48,76 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const snapshotsRef = useRef<EditorSnapshot[]>([]);
   const startTimeRef = useRef<number>(0);
 
-  // Audio instance management (replacing audioRef)
+  // Audio instance management like the demo
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recordingDurationRef = useRef<number>(0);
+  
+  // Independent timeline management (not dependent on audio.currentTime)
+  const playbackStartTimeRef = useRef<number>(0);
+  const playbackPausedAtRef = useRef<number>(0);
+  const totalPausedTimeRef = useRef<number>(0);
+  
+  // Mouse cursor tracking
+  const lastMousePositionRef = useRef<{ x: number; y: number; visible: boolean }>({
+    x: 0,
+    y: 0,
+    visible: false
+  });
 
   // Integrated audio recording
   const audioRecording = useAudioRecording();
+
+  // Calculate current timeline position independently of audio
+  const getCurrentTimelinePosition = useCallback((): number => {
+    if (!isPlaying) return currentTime;
+    
+    const now = performance.now();
+    const elapsedSinceStart = now - playbackStartTimeRef.current - totalPausedTimeRef.current;
+    const adjustedElapsed = elapsedSinceStart * playbackSpeed;
+    
+    return Math.max(0, adjustedElapsed);
+  }, [isPlaying, currentTime, playbackSpeed]);
+
+  // Duration calculation using FileReader like the demo
+  const calculateDurationFromFileReader = useCallback(async (audioBlob: Blob): Promise<number> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = function(e) {
+        try {
+          const arrayBuffer = e.target?.result as ArrayBuffer;
+          const audioContext = new window.AudioContext();
+          
+          audioContext.decodeAudioData(
+            arrayBuffer,
+            buffer => {
+              const rawDuration = buffer.duration;
+              const adjustedDuration = rawDuration - 0.06; // Subtract 0.06s for exact end time
+              console.log('FileReader raw duration:', rawDuration, 'seconds');
+              console.log('Adjusted duration:', adjustedDuration, 'seconds');
+              audioContext.close();
+              resolve(adjustedDuration);
+            },
+            error => {
+              console.error('FileReader decode error:', error);
+              audioContext.close();
+              reject(error);
+            }
+          );
+        } catch (error) {
+          console.error('FileReader processing error:', error);
+          reject(error);
+        }
+      };
+      
+      reader.onerror = function() {
+        console.error('FileReader read error');
+        reject(new Error('FileReader failed'));
+      };
+      
+      reader.readAsArrayBuffer(audioBlob);
+    });
+  }, []);
 
   // Simple editor change handling like the demo
   const handleEditorChange = useCallback(() => {
@@ -58,11 +125,17 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       const timestamp = performance.now() - startTimeRef.current;
       const editor = editorRef.current;
 
+      const currentSelection = editor.getSelection();
+      const currentPosition = editor.getPosition();
+      
+      // Get current mouse cursor position relative to document
+      const mouseCursorPosition = lastMousePositionRef.current;
+      
       const snapshot: EditorSnapshot = {
         timestamp,
         state: {
           content: editor.getValue(),
-          selection: editor.getSelection() || {
+          selection: currentSelection || {
             startLineNumber: 1,
             startColumn: 1,
             endLineNumber: 1,
@@ -72,18 +145,28 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
             positionLineNumber: 1,
             positionColumn: 1
           } as monaco.Selection,
-          position: editor.getPosition() || {
+          position: currentPosition || {
             lineNumber: 1,
             column: 1
           } as monaco.Position,
           viewState: editor.saveViewState(),
+          mouseCursor: mouseCursorPosition,
         }
       };
+
+      // Debug logging for recording
+      console.log('📸 Recording snapshot:', {
+        timestamp,
+        position: currentPosition,
+        selection: currentSelection,
+        mouseCursor: mouseCursorPosition,
+        contentLength: snapshot.state.content.length
+      });
 
       snapshotsRef.current.push(snapshot);
       onSnapshot?.(snapshot);
     }
-  }, [isRecording, onSnapshot]);
+  }, [isRecording, onSnapshot, editorRef]);
 
   // Handle editor events
   useEffect(() => {
@@ -95,11 +178,67 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     if (!model) return;
 
     // Listen for content changes
-    const disposable = model.onDidChangeContent(() => {
+    const contentDisposable = model.onDidChangeContent(() => {
       handleEditorChange();
     });
 
-    return () => disposable.dispose();
+    // Listen for cursor position changes
+    const positionDisposable = editor.onDidChangeCursorPosition(() => {
+      handleEditorChange();
+    });
+
+    // Listen for selection changes
+    const selectionDisposable = editor.onDidChangeCursorSelection(() => {
+      handleEditorChange();
+    });
+
+    return () => {
+      contentDisposable.dispose();
+      positionDisposable.dispose();
+      selectionDisposable.dispose();
+    };
+  }, [isRecording, handleEditorChange, editorRef]);
+
+  // Handle mouse cursor recording
+  useEffect(() => {
+    if (!isRecording) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // Update mouse position on every movement for smooth playback
+      lastMousePositionRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        visible: true
+      };
+      
+      // Record every mouse movement for smooth cursor playback
+      handleEditorChange();
+    };
+
+    const handleMouseLeave = () => {
+      lastMousePositionRef.current = {
+        ...lastMousePositionRef.current,
+        visible: false
+      };
+    };
+
+    const handleMouseEnter = () => {
+      lastMousePositionRef.current = {
+        ...lastMousePositionRef.current,
+        visible: true
+      };
+    };
+
+    // Add mouse event listeners to document
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseleave', handleMouseLeave);
+    document.addEventListener('mouseenter', handleMouseEnter);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseleave', handleMouseLeave);
+      document.removeEventListener('mouseenter', handleMouseEnter);
+    };
   }, [isRecording, handleEditorChange]);
 
   // Recording controls like the demo
@@ -133,6 +272,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
               column: 1
             } as monaco.Position,
             viewState: editor.saveViewState(),
+            mouseCursor: lastMousePositionRef.current,
           }
         };
         snapshotsRef.current.push(initialSnapshot);
@@ -155,27 +295,42 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     } catch (error) {
       onError?.(error as Error);
     }
-  }, [audioRecording, enableAudioRecording, onRecordingStart, onError]);
+  }, [audioRecording, enableAudioRecording, onRecordingStart, onError, editorRef]);
 
   const stopRecording = useCallback(async () => {
     try {
       if (!isRecording) return;
 
       // Stop audio recording if enabled and active
+      let finalAudioBlob: Blob | undefined;
       if (enableAudioRecording && audioRecording.isRecordingAudio) {
-        audioRecording.stopRecording();
+        finalAudioBlob = (await audioRecording.stopRecording()) || undefined;
       }
 
       const stopTime = performance.now();
       const duration = stopTime - startTimeRef.current;
+
+      // Calculate exact duration using FileReader if audio available
+      let finalDuration = duration;
+      if (enableAudioRecording && finalAudioBlob) {
+        try {
+          const exactDuration = await calculateDurationFromFileReader(finalAudioBlob);
+          finalDuration = exactDuration * 1000; // Convert to milliseconds
+          recordingDurationRef.current = exactDuration;
+          console.log('🎵 Exact duration calculated:', exactDuration, 'seconds');
+        } catch (error) {
+          console.error('Failed to calculate exact duration:', error);
+          recordingDurationRef.current = duration / 1000;
+        }
+      }
 
       const recordingData: Recording = {
         id: Date.now().toString(),
         name: `Recording ${Date.now()}`,
         createdAt: Date.now(),
         snapshots: [...snapshotsRef.current],
-        duration,
-        audioBlob: enableAudioRecording ? (audioRecording.audioBlob || undefined) : undefined,
+        duration: finalDuration,
+        audioBlob: enableAudioRecording ? finalAudioBlob : undefined,
       };
 
       setIsRecording(false);
@@ -188,7 +343,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     } catch (error) {
       onError?.(error as Error);
     }
-  }, [isRecording, audioRecording, enableAudioRecording, onRecordingStop, onError]);
+  }, [isRecording, audioRecording, enableAudioRecording, onRecordingStop, onError, calculateDurationFromFileReader]);
 
   // Simple playback state management
   const cleanupPlayback = useCallback(() => {
@@ -223,6 +378,15 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
               lineNumber: safeLineNumber,
               column: Math.min(Math.max(snapshot.state.position.column, 1), maxColumn)
             };
+            // Debug logging for playback
+            console.log('🎬 Applying editor state:', {
+              position: validPosition,
+              selection: snapshot.state.selection,
+              hasViewState: !!snapshot.state.viewState
+            });
+            
+            // Focus editor for cursor visibility during playback
+            editor.focus();
             editor.setPosition(validPosition);
             editor.setSelection(snapshot.state.selection);
 
@@ -233,6 +397,12 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
                 console.error('View State Error:', err);
               }
             }
+            
+            // Verify what was actually applied
+            console.log('✅ Editor state after apply:', {
+              actualPosition: editor.getPosition(),
+              actualSelection: editor.getSelection()
+            });
           }
         }
       }
@@ -242,64 +412,93 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     } catch (error) {
       console.warn('Error applying editor state:', error);
     }
-  }, [onStateChange]);
+  }, [onStateChange, editorRef]);
 
-  // Timeupdate synchronization like the demo
+  // Independent timeline playback synchronization
   useEffect(() => {
     if (!isPlaying || !currentRecording) return;
 
-    const hasAudio = audioRef?.current && currentRecording.audioBlob;
-    const hasEditor = editorRef?.current && isEditorReady(editorRef.current);
+    const editor = editorRef?.current;
+    const snapshots = currentRecording.snapshots;
+    const hasEditor = editor && isEditorReady(editor);
+    const totalDuration = recordingDurationRef.current * 1000; // Convert to milliseconds
+    let animationFrameId: number;
 
-    if (hasAudio) {
-      // Use timeupdate event as single source of truth
-      const audio = audioRef.current!;
-      const editor = editorRef?.current;
-      const snapshots = currentRecording.snapshots;
+    // Smooth animation loop for 60fps playback using independent timeline
+    const updatePlayback = () => {
+      if (!isPlaying || hasEnded) return;
 
-      const handleTimeUpdate = () => {
-        if (!isPlaying || hasEnded) return;
+      // Get current timeline position (independent of audio)
+      const timelinePosition = getCurrentTimelinePosition();
+      setCurrentTime(timelinePosition);
 
-        // Audio timeupdate is the single source of truth like the demo
-        const audioCurrentTime = audio.currentTime * 1000; // Convert to milliseconds
-        setCurrentTime(audioCurrentTime);
-
-        // Apply editor state changes synchronously
-        if (hasEditor && editor) {
-          const validSnapshots = snapshots.filter(s => s?.timestamp !== undefined);
-          const currentSnapshotToApply = validSnapshots
-            .filter(s => s.timestamp <= audioCurrentTime)
-            .pop();
-
-          if (currentSnapshotToApply &&
-            currentSnapshotToApply !== currentSnapshot &&
-            currentSnapshotToApply.state &&
-            isValidSnapshotState(currentSnapshotToApply.state)) {
-
-            applyEditorState(currentSnapshotToApply);
-            onPlaybackUpdate?.(audioCurrentTime, currentSnapshotToApply);
-          }
-        }
-      };
-
-      const handleAudioEnded = () => {
+      // Check if we've reached the end
+      if (timelinePosition >= totalDuration) {
         setIsPlaying(false);
         setHasEnded(true);
-        setCurrentTime(currentRecording.duration);
+        setCurrentTime(totalDuration);
         console.log('🎯 Playback ended');
-      };
+        return;
+      }
 
-      // Use timeupdate as single source of truth
-      audio.addEventListener('timeupdate', handleTimeUpdate);
-      audio.addEventListener('ended', handleAudioEnded);
+      // Apply editor state changes synchronously at 60fps
+      if (hasEditor) {
+        const validSnapshots = snapshots.filter(s => s?.timestamp !== undefined);
+        for (let i = validSnapshots.length - 1; i >= 0; i--) {
+          if (validSnapshots[i].timestamp <= timelinePosition) {
+            const snapshotToApply = validSnapshots[i];
+            if (snapshotToApply &&
+                snapshotToApply !== currentSnapshot &&
+                snapshotToApply.state &&
+                isValidSnapshotState(snapshotToApply.state)) {
+              applyEditorState(snapshotToApply);
+              onPlaybackUpdate?.(timelinePosition, snapshotToApply);
+            }
+            break;
+          }
+        }
+      }
 
-      return () => {
-        audio.removeEventListener('timeupdate', handleTimeUpdate);
-        audio.removeEventListener('ended', handleAudioEnded);
-        audio.pause();
-      };
-    }
-  }, [isPlaying, currentRecording, currentSnapshot, hasEnded, onPlaybackUpdate]);
+      // Continue the animation loop
+      animationFrameId = requestAnimationFrame(updatePlayback);
+    };
+
+    // Start the smooth animation loop
+    animationFrameId = requestAnimationFrame(updatePlayback);
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [isPlaying, currentRecording, currentSnapshot, hasEnded, onPlaybackUpdate, applyEditorState, editorRef, getCurrentTimelinePosition]);
+
+  // Audio management (only for start trigger and duration reference)
+  useEffect(() => {
+    if (!isPlaying || !currentRecording?.audioBlob || !audioRef.current) return;
+
+    const audio = audioRef.current;
+
+    const handleLoadedMetadata = () => {
+      // Set the exact duration like the demo (for reference only)
+      (audio as AudioElementWithDuration)._actualDuration = recordingDurationRef.current;
+      console.log('Setting audio._actualDuration:', recordingDurationRef.current);
+    };
+
+    const handleAudioEnded = () => {
+      // Audio ended - this is just for cleanup, timeline manages the end
+      console.log('🎵 Audio track ended');
+    };
+
+    // Add audio event listeners
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('ended', handleAudioEnded);
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('ended', handleAudioEnded);
+    };
+  }, [isPlaying, currentRecording]);
 
   // Simple playback controls like the demo
   const play = useCallback(() => {
@@ -308,40 +507,85 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       return;
     }
 
+    console.log('🎯 Play called:', {
+      hasAudio: !!currentRecording.audioBlob,
+      audioRefExists: !!audioRef.current,
+      recordingDuration: recordingDurationRef.current
+    });
+
+    // Check if we're restarting from the end
+    const isRestarting = hasEnded;
+    
     // If playback has ended, restart from the beginning
     if (hasEnded) {
       setCurrentTime(0);
       setHasEnded(false);
+      console.log('🔄 Restarting playback from beginning');
+    }
+
+    // Initialize independent timeline
+    const now = performance.now();
+    
+    if (isPaused && playbackPausedAtRef.current > 0 && !isRestarting) {
+      // Resuming from pause (but not restarting) - add pause duration to total paused time
+      totalPausedTimeRef.current += now - playbackPausedAtRef.current;
+      playbackPausedAtRef.current = 0;
+    } else {
+      // Starting fresh or restarting from end
+      playbackStartTimeRef.current = now;
+      totalPausedTimeRef.current = 0;
+      playbackPausedAtRef.current = 0;
+      
+      // Only adjust start time for seek, not for restart
+      if (currentTime > 0 && !isRestarting) {
+        playbackStartTimeRef.current -= currentTime / playbackSpeed;
+      }
     }
 
     const hasAudio = currentRecording.audioBlob;
 
     if (hasAudio) {
-      // Create new Audio instance if needed
+      // Create Audio instance if needed like the demo
       if (!audioRef.current) {
+        console.log('🎵 Creating Audio instance for playback');
         const audioUrl = URL.createObjectURL(currentRecording.audioBlob!);
         audioRef.current = new Audio(audioUrl);
-        audioRef.current.volume = volume;
-        // Store exact duration for progress calculation
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (audioRef.current as any)._actualDuration = recordingDurationRef.current;
+        (audioRef.current as AudioElementWithDuration)._actualDuration = recordingDurationRef.current;
       }
 
-      // Set audio position and playback rate
-      audioRef.current.pause();
+      // Apply initial state like the demo (always when playing, especially when restarting)
+      if (currentRecording.snapshots.length > 0 && editorRef.current) {
+        // When restarting or starting fresh, always apply the first snapshot
+        if (isRestarting || currentTime === 0) {
+          console.log('🎬 Applying initial snapshot for restart/fresh start');
+        }
+        applyEditorState(currentRecording.snapshots[0]);
+      }
+
+      // Set audio position and playback rate (audio follows our timeline)
       audioRef.current.currentTime = currentTime / 1000;
       audioRef.current.playbackRate = playbackSpeed;
+      audioRef.current.volume = volume;
 
-      // Play audio
+      console.log('🎮 Starting independent timeline at', currentTime, 'ms');
+      if (isRestarting) {
+        console.log('🔄 Audio restarted from position 0');
+      }
+      // Play audio (it will follow our independent timeline)
       audioRef.current.play().catch(console.error);
+    } else {
+      console.warn('⚠️ No audio blob found in recording');
     }
 
     setIsPlaying(true);
     setIsPaused(false);
     onPlaybackStart?.();
-  }, [currentRecording, hasEnded, currentTime, volume, playbackSpeed, onPlaybackStart]);
+  }, [currentRecording, hasEnded, currentTime, volume, playbackSpeed, onPlaybackStart, applyEditorState, editorRef, isPaused]);
 
   const pause = useCallback(() => {
+    // Record when we paused for timeline calculation
+    playbackPausedAtRef.current = performance.now();
+    
     setIsPlaying(false);
     setIsPaused(true);
 
@@ -369,51 +613,56 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const seekTo = useCallback((targetTime: number) => {
     if (!currentRecording) return;
 
-    const clampedTime = Math.min(Math.max(targetTime, 0), currentRecording.duration);
-    const wasPlaying = isPlaying;
-
-    // Pause during seek
-    if (wasPlaying) {
-      setIsPlaying(false);
-    }
-
-    // Update audio position if available
-    if (audioRef?.current && currentRecording.audioBlob) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = clampedTime / 1000;
-    }
-
+    const totalDuration = recordingDurationRef.current * 1000; // Convert to milliseconds
+    const clampedTime = Math.min(Math.max(targetTime, 0), totalDuration);
+    
+    // Update current time
     setCurrentTime(clampedTime);
     setHasEnded(false);
 
-    // Find and apply the appropriate snapshot
-    const validSnapshots = currentRecording.snapshots.filter(s => s?.timestamp !== undefined);
-    const lastSnapshot = validSnapshots
-      .filter(s => s.timestamp <= clampedTime)
-      .pop();
+    // Reset timeline to new position
+    const now = performance.now();
+    playbackStartTimeRef.current = now - (clampedTime / playbackSpeed);
+    totalPausedTimeRef.current = 0;
+    playbackPausedAtRef.current = 0;
 
-    if (lastSnapshot) {
-      applyEditorState(lastSnapshot);
+    // Update audio position if available
+    if (audioRef.current) {
+      audioRef.current.currentTime = clampedTime / 1000;
+    }
+
+    // Find and apply the appropriate snapshot immediately like the demo
+    const validSnapshots = currentRecording.snapshots.filter(s => s?.timestamp !== undefined);
+    for (let i = validSnapshots.length - 1; i >= 0; i--) {
+      if (validSnapshots[i].timestamp <= clampedTime) {
+        applyEditorState(validSnapshots[i]);
+        break;
+      }
     }
 
     onSeek?.(clampedTime);
 
-    // Resume playback after seek
-    if (wasPlaying) {
-      setTimeout(() => {
-        play();
-      }, 0);
+    // Continue playing if it was playing
+    if (audioRef.current && audioRef.current.paused && isPlaying) {
+      audioRef.current.play().catch(console.error);
     }
-  }, [currentRecording, isPlaying, onSeek, play]);
+  }, [currentRecording, isPlaying, onSeek, applyEditorState, playbackSpeed]);
 
   const setPlaybackSpeed = useCallback((speed: number) => {
+    if (isPlaying) {
+      // Adjust timeline when changing speed during playback
+      const currentPos = getCurrentTimelinePosition();
+      const now = performance.now();
+      playbackStartTimeRef.current = now - (currentPos / speed) - totalPausedTimeRef.current;
+    }
+    
     setPlaybackSpeedState(speed);
 
     // Update audio playback rate if available
     if (audioRef?.current) {
       audioRef.current.playbackRate = speed;
     }
-  }, []);
+  }, [isPlaying, getCurrentTimelinePosition]);
 
   const setVolume = useCallback((newVolume: number) => {
     const clampedVolume = Math.max(0, Math.min(newVolume, 1));
@@ -426,7 +675,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   }, []);
 
   // Simple loadRecording like the demo
-  const loadRecording = useCallback((recording: Recording) => {
+  const loadRecording = useCallback(async (recording: Recording) => {
     if (!recording) {
       console.warn('Cannot load null/undefined recording');
       return;
@@ -446,24 +695,31 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
     // Calculate exact duration if audio available
     if (recording.audioBlob) {
-      audioRecording.calculateExactDuration(recording.audioBlob).then(exactDuration => {
+      try {
+        const exactDuration = await calculateDurationFromFileReader(recording.audioBlob);
         recordingDurationRef.current = exactDuration;
         console.log('🎵 Exact duration calculated:', exactDuration, 'seconds');
 
+        // Create new Audio instance like the demo
+        const audioUrl = URL.createObjectURL(recording.audioBlob);
+        audioRef.current = new Audio(audioUrl);
+        
+        // Set the exact duration like the demo
+        (audioRef.current as AudioElementWithDuration)._actualDuration = exactDuration;
+        
         // Update recording duration if significantly different
         const recordedDurationSeconds = recording.duration / 1000;
         if (Math.abs(exactDuration - recordedDurationSeconds) > 0.1) {
           console.log('⚠️ Duration mismatch detected, updating recording');
-          const updatedRecording = {
+          recording = {
             ...recording,
             duration: exactDuration * 1000
           };
-          setCurrentRecording(updatedRecording);
         }
-      }).catch(error => {
+      } catch (error) {
         console.error('Failed to calculate exact duration:', error);
         recordingDurationRef.current = recording.duration / 1000;
-      });
+      }
     }
 
     setCurrentRecording(recording);
@@ -476,7 +732,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     if (recording.snapshots.length > 0) {
       applyEditorState(recording.snapshots[0]);
     }
-  }, [cleanupPlayback, audioRecording]);
+  }, [cleanupPlayback, calculateDurationFromFileReader, applyEditorState]);
 
 
 
@@ -517,7 +773,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       } as monaco.Position,
       viewState: editor.saveViewState(),
     };
-  }, []);
+  }, [editorRef]);
 
   return {
     // Recording State
@@ -536,6 +792,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     // Data
     currentRecording,
     currentCursor: currentSnapshot?.state?.mouseCursor || null,
+    actualDuration: recordingDurationRef.current,
 
     // Recording Controls
     startRecording,

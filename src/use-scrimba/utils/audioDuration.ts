@@ -14,6 +14,7 @@ export async function calculateDurationFromFileReader(audioBlob: Blob): Promise<
           return;
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         
         audioContext.decodeAudioData(
