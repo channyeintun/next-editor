@@ -21,13 +21,18 @@ export const recordingSlice = createSlice({
   name: 'recording',
   initialState,
   reducers: {
-    startRecording: (state) => {
-      state.isRecording = true;
-      state.recordingStartTime = Date.now();
-      state.currentRecording = {
-        snapshots: [],
-        duration: 0,
-      };
+    startRecording: {
+      reducer: (state, action: PayloadAction<{ masterStartTime: number }>) => {
+        state.isRecording = true;
+        state.recordingStartTime = action.payload.masterStartTime;
+        state.currentRecording = {
+          snapshots: [],
+          duration: 0,
+        };
+      },
+      prepare: (masterStartTime?: number) => ({
+        payload: { masterStartTime: masterStartTime || Date.now() }
+      })
     },
     stopRecording: (state, action: PayloadAction<{ audioBlob?: Blob }>) => {
       state.isRecording = false;

@@ -10,10 +10,14 @@ export const useRecording = (
   isRecording: boolean,
   isPlaying: boolean,
   captureEvents: CaptureEvents = {},
-  onSnapshot?: (snapshot: EditorSnapshot) => void
+  onSnapshot?: (snapshot: EditorSnapshot) => void,
+  storeRecordingStartTime?: number | null
 ) => {
   const [stateChangeCounter, setStateChangeCounter] = useState(0);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
+  
+  // Use store's recording start time when available
+  const effectiveRecordingStartTime = storeRecordingStartTime || recordingStartTime;
   const currentMouseCursor = useRef<MouseCursorPosition>({ x: 0, y: 0, visible: false });
 
   // Default capture settings (memoized to prevent dependency changes)
@@ -42,7 +46,7 @@ export const useRecording = (
 
   // Create snapshots when state changes occur
   useEffect(() => {
-    if (isRecording && !isPlaying && editorRef.current && stateChangeCounter > 0 && recordingStartTime) {
+    if (isRecording && !isPlaying && editorRef.current && stateChangeCounter > 0 && effectiveRecordingStartTime) {
       const editor = editorRef.current;
       const content = editor.getValue();
       const selection = editor.getSelection();
@@ -51,7 +55,7 @@ export const useRecording = (
 
       if (selection && position && viewState) {
         const snapshot: EditorSnapshot = {
-          timestamp: Date.now() - recordingStartTime,
+          timestamp: Date.now() - effectiveRecordingStartTime,
           state: {
             content,
             selection,
@@ -64,7 +68,7 @@ export const useRecording = (
         onSnapshot?.(snapshot);
       }
     }
-  }, [stateChangeCounter, isRecording, isPlaying, editorRef, recordingStartTime, onSnapshot, settings.mouseCursor]);
+  }, [stateChangeCounter, isRecording, isPlaying, editorRef, effectiveRecordingStartTime, onSnapshot, settings.mouseCursor]);
 
   // Reset state change counter when recording starts
   useEffect(() => {
@@ -142,6 +146,6 @@ export const useRecording = (
 
   return {
     handleEditorChange,
-    recordingStartTime,
+    recordingStartTime: effectiveRecordingStartTime,
   };
 };

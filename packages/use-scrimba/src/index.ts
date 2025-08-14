@@ -16,3 +16,5 @@ export type {
 // Re-export internal hooks for advanced users
 export { useRecording } from './hooks/useRecording';
 export { usePlayback } from './hooks/usePlayback';
+export { useAudioRecording } from './hooks/useAudioRecording';
+export type { UseAudioRecordingReturn } from './hooks/useAudioRecording';

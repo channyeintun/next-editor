@@ -10,6 +10,7 @@ import type {
 } from './types';
 import { useRecording } from './hooks/useRecording';
 import { usePlayback } from './hooks/usePlayback';
+import { useAudioRecording } from './hooks/useAudioRecording';
 import { isValidSnapshotState, isEditorReady } from './utils/validation';
 import { applyContentDiff } from './utils/editorDiff';
 import { 
@@ -39,6 +40,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     editorRef,
     audioRef,
     captureEvents = {},
+    enableAudioRecording = false,
     pauseOnUserInteraction = true,
     onRecordingStart,
     onRecordingStop,
@@ -55,6 +57,10 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   // Create Redux store instance for this hook
   const [store] = useState(() => createScrimbaStore());
   const [, forceUpdate] = useState({});
+
+  // Integrated audio recording
+  const audioRecording = useAudioRecording();
+  const masterTimingRef = useRef<{ startTime: number; stopTime: number | null }>({ startTime: 0, stopTime: null });
 
   // Force component update when store changes
   const triggerUpdate = useCallback(() => {
@@ -89,7 +95,8 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     recording.isRecording,
     playback.isPlaying,
     captureEvents,
-    handleSnapshot
+    handleSnapshot,
+    recording.recordingStartTime // Pass store's recording start time for synchronization
   );
 
   // Callback for handling playback pause
@@ -119,54 +126,83 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     handlePlaybackPause
   );
 
-  // Recording controls
-  const startRecording = useCallback(() => {
+  // Recording controls with synchronized timing
+  const startRecording = useCallback(async () => {
     try {
-      store.dispatch(startRecordingAction());
+      // Create master start time for perfect synchronization
+      const masterStartTime = Date.now();
+      masterTimingRef.current.startTime = masterStartTime;
+      masterTimingRef.current.stopTime = null;
+
+      // Start snapshot recording
+      store.dispatch(startRecordingAction(masterStartTime));
+      
+      // Start audio recording only if enabled
+      if (enableAudioRecording) {
+        const startOperations = await Promise.allSettled([
+          audioRecording.startRecording(masterStartTime)
+        ]);
+        
+        // Check if audio recording failed
+        const audioResult = startOperations[0];
+        if (audioResult.status === 'rejected') {
+          console.warn('Audio recording failed to start:', audioResult.reason);
+        }
+      }
+
+
+      console.log('🎬 Synchronized recording started at master time:', masterStartTime);
       onRecordingStart?.();
     } catch (error) {
       onError?.(error as Error);
     }
-  }, [store, onRecordingStart, onError]);
+  }, [store, audioRecording, onRecordingStart, onError]);
 
   const stopRecording = useCallback(async (options?: { audioBlob?: Blob; masterDuration?: number }) => {
     try {
       if (recording.currentRecording && recordingStartTime) {
-        // Synchronize snapshot recording stop operations
-        await Promise.allSettled([
-          // Stop snapshot recording and include audio blob if provided
-          Promise.resolve(store.dispatch(stopRecordingAction({ audioBlob: options?.audioBlob }))),
-          // Ensure we have final recording state
-          Promise.resolve(store.getState().recording.currentRecording)
-        ]);
+        // Create master stop time for perfect synchronization
+        const masterStopTime = Date.now();
+        masterTimingRef.current.stopTime = masterStopTime;
+
+        // Stop snapshot recording
+        store.dispatch(stopRecordingAction({ audioBlob: options?.audioBlob }));
+        
+        // Stop audio recording only if enabled and active
+        let audioBlob: Blob | null = null;
+        if (enableAudioRecording && audioRecording.isRecordingAudio) {
+          const stopOperations = await Promise.allSettled([
+            audioRecording.stopRecording(masterStopTime)
+          ]);
+          
+          const audioResult = stopOperations[0];
+          audioBlob = audioResult.status === 'fulfilled' ? audioResult.value : null;
+        }
+
 
         const currentRecordingData = store.getState().recording.currentRecording;
         if (currentRecordingData) {
-          // Use masterDuration if provided to ensure both recordings have same duration
-          let finalDuration = options?.masterDuration || currentRecordingData.duration;
+          // Calculate synchronized duration from master timeline
+          const synchronizedDuration = masterStopTime - masterTimingRef.current.startTime;
+          const finalDuration = options?.masterDuration || synchronizedDuration;
           
-          // Ensure we have a valid finite duration
-          if (!isFinite(finalDuration) || finalDuration <= 0) {
-            console.warn('⚠️ Invalid finalDuration:', finalDuration, 'using fallback');
-            finalDuration = currentRecordingData.duration;
-            
-            // If still invalid, use a default based on recording time
-            if (!isFinite(finalDuration) || finalDuration <= 0) {
-              finalDuration = recordingStartTime ? Date.now() - recordingStartTime : 0;
-              console.warn('⚠️ Using calculated duration from recording time:', finalDuration, 'ms');
-            }
-          }
-          
+          console.log('🎬 Synchronized recording stopped at master time:', masterStopTime);
+          console.log('📏 Master timeline duration:', synchronizedDuration, 'ms');
+
           const recordingData: Recording = {
             id: Date.now().toString(),
             name: `Recording ${Date.now()}`,
             createdAt: Date.now(),
-            snapshots: currentRecordingData.snapshots,
-            duration: finalDuration, // Use validated duration
-            audioBlob: currentRecordingData.audioBlob,
+            snapshots: currentRecordingData.snapshots.map(snapshot => ({
+              ...snapshot,
+              // Ensure all snapshots are relative to master start time
+              timestamp: snapshot.timestamp
+            })),
+            duration: finalDuration,
+            audioBlob: audioBlob || currentRecordingData.audioBlob,
           };
           
-          console.log('📏 Final recording duration set to:', finalDuration, 'ms');
+          console.log('✅ Synchronized duration for both recordings:', finalDuration, 'ms');
 
           // Synchronize final cleanup operations
           await Promise.allSettled([
@@ -178,7 +214,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     } catch (error) {
       onError?.(error as Error);
     }
-  }, [store, recording.currentRecording, recordingStartTime, onRecordingStop, onError]);
+  }, [store, recording.currentRecording, recordingStartTime, audioRecording, onRecordingStop, onError]);
 
   // Helper function to safely apply editor state
   const applyEditorStateSafely = useCallback((state: EditorState): boolean => {
@@ -797,6 +833,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   return {
     // Recording State
     isRecording: recording.isRecording,
+    isRecordingAudio: enableAudioRecording ? audioRecording.isRecordingAudio : false,
     recordingStartTime,
     
     // Playback State

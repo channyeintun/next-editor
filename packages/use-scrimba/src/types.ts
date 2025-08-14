@@ -59,6 +59,7 @@ export interface UseScrimbaConfig {
   
   // Recording Options
   captureEvents?: CaptureEvents;
+  enableAudioRecording?: boolean;
   
   // Playback Options
   pauseOnUserInteraction?: boolean;
@@ -116,6 +117,7 @@ export type ScrimbaAction =
 export interface UseScrimbaReturn {
   // Recording State
   isRecording: boolean;
+  isRecordingAudio: boolean;
   recordingStartTime: number | null;
   
   // Playback State
