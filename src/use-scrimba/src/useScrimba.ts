@@ -52,12 +52,12 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   // Audio instance management like the demo
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recordingDurationRef = useRef<number>(0);
-  
+
   // Independent timeline management (not dependent on audio.currentTime)
   const playbackStartTimeRef = useRef<number>(0);
   const playbackPausedAtRef = useRef<number>(0);
   const totalPausedTimeRef = useRef<number>(0);
-  
+
   // Mouse cursor tracking
   const lastMousePositionRef = useRef<{ x: number; y: number; visible: boolean }>({
     x: 0,
@@ -71,11 +71,11 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   // Calculate current timeline position independently of audio
   const getCurrentTimelinePosition = useCallback((): number => {
     if (!isPlaying) return currentTime;
-    
+
     const now = performance.now();
     const elapsedSinceStart = now - playbackStartTimeRef.current - totalPausedTimeRef.current;
     const adjustedElapsed = elapsedSinceStart * playbackSpeed;
-    
+
     return Math.max(0, adjustedElapsed);
   }, [isPlaying, currentTime, playbackSpeed]);
 
@@ -88,7 +88,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         try {
           const arrayBuffer = e.target?.result as ArrayBuffer;
           const audioContext = new window.AudioContext();
-          
+
           audioContext.decodeAudioData(
             arrayBuffer,
             buffer => {
@@ -110,12 +110,12 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
           reject(error);
         }
       };
-      
-      reader.onerror = function() {
+
+      reader.onerror = function () {
         console.error('FileReader read error');
         reject(new Error('FileReader failed'));
       };
-      
+
       reader.readAsArrayBuffer(audioBlob);
     });
   }, []);
@@ -128,10 +128,10 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
       const currentSelection = editor.getSelection();
       const currentPosition = editor.getPosition();
-      
+
       // Get current mouse cursor position relative to document
       const mouseCursorPosition = lastMousePositionRef.current;
-      
+
       const snapshot: EditorSnapshot = {
         timestamp,
         state: {
@@ -211,7 +211,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         y: e.clientY,
         visible: true
       };
-      
+
       // Record every mouse movement for smooth cursor playback
       handleEditorChange();
     };
@@ -385,7 +385,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
               selection: snapshot.state.selection,
               hasViewState: !!snapshot.state.viewState
             });
-            
+
             // Focus editor for cursor visibility during playback
             editor.focus();
             editor.setPosition(validPosition);
@@ -398,7 +398,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
                 console.error('View State Error:', err);
               }
             }
-            
+
             // Verify what was actually applied
             console.log('✅ Editor state after apply:', {
               actualPosition: editor.getPosition(),
@@ -516,7 +516,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
     // Check if we're restarting from the end
     const isRestarting = hasEnded;
-    
+
     // If playback has ended, restart from the beginning
     if (hasEnded) {
       setCurrentTime(0);
@@ -526,7 +526,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
     // Initialize independent timeline
     const now = performance.now();
-    
+
     if (isPaused && playbackPausedAtRef.current > 0 && !isRestarting) {
       // Resuming from pause (but not restarting) - add pause duration to total paused time
       totalPausedTimeRef.current += now - playbackPausedAtRef.current;
@@ -536,7 +536,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       playbackStartTimeRef.current = now;
       totalPausedTimeRef.current = 0;
       playbackPausedAtRef.current = 0;
-      
+
       // Only adjust start time for seek, not for restart
       if (currentTime > 0 && !isRestarting) {
         playbackStartTimeRef.current -= currentTime / playbackSpeed;
@@ -586,7 +586,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const pause = useCallback(() => {
     // Record when we paused for timeline calculation
     playbackPausedAtRef.current = performance.now();
-    
+
     setIsPlaying(false);
     setIsPaused(true);
 
@@ -642,7 +642,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
     const totalDuration = recordingDurationRef.current * 1000; // Convert to milliseconds
     const clampedTime = Math.min(Math.max(targetTime, 0), totalDuration);
-    
+
     // Update current time
     setCurrentTime(clampedTime);
     setHasEnded(false);
@@ -682,7 +682,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       const now = performance.now();
       playbackStartTimeRef.current = now - (currentPos / speed) - totalPausedTimeRef.current;
     }
-    
+
     setPlaybackSpeedState(speed);
 
     // Update audio playback rate if available
@@ -730,10 +730,10 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         // Create new Audio instance like the demo
         const audioUrl = URL.createObjectURL(recording.audioBlob);
         audioRef.current = new Audio(audioUrl);
-        
+
         // Set the exact duration like the demo
         (audioRef.current as AudioElementWithDuration)._actualDuration = exactDuration;
-        
+
         // Update recording duration if significantly different
         const recordedDurationSeconds = recording.duration / 1000;
         if (Math.abs(exactDuration - recordedDurationSeconds) > 0.1) {
