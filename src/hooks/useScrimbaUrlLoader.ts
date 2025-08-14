@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { Recording } from 'use-scrimba';
+import type { Recording } from '../use-scrimba/src';
 import { useScrimbaContext } from './useScrimbaContext';
 
 export const useScrimbaUrlLoader = () => {

@@ -17,8 +17,7 @@
     "pako": "^2.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "superjson": "^2.2.2",
-    "use-scrimba": "file:./packages/use-scrimba"
+    "superjson": "^2.2.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",

@@ -1,7 +1,7 @@
 import { useContext, type RefObject } from 'react';
 import type * as monaco from 'monaco-editor';
 import { ScrimbaContext } from '../contexts/ScrimbaContext';
-import type { UseScrimbaReturn, Recording } from 'use-scrimba';
+import type { UseScrimbaReturn, Recording } from '../use-scrimba/src';
 
 /**
  * Hook to access useScrimba functionality from any component
@@ -9,7 +9,6 @@ import type { UseScrimbaReturn, Recording } from 'use-scrimba';
  */
 export const useScrimbaContext = (): UseScrimbaReturn & { 
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
-  audioRef: RefObject<HTMLAudioElement | null>;
   // JSON Storage methods
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;
   exportAllAsFile: (filename?: string) => Promise<void>;

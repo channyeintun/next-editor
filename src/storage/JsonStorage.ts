@@ -1,4 +1,4 @@
-import type { Recording } from 'use-scrimba';
+import type { Recording } from '../use-scrimba/src';
 import { superjson } from './SuperJsonConfig';
 import { deflate, inflate } from 'pako';
 

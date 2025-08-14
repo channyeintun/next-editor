@@ -146,9 +146,8 @@ export default function Preview() {
     }
 
     try {
-      doc.open();
-      doc.write(htmlContent);
-      doc.close();
+      // Use modern DOM manipulation instead of deprecated document.write
+      doc.documentElement.innerHTML = htmlContent.replace(/^<!DOCTYPE html>\s*<html[^>]*>|<\/html>\s*$/gi, '');
     } catch (error) {
       console.error(error);
     }

@@ -1,6 +1,6 @@
 {
   "name": "use-scrimba",
-  "version": "1.6.3",
+  "version": "2.0.0",
   "description": "A powerful React hook for recording and replaying Monaco Editor interactions with Scrimba-like functionality",
   "main": "./dist/index.js",
   "module": "./dist/index.esm.js",
@@ -20,8 +20,7 @@
     "type-check": "tsc --noEmit",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint \"src/**/*.{ts,tsx}\"",
     "clean": "rimraf dist",
-    "publish": "./publish.sh",
-    "test-local": "./scripts/test-simple.sh"
+    "publish": "./publish.sh"
   },
   "keywords": [
     "react",
