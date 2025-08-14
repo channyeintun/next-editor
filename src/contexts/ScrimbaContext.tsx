@@ -5,7 +5,8 @@ import { useAudioRecording } from '../hooks/useAudioRecording';
 import { ScrimbaContext } from './ScrimbaContext';
 import { createJsonStorage } from '../storage/JsonStorage';
 
-let timeoutId: NodeJS.Timeout;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let timeoutId: any;
 
 // Function to get audio duration from blob
 const getAudioDuration = (audioBlob: Blob): Promise<number> => {
