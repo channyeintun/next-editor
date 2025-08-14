@@ -1,6 +1,5 @@
 import CodeEditor from './components/CodeEditor';
 import MediaControls from './components/MediaControls';
-import AudioPlayer from './components/AudioPlayer';
 import DragDropOverlay from './components/DragDropOverlay';
 import Preview from './components/Preview.tsx';
 import { ScrimbaProvider } from './contexts/ScrimbaContext.tsx';
@@ -29,7 +28,6 @@ function AppContent() {
       </div>
       
       <MediaControls />
-      <AudioPlayer />
       <CursorComponent />
       <Preview />
       

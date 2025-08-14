@@ -1,10 +1,8 @@
 import React, { useRef } from 'react';
 import type * as monaco from 'monaco-editor';
-import { useScrimba } from 'use-scrimba';
+import { useScrimba } from '../use-scrimba';
 import { ScrimbaContext } from './ScrimbaContext';
 import { createJsonStorage } from '../storage/JsonStorage';
-
-
 
 interface ScrimbaProviderProps {
   children: React.ReactNode;
@@ -16,12 +14,10 @@ interface ScrimbaProviderProps {
  */
 export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const jsonStorage = useRef(createJsonStorage());
   
   const originalScrimbaHook = useScrimba({
     editorRef,
-    audioRef,
     enableAudioRecording: true, // Enable built-in synchronized audio recording
     onRecordingStart: () => {
       console.log('📹 Synchronized recording started');
@@ -69,7 +65,7 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
   };
 
   return (
-    <ScrimbaContext value={{ ...scrimbaHook, editorRef, audioRef }}>
+    <ScrimbaContext value={{ ...scrimbaHook, editorRef }}>
       {children}
     </ScrimbaContext>
   );

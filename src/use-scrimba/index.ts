@@ -10,11 +10,8 @@ export type {
   UseScrimbaConfig,
   UseScrimbaReturn,
   EditorState,
-  ScrimbaAction,
 } from './types';
 
-// Re-export internal hooks for advanced users
-export { useRecording } from './hooks/useRecording';
-export { usePlayback } from './hooks/usePlayback';
+// Re-export audio recording hook for advanced users
 export { useAudioRecording } from './hooks/useAudioRecording';
 export type { UseAudioRecordingReturn } from './hooks/useAudioRecording';

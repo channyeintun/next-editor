@@ -54,9 +54,6 @@ export interface UseScrimbaConfig {
   // Required
   editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   
-  // Optional Audio Sync
-  audioRef?: React.RefObject<HTMLAudioElement | null>;
-  
   // Recording Options
   captureEvents?: CaptureEvents;
   enableAudioRecording?: boolean;
@@ -91,25 +88,6 @@ export interface EditorState {
   mouseCursor?: MouseCursorPosition;
 }
 
-/**
- * Available Redux actions for the useScrimba store
- * Derived from the actual slice actions to maintain single source of truth
- */
-export type ScrimbaAction = 
-  | ReturnType<typeof import('./store/recordingSlice').recordingSlice.actions.startRecording>
-  | ReturnType<typeof import('./store/recordingSlice').recordingSlice.actions.stopRecording>
-  | ReturnType<typeof import('./store/recordingSlice').recordingSlice.actions.addSnapshot>
-  | ReturnType<typeof import('./store/recordingSlice').recordingSlice.actions.clearCurrentRecording>
-  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.play>
-  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.pause>
-  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.stop>
-  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.end>
-  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.updateCurrentTime>
-  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.seekTo>
-  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.setPlaybackSpeed>
-  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.loadRecording>
-  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.updateCurrentSnapshot>
-  | ReturnType<typeof import('./store/playbackSlice').playbackSlice.actions.updateEditorState>;
 
 /**
  * Return type of useScrimba hook
@@ -126,6 +104,7 @@ export interface UseScrimbaReturn {
   hasEnded: boolean;
   currentTime: number;
   playbackSpeed: number;
+  volume: number;
   
   // Data
   currentRecording: Recording | null;
@@ -133,7 +112,7 @@ export interface UseScrimbaReturn {
   
   // Recording Controls
   startRecording: () => void;
-  stopRecording: (options?: { audioBlob?: Blob; masterDuration?: number }) => void;
+  stopRecording: () => void;
   
   // Playback Controls
   play: () => void;
@@ -141,6 +120,7 @@ export interface UseScrimbaReturn {
   stop: () => void;
   seekTo: (time: number) => void;
   setPlaybackSpeed: (speed: number) => void;
+  setVolume: (volume: number) => void;
   
   // Recording Management
   loadRecording: (recording: Recording) => void;
@@ -148,30 +128,8 @@ export interface UseScrimbaReturn {
   // Monaco Editor Integration
   handleEditorChange: () => void;
   
-  // Advanced
+  // Helper functions
   getEditorState: () => EditorState | null;
-  applyEditorState: (state: EditorState) => void;
-  
-  // New granular controls
   getSnapshot: (timestamp?: number) => EditorSnapshot | null;
-  getCurrentState: () => { 
-    recording: {
-      isRecording: boolean;
-      recordingStartTime: number | null;
-      currentRecording: { snapshots: EditorSnapshot[]; duration: number; audioBlob?: Blob } | null;
-    };
-    playback: {
-      isPlaying: boolean;
-      isPaused: boolean;
-      hasEnded: boolean;
-      currentTime: number;
-      playbackSpeed: number;
-      loadedRecording: Recording | null;
-      currentSnapshot: EditorSnapshot | null;
-      editorState: EditorState;
-    };
-  };
-  dispatch: (action: ScrimbaAction) => void;
-  subscribe: (callback: () => void) => () => void;
   
 }
