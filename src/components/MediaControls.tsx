@@ -97,13 +97,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
 
   const duration = currentRecording?.duration || 0;
 
-  // Add audio element debugging
-  if (audioRef.current && isPlaying) {
-    console.log('audio.duration:', audioRef.current.duration * 1000, 'ms');
-    console.log('audio.currentTime:', audioRef.current.currentTime * 1000, 'ms');
-    console.log('audio.ended:', audioRef.current.ended);
-  }
-
   // Calculate the time to display
   const displayTime = isRecording
     ? recordingTime
