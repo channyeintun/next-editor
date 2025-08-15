@@ -11,11 +11,8 @@ interface FakeCursorProps {
 }
 
 const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
-  // if (!position.visible) return null;
-  console.log({
-    left: position.x,
-    top: position.y,
-  })
+  if (!position.visible) return null;
+  
   return (
     <div
       style={{

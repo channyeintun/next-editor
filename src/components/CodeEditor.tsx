@@ -5,6 +5,7 @@ import { useScrimbaContext } from '../hooks/useScrimbaContext';
 interface CodeEditorProps {
   language?: string;
   theme?: string;
+  showImportExport?: boolean;
 }
 
 /**
@@ -21,7 +22,8 @@ interface CodeEditorProps {
  */
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
-  theme = 'vs-dark'
+  theme = 'vs-dark',
+  showImportExport = true
 }) => {
   const selectedLanguage = 'html';
   // Use the useScrimba context instead of Redux and custom hooks
@@ -74,22 +76,24 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       {/* Title Bar with Import/Export buttons */}
       <div className="bg-gray-700 px-4 py-2 flex items-center justify-between">
         <span className="text-sm font-medium text-gray-300">use-scrimba</span>
-        <div className="flex items-center space-x-2">
-          {/* Import/Export buttons */}
-          <button
-            onClick={handleImport}
-            className="px-3 py-1 text-xs text-gray-300 hover:text-white bg-gray-600 hover:bg-gray-500 rounded transition-colors"
-          >
-            Import
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={!currentRecording}
-            className="px-3 py-1 text-xs text-gray-300 hover:text-white bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed rounded transition-colors"
-          >
-            Export
-          </button>
-        </div>
+        {showImportExport && (
+          <div className="flex items-center space-x-2">
+            {/* Import/Export buttons */}
+            <button
+              onClick={handleImport}
+              className="px-3 py-1 text-xs text-gray-300 hover:text-white bg-gray-600 hover:bg-gray-500 rounded transition-colors"
+            >
+              Import
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={!currentRecording}
+              className="px-3 py-1 text-xs text-gray-300 hover:text-white bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed rounded transition-colors"
+            >
+              Export
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Monaco Editor */}

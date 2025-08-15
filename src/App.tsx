@@ -1,3 +1,4 @@
+import { Routes, Route } from 'react-router-dom';
 import CodeEditor from './components/CodeEditor';
 import MediaControls from './components/MediaControls';
 import DragDropOverlay from './components/DragDropOverlay';
@@ -5,13 +6,17 @@ import Preview from './components/Preview.tsx';
 import { ScrimbaProvider } from './contexts/ScrimbaContext.tsx';
 import { useDragAndDropUrl } from './hooks/useDragAndDropUrl';
 import { useUrlQuery } from './hooks/useUrlQuery';
+import CssCourse from './pages/CssCourse';
 import './App.css'
 import CursorComponent from './components/Cursor.tsx';
 
 function App() {
   return (
     <ScrimbaProvider>
-      <AppContent />
+      <Routes>
+        <Route path="/" element={<AppContent />} />
+        <Route path="/css-course" element={<CssCourse />} />
+      </Routes>
     </ScrimbaProvider>
   );
 }

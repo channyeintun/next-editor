@@ -9,9 +9,11 @@ import ProgressBar from './ProgressBar';
 interface MediaControlsProps {
   onRecord?: () => void;
   onStopRecording?: () => void;
+  showRecord?: boolean;
+  positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
 }
 
-const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording }) => {
+const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording, showRecord = true, positioning = 'fixed' }) => {
   const {
     isRecording,
     isPlaying,
@@ -99,20 +101,22 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     : (currentRecording ? duration - currentTime : currentTime);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 px-4 py-3 z-50">
+    <div className={`${positioning} bottom-0 left-0 w-full px-4 py-3 z-50`}>
       <div className="flex items-center gap-3 w-full h-6">
-        {/* Record button - always show */}
-        <button
-          onClick={handleRecordToggle}
-          title={isRecording ? "Stop recording" : "Start recording"}
-          className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-2 before:content-[''] after:absolute after:inset-0 after:bg-red-500/50 after:rounded-full after:scale-0 hover:after:scale-200 after:transition-transform after:duration-200"
-        >
-          {isRecording ? (
-            <div className="w-3 h-3 bg-red-500 rounded-sm animate-pulse"></div>
-          ) : (
-            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-          )}
-        </button>
+        {/* Record button - show only if showRecord is true */}
+        {showRecord && (
+          <button
+            onClick={handleRecordToggle}
+            title={isRecording ? "Stop recording" : "Start recording"}
+            className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-2 before:content-[''] after:absolute after:inset-0 after:bg-red-500/50 after:rounded-full after:scale-0 hover:after:scale-200 after:transition-transform after:duration-200"
+          >
+            {isRecording ? (
+              <div className="w-3 h-3 bg-red-500 rounded-sm animate-pulse"></div>
+            ) : (
+              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+            )}
+          </button>
+        )}
 
         {/* Show playback controls only if recording exists and not currently recording */}
         {currentRecording && !isRecording && (

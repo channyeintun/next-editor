@@ -4,7 +4,11 @@ import { useScrimbaContext } from '../hooks/useScrimbaContext';
 
 type PreviewSize = 'small' | 'medium' | 'large';
 
-export default function Preview() {
+interface PreviewProps {
+  positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
+}
+
+export default function Preview({ positioning = 'fixed' }: PreviewProps) {
   const [size, setSize] = useState<PreviewSize>('small');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastContentRef = useRef<string>('');
@@ -272,7 +276,7 @@ export default function Preview() {
       )}
 
       <div
-        className={`fixed bg-white rounded shadow-lg z-40 transition-all duration-500 ease-in-out ${getSizeClasses()}`}
+        className={`${positioning} bg-white rounded shadow-lg z-40 transition-all duration-500 ease-in-out ${getSizeClasses()}`}
         style={{
           border: '1px solid #ccc',
           ...getSizeStyles()
