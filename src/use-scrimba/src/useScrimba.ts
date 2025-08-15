@@ -126,8 +126,10 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       const timestamp = performance.now() - startTimeRef.current;
       const editor = editorRef.current;
 
+      const content = editor.getValue();
       const currentSelection = editor.getSelection();
       const currentPosition = editor.getPosition();
+      const viewState = editor.saveViewState();
 
       // Get current mouse cursor position relative to document
       const mouseCursorPosition = lastMousePositionRef.current;
@@ -135,7 +137,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       const snapshot: EditorSnapshot = {
         timestamp,
         state: {
-          content: editor.getValue(),
+          content,
           selection: currentSelection || {
             startLineNumber: 1,
             startColumn: 1,
@@ -150,7 +152,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
             lineNumber: 1,
             column: 1
           } as monaco.Position,
-          viewState: editor.saveViewState(),
+          viewState,
           mouseCursor: mouseCursorPosition,
         }
       };
