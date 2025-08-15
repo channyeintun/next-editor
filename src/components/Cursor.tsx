@@ -17,13 +17,13 @@ const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
     <div
       style={{
         position: 'fixed',
-        left: position.x,
-        top: position.y,
+        left: -7,
+        top: -5,
         width: 24,
         height: 24,
         pointerEvents: 'none',
         zIndex: 9999,
-        transform: 'translate(-30%, -20%)',
+        transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
       }}
     >
       <svg
