@@ -34,13 +34,13 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
           echoCancellation: true,
           noiseSuppression: true,
           channelCount: 1,
-          sampleRate: 48000,
+          sampleRate: 16000,
         }
       });
 
       const mimeType = "audio/webm; codecs=opus";
       const mediaRecorder = new MediaRecorder(stream, {
-        audioBitsPerSecond: 48000,
+        audioBitsPerSecond: 32000,
         mimeType: mimeType,
       });
       mediaRecorderRef.current = mediaRecorder;
