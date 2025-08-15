@@ -6,17 +6,11 @@ import CursorComponent from '../components/Cursor';
 import Preview from '../components/Preview';
 import { useUrlQuery } from '../hooks/useUrlQuery';
 
-// CSS Course lessons configuration
 const CSS_LESSONS = [
   {
     id: 1,
-    title: "Introduction to CSS",
+    title: "Text Shadow",
     scrimUrl: "/lessons/text-shadow.scrimba"
-  },
-  {
-    id: 2,
-    title: "CSS Selectors",
-    scrimUrl: "/lessons/002.scrimba"
   },
 ];
 
