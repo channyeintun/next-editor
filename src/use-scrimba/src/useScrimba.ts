@@ -180,25 +180,34 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
     if (!model) return;
 
+    const disposables: monaco.IDisposable[] = [];
+
     // Listen for content changes
     const contentDisposable = model.onDidChangeContent(() => {
       handleEditorChange();
     });
+    disposables.push(contentDisposable);
 
     // Listen for cursor position changes
     const positionDisposable = editor.onDidChangeCursorPosition(() => {
       handleEditorChange();
     });
+    disposables.push(positionDisposable);
 
     // Listen for selection changes
     const selectionDisposable = editor.onDidChangeCursorSelection(() => {
       handleEditorChange();
     });
+    disposables.push(selectionDisposable);
+
+    // Listen for scroll changes if enabled
+    const scrollDisposable = editor.onDidScrollChange(() => {
+      handleEditorChange();
+    });
+    disposables.push(scrollDisposable);
 
     return () => {
-      contentDisposable.dispose();
-      positionDisposable.dispose();
-      selectionDisposable.dispose();
+      disposables.forEach(d => d.dispose());
     };
   }, [isRecording, handleEditorChange, editorRef]);
 

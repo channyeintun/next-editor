@@ -122,9 +122,6 @@ interface UseScrimbaConfig {
   // Audio Recording
   enableAudioRecording?: boolean;    // Enable built-in synchronized audio recording
   
-  // Recording Options
-  captureEvents?: CaptureEvents;     // Customize what events to capture
-  
   // Playback Options
   pauseOnUserInteraction?: boolean;  // Default: true
   defaultPlaybackSpeed?: number;     // Default: 1

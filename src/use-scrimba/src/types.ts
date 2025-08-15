@@ -35,17 +35,6 @@ export interface Recording {
   createdAt: number;
 }
 
-/**
- * Configuration for event capturing during recording
- */
-export interface CaptureEvents {
-  content?: boolean;
-  cursorPosition?: boolean;
-  selection?: boolean;
-  scroll?: boolean;
-  mouseCursor?: boolean;
-}
-
 
 /**
  * Configuration options for useScrimba hook
@@ -55,7 +44,6 @@ export interface UseScrimbaConfig {
   editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   
   // Recording Options
-  captureEvents?: CaptureEvents;
   enableAudioRecording?: boolean;
   
   // Playback Options

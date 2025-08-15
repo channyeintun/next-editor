@@ -6,7 +6,6 @@ export type {
   MouseCursorPosition,
   EditorSnapshot,
   Recording,
-  CaptureEvents,
   UseScrimbaConfig,
   UseScrimbaReturn,
   EditorState,
