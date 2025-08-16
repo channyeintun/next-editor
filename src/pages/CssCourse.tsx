@@ -204,7 +204,13 @@ const CssCourse: React.FC = () => {
         </button>
 
         <div className="bg-slate-800 h-full">
-          <CodeEditor showImportExport={false} />
+          <CodeEditor  
+            defaultContent={`<html>
+  <h1>Based on web.dev's CSS course.</h1>
+  <img src="./web-dev-css.webp" width="100%" style="object-fit: contain;" />
+</html>
+              `}
+            showImportExport={false} />
         </div>
         <Preview positioning="absolute" />
         <CursorComponent hasParent />

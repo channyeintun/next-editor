@@ -6,6 +6,7 @@ interface CodeEditorProps {
   language?: string;
   theme?: string;
   showImportExport?: boolean;
+  defaultContent?: string;
 }
 
 /**
@@ -23,12 +24,15 @@ interface CodeEditorProps {
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
   theme = 'vs-dark',
-  showImportExport = true
+  showImportExport = true,
+  defaultContent = `<html>
+    <h1>Hello world</h1>
+</html>`
 }) => {
   const selectedLanguage = 'html';
   // Use the useScrimba context instead of Redux and custom hooks
   const {
-    handleEditorChange, 
+    handleEditorChange,
     editorRef,
     currentRecording,
     exportAsFile,
@@ -46,7 +50,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleImport = async () => {
     try {
       const importedRecordings = await importFromFile();
-      
+
       // Load the first imported recording for playback
       if (importedRecordings.length > 0) {
         loadRecording(importedRecordings[0]);
@@ -57,10 +61,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     }
   };
 
-  const defaultContent = `<html>
-    <h1>Hello world</h1>
-</html>`;
-
   /**
    * Handle Monaco Editor mount event
    * Sets up the editor reference for use in recording and replay
@@ -68,7 +68,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
   };
-  
+
   return (
     <div className="h-screen flex flex-col">
       {/* Title Bar with Import/Export buttons */}
