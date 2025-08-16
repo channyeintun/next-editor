@@ -5,15 +5,17 @@ import PlayIcon from './icon/Play';
 import PauseIcon from './icon/Pause';
 import SettingIcon from './icon/Setting';
 import ProgressBar from './ProgressBar';
+import SnapshotEditor from './SnapshotEditor';
+import type { Recording } from '../use-scrimba/src';
 
 interface MediaControlsProps {
   onRecord?: () => void;
   onStopRecording?: () => void;
-  showRecord?: boolean;
+  recordMode?: boolean;
   positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
 }
 
-const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording, showRecord = true, positioning = 'fixed' }) => {
+const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording, recordMode = true, positioning = 'fixed' }) => {
   const {
     isRecording,
     isPlaying,
@@ -31,10 +33,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     volume,
     setVolume,
     actualDuration,
+    loadRecording,
   } = useScrimbaContext();
 
   const [showSettings, setShowSettings] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [showSnapshotEditor, setShowSnapshotEditor] = useState(false);
 
   // Update recording time every 100ms when recording
   useEffect(() => {
@@ -89,6 +93,26 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     setVolume(newVolume);
   };
 
+  const handleEditClick = () => {
+    if (currentRecording) {
+      setShowSnapshotEditor(true);
+    }
+  };
+
+  const handleSaveRecording = async (editedRecording: Recording) => {
+    try {
+      // Update the current recording
+      loadRecording(editedRecording);
+      setShowSnapshotEditor(false);
+    } catch (error) {
+      console.error('Save failed:', error);
+    }
+  };
+
+  const handleCancelExport = () => {
+    setShowSnapshotEditor(false);
+  };
+
 
   const duration = currentRecording?.duration || 0;
   
@@ -103,8 +127,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
   return (
     <div className={`${positioning} bottom-0 left-0 w-full px-4 py-3 z-50`}>
       <div className="flex items-center gap-3 w-full h-6">
-        {/* Record button - show only if showRecord is true */}
-        {showRecord && (
+        {/* Record button - show only if recordMode is true */}
+        {recordMode && (
           <button
             onClick={handleRecordToggle}
             title={isRecording ? "Stop recording" : "Start recording"}
@@ -119,7 +143,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
         )}
 
         {/* Show playback controls only if recording exists and not currently recording */}
-        {currentRecording && !isRecording && (
+        {currentRecording && !isRecording && recordMode && (
           <>
             {/* Play/Pause button */}
             <button
@@ -197,12 +221,21 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
                         />
                       </div>
                     </div>
+                    <div className="pt-3">
+                      <button
+                        onClick={handleEditClick}
+                        className="w-full px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"
+                      >
+                        Edit JSON
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
           </>
         )}
+
 
         {/* Time display - show only during recording or playback */}
         {(isRecording || currentRecording) && (
@@ -211,6 +244,17 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
           </span>
         )}
       </div>
+
+      {/* Snapshot Editor Modal */}
+      {currentRecording && (
+        <SnapshotEditor
+          recording={currentRecording}
+          isVisible={showSnapshotEditor}
+          mode="edit"
+          onSave={handleSaveRecording}
+          onCancel={handleCancelExport}
+        />
+      )}
     </div>
   );
 };
