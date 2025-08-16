@@ -7,16 +7,16 @@ import type { MouseCursorPosition } from '../use-scrimba/src';
  * Based on the working example from test-simple.sh
  */
 interface FakeCursorProps {
-  position: MouseCursorPosition;
+  position: MouseCursorPosition & { hasParent?: boolean };
 }
 
 const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
   if (!position.visible) return null;
-  
+
   return (
     <div
       style={{
-        position: 'fixed',
+        position: position.hasParent ? 'absolute' : 'fixed',
         left: -7,
         top: -5,
         width: 24,
@@ -67,14 +67,16 @@ const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
  * CursorComponent - Displays a fake cursor overlay during playback
  * Implementation based on working example from test-simple.sh
  */
-const CursorComponent: React.FC = () => {
+const CursorComponent: React.FC<{
+  hasParent?: boolean;
+}> = (props) => {
   const { isPlaying, currentCursor } = useScrimbaContext();
 
   // Render fake cursor during playback - fixed to viewport with smooth transitions
   return (
     <>
       {isPlaying && currentCursor && currentCursor.visible && (
-        <FakeCursor position={currentCursor} />
+        <FakeCursor position={currentCursor} {...props} />
       )}
     </>
   );

@@ -25,13 +25,18 @@ const CSS_LESSONS = [
         title: "The Areas of the Box Model",
         scrimUrl: "/lessons/the-areas-of-the-box-model.scrimba"
       },
+      {
+        id: 4,
+        title: "Debug the Box Model",
+        scrimUrl: "/lessons/debug-the-box-model.scrimba"
+      },
     ]
   },
   {
     groupTitle: "Shadows",
     lessons: [
       {
-        id: 4,
+        id: 6,
         title: "Text Shadow",
         scrimUrl: "/lessons/text-shadow.scrimba"
       },
@@ -149,7 +154,7 @@ const CssCourse: React.FC = () => {
           <CodeEditor showImportExport={false} />
         </div>
         <Preview positioning="absolute"  />
-        <CursorComponent />
+        <CursorComponent hasParent />
         <MediaControls showRecord={false} positioning="absolute" />
         
         {/* Loading overlay */}
