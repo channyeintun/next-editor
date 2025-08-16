@@ -143,7 +143,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
         )}
 
         {/* Show playback controls only if recording exists and not currently recording */}
-        {currentRecording && !isRecording && recordMode && (
+        {currentRecording && !isRecording && (
           <>
             {/* Play/Pause button */}
             <button
@@ -221,14 +221,16 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
                         />
                       </div>
                     </div>
-                    <div className="pt-3">
-                      <button
-                        onClick={handleEditClick}
-                        className="w-full px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"
-                      >
-                        Edit JSON
-                      </button>
-                    </div>
+                    {recordMode && (
+                      <div className="pt-3">
+                        <button
+                          onClick={handleEditClick}
+                          className="w-full px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"
+                        >
+                          Edit JSON
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
