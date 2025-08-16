@@ -241,15 +241,118 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       };
     };
 
+    // Handle iframe mouse tracking
+    const handleIframeMouseMove = (iframe: HTMLIFrameElement) => (e: MouseEvent) => {
+      // Get iframe position relative to viewport
+      const iframeRect = iframe.getBoundingClientRect();
+      
+      // Calculate mouse position relative to the main document
+      const documentX = iframeRect.left + e.clientX;
+      const documentY = iframeRect.top + e.clientY;
+
+      lastMousePositionRef.current = {
+        x: documentX,
+        y: documentY,
+        visible: true
+      };
+
+      // Record mouse movement in iframe
+      handleEditorChange();
+    };
+
+    const handleIframeMouseLeave = () => {
+      lastMousePositionRef.current = {
+        ...lastMousePositionRef.current,
+        visible: false
+      };
+    };
+
     // Add mouse event listeners to document
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseleave', handleMouseLeave);
     document.addEventListener('mouseenter', handleMouseEnter);
 
+    // Add listeners to all iframes on the page
+    const iframeListeners: Array<{ iframe: HTMLIFrameElement; listeners: Array<() => void> }> = [];
+    
+    const setupIframeListeners = (iframe: HTMLIFrameElement) => {
+      try {
+        const iframeWindow = iframe.contentWindow;
+        const iframeDocument = iframe.contentDocument;
+        
+        if (iframeWindow && iframeDocument) {
+          const mouseMoveHandler = handleIframeMouseMove(iframe);
+          
+          iframeDocument.addEventListener('mousemove', mouseMoveHandler);
+          iframeDocument.addEventListener('mouseleave', handleIframeMouseLeave);
+          
+          iframeListeners.push({
+            iframe,
+            listeners: [
+              () => iframeDocument.removeEventListener('mousemove', mouseMoveHandler),
+              () => iframeDocument.removeEventListener('mouseleave', handleIframeMouseLeave)
+            ]
+          });
+        }
+      } catch (error) {
+        // Iframe might be cross-origin, skip it
+        console.warn('Cannot track cursor in iframe (likely cross-origin):', error);
+      }
+    };
+
+    const attachToIframe = (iframe: HTMLIFrameElement) => {
+      try {
+        if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+          setupIframeListeners(iframe);
+        } else {
+          iframe.addEventListener('load', () => setupIframeListeners(iframe));
+        }
+      } catch (error) {
+        console.warn('Cannot access iframe:', error);
+      }
+    };
+
+    // Setup listeners for existing iframes
+    const iframes = document.querySelectorAll('iframe');
+    iframes.forEach(attachToIframe);
+
+    // Watch for new iframes being added to the DOM
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const element = node as Element;
+            
+            // Check if the added node is an iframe
+            if (element.tagName === 'IFRAME') {
+              attachToIframe(element as HTMLIFrameElement);
+            }
+            
+            // Check if any descendant nodes are iframes
+            const descendantIframes = element.querySelectorAll('iframe');
+            descendantIframes.forEach(attachToIframe);
+          }
+        });
+      });
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseleave', handleMouseLeave);
       document.removeEventListener('mouseenter', handleMouseEnter);
+      
+      // Stop observing for new iframes
+      observer.disconnect();
+      
+      // Clean up iframe listeners
+      iframeListeners.forEach(({ listeners }) => {
+        listeners.forEach(cleanup => cleanup());
+      });
     };
   }, [isRecording, handleEditorChange]);
 
