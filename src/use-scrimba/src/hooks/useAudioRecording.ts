@@ -74,15 +74,8 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
           
           const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm; codecs=opus" });
           
-          try {
-            const recordingDuration = await calculateDurationFromFileReader(audioBlob);
-            setAudioBlob(audioBlob);
-            resolve(audioBlob);
-          } catch (error) {
-            console.error('Failed to calculate duration:', error);
-            setAudioBlob(audioBlob);
-            resolve(audioBlob);
-          }
+          setAudioBlob(audioBlob);
+          resolve(audioBlob);
           
           setIsRecordingAudio(false);
         };
