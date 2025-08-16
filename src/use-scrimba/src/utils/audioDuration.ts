@@ -22,8 +22,6 @@ export async function calculateDurationFromFileReader(audioBlob: Blob): Promise<
           buffer => {
             const rawDuration = buffer.duration;
             const adjustedDuration = rawDuration - 0.06; // Subtract 0.06s for exact end time
-            console.log('FileReader raw duration:', rawDuration, 'seconds');
-            console.log('Adjusted duration:', adjustedDuration, 'seconds');
             audioContext.close();
             resolve(adjustedDuration);
           },

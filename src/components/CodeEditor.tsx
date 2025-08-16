@@ -46,12 +46,10 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleImport = async () => {
     try {
       const importedRecordings = await importFromFile();
-      console.log('Successfully imported recordings:', importedRecordings);
       
       // Load the first imported recording for playback
       if (importedRecordings.length > 0) {
         loadRecording(importedRecordings[0]);
-        console.log(`Imported ${importedRecordings.length} recording(s) and loaded the first one for playback`);
       }
     } catch (error) {
       console.error('Import failed:', error);

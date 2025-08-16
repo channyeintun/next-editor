@@ -55,8 +55,6 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
       // Start recording
       mediaRecorder.start();
       setIsRecordingAudio(true);
-
-      console.log('🎤 Audio recording started');
     } catch (err) {
       setError('Failed to start recording. Please check microphone permissions.');
       console.error('Error starting audio recording:', err);
@@ -78,8 +76,6 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
           
           try {
             const recordingDuration = await calculateDurationFromFileReader(audioBlob);
-            console.log('🎤 Audio recording stopped');
-            console.log('🎤 Calculated exact duration:', recordingDuration, 'seconds');
             setAudioBlob(audioBlob);
             resolve(audioBlob);
           } catch (error) {

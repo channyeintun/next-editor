@@ -94,8 +94,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
             buffer => {
               const rawDuration = buffer.duration;
               const adjustedDuration = rawDuration - 0.06; // Subtract 0.06s for exact end time
-              console.log('FileReader raw duration:', rawDuration, 'seconds');
-              console.log('Adjusted duration:', adjustedDuration, 'seconds');
               audioContext.close();
               resolve(adjustedDuration);
             },
@@ -156,15 +154,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
           mouseCursor: mouseCursorPosition,
         }
       };
-
-      // Debug logging for recording
-      console.log('📸 Recording snapshot:', {
-        timestamp,
-        position: currentPosition,
-        selection: currentSelection,
-        mouseCursor: mouseCursorPosition,
-        contentLength: snapshot.state.content.length
-      });
 
       snapshotsRef.current.push(snapshot);
       onSnapshot?.(snapshot);
@@ -404,8 +393,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
       setIsRecording(true);
       setRecordingStartTime(Date.now());
-
-      console.log('🎬 Recording started');
       onRecordingStart?.();
     } catch (error) {
       onError?.(error as Error);
@@ -432,7 +419,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
           const exactDuration = await calculateDurationFromFileReader(finalAudioBlob);
           finalDuration = exactDuration * 1000; // Convert to milliseconds
           recordingDurationRef.current = exactDuration;
-          console.log('🎵 Exact duration calculated:', exactDuration, 'seconds');
         } catch (error) {
           console.error('Failed to calculate exact duration:', error);
           recordingDurationRef.current = duration / 1000;
@@ -450,10 +436,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
       setIsRecording(false);
       setRecordingStartTime(null);
-
-      console.log('🎬 Recording stopped');
-      console.log('📏 Duration:', duration, 'ms');
-
       onRecordingStop?.(recordingData);
     } catch (error) {
       onError?.(error as Error);
@@ -493,12 +475,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
               lineNumber: safeLineNumber,
               column: Math.min(Math.max(snapshot.state.position.column, 1), maxColumn)
             };
-            // Debug logging for playback
-            console.log('🎬 Applying editor state:', {
-              position: validPosition,
-              selection: snapshot.state.selection,
-              hasViewState: !!snapshot.state.viewState
-            });
 
             // Focus editor for cursor visibility during playback
             editor.focus();
@@ -512,12 +488,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
                 console.error('View State Error:', err);
               }
             }
-
-            // Verify what was actually applied
-            console.log('✅ Editor state after apply:', {
-              actualPosition: editor.getPosition(),
-              actualSelection: editor.getSelection()
-            });
           }
         }
       }
@@ -552,7 +522,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         setIsPlaying(false);
         setHasEnded(true);
         setCurrentTime(totalDuration);
-        console.log('🎯 Playback ended');
         return;
       }
 
@@ -597,21 +566,13 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     const handleLoadedMetadata = () => {
       // Set the exact duration like the demo (for reference only)
       (audio as AudioElementWithDuration)._actualDuration = recordingDurationRef.current;
-      console.log('Setting audio._actualDuration:', recordingDurationRef.current);
-    };
-
-    const handleAudioEnded = () => {
-      // Audio ended - this is just for cleanup, timeline manages the end
-      console.log('🎵 Audio track ended');
     };
 
     // Add audio event listeners
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('ended', handleAudioEnded);
 
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('ended', handleAudioEnded);
     };
   }, [isPlaying, currentRecording]);
 
@@ -622,12 +583,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       return;
     }
 
-    console.log('🎯 Play called:', {
-      hasAudio: !!currentRecording.audioBlob,
-      audioRefExists: !!audioRef.current,
-      recordingDuration: recordingDurationRef.current
-    });
-
     // Check if we're restarting from the end
     const isRestarting = hasEnded;
 
@@ -635,7 +590,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     if (hasEnded) {
       setCurrentTime(0);
       setHasEnded(false);
-      console.log('🔄 Restarting playback from beginning');
     }
 
     // Initialize independent timeline
@@ -662,7 +616,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     if (hasAudio) {
       // Create Audio instance if needed like the demo
       if (!audioRef.current) {
-        console.log('🎵 Creating Audio instance for playback');
         const audioUrl = URL.createObjectURL(currentRecording.audioBlob!);
         audioRef.current = new Audio(audioUrl);
         (audioRef.current as AudioElementWithDuration)._actualDuration = recordingDurationRef.current;
@@ -671,9 +624,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       // Apply initial state like the demo (always when playing, especially when restarting)
       if (currentRecording.snapshots.length > 0 && editorRef.current) {
         // When restarting or starting fresh, always apply the first snapshot
-        if (isRestarting || currentTime === 0) {
-          console.log('🎬 Applying initial snapshot for restart/fresh start');
-        }
         applyEditorState(currentRecording.snapshots[0]);
       }
 
@@ -682,10 +632,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       audioRef.current.playbackRate = playbackSpeed;
       audioRef.current.volume = volume;
 
-      console.log('🎮 Starting independent timeline at', currentTime, 'ms');
-      if (isRestarting) {
-        console.log('🔄 Audio restarted from position 0');
-      }
       // Play audio (it will follow our independent timeline)
       audioRef.current.play().catch(console.error);
     } else {
@@ -839,7 +785,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       try {
         const exactDuration = await calculateDurationFromFileReader(recording.audioBlob);
         recordingDurationRef.current = exactDuration;
-        console.log('🎵 Exact duration calculated:', exactDuration, 'seconds');
 
         // Create new Audio instance like the demo
         const audioUrl = URL.createObjectURL(recording.audioBlob);
@@ -851,7 +796,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         // Update recording duration if significantly different
         const recordedDurationSeconds = recording.duration / 1000;
         if (Math.abs(exactDuration - recordedDurationSeconds) > 0.1) {
-          console.log('⚠️ Duration mismatch detected, updating recording');
+          // console.log('⚠️ Duration mismatch detected, updating recording');
           recording = {
             ...recording,
             duration: exactDuration * 1000

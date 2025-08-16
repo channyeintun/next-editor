@@ -54,10 +54,12 @@ interface LessonsPanelProps {
   lessons: typeof CSS_LESSONS;
   currentLessonId?: number;
   onLessonSelect: (lesson: Lesson) => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-const LessonsPanel: React.FC<LessonsPanelProps> = ({ lessons, currentLessonId, onLessonSelect }) => {
-  const [expandedGroups, setExpandedGroups] = React.useState<string[]>(['Introduction']);
+const LessonsPanel: React.FC<LessonsPanelProps> = ({ lessons, currentLessonId, onLessonSelect, isOpen, onClose }) => {
+  const [expandedGroups, setExpandedGroups] = React.useState<string[]>(['Box Model']);
 
   const toggleGroup = (groupTitle: string) => {
     setExpandedGroups(prev => 
@@ -67,10 +69,44 @@ const LessonsPanel: React.FC<LessonsPanelProps> = ({ lessons, currentLessonId, o
     );
   };
 
+  const handleLessonClick = (lesson: Lesson) => {
+    onLessonSelect(lesson);
+    // Close panel on mobile after selecting a lesson
+    if (window.innerWidth < 768) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="w-80 bg-slate-900 border-l border-slate-700 flex flex-col shadow-xl">
-      <div className="p-4 border-b border-slate-700 bg-gradient-to-r from-slate-800 to-slate-900">
+    <>
+      {/* Mobile overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={onClose}
+        />
+      )}
+      
+      {/* Panel */}
+      <div className={`
+        fixed md:relative top-0 right-0 h-full z-50 md:z-auto
+        w-80 md:w-80 lg:w-96
+        bg-slate-900 border-l border-slate-700 flex flex-col shadow-xl
+        transform transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
+      `}>
+      <div className="p-4 border-b border-slate-700 bg-gradient-to-r from-slate-800 to-slate-900 flex justify-between items-center">
         <h2 className="text-lg font-semibold text-white">CSS Course Lessons</h2>
+        {/* Close button for mobile */}
+        <button
+          onClick={onClose}
+          className="md:hidden p-1 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+          aria-label="Close lessons panel"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto bg-slate-900">
         {lessons.map((group) => (
@@ -103,7 +139,7 @@ const LessonsPanel: React.FC<LessonsPanelProps> = ({ lessons, currentLessonId, o
                 {group.lessons.map((lesson) => (
                   <div
                     key={lesson.id}
-                    onClick={() => onLessonSelect(lesson)}
+                    onClick={() => handleLessonClick(lesson)}
                     className={`pl-8 pr-4 py-3 border-b border-slate-700 cursor-pointer hover:bg-slate-800 focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-inset text-slate-100 transition-all duration-200 group ${
                       currentLessonId === lesson.id ? 'bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-indigo-800 hover:to-indigo-700 border-l-4 border-l-indigo-400' : ''
                     }`}
@@ -112,7 +148,7 @@ const LessonsPanel: React.FC<LessonsPanelProps> = ({ lessons, currentLessonId, o
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        onLessonSelect(lesson);
+                        handleLessonClick(lesson);
                       }
                     }}
                   >
@@ -130,12 +166,14 @@ const LessonsPanel: React.FC<LessonsPanelProps> = ({ lessons, currentLessonId, o
         ))}
       </div>
     </div>
+    </>
   );
 };
 
 const CssCourse: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isLoading } = useUrlQuery();
+  const [isLessonsPanelOpen, setIsLessonsPanelOpen] = React.useState(false);
   const currentScrimUrl = searchParams.get('scrimUrl');
   
   // Find current lesson across all groups
@@ -147,13 +185,28 @@ const CssCourse: React.FC = () => {
     setSearchParams({ scrimUrl: lesson.scrimUrl });
   };
 
+  const toggleLessonsPanel = () => {
+    setIsLessonsPanelOpen(prev => !prev);
+  };
+
   return (
-    <div className='flex'>
-      <div className="flex-grow-1 w-auto h-screen bg-slate-900 text-slate-100 relative">
-        <div className="bg-slate-800">
+    <div className='flex h-screen overflow-hidden'>
+      <div className="flex-1 bg-slate-900 text-slate-100 relative">
+        {/* Mobile lessons toggle button */}
+        <button
+          onClick={toggleLessonsPanel}
+          className="md:hidden fixed top-4 right-4 z-30 p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-lg transition-colors"
+          aria-label="Toggle lessons panel"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
+        <div className="bg-slate-800 h-full">
           <CodeEditor showImportExport={false} />
         </div>
-        <Preview positioning="absolute"  />
+        <Preview positioning="absolute" />
         <CursorComponent hasParent />
         <MediaControls showRecord={false} positioning="absolute" />
         
@@ -165,10 +218,13 @@ const CssCourse: React.FC = () => {
           </div>
         </div>
       </div>
+      
       <LessonsPanel
         lessons={CSS_LESSONS}
         currentLessonId={currentLessonId}
         onLessonSelect={handleLessonSelect}
+        isOpen={isLessonsPanelOpen}
+        onClose={() => setIsLessonsPanelOpen(false)}
       />
     </div>
   );

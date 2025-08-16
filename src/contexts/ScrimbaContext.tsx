@@ -19,21 +19,12 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
   const originalScrimbaHook = useScrimba({
     editorRef,
     enableAudioRecording: true, // Enable built-in synchronized audio recording
-    onRecordingStart: () => {
-      console.log('📹 Synchronized recording started');
-    },
+    onRecordingStart: () => {},
     onRecordingStop: (recording) => {
-      console.log('⏹️ Synchronized recording stopped', recording);
-      console.log('🎤 Audio synchronized:', !!recording.audioBlob, recording.audioBlob ? `(${recording.audioBlob.size} bytes)` : '');
-      console.log('📏 Duration:', recording.duration, 'ms');
       originalScrimbaHook.loadRecording(recording);
     },
-    onPlaybackStart: () => {
-      console.log('▶️ Playback started');
-    },
-    onPlaybackPause: () => {
-      console.log('⏸️ Playback paused');
-    },
+    onPlaybackStart: () => {},
+    onPlaybackPause: () => {},
     onError: (error: Error) => {
       console.error('🚨 Scrimba error:', error);
     },
