@@ -190,7 +190,7 @@ const CssCourse: React.FC = () => {
   };
 
   return (
-    <div className='flex h-screen overflow-hidden'>
+    <div className='flex h-svh overflow-auto'>
       <div className="flex-1 bg-slate-900 text-slate-100 relative">
         {/* Mobile lessons toggle button */}
         <button
