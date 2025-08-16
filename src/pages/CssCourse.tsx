@@ -8,10 +8,30 @@ import { useUrlQuery } from '../hooks/useUrlQuery';
 
 const CSS_LESSONS = [
   {
-    groupTitle: "Shadows",
+    groupTitle: "Box Model",
     lessons: [
       {
         id: 1,
+        title: "Introduction to the Box Model",
+        scrimUrl: "/lessons/introduction-to-box-model.scrimba"
+      },
+      {
+        id: 2,
+        title: "Content and Sizing",
+        scrimUrl: "/lessons/content-and-sizing.scrimba"
+      },
+       {
+        id: 3,
+        title: "The Areas of the Box Model",
+        scrimUrl: "/lessons/the-areas-of-the-box-model.scrimba"
+      },
+    ]
+  },
+  {
+    groupTitle: "Shadows",
+    lessons: [
+      {
+        id: 4,
         title: "Text Shadow",
         scrimUrl: "/lessons/text-shadow.scrimba"
       },
