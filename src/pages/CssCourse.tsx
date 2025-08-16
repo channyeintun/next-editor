@@ -30,13 +30,18 @@ const CSS_LESSONS = [
         title: "Debug the Box Model",
         scrimUrl: "/lessons/debug-the-box-model.scrimba"
       },
+      {
+        id: 5,
+        title: "Control the Box Model",
+        scrimUrl: "/lessons/control-the-box-model.scrimba"
+      },
     ]
   },
   {
     groupTitle: "Shadows",
     lessons: [
       {
-        id: 6,
+        id: 99,
         title: "Text Shadow",
         scrimUrl: "/lessons/text-shadow.scrimba"
       },
@@ -210,11 +215,11 @@ const CssCourse: React.FC = () => {
   <img src="./web-dev-css.webp" width="100%" style="object-fit: contain;" />
 </html>
               `}
-            showImportExport={false} />
+            showImportExport={true} />
         </div>
         <Preview positioning="absolute" />
         <CursorComponent hasParent />
-        <MediaControls showRecord={false} positioning="absolute" />
+        <MediaControls showRecord={true} positioning="absolute" />
         
         {/* Loading overlay */}
         <div className={`absolute inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity duration-300 ${isLoading ? 'opacity-100 delay-300' : 'opacity-0 pointer-events-none'}`}>
