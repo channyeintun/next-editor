@@ -15,6 +15,10 @@ interface ScrimbaProviderProps {
 export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
+  const getSlideStateRef = useRef<(() => { previewState: any; currentSlideIndex: number } | null) | null>(null);
+  const applySlideStateRef = useRef<((slideState: any, currentSlideIndex: number) => void) | null>(null);
+  const getSlidesRef = useRef<(() => Array<{id: string; imageUrl: string; name?: string; order: number}> | null) | null>(null);
+  const applySlidesRef = useRef<((slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void) | null>(null);
   
   const originalScrimbaHook = useScrimba({
     editorRef,
@@ -29,6 +33,10 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
       console.error('🚨 Scrimba error:', error);
     },
     pauseOnUserInteraction: true,
+    getSlideState: () => getSlideStateRef.current?.() || null,
+    applySlideState: (slideState, currentSlideIndex) => applySlideStateRef.current?.(slideState, currentSlideIndex),
+    getSlides: () => getSlidesRef.current?.() || null,
+    applySlides: (slides) => applySlidesRef.current?.(slides),
   });
 
 
@@ -52,6 +60,20 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
         console.warn('Failed to load recordings from storage:', error);
         return [];
       }
+    },
+    // Slide state registration
+    registerSlideStateGetter: (getter: () => { previewState: any; currentSlideIndex: number } | null) => {
+      getSlideStateRef.current = getter;
+    },
+    registerSlideStateApplier: (applier: (slideState: any, currentSlideIndex: number) => void) => {
+      applySlideStateRef.current = applier;
+    },
+    // Slides data registration
+    registerSlidesGetter: (getter: () => Array<{id: string; imageUrl: string; name?: string; order: number}> | null) => {
+      getSlidesRef.current = getter;
+    },
+    registerSlidesApplier: (applier: (slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void) => {
+      applySlidesRef.current = applier;
     },
   };
 

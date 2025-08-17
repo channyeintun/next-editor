@@ -6,6 +6,7 @@ import type {
   Recording,
   EditorSnapshot
 } from './types';
+import type { SlideEvent } from '../../types/slides';
 import { useAudioRecording } from './hooks/useAudioRecording';
 import { isValidSnapshotState, isEditorReady } from './utils/validation';
 import { applyContentDiff } from './utils/editorDiff';
@@ -31,6 +32,11 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     onSnapshot,
     onStateChange,
     onPlaybackUpdate,
+    onSlideEvent,
+    getSlideState,
+    applySlideState,
+    getSlides,
+    applySlides,
   } = config;
 
   // Simple React state management like the demo
@@ -47,6 +53,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
   // Recording data like the demo
   const snapshotsRef = useRef<EditorSnapshot[]>([]);
+  const slideEventsRef = useRef<SlideEvent[]>([]);
   const startTimeRef = useRef<number>(0);
 
   // Audio instance management like the demo
@@ -135,6 +142,9 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       // Get current mouse cursor position relative to document
       const mouseCursorPosition = lastMousePositionRef.current;
 
+      // Get current slide state if available
+      const slideState = getSlideState?.();
+
       const snapshot: EditorSnapshot = {
         timestamp,
         state: {
@@ -155,13 +165,27 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
           } as monaco.Position,
           viewState,
           mouseCursor: mouseCursorPosition,
+          slideState: slideState?.previewState,
+          currentSlideIndex: slideState?.currentSlideIndex,
         }
       };
 
       snapshotsRef.current.push(snapshot);
       onSnapshot?.(snapshot);
     }
-  }, [isRecording, onSnapshot, editorRef]);
+  }, [isRecording, onSnapshot, editorRef, getSlideState]);
+
+  // Handle slide events during recording
+  const handleSlideEvent = useCallback((event: SlideEvent) => {
+    if (isRecording) {
+      const adjustedEvent = {
+        ...event,
+        timestamp: performance.now() - startTimeRef.current
+      };
+      slideEventsRef.current.push(adjustedEvent);
+    }
+    onSlideEvent?.(event);
+  }, [isRecording, onSlideEvent]);
 
   // Handle editor events
   useEffect(() => {
@@ -353,6 +377,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     try {
       // Clear previous recording data
       snapshotsRef.current = [];
+      slideEventsRef.current = [];
 
       // Set start time
       startTimeRef.current = performance.now();
@@ -428,11 +453,16 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         }
       }
 
+      // Get final slides data if available
+      const finalSlides = getSlides?.();
+
       const recordingData: Recording = {
         id: Date.now().toString(),
         name: `Recording ${Date.now()}`,
         createdAt: Date.now(),
         snapshots: [...snapshotsRef.current],
+        slideEvents: [...slideEventsRef.current],
+        slides: finalSlides || undefined,
         duration: finalDuration,
         audioBlob: enableAudioRecording ? finalAudioBlob : undefined,
       };
@@ -443,7 +473,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     } catch (error) {
       onError?.(error as Error);
     }
-  }, [isRecording, audioRecording, enableAudioRecording, onRecordingStop, onError, calculateDurationFromFileReader]);
+  }, [isRecording, audioRecording, enableAudioRecording, onRecordingStop, onError, calculateDurationFromFileReader, getSlides]);
 
   // Simple playback state management
   const cleanupPlayback = useCallback(() => {
@@ -542,12 +572,17 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         }
       }
 
+      // Apply slide state if available
+      if (snapshot.state.slideState && snapshot.state.currentSlideIndex !== undefined && applySlideState) {
+        applySlideState(snapshot.state.slideState, snapshot.state.currentSlideIndex);
+      }
+
       setCurrentSnapshot(snapshot);
       onStateChange?.(snapshot.state);
     } catch (error) {
       console.warn('Error applying editor state:', error);
     }
-  }, [onStateChange, editorRef, isPlaying]);
+  }, [onStateChange, editorRef, isPlaying, applySlideState]);
 
   // Independent timeline playback synchronization
   useEffect(() => {
@@ -889,11 +924,16 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     setIsPlaying(false);
     setIsPaused(false);
 
+    // Apply slides data if available
+    if (recording.slides && applySlides) {
+      applySlides(recording.slides);
+    }
+
     // Apply initial state
     if (recording.snapshots.length > 0) {
       applyEditorState(recording.snapshots[0]);
     }
-  }, [cleanupPlayback, calculateDurationFromFileReader, applyEditorState]);
+  }, [cleanupPlayback, calculateDurationFromFileReader, applyEditorState, applySlides]);
 
 
 
@@ -972,6 +1012,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
 
     // Monaco Editor Integration
     handleEditorChange,
+    handleSlideEvent,
 
     // Helper functions
     getEditorState,
