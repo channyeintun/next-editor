@@ -1,5 +1,5 @@
 import type * as monaco from 'monaco-editor';
-import type { SlideEvent, SlidePreviewState } from '../../types/slides';
+import type { SlideEvent, SlidePreviewState } from './slides';
 
 /**
  * Mouse cursor position relative to editor container

@@ -3,6 +3,7 @@ const commonjs = require('@rollup/plugin-commonjs');
 const typescript = require('@rollup/plugin-typescript');
 const terser = require('@rollup/plugin-terser');
 const { default: dts } = require('rollup-plugin-dts');
+const postcss = require('rollup-plugin-postcss');
 const { readFileSync } = require('fs');
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf8'));
@@ -22,16 +23,23 @@ module.exports = [
         file: pkg.main,
         format: 'cjs',
         sourcemap: true,
+        inlineDynamicImports: true,
       },
       {
         file: pkg.module,
         format: 'esm',
         sourcemap: true,
+        inlineDynamicImports: true,
       },
     ],
     plugins: [
       resolve(),
       commonjs(),
+      postcss({
+        extract: false, // Don't extract CSS to separate file
+        inject: false, // Don't inject CSS into JS
+        minimize: true,
+      }),
       typescript({
         tsconfig: './tsconfig.json',
         declaration: false, // We'll generate declarations separately

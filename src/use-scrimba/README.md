@@ -14,6 +14,8 @@ A powerful React hook for recording and replaying Monaco Editor interactions wit
 
 🎨 **Highly Customizable** - Extensive configuration options for recording and playback behavior
 
+🎞️ **Slide Presentations** - Record and replay slide presentations with synchronized state
+
 📦 **TypeScript Ready** - Full TypeScript support with comprehensive type definitions
 
 ## Demo
@@ -158,6 +160,13 @@ interface UseScrimbaConfig {
   onSnapshot?: (snapshot: EditorSnapshot) => void;
   onStateChange?: (state: EditorState) => void;
   onPlaybackUpdate?: (currentTime: number, snapshot: EditorSnapshot | null) => void;
+  
+  // Slide integration callbacks
+  onSlideEvent?: (event: SlideEvent) => void;
+  getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
+  applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
+  getSlides?: () => Array<{id: string; imageUrl: string; name?: string; order: number}> | null;
+  applySlides?: (slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void;
 }
 ```
 
@@ -200,12 +209,131 @@ interface UseScrimbaReturn {
   
   // Monaco Editor Integration
   handleEditorChange: () => void;
+  handleSlideEvent: (event: SlideEvent) => void;
   
   // Helper functions
   getEditorState: () => EditorState | null;
   getSnapshot: (timestamp?: number) => EditorSnapshot | null;
 }
 ```
+
+## Slide Presentations
+
+useScrimba supports recording and replaying slide presentations alongside code changes. This feature allows you to create interactive tutorials with synchronized slides.
+
+### Slide Integration
+
+To integrate slides with your recordings, you need to provide getter and setter functions for slide state and slide data:
+
+```typescript
+const {
+  // ... other useScrimba return values
+  handleSlideEvent,
+} = useScrimba({
+  editorRef,
+  enableAudioRecording: true,
+  
+  // Slide state callbacks
+  getSlideState: () => ({
+    previewState: {
+      isOpen: boolean,      // Whether slides are visible
+      isMaximized: boolean, // Whether slides are in fullscreen
+      currentSlideId: string | null // Current slide ID
+    },
+    currentSlideIndex: number // Current slide index
+  }),
+  
+  applySlideState: (slideState, currentSlideIndex) => {
+    // Apply slide state during playback
+    // Update your slide components to match the recorded state
+  },
+  
+  getSlides: () => [
+    // Array of slide objects
+    { id: 'slide1', imageUrl: 'https://...', order: 0 },
+    { id: 'slide2', imageUrl: 'https://...', order: 1 },
+  ],
+  
+  applySlides: (slides) => {
+    // Restore slides data when loading a recording
+    // Set your slides array to the provided data
+  },
+  
+  // Handle slide events during recording
+  onSlideEvent: (event) => {
+    // Optional: Handle slide events for custom logic
+    console.log('Slide event:', event);
+  }
+});
+```
+
+### Slide Events
+
+During recording, slide interactions are captured as events:
+
+```typescript
+interface SlideEvent {
+  type: 'slide_open' | 'slide_close' | 'slide_change' | 'slide_maximize' | 'slide_minimize';
+  timestamp: number;
+  slideId?: string;
+  isMaximized?: boolean;
+}
+```
+
+Use `handleSlideEvent` to record slide interactions:
+
+```typescript
+// When user opens slides
+handleSlideEvent({
+  type: 'slide_open',
+  timestamp: performance.now(),
+  slideId: currentSlide.id
+});
+
+// When user changes slides
+handleSlideEvent({
+  type: 'slide_change', 
+  timestamp: performance.now(),
+  slideId: newSlide.id
+});
+
+// When user maximizes slides
+handleSlideEvent({
+  type: 'slide_maximize',
+  timestamp: performance.now(),
+  slideId: currentSlide.id,
+  isMaximized: true
+});
+```
+
+### Recording Data Structure
+
+Slide data is efficiently stored in recordings:
+
+```typescript
+interface Recording {
+  id: string;
+  name: string;
+  snapshots: EditorSnapshot[];        // Code and slide state changes
+  slideEvents?: SlideEvent[];         // Slide interaction events
+  slides?: Array<{                    // Slide data (stored once per recording)
+    id: string;
+    imageUrl: string;
+    name?: string;
+    order: number;
+  }>;
+  audioBlob?: Blob;
+  duration: number;
+  createdAt: number;
+}
+```
+
+### Best Practices
+
+1. **Efficient Storage**: Slide data is stored once per recording, while only slide state changes are captured in snapshots
+2. **State Synchronization**: Slide state is automatically synchronized during playback
+3. **User Interaction**: Slide navigation is automatically disabled during playback to prevent desynchronization
+4. **Event Recording**: All slide interactions (open/close, maximize/minimize, navigation) are recorded and replayed
 
 ## Key Benefits
 

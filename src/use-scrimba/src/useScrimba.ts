@@ -6,7 +6,7 @@ import type {
   Recording,
   EditorSnapshot
 } from './types';
-import type { SlideEvent } from '../../types/slides';
+import type { SlideEvent } from './slides';
 import { useAudioRecording } from './hooks/useAudioRecording';
 import { isValidSnapshotState, isEditorReady } from './utils/validation';
 import { applyContentDiff } from './utils/editorDiff';
