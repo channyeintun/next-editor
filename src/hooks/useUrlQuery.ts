@@ -25,7 +25,7 @@ export const useUrlQuery = () => {
         console.error('Failed to load scrim from URL query:', error);
       });
     }
-  }, [searchParams, fetchScrimbaFile]); // React to changes in searchParams
+  }, [searchParams]); // Only react to changes in searchParams
 
   return { isLoading };
 };
