@@ -1,6 +1,27 @@
 import { useState, useRef, useCallback } from 'react';
 import { calculateDurationFromFileReader } from '../utils/audioDuration';
 
+const getSupportedAudioMimeType = (): string => {
+  const mimeTypes = [
+    'audio/webm; codecs=opus',
+    'audio/webm',
+    'audio/mp4; codecs=mp4a.40.2',
+    'audio/mp4',
+    'audio/ogg; codecs=opus',
+    'audio/ogg',
+    'audio/wav',
+    'audio/mpeg'
+  ];
+
+  for (const mimeType of mimeTypes) {
+    if (MediaRecorder.isTypeSupported(mimeType)) {
+      return mimeType;
+    }
+  }
+
+  return '';
+};
+
 export interface UseAudioRecordingReturn {
   isRecordingAudio: boolean;
   audioBlob: Blob | null;
@@ -22,6 +43,7 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingStartTimeRef = useRef<number | null>(null);
+  const mimeTypeRef = useRef<string>('');
 
   const startRecording = useCallback(async () => {
     try {
@@ -38,7 +60,12 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
         }
       });
 
-      const mimeType = "audio/webm; codecs=opus";
+      const mimeType = getSupportedAudioMimeType();
+      if (!mimeType) {
+        throw new Error('No supported audio MIME type found');
+      }
+      
+      mimeTypeRef.current = mimeType;
       const mediaRecorder = new MediaRecorder(stream, {
         audioBitsPerSecond: 32000,
         mimeType: mimeType,
@@ -72,7 +99,7 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
         mediaRecorder.onstop = async () => {
           stream.getTracks().forEach(track => track.stop());
           
-          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm; codecs=opus" });
+          const audioBlob = new Blob(audioChunksRef.current, { type: mimeTypeRef.current });
           
           setAudioBlob(audioBlob);
           resolve(audioBlob);
