@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type * as monaco from 'monaco-editor';
+import * as monaco from 'monaco-editor';
 import type {
   UseScrimbaConfig,
   UseScrimbaReturn,
@@ -493,7 +493,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
             
             // Add cursor decorations only during playback
             if (isPlaying) {
-              const newDecorations = [];
+              const newDecorations: monaco.editor.IModelDeltaDecoration[] = [];
               
               // Get all current selections to decorate all cursors
               const currentSelections = editor.getSelections() || [snapshot.state.selection];
