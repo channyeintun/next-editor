@@ -1,4 +1,5 @@
 import type * as monaco from 'monaco-editor';
+import type { SlideEvent, SlidePreviewState } from '../../types/slides';
 
 /**
  * Mouse cursor position relative to editor container
@@ -20,6 +21,8 @@ export interface EditorSnapshot {
     position: monaco.Position; // Text caret position
     viewState: monaco.editor.ICodeEditorViewState | null;
     mouseCursor?: MouseCursorPosition; // Mouse cursor position
+    slideState?: SlidePreviewState; // Slide preview state
+    currentSlideIndex?: number; // Current slide index
   };
 }
 
@@ -30,6 +33,7 @@ export interface Recording {
   id: string;
   name: string;
   snapshots: EditorSnapshot[];
+  slideEvents?: SlideEvent[];
   audioBlob?: Blob;
   duration: number;
   createdAt: number;
@@ -63,6 +67,9 @@ export interface UseScrimbaConfig {
   onSnapshot?: (snapshot: EditorSnapshot) => void;
   onStateChange?: (state: EditorState) => void;
   onPlaybackUpdate?: (currentTime: number, snapshot: EditorSnapshot | null) => void;
+  onSlideEvent?: (event: SlideEvent) => void;
+  getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
+  applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
 }
 
 /**
@@ -74,6 +81,8 @@ export interface EditorState {
   position: monaco.Position;
   viewState: monaco.editor.ICodeEditorViewState | null;
   mouseCursor?: MouseCursorPosition;
+  slideState?: SlidePreviewState;
+  currentSlideIndex?: number;
 }
 
 
@@ -116,6 +125,7 @@ export interface UseScrimbaReturn {
   
   // Monaco Editor Integration
   handleEditorChange: () => void;
+  handleSlideEvent: (event: SlideEvent) => void;
   
   // Helper functions
   getEditorState: () => EditorState | null;

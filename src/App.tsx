@@ -3,7 +3,9 @@ import CodeEditor from './components/CodeEditor';
 import MediaControls from './components/MediaControls';
 import DragDropOverlay from './components/DragDropOverlay';
 import Preview from './components/Preview.tsx';
+import SlidePanel from './components/SlidePanel';
 import { ScrimbaProvider } from './contexts/ScrimbaContext.tsx';
+import { SlidesProvider } from './contexts/SlidesContext';
 import { useDragAndDropUrl } from './hooks/useDragAndDropUrl';
 import { useUrlQuery } from './hooks/useUrlQuery';
 import CssCourse from './pages/CssCourse';
@@ -13,10 +15,12 @@ import CursorComponent from './components/Cursor.tsx';
 function App() {
   return (
     <ScrimbaProvider>
-      <Routes>
-        <Route path="/" element={<AppContent />} />
-        <Route path="/css-course" element={<CssCourse />} />
-      </Routes>
+      <SlidesProvider>
+        <Routes>
+          <Route path="/" element={<AppContent />} />
+          <Route path="/css-course" element={<CssCourse />} />
+        </Routes>
+      </SlidesProvider>
     </ScrimbaProvider>
   );
 }
@@ -35,6 +39,7 @@ function AppContent() {
       <MediaControls />
       <CursorComponent />
       <Preview />
+      <SlidePanel />
       
       <DragDropOverlay isDragging={isDragging} isLoading={isLoading} />
     </div>

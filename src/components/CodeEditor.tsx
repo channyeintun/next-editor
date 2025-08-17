@@ -1,6 +1,7 @@
 import React from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { useScrimbaContext } from '../hooks/useScrimbaContext';
+import SlidesButton from './SlidesButton';
 
 interface CodeEditorProps {
   language?: string;
@@ -211,7 +212,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       <div className="bg-gray-700 px-4 py-2 flex items-center justify-between">
         <span className="text-sm font-medium text-gray-300">use-scrimba</span>
         {showImportExport && (
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 relative">
             {/* Import/Export buttons */}
             <button
               onClick={handleImport}
@@ -226,6 +227,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
             >
               Export
             </button>
+            {/* Slides Button */}
+            <SlidesButton />
           </div>
         )}
       </div>

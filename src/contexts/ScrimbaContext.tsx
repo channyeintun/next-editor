@@ -15,6 +15,8 @@ interface ScrimbaProviderProps {
 export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
+  const getSlideStateRef = useRef<(() => { previewState: any; currentSlideIndex: number } | null) | null>(null);
+  const applySlideStateRef = useRef<((slideState: any, currentSlideIndex: number) => void) | null>(null);
   
   const originalScrimbaHook = useScrimba({
     editorRef,
@@ -29,6 +31,8 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
       console.error('🚨 Scrimba error:', error);
     },
     pauseOnUserInteraction: true,
+    getSlideState: () => getSlideStateRef.current?.() || null,
+    applySlideState: (slideState, currentSlideIndex) => applySlideStateRef.current?.(slideState, currentSlideIndex),
   });
 
 
@@ -52,6 +56,13 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
         console.warn('Failed to load recordings from storage:', error);
         return [];
       }
+    },
+    // Slide state registration
+    registerSlideStateGetter: (getter: () => { previewState: any; currentSlideIndex: number } | null) => {
+      getSlideStateRef.current = getter;
+    },
+    registerSlideStateApplier: (applier: (slideState: any, currentSlideIndex: number) => void) => {
+      applySlideStateRef.current = applier;
     },
   };
 
