@@ -108,25 +108,6 @@ function MyCodeEditor() {
 }
 ```
 
-## Styling
-
-For the cursor decoration during playback to work properly, you need to add this CSS to your application:
-
-```css
-.playback-cursor-decoration {
-  background-color: rgba(0, 122, 204, 0.3);
-  border-left: 2px solid #007ACC;
-  animation: cursor-blink 1s infinite;
-}
-
-@keyframes cursor-blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0.3; }
-}
-```
-
-This provides a blinking blue cursor decoration that highlights the current cursor position during playback without requiring editor focus.
-
 ## API Reference
 
 ### useScrimba(config)
