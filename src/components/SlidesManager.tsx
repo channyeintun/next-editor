@@ -50,7 +50,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
   }, [slides, onSlidesChange]);
 
   return (
-    <div className="slides-manager bg-white rounded-lg shadow-lg p-4 max-w-md">
+    <div className="bg-white rounded-lg shadow-lg p-4 max-w-md">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-800">Presentation Slides</h3>
         <div className="flex items-center gap-2">
@@ -59,7 +59,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
               onClick={onStartPresentation}
               className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
             >
-              Start Presentation
+              Ready
             </button>
           )}
           {onClose && (
@@ -82,8 +82,8 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
             value={newSlideUrl}
             onChange={(e) => setNewSlideUrl(e.target.value)}
             placeholder="Image URL (absolute/full path)"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
-            onKeyPress={(e) => e.key === 'Enter' && addSlide()}
+            className="min-w-3xs flex-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            onKeyDown={(e) => e.key === 'Enter' && addSlide()}
           />
           <button
             onClick={addSlide}
@@ -98,7 +98,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
       <div className="space-y-2 max-h-60 overflow-y-auto">
         {slides.length === 0 ? (
           <p className="text-gray-500 text-sm text-center py-4">
-            No slides added yet. Add an image URL to get started.
+            No slides added yet.<br />Add an image URL to get started.
           </p>
         ) : (
           slides.map((slide, index) => (
