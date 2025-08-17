@@ -17,6 +17,8 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
   const jsonStorage = useRef(createJsonStorage());
   const getSlideStateRef = useRef<(() => { previewState: any; currentSlideIndex: number } | null) | null>(null);
   const applySlideStateRef = useRef<((slideState: any, currentSlideIndex: number) => void) | null>(null);
+  const getSlidesRef = useRef<(() => Array<{id: string; imageUrl: string; name?: string; order: number}> | null) | null>(null);
+  const applySlidesRef = useRef<((slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void) | null>(null);
   
   const originalScrimbaHook = useScrimba({
     editorRef,
@@ -33,6 +35,8 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
     pauseOnUserInteraction: true,
     getSlideState: () => getSlideStateRef.current?.() || null,
     applySlideState: (slideState, currentSlideIndex) => applySlideStateRef.current?.(slideState, currentSlideIndex),
+    getSlides: () => getSlidesRef.current?.() || null,
+    applySlides: (slides) => applySlidesRef.current?.(slides),
   });
 
 
@@ -63,6 +67,13 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
     },
     registerSlideStateApplier: (applier: (slideState: any, currentSlideIndex: number) => void) => {
       applySlideStateRef.current = applier;
+    },
+    // Slides data registration
+    registerSlidesGetter: (getter: () => Array<{id: string; imageUrl: string; name?: string; order: number}> | null) => {
+      getSlidesRef.current = getter;
+    },
+    registerSlidesApplier: (applier: (slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void) => {
+      applySlidesRef.current = applier;
     },
   };
 

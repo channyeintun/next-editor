@@ -35,6 +35,8 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     onSlideEvent,
     getSlideState,
     applySlideState,
+    getSlides,
+    applySlides,
   } = config;
 
   // Simple React state management like the demo
@@ -451,12 +453,16 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         }
       }
 
+      // Get final slides data if available
+      const finalSlides = getSlides?.();
+
       const recordingData: Recording = {
         id: Date.now().toString(),
         name: `Recording ${Date.now()}`,
         createdAt: Date.now(),
         snapshots: [...snapshotsRef.current],
         slideEvents: [...slideEventsRef.current],
+        slides: finalSlides || undefined,
         duration: finalDuration,
         audioBlob: enableAudioRecording ? finalAudioBlob : undefined,
       };
@@ -467,7 +473,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     } catch (error) {
       onError?.(error as Error);
     }
-  }, [isRecording, audioRecording, enableAudioRecording, onRecordingStop, onError, calculateDurationFromFileReader]);
+  }, [isRecording, audioRecording, enableAudioRecording, onRecordingStop, onError, calculateDurationFromFileReader, getSlides]);
 
   // Simple playback state management
   const cleanupPlayback = useCallback(() => {
@@ -918,11 +924,16 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     setIsPlaying(false);
     setIsPaused(false);
 
+    // Apply slides data if available
+    if (recording.slides && applySlides) {
+      applySlides(recording.slides);
+    }
+
     // Apply initial state
     if (recording.snapshots.length > 0) {
       applyEditorState(recording.snapshots[0]);
     }
-  }, [cleanupPlayback, calculateDurationFromFileReader, applyEditorState]);
+  }, [cleanupPlayback, calculateDurationFromFileReader, applyEditorState, applySlides]);
 
 
 

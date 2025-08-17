@@ -11,7 +11,7 @@ export default function SlidePanel() {
     handleSlideEvent: onSlideEvent,
   } = useSlidesContext();
   
-  const { stop } = useScrimbaContext();
+  const { pause } = useScrimbaContext();
 
   return (
     <>
@@ -21,7 +21,7 @@ export default function SlidePanel() {
         currentSlideIndex={currentSlideIndex}
         onSlideChange={goToSlide}
         onSlideEvent={onSlideEvent}
-        onStopPlayback={stop}
+        onStopPlayback={pause}
         isOpen={previewState.isOpen}
         isMaximized={previewState.isMaximized}
         positioning="fixed"

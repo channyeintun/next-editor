@@ -17,4 +17,7 @@ export const ScrimbaContext = createContext<(UseScrimbaReturn & {
   // Slide state registration
   registerSlideStateGetter: (getter: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null) => void;
   registerSlideStateApplier: (applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void) => void;
+  // Slides data registration
+  registerSlidesGetter: (getter: () => Array<{id: string; imageUrl: string; name?: string; order: number}> | null) => void;
+  registerSlidesApplier: (applier: (slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void) => void;
 }) | null>(null);

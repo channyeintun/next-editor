@@ -14,6 +14,8 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
   const { handleSlideEvent } = scrimbaContext;
   const registerSlideStateGetter = 'registerSlideStateGetter' in scrimbaContext ? scrimbaContext.registerSlideStateGetter : undefined;
   const registerSlideStateApplier = 'registerSlideStateApplier' in scrimbaContext ? scrimbaContext.registerSlideStateApplier : undefined;
+  const registerSlidesGetter = 'registerSlidesGetter' in scrimbaContext ? scrimbaContext.registerSlidesGetter : undefined;
+  const registerSlidesApplier = 'registerSlidesApplier' in scrimbaContext ? scrimbaContext.registerSlidesApplier : undefined;
   
   const slidesData = useSlides({
     onSlideEvent: handleSlideEvent
@@ -28,6 +30,13 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
       }));
     }
   }, [registerSlideStateGetter, slidesData.previewState, slidesData.currentSlideIndex]);
+
+  // Register slides data getter with ScrimbaProvider
+  useEffect(() => {
+    if (registerSlidesGetter && typeof registerSlidesGetter === 'function') {
+      registerSlidesGetter(() => slidesData.slides);
+    }
+  }, [registerSlidesGetter, slidesData.slides]);
 
   useEffect(() => {
     if (registerSlideStateApplier && typeof registerSlideStateApplier === 'function') {
@@ -54,6 +63,15 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
       });
     }
   }, [registerSlideStateApplier, slidesData]);
+
+  // Register slides data applier with ScrimbaProvider
+  useEffect(() => {
+    if (registerSlidesApplier && typeof registerSlidesApplier === 'function') {
+      registerSlidesApplier((slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => {
+        slidesData.setSlides(slides);
+      });
+    }
+  }, [registerSlidesApplier, slidesData]);
 
   return (
     <SlidesContext.Provider value={slidesData}>

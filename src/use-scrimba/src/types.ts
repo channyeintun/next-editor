@@ -34,6 +34,7 @@ export interface Recording {
   name: string;
   snapshots: EditorSnapshot[];
   slideEvents?: SlideEvent[];
+  slides?: Array<{id: string; imageUrl: string; name?: string; order: number}>;
   audioBlob?: Blob;
   duration: number;
   createdAt: number;
@@ -70,6 +71,8 @@ export interface UseScrimbaConfig {
   onSlideEvent?: (event: SlideEvent) => void;
   getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
   applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
+  getSlides?: () => Array<{id: string; imageUrl: string; name?: string; order: number}> | null;
+  applySlides?: (slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void;
 }
 
 /**

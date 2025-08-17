@@ -71,49 +71,49 @@ export default function SlidePreview({
     if (size === 'small') {
       setSize('large');
       emitSlideEvent('slide_maximize', currentSlide?.id, true);
+      // Pause playback when maximizing through click
+      onStopPlayback?.();
     }
   };
 
-  const handleMinimize = () => {
+  const handleMinimize = useCallback(() => {
     setSize('small');
     emitSlideEvent('slide_minimize', currentSlide?.id, false);
     // Stop playback when minimizing
     onStopPlayback?.();
-  };
+  }, [emitSlideEvent, currentSlide?.id, onStopPlayback]);
 
   const handleMaximize = () => {
     const newSize = size === 'large' ? 'small' : 'large';
     setSize(newSize);
     emitSlideEvent(newSize === 'large' ? 'slide_maximize' : 'slide_minimize', currentSlide?.id, newSize === 'large');
-    // Stop playback when minimizing (going from large to small)
-    if (newSize === 'small') {
-      onStopPlayback?.();
-    }
+    // Pause playback on any size change (both maximize and minimize)
+    onStopPlayback?.();
   };
 
 
-  const goToNextSlide = () => {
+  const goToNextSlide = useCallback(() => {
     if (currentSlideIndex < slides.length - 1) {
       const newIndex = currentSlideIndex + 1;
       onSlideChange(newIndex);
       emitSlideEvent('slide_change', slides[newIndex]?.id);
     }
-  };
+  }, [currentSlideIndex, slides, onSlideChange, emitSlideEvent]);
 
-  const goToPrevSlide = () => {
+  const goToPrevSlide = useCallback(() => {
     if (currentSlideIndex > 0) {
       const newIndex = currentSlideIndex - 1;
       onSlideChange(newIndex);
       emitSlideEvent('slide_change', slides[newIndex]?.id);
     }
-  };
+  }, [currentSlideIndex, onSlideChange, emitSlideEvent, slides]);
 
   // Emit slide open event when component first opens
   useEffect(() => {
     if (isOpen && currentSlide) {
       emitSlideEvent('slide_open', currentSlide.id);
     }
-  }, [isOpen, currentSlide?.id, emitSlideEvent]);
+  }, [isOpen, currentSlide, emitSlideEvent]);
 
   // Keyboard navigation for large mode
   useEffect(() => {
