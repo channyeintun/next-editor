@@ -24,6 +24,9 @@ export default function SlidePreview({
   isMaximized = false,
   positioning = 'fixed'
 }: SlidePreviewProps) {
+  // Check record mode from sessionStorage (same pattern as CssCourse page)
+  const recordMode = sessionStorage.getItem('recordMode') === 'true';
+  
   // Use isMaximized prop to determine size, but keep internal state for immediate updates
   const [size, setSize] = useState<SlidePreviewSize>(isMaximized ? 'large' : 'small');
   
@@ -242,8 +245,8 @@ export default function SlidePreview({
             }}
           />
           
-          {/* Keyboard navigation hint for large size */}
-          {size === 'large' && (
+          {/* Keyboard navigation hint for large size - only show when not in record mode */}
+          {size === 'large' && recordMode && (
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-70 text-white px-3 py-1 rounded text-sm">
               Use ← → keys to navigate
             </div>
