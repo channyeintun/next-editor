@@ -53,6 +53,9 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recordingDurationRef = useRef<number>(0);
 
+  // Cursor decoration management for playback
+  const cursorDecorationRef = useRef<string[]>([]);
+
   // Independent timeline management (not dependent on audio.currentTime)
   const playbackStartTimeRef = useRef<number>(0);
   const playbackPausedAtRef = useRef<number>(0);
@@ -450,7 +453,15 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     if (audioRef.current) {
       audioRef.current.pause();
     }
-  }, []);
+    
+    // Clear cursor decorations
+    if (editorRef.current && cursorDecorationRef.current.length > 0) {
+      cursorDecorationRef.current = editorRef.current.deltaDecorations(
+        cursorDecorationRef.current,
+        []
+      );
+    }
+  }, [editorRef]);
 
   // Apply editor state like the demo
   const applyEditorState = useCallback((snapshot: EditorSnapshot) => {
@@ -476,10 +487,49 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
               column: Math.min(Math.max(snapshot.state.position.column, 1), maxColumn)
             };
 
-            // Focus editor for cursor visibility during playback
-            editor.focus();
+            // Set cursor position and highlight with decoration instead of focus
             editor.setPosition(validPosition);
             editor.setSelection(snapshot.state.selection);
+            
+            // Add cursor decorations only during playback
+            if (isPlaying) {
+              const newDecorations = [];
+              
+              // Get all current selections to decorate all cursors
+              const currentSelections = editor.getSelections() || [snapshot.state.selection];
+              
+              currentSelections.forEach((selection) => {
+                // Get cursor position for this selection
+                const cursorPos = selection.getPosition();
+                
+                newDecorations.push({
+                  range: new monaco.Range(
+                    cursorPos.lineNumber,
+                    cursorPos.column,
+                    cursorPos.lineNumber,
+                    cursorPos.column
+                  ),
+                  options: {
+                    className: 'playback-cursor-decoration',
+                    stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+                    minimap: {
+                      color: '#007ACC',
+                      position: monaco.editor.MinimapPosition.Inline
+                    },
+                    overviewRuler: {
+                      color: '#007ACC',
+                      position: monaco.editor.OverviewRulerLane.Center
+                    }
+                  }
+                });
+              });
+              
+              // Update cursor decorations
+              cursorDecorationRef.current = editor.deltaDecorations(
+                cursorDecorationRef.current,
+                newDecorations
+              );
+            }
 
             if (snapshot.state.viewState) {
               try {
@@ -497,7 +547,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     } catch (error) {
       console.warn('Error applying editor state:', error);
     }
-  }, [onStateChange, editorRef]);
+  }, [onStateChange, editorRef, isPlaying]);
 
   // Independent timeline playback synchronization
   useEffect(() => {
@@ -522,6 +572,15 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         setIsPlaying(false);
         setHasEnded(true);
         setCurrentTime(totalDuration);
+        
+        // Clear cursor decorations when playback ends naturally
+        if (editorRef?.current && cursorDecorationRef.current.length > 0) {
+          cursorDecorationRef.current = editorRef.current.deltaDecorations(
+            cursorDecorationRef.current,
+            []
+          );
+        }
+        
         return;
       }
 
@@ -655,8 +714,16 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       audioRef.current.pause();
     }
 
+    // Clear cursor decorations when paused
+    if (editorRef.current && cursorDecorationRef.current.length > 0) {
+      cursorDecorationRef.current = editorRef.current.deltaDecorations(
+        cursorDecorationRef.current,
+        []
+      );
+    }
+
     onPlaybackPause?.();
-  }, [onPlaybackPause]);
+  }, [onPlaybackPause, editorRef]);
 
   // Setup user interaction listeners during playback
   useEffect(() => {
@@ -695,7 +762,15 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
-  }, []);
+
+    // Clear cursor decorations when stopped
+    if (editorRef.current && cursorDecorationRef.current.length > 0) {
+      cursorDecorationRef.current = editorRef.current.deltaDecorations(
+        cursorDecorationRef.current,
+        []
+      );
+    }
+  }, [editorRef]);
 
   const seekTo = useCallback((targetTime: number) => {
     if (!currentRecording) return;
