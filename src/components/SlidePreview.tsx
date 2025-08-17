@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { Slide, SlideEvent } from '../types/slides';
+import { useScrimbaContext } from '../hooks/useScrimbaContext';
 
 type SlidePreviewSize = 'small' | 'large';
 
@@ -24,6 +25,7 @@ export default function SlidePreview({
   isMaximized = false,
   positioning = 'fixed'
 }: SlidePreviewProps) {
+  const { isPlaying } = useScrimbaContext();
   // Check record mode from sessionStorage (same pattern as CssCourse page)
   const recordMode = sessionStorage.getItem('recordMode') === 'true';
   
@@ -96,20 +98,22 @@ export default function SlidePreview({
 
 
   const goToNextSlide = useCallback(() => {
+    if (isPlaying) return; // Disable navigation during playback
     if (currentSlideIndex < slides.length - 1) {
       const newIndex = currentSlideIndex + 1;
       onSlideChange(newIndex);
       emitSlideEvent('slide_change', slides[newIndex]?.id);
     }
-  }, [currentSlideIndex, slides, onSlideChange, emitSlideEvent]);
+  }, [isPlaying, currentSlideIndex, slides, onSlideChange, emitSlideEvent]);
 
   const goToPrevSlide = useCallback(() => {
+    if (isPlaying) return; // Disable navigation during playback
     if (currentSlideIndex > 0) {
       const newIndex = currentSlideIndex - 1;
       onSlideChange(newIndex);
       emitSlideEvent('slide_change', slides[newIndex]?.id);
     }
-  }, [currentSlideIndex, onSlideChange, emitSlideEvent, slides]);
+  }, [isPlaying, currentSlideIndex, onSlideChange, emitSlideEvent, slides]);
 
   // Emit slide open event when component first opens
   useEffect(() => {
@@ -202,7 +206,7 @@ export default function SlidePreview({
                   e.stopPropagation();
                   goToPrevSlide();
                 }}
-                disabled={currentSlideIndex === 0}
+                disabled={currentSlideIndex === 0 || isPlaying}
                 className="text-gray-600 hover:text-gray-800 disabled:opacity-30 px-2 py-1"
                 title="Previous slide"
               >
@@ -213,7 +217,7 @@ export default function SlidePreview({
                   e.stopPropagation();
                   goToNextSlide();
                 }}
-                disabled={currentSlideIndex === slides.length - 1}
+                disabled={currentSlideIndex === slides.length - 1 || isPlaying}
                 className="text-gray-600 hover:text-gray-800 disabled:opacity-30 px-2 py-1"
                 title="Next slide"
               >
