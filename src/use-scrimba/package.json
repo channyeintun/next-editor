@@ -1,6 +1,6 @@
 {
   "name": "use-scrimba",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "A powerful React hook for recording and replaying Monaco Editor interactions with Scrimba-like functionality",
   "main": "./dist/index.js",
   "module": "./dist/index.esm.js",
@@ -40,6 +40,7 @@
     "email": "chanyeintun@gmail.com"
   },
   "license": "MIT",
+  "homepage": "https://github.com/channyeintun/use-scrimba",
   "peerDependencies": {
     "@monaco-editor/react": ">=4.0.0",
     "react": ">=16.8.0"
