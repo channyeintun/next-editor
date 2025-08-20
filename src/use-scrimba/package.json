@@ -40,7 +40,6 @@
     "email": "chanyeintun@gmail.com"
   },
   "license": "MIT",
-  "homepage": "https://github.com/channyeintun/use-scrimba",
   "peerDependencies": {
     "@monaco-editor/react": ">=4.0.0",
     "react": ">=16.8.0"
