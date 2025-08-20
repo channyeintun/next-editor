@@ -3,6 +3,7 @@ import type * as monaco from 'monaco-editor';
 import { useScrimba } from '../use-scrimba/src';
 import { ScrimbaContext } from './ScrimbaContext';
 import { createJsonStorage } from '../storage/JsonStorage';
+import type { SlidePreviewState } from '../types/slides';
 
 interface ScrimbaProviderProps {
   children: React.ReactNode;
@@ -10,13 +11,12 @@ interface ScrimbaProviderProps {
 
 /**
  * Provider component that makes useScrimba functionality available to all child components
- * This replaces Redux state management with the useScrimba hook
  */
 export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
-  const getSlideStateRef = useRef<(() => { previewState: any; currentSlideIndex: number } | null) | null>(null);
-  const applySlideStateRef = useRef<((slideState: any, currentSlideIndex: number) => void) | null>(null);
+  const getSlideStateRef = useRef<(() => { previewState: SlidePreviewState; currentSlideIndex: number } | null) | null>(null);
+  const applySlideStateRef = useRef<((slideState: SlidePreviewState, currentSlideIndex: number) => void) | null>(null);
   const getSlidesRef = useRef<(() => Array<{id: string; imageUrl: string; name?: string; order: number}> | null) | null>(null);
   const applySlidesRef = useRef<((slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void) | null>(null);
   
@@ -62,10 +62,10 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
       }
     },
     // Slide state registration
-    registerSlideStateGetter: (getter: () => { previewState: any; currentSlideIndex: number } | null) => {
+    registerSlideStateGetter: (getter: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null) => {
       getSlideStateRef.current = getter;
     },
-    registerSlideStateApplier: (applier: (slideState: any, currentSlideIndex: number) => void) => {
+    registerSlideStateApplier: (applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void) => {
       applySlideStateRef.current = applier;
     },
     // Slides data registration
