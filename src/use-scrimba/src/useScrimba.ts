@@ -9,7 +9,7 @@ import type {
 import type { SlideEvent } from './slides';
 import { useAudioRecording } from './hooks/useAudioRecording';
 import { isValidSnapshotState, isEditorReady } from './utils/validation';
-import { applyContentDiff } from './utils/editorDiff';
+import { applyContentDiff, applyPositionDiff, applySelectionDiff } from './utils/editorDiff';
 
 // Extended HTMLAudioElement type for demo compatibility
 type AudioElementWithDuration = HTMLAudioElement & { _actualDuration?: number };
@@ -500,74 +500,63 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     const editor = editorRef.current;
 
     try {
-      // Apply content
+      // Apply content changes only when needed
       applyContentDiff(editor, snapshot.state.content);
 
-      // Apply position and selection
+      // Apply position and selection changes only when needed
       if (editor.getValue() === snapshot.state.content) {
-        const model = editor.getModel();
-        if (model) {
-          const lineCount = model.getLineCount();
-          const safeLineNumber = Math.min(Math.max(snapshot.state.position.lineNumber, 1), lineCount);
-          const lineLength = model.getLineLength(safeLineNumber);
-          if (lineLength >= 0) {
-            const maxColumn = Math.max(1, lineLength + 1);
-            const validPosition = {
-              lineNumber: safeLineNumber,
-              column: Math.min(Math.max(snapshot.state.position.column, 1), maxColumn)
-            };
-
-            // Set cursor position and highlight with decoration instead of focus
-            editor.setPosition(validPosition);
-            editor.setSelection(snapshot.state.selection);
+        // Use diffing to apply position only if it has changed
+        applyPositionDiff(editor, snapshot.state.position);
+        
+        // Use diffing to apply selection only if it has changed
+        applySelectionDiff(editor, snapshot.state.selection);
+        
+        // Add cursor decorations only during playback
+        if (isPlaying) {
+          const newDecorations: monaco.editor.IModelDeltaDecoration[] = [];
+          
+          // Get all current selections to decorate all cursors
+          const currentSelections = editor.getSelections() || [snapshot.state.selection];
+          
+          currentSelections.forEach((selection) => {
+            // Get cursor position for this selection
+            const cursorPos = selection.getPosition();
             
-            // Add cursor decorations only during playback
-            if (isPlaying) {
-              const newDecorations: monaco.editor.IModelDeltaDecoration[] = [];
-              
-              // Get all current selections to decorate all cursors
-              const currentSelections = editor.getSelections() || [snapshot.state.selection];
-              
-              currentSelections.forEach((selection) => {
-                // Get cursor position for this selection
-                const cursorPos = selection.getPosition();
-                
-                newDecorations.push({
-                  range: new monaco.Range(
-                    cursorPos.lineNumber,
-                    cursorPos.column,
-                    cursorPos.lineNumber,
-                    cursorPos.column
-                  ),
-                  options: {
-                    className: 'playback-cursor-decoration',
-                    stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
-                    minimap: {
-                      color: '#007ACC',
-                      position: monaco.editor.MinimapPosition.Inline
-                    },
-                    overviewRuler: {
-                      color: '#007ACC',
-                      position: monaco.editor.OverviewRulerLane.Center
-                    }
-                  }
-                });
-              });
-              
-              // Update cursor decorations
-              cursorDecorationRef.current = editor.deltaDecorations(
-                cursorDecorationRef.current,
-                newDecorations
-              );
-            }
-
-            if (snapshot.state.viewState) {
-              try {
-                editor.restoreViewState(snapshot.state.viewState);
-              } catch (err) {
-                console.error('View State Error:', err);
+            newDecorations.push({
+              range: new monaco.Range(
+                cursorPos.lineNumber,
+                cursorPos.column,
+                cursorPos.lineNumber,
+                cursorPos.column
+              ),
+              options: {
+                className: 'playback-cursor-decoration',
+                stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+                minimap: {
+                  color: '#007ACC',
+                  position: monaco.editor.MinimapPosition.Inline
+                },
+                overviewRuler: {
+                  color: '#007ACC',
+                  position: monaco.editor.OverviewRulerLane.Center
+                }
               }
-            }
+            });
+          });
+          
+          // Update cursor decorations
+          cursorDecorationRef.current = editor.deltaDecorations(
+            cursorDecorationRef.current,
+            newDecorations
+          );
+        }
+
+        // Apply view state changes
+        if (snapshot.state.viewState) {
+          try {
+            editor.restoreViewState(snapshot.state.viewState);
+          } catch (err) {
+            console.error('View State Error:', err);
           }
         }
       }

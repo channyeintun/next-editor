@@ -1,6 +1,120 @@
 import type * as monaco from 'monaco-editor';
 
 /**
+ * Checks if two positions are equal
+ */
+function arePositionsEqual(pos1: monaco.IPosition | null, pos2: monaco.IPosition | null): boolean {
+  if (!pos1 || !pos2) return pos1 === pos2;
+  return pos1.lineNumber === pos2.lineNumber && pos1.column === pos2.column;
+}
+
+/**
+ * Checks if two selections are equal
+ */
+function areSelectionsEqual(sel1: monaco.ISelection | null, sel2: monaco.ISelection | null): boolean {
+  if (!sel1 || !sel2) return sel1 === sel2;
+  return (
+    sel1.startLineNumber === sel2.startLineNumber &&
+    sel1.startColumn === sel2.startColumn &&
+    sel1.endLineNumber === sel2.endLineNumber &&
+    sel1.endColumn === sel2.endColumn &&
+    sel1.selectionStartLineNumber === sel2.selectionStartLineNumber &&
+    sel1.selectionStartColumn === sel2.selectionStartColumn &&
+    sel1.positionLineNumber === sel2.positionLineNumber &&
+    sel1.positionColumn === sel2.positionColumn
+  );
+}
+
+/**
+ * Applies cursor position only if it has changed
+ */
+export const applyPositionDiff = (
+  editor: monaco.editor.IStandaloneCodeEditor,
+  targetPosition: monaco.IPosition
+): boolean => {
+  const currentPosition = editor.getPosition();
+  
+  if (arePositionsEqual(currentPosition, targetPosition)) {
+    return true; // No change needed
+  }
+
+  try {
+    const model = editor.getModel();
+    if (!model) return false;
+
+    // Validate and clamp the position
+    const lineCount = model.getLineCount();
+    const safeLineNumber = Math.min(Math.max(targetPosition.lineNumber, 1), lineCount);
+    const lineLength = model.getLineLength(safeLineNumber);
+    const maxColumn = Math.max(1, lineLength + 1);
+    const validPosition = {
+      lineNumber: safeLineNumber,
+      column: Math.min(Math.max(targetPosition.column, 1), maxColumn)
+    };
+
+    editor.setPosition(validPosition);
+    return true;
+  } catch (error) {
+    console.warn('Error applying position diff:', error);
+    return false;
+  }
+};
+
+/**
+ * Applies selection only if it has changed
+ */
+export const applySelectionDiff = (
+  editor: monaco.editor.IStandaloneCodeEditor,
+  targetSelection: monaco.ISelection
+): boolean => {
+  const currentSelection = editor.getSelection();
+  
+  if (areSelectionsEqual(currentSelection, targetSelection)) {
+    return true; // No change needed
+  }
+
+  try {
+    const model = editor.getModel();
+    if (!model) return false;
+
+    // Validate the selection bounds
+    const lineCount = model.getLineCount();
+    
+    const validatePosition = (lineNumber: number, column: number) => {
+      const safeLineNumber = Math.min(Math.max(lineNumber, 1), lineCount);
+      const lineLength = model.getLineLength(safeLineNumber);
+      const maxColumn = Math.max(1, lineLength + 1);
+      return {
+        lineNumber: safeLineNumber,
+        column: Math.min(Math.max(column, 1), maxColumn)
+      };
+    };
+
+    const validStart = validatePosition(targetSelection.startLineNumber, targetSelection.startColumn);
+    const validEnd = validatePosition(targetSelection.endLineNumber, targetSelection.endColumn);
+    const validSelectionStart = validatePosition(targetSelection.selectionStartLineNumber, targetSelection.selectionStartColumn);
+    const validPosition = validatePosition(targetSelection.positionLineNumber, targetSelection.positionColumn);
+
+    const validSelection: monaco.ISelection = {
+      startLineNumber: validStart.lineNumber,
+      startColumn: validStart.column,
+      endLineNumber: validEnd.lineNumber,
+      endColumn: validEnd.column,
+      selectionStartLineNumber: validSelectionStart.lineNumber,
+      selectionStartColumn: validSelectionStart.column,
+      positionLineNumber: validPosition.lineNumber,
+      positionColumn: validPosition.column
+    };
+
+    editor.setSelection(validSelection);
+    return true;
+  } catch (error) {
+    console.warn('Error applying selection diff:', error);
+    return false;
+  }
+};
+
+/**
  * Calculates the minimal edit operations needed to transform the current content
  * to the target content and applies them using pushEditOperations
  */
