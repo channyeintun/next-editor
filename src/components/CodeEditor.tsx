@@ -38,7 +38,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     currentRecording,
     exportAsFile,
     importFromFile,
-    loadRecording
+    loadRecording,
+    isPlaying,
   } = useScrimbaContext();
 
 
@@ -68,7 +69,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
    */
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
-    
+
     // Define Scrimba dark theme
     monaco.editor.defineTheme('scrimba-dark', {
       base: 'vs-dark',
@@ -234,7 +235,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       </div>
 
       {/* Monaco Editor */}
-      <div className="flex-1">
+      <div className={"flex-1" + (isPlaying ? " playback-mode" : "")}>
         <Editor
           height="100%"
           language={selectedLanguage}
@@ -250,7 +251,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
             scrollBeyondLastLine: false,
             readOnly: false, // Keep editor writable to allow cursor blinking
             cursorStyle: 'line',
-            cursorBlinking: 'blink',
+            cursorBlinking: isPlaying ? 'solid' : 'blink',
             renderValidationDecorations: 'on',
             automaticLayout: true,
             // Disable code suggestions and IntelliSense

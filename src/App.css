@@ -23,6 +23,7 @@
   background-color: #ffed4f !important;
   border: none !important;
   width: 2px !important;
+  animation: nb-cursor-blink 1s step-end infinite !important;
 }
 
 /* Override other cursors' color only - keep their native animation */
@@ -36,4 +37,22 @@
   background-color: #ffed4f !important;
   border: none !important;
   width: 2px !important;
+}
+
+.playback-mode .monaco-editor .cursor {
+  animation: nb-cursor-blink 1s step-end infinite !important;
+}
+
+@keyframes nb-cursor-blink {
+  0% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
 }
