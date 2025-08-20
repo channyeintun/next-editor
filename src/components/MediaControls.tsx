@@ -131,8 +131,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
         {recordMode && (
           <button
             onClick={handleRecordToggle}
-            title={isRecording ? "Stop recording" : "Start recording"}
-            className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-2 before:content-[''] after:absolute after:inset-0 after:bg-red-500/50 after:rounded-full after:scale-0 hover:after:scale-200 after:transition-transform after:duration-200"
+            disabled={isPlaying}
+            title={isPlaying ? "Cannot record during playback" : isRecording ? "Stop recording" : "Start recording"}
+            className={`flex items-center justify-center transition-colors relative before:absolute before:-inset-2 before:content-[''] after:absolute after:inset-0 after:bg-red-500/50 after:rounded-full after:scale-0 after:transition-transform after:duration-200 ${
+              isPlaying 
+                ? 'opacity-50 cursor-not-allowed' 
+                : 'hover:opacity-80 cursor-pointer hover:after:scale-200'
+            }`}
           >
             {isRecording ? (
               <div className="w-3 h-3 bg-red-500 rounded-sm animate-pulse"></div>
