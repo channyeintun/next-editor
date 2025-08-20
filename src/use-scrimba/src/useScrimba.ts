@@ -129,7 +129,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
   }, []);
 
   // Simple editor change handling like the demo
-  const handleEditorChange = useCallback(() => {
+  const handleEditorChange = useCallback((isMouseMovement = false) => {
     if (isRecording && editorRef.current) {
       const timestamp = performance.now() - startTimeRef.current;
       const editor = editorRef.current;
@@ -140,7 +140,24 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
       const viewState = editor.saveViewState();
 
       // Get current mouse cursor position relative to document
-      const mouseCursorPosition = lastMousePositionRef.current;
+      let mouseCursorPosition = lastMousePositionRef.current;
+
+      // Set cursor visibility based on action type
+      if (isMouseMovement) {
+        // Mouse movement: set cursor visible true
+        mouseCursorPosition = {
+          ...mouseCursorPosition,
+          visible: true
+        };
+        lastMousePositionRef.current = mouseCursorPosition;
+      } else {
+        // Content change: set cursor visible false
+        mouseCursorPosition = {
+          ...mouseCursorPosition,
+          visible: false
+        };
+        lastMousePositionRef.current = mouseCursorPosition;
+      }
 
       // Get current slide state if available
       const slideState = getSlideState?.();
@@ -239,8 +256,8 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         visible: true
       };
 
-      // Record every mouse movement for smooth cursor playback
-      handleEditorChange();
+      // Record every mouse movement for smooth cursor playback (mark as mouse movement)
+      handleEditorChange(true);
     };
 
     const handleMouseLeave = () => {
@@ -272,8 +289,8 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
         visible: true
       };
 
-      // Record mouse movement in iframe
-      handleEditorChange();
+      // Record mouse movement in iframe (mark as mouse movement)
+      handleEditorChange(true);
     };
 
     const handleIframeMouseLeave = () => {
