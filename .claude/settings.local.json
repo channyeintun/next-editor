@@ -16,7 +16,8 @@
       "Bash(npm publish:*)",
       "Bash(npm run dev:*)",
       "Bash(npx tsc:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

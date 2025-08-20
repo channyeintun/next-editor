@@ -1,4 +1,4 @@
-import type * as monaco from 'monaco-editor';
+import * as monaco from 'monaco-editor';
 
 /**
  * Checks if two positions are equal
@@ -11,7 +11,7 @@ function arePositionsEqual(pos1: monaco.IPosition | null, pos2: monaco.IPosition
 /**
  * Checks if two selections are equal
  */
-function areSelectionsEqual(sel1: monaco.ISelection | null, sel2: monaco.ISelection | null): boolean {
+function areSelectionsEqual(sel1: monaco.Selection | null, sel2: monaco.Selection | null): boolean {
   if (!sel1 || !sel2) return sel1 === sel2;
   return (
     sel1.startLineNumber === sel2.startLineNumber &&
@@ -65,7 +65,7 @@ export const applyPositionDiff = (
  */
 export const applySelectionDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
-  targetSelection: monaco.ISelection
+  targetSelection: monaco.Selection
 ): boolean => {
   const currentSelection = editor.getSelection();
   
@@ -90,21 +90,15 @@ export const applySelectionDiff = (
       };
     };
 
-    const validStart = validatePosition(targetSelection.startLineNumber, targetSelection.startColumn);
-    const validEnd = validatePosition(targetSelection.endLineNumber, targetSelection.endColumn);
     const validSelectionStart = validatePosition(targetSelection.selectionStartLineNumber, targetSelection.selectionStartColumn);
     const validPosition = validatePosition(targetSelection.positionLineNumber, targetSelection.positionColumn);
 
-    const validSelection: monaco.ISelection = {
-      startLineNumber: validStart.lineNumber,
-      startColumn: validStart.column,
-      endLineNumber: validEnd.lineNumber,
-      endColumn: validEnd.column,
-      selectionStartLineNumber: validSelectionStart.lineNumber,
-      selectionStartColumn: validSelectionStart.column,
-      positionLineNumber: validPosition.lineNumber,
-      positionColumn: validPosition.column
-    };
+    const validSelection = new monaco.Selection(
+      validSelectionStart.lineNumber,
+      validSelectionStart.column,
+      validPosition.lineNumber,
+      validPosition.column
+    );
 
     editor.setSelection(validSelection);
     return true;
