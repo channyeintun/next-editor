@@ -8,6 +8,7 @@ import type {
 } from './types';
 import type { SlideEvent } from './slides';
 import { useAudioRecording } from './hooks/useAudioRecording';
+import { calculateDurationFromFileReader } from './utils/audioDuration';
 import { isValidSnapshotState, isEditorReady } from './utils/validation';
 import { applyContentDiff, applyPositionDiff, applySelectionDiff } from './utils/editorDiff';
 
@@ -89,44 +90,6 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
     return Math.max(0, adjustedElapsed);
   }, [isPlaying, currentTime, playbackSpeed]);
 
-  // Duration calculation using FileReader like the demo
-  const calculateDurationFromFileReader = useCallback(async (audioBlob: Blob): Promise<number> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = function (e) {
-        try {
-          const arrayBuffer = e.target?.result as ArrayBuffer;
-          const audioContext = new window.AudioContext();
-
-          audioContext.decodeAudioData(
-            arrayBuffer,
-            buffer => {
-              const rawDuration = buffer.duration;
-              const adjustedDuration = rawDuration;
-              audioContext.close();
-              resolve(adjustedDuration);
-            },
-            error => {
-              console.error('FileReader decode error:', error);
-              audioContext.close();
-              reject(error);
-            }
-          );
-        } catch (error) {
-          console.error('FileReader processing error:', error);
-          reject(error);
-        }
-      };
-
-      reader.onerror = function () {
-        console.error('FileReader read error');
-        reject(new Error('FileReader failed'));
-      };
-
-      reader.readAsArrayBuffer(audioBlob);
-    });
-  }, []);
 
   // Simple editor change handling like the demo
   const handleEditorChange = useCallback((isMouseMovement = false) => {
