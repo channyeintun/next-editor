@@ -103,7 +103,7 @@ export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
             arrayBuffer,
             buffer => {
               const rawDuration = buffer.duration;
-              const adjustedDuration = rawDuration - 0.06; // Subtract 0.06s for exact end time
+              const adjustedDuration = rawDuration;
               audioContext.close();
               resolve(adjustedDuration);
             },
