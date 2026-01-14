@@ -8,7 +8,6 @@ import ProgressBar from './ProgressBar';
 import SnapshotEditor from './SnapshotEditor';
 import type { Recording } from '../use-scrimba/src';
 import ScrimbaVideoSaveModal from './ScrimbaVideoSaveModal';
-import ScrimbaImageSaveModal from './ScrimbaImageSaveModal';
 import MastodonIcon from './icon/Mastodon';
 
 interface MediaControlsProps {
@@ -49,7 +48,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [showSnapshotEditor, setShowSnapshotEditor] = useState(false);
-  const [showImageSaveModal, setShowImageSaveModal] = useState(false);
   const [showVideoSaveModal, setShowVideoSaveModal] = useState(false);
 
   // Update recording time every 100ms when recording
@@ -92,9 +90,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     const size = calculateRecordingSize(currentRecording);
     const sizeMB = size / (1024 * 1024);
 
-    if (sizeMB < 16) {
-      setShowImageSaveModal(true);
-    } else if (sizeMB < 99) {
+    if (sizeMB < 99) {
       setShowVideoSaveModal(true);
     } else {
       alert(`Recording is too large (${sizeMB.toFixed(2)}MB). Max limit is 99MB.`);
@@ -265,18 +261,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
           mode="edit"
           onSave={handleSaveRecording}
           onCancel={handleCancelExport}
-        />
-      )}
-
-      {currentRecording && (
-        <ScrimbaImageSaveModal
-          recording={currentRecording}
-          isVisible={showImageSaveModal}
-          onSave={(file) => {
-            setShowImageSaveModal(false);
-            onSaveToVideo?.(file);
-          }}
-          onCancel={() => setShowImageSaveModal(false)}
         />
       )}
 

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { useScrimbaContext } from '../hooks/useScrimbaContext';
-import ScrimbaImageSaveModal from './ScrimbaImageSaveModal';
 import ScrimbaVideoSaveModal from './ScrimbaVideoSaveModal';
 import type { Recording } from '../use-scrimba/src';
 import MastodonIcon from './icon/Mastodon';
@@ -38,7 +37,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     exportAsFile,
   } = useScrimbaContext();
 
-  const [showImageSaveModal, setShowImageSaveModal] = useState(false);
   const [showVideoSaveModal, setShowVideoSaveModal] = useState(false);
 
   const calculateRecordingSize = (recording: Recording) => {
@@ -57,9 +55,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     const size = calculateRecordingSize(currentRecording);
     const sizeMB = size / (1024 * 1024);
 
-    if (sizeMB < 16) {
-      setShowImageSaveModal(true);
-    } else if (sizeMB < 99) {
+    if (sizeMB < 99) {
       setShowVideoSaveModal(true);
     } else {
       alert(`Recording is too large (${sizeMB.toFixed(2)}MB). Max limit is 99MB.`);
@@ -307,15 +303,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           }}
         />
       </div>
-      {currentRecording && (
-        <ScrimbaImageSaveModal
-          recording={currentRecording}
-          isVisible={showImageSaveModal}
-          onSave={() => setShowImageSaveModal(false)}
-          onCancel={() => setShowImageSaveModal(false)}
-          initialText={text}
-        />
-      )}
       {currentRecording && (
         <ScrimbaVideoSaveModal
           recording={currentRecording}
