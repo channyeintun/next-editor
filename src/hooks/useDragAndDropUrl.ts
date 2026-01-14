@@ -32,7 +32,7 @@ export const useDragAndDropUrl = () => {
       const files = e.dataTransfer?.files;
       if (files && files.length > 0) {
         const file = files[0];
-        if (file.name.endsWith('.png') || file.name.endsWith('.scrimba') || file.name.endsWith('.webm') || file.name.endsWith('.mp4')) {
+        if (file.name.endsWith('.png') || file.name.endsWith('.scrimba')) {
           await importScrimbaFile(file);
         }
       }
