@@ -16,7 +16,7 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
   const registerSlideStateApplier = 'registerSlideStateApplier' in scrimbaContext ? scrimbaContext.registerSlideStateApplier : undefined;
   const registerSlidesGetter = 'registerSlidesGetter' in scrimbaContext ? scrimbaContext.registerSlidesGetter : undefined;
   const registerSlidesApplier = 'registerSlidesApplier' in scrimbaContext ? scrimbaContext.registerSlidesApplier : undefined;
-  
+
   const slidesData = useSlides({
     onSlideEvent: handleSlideEvent
   });
@@ -43,19 +43,19 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
       registerSlideStateApplier((slideState: SlidePreviewState, currentSlideIndex: number) => {
         // Directly apply the slide state during playback without triggering events
         // to avoid double event recording during playback
-        
+
         // Set the preview state directly to match the recorded state
         if (slideState.isOpen !== slidesData.previewState.isOpen ||
-            slideState.isMaximized !== slidesData.previewState.isMaximized ||
-            slideState.currentSlideId !== slidesData.previewState.currentSlideId) {
-          
+          slideState.isMaximized !== slidesData.previewState.isMaximized ||
+          slideState.currentSlideId !== slidesData.previewState.currentSlideId) {
+
           slidesData.setPreviewState({
             isOpen: slideState.isOpen,
             isMaximized: slideState.isMaximized,
             currentSlideId: slideState.currentSlideId
           });
         }
-        
+
         // Update slide index if needed
         if (slideState.isOpen && currentSlideIndex !== slidesData.currentSlideIndex) {
           slidesData.goToSlide(currentSlideIndex);
@@ -67,7 +67,7 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
   // Register slides data applier with ScrimbaProvider
   useEffect(() => {
     if (registerSlidesApplier && typeof registerSlidesApplier === 'function') {
-      registerSlidesApplier((slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => {
+      registerSlidesApplier((slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => {
         slidesData.setSlides(slides);
       });
     }
@@ -80,6 +80,7 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useSlidesContext = () => {
   const context = useContext(SlidesContext);
   if (!context) {
