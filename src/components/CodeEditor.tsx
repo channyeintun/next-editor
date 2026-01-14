@@ -206,9 +206,10 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 
   return (
     <div className="h-full flex flex-col">
-      {showImportExport && (
-        <div className="bg-slate-800 px-4 py-1.5 flex items-center justify-between border-b border-slate-700">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
+      <div className="bg-slate-800 px-4 py-1.5 flex items-center justify-between border-b border-slate-700">
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
+
+        {showImportExport && (
           <div className="flex items-center gap-2">
             {currentRecording && (
               <button
@@ -237,8 +238,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
             <div className="w-[1px] h-4 bg-slate-700 mx-1" />
             <SlidesButton />
           </div>
-        </div>
-      )}
+        )}
+      </div>
       {/* Monaco Editor */}
       <div className={"flex-1" + (isPlaying ? " playback-mode" : "")}>
         <Editor

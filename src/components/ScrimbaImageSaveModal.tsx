@@ -14,9 +14,7 @@ import {
     Grid3X3,
     Wind,
     Shapes,
-    Sparkles,
-    Copy,
-    ExternalLink
+    Sparkles
 } from 'lucide-react';
 import MastodonIcon from './icon/Mastodon';
 import { MAGIC_PREFIX } from '../use-scrimba/src/utils/steganography';
@@ -84,8 +82,6 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
     const [imageStyle, setImageStyle] = useState<ImageStyle>('gradient');
     const [isGenerating, setIsGenerating] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-    const [composeLink, setComposeLink] = useState<string | null>(null);
-    const [linkCopied, setLinkCopied] = useState(false);
 
     const generateImage = async (isManualDownload: boolean = false, shareToMastodon: boolean = false) => {
         if (!isVisible) return;
@@ -240,10 +236,6 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                     }
 
                     if (shareToMastodon) {
-                        // Open window immediately to avoid popup blocker (must be in sync click handler)
-                        const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
-                        const newWindow = window.open('about:blank', '_blank');
-
                         try {
                             // 1. Get credentials from cookies
                             const getCookie = (name: string) => {
@@ -268,14 +260,12 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                             const instanceURL = getCookie('instanceURL');
 
                             if (!accessToken || !instanceURL) {
-                                newWindow?.close();
                                 alert('Please sign in to Mastodon first.');
                                 setIsGenerating(false);
                                 return;
                             }
 
                             if (!instanceURL.startsWith('http')) {
-                                newWindow?.close();
                                 console.error('Invalid instance URL from cookie:', instanceURL);
                                 alert(`Invalid Mastodon instance URL: ${instanceURL}`);
                                 setIsGenerating(false);
@@ -297,28 +287,21 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                             });
 
                             if (!response.ok) {
-                                newWindow?.close();
                                 throw new Error('Failed to upload to Mastodon');
                             }
 
                             const mediaData = await response.json();
                             const mediaId = mediaData.id;
 
-                            // 3. Navigate to compose page in the already-opened window
+                            // 3. Redirect to next-mastodon compose page
                             const postTitle = imageTitle || 'New Scrimba Tutorial';
                             const postText = initialText
                                 ? encodeURIComponent(`${initialText}\n\n#scrimba #tutorial`)
                                 : encodeURIComponent(`${postTitle}\n\n#scrimba #tutorial`);
-
-                            const finalComposeUrl = `${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`;
-                            setComposeLink(finalComposeUrl);
-
-                            if (newWindow) {
-                                newWindow.location.href = finalComposeUrl;
-                            }
+                            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
+                            window.open(`${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`, '_blank');
 
                         } catch (err) {
-                            newWindow?.close();
                             console.error('Sharing failed:', err);
                             alert('Failed to share on Mastodon. Please try again.');
                         }
@@ -471,63 +454,26 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                     </div>
                 </div>
 
-                <div className="p-8 bg-gray-900/50 border-t border-gray-700/50 flex flex-col gap-4 shrink-0">
-                    {/* Show compose link after successful upload */}
-                    {composeLink && (
-                        <div className="flex flex-col gap-3 p-4 bg-green-500/10 border border-green-500/30 rounded-2xl">
-                            <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
-                                <Check className="w-4 h-4" />
-                                Upload complete! If the tab didn&apos;t open, use the buttons below:
-                            </div>
-                            <div className="flex gap-2">
-                                <a
-                                    href={composeLink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white font-medium rounded-xl hover:bg-green-500 transition-colors"
-                                >
-                                    <ExternalLink className="w-4 h-4" />
-                                    Open Link
-                                </a>
-                                <button
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(composeLink);
-                                        setLinkCopied(true);
-                                        setTimeout(() => setLinkCopied(false), 2000);
-                                    }}
-                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-700 text-white font-medium rounded-xl hover:bg-gray-600 transition-colors"
-                                >
-                                    <Copy className="w-4 h-4" />
-                                    {linkCopied ? 'Copied!' : 'Copy Link'}
-                                </button>
-                            </div>
+                <div className="p-8 bg-gray-900/50 border-t border-gray-700/50 flex flex-col sm:flex-row gap-4 shrink-0">
+                    <button
+                        onClick={() => generateImage(true, false)}
+                        disabled={isGenerating}
+                        className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gray-800 text-gray-200 font-bold rounded-2xl hover:bg-gray-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all border border-gray-700 shadow-xl"
+                    >
+                        <Download className="w-5 h-5" />
+                        Download Image
+                    </button>
+                    <button
+                        onClick={() => generateImage(false, true)}
+                        disabled={isGenerating}
+                        className="flex-[1.5] flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-500 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all shadow-[0_8px_32px_rgba(79,70,229,0.3)] group"
+                    >
+                        <div className="transition-transform group-hover:rotate-12">
+                            <MastodonIcon />
                         </div>
-                    )}
-
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <button
-                            onClick={() => generateImage(true, false)}
-                            disabled={isGenerating}
-                            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gray-800 text-gray-200 font-bold rounded-2xl hover:bg-gray-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all border border-gray-700 shadow-xl"
-                        >
-                            <Download className="w-5 h-5" />
-                            Download Image
-                        </button>
-                        <button
-                            onClick={() => {
-                                setComposeLink(null);
-                                generateImage(false, true);
-                            }}
-                            disabled={isGenerating}
-                            className="flex-[1.5] flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-500 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all shadow-[0_8px_32px_rgba(79,70,229,0.3)] group"
-                        >
-                            <div className="transition-transform group-hover:rotate-12">
-                                <MastodonIcon />
-                            </div>
-                            Share on Mastodon
-                            <ChevronRight className="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform" />
-                        </button>
-                    </div>
+                        Share on Mastodon
+                        <ChevronRight className="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform" />
+                    </button>
                 </div>
             </div>
         </div>

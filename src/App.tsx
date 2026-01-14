@@ -4,7 +4,6 @@ import MediaControls from './components/MediaControls';
 import DragDropOverlay from './components/DragDropOverlay';
 import Preview from './components/Preview.tsx';
 import SlidePanel from './components/SlidePanel';
-import FloatingPlayButton from './components/FloatingPlayButton';
 import { ScrimbaProvider } from './contexts/ScrimbaProvider';
 import { SlidesProvider } from './contexts/SlidesContext';
 import { useDragAndDropUrl } from './hooks/useDragAndDropUrl';
@@ -34,7 +33,7 @@ function AppContent() {
 
   // Check URL for showImportExport parameter (defaults to true if not specified)
   const urlParams = new URLSearchParams(window.location.search);
-  const readOnly = urlParams.get('readOnly') === 'true';
+  const readOnly = urlParams.get('readonly') === 'true';
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white overflow-hidden">
@@ -45,11 +44,9 @@ function AppContent() {
         <SlidePanel />
       </div>
 
-      <MediaControls recordMode={!readOnly} />
+      <MediaControls recordMode={!readOnly}/>
 
       <DragDropOverlay isDragging={isDragging} isLoading={isLoading} />
-
-      <FloatingPlayButton />
     </div>
   );
 }
