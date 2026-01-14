@@ -7,6 +7,7 @@ interface ScrimbaImageSaveModalProps {
     isVisible: boolean;
     onSave: (file: File) => void;
     onCancel: () => void;
+    initialText?: string;
 }
 
 type ImageStyle = 'gradient' | 'pixelated' | 'abstract' | 'noise' | 'geometric';
@@ -15,7 +16,8 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
     recording,
     isVisible,
     onSave,
-    onCancel
+    onCancel,
+    initialText
 }) => {
     const [imageTitle, setImageTitle] = useState('');
     const [imageStyle, setImageStyle] = useState<ImageStyle>('gradient');
@@ -56,7 +58,7 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
 
             // 3. Draw style
             switch (imageStyle) {
-                case 'gradient':
+                case 'gradient': {
                     const grad = ctx.createLinearGradient(0, 0, width, height);
                     const h1 = Math.random() * 360;
                     const h2 = (h1 + 60) % 360;
@@ -65,7 +67,8 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                     ctx.fillStyle = grad;
                     ctx.fillRect(0, 0, width, height);
                     break;
-                case 'pixelated':
+                }
+                case 'pixelated': {
                     const ps = 20;
                     for (let y = 0; y < height; y += ps) {
                         for (let x = 0; x < width; x += ps) {
@@ -74,7 +77,8 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                         }
                     }
                     break;
-                case 'abstract':
+                }
+                case 'abstract': {
                     ctx.fillStyle = '#f8fafc';
                     ctx.fillRect(0, 0, width, height);
                     for (let i = 0; i < 20; i++) {
@@ -84,7 +88,8 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                         ctx.fill();
                     }
                     break;
-                case 'geometric':
+                }
+                case 'geometric': {
                     ctx.fillStyle = '#1e293b';
                     ctx.fillRect(0, 0, width, height);
                     for (let i = 0; i < 15; i++) {
@@ -103,7 +108,8 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                         ctx.fill();
                     }
                     break;
-                case 'noise':
+                }
+                case 'noise': {
                     const id = ctx.createImageData(width, height);
                     for (let i = 0; i < id.data.length; i += 4) {
                         const v = 120 + Math.random() * 100;
@@ -111,6 +117,7 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                     }
                     ctx.putImageData(id, 0, 0);
                     break;
+                }
             }
 
             // 4. Add Title
@@ -195,7 +202,9 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
 
                             // 3. Redirect to next-mastodon compose page
                             const postTitle = imageTitle || 'New Scrimba Tutorial';
-                            const postText = encodeURIComponent(`${postTitle}\n\n#scrimba #tutorial`);
+                            const postText = initialText
+                                ? encodeURIComponent(`${initialText}\n\n#scrimba #tutorial`)
+                                : encodeURIComponent(`${postTitle}\n\n#scrimba #tutorial`);
                             const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
                             window.location.href = `${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`;
                         } catch (err) {

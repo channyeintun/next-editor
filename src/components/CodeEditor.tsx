@@ -1,11 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { useScrimbaContext } from '../hooks/useScrimbaContext';
+import ScrimbaImageSaveModal from './ScrimbaImageSaveModal';
+import MastodonIcon from './icon/Mastodon';
+import SlidesButton from './SlidesButton';
 
 interface CodeEditorProps {
   language?: string;
   theme?: string;
   defaultContent?: string;
+  showImportExport?: boolean;
+  text?: string;
 }
 
 /**
@@ -16,14 +21,22 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   theme = 'scrimba-dark',
   defaultContent = `<html>
     <h1>Hello world</h1>
-</html>`
+</html>`,
+  showImportExport = false,
+  text
 }) => {
   const selectedLanguage = 'html';
   const {
     handleEditorChange,
     editorRef,
     isPlaying,
+    currentRecording,
+    importFromFile,
+    loadRecording,
+    exportAsFile,
   } = useScrimbaContext();
+
+  const [showImageSaveModal, setShowImageSaveModal] = useState(false);
 
   /**
    * Handle Monaco Editor mount event
@@ -169,8 +182,63 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     monaco.editor.setTheme('scrimba-dark');
   };
 
+  const handleImport = async () => {
+    try {
+      const importedRecordings = await importFromFile();
+      if (importedRecordings.length > 0) {
+        loadRecording(importedRecordings[0]);
+      }
+    } catch (error) {
+      console.error('Import failed:', error);
+    }
+  };
+
+  const handleScrimbaExport = async () => {
+    if (currentRecording) {
+      try {
+        await exportAsFile(currentRecording);
+      } catch (error) {
+        console.error('Export failed:', error);
+      }
+    }
+  };
+
+
   return (
     <div className="h-full flex flex-col">
+      {showImportExport && (
+        <div className="bg-slate-800 px-4 py-1.5 flex items-center justify-between border-b border-slate-700">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
+          <div className="flex items-center gap-2">
+            {currentRecording && (
+              <button
+                onClick={() => setShowImageSaveModal(true)}
+                className="p-1.5 text-white bg-indigo-600 hover:bg-indigo-500 rounded transition-colors flex items-center justify-center shadow-sm"
+                title="Share on Mastodon"
+              >
+                <MastodonIcon />
+              </button>
+            )}
+
+            <button
+              onClick={handleImport}
+              className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+            >
+              Import
+            </button>
+            <button
+              onClick={handleScrimbaExport}
+              disabled={!currentRecording}
+              className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+            >
+              Export
+            </button>
+
+            <div className="w-[1px] h-4 bg-slate-700 mx-1" />
+            <SlidesButton />
+          </div>
+        </div>
+      )}
       {/* Monaco Editor */}
       <div className={"flex-1" + (isPlaying ? " playback-mode" : "")}>
         <Editor
@@ -211,6 +279,15 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           }}
         />
       </div>
+      {currentRecording && (
+        <ScrimbaImageSaveModal
+          recording={currentRecording}
+          isVisible={showImageSaveModal}
+          onSave={() => setShowImageSaveModal(false)}
+          onCancel={() => setShowImageSaveModal(false)}
+          initialText={text}
+        />
+      )}
     </div>
   );
 };
