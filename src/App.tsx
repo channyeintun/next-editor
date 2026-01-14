@@ -11,7 +11,6 @@ import { useUrlQuery } from './hooks/useUrlQuery';
 import CssCourse from './pages/CssCourse';
 import './App.css'
 import CursorComponent from './components/Cursor.tsx';
-import FloatingPlayButton from './components/FloatingPlayButton.tsx';
 
 function App() {
   return (
@@ -48,8 +47,6 @@ function AppContent() {
       <MediaControls recordMode={!readOnly}/>
 
       <DragDropOverlay isDragging={isDragging} isLoading={isLoading} />
-
-       <FloatingPlayButton />
     </div>
   );
 }
