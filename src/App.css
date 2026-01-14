@@ -74,7 +74,7 @@
   justify-content: center;
   box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
   transition: all 0.3s ease;
-  z-index: 1000;
+  z-index: 50;
 }
 
 .floating-play-button:hover {
