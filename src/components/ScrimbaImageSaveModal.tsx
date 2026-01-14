@@ -17,7 +17,8 @@ import {
     Sparkles
 } from 'lucide-react';
 import MastodonIcon from './icon/Mastodon';
-import { MAGIC_PREFIX_V2 } from '../use-scrimba/src/utils/steganography';
+import { MAGIC_PREFIX } from '../use-scrimba/src/utils/steganography';
+
 
 
 interface ScrimbaImageSaveModalProps {
@@ -105,7 +106,8 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
             // 2. Determine canvas size (with compression estimation)
             const compressed = pako.deflate(dataToSaveRaw);
             const base64Data = btoa(String.fromCharCode.apply(null, Array.from(compressed)));
-            const estimatedEncodedLength = MAGIC_PREFIX_V2.length + base64Data.length;
+            const estimatedEncodedLength = MAGIC_PREFIX.length + base64Data.length;
+
 
             const bitsNeeded = (estimatedEncodedLength) * 8 + 32;
             const pixelsNeeded = Math.ceil(bitsNeeded / 3);

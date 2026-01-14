@@ -3,8 +3,8 @@ import pako from 'pako';
 /**
  * MAGIC_PREFIX is used to identify Scrimba data in images.
  */
-export const MAGIC_PREFIX = 'SCRIMBA_v1:';
-export const MAGIC_PREFIX_V2 = 'SCRIMBA_v2:';
+export const MAGIC_PREFIX = 'SCRIMBA_v2:';
+
 
 
 /**
@@ -21,12 +21,13 @@ export function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string): voi
 
     // Compress data using pako
     const compressed = pako.deflate(data);
-    
+
     // Create V2 formatted data: Prefix + Base64 of compressed data
     // We use Base64 to make it easier to handle as a string in our current LSB implementation
     const base64Data = btoa(String.fromCharCode.apply(null, Array.from(compressed)));
-    const dataToEncode = MAGIC_PREFIX_V2 + base64Data;
-    
+    const dataToEncode = MAGIC_PREFIX + base64Data;
+
+
     const binaryData = stringToBinary(dataToEncode);
     const dataLength = binaryData.length;
 
@@ -98,9 +99,9 @@ export function decodeDataFromCanvas(canvas: HTMLCanvasElement): string | null {
     const decoded = binaryToString(binaryData);
 
     // V2: Compressed data
-    if (decoded.startsWith(MAGIC_PREFIX_V2)) {
+    if (decoded.startsWith(MAGIC_PREFIX)) {
         try {
-            const base64Data = decoded.substring(MAGIC_PREFIX_V2.length);
+            const base64Data = decoded.substring(MAGIC_PREFIX.length);
             const binaryString = atob(base64Data);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
@@ -109,18 +110,14 @@ export function decodeDataFromCanvas(canvas: HTMLCanvasElement): string | null {
             const decompressed = pako.inflate(bytes, { to: 'string' });
             return decompressed;
         } catch (e) {
-            console.error('Failed to decompress Scrimba V2 data', e);
+            console.error('Failed to decompress Scrimba data', e);
             return null;
         }
     }
 
-    // V1: Plain string data (backward compatibility)
-    if (decoded.startsWith(MAGIC_PREFIX)) {
-        return decoded.substring(MAGIC_PREFIX.length);
-    }
-
     return null;
 }
+
 
 
 function stringToBinary(str: string): string {
