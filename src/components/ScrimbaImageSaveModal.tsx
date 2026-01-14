@@ -221,11 +221,20 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                         try {
                             // 1. Get credentials from cookies
                             const getCookie = (name: string) => {
-                                const value = `; ${document.cookie}`;
-                                const parts = value.split(`; ${name}=`);
-                                if (parts.length === 2) {
-                                    const val = parts.pop()?.split(';').shift();
-                                    return val ? decodeURIComponent(val) : undefined;
+                                const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+                                if (!match) return undefined;
+
+                                let value = match[2];
+                                try {
+                                    // Decode and strip potential wrapping quotes
+                                    value = decodeURIComponent(value).replace(/^"(.*)"$/, '$1');
+                                    // Sometimes values are double encoded
+                                    if (value.includes('%')) {
+                                        value = decodeURIComponent(value);
+                                    }
+                                    return value;
+                                } catch (e) {
+                                    return value;
                                 }
                             };
 
@@ -238,12 +247,20 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                                 return;
                             }
 
+                            if (!instanceURL.startsWith('http')) {
+                                console.error('Invalid instance URL from cookie:', instanceURL);
+                                alert(`Invalid Mastodon instance URL: ${instanceURL}`);
+                                setIsGenerating(false);
+                                return;
+                            }
+
                             // 2. Upload to Mastodon
                             const formData = new FormData();
                             formData.append('file', file);
                             formData.append('description', `Scrimba tutorial: ${imageTitle || 'Untitled'}`);
 
-                            const response = await fetch(`${instanceURL.replace(/\/$/, '')}/api/v2/media`, {
+                            const uploadUrl = `${instanceURL.replace(/\/$/, '')}/api/v2/media`;
+                            const response = await fetch(uploadUrl, {
                                 method: 'POST',
                                 headers: {
                                     'Authorization': `Bearer ${accessToken}`,
