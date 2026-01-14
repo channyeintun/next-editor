@@ -285,7 +285,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                             // 2. Upload to Mastodon
                             const formData = new FormData();
                             formData.append('file', file);
-                            formData.append('description', `Next Editor tutorial: ${imageTitle || 'Untitled'}`);
+                            formData.append('description', `tutorial: ${imageTitle || 'Untitled'}`);
 
                             const uploadUrl = `${instanceURL.replace(/\/$/, '')}/api/v2/media`;
                             const response = await fetch(uploadUrl, {
@@ -304,12 +304,18 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                             const mediaData = await response.json();
                             const mediaId = mediaData.id;
 
-                            // 3. Redirect to next-mastodon compose page
+                            // 3. Navigate to compose page in the already-opened window
                             const postTitle = imageTitle || 'New Tutorial';
                             const postText = initialText
                                 ? encodeURIComponent(`${initialText}\n\n#nexteditor #tutorial`)
                                 : encodeURIComponent(`${postTitle}\n\n#nexteditor #tutorial`);
-                            window.open(`${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`, '_blank');
+
+                            const finalComposeUrl = `${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`;
+                            setComposeLink(finalComposeUrl);
+
+                            if (newWindow) {
+                                newWindow.location.href = finalComposeUrl;
+                            }
 
                         } catch (err) {
                             newWindow?.close();
