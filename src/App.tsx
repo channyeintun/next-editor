@@ -34,7 +34,7 @@ function AppContent() {
 
   // Check URL for showImportExport parameter (defaults to true if not specified)
   const urlParams = new URLSearchParams(window.location.search);
-  const readOnly = urlParams.get('readonly') === 'true';
+  const readOnly = urlParams.get('readOnly') === 'true';
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white overflow-hidden">
