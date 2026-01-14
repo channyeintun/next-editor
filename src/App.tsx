@@ -4,6 +4,7 @@ import MediaControls from './components/MediaControls';
 import DragDropOverlay from './components/DragDropOverlay';
 import Preview from './components/Preview.tsx';
 import SlidePanel from './components/SlidePanel';
+import FloatingPlayButton from './components/FloatingPlayButton';
 import { ScrimbaProvider } from './contexts/ScrimbaProvider';
 import { SlidesProvider } from './contexts/SlidesContext';
 import { useDragAndDropUrl } from './hooks/useDragAndDropUrl';
@@ -44,9 +45,11 @@ function AppContent() {
         <SlidePanel />
       </div>
 
-      <MediaControls recordMode={!readOnly}/>
+      <MediaControls recordMode={!readOnly} />
 
       <DragDropOverlay isDragging={isDragging} isLoading={isLoading} />
+
+      <FloatingPlayButton />
     </div>
   );
 }
