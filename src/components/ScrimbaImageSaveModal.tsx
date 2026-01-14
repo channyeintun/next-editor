@@ -292,7 +292,8 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                                 ? encodeURIComponent(`${initialText}\n\n#scrimba #tutorial`)
                                 : encodeURIComponent(`${postTitle}\n\n#scrimba #tutorial`);
                             const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
-                            window.location.href = `${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`;
+                            window.open(`${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`, '_blank');
+
                         } catch (err) {
                             console.error('Sharing failed:', err);
                             alert('Failed to share on Mastodon. Please try again.');
