@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { useScrimbaContext } from '../hooks/useScrimbaContext';
 import ScrimbaImageSaveModal from './ScrimbaImageSaveModal';
+import ScrimbaVideoSaveModal from './ScrimbaVideoSaveModal';
+import type { Recording } from '../use-scrimba/src';
 import MastodonIcon from './icon/Mastodon';
 import SlidesButton from './SlidesButton';
 
@@ -37,6 +39,32 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   } = useScrimbaContext();
 
   const [showImageSaveModal, setShowImageSaveModal] = useState(false);
+  const [showVideoSaveModal, setShowVideoSaveModal] = useState(false);
+
+  const calculateRecordingSize = (recording: Recording) => {
+    // Create a copy without audioBlob for JSON size calculation
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { audioBlob, ...rest } = recording;
+    const jsonString = JSON.stringify(rest);
+    const jsonSize = new Blob([jsonString]).size;
+    const audioSize = recording.audioBlob ? recording.audioBlob.size : 0;
+    return jsonSize + audioSize;
+  };
+
+  const handleShare = () => {
+    if (!currentRecording) return;
+    
+    const size = calculateRecordingSize(currentRecording);
+    const sizeMB = size / (1024 * 1024);
+
+    if (sizeMB < 16) {
+      setShowImageSaveModal(true);
+    } else if (sizeMB < 99) {
+      setShowVideoSaveModal(true);
+    } else {
+      alert(`Recording is too large (${sizeMB.toFixed(2)}MB). Max limit is 99MB.`);
+    }
+  };
 
   /**
    * Handle Monaco Editor mount event
@@ -212,7 +240,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           <div className="flex items-center gap-2">
             {currentRecording && (
               <button
-                onClick={() => setShowImageSaveModal(true)}
+                onClick={handleShare}
                 className="p-1.5 text-white bg-indigo-600 hover:bg-indigo-500 rounded transition-colors flex items-center justify-center shadow-sm"
                 title="Share on Mastodon"
               >
@@ -285,6 +313,15 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           isVisible={showImageSaveModal}
           onSave={() => setShowImageSaveModal(false)}
           onCancel={() => setShowImageSaveModal(false)}
+          initialText={text}
+        />
+      )}
+      {currentRecording && (
+        <ScrimbaVideoSaveModal
+          recording={currentRecording}
+          isVisible={showVideoSaveModal}
+          onSave={() => setShowVideoSaveModal(false)}
+          onCancel={() => setShowVideoSaveModal(false)}
           initialText={text}
         />
       )}
