@@ -11,6 +11,7 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
   const [size, setSize] = useState<PreviewSize>('small');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastContentRef = useRef<string>('');
+  const scrollPositionRef = useRef<{ scrollTop: number; scrollLeft: number }>({ scrollTop: 0, scrollLeft: 0 });
   const scrimbaContext = useScrimbaContext();
   const { editorRef, handlePreviewEvent, isRecording } = scrimbaContext;
   
@@ -19,12 +20,14 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
   const registerPreviewStateApplier = 'registerPreviewStateApplier' in scrimbaContext ? scrimbaContext.registerPreviewStateApplier : undefined;
 
   // Emit preview event when size changes
-  const emitPreviewEvent = useCallback((newSize: PreviewSize, eventType: PreviewEvent['type']) => {
+  const emitPreviewEvent = useCallback((newSize: PreviewSize, eventType: PreviewEvent['type'], scrollTop?: number, scrollLeft?: number) => {
     if (isRecording && handlePreviewEvent) {
       const event: PreviewEvent = {
         type: eventType,
         timestamp: performance.now(),
         size: newSize,
+        scrollTop,
+        scrollLeft,
       };
       handlePreviewEvent(event);
     }
@@ -35,6 +38,8 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
     if (registerPreviewStateGetter && typeof registerPreviewStateGetter === 'function') {
       registerPreviewStateGetter((): PreviewState => ({
         size,
+        scrollTop: scrollPositionRef.current.scrollTop,
+        scrollLeft: scrollPositionRef.current.scrollLeft,
       }));
     }
   }, [registerPreviewStateGetter, size]);
@@ -46,9 +51,90 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
         if (previewState.size !== size) {
           setSize(previewState.size);
         }
+        // Apply scroll position during playback
+        if (previewState.scrollTop !== undefined || previewState.scrollLeft !== undefined) {
+          const iframe = iframeRef.current;
+          if (iframe) {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (iframeDoc && iframeDoc.documentElement) {
+              if (previewState.scrollTop !== undefined) {
+                iframeDoc.documentElement.scrollTop = previewState.scrollTop;
+                if (iframeDoc.body) {
+                  iframeDoc.body.scrollTop = previewState.scrollTop;
+                }
+              }
+              if (previewState.scrollLeft !== undefined) {
+                iframeDoc.documentElement.scrollLeft = previewState.scrollLeft;
+                if (iframeDoc.body) {
+                  iframeDoc.body.scrollLeft = previewState.scrollLeft;
+                }
+              }
+            }
+          }
+        }
       });
     }
   }, [registerPreviewStateApplier, size]);
+
+  // Track scroll events in iframe during recording
+  useEffect(() => {
+    if (!isRecording) return;
+    
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const handleScroll = () => {
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!iframeDoc) return;
+      
+      const scrollTop = iframeDoc.documentElement?.scrollTop || iframeDoc.body?.scrollTop || 0;
+      const scrollLeft = iframeDoc.documentElement?.scrollLeft || iframeDoc.body?.scrollLeft || 0;
+      
+      scrollPositionRef.current = { scrollTop, scrollLeft };
+      emitPreviewEvent(size, 'preview_scroll', scrollTop, scrollLeft);
+    };
+
+    const setupScrollListener = () => {
+      try {
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.addEventListener('scroll', handleScroll, true);
+          // Also listen on the body and documentElement for better coverage
+          if (iframeDoc.body) {
+            iframeDoc.body.addEventListener('scroll', handleScroll, true);
+          }
+          iframeDoc.documentElement?.addEventListener('scroll', handleScroll, true);
+        }
+      } catch (error) {
+        console.warn('Cannot track scroll in iframe:', error);
+      }
+    };
+
+    // Setup listener when iframe loads
+    const handleIframeLoad = () => {
+      setupScrollListener();
+    };
+
+    iframe.addEventListener('load', handleIframeLoad);
+    // Also try to setup immediately in case iframe is already loaded
+    setupScrollListener();
+
+    return () => {
+      iframe.removeEventListener('load', handleIframeLoad);
+      try {
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.removeEventListener('scroll', handleScroll, true);
+          if (iframeDoc.body) {
+            iframeDoc.body.removeEventListener('scroll', handleScroll, true);
+          }
+          iframeDoc.documentElement?.removeEventListener('scroll', handleScroll, true);
+        }
+      } catch (error) {
+        // Iframe might be cross-origin or already unloaded
+      }
+    };
+  }, [isRecording, size, emitPreviewEvent]);
 
   const updateIframeContent = (content: string) => {
     if (!iframeRef.current) return;

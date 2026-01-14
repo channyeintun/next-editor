@@ -25,10 +25,14 @@ export type PreviewSize = 'small' | 'medium' | 'large';
 
 export interface PreviewState {
   size: PreviewSize;
+  scrollTop?: number;
+  scrollLeft?: number;
 }
 
 export interface PreviewEvent {
-  type: 'preview_open' | 'preview_minimize' | 'preview_maximize';
+  type: 'preview_open' | 'preview_minimize' | 'preview_maximize' | 'preview_scroll';
   timestamp: number;
   size: PreviewSize;
+  scrollTop?: number;
+  scrollLeft?: number;
 }
