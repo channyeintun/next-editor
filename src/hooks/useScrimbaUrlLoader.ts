@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { Recording } from '../use-scrimba/src';
 import { useScrimbaContext } from './useScrimbaContext';
-import { decodeDataFromCanvas } from '../use-scrimba/src/utils/steganography';
 
 export const useScrimbaUrlLoader = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -17,6 +16,31 @@ export const useScrimbaUrlLoader = () => {
     }
   };
 
+  const importScrimbaFile = useCallback(async (file: File) => {
+    try {
+      setIsLoading(true);
+      if (file.name.endsWith('.png')) {
+        const { extractRecordingsFromPng } = await import('../storage/ImportUtils');
+        const recordings = await extractRecordingsFromPng(file);
+        if (recordings.length > 0) {
+          loadRecording(recordings[0]);
+        }
+      } else if (file.name.endsWith('.scrimba')) {
+        const text = await file.text();
+        const binaryData = base64ToBinary(text.trim());
+        const recordings = await decompressBinaryToRecordings(binaryData);
+        if (recordings.length > 0) {
+          loadRecording(recordings[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to import Scrimba file:', error);
+      alert(`Failed to import Scrimba file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadRecording]);
+
   const fetchScrimbaFile = useCallback(async (url: string) => {
     if (!isScrimbaUrl(url)) {
       throw new Error('URL does not point to a supported Scrimba file (.scrimba, .png)');
@@ -31,31 +55,8 @@ export const useScrimbaUrlLoader = () => {
       }
 
       const blob = await response.blob();
-
-      if (url.toLowerCase().endsWith('.scrimba')) {
-        const text = await blob.text();
-
-        // Use the same decompression logic from JsonStorage
-        const binaryData = base64ToBinary(text.trim());
-        const recordings = await decompressBinaryToRecordings(binaryData);
-
-        if (recordings.length > 0) {
-          loadRecording(recordings[0]);
-        }
-      } else {
-        // It's an image
-        const imageUrl = URL.createObjectURL(blob);
-        try {
-          const recordings = await decodeImageToRecordings(imageUrl);
-          if (recordings && recordings.length > 0) {
-            loadRecording(recordings[0]);
-          } else {
-            throw new Error('No Scrimba data found in this image');
-          }
-        } finally {
-          URL.revokeObjectURL(imageUrl);
-        }
-      }
+      const file = new File([blob], url.split('/').pop() || 'recording', { type: blob.type });
+      await importScrimbaFile(file);
     } catch (error) {
       console.error('Failed to load Scrimba tutorial from URL:', error);
       alert(`Failed to load Scrimba tutorial: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -63,45 +64,9 @@ export const useScrimbaUrlLoader = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [loadRecording]);
+  }, [importScrimbaFile]);
 
-  const decodeImageToRecordings = async (imageUrl: string): Promise<Recording[] | null> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = async () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(null);
-          return;
-        }
-        ctx.drawImage(img, 0, 0);
-        const jsonData = decodeDataFromCanvas(canvas);
-        if (jsonData) {
-          try {
-            const binaryData = base64ToBinary(jsonData.trim());
-            const recordings = await decompressBinaryToRecordings(binaryData);
-            resolve(recordings);
-          } catch (err) {
-            console.error('Failed to decompress recording from image:', err);
-            resolve(null);
-          }
-        } else {
-          resolve(null);
-        }
-      };
-      img.onerror = () => {
-        console.error('Failed to load image for decoding');
-        resolve(null);
-      };
-      img.src = imageUrl;
-    });
-  };
-
-  // Helper functions from JsonStorage (duplicated for now)
+  // Helper functions from JsonStorage (still needed for .scrimba files)
   const base64ToBinary = (base64Data: string): Uint8Array => {
     const binaryString = atob(base64Data);
     const bytes = new Uint8Array(binaryString.length);
@@ -165,6 +130,7 @@ export const useScrimbaUrlLoader = () => {
 
   return {
     fetchScrimbaFile,
+    importScrimbaFile,
     isScrimbaUrl,
     isLoading
   };

@@ -3,15 +3,16 @@ import { useScrimbaUrlLoader } from './useScrimbaUrlLoader';
 
 export const useDragAndDropUrl = () => {
   const [isDragging, setIsDragging] = useState(false);
-  const { fetchScrimbaFile, isScrimbaUrl, isLoading } = useScrimbaUrlLoader();
+  const { fetchScrimbaFile, importScrimbaFile, isScrimbaUrl, isLoading } = useScrimbaUrlLoader();
 
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {
       e.preventDefault();
 
-      // Check if the drag contains text (URL)
+      // Check if the drag contains text (URL) or files
       const hasText = e.dataTransfer?.types.includes('text/plain');
-      if (hasText) {
+      const hasFiles = e.dataTransfer?.types.includes('Files');
+      if (hasText || hasFiles) {
         setIsDragging(true);
       }
     };
@@ -27,9 +28,19 @@ export const useDragAndDropUrl = () => {
       e.preventDefault();
       setIsDragging(false);
 
+      // Handle file drops
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        if (file.name.endsWith('.png') || file.name.endsWith('.scrimba')) {
+          await importScrimbaFile(file);
+        }
+      }
+
+      // Handle URL drops
       const text = e.dataTransfer?.getData('text/plain');
       if (text && isScrimbaUrl(text)) {
-        await fetchScrimbaFile(text).catch(error => {
+        await fetchScrimbaFile(text).catch((error: unknown) => {
           console.error('Failed to load dropped URL:', error);
         });
       }
@@ -44,7 +55,7 @@ export const useDragAndDropUrl = () => {
       document.removeEventListener('dragleave', handleDragLeave);
       document.removeEventListener('drop', handleDrop);
     };
-  }, [fetchScrimbaFile, isScrimbaUrl]);
+  }, [fetchScrimbaFile, importScrimbaFile, isScrimbaUrl]);
 
   return { isDragging, isLoading };
 };
