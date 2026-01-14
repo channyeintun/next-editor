@@ -1,22 +1,22 @@
 import { useCallback, useState } from 'react';
-import type { Recording } from '../use-scrimba/src';
-import { useScrimbaContext } from './useScrimbaContext';
+import type { Recording } from '../use-next-editor/src';
+import { useNextEditorContext } from './useNextEditorContext';
 
-export const useScrimbaUrlLoader = () => {
+export const useUrlLoader = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const { loadRecording } = useScrimbaContext();
+  const { loadRecording } = useNextEditorContext();
 
-  const isScrimbaUrl = (url: string): boolean => {
+  const isNextEditorUrl = (url: string): boolean => {
     try {
       const urlObj = new URL(url);
       const pathname = urlObj.pathname.toLowerCase();
-      return pathname.endsWith('.scrimba') || pathname.endsWith('.png');
+      return pathname.endsWith('.ne') || pathname.endsWith('.png');
     } catch {
       return false;
     }
   };
 
-  const importScrimbaFile = useCallback(async (file: File) => {
+  const importNextEditorFile = useCallback(async (file: File) => {
     try {
       setIsLoading(true);
       if (file.name.endsWith('.png')) {
@@ -25,7 +25,7 @@ export const useScrimbaUrlLoader = () => {
         if (recordings.length > 0) {
           loadRecording(recordings[0]);
         }
-      } else if (file.name.endsWith('.scrimba')) {
+      } else if (file.name.endsWith('.ne')) {
         const text = await file.text();
         const binaryData = base64ToBinary(text.trim());
         const recordings = await decompressBinaryToRecordings(binaryData);
@@ -34,16 +34,16 @@ export const useScrimbaUrlLoader = () => {
         }
       }
     } catch (error) {
-      console.error('Failed to import Scrimba file:', error);
-      alert(`Failed to import Scrimba file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Failed to import file:', error);
+      alert(`Failed to import file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
   }, [loadRecording]);
 
-  const fetchScrimbaFile = useCallback(async (url: string) => {
-    if (!isScrimbaUrl(url)) {
-      throw new Error('URL does not point to a supported Scrimba file (.scrimba, .png)');
+  const fetchNextEditorFile = useCallback(async (url: string) => {
+    if (!isNextEditorUrl(url)) {
+      throw new Error('URL does not point to a supported file (.ne, .png)');
     }
 
     try {
@@ -61,9 +61,9 @@ export const useScrimbaUrlLoader = () => {
           let proxyBase = 'https://mastodon.website';
           if (isLocal) {
             proxyBase = 'http://localhost:9003';
-          } else if (window.location.hostname.includes('scrim.mastodon.website')) {
-            // If we are on the scrim subdomain, the proxy is on the main domain
-            proxyBase = window.location.origin.replace('scrim.', '');
+          } else if (window.location.hostname.includes('code.mastodon.website')) {
+            // If we are on the subdomain, the proxy is on the main domain
+            proxyBase = window.location.origin.replace('code.', '');
           }
 
           fetchUrl = `${proxyBase}/api/proxy?url=${encodeURIComponent(url)}`;
@@ -80,17 +80,17 @@ export const useScrimbaUrlLoader = () => {
 
       const blob = await response.blob();
       const file = new File([blob], url.split('/').pop() || 'recording', { type: blob.type });
-      await importScrimbaFile(file);
+      await importNextEditorFile(file);
     } catch (error) {
-      console.error('Failed to load Scrimba tutorial from URL:', error);
-      alert(`Failed to load Scrimba tutorial: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Failed to load tutorial from URL:', error);
+      alert(`Failed to load tutorial: ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw error;
     } finally {
       setIsLoading(false);
     }
-  }, [importScrimbaFile]);
+  }, [importNextEditorFile]);
 
-  // Helper functions from JsonStorage (still needed for .scrimba files)
+  // Helper functions from JsonStorage (still needed for .ne files)
   const base64ToBinary = (base64Data: string): Uint8Array => {
     const binaryString = atob(base64Data);
     const bytes = new Uint8Array(binaryString.length);
@@ -153,9 +153,9 @@ export const useScrimbaUrlLoader = () => {
   };
 
   return {
-    fetchScrimbaFile,
-    importScrimbaFile,
-    isScrimbaUrl,
+    fetchNextEditorFile,
+    importNextEditorFile,
+    isNextEditorUrl,
     isLoading
   };
 };

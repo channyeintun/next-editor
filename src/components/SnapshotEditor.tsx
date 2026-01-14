@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import type { Recording } from '../use-scrimba/src';
+import type { Recording } from '../use-next-editor/src';
 
 interface SnapshotEditorProps {
   recording: Recording;

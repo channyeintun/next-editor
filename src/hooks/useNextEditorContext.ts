@@ -1,13 +1,13 @@
 import { useContext, type RefObject } from 'react';
 import type * as monaco from 'monaco-editor';
-import { ScrimbaContext } from '../contexts/ScrimbaContext';
-import type { UseScrimbaReturn, Recording } from '../use-scrimba/src';
+import { NextEditorContext } from '../contexts/NextEditorContext';
+import type { UseNextEditorReturn, Recording } from '../use-next-editor/src';
 
 /**
- * Hook to access useScrimba functionality from any component
+ * Hook to access useNextEditor functionality from any component
  * This replaces useSelector and useDispatch from Redux and includes JSON storage methods
  */
-export const useScrimbaContext = (): UseScrimbaReturn & { 
+export const useNextEditorContext = (): UseNextEditorReturn & { 
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   // JSON Storage methods
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;
@@ -18,9 +18,9 @@ export const useScrimbaContext = (): UseScrimbaReturn & {
   loadRecordingsFromStorage: () => Promise<Recording[]>;
   deleteFromStorage: (id: string) => Promise<void>;
 } => {
-  const context = useContext(ScrimbaContext);
+  const context = useContext(NextEditorContext);
   if (!context) {
-    throw new Error('useScrimbaContext must be used within a ScrimbaProvider');
+    throw new Error('useNextEditorContext must be used within a NextEditorProvider');
   }
   return context;
 };

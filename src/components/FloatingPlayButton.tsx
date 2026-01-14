@@ -1,4 +1,4 @@
-import { useScrimbaContext } from '../hooks/useScrimbaContext';
+import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import '../App.css';
 
 /**
@@ -7,7 +7,7 @@ import '../App.css';
  * Clicking it triggers playback of the recording.
  */
 const FloatingPlayButton = () => {
-    const { currentRecording, isPlaying, isRecording, play } = useScrimbaContext();
+    const { currentRecording, isPlaying, isRecording, play } = useNextEditorContext();
 
     // Only show when there's a recording loaded and not currently playing or recording
     const shouldShow = currentRecording && !isPlaying && !isRecording;

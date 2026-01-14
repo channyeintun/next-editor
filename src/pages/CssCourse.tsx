@@ -13,27 +13,27 @@ const CSS_LESSONS = [
       {
         id: 1,
         title: "Introduction to the Box Model",
-        scrimUrl: "/lessons/introduction-to-box-model.scrimba"
+        url: "/lessons/introduction-to-box-model.ne"
       },
       {
         id: 2,
         title: "Content and Sizing",
-        scrimUrl: "/lessons/content-and-sizing.scrimba"
+        url: "/lessons/content-and-sizing.ne"
       },
       {
         id: 3,
         title: "The Areas of the Box Model",
-        scrimUrl: "/lessons/the-areas-of-the-box-model.scrimba"
+        url: "/lessons/the-areas-of-the-box-model.ne"
       },
       {
         id: 4,
         title: "Debug the Box Model",
-        scrimUrl: "/lessons/debug-the-box-model.scrimba"
+        url: "/lessons/debug-the-box-model.ne"
       },
       {
         id: 5,
         title: "Control the Box Model",
-        scrimUrl: "/lessons/control-the-box-model.scrimba"
+        url: "/lessons/control-the-box-model.ne"
       },
     ]
   },
@@ -43,7 +43,7 @@ const CSS_LESSONS = [
       {
         id: 99,
         title: "Text Shadow",
-        scrimUrl: "/lessons/text-shadow.scrimba"
+        url: "/lessons/text-shadow.ne"
       },
     ]
   },
@@ -52,7 +52,7 @@ const CSS_LESSONS = [
 type Lesson = {
   id: number;
   title: string;
-  scrimUrl: string;
+  url: string;
 };
 
 interface LessonsPanelProps {
@@ -159,7 +159,7 @@ const LessonsPanel: React.FC<LessonsPanelProps> = ({ lessons, currentLessonId, o
                       <h4 className={`text-sm font-medium group-hover:text-indigo-300 transition-colors ${currentLessonId === lesson.id ? 'text-indigo-200' : ''
                         }`}>{lesson.title}</h4>
                       <p className={`text-xs mt-1 transition-colors ${currentLessonId === lesson.id ? 'text-indigo-400' : 'text-slate-400'
-                        }`}>{lesson.scrimUrl}</p>
+                        }`}>{lesson.url}</p>
                     </div>
                   ))}
                 </div>
@@ -177,15 +177,15 @@ const CssCourse: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isLoading } = useUrlQuery();
   const [isLessonsPanelOpen, setIsLessonsPanelOpen] = React.useState(false);
-  const currentScrimUrl = searchParams.get('scrimUrl');
+  const currentUrl = searchParams.get('url');
 
   // Find current lesson across all groups
   const currentLessonId = CSS_LESSONS
     .flatMap(group => group.lessons)
-    .find(lesson => lesson.scrimUrl === currentScrimUrl)?.id;
+    .find(lesson => lesson.url === currentUrl)?.id;
 
   const handleLessonSelect = (lesson: Lesson) => {
-    setSearchParams({ scrimUrl: lesson.scrimUrl });
+    setSearchParams({ url: lesson.url });
   };
 
   const toggleLessonsPanel = () => {

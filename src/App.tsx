@@ -4,7 +4,7 @@ import MediaControls from './components/MediaControls';
 import DragDropOverlay from './components/DragDropOverlay';
 import Preview from './components/Preview.tsx';
 import SlidePanel from './components/SlidePanel';
-import { ScrimbaProvider } from './contexts/ScrimbaProvider';
+import { NextEditorProvider } from './contexts/NextEditorProvider.tsx';
 import { SlidesProvider } from './contexts/SlidesContext';
 import { useDragAndDropUrl } from './hooks/useDragAndDropUrl';
 import { useUrlQuery } from './hooks/useUrlQuery';
@@ -15,14 +15,14 @@ import FloatingPlayButton from './components/FloatingPlayButton.tsx';
 
 function App() {
   return (
-    <ScrimbaProvider>
+    <NextEditorProvider>
       <SlidesProvider>
         <Routes>
           <Route path="/" element={<AppContent />} />
           <Route path="/css-course" element={<CssCourse />} />
         </Routes>
       </SlidesProvider>
-    </ScrimbaProvider>
+    </NextEditorProvider>
   );
 }
 

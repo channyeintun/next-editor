@@ -44,9 +44,9 @@ export interface Recording {
 
 
 /**
- * Configuration options for useScrimba hook
+ * Configuration options for useNextEditor hook
  */
-export interface UseScrimbaConfig {
+export interface UseNextEditorConfig {
   // Required
   editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   
@@ -98,9 +98,9 @@ export interface EditorState {
 
 
 /**
- * Return type of useScrimba hook
+ * Return type of useNextEditor hook
  */
-export interface UseScrimbaReturn {
+export interface UseNextEditorReturn {
   // Recording State
   isRecording: boolean;
   isRecordingAudio: boolean;

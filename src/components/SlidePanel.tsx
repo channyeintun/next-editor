@@ -1,5 +1,5 @@
 import { useSlidesContext } from '../contexts/SlidesContext';
-import { useScrimbaContext } from '../hooks/useScrimbaContext';
+import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import SlidePreview from './SlidePreview';
 
 export default function SlidePanel() {
@@ -11,7 +11,7 @@ export default function SlidePanel() {
     handleSlideEvent: onSlideEvent,
   } = useSlidesContext();
   
-  const { pause } = useScrimbaContext();
+  const { pause } = useNextEditorContext();
 
   return (
     <>

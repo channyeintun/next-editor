@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useScrimbaUrlLoader } from './useScrimbaUrlLoader';
+import { useUrlLoader } from './useUrlLoader';
 
 export const useDragAndDropUrl = () => {
   const [isDragging, setIsDragging] = useState(false);
-  const { fetchScrimbaFile, importScrimbaFile, isScrimbaUrl, isLoading } = useScrimbaUrlLoader();
+  const { fetchNextEditorFile, importNextEditorFile, isNextEditorUrl, isLoading } = useUrlLoader();
 
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {
@@ -32,15 +32,15 @@ export const useDragAndDropUrl = () => {
       const files = e.dataTransfer?.files;
       if (files && files.length > 0) {
         const file = files[0];
-        if (file.name.endsWith('.png') || file.name.endsWith('.scrimba')) {
-          await importScrimbaFile(file);
+        if (file.name.endsWith('.png') || file.name.endsWith('.ne')) {
+          await importNextEditorFile(file);
         }
       }
 
       // Handle URL drops
       const text = e.dataTransfer?.getData('text/plain');
-      if (text && isScrimbaUrl(text)) {
-        await fetchScrimbaFile(text).catch((error: unknown) => {
+      if (text && isNextEditorUrl(text)) {
+        await fetchNextEditorFile(text).catch((error: unknown) => {
           console.error('Failed to load dropped URL:', error);
         });
       }
@@ -55,7 +55,7 @@ export const useDragAndDropUrl = () => {
       document.removeEventListener('dragleave', handleDragLeave);
       document.removeEventListener('drop', handleDrop);
     };
-  }, [fetchScrimbaFile, importScrimbaFile, isScrimbaUrl]);
+  }, [fetchNextEditorFile, importNextEditorFile, isNextEditorUrl]);
 
   return { isDragging, isLoading };
 };

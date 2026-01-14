@@ -1,8 +1,8 @@
-import type { Recording } from '../use-scrimba/src';
-import { decodeDataFromCanvas } from '../use-scrimba/src/utils/steganography';
+import type { Recording } from '../use-next-editor/src';
+import { decodeDataFromCanvas } from '../use-next-editor/src/utils/steganography';
 
 /**
- * Extracts Scrimba recordings from a PNG file using steganography
+ * Extracts recordings from a PNG file using steganography
  */
 export async function extractRecordingsFromPng(file: File): Promise<Recording[]> {
     return new Promise((resolve, reject) => {
@@ -23,19 +23,19 @@ export async function extractRecordingsFromPng(file: File): Promise<Recording[]>
                 try {
                     const decodedData = decodeDataFromCanvas(canvas);
                     if (!decodedData) {
-                        reject(new Error('No Scrimba data found in image'));
+                        reject(new Error('No data found in image'));
                         return;
                     }
 
                     const parsed = JSON.parse(decodedData);
 
-                    interface ScrimbaImportData extends Recording {
+                    interface ImportData extends Recording {
                         audioBase64?: string;
                     }
 
                     // Handle both single recording and array of recordings
                     const parsedArray = Array.isArray(parsed) ? parsed : [parsed];
-                    const recordings = parsedArray as ScrimbaImportData[];
+                    const recordings = parsedArray as ImportData[];
 
                     // Convert audioBase64 back to audioBlob if present
                     const processedRecordings = recordings.map((r) => {
@@ -58,7 +58,7 @@ export async function extractRecordingsFromPng(file: File): Promise<Recording[]>
 
                     resolve(processedRecordings);
                 } catch (error) {
-                    reject(new Error(`Failed to decode Scrimba data: ${error instanceof Error ? error.message : 'Unknown error'}`));
+                    reject(new Error(`Failed to decode data: ${error instanceof Error ? error.message : 'Unknown error'}`));
                 }
             };
             img.onerror = () => reject(new Error('Failed to load image'));

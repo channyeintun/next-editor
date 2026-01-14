@@ -82,6 +82,5 @@ https://example.com/image.png
 
 - Slide events are recorded with timestamps relative to recording start
 - Events include: slide_open, slide_close, slide_change, slide_maximize, slide_minimize
-- The feature integrates with the existing Scrimba recording system
 - Images are loaded lazily and handle errors gracefully
 - Keyboard navigation only works in large (maximized) mode

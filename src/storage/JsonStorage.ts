@@ -1,4 +1,4 @@
-import type { Recording } from '../use-scrimba/src';
+import type { Recording } from '../use-next-editor/src';
 import { superjson } from './SuperJsonConfig';
 import { deflate, inflate } from 'pako';
 
@@ -17,11 +17,11 @@ interface AudioPlaceholder {
 
 
 /**
- * JSON Storage Interface for use-scrimba
+ * JSON Storage Interface for use-next-editor
  * Provides export/import functionality for recordings as JSON files with compression
  */
 export class JsonStorage {
-  private localStorageKey = 'scrimba-recordings';
+  private localStorageKey = 'next-editor-recordings';
 
   /**
    * Extract audio data from all recordings (helper for stats)
@@ -276,9 +276,9 @@ export class JsonStorage {
 
       const link = document.createElement('a');
       link.href = url;
-      // Use .scrimba extension to indicate new binary format
+      // Use .ne extension to indicate new binary format
       const baseFilename = filename?.replace(/\.json$/, '') || `recording-${recording.id}`;
-      link.download = `${baseFilename}.scrimba`;
+      link.download = `${baseFilename}.ne`;
       document.body.appendChild(link);
       link.click();
 
@@ -306,9 +306,9 @@ export class JsonStorage {
 
       const link = document.createElement('a');
       link.href = url;
-      // Use .scrimba extension to indicate new binary format
-      const baseFilename = filename?.replace(/\.json$/, '') || `scrimba-recordings-${Date.now()}`;
-      link.download = `${baseFilename}.scrimba`;
+      // Use .ne extension to indicate new binary format
+      const baseFilename = filename?.replace(/\.json$/, '') || `next-editor-recordings-${Date.now()}`;
+      link.download = `${baseFilename}.ne`;
       document.body.appendChild(link);
       link.click();
 
@@ -321,13 +321,13 @@ export class JsonStorage {
   }
 
   /**
-   * Import recordings from .scrimba or .png format file
+   * Import recordings from .ne or .png format file
    */
   importFromFile(): Promise<Recording[]> {
     return new Promise((resolve, reject) => {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.scrimba,.png';
+      input.accept = '.ne,.png';
 
       input.onchange = async (event) => {
         const file = (event.target as HTMLInputElement).files?.[0];

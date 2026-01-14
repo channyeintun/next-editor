@@ -32,7 +32,7 @@ export interface UseAudioRecordingReturn {
 }
 
 /**
- * Hook for synchronized audio recording within the use-scrimba package
+ * Hook for synchronized audio recording within the use-next-editor package
  * Ensures perfect synchronization with snapshot recording
  */
 export const useAudioRecording = (): UseAudioRecordingReturn => {

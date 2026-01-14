@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import * as monaco from 'monaco-editor';
 import type {
-  UseScrimbaConfig,
-  UseScrimbaReturn,
+  UseNextEditorConfig,
+  UseNextEditorReturn,
   Recording,
   EditorSnapshot
 } from './types';
@@ -16,10 +16,10 @@ import { applyContentDiff, applyPositionDiff, applySelectionDiff } from './utils
 type AudioElementWithDuration = HTMLAudioElement & { _actualDuration?: number };
 
 /**
- * Main useScrimba hook - provides Scrimba-like recording and playback functionality
+ * Main useNextEditor hook
  * Uses simple React state management like the demo
  */
-export const useScrimba = (config: UseScrimbaConfig): UseScrimbaReturn => {
+export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn => {
   const {
     editorRef,
     enableAudioRecording = false,

@@ -1,12 +1,12 @@
-export { useScrimba } from './useScrimba';
+export { useNextEditor } from './useNextEditor';
 
 // Contexts
-export { ScrimbaProvider } from '../../contexts/ScrimbaProvider';
-export { ScrimbaContext } from '../../contexts/ScrimbaContext';
+export { NextEditorProvider } from '../../contexts/NextEditorProvider';
+export { NextEditorContext } from '../../contexts/NextEditorContext';
 export { SlidesProvider } from '../../contexts/SlidesContext';
 
 // Hooks
-export { useScrimbaContext } from '../../hooks/useScrimbaContext';
+export { useNextEditorContext } from '../../hooks/useNextEditorContext';
 export { useSlides } from '../../hooks/useSlides';
 
 // Components
@@ -15,15 +15,15 @@ export { default as MediaControls } from '../../components/MediaControls';
 export { default as Preview } from '../../components/Preview';
 export { default as CursorComponent } from '../../components/Cursor';
 export { default as SlidePanel } from '../../components/SlidePanel';
-export { default as ScrimbaImageSaveModal } from '../../components/ScrimbaImageSaveModal';
+export { default as NextEditorImageSaveModal } from '../../components/ShareModal';
 
 // Type exports for users
 export type {
   MouseCursorPosition,
   EditorSnapshot,
   Recording,
-  UseScrimbaConfig,
-  UseScrimbaReturn,
+  UseNextEditorConfig,
+  UseNextEditorReturn,
   EditorState,
 } from './types';
 

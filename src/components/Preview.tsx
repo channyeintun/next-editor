@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useScrimbaContext } from '../hooks/useScrimbaContext';
+import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import type { PreviewSize, PreviewState, PreviewEvent } from '../types/slides';
 
 interface PreviewProps {
@@ -12,12 +12,12 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastContentRef = useRef<string>('');
   const scrollPositionRef = useRef<{ scrollTop: number; scrollLeft: number }>({ scrollTop: 0, scrollLeft: 0 });
-  const scrimbaContext = useScrimbaContext();
-  const { editorRef, handlePreviewEvent, isRecording } = scrimbaContext;
+  const nextEditorContext = useNextEditorContext();
+  const { editorRef, handlePreviewEvent, isRecording } = nextEditorContext;
   
   // Get registration functions from context
-  const registerPreviewStateGetter = 'registerPreviewStateGetter' in scrimbaContext ? scrimbaContext.registerPreviewStateGetter : undefined;
-  const registerPreviewStateApplier = 'registerPreviewStateApplier' in scrimbaContext ? scrimbaContext.registerPreviewStateApplier : undefined;
+  const registerPreviewStateGetter = 'registerPreviewStateGetter' in nextEditorContext ? nextEditorContext.registerPreviewStateGetter : undefined;
+  const registerPreviewStateApplier = 'registerPreviewStateApplier' in nextEditorContext ? nextEditorContext.registerPreviewStateApplier : undefined;
 
   // Emit preview event when size changes
   const emitPreviewEvent = useCallback((newSize: PreviewSize, eventType: PreviewEvent['type'], scrollTop?: number, scrollLeft?: number) => {
@@ -141,7 +141,7 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
           iframeDoc.documentElement?.removeEventListener('scroll', handleScroll, true);
         }
       } catch (error) {
-        // Iframe might be cross-origin or already unloaded
+        console.error('Error cleaning up scroll listener in iframe:', error);
       }
     };
   }, [isRecording, size, emitPreviewEvent]);

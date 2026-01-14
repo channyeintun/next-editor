@@ -1,10 +1,10 @@
 import { createContext, type RefObject } from 'react';
-import type { UseScrimbaReturn, Recording } from '../use-scrimba/src';
+import type { UseNextEditorReturn, Recording } from '../use-next-editor/src';
 import type { SlidePreviewState, PreviewState } from '../types/slides';
 import type * as monaco from 'monaco-editor';
 
-// Create context for useScrimba functionality with editor ref and JSON storage
-export const ScrimbaContext = createContext<(UseScrimbaReturn & { 
+// Create context for useNextEditor functionality with editor ref and JSON storage
+export const NextEditorContext = createContext<(UseNextEditorReturn & { 
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   // JSON Storage methods
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;

@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "use-scrimba",
+      "name": "use-next-editor",
       "dependencies": {
         "monaco-editor": "^0.52.2",
       },

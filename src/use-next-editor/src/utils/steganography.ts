@@ -1,11 +1,9 @@
 import pako from 'pako';
 
 /**
- * MAGIC_PREFIX is used to identify Scrimba data in images.
+ * MAGIC_PREFIX is used to identify data in images.
  */
-export const MAGIC_PREFIX = 'SCRIMBA_v2:';
-
-
+export const MAGIC_PREFIX = 'NEXT_EDITOR_v2:';
 
 /**
  * Encodes a string into an image's pixel data using LSB (Least Significant Bit).
@@ -68,7 +66,7 @@ export function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string): voi
 /**
  * Decodes data from an image's pixel data.
  * @param canvas The canvas containing the image.
- * @returns The decoded string, or null if no Scrimba data found.
+ * @returns The decoded string, or null if no data found.
  */
 export function decodeDataFromCanvas(canvas: HTMLCanvasElement): string | null {
     const ctx = canvas.getContext('2d');
@@ -117,7 +115,7 @@ export function decodeDataFromCanvas(canvas: HTMLCanvasElement): string | null {
             const decompressed = pako.inflate(bytes, { to: 'string' });
             return decompressed;
         } catch (e) {
-            console.error('Failed to decompress Scrimba data', e);
+            console.error('Failed to decompress data', e);
             return null;
         }
     }

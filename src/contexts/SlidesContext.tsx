@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect } from 'react';
 import { useSlides } from '../hooks/useSlides';
-import { useScrimbaContext } from '../hooks/useScrimbaContext';
+import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import type { SlidePreviewState } from '../types/slides';
 
 const SlidesContext = createContext<ReturnType<typeof useSlides> | null>(null);
@@ -10,18 +10,18 @@ interface SlidesProviderProps {
 }
 
 export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
-  const scrimbaContext = useScrimbaContext();
-  const { handleSlideEvent } = scrimbaContext;
-  const registerSlideStateGetter = 'registerSlideStateGetter' in scrimbaContext ? scrimbaContext.registerSlideStateGetter : undefined;
-  const registerSlideStateApplier = 'registerSlideStateApplier' in scrimbaContext ? scrimbaContext.registerSlideStateApplier : undefined;
-  const registerSlidesGetter = 'registerSlidesGetter' in scrimbaContext ? scrimbaContext.registerSlidesGetter : undefined;
-  const registerSlidesApplier = 'registerSlidesApplier' in scrimbaContext ? scrimbaContext.registerSlidesApplier : undefined;
+  const nextEditorContext = useNextEditorContext();
+  const { handleSlideEvent } = nextEditorContext;
+  const registerSlideStateGetter = 'registerSlideStateGetter' in nextEditorContext ? nextEditorContext.registerSlideStateGetter : undefined;
+  const registerSlideStateApplier = 'registerSlideStateApplier' in nextEditorContext ? nextEditorContext.registerSlideStateApplier : undefined;
+  const registerSlidesGetter = 'registerSlidesGetter' in nextEditorContext ? nextEditorContext.registerSlidesGetter : undefined;
+  const registerSlidesApplier = 'registerSlidesApplier' in nextEditorContext ? nextEditorContext.registerSlidesApplier : undefined;
 
   const slidesData = useSlides({
     onSlideEvent: handleSlideEvent
   });
 
-  // Register slide state getter and applier with ScrimbaProvider
+  // Register slide state getter and applier with NextEditorProvider
   useEffect(() => {
     if (registerSlideStateGetter && typeof registerSlideStateGetter === 'function') {
       registerSlideStateGetter(() => ({
@@ -31,7 +31,7 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     }
   }, [registerSlideStateGetter, slidesData.previewState, slidesData.currentSlideIndex]);
 
-  // Register slides data getter with ScrimbaProvider
+  // Register slides data getter with NextEditorProvider
   useEffect(() => {
     if (registerSlidesGetter && typeof registerSlidesGetter === 'function') {
       registerSlidesGetter(() => slidesData.slides);
@@ -64,7 +64,6 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     }
   }, [registerSlideStateApplier, slidesData]);
 
-  // Register slides data applier with ScrimbaProvider
   useEffect(() => {
     if (registerSlidesApplier && typeof registerSlidesApplier === 'function') {
       registerSlidesApplier((slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => {

@@ -84,7 +84,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 
   // Add pseudo element for larger clickable area
   const containerWithPseudo = `
-    .scrimba-progress-container::before {
+    .next-editor-progress-container::before {
       content: '';
       position: absolute;
       top: -8px;
@@ -119,7 +119,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     <>
       <style>{containerWithPseudo}</style>
       <div
-        className={`scrimba-progress-container ${className}`}
+        className={`next-editor-progress-container ${className}`}
         style={containerStyle}
         onClick={handleClick}
         onMouseEnter={(e) => {
@@ -137,11 +137,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         aria-label="Playback progress"
       >
         <div
-          className="scrimba-progress-bar"
+          className="next-editor-progress-bar"
           style={progressStyle}
         />
         <div
-          className="scrimba-progress-thumb"
+          className="next-editor-progress-thumb"
           style={thumbStyle}
         />
       </div>

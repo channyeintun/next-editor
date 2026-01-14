@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { useScrimbaContext } from '../hooks/useScrimbaContext';
+import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import { useSlidesContext } from '../contexts/SlidesContext';
 import SlidesManager from './SlidesManager';
 
 export default function SlidesButton() {
-  const { isRecording } = useScrimbaContext();
+  const { isRecording } = useNextEditorContext();
   const [showManager, setShowManager] = useState(false);
   
   const {

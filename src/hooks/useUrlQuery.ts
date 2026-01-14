@@ -1,17 +1,17 @@
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useScrimbaUrlLoader } from './useScrimbaUrlLoader';
+import { useUrlLoader } from './useUrlLoader';
 
 export const useUrlQuery = () => {
-  const { fetchScrimbaFile, isLoading } = useScrimbaUrlLoader();
+  const { fetchNextEditorFile, isLoading } = useUrlLoader();
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    const scrimUrl = searchParams.get('scrimUrl');
+    const url = searchParams.get('url');
 
-    if (scrimUrl) {
+    if (url) {
       // Decode URL in case it was URL encoded
-      const decodedUrl = decodeURIComponent(scrimUrl);
+      const decodedUrl = decodeURIComponent(url);
       
       // Convert relative URLs to absolute URLs for same origin
       let fullUrl = decodedUrl;
@@ -21,8 +21,8 @@ export const useUrlQuery = () => {
         fullUrl = decodedUrl.startsWith('/') ? `${origin}${decodedUrl}` : `${origin}/${decodedUrl}`;
       }
       
-      fetchScrimbaFile(fullUrl).catch(error => {
-        console.error('Failed to load scrim from URL query:', error);
+      fetchNextEditorFile(fullUrl).catch(error => {
+        console.error('Failed to load from URL query:', error);
       });
     }
   }, [searchParams]); // Only react to changes in searchParams

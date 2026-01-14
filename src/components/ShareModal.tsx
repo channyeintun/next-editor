@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import type { Recording } from '../use-scrimba/src';
-import { encodeDataInCanvas } from '../use-scrimba/src/utils/steganography';
+import type { Recording } from '../use-next-editor/src';
+import { encodeDataInCanvas } from '../use-next-editor/src/utils/steganography';
 import pako from 'pako';
 import {
     X,
@@ -17,11 +17,11 @@ import {
     Sparkles
 } from 'lucide-react';
 import MastodonIcon from './icon/Mastodon';
-import { MAGIC_PREFIX } from '../use-scrimba/src/utils/steganography';
+import { MAGIC_PREFIX } from '../use-next-editor/src/utils/steganography';
 
 
 
-interface ScrimbaImageSaveModalProps {
+interface NextEditorImageSaveModalProps {
     recording: Recording;
     isVisible: boolean;
     onSave: (file: File) => void;
@@ -71,7 +71,7 @@ const STYLE_OPTIONS: StyleOption[] = [
     },
 ];
 
-const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
+const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
     recording,
     isVisible,
     onSave,
@@ -221,7 +221,7 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
 
             canvas.toBlob(async (blob) => {
                 if (blob) {
-                    const file = new File([blob], `scrimba-${Date.now()}.png`, { type: 'image/png' });
+                    const file = new File([blob], `next-editor-${Date.now()}.png`, { type: 'image/png' });
 
                     if (previewUrl) URL.revokeObjectURL(previewUrl);
                     const newPreviewUrl = URL.createObjectURL(blob);
@@ -275,7 +275,7 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                             // 2. Upload to Mastodon
                             const formData = new FormData();
                             formData.append('file', file);
-                            formData.append('description', `Scrimba tutorial: ${imageTitle || 'Untitled'}`);
+                            formData.append('description', `Next Editor tutorial: ${imageTitle || 'Untitled'}`);
 
                             const uploadUrl = `${instanceURL.replace(/\/$/, '')}/api/v2/media`;
                             const response = await fetch(uploadUrl, {
@@ -294,10 +294,10 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                             const mediaId = mediaData.id;
 
                             // 3. Redirect to next-mastodon compose page
-                            const postTitle = imageTitle || 'New Scrimba Tutorial';
+                            const postTitle = imageTitle || 'New Next Editor Tutorial';
                             const postText = initialText
-                                ? encodeURIComponent(`${initialText}\n\n#scrimba #tutorial`)
-                                : encodeURIComponent(`${postTitle}\n\n#scrimba #tutorial`);
+                                ? encodeURIComponent(`${initialText}\n\n#nexteditor #tutorial`)
+                                : encodeURIComponent(`${postTitle}\n\n#nexteditor #tutorial`);
                             const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
                             window.open(`${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`, '_blank');
 
@@ -480,4 +480,4 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
     );
 };
 
-export default ScrimbaImageSaveModal;
+export default NextEditorImageSaveModal;

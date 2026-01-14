@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { useScrimbaContext } from '../hooks/useScrimbaContext';
-import ScrimbaImageSaveModal from './ScrimbaImageSaveModal';
+import { useNextEditorContext } from '../hooks/useNextEditorContext';
+import NextEditorImageSaveModal from './ShareModal';
 import MastodonIcon from './icon/Mastodon';
 import SlidesButton from './SlidesButton';
 
@@ -18,7 +18,7 @@ interface CodeEditorProps {
  */
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
-  theme = 'scrimba-dark',
+  theme = 'next-editor-dark',
   defaultContent = `<html>
     <h1>Hello world</h1>
 </html>`,
@@ -34,7 +34,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     importFromFile,
     loadRecording,
     exportAsFile,
-  } = useScrimbaContext();
+  } = useNextEditorContext();
 
   const [showImageSaveModal, setShowImageSaveModal] = useState(false);
 
@@ -45,8 +45,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
 
-    // Define Scrimba dark theme
-    monaco.editor.defineTheme('scrimba-dark', {
+    // Define dark theme
+    monaco.editor.defineTheme('next-editor-dark', {
       base: 'vs-dark',
       inherit: false,
       rules: [
@@ -179,7 +179,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     });
 
     // Apply the theme
-    monaco.editor.setTheme('scrimba-dark');
+    monaco.editor.setTheme('next-editor-dark');
   };
 
   const handleImport = async () => {
@@ -193,7 +193,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     }
   };
 
-  const handleScrimbaExport = async () => {
+  const handleNextEditorExport = async () => {
     if (currentRecording) {
       try {
         await exportAsFile(currentRecording);
@@ -228,7 +228,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
               Import
             </button>
             <button
-              onClick={handleScrimbaExport}
+              onClick={handleNextEditorExport}
               disabled={!currentRecording}
               className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
             >
@@ -281,7 +281,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         />
       </div>
       {currentRecording && (
-        <ScrimbaImageSaveModal
+        <NextEditorImageSaveModal
           recording={currentRecording}
           isVisible={showImageSaveModal}
           onSave={() => setShowImageSaveModal(false)}

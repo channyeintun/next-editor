@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { Slide, SlideEvent } from '../types/slides';
-import { useScrimbaContext } from '../hooks/useScrimbaContext';
+import { useNextEditorContext } from '../hooks/useNextEditorContext';
 
 type SlidePreviewSize = 'small' | 'large';
 
@@ -25,7 +25,7 @@ export default function SlidePreview({
   isMaximized = false,
   positioning = 'fixed'
 }: SlidePreviewProps) {
-  const { isPlaying } = useScrimbaContext();
+  const { isPlaying } = useNextEditorContext();
   // Check record mode from sessionStorage (same pattern as CssCourse page)
   const recordMode = sessionStorage.getItem('recordMode') === 'true';
   

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useScrimbaContext } from '../hooks/useScrimbaContext';
+import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import ReplayIcon from './icon/Replay';
 import PlayIcon from './icon/Play';
 import PauseIcon from './icon/Pause';
 import SettingIcon from './icon/Setting';
 import ProgressBar from './ProgressBar';
 import SnapshotEditor from './SnapshotEditor';
-import type { Recording } from '../use-scrimba/src';
+import type { Recording } from '../use-next-editor/src';
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -40,7 +40,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     setVolume,
     actualDuration,
     loadRecording,
-  } = useScrimbaContext();
+  } = useNextEditorContext();
 
   const [showSettings, setShowSettings] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);

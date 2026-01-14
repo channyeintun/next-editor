@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Publishing use-scrimba package..."
+echo "Publishing use-next-editor package..."
 
 # Build
 npm run build

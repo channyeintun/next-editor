@@ -18,7 +18,7 @@ const DragDropOverlay: React.FC<DragDropOverlayProps> = ({ isDragging, isLoading
           </div>
         ) : (
           <div className="text-blue-400">
-            <p className="text-lg font-medium">Drop .scrimba file URL here</p>
+            <p className="text-lg font-medium">Drop lesson file URL here</p>
           </div>
         )}
       </div>

@@ -6,8 +6,8 @@ export default defineConfig({
     plugins: [react()],
     build: {
         lib: {
-            entry: path.resolve(__dirname, 'src/use-scrimba/src/index.ts'),
-            name: 'UseScrimba',
+            entry: path.resolve(__dirname, 'src/use-next-editor/src/index.ts'),
+            name: 'UseNextEditor',
             fileName: (format) => `index.${format === 'es' ? 'js' : 'cjs'}`,
             formats: ['es', 'cjs'],
         },
@@ -20,7 +20,7 @@ export default defineConfig({
                 },
             },
         },
-        outDir: 'src/use-scrimba/dist',
+        outDir: 'src/use-next-editor/dist',
         emptyOutDir: true,
     },
 });

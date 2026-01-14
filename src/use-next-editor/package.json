@@ -1,7 +1,7 @@
 {
-  "name": "use-scrimba",
+  "name": "use-next-editor",
   "version": "3.2.0",
-  "description": "A powerful React hook for recording and replaying Monaco Editor interactions with Scrimba-like functionality",
+  "description": "A powerful React hook for recording and replaying Monaco Editor interactions",
   "main": "./dist/index.js",
   "module": "./dist/index.esm.js",
   "types": "./dist/index.d.ts",
@@ -29,7 +29,7 @@
     "editor",
     "recording",
     "replay",
-    "scrimba",
+    "next-editor",
     "typescript",
     "code-editor",
     "screen-recording",

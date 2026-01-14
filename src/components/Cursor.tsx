@@ -1,6 +1,6 @@
 import React from 'react';
-import { useScrimbaContext } from '../hooks/useScrimbaContext';
-import type { MouseCursorPosition } from '../use-scrimba/src';
+import { useNextEditorContext } from '../hooks/useNextEditorContext';
+import type { MouseCursorPosition } from '../use-next-editor/src';
 
 /**
  * Fake cursor component for playback visualization
@@ -70,7 +70,7 @@ const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
 const CursorComponent: React.FC<{
   hasParent?: boolean;
 }> = (props) => {
-  const { isPlaying, currentCursor } = useScrimbaContext();
+  const { isPlaying, currentCursor } = useNextEditorContext();
 
   // Render fake cursor during playback - fixed to viewport with smooth transitions
   return (

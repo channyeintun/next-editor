@@ -1,5 +1,5 @@
 import superjson from 'superjson';
-import type { Recording } from '../use-scrimba/src';
+import type { Recording } from '../use-next-editor/src';
 
 /**
  * Serializable Blob representation for SuperJSON

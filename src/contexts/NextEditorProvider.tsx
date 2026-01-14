@@ -1,18 +1,15 @@
 import React, { useRef } from 'react';
 import type * as monaco from 'monaco-editor';
-import { useScrimba } from '../use-scrimba/src';
-import { ScrimbaContext } from './ScrimbaContext';
+import { useNextEditor } from '../use-next-editor/src';
+import { NextEditorContext } from './NextEditorContext';
 import { createJsonStorage } from '../storage/JsonStorage';
 import type { SlidePreviewState, PreviewState } from '../types/slides';
 
-interface ScrimbaProviderProps {
+interface NextEditorProviderProps {
   children: React.ReactNode;
 }
 
-/**
- * Provider component that makes useScrimba functionality available to all child components
- */
-export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) => {
+export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
   const getSlideStateRef = useRef<(() => { previewState: SlidePreviewState; currentSlideIndex: number } | null) | null>(null);
@@ -22,17 +19,17 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
   const getPreviewStateRef = useRef<(() => PreviewState | null) | null>(null);
   const applyPreviewStateRef = useRef<((previewState: PreviewState) => void) | null>(null);
   
-  const originalScrimbaHook = useScrimba({
+  const originalHook = useNextEditor({
     editorRef,
     enableAudioRecording: true, // Enable built-in synchronized audio recording
     onRecordingStart: () => {},
     onRecordingStop: (recording) => {
-      originalScrimbaHook.loadRecording(recording);
+      originalHook.loadRecording(recording);
     },
     onPlaybackStart: () => {},
     onPlaybackPause: () => {},
     onError: (error: Error) => {
-      console.error('🚨 Scrimba error:', error);
+      console.error('🚨 error:', error);
     },
     pauseOnUserInteraction: true,
     getSlideState: () => getSlideStateRef.current?.() || null,
@@ -44,9 +41,9 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
   });
 
 
-  // Create enhanced scrimba hook with JSON storage methods
-  const scrimbaHook = {
-    ...originalScrimbaHook,
+  // Create enhanced hook with JSON storage methods
+  const editorHook = {
+    ...originalHook,
     // JSON Storage methods
     exportAsFile: jsonStorage.current.exportAsFile.bind(jsonStorage.current),
     exportAllAsFile: jsonStorage.current.exportAllAsFile.bind(jsonStorage.current),
@@ -89,9 +86,9 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
   };
 
   return (
-    <ScrimbaContext value={{ ...scrimbaHook, editorRef }}>
+    <NextEditorContext value={{ ...editorHook, editorRef }}>
       {children}
-    </ScrimbaContext>
+    </NextEditorContext>
   );
 };
 
