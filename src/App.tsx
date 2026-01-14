@@ -33,18 +33,18 @@ function AppContent() {
 
   // Check URL for showImportExport parameter (defaults to true if not specified)
   const urlParams = new URLSearchParams(window.location.search);
-  const showImportExport = urlParams.get('showImportExport') !== 'false';
+  const readOnly = urlParams.get('readonly') === 'true';
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white overflow-hidden">
       <div className="flex-1 overflow-hidden relative">
-        <CodeEditor showImportExport={showImportExport} />
+        <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
         <Preview />
         <SlidePanel />
       </div>
 
-      <MediaControls />
+      <MediaControls recordMode={!readOnly}/>
 
       <DragDropOverlay isDragging={isDragging} isLoading={isLoading} />
     </div>
