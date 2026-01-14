@@ -236,6 +236,10 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                     }
 
                     if (shareToMastodon) {
+                        // Open window immediately to avoid popup blocker (must be in sync click handler)
+                        const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
+                        const newWindow = window.open('about:blank', '_blank');
+
                         try {
                             // 1. Get credentials from cookies
                             const getCookie = (name: string) => {
@@ -260,12 +264,14 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                             const instanceURL = getCookie('instanceURL');
 
                             if (!accessToken || !instanceURL) {
+                                newWindow?.close();
                                 alert('Please sign in to Mastodon first.');
                                 setIsGenerating(false);
                                 return;
                             }
 
                             if (!instanceURL.startsWith('http')) {
+                                newWindow?.close();
                                 console.error('Invalid instance URL from cookie:', instanceURL);
                                 alert(`Invalid Mastodon instance URL: ${instanceURL}`);
                                 setIsGenerating(false);
@@ -287,21 +293,25 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                             });
 
                             if (!response.ok) {
+                                newWindow?.close();
                                 throw new Error('Failed to upload to Mastodon');
                             }
 
                             const mediaData = await response.json();
                             const mediaId = mediaData.id;
 
-                            // 3. Redirect to next-mastodon compose page
+                            // 3. Navigate to compose page in the already-opened window
                             const postTitle = imageTitle || 'New Scrimba Tutorial';
                             const postText = initialText
                                 ? encodeURIComponent(`${initialText}\n\n#scrimba #tutorial`)
                                 : encodeURIComponent(`${postTitle}\n\n#scrimba #tutorial`);
-                            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
-                            window.open(`${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`, '_blank');
+
+                            if (newWindow) {
+                                newWindow.location.href = `${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`;
+                            }
 
                         } catch (err) {
+                            newWindow?.close();
                             console.error('Sharing failed:', err);
                             alert('Failed to share on Mastodon. Please try again.');
                         }
