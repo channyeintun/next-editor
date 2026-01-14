@@ -54,7 +54,18 @@ export const useScrimbaUrlLoader = () => {
       try {
         const urlObj = new URL(url);
         if (urlObj.origin !== window.location.origin) {
-          const proxyBase = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
+          const isLocal = window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1' ||
+            window.location.hostname.endsWith('.local');
+
+          let proxyBase = 'https://mastodon.website';
+          if (isLocal) {
+            proxyBase = 'http://localhost:9003';
+          } else if (window.location.hostname.includes('scrim.mastodon.website')) {
+            // If we are on the scrim subdomain, the proxy is on the main domain
+            proxyBase = window.location.origin.replace('scrim.', '');
+          }
+
           fetchUrl = `${proxyBase}/api/proxy?url=${encodeURIComponent(url)}`;
         }
       } catch (e) {
