@@ -17,3 +17,18 @@ export interface SlideEvent {
   slideId?: string;
   isMaximized?: boolean;
 }
+
+/**
+ * Preview panel state (for code preview iframe)
+ */
+export type PreviewSize = 'small' | 'medium' | 'large';
+
+export interface PreviewState {
+  size: PreviewSize;
+}
+
+export interface PreviewEvent {
+  type: 'preview_open' | 'preview_minimize' | 'preview_maximize';
+  timestamp: number;
+  size: PreviewSize;
+}

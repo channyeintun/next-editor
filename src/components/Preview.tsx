@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useScrimbaContext } from '../hooks/useScrimbaContext';
-
-type PreviewSize = 'small' | 'medium' | 'large';
+import type { PreviewSize, PreviewState, PreviewEvent } from '../types/slides';
 
 interface PreviewProps {
   positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
@@ -12,7 +11,44 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
   const [size, setSize] = useState<PreviewSize>('small');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastContentRef = useRef<string>('');
-  const { editorRef } = useScrimbaContext();
+  const scrimbaContext = useScrimbaContext();
+  const { editorRef, handlePreviewEvent, isRecording } = scrimbaContext;
+  
+  // Get registration functions from context
+  const registerPreviewStateGetter = 'registerPreviewStateGetter' in scrimbaContext ? scrimbaContext.registerPreviewStateGetter : undefined;
+  const registerPreviewStateApplier = 'registerPreviewStateApplier' in scrimbaContext ? scrimbaContext.registerPreviewStateApplier : undefined;
+
+  // Emit preview event when size changes
+  const emitPreviewEvent = useCallback((newSize: PreviewSize, eventType: PreviewEvent['type']) => {
+    if (isRecording && handlePreviewEvent) {
+      const event: PreviewEvent = {
+        type: eventType,
+        timestamp: performance.now(),
+        size: newSize,
+      };
+      handlePreviewEvent(event);
+    }
+  }, [isRecording, handlePreviewEvent]);
+
+  // Register preview state getter
+  useEffect(() => {
+    if (registerPreviewStateGetter && typeof registerPreviewStateGetter === 'function') {
+      registerPreviewStateGetter((): PreviewState => ({
+        size,
+      }));
+    }
+  }, [registerPreviewStateGetter, size]);
+
+  // Register preview state applier
+  useEffect(() => {
+    if (registerPreviewStateApplier && typeof registerPreviewStateApplier === 'function') {
+      registerPreviewStateApplier((previewState: PreviewState) => {
+        if (previewState.size !== size) {
+          setSize(previewState.size);
+        }
+      });
+    }
+  }, [registerPreviewStateApplier, size]);
 
   const updateIframeContent = (content: string) => {
     if (!iframeRef.current) return;
@@ -254,15 +290,19 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
   const handleClick = () => {
     if (size === 'small') {
       setSize('medium');
+      emitPreviewEvent('medium', 'preview_open');
     }
   };
 
   const handleMinimize = () => {
     setSize('small');
+    emitPreviewEvent('small', 'preview_minimize');
   };
 
   const handleMaximize = () => {
-    setSize(size === 'large' ? 'medium' : 'large');
+    const newSize = size === 'large' ? 'medium' : 'large';
+    setSize(newSize);
+    emitPreviewEvent(newSize, 'preview_maximize');
   };
 
   return (

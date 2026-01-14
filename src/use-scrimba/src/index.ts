@@ -32,6 +32,9 @@ export type {
   Slide,
   SlidePreviewState,
   SlideEvent,
+  PreviewSize,
+  PreviewState,
+  PreviewEvent,
 } from './slides';
 
 // Re-export audio recording hook for advanced users

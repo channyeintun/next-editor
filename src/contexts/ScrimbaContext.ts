@@ -1,6 +1,6 @@
 import { createContext, type RefObject } from 'react';
 import type { UseScrimbaReturn, Recording } from '../use-scrimba/src';
-import type { SlidePreviewState } from '../types/slides';
+import type { SlidePreviewState, PreviewState } from '../types/slides';
 import type * as monaco from 'monaco-editor';
 
 // Create context for useScrimba functionality with editor ref and JSON storage
@@ -20,4 +20,7 @@ export const ScrimbaContext = createContext<(UseScrimbaReturn & {
   // Slides data registration
   registerSlidesGetter: (getter: () => Array<{id: string; imageUrl: string; name?: string; order: number}> | null) => void;
   registerSlidesApplier: (applier: (slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void) => void;
+  // Preview state registration
+  registerPreviewStateGetter: (getter: () => PreviewState | null) => void;
+  registerPreviewStateApplier: (applier: (previewState: PreviewState) => void) => void;
 }) | null>(null);

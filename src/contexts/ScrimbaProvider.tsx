@@ -3,7 +3,7 @@ import type * as monaco from 'monaco-editor';
 import { useScrimba } from '../use-scrimba/src';
 import { ScrimbaContext } from './ScrimbaContext';
 import { createJsonStorage } from '../storage/JsonStorage';
-import type { SlidePreviewState } from '../types/slides';
+import type { SlidePreviewState, PreviewState } from '../types/slides';
 
 interface ScrimbaProviderProps {
   children: React.ReactNode;
@@ -19,6 +19,8 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
   const applySlideStateRef = useRef<((slideState: SlidePreviewState, currentSlideIndex: number) => void) | null>(null);
   const getSlidesRef = useRef<(() => Array<{id: string; imageUrl: string; name?: string; order: number}> | null) | null>(null);
   const applySlidesRef = useRef<((slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void) | null>(null);
+  const getPreviewStateRef = useRef<(() => PreviewState | null) | null>(null);
+  const applyPreviewStateRef = useRef<((previewState: PreviewState) => void) | null>(null);
   
   const originalScrimbaHook = useScrimba({
     editorRef,
@@ -37,6 +39,8 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
     applySlideState: (slideState, currentSlideIndex) => applySlideStateRef.current?.(slideState, currentSlideIndex),
     getSlides: () => getSlidesRef.current?.() || null,
     applySlides: (slides) => applySlidesRef.current?.(slides),
+    getPreviewState: () => getPreviewStateRef.current?.() || null,
+    applyPreviewState: (previewState) => applyPreviewStateRef.current?.(previewState),
   });
 
 
@@ -74,6 +78,13 @@ export const ScrimbaProvider: React.FC<ScrimbaProviderProps> = ({ children }) =>
     },
     registerSlidesApplier: (applier: (slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void) => {
       applySlidesRef.current = applier;
+    },
+    // Preview state registration
+    registerPreviewStateGetter: (getter: () => PreviewState | null) => {
+      getPreviewStateRef.current = getter;
+    },
+    registerPreviewStateApplier: (applier: (previewState: PreviewState) => void) => {
+      applyPreviewStateRef.current = applier;
     },
   };
 
