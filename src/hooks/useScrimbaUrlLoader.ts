@@ -10,7 +10,7 @@ export const useScrimbaUrlLoader = () => {
     try {
       const urlObj = new URL(url);
       const pathname = urlObj.pathname.toLowerCase();
-      return pathname.endsWith('.scrimba') || pathname.endsWith('.png');
+      return pathname.endsWith('.scrimba') || pathname.endsWith('.png') || pathname.endsWith('.webm') || pathname.endsWith('.mp4');
     } catch {
       return false;
     }
@@ -22,6 +22,12 @@ export const useScrimbaUrlLoader = () => {
       if (file.name.endsWith('.png')) {
         const { extractRecordingsFromPng } = await import('../storage/ImportUtils');
         const recordings = await extractRecordingsFromPng(file);
+        if (recordings.length > 0) {
+          loadRecording(recordings[0]);
+        }
+      } else if (file.name.endsWith('.webm') || file.name.endsWith('.mp4')) {
+        const { extractRecordingsFromVideo } = await import('../storage/ImportUtils');
+        const recordings = await extractRecordingsFromVideo(file);
         if (recordings.length > 0) {
           loadRecording(recordings[0]);
         }
