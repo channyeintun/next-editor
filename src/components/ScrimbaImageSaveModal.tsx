@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Recording } from '../use-scrimba/src';
 import { encodeDataInCanvas } from '../use-scrimba/src/utils/steganography';
+import pako from 'pako';
 import {
     X,
     Download,
@@ -16,6 +17,8 @@ import {
     Sparkles
 } from 'lucide-react';
 import MastodonIcon from './icon/Mastodon';
+import { MAGIC_PREFIX_V2 } from '../use-scrimba/src/utils/steganography';
+
 
 interface ScrimbaImageSaveModalProps {
     recording: Recording;
@@ -93,18 +96,23 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                 });
             }
 
-            const dataToSave = JSON.stringify({
+            const dataToSaveRaw = JSON.stringify({
                 ...recording,
                 audioBlob: undefined,
                 audioBase64
             });
 
-            // 2. Determine canvas size
-            const bitsNeeded = (dataToSave.length + 12) * 8 + 32;
+            // 2. Determine canvas size (with compression estimation)
+            const compressed = pako.deflate(dataToSaveRaw);
+            const base64Data = btoa(String.fromCharCode.apply(null, Array.from(compressed)));
+            const estimatedEncodedLength = MAGIC_PREFIX_V2.length + base64Data.length;
+
+            const bitsNeeded = (estimatedEncodedLength) * 8 + 32;
             const pixelsNeeded = Math.ceil(bitsNeeded / 3);
             const dimension = Math.ceil(Math.sqrt(pixelsNeeded));
             const width = Math.max(400, Math.ceil(dimension / 50) * 50);
             const height = width;
+
 
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d')!;
@@ -199,7 +207,8 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
             }
 
             // 5. Encode Data
-            encodeDataInCanvas(canvas, dataToSave);
+            encodeDataInCanvas(canvas, dataToSaveRaw);
+
 
             canvas.toBlob(async (blob) => {
                 if (blob) {

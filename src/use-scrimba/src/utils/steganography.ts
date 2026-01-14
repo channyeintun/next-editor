@@ -1,7 +1,11 @@
+import pako from 'pako';
+
 /**
  * MAGIC_PREFIX is used to identify Scrimba data in images.
  */
 export const MAGIC_PREFIX = 'SCRIMBA_v1:';
+export const MAGIC_PREFIX_V2 = 'SCRIMBA_v2:';
+
 
 /**
  * Encodes a string into an image's pixel data using LSB (Least Significant Bit).
@@ -15,8 +19,14 @@ export function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string): voi
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const pixels = imageData.data;
 
-    // Add magic prefix to data
-    const dataToEncode = MAGIC_PREFIX + data;
+    // Compress data using pako
+    const compressed = pako.deflate(data);
+    
+    // Create V2 formatted data: Prefix + Base64 of compressed data
+    // We use Base64 to make it easier to handle as a string in our current LSB implementation
+    const base64Data = btoa(String.fromCharCode.apply(null, Array.from(compressed)));
+    const dataToEncode = MAGIC_PREFIX_V2 + base64Data;
+    
     const binaryData = stringToBinary(dataToEncode);
     const dataLength = binaryData.length;
 
@@ -45,6 +55,7 @@ export function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string): voi
 
     ctx.putImageData(imageData, 0, 0);
 }
+
 
 /**
  * Decodes data from an image's pixel data.
@@ -86,12 +97,31 @@ export function decodeDataFromCanvas(canvas: HTMLCanvasElement): string | null {
 
     const decoded = binaryToString(binaryData);
 
+    // V2: Compressed data
+    if (decoded.startsWith(MAGIC_PREFIX_V2)) {
+        try {
+            const base64Data = decoded.substring(MAGIC_PREFIX_V2.length);
+            const binaryString = atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const decompressed = pako.inflate(bytes, { to: 'string' });
+            return decompressed;
+        } catch (e) {
+            console.error('Failed to decompress Scrimba V2 data', e);
+            return null;
+        }
+    }
+
+    // V1: Plain string data (backward compatibility)
     if (decoded.startsWith(MAGIC_PREFIX)) {
         return decoded.substring(MAGIC_PREFIX.length);
     }
 
     return null;
 }
+
 
 function stringToBinary(str: string): string {
     return str.split('').map(char => {
