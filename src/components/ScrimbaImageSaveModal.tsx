@@ -233,7 +233,7 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                                         value = decodeURIComponent(value);
                                     }
                                     return value;
-                                } catch (e) {
+                                } catch {
                                     return value;
                                 }
                             };

@@ -48,7 +48,20 @@ export const useScrimbaUrlLoader = () => {
 
     try {
       setIsLoading(true);
-      const response = await fetch(url);
+
+      // Use proxy if URL is cross-origin to avoid CORS issues
+      let fetchUrl = url;
+      try {
+        const urlObj = new URL(url);
+        if (urlObj.origin !== window.location.origin) {
+          const proxyBase = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
+          fetchUrl = `${proxyBase}/api/proxy?url=${encodeURIComponent(url)}`;
+        }
+      } catch (e) {
+        console.warn('Failed to parse URL for proxy check:', e);
+      }
+
+      const response = await fetch(fetchUrl);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch file: ${response.statusText}`);
