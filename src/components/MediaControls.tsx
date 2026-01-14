@@ -7,9 +7,6 @@ import SettingIcon from './icon/Setting';
 import ProgressBar from './ProgressBar';
 import SnapshotEditor from './SnapshotEditor';
 import type { Recording } from '../use-scrimba/src';
-import ScrimbaImageSaveModal from './ScrimbaImageSaveModal';
-import ImageIcon from './icon/Image';
-import MastodonIcon from './icon/Mastodon';
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -22,7 +19,6 @@ interface MediaControlsProps {
 const MediaControls: React.FC<MediaControlsProps> = ({
   onRecord,
   onStopRecording,
-  onSaveToImage,
   recordMode = true,
   positioning = 'fixed'
 }) => {
@@ -49,7 +45,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [showSnapshotEditor, setShowSnapshotEditor] = useState(false);
-  const [showImageSaveModal, setShowImageSaveModal] = useState(false);
 
   // Update recording time every 100ms when recording
   useEffect(() => {
@@ -208,26 +203,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                         >
                           Edit JSON
                         </button>
-                        <button
-                          onClick={() => {
-                            setShowSettings(false);
-                            setShowImageSaveModal(true);
-                          }}
-                          className="w-full px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm flex items-center justify-center gap-2 mb-2"
-                        >
-                          <ImageIcon />
-                          Save to Image
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowSettings(false);
-                            setShowImageSaveModal(true);
-                          }}
-                          className="w-full px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors text-sm flex items-center justify-center gap-2"
-                        >
-                          <MastodonIcon />
-                          Share on Mastodon
-                        </button>
                       </div>
                     )}
                   </div>
@@ -251,18 +226,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
           mode="edit"
           onSave={handleSaveRecording}
           onCancel={handleCancelExport}
-        />
-      )}
-
-      {currentRecording && (
-        <ScrimbaImageSaveModal
-          recording={currentRecording}
-          isVisible={showImageSaveModal}
-          onSave={(file) => {
-            setShowImageSaveModal(false);
-            onSaveToImage?.(file);
-          }}
-          onCancel={() => setShowImageSaveModal(false)}
         />
       )}
     </div>
