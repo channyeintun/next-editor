@@ -105,7 +105,14 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
 
             // 2. Determine canvas size (with compression estimation)
             const compressed = pako.deflate(dataToSaveRaw);
-            const base64Data = btoa(String.fromCharCode.apply(null, Array.from(compressed)));
+            // Convert Uint8Array to base64 in chunks to avoid stack overflow
+            let binaryString = '';
+            const chunkSize = 8192;
+            for (let i = 0; i < compressed.length; i += chunkSize) {
+                const chunk = compressed.subarray(i, Math.min(i + chunkSize, compressed.length));
+                binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+            }
+            const base64Data = btoa(binaryString);
             const estimatedEncodedLength = MAGIC_PREFIX.length + base64Data.length;
 
 

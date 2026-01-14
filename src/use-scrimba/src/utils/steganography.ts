@@ -24,7 +24,14 @@ export function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string): voi
 
     // Create V2 formatted data: Prefix + Base64 of compressed data
     // We use Base64 to make it easier to handle as a string in our current LSB implementation
-    const base64Data = btoa(String.fromCharCode.apply(null, Array.from(compressed)));
+    // Convert to base64 in chunks to avoid stack overflow with large data
+    let binaryString = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < compressed.length; i += chunkSize) {
+        const chunk = compressed.subarray(i, Math.min(i + chunkSize, compressed.length));
+        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    const base64Data = btoa(binaryString);
     const dataToEncode = MAGIC_PREFIX + base64Data;
 
 
