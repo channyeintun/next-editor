@@ -7,15 +7,25 @@ import SettingIcon from './icon/Setting';
 import ProgressBar from './ProgressBar';
 import SnapshotEditor from './SnapshotEditor';
 import type { Recording } from '../use-scrimba/src';
+import ScrimbaImageSaveModal from './ScrimbaImageSaveModal';
+import ImageIcon from './icon/Image';
+import MastodonIcon from './icon/Mastodon';
 
 interface MediaControlsProps {
   onRecord?: () => void;
   onStopRecording?: () => void;
+  onSaveToImage?: (file: File) => void;
   recordMode?: boolean;
   positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
 }
 
-const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording, recordMode = true, positioning = 'fixed' }) => {
+const MediaControls: React.FC<MediaControlsProps> = ({
+  onRecord,
+  onStopRecording,
+  onSaveToImage,
+  recordMode = true,
+  positioning = 'fixed'
+}) => {
   const {
     isRecording,
     isPlaying,
@@ -39,6 +49,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
   const [showSettings, setShowSettings] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [showSnapshotEditor, setShowSnapshotEditor] = useState(false);
+  const [showImageSaveModal, setShowImageSaveModal] = useState(false);
 
   // Update recording time every 100ms when recording
   useEffect(() => {
@@ -56,8 +67,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
       if (interval) clearInterval(interval);
     };
   }, [isRecording, recordingStartTime]);
-
-  // Note: Volume control is now handled internally by the Audio instance in useScrimba
 
   const formatTime = (milliseconds: number): string => {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -101,7 +110,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
 
   const handleSaveRecording = async (editedRecording: Recording) => {
     try {
-      // Update the current recording
       loadRecording(editedRecording);
       setShowSnapshotEditor(false);
     } catch (error) {
@@ -113,13 +121,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
     setShowSnapshotEditor(false);
   };
 
-
   const duration = currentRecording?.duration || 0;
-  
-  // Use actualDuration for progress calculation (like the demo)
-  const progressDuration = actualDuration > 0 ? actualDuration * 1000 : duration; // Convert to ms if needed
+  const progressDuration = actualDuration > 0 ? actualDuration * 1000 : duration;
 
-  // Calculate the time to display
   const displayTime = isRecording
     ? recordingTime
     : (currentRecording ? duration - currentTime : currentTime);
@@ -127,46 +131,22 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
   return (
     <div className={`${positioning} bottom-0 left-0 w-full px-4 py-3 z-50`}>
       <div className="flex items-center gap-3 w-full h-6">
-        {/* Record button - show only if recordMode is true */}
         {recordMode && (
           <button
             onClick={handleRecordToggle}
             disabled={isPlaying}
-            title={isPlaying ? "Cannot record during playback" : isRecording ? "Stop recording" : "Start recording"}
-            className={`flex items-center justify-center transition-colors relative before:absolute before:-inset-2 before:content-[''] after:absolute after:inset-0 after:bg-red-500/50 after:rounded-full after:scale-0 after:transition-transform after:duration-200 ${
-              isPlaying 
-                ? 'opacity-50 cursor-not-allowed' 
-                : 'hover:opacity-80 cursor-pointer hover:after:scale-200'
-            }`}
+            className={`flex items-center justify-center transition-colors relative ${isPlaying ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80 cursor-pointer'}`}
           >
-            {isRecording ? (
-              <div className="w-3 h-3 bg-red-500 rounded-sm animate-pulse"></div>
-            ) : (
-              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-            )}
+            {isRecording ? <div className="w-3 h-3 bg-red-500 rounded-sm animate-pulse" /> : <div className="w-2 h-2 bg-red-500 rounded-full" />}
           </button>
         )}
 
-        {/* Show playback controls only if recording exists and not currently recording */}
         {currentRecording && !isRecording && (
           <>
-            {/* Play/Pause button */}
-            <button
-              onClick={handlePlayPause}
-              className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-[2px] before:content-['']"
-            >
-              <div className="w-6 flex items-center justify-center">
-                {isPlaying ? (
-                  <PauseIcon />
-                ) : hasEnded ? (
-                  <ReplayIcon />
-                ) : (
-                  <PlayIcon />
-                )}
-              </div>
+            <button onClick={handlePlayPause} className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer w-6">
+              {isPlaying ? <PauseIcon /> : (hasEnded ? <ReplayIcon /> : <PlayIcon />)}
             </button>
 
-            {/* Progress bar */}
             <div className="flex-1 mx-1 flex items-center">
               <ProgressBar
                 progress={progressDuration > 0 ? Math.min((currentTime / progressDuration) * 100, 100) : 0}
@@ -179,23 +159,19 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
               />
             </div>
 
-            {/* Settings button */}
             <div className="relative">
               <button
                 onClick={() => setShowSettings(prev => !prev)}
-                className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer relative before:absolute before:-inset-[2px] before:content-['']"
+                className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer"
               >
                 <SettingIcon />
               </button>
 
-              {/* Settings Popup */}
               {showSettings && (
                 <div className="absolute bottom-full right-0 mb-2 bg-white rounded-lg shadow-lg p-4 min-w-[200px] z-50">
                   <div className="text-gray-800">
                     <div className="mb-3">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Speed
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Speed</label>
                       <div className="flex items-center gap-3">
                         <span className="text-sm text-gray-500 min-w-[32px]">{playbackSpeed}x</span>
                         <input
@@ -210,9 +186,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
                       </div>
                     </div>
                     <div className="mb-3">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Volume
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Volume</label>
                       <div className="flex items-center gap-3">
                         <span className="text-sm text-gray-500 min-w-[32px]">{Math.round(volume * 100)}</span>
                         <input
@@ -227,12 +201,32 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
                       </div>
                     </div>
                     {recordMode && (
-                      <div className="pt-3">
+                      <div className="pt-3 border-t">
                         <button
                           onClick={handleEditClick}
-                          className="w-full px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"
+                          className="w-full px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm mb-2"
                         >
                           Edit JSON
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowSettings(false);
+                            setShowImageSaveModal(true);
+                          }}
+                          className="w-full px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm flex items-center justify-center gap-2 mb-2"
+                        >
+                          <ImageIcon />
+                          Save to Image
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowSettings(false);
+                            setShowImageSaveModal(true);
+                          }}
+                          className="w-full px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors text-sm flex items-center justify-center gap-2"
+                        >
+                          <MastodonIcon />
+                          Share on Mastodon
                         </button>
                       </div>
                     )}
@@ -243,8 +237,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
           </>
         )}
 
-
-        {/* Time display - show only during recording or playback */}
         {(isRecording || currentRecording) && (
           <span className="text-slate-400 text-sm font-mono">
             {isRecording ? formatTime(displayTime) : `-${formatTime(displayTime)}`}
@@ -252,7 +244,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
         )}
       </div>
 
-      {/* Snapshot Editor Modal */}
       {currentRecording && (
         <SnapshotEditor
           recording={currentRecording}
@@ -260,6 +251,18 @@ const MediaControls: React.FC<MediaControlsProps> = ({ onRecord, onStopRecording
           mode="edit"
           onSave={handleSaveRecording}
           onCancel={handleCancelExport}
+        />
+      )}
+
+      {currentRecording && (
+        <ScrimbaImageSaveModal
+          recording={currentRecording}
+          isVisible={showImageSaveModal}
+          onSave={(file) => {
+            setShowImageSaveModal(false);
+            onSaveToImage?.(file);
+          }}
+          onCancel={() => setShowImageSaveModal(false)}
         />
       )}
     </div>

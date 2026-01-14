@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { Recording } from '../use-scrimba/src';
 import { useScrimbaContext } from './useScrimbaContext';
+import { decodeDataFromCanvas } from '../use-scrimba/src/utils/steganography';
 
 export const useScrimbaUrlLoader = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -9,7 +10,8 @@ export const useScrimbaUrlLoader = () => {
   const isScrimbaUrl = (url: string): boolean => {
     try {
       const urlObj = new URL(url);
-      return urlObj.pathname.endsWith('.scrimba');
+      const pathname = urlObj.pathname.toLowerCase();
+      return pathname.endsWith('.scrimba') || pathname.endsWith('.png');
     } catch {
       return false;
     }
@@ -17,7 +19,7 @@ export const useScrimbaUrlLoader = () => {
 
   const fetchScrimbaFile = useCallback(async (url: string) => {
     if (!isScrimbaUrl(url)) {
-      throw new Error('URL does not point to a .scrimba file');
+      throw new Error('URL does not point to a supported Scrimba file (.scrimba, .png)');
     }
 
     try {
@@ -29,23 +31,75 @@ export const useScrimbaUrlLoader = () => {
       }
 
       const blob = await response.blob();
-      const text = await blob.text();
 
-      // Use the same decompression logic from JsonStorage
-      const binaryData = base64ToBinary(text.trim());
-      const recordings = await decompressBinaryToRecordings(binaryData);
+      if (url.toLowerCase().endsWith('.scrimba')) {
+        const text = await blob.text();
 
-      if (recordings.length > 0) {
-        loadRecording(recordings[0]);
+        // Use the same decompression logic from JsonStorage
+        const binaryData = base64ToBinary(text.trim());
+        const recordings = await decompressBinaryToRecordings(binaryData);
+
+        if (recordings.length > 0) {
+          loadRecording(recordings[0]);
+        }
+      } else {
+        // It's an image
+        const imageUrl = URL.createObjectURL(blob);
+        try {
+          const recordings = await decodeImageToRecordings(imageUrl);
+          if (recordings && recordings.length > 0) {
+            loadRecording(recordings[0]);
+          } else {
+            throw new Error('No Scrimba data found in this image');
+          }
+        } finally {
+          URL.revokeObjectURL(imageUrl);
+        }
       }
     } catch (error) {
-      console.error('Failed to load .scrimba file from URL:', error);
-      alert(`Failed to load .scrimba file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Failed to load Scrimba tutorial from URL:', error);
+      alert(`Failed to load Scrimba tutorial: ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw error;
     } finally {
       setIsLoading(false);
     }
   }, [loadRecording]);
+
+  const decodeImageToRecordings = async (imageUrl: string): Promise<Recording[] | null> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        const jsonData = decodeDataFromCanvas(canvas);
+        if (jsonData) {
+          try {
+            const binaryData = base64ToBinary(jsonData.trim());
+            const recordings = await decompressBinaryToRecordings(binaryData);
+            resolve(recordings);
+          } catch (err) {
+            console.error('Failed to decompress recording from image:', err);
+            resolve(null);
+          }
+        } else {
+          resolve(null);
+        }
+      };
+      img.onerror = () => {
+        console.error('Failed to load image for decoding');
+        resolve(null);
+      };
+      img.src = imageUrl;
+    });
+  };
 
   // Helper functions from JsonStorage (duplicated for now)
   const base64ToBinary = (base64Data: string): Uint8Array => {
@@ -109,9 +163,9 @@ export const useScrimbaUrlLoader = () => {
     });
   };
 
-  return { 
-    fetchScrimbaFile, 
-    isScrimbaUrl, 
-    isLoading 
+  return {
+    fetchScrimbaFile,
+    isScrimbaUrl,
+    isLoading
   };
 };
