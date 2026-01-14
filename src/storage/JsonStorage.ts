@@ -327,7 +327,7 @@ export class JsonStorage {
     return new Promise((resolve, reject) => {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.scrimba,.png,.webm,.mp4';
+      input.accept = '.scrimba,.png';
 
       input.onchange = async (event) => {
         const file = (event.target as HTMLInputElement).files?.[0];
@@ -340,11 +340,6 @@ export class JsonStorage {
           if (file.name.endsWith('.png')) {
             const { extractRecordingsFromPng } = await import('./ImportUtils');
             const recordings = await extractRecordingsFromPng(file);
-            resolve(recordings);
-            return;
-          } else if (file.name.endsWith('.webm') || file.name.endsWith('.mp4')) {
-            const { extractRecordingsFromVideo } = await import('./ImportUtils');
-            const recordings = await extractRecordingsFromVideo(file);
             resolve(recordings);
             return;
           }

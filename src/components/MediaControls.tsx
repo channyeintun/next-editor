@@ -7,13 +7,14 @@ import SettingIcon from './icon/Setting';
 import ProgressBar from './ProgressBar';
 import SnapshotEditor from './SnapshotEditor';
 import type { Recording } from '../use-scrimba/src';
-import ScrimbaVideoSaveModal from './ScrimbaVideoSaveModal';
+import ScrimbaImageSaveModal from './ScrimbaImageSaveModal';
+import ImageIcon from './icon/Image';
 import MastodonIcon from './icon/Mastodon';
 
 interface MediaControlsProps {
   onRecord?: () => void;
   onStopRecording?: () => void;
-  onSaveToVideo?: (file: File) => void;
+  onSaveToImage?: (file: File) => void;
   recordMode?: boolean;
   positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
 }
@@ -21,7 +22,7 @@ interface MediaControlsProps {
 const MediaControls: React.FC<MediaControlsProps> = ({
   onRecord,
   onStopRecording,
-  onSaveToVideo,
+  onSaveToImage,
   recordMode = true,
   positioning = 'fixed'
 }) => {
@@ -48,7 +49,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [showSnapshotEditor, setShowSnapshotEditor] = useState(false);
-  const [showVideoSaveModal, setShowVideoSaveModal] = useState(false);
+  const [showImageSaveModal, setShowImageSaveModal] = useState(false);
 
   // Update recording time every 100ms when recording
   useEffect(() => {
@@ -72,30 +73,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  const calculateRecordingSize = (recording: Recording) => {
-    // Create a copy without audioBlob for JSON size calculation
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { audioBlob, ...rest } = recording;
-    const jsonString = JSON.stringify(rest);
-    const jsonSize = new Blob([jsonString]).size;
-    const audioSize = recording.audioBlob ? recording.audioBlob.size : 0;
-    return jsonSize + audioSize;
-  };
-
-  const handleShare = () => {
-    if (!currentRecording) return;
-    
-    const size = calculateRecordingSize(currentRecording);
-    const sizeMB = size / (1024 * 1024);
-
-    if (sizeMB < 99) {
-      setShowVideoSaveModal(true);
-    } else {
-      alert(`Recording is too large (${sizeMB.toFixed(2)}MB). Max limit is 99MB.`);
-    }
-    setShowSettings(false);
   };
 
   const handleRecordToggle = () => {
@@ -232,11 +209,24 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                           Edit JSON
                         </button>
                         <button
-                          onClick={handleShare}
+                          onClick={() => {
+                            setShowSettings(false);
+                            setShowImageSaveModal(true);
+                          }}
+                          className="w-full px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm flex items-center justify-center gap-2 mb-2"
+                        >
+                          <ImageIcon />
+                          Save to Image
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowSettings(false);
+                            setShowImageSaveModal(true);
+                          }}
                           className="w-full px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors text-sm flex items-center justify-center gap-2"
                         >
                           <MastodonIcon />
-                          Share / Save
+                          Share on Mastodon
                         </button>
                       </div>
                     )}
@@ -265,14 +255,14 @@ const MediaControls: React.FC<MediaControlsProps> = ({
       )}
 
       {currentRecording && (
-        <ScrimbaVideoSaveModal
+        <ScrimbaImageSaveModal
           recording={currentRecording}
-          isVisible={showVideoSaveModal}
+          isVisible={showImageSaveModal}
           onSave={(file) => {
-            setShowVideoSaveModal(false);
-            onSaveToVideo?.(file);
+            setShowImageSaveModal(false);
+            onSaveToImage?.(file);
           }}
-          onCancel={() => setShowVideoSaveModal(false)}
+          onCancel={() => setShowImageSaveModal(false)}
         />
       )}
     </div>
