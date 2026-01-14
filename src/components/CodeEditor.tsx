@@ -206,39 +206,37 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 
   return (
     <div className="h-full flex flex-col">
-      {showImportExport && (
-        <div className="bg-slate-800 px-4 py-1.5 flex items-center justify-between border-b border-slate-700">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
-          <div className="flex items-center gap-2">
-            {currentRecording && (
-              <button
-                onClick={() => setShowImageSaveModal(true)}
-                className="p-1.5 text-white bg-indigo-600 hover:bg-indigo-500 rounded transition-colors flex items-center justify-center shadow-sm"
-                title="Share on Mastodon"
-              >
-                <MastodonIcon />
-              </button>
-            )}
-
+      <div className="bg-slate-800 px-4 py-1.5 flex items-center justify-between border-b border-slate-700">
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
+        {showImportExport && (<div className="flex items-center gap-2">
+          {currentRecording && (
             <button
-              onClick={handleImport}
-              className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+              onClick={() => setShowImageSaveModal(true)}
+              className="p-1.5 text-white bg-indigo-600 hover:bg-indigo-500 rounded transition-colors flex items-center justify-center shadow-sm"
+              title="Share on Mastodon"
             >
-              Import
+              <MastodonIcon />
             </button>
-            <button
-              onClick={handleNextEditorExport}
-              disabled={!currentRecording}
-              className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
-            >
-              Export
-            </button>
+          )}
 
-            <div className="w-[1px] h-4 bg-slate-700 mx-1" />
-            <SlidesButton />
-          </div>
-        </div>
-      )}
+          <button
+            onClick={handleImport}
+            className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+          >
+            Import
+          </button>
+          <button
+            onClick={handleNextEditorExport}
+            disabled={!currentRecording}
+            className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+          >
+            Export
+          </button>
+
+          <div className="w-[1px] h-4 bg-slate-700 mx-1" />
+          <SlidesButton />
+        </div>)}
+      </div>
       {/* Monaco Editor */}
       <div className={"flex-1" + (isPlaying ? " playback-mode" : "")}>
         <Editor
