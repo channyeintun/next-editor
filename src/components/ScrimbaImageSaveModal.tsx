@@ -445,7 +445,7 @@ const ScrimbaImageSaveModal: React.FC<ScrimbaImageSaveModalProps> = ({
                         Download Image
                     </button>
                     <button
-                        onClick={() => generateImage(true, true)}
+                        onClick={() => generateImage(false, true)}
                         disabled={isGenerating}
                         className="flex-[1.5] flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-500 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all shadow-[0_8px_32px_rgba(79,70,229,0.3)] group"
                     >
