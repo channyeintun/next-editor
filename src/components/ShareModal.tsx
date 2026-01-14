@@ -309,7 +309,6 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                             const postText = initialText
                                 ? encodeURIComponent(`${initialText}\n\n#nexteditor #tutorial`)
                                 : encodeURIComponent(`${postTitle}\n\n#nexteditor #tutorial`);
-                            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
                             window.open(`${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`, '_blank');
 
                         } catch (err) {
