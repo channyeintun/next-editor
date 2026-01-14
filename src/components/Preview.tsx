@@ -51,22 +51,32 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
         if (previewState.size !== size) {
           setSize(previewState.size);
         }
-        // Apply scroll position during playback
+        // Apply scroll position during playback with smooth scrolling
         if (previewState.scrollTop !== undefined || previewState.scrollLeft !== undefined) {
           const iframe = iframeRef.current;
           if (iframe) {
             const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-            if (iframeDoc && iframeDoc.documentElement) {
-              if (previewState.scrollTop !== undefined) {
-                iframeDoc.documentElement.scrollTop = previewState.scrollTop;
-                if (iframeDoc.body) {
-                  iframeDoc.body.scrollTop = previewState.scrollTop;
+            const iframeWindow = iframe.contentWindow;
+            if (iframeDoc && iframeWindow) {
+              const scrollTop = previewState.scrollTop ?? 0;
+              const scrollLeft = previewState.scrollLeft ?? 0;
+              
+              // Use scrollTo with smooth behavior for natural scrolling
+              try {
+                iframeWindow.scrollTo({
+                  top: scrollTop,
+                  left: scrollLeft,
+                  behavior: 'smooth'
+                });
+              } catch {
+                // Fallback for older browsers or if smooth scroll fails
+                if (iframeDoc.documentElement) {
+                  iframeDoc.documentElement.scrollTop = scrollTop;
+                  iframeDoc.documentElement.scrollLeft = scrollLeft;
                 }
-              }
-              if (previewState.scrollLeft !== undefined) {
-                iframeDoc.documentElement.scrollLeft = previewState.scrollLeft;
                 if (iframeDoc.body) {
-                  iframeDoc.body.scrollLeft = previewState.scrollLeft;
+                  iframeDoc.body.scrollTop = scrollTop;
+                  iframeDoc.body.scrollLeft = scrollLeft;
                 }
               }
             }
