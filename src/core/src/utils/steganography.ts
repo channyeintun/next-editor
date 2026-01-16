@@ -5,14 +5,80 @@ import pako from 'pako';
  */
 export const MAGIC_PREFIX = 'NEXT_EDITOR_v2:';
 
+let wasmInstance: WebAssembly.Instance | null = null;
+let wasmPromise: Promise<WebAssembly.Instance | null> | null = null;
+
+interface SteganographyWasmExports {
+    memory: WebAssembly.Memory;
+    encodeLSB(pixelsPtr: number, pixelsLen: number, dataPtr: number, dataLen: number): void;
+    decodeLSB(pixelsPtr: number, pixelsLen: number, resultPtr: number, resultMaxLen: number): number;
+}
+
+/**
+ * Initializes the WebAssembly module.
+ * 
+ * Performance Note:
+ * This module uses WebAssembly to optimize the bitwise LSB (Least Significant Bit) 
+ * encoding/decoding operations. These operations involve iterating over large 
+ * pixel arrays (e.g., 4M+ elements for a 1000x1000 image), which is significantly
+ * faster in Wasm.
+ * 
+ * Memory Layout:
+ * - [0...pixels.length]: Pixel data (Uint8Array)
+ * - [pixels.length...]: Payload data (Uint8Array)
+ * 
+ * @param url The URL to the .wasm file. If not provided, it defaults to '/steganography.wasm'.
+ */
+export async function initWasm(url?: string): Promise<boolean> {
+    if (wasmInstance) return true;
+    if (wasmPromise) return (await wasmPromise) !== null;
+
+    wasmPromise = (async () => {
+        try {
+            // Default URL if not provided. In many setups, this would be served from the public folder or absolute path.
+            // Users can override this by calling initWasm('/path/to/steganography.wasm')
+            const wasmUrl = url || '/steganography.wasm';
+
+            let response: Response;
+            try {
+                response = await fetch(wasmUrl);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch {
+                console.warn(`Failed to fetch wasm from ${wasmUrl}. Steganography will fail as WebAssembly is required.`);
+                return null;
+            }
+
+            const module = await WebAssembly.compileStreaming(response);
+            const instance = await WebAssembly.instantiate(module, {
+                env: {
+                    abort: () => console.error('Wasm aborted')
+                }
+            });
+            wasmInstance = instance;
+            console.log('WebAssembly Steganography module initialized from', wasmUrl);
+            return instance;
+        } catch (e) {
+            console.error('Failed to initialize WebAssembly steganography', e);
+            return null;
+        }
+    })();
+
+    return (await wasmPromise) !== null;
+}
+
 /**
  * Encodes a string into an image's pixel data using LSB (Least Significant Bit).
+ * Requires WebAssembly to be initialized via initWasm().
  * @param canvas The canvas containing the image.
  * @param data The string data to encode.
  */
-export function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string): void {
+export async function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string): Promise<void> {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Could not get canvas context');
+
+    if (!wasmInstance) {
+        throw new Error('Steganography: WebAssembly module not initialized. Call initWasm() first.');
+    }
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const pixels = imageData.data;
@@ -21,8 +87,6 @@ export function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string): voi
     const compressed = pako.deflate(data);
 
     // Create V2 formatted data: Prefix + Base64 of compressed data
-    // We use Base64 to make it easier to handle as a string in our current LSB implementation
-    // Convert to base64 in chunks to avoid stack overflow with large data
     let binaryString = '';
     const chunkSize = 8192;
     for (let i = 0; i < compressed.length; i += chunkSize) {
@@ -31,79 +95,79 @@ export function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string): voi
     }
     const base64Data = btoa(binaryString);
     const dataToEncode = MAGIC_PREFIX + base64Data;
+    const dataToEncodeBuffer = new TextEncoder().encode(dataToEncode);
 
+    const exports = wasmInstance.exports as unknown as SteganographyWasmExports;
+    const memory = exports.memory;
 
-    const binaryData = stringToBinary(dataToEncode);
-    const dataLength = binaryData.length;
-
-    // Store data length in first 32 bits
-    const lengthBinary = dataLength.toString(2).padStart(32, '0');
-
-    let bitIndex = 0;
-
-    // Encode length
-    for (let i = 0; i < 32; i++) {
-        const pixelIndex = Math.floor(bitIndex / 3) * 4;
-        const colorChannel = bitIndex % 3;
-        const bit = parseInt(lengthBinary[i]);
-        pixels[pixelIndex + colorChannel] = (pixels[pixelIndex + colorChannel] & 0xFE) | bit;
-        bitIndex++;
+    // Need enough memory
+    const totalSizeNeeded = pixels.length + dataToEncodeBuffer.length;
+    if (memory.buffer.byteLength < totalSizeNeeded) {
+        const pagesNeeded = Math.ceil((totalSizeNeeded - memory.buffer.byteLength) / 65536);
+        if (pagesNeeded > 0) memory.grow(pagesNeeded);
     }
 
-    // Encode data
-    for (let i = 0; i < dataLength; i++) {
-        const pixelIndex = Math.floor(bitIndex / 3) * 4;
-        const colorChannel = bitIndex % 3;
-        const bit = parseInt(binaryData[i]);
-        pixels[pixelIndex + colorChannel] = (pixels[pixelIndex + colorChannel] & 0xFE) | bit;
-        bitIndex++;
-    }
+    const pixelsPtr = 0;
+    const dataPtr = pixels.length;
 
+    const wasmPixels = new Uint8Array(memory.buffer, pixelsPtr, pixels.length);
+    const wasmData = new Uint8Array(memory.buffer, dataPtr, dataToEncodeBuffer.length);
+
+    wasmPixels.set(pixels);
+    wasmData.set(dataToEncodeBuffer);
+
+    exports.encodeLSB(pixelsPtr, pixels.length, dataPtr, dataToEncodeBuffer.length);
+
+    // Copy back
+    pixels.set(wasmPixels);
     ctx.putImageData(imageData, 0, 0);
 }
 
-
 /**
  * Decodes data from an image's pixel data.
+ * Requires WebAssembly to be initialized via initWasm().
  * @param canvas The canvas containing the image.
- * @returns The decoded string, or null if no data found.
+ * @returns The decoded string, or null if no data found or Wasm missing.
  */
-export function decodeDataFromCanvas(canvas: HTMLCanvasElement): string | null {
+export async function decodeDataFromCanvas(canvas: HTMLCanvasElement): Promise<string | null> {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
+
+    if (!wasmInstance) {
+        console.warn('Steganography: WebAssembly module not initialized. Call initWasm() first.');
+        return null;
+    }
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const pixels = imageData.data;
 
-    let bitIndex = 0;
-    let lengthBinary = '';
+    const exports = wasmInstance.exports as unknown as SteganographyWasmExports;
+    const memory = exports.memory;
 
-    // Read length (32 bits)
-    for (let i = 0; i < 32; i++) {
-        const pixelIndex = Math.floor(bitIndex / 3) * 4;
-        const colorChannel = bitIndex % 3;
-        lengthBinary += (pixels[pixelIndex + colorChannel] & 1).toString();
-        bitIndex++;
+    // Need enough memory for pixels
+    if (memory.buffer.byteLength < pixels.length * 2) {
+        const pagesNeeded = Math.ceil((pixels.length * 2 - memory.buffer.byteLength) / 65536);
+        if (pagesNeeded > 0) memory.grow(pagesNeeded);
     }
 
-    const dataLength = parseInt(lengthBinary, 2);
+    const pixelsPtr = 0;
+    const resultPtr = pixels.length;
+    const resultMaxLen = pixels.length;
 
-    // Basic sanity check on length
-    if (isNaN(dataLength) || dataLength <= 0 || dataLength > pixels.length * 3) {
-        return null;
+    const wasmPixels = new Uint8Array(memory.buffer, pixelsPtr, pixels.length);
+    wasmPixels.set(pixels);
+
+    const byteCount = exports.decodeLSB(pixelsPtr, pixels.length, resultPtr, resultMaxLen);
+    if (byteCount > 0) {
+        const resultBuffer = new Uint8Array(memory.buffer, resultPtr, byteCount);
+        const decoded = new TextDecoder().decode(resultBuffer);
+        return handleDecodedMessage(decoded);
     }
 
-    let binaryData = '';
-    for (let i = 0; i < dataLength; i++) {
-        const pixelIndex = Math.floor(bitIndex / 3) * 4;
-        const colorChannel = bitIndex % 3;
-        binaryData += (pixels[pixelIndex + colorChannel] & 1).toString();
-        bitIndex++;
-    }
+    return null;
+}
 
-    const decoded = binaryToString(binaryData);
-
-    // V2: Compressed data
+function handleDecodedMessage(decoded: string): string | null {
     if (decoded.startsWith(MAGIC_PREFIX)) {
         try {
             const base64Data = decoded.substring(MAGIC_PREFIX.length);
@@ -119,20 +183,6 @@ export function decodeDataFromCanvas(canvas: HTMLCanvasElement): string | null {
             return null;
         }
     }
-
     return null;
 }
 
-
-
-function stringToBinary(str: string): string {
-    return str.split('').map(char => {
-        return char.charCodeAt(0).toString(2).padStart(8, '0');
-    }).join('');
-}
-
-function binaryToString(binary: string): string {
-    const bytes = binary.match(/.{8}/g);
-    if (!bytes) return '';
-    return bytes.map(byte => String.fromCharCode(parseInt(byte, 2))).join('');
-}

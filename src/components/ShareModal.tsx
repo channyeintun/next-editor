@@ -221,7 +221,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
             }
 
             // 5. Encode Data
-            encodeDataInCanvas(canvas, dataToSaveRaw);
+            await encodeDataInCanvas(canvas, dataToSaveRaw);
 
 
             canvas.toBlob(async (blob) => {

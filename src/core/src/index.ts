@@ -46,4 +46,4 @@ export { useAudioRecording } from './hooks/useAudioRecording';
 export type { UseAudioRecordingReturn } from './hooks/useAudioRecording';
 
 // Steganography exports
-export { decodeDataFromCanvas, MAGIC_PREFIX } from './utils/steganography';
+export { decodeDataFromCanvas, MAGIC_PREFIX, initWasm } from './utils/steganography';

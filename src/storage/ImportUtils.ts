@@ -9,7 +9,7 @@ export async function extractRecordingsFromPng(file: File): Promise<Recording[]>
         const reader = new FileReader();
         reader.onload = async (e) => {
             const img = new Image();
-            img.onload = () => {
+            img.onload = async () => {
                 const canvas = document.createElement('canvas');
                 canvas.width = img.width;
                 canvas.height = img.height;
@@ -21,7 +21,7 @@ export async function extractRecordingsFromPng(file: File): Promise<Recording[]>
                 ctx.drawImage(img, 0, 0);
 
                 try {
-                    const decodedData = decodeDataFromCanvas(canvas);
+                    const decodedData = await decodeDataFromCanvas(canvas);
                     if (!decodedData) {
                         reject(new Error('No data found in image'));
                         return;

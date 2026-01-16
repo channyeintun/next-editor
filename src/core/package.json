@@ -20,7 +20,11 @@
     "type-check": "tsc --noEmit",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint \"src/**/*.{ts,tsx}\"",
     "clean": "rimraf dist",
-    "publish": "./publish.sh"
+    "publish": "./publish.sh",
+    "asbuild:debug": "asc assembly/index.ts --target debug --outFile build/steganography.debug.wasm",
+    "asbuild:release": "asc assembly/index.ts --target release --outFile build/steganography.wasm",
+    "asbuild": "npm run asbuild:release && mkdir -p dist && cp build/steganography.wasm dist/",
+    "start": "npx serve ."
   },
   "keywords": [
     "react",
@@ -62,6 +66,8 @@
     "@types/react": "^18.2.56",
     "@typescript-eslint/eslint-plugin": "^7.0.2",
     "@typescript-eslint/parser": "^7.0.2",
+    "asbuild": "^0.2.0",
+    "assemblyscript": "^0.28.9",
     "eslint": "^8.56.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
@@ -86,5 +92,6 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "type": "module"
 }

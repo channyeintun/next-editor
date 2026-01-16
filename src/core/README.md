@@ -21,8 +21,12 @@ playback behavior
 🎞️ **Slide Presentations** - Record and replay slide presentations with
 synchronized state
 
-📦 **TypeScript Ready** - Full TypeScript support with comprehensive type
-definitions
+🚀 **WebAssembly Powered** - High-performance steganography core
+powered strictly by AssemblyScript for ultra-fast encoding and decoding
+
+## Why WebAssembly?
+
+Steganography involves intensive bitwise operations on large arrays of pixel data. This module uses WebAssembly (Wasm) exclusively to provide predictable, high-performance encoding and decoding. By using AssemblyScript, we maintain a TypeScript-like codebase that compiles to a highly efficient binary.
 
 ## Installation
 
