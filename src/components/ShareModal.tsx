@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import type { Recording } from '../use-next-editor/src';
-import { encodeDataInCanvas } from '../use-next-editor/src/utils/steganography';
+import React, { useState, useCallback, useEffect } from 'react';
+import type { Recording } from '../core/src';
+import { encodeDataInCanvas } from '../core/src/utils/steganography';
 import pako from 'pako';
 import {
     X,
@@ -19,7 +19,7 @@ import {
     ExternalLink
 } from 'lucide-react';
 import MastodonIcon from './icon/Mastodon';
-import { MAGIC_PREFIX } from '../use-next-editor/src/utils/steganography';
+import { MAGIC_PREFIX } from '../core/src/utils/steganography';
 
 
 
@@ -87,17 +87,17 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
     const [composeLink, setComposeLink] = useState<string | null>(null);
     const [linkCopied, setLinkCopied] = useState(false);
 
-    const generateImage = async (isManualDownload: boolean = false, shareToMastodon: boolean = false) => {
+    const generateImage = useCallback(async (isManualDownload: boolean = false, shareToMastodon: boolean = false) => {
         if (!isVisible) return;
         setIsGenerating(true);
         try {
             // 1. Prepare data (Recording JSON)
             let audioBase64 = '';
-            if (recording.audioBlob) {
+            if (recording.audioBlob instanceof Blob) {
                 audioBase64 = await new Promise<string>((resolve) => {
                     const reader = new FileReader();
                     reader.onloadend = () => resolve(reader.result as string);
-                    reader.readAsDataURL(recording.audioBlob!);
+                    reader.readAsDataURL(recording.audioBlob as Blob);
                 });
             }
 
@@ -331,17 +331,17 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
             console.error('Failed to generate image:', err);
             setIsGenerating(false);
         }
-    };
+    }, [imageStyle, imageTitle, initialText, isVisible, onSave, previewUrl, recording]);
 
     // Auto-generate preview
-    React.useEffect(() => {
+    useEffect(() => {
         if (isVisible) {
             const timer = setTimeout(() => {
                 generateImage(false, false);
             }, 300);
             return () => clearTimeout(timer);
         }
-    }, [imageTitle, imageStyle, isVisible]);
+    }, [isVisible, generateImage]);
 
     if (!isVisible) return null;
 

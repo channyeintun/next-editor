@@ -6,7 +6,7 @@ import PauseIcon from './icon/Pause';
 import SettingIcon from './icon/Setting';
 import ProgressBar from './ProgressBar';
 import SnapshotEditor from './SnapshotEditor';
-import type { Recording } from '../use-next-editor/src';
+import type { Recording } from '../core/src';
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -48,8 +48,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   // Update recording time every 100ms when recording
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (isRecording && recordingStartTime !== null) {
       interval = setInterval(() => {
         setRecordingTime(Date.now() - recordingStartTime);

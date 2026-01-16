@@ -1,34 +1,45 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import react from '@vitejs/plugin-react-swc'
+import checker from 'vite-plugin-checker'
 
-// https://vite.dev/config/
+// https://viteplus.dev/ alignment
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    checker({
+      typescript: true,
+      eslint: {
+        useFlatConfig: true,
+        lintCommand: 'eslint "./src/**/*.{ts,tsx}"',
+      },
+    }),
+  ],
   build: {
-    // Enable minification for production builds
     minify: 'terser',
     terserOptions: {
       mangle: {
-        // Mangle function and variable names for smaller bundle size
         toplevel: true,
       },
       format: {
-        // Remove comments from production build
         comments: false,
       },
     },
-    // Optimize chunk splitting for better caching
     rollupOptions: {
       output: {
         manualChunks: {
-          // Separate vendor libraries for better caching
-          vendor: ['react', 'react-dom'],
+          vendor: ['react', 'react-dom', 'react-router-dom'],
           editor: ['@monaco-editor/react', 'monaco-editor'],
+          xstate: ['xstate', '@xstate/react'],
           utils: ['pako', 'superjson']
         },
       },
     },
-    // Set chunk size warning limit to 1MB
     chunkSizeWarningLimit: 1024,
+    reportCompressedSize: false, // Speed up build
+  },
+  server: {
+    hmr: {
+      overlay: true, // Show errors in overlay
+    },
   },
 })

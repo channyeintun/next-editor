@@ -44,26 +44,21 @@ export interface IframeInteractionTarget {
   tagName: string;
   id?: string;
   className?: string;
-  xpath: string; // For precise element targeting during playback
+  xpath: string;
 }
 
 /**
  * Data payload for different interaction types
  */
 export interface IframeInteractionData {
-  // Click/mouse data
   clientX?: number;
   clientY?: number;
   button?: number;
-  // Key data
   key?: string;
   code?: string;
-  // Scroll data
   scrollTop?: number;
   scrollLeft?: number;
-  // Input data
   value?: string;
-  // Flag for document-level scroll
   isDocument?: boolean;
 }
 
@@ -81,7 +76,6 @@ export interface PreviewState {
   size: PreviewSize;
   scrollTop?: number;
   scrollLeft?: number;
-  // Current interaction being replayed (for visualization)
   currentInteraction?: IframeInteractionEvent;
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import NextEditorImageSaveModal from './ShareModal';
@@ -30,6 +30,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     handleEditorChange,
     editorRef,
     isPlaying,
+    isRecording,
     currentRecording,
     importFromFile,
     loadRecording,
@@ -37,6 +38,43 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   } = useNextEditorContext();
 
   const [showImageSaveModal, setShowImageSaveModal] = useState(false);
+
+  // Listen for cursor/selection changes during recording
+  // This captures caret movements from keyboard navigation (arrow keys, etc.)
+  useEffect(() => {
+    if (!isRecording || !editorRef.current) return;
+
+    const editor = editorRef.current;
+    const model = editor.getModel();
+    if (!model) return;
+
+    const disposables: { dispose(): void }[] = [];
+
+    // Listen for cursor position changes (keyboard navigation, etc.)
+    disposables.push(
+      editor.onDidChangeCursorPosition(() => {
+        handleEditorChange();
+      })
+    );
+
+    // Listen for selection changes (shift+arrow, shift+click, etc.)
+    disposables.push(
+      editor.onDidChangeCursorSelection(() => {
+        handleEditorChange();
+      })
+    );
+
+    // Listen for scroll changes
+    disposables.push(
+      editor.onDidScrollChange(() => {
+        handleEditorChange();
+      })
+    );
+
+    return () => {
+      disposables.forEach(d => d.dispose());
+    };
+  }, [isRecording, editorRef, handleEditorChange]);
 
   /**
    * Handle Monaco Editor mount event

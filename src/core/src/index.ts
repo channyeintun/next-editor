@@ -27,6 +27,10 @@ export type {
   EditorState,
 } from './types';
 
+// Machine exports
+export { editorMachine } from './machine/editorMachine';
+export type { EditorMachineStatus, EditorMachineContext, EditorMachineEvent } from './machine/types';
+
 // Slide type exports
 export type {
   Slide,

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import type { Recording } from '../use-next-editor/src';
+import type { Recording } from '../core/src';
 
 interface SnapshotEditorProps {
   recording: Recording;
@@ -28,7 +28,7 @@ const SnapshotEditor: React.FC<SnapshotEditorProps> = ({
   const handleSave = useCallback(() => {
     try {
       const parsed = JSON.parse(jsonText);
-      
+
       // Restore audioBlob from original recording
       const editedRecording: Recording = {
         ...parsed,

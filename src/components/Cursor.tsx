@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNextEditorContext } from '../hooks/useNextEditorContext';
-import type { MouseCursorPosition } from '../use-next-editor/src';
+import type { MouseCursorPosition } from '../core/src';
 
 /**
  * Fake cursor component for playback visualization

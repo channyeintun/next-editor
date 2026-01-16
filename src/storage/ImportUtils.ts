@@ -1,5 +1,5 @@
-import type { Recording } from '../use-next-editor/src';
-import { decodeDataFromCanvas } from '../use-next-editor/src/utils/steganography';
+import type { Recording } from '../core/src';
+import { decodeDataFromCanvas } from '../core/src/utils/steganography';
 
 /**
  * Extracts recordings from a PNG file using steganography

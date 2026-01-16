@@ -1,6 +1,7 @@
-import type { Recording } from '../use-next-editor/src';
+import type { Recording } from '../core/src';
 import { superjson } from './SuperJsonConfig';
 import { deflate, inflate } from 'pako';
+import { type AudioPlaceholder } from '../core/src/types';
 
 interface StorageStats {
   count: number;
@@ -9,11 +10,7 @@ interface StorageStats {
   compressionRatio?: string;
 }
 
-interface AudioPlaceholder {
-  __audio_offset: number;
-  __audio_size: number;
-  __audio_type: string;
-}
+
 
 
 /**
@@ -40,7 +37,7 @@ export class JsonStorage {
    * Extract audio blobs from recording and replace with placeholders
    */
   private async extractAudioData(recording: Recording): Promise<{ recordingWithPlaceholders: Recording; audioData: Uint8Array | null }> {
-    if (!recording.audioBlob) {
+    if (!recording.audioBlob || !(recording.audioBlob instanceof Blob)) {
       return { recordingWithPlaceholders: recording, audioData: null };
     }
 
@@ -58,8 +55,7 @@ export class JsonStorage {
     // Create recording with placeholder
     const recordingWithPlaceholders: Recording = {
       ...recording,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      audioBlob: placeholder as any // Type assertion for compatibility
+      audioBlob: placeholder
     };
 
     return { recordingWithPlaceholders, audioData };
@@ -79,8 +75,8 @@ export class JsonStorage {
 
         if (audioData) {
           // Update placeholder with actual offset
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (recordingWithPlaceholders.audioBlob as any).__audio_offset = currentOffset;
+          const placeholder = recordingWithPlaceholders.audioBlob as AudioPlaceholder;
+          placeholder.__audio_offset = currentOffset;
           audioChunks.push(audioData);
           currentOffset += audioData.length;
         }
@@ -163,10 +159,9 @@ export class JsonStorage {
     const audioData = binaryData.slice(audioDataStart);
 
     return recordings.map(recording => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const audioPlaceholder = recording.audioBlob as any;
+      const audioPlaceholder = recording.audioBlob as AudioPlaceholder | undefined;
 
-      if (audioPlaceholder && audioPlaceholder.__audio_offset !== undefined) {
+      if (audioPlaceholder && (audioPlaceholder as AudioPlaceholder).__audio_offset !== undefined) {
         const audioOffset = audioPlaceholder.__audio_offset;
         const audioSize = audioPlaceholder.__audio_size;
         const audioType = audioPlaceholder.__audio_type;
@@ -409,7 +404,8 @@ export class JsonStorage {
     const jsonString = superjson.stringify(recordingsWithPlaceholders);
     const jsonSize = new Blob([jsonString]).size;
     const audioSize = recordings.reduce((total, recording) => {
-      return total + (recording.audioBlob ? recording.audioBlob.size : 0);
+      const blob = recording.audioBlob;
+      return total + (blob instanceof Blob ? blob.size : 0);
     }, 0);
 
     // Simulate old format: JSON + base64 audio (33% overhead) + base64 storage (33% overhead)
