@@ -87,6 +87,10 @@ export interface UseNextEditorConfig {
   onPreviewEvent?: (event: PreviewEvent) => void;
   getPreviewState?: () => PreviewState | null;
   applyPreviewState?: (previewState: PreviewState) => void;
+
+  // Slides data callbacks
+  getSlides?: () => Array<{ id: string; imageUrl: string; name?: string; order: number }>;
+  applySlides?: (slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void;
 }
 
 /**
@@ -140,6 +144,7 @@ export interface UseNextEditorReturn {
 
   // Recording Management
   loadRecording: (recording: Recording) => void;
+  clearRecording: () => void;
 
   // Monaco Editor Integration
   handleEditorChange: () => void;

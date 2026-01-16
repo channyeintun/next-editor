@@ -114,10 +114,14 @@ export interface EditorMachineContext {
     error: string | null;
     /** Callback to apply slide state during playback */
     applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
+    /** Callback to apply slides data during playback */
+    applySlides?: (slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void;
     /** Callback to apply preview state during playback */
     applyPreviewState?: (previewState: PreviewState) => void;
     /** Callback to get slide state during recording */
     getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
+    /** Callback to get slides data during recording */
+    getSlides?: () => Array<{ id: string; imageUrl: string; name?: string; order: number }>;
     /** Callback to get preview state during recording */
     getPreviewState?: () => PreviewState | null;
     /** Index of the last applied snapshot during playback */
@@ -311,6 +315,8 @@ export interface EditorMachineInput {
     onSlideEvent?: (event: SlideEvent) => void;
     getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
     applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
+    getSlides?: () => Array<{ id: string; imageUrl: string; name?: string; order: number }>;
+    applySlides?: (slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void;
     onPreviewEvent?: (event: PreviewEvent) => void;
     getPreviewState?: () => PreviewState | null;
     applyPreviewState?: (previewState: PreviewState) => void;
@@ -355,4 +361,10 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     lastAppliedSnapshotIndex: -1,
     lastAppliedPreviewEventIndex: -1,
     lastAppliedPreviewState: undefined,
+    applySlideState: input.applySlideState,
+    applySlides: input.applySlides,
+    getSlideState: input.getSlideState,
+    getSlides: input.getSlides,
+    applyPreviewState: input.applyPreviewState,
+    getPreviewState: input.getPreviewState,
 });

@@ -18,6 +18,9 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   const getPreviewStateRef = useRef<(() => PreviewState | null) | null>(null);
   const applyPreviewStateRef = useRef<((previewState: PreviewState) => void) | null>(null);
 
+  const getSlidesRef = useRef<(() => Array<{ id: string; imageUrl: string; name?: string; order: number }>) | null>(null);
+  const applySlidesRef = useRef<((slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void) | null>(null);
+
   const originalHook = useNextEditor({
     editorRef,
     enableAudioRecording: true, // Enable built-in synchronized audio recording
@@ -36,6 +39,9 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
 
     getPreviewState: () => getPreviewStateRef.current?.() || null,
     applyPreviewState: (previewState) => applyPreviewStateRef.current?.(previewState),
+
+    getSlides: () => getSlidesRef.current?.() || [],
+    applySlides: (slides) => applySlidesRef.current?.(slides),
   });
 
 
@@ -49,6 +55,14 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     clearStorage: jsonStorage.current.clear.bind(jsonStorage.current),
     getStorageStats: jsonStorage.current.getStats.bind(jsonStorage.current),
     deleteFromStorage: jsonStorage.current.delete.bind(jsonStorage.current),
+    clearRecording: () => {
+      originalHook.clearRecording();
+      if (editorRef.current) {
+        editorRef.current.setValue(`<html>
+    <h1>Hello world</h1>
+</html>`);
+      }
+    },
     loadRecordingsFromStorage: async () => {
       try {
         const loadedRecordings = await jsonStorage.current.load();
@@ -68,7 +82,12 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       applySlideStateRef.current = applier;
     },
     // Slides data registration
-
+    registerSlidesGetter: (getter: () => Array<{ id: string; imageUrl: string; name?: string; order: number }>) => {
+      getSlidesRef.current = getter;
+    },
+    registerSlidesApplier: (applier: (slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void) => {
+      applySlidesRef.current = applier;
+    },
     // Preview state registration
     registerPreviewStateGetter: (getter: () => PreviewState | null) => {
       getPreviewStateRef.current = getter;

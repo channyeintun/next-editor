@@ -18,7 +18,8 @@ export const NextEditorContext = createContext<(UseNextEditorReturn & {
   registerSlideStateGetter: (getter: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null) => void;
   registerSlideStateApplier: (applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void) => void;
   // Slides data registration
-
+  registerSlidesGetter: (getter: () => Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void;
+  registerSlidesApplier: (applier: (slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void) => void;
   // Preview state registration
   registerPreviewStateGetter: (getter: () => PreviewState | null) => void;
   registerPreviewStateApplier: (applier: (previewState: PreviewState) => void) => void;

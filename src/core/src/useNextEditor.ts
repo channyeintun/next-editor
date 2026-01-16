@@ -59,9 +59,12 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
     send({ type: 'SET_VOLUME', volume });
   }, [send]);
 
-  // Recording Management
   const loadRecording = useCallback((recording: Recording) => {
     send({ type: 'LOAD_RECORDING', recording });
+  }, [send]);
+
+  const clearRecording = useCallback(() => {
+    send({ type: 'UNLOAD' });
   }, [send]);
 
   // Event Handlers for UI
@@ -129,6 +132,7 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
     setPlaybackSpeed,
     setVolume,
     loadRecording,
+    clearRecording,
 
     // Integration
     handleEditorChange,

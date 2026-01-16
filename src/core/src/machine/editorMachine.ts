@@ -406,6 +406,7 @@ export const editorMachine = setup({
             if (!context.session) return { recording: null };
 
             const duration = Math.max(Date.now() - context.session.startedAt, 1);
+            const slides = context.getSlides?.();
 
             const recording: Recording = {
                 id: Date.now().toString(),
@@ -414,6 +415,7 @@ export const editorMachine = setup({
                 snapshots: context.session.snapshots,
                 slideEvents: context.session.slideEvents,
                 previewEvents: context.session.previewEvents,
+                slides: slides,
                 duration,
                 audioBlob: context.audio.blob || undefined,
             };
@@ -431,8 +433,13 @@ export const editorMachine = setup({
         }),
 
         // Playback actions
-        setRecording: assign(({ event }) => {
+        setRecording: assign(({ context, event }) => {
             if (event.type !== 'RECORDING_LOADED') return {};
+
+            if (event.recording.slides && context.applySlides) {
+                context.applySlides(event.recording.slides);
+            }
+
             return {
                 recording: event.recording,
                 timeline: {
@@ -698,12 +705,14 @@ export const editorMachine = setup({
         pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
         animationFrameId: null,
         error: null,
-        applySlideState: input.applySlideState,
-        applyPreviewState: input.applyPreviewState,
-        getSlideState: input.getSlideState,
-        getPreviewState: input.getPreviewState,
         lastAppliedSnapshotIndex: -1,
         lastAppliedPreviewEventIndex: -1,
+        applySlideState: input.applySlideState,
+        applySlides: input.applySlides,
+        getSlideState: input.getSlideState,
+        getSlides: input.getSlides,
+        applyPreviewState: input.applyPreviewState,
+        getPreviewState: input.getPreviewState,
     }),
 
     initial: 'idle',
@@ -853,6 +862,11 @@ export const editorMachine = setup({
                             }),
                             currentSnapshot: null,
                         }),
+                        ({ context, event }) => {
+                            if (event.output.recording.slides && context.applySlides) {
+                                context.applySlides(event.output.recording.slides);
+                            }
+                        }
                     ],
                 },
                 onError: {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Circle, Square, Plus } from 'lucide-react';
 import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import ReplayIcon from './icon/Replay';
 import PlayIcon from './icon/Play';
@@ -31,6 +32,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     currentRecording,
     startRecording,
     stopRecording,
+    clearRecording,
     play,
     pause,
     seekTo,
@@ -69,15 +71,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const handleRecordToggle = () => {
-    if (isRecording) {
-      stopRecording();
-      onStopRecording?.();
-    } else {
-      startRecording();
-      onRecord?.();
-    }
-  };
+
 
   const handlePlayPause = () => {
     if (isPlaying) {
@@ -127,11 +121,33 @@ const MediaControls: React.FC<MediaControlsProps> = ({
       <div className="flex items-center gap-3 w-full h-6">
         {recordMode && (
           <button
-            onClick={handleRecordToggle}
+            onClick={() => {
+              if (isRecording) {
+                stopRecording();
+                onStopRecording?.();
+              } else if (currentRecording) {
+                clearRecording();
+              } else {
+                startRecording();
+                onRecord?.();
+              }
+            }}
             disabled={isPlaying}
             className={`flex items-center justify-center transition-colors relative ${isPlaying ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80 cursor-pointer'}`}
+            title={isRecording ? "Stop Recording" : (currentRecording ? "New Recording" : "Start Recording")}
           >
-            {isRecording ? <div className="w-3 h-3 bg-red-500 rounded-sm animate-pulse" /> : <div className="w-2 h-2 bg-red-500 rounded-full" />}
+            {isRecording ? (
+              <Square size={14} className="fill-red-500 text-red-500 animate-pulse" />
+            ) : currentRecording ? (
+              <div className="relative">
+                <Circle size={14} className="fill-red-500 text-red-500" />
+                <div className="absolute -top-1 -right-1.5 bg-[#202732] rounded-full p-[0.5px]">
+                  <Plus size={10} className="text-red-500 stroke-[3px]" />
+                </div>
+              </div>
+            ) : (
+              <Circle size={14} className="fill-red-500 text-red-500" />
+            )}
           </button>
         )}
 
