@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { Recording } from '../use-next-editor/src';
+import type { Recording, AudioPlaceholder } from '../use-next-editor/src/types';
 import { useNextEditorContext } from './useNextEditorContext';
 
 export const useUrlLoader = () => {
@@ -136,10 +136,9 @@ export const useUrlLoader = () => {
     const audioData = binaryData.slice(audioDataStart);
 
     return recordings.map(recording => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const audioPlaceholder = recording.audioBlob as any;
+      const audioPlaceholder = recording.audioBlob as AudioPlaceholder | undefined;
 
-      if (audioPlaceholder && audioPlaceholder.__audio_offset !== undefined) {
+      if (audioPlaceholder && (audioPlaceholder as AudioPlaceholder).__audio_offset !== undefined) {
         const audioOffset = audioPlaceholder.__audio_offset;
         const audioSize = audioPlaceholder.__audio_size;
         const audioType = audioPlaceholder.__audio_type;

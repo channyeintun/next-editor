@@ -5,8 +5,8 @@
 export async function calculateDurationFromFileReader(audioBlob: Blob): Promise<number> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    
-    reader.onload = function(e) {
+
+    reader.onload = function (e) {
       try {
         const arrayBuffer = e.target?.result as ArrayBuffer;
         if (!arrayBuffer) {
@@ -14,9 +14,9 @@ export async function calculateDurationFromFileReader(audioBlob: Blob): Promise<
           return;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        
+        const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const audioContext = new AudioContextClass();
+
         audioContext.decodeAudioData(
           arrayBuffer,
           buffer => {
@@ -36,12 +36,12 @@ export async function calculateDurationFromFileReader(audioBlob: Blob): Promise<
         reject(error);
       }
     };
-    
-    reader.onerror = function() {
+
+    reader.onerror = function () {
       console.error('FileReader read error');
       reject(new Error('FileReader failed'));
     };
-    
+
     reader.readAsArrayBuffer(audioBlob);
   });
 }

@@ -12,7 +12,7 @@ export const useUrlQuery = () => {
     if (url) {
       // Decode URL in case it was URL encoded
       const decodedUrl = decodeURIComponent(url);
-      
+
       // Convert relative URLs to absolute URLs for same origin
       let fullUrl = decodedUrl;
       if (!decodedUrl.startsWith('http://') && !decodedUrl.startsWith('https://')) {
@@ -20,12 +20,12 @@ export const useUrlQuery = () => {
         const origin = window.location.origin;
         fullUrl = decodedUrl.startsWith('/') ? `${origin}${decodedUrl}` : `${origin}/${decodedUrl}`;
       }
-      
+
       fetchNextEditorFile(fullUrl).catch(error => {
         console.error('Failed to load from URL query:', error);
       });
     }
-  }, [searchParams]); // Only react to changes in searchParams
+  }, [searchParams, fetchNextEditorFile]); // Only react to changes in searchParams
 
   return { isLoading };
 };

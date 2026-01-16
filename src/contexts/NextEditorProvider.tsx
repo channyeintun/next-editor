@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import type * as monaco from 'monaco-editor';
-import { useNextEditor } from '../use-next-editor/src';
+import { useNextEditor } from '../core/src';
 import { NextEditorContext } from './NextEditorContext';
 import { createJsonStorage } from '../storage/JsonStorage';
 import type { SlidePreviewState, PreviewState } from '../types/slides';
@@ -14,20 +14,20 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   const jsonStorage = useRef(createJsonStorage());
   const getSlideStateRef = useRef<(() => { previewState: SlidePreviewState; currentSlideIndex: number } | null) | null>(null);
   const applySlideStateRef = useRef<((slideState: SlidePreviewState, currentSlideIndex: number) => void) | null>(null);
-  const getSlidesRef = useRef<(() => Array<{id: string; imageUrl: string; name?: string; order: number}> | null) | null>(null);
-  const applySlidesRef = useRef<((slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void) | null>(null);
+  const getSlidesRef = useRef<(() => Array<{ id: string; imageUrl: string; name?: string; order: number }> | null) | null>(null);
+  const applySlidesRef = useRef<((slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void) | null>(null);
   const getPreviewStateRef = useRef<(() => PreviewState | null) | null>(null);
   const applyPreviewStateRef = useRef<((previewState: PreviewState) => void) | null>(null);
-  
+
   const originalHook = useNextEditor({
     editorRef,
     enableAudioRecording: true, // Enable built-in synchronized audio recording
-    onRecordingStart: () => {},
+    onRecordingStart: () => { },
     onRecordingStop: (recording) => {
       originalHook.loadRecording(recording);
     },
-    onPlaybackStart: () => {},
-    onPlaybackPause: () => {},
+    onPlaybackStart: () => { },
+    onPlaybackPause: () => { },
     onError: (error: Error) => {
       console.error('🚨 error:', error);
     },
@@ -70,10 +70,10 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       applySlideStateRef.current = applier;
     },
     // Slides data registration
-    registerSlidesGetter: (getter: () => Array<{id: string; imageUrl: string; name?: string; order: number}> | null) => {
+    registerSlidesGetter: (getter: () => Array<{ id: string; imageUrl: string; name?: string; order: number }> | null) => {
       getSlidesRef.current = getter;
     },
-    registerSlidesApplier: (applier: (slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void) => {
+    registerSlidesApplier: (applier: (slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void) => {
       applySlidesRef.current = applier;
     },
     // Preview state registration

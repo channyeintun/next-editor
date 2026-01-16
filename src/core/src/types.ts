@@ -2,6 +2,15 @@ import type * as monaco from 'monaco-editor';
 import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState } from './slides';
 
 /**
+ * Audio storage placeholder for serialization
+ */
+export interface AudioPlaceholder {
+  __audio_offset: number;
+  __audio_size: number;
+  __audio_type: string;
+}
+
+/**
  * Mouse cursor position relative to editor container
  */
 export interface MouseCursorPosition {
@@ -36,8 +45,8 @@ export interface Recording {
   snapshots: EditorSnapshot[];
   slideEvents?: SlideEvent[];
   previewEvents?: PreviewEvent[];
-  slides?: Array<{id: string; imageUrl: string; name?: string; order: number}>;
-  audioBlob?: Blob;
+  slides?: Array<{ id: string; imageUrl: string; name?: string; order: number }>;
+  audioBlob?: Blob | AudioPlaceholder;
   duration: number;
   createdAt: number;
 }
@@ -49,14 +58,14 @@ export interface Recording {
 export interface UseNextEditorConfig {
   // Required
   editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
-  
+
   // Recording Options
   enableAudioRecording?: boolean;
-  
+
   // Playback Options
   pauseOnUserInteraction?: boolean;
   defaultPlaybackSpeed?: number;
-  
+
   // Callbacks
   onRecordingStart?: () => void;
   onRecordingStop?: (recording: Recording) => void;
@@ -65,7 +74,7 @@ export interface UseNextEditorConfig {
   onPlaybackEnd?: () => void;
   onSeek?: (time: number) => void;
   onError?: (error: Error) => void;
-  
+
   // New granular callbacks
   onSnapshot?: (snapshot: EditorSnapshot) => void;
   onStateChange?: (state: EditorState) => void;
@@ -73,9 +82,7 @@ export interface UseNextEditorConfig {
   onSlideEvent?: (event: SlideEvent) => void;
   getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
   applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
-  getSlides?: () => Array<{id: string; imageUrl: string; name?: string; order: number}> | null;
-  applySlides?: (slides: Array<{id: string; imageUrl: string; name?: string; order: number}>) => void;
-  
+
   // Preview state callbacks
   onPreviewEvent?: (event: PreviewEvent) => void;
   getPreviewState?: () => PreviewState | null;
@@ -105,7 +112,7 @@ export interface UseNextEditorReturn {
   isRecording: boolean;
   isRecordingAudio: boolean;
   recordingStartTime: number | null;
-  
+
   // Playback State
   isPlaying: boolean;
   isPaused: boolean;
@@ -113,16 +120,16 @@ export interface UseNextEditorReturn {
   currentTime: number;
   playbackSpeed: number;
   volume: number;
-  
+
   // Data
   currentRecording: Recording | null;
   currentCursor: MouseCursorPosition | null;
   actualDuration: number;
-  
+
   // Recording Controls
   startRecording: () => void;
   stopRecording: () => void;
-  
+
   // Playback Controls
   play: () => void;
   pause: () => void;
@@ -130,17 +137,17 @@ export interface UseNextEditorReturn {
   seekTo: (time: number) => void;
   setPlaybackSpeed: (speed: number) => void;
   setVolume: (volume: number) => void;
-  
+
   // Recording Management
   loadRecording: (recording: Recording) => void;
-  
+
   // Monaco Editor Integration
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
-  
+
   // Helper functions
   getEditorState: () => EditorState | null;
   getSnapshot: (timestamp?: number) => EditorSnapshot | null;
-  
+
 }

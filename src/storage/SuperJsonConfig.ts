@@ -1,5 +1,5 @@
 import superjson from 'superjson';
-import type { Recording } from '../use-next-editor/src';
+import type { Recording } from '../core/src';
 
 /**
  * Serializable Blob representation for SuperJSON
@@ -17,11 +17,11 @@ interface SerializableBlob extends Record<string, string | boolean> {
  */
 superjson.registerCustom<SerializableBlob, SerializableBlob>(
   {
-    isApplicable: (v): v is SerializableBlob => 
-      v && 
-      typeof v === 'object' && 
-      'data' in v && 
-      'type' in v && 
+    isApplicable: (v): v is SerializableBlob =>
+      v &&
+      typeof v === 'object' &&
+      'data' in v &&
+      'type' in v &&
       '__isSerializableBlob' in v,
     serialize: (serializableBlob) => serializableBlob,
     deserialize: (serializableBlob) => {
@@ -45,10 +45,10 @@ export const blobHelpers = {
       reader.onload = () => {
         const result = reader.result as string;
         const base64 = result.split(',')[1];
-        resolve({ 
-          data: base64, 
+        resolve({
+          data: base64,
           type: blob.type,
-          __isSerializableBlob: true 
+          __isSerializableBlob: true
         } as SerializableBlob);
       };
       reader.onerror = reject;
@@ -61,7 +61,7 @@ export const blobHelpers = {
    */
   async prepareRecordingForSerialization(recording: Recording): Promise<Recording> {
     const prepared = { ...recording };
-    
+
     if (recording.audioBlob instanceof Blob) {
       // Replace Blob with SerializableBlob for JSON compatibility
       const serialized = await this.blobToSerializable(recording.audioBlob);
@@ -69,7 +69,7 @@ export const blobHelpers = {
       delete (prepared as { audioBlob?: unknown }).audioBlob;
       (prepared as { audioBlob?: SerializableBlob }).audioBlob = serialized;
     }
-    
+
     return prepared;
   }
 };
