@@ -331,7 +331,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
             console.error('Failed to generate image:', err);
             setIsGenerating(false);
         }
-    }, [imageStyle, imageTitle, initialText, isVisible, onSave, previewUrl, recording]);
+    }, [imageStyle, imageTitle, initialText, isVisible, onSave, recording]);
 
     // Auto-generate preview
     useEffect(() => {
