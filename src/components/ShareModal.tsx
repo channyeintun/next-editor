@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { Recording } from '../core/src';
 import { encodeDataInCanvas } from '../core/src/utils/steganography';
 import pako from 'pako';
@@ -84,6 +84,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
     const [imageStyle, setImageStyle] = useState<ImageStyle>('gradient');
     const [isGenerating, setIsGenerating] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const previewUrlRef = useRef<string | null>(null);
     const [composeLink, setComposeLink] = useState<string | null>(null);
     const [linkCopied, setLinkCopied] = useState(false);
 
@@ -227,8 +228,9 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                 if (blob) {
                     const file = new File([blob], `next-editor-${Date.now()}.png`, { type: 'image/png' });
 
-                    if (previewUrl) URL.revokeObjectURL(previewUrl);
+                    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
                     const newPreviewUrl = URL.createObjectURL(blob);
+                    previewUrlRef.current = newPreviewUrl;
                     setPreviewUrl(newPreviewUrl);
 
                     if (isManualDownload) {
