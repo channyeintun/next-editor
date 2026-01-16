@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { Recording, AudioPlaceholder } from '../use-next-editor/src/types';
+import type { Recording, AudioPlaceholder } from '../core/src/types';
 import { useNextEditorContext } from './useNextEditorContext';
 
 export const useUrlLoader = () => {

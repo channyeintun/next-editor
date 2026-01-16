@@ -14,8 +14,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   const jsonStorage = useRef(createJsonStorage());
   const getSlideStateRef = useRef<(() => { previewState: SlidePreviewState; currentSlideIndex: number } | null) | null>(null);
   const applySlideStateRef = useRef<((slideState: SlidePreviewState, currentSlideIndex: number) => void) | null>(null);
-  const getSlidesRef = useRef<(() => Array<{ id: string; imageUrl: string; name?: string; order: number }> | null) | null>(null);
-  const applySlidesRef = useRef<((slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void) | null>(null);
+
   const getPreviewStateRef = useRef<(() => PreviewState | null) | null>(null);
   const applyPreviewStateRef = useRef<((previewState: PreviewState) => void) | null>(null);
 
@@ -34,8 +33,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     pauseOnUserInteraction: true,
     getSlideState: () => getSlideStateRef.current?.() || null,
     applySlideState: (slideState, currentSlideIndex) => applySlideStateRef.current?.(slideState, currentSlideIndex),
-    getSlides: () => getSlidesRef.current?.() || null,
-    applySlides: (slides) => applySlidesRef.current?.(slides),
+
     getPreviewState: () => getPreviewStateRef.current?.() || null,
     applyPreviewState: (previewState) => applyPreviewStateRef.current?.(previewState),
   });
@@ -70,12 +68,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       applySlideStateRef.current = applier;
     },
     // Slides data registration
-    registerSlidesGetter: (getter: () => Array<{ id: string; imageUrl: string; name?: string; order: number }> | null) => {
-      getSlidesRef.current = getter;
-    },
-    registerSlidesApplier: (applier: (slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void) => {
-      applySlidesRef.current = applier;
-    },
+
     // Preview state registration
     registerPreviewStateGetter: (getter: () => PreviewState | null) => {
       getPreviewStateRef.current = getter;
