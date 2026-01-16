@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from 'react';
+import * as monaco from 'monaco-editor';
 import { useMachine } from '@xstate/react';
 import { editorMachine } from './machine/editorMachine';
 import type { UseNextEditorConfig, UseNextEditorReturn, EditorState, EditorSnapshot, Recording } from './types';
@@ -69,16 +70,66 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
 
   // Event Handlers for UI
   const handleEditorChange = useCallback(() => {
-    send({ type: 'CAPTURE_SNAPSHOT' });
-  }, [send]);
+    if (state.matches('recording')) {
+      send({ type: 'CAPTURE_SNAPSHOT' });
+    }
+  }, [send, state]);
+
+  const isPlaying = state.matches({ playback: 'playing' });
+
+  // Handle playback interaction detection via direct input listeners
+  // This is more stable than onChange for preventing machine/user feedback loops
+  useEffect(() => {
+    if (isPlaying && editor) {
+      const disposables: monaco.IDisposable[] = [];
+
+      // Listen for user keyboard input during replay
+      disposables.push(
+        editor.onKeyDown((e) => {
+          // Ignore navigation/modifier keys to only pause on potential value changes
+          const ignoreKeys = [
+            monaco.KeyCode.LeftArrow, monaco.KeyCode.RightArrow,
+            monaco.KeyCode.UpArrow, monaco.KeyCode.DownArrow,
+            monaco.KeyCode.PageUp, monaco.KeyCode.PageDown,
+            monaco.KeyCode.Home, monaco.KeyCode.End,
+            monaco.KeyCode.Shift, monaco.KeyCode.Ctrl,
+            monaco.KeyCode.Alt, monaco.KeyCode.Meta,
+            monaco.KeyCode.CapsLock, monaco.KeyCode.Escape,
+            monaco.KeyCode.F1, monaco.KeyCode.F2, monaco.KeyCode.F3, monaco.KeyCode.F4,
+            monaco.KeyCode.F5, monaco.KeyCode.F6, monaco.KeyCode.F7, monaco.KeyCode.F8,
+            monaco.KeyCode.F9, monaco.KeyCode.F10, monaco.KeyCode.F11, monaco.KeyCode.F12
+          ];
+
+          if (!ignoreKeys.includes(e.keyCode)) {
+            send({ type: 'USER_INTERACTION' });
+          }
+        })
+      );
+
+      // Listen for paste events
+      disposables.push(
+        editor.onDidPaste(() => {
+          send({ type: 'USER_INTERACTION' });
+        })
+      );
+
+      return () => {
+        disposables.forEach(d => d.dispose());
+      };
+    }
+  }, [isPlaying, editor, send]);
 
   const handleSlideEvent = useCallback((event: SlideEvent) => {
-    send({ type: 'SLIDE_EVENT', event });
-  }, [send]);
+    if (state.matches('recording')) {
+      send({ type: 'SLIDE_EVENT', event });
+    }
+  }, [send, state]);
 
   const handlePreviewEvent = useCallback((event: PreviewEvent) => {
-    send({ type: 'PREVIEW_EVENT', event });
-  }, [send]);
+    if (state.matches('recording')) {
+      send({ type: 'PREVIEW_EVENT', event });
+    }
+  }, [send, state]);
 
   // Helper functions
   const getEditorState = useCallback((): EditorState | null => {
