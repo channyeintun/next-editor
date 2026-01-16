@@ -1,20 +1,52 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Slide, SlidePreviewState, SlideEvent } from '../types/slides';
+
+const SLIDES_STORAGE_KEY = 'next-editor-slides';
+
+// Load slides from localStorage
+const loadSlidesFromStorage = (): Slide[] => {
+  try {
+    const saved = localStorage.getItem(SLIDES_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load slides from localStorage:', e);
+  }
+  return [];
+};
+
+// Save slides to localStorage
+const saveSlidesToStorage = (slides: Slide[]): void => {
+  try {
+    localStorage.setItem(SLIDES_STORAGE_KEY, JSON.stringify(slides));
+  } catch (e) {
+    console.warn('Failed to save slides to localStorage:', e);
+  }
+};
 
 interface UseSlidesConfig {
   onSlideEvent?: (event: SlideEvent) => void;
 }
 
 export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
-  const [slides, setSlides] = useState<Slide[]>([]);
+  const [slides, setSlides] = useState<Slide[]>(loadSlidesFromStorage);
   const [previewState, setPreviewState] = useState<SlidePreviewState>({
     isOpen: false,
     isMaximized: false,
     currentSlideId: null
   });
-  
+
   const currentSlideIndex = slides.findIndex(slide => slide.id === previewState.currentSlideId);
   const slideEventsRef = useRef<SlideEvent[]>([]);
+
+  // Persist slides to localStorage whenever they change
+  useEffect(() => {
+    saveSlidesToStorage(slides);
+  }, [slides]);
 
   const addSlide = useCallback((imageUrl: string) => {
     const newSlide: Slide = {
@@ -31,7 +63,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
       const updated = prev
         .filter(slide => slide.id !== slideId)
         .map((slide, index) => ({ ...slide, order: index }));
-      
+
       // If we're removing the current slide, close preview or move to another slide
       if (previewState.currentSlideId === slideId) {
         if (updated.length > 0) {
@@ -48,7 +80,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
           }));
         }
       }
-      
+
       return updated;
     });
   }, [previewState.currentSlideId, currentSlideIndex]);
@@ -60,22 +92,22 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
   const handleSlideEvent = useCallback((event: SlideEvent) => {
     slideEventsRef.current.push(event);
     onSlideEvent?.(event);
-    
+
     // Update preview state based on event
     switch (event.type) {
       case 'slide_open':
-        setPreviewState(prev => ({ 
-          ...prev, 
+        setPreviewState(prev => ({
+          ...prev,
           isOpen: true,
-          currentSlideId: event.slideId || prev.currentSlideId 
+          currentSlideId: event.slideId || prev.currentSlideId
         }));
         break;
       case 'slide_close':
-        setPreviewState(prev => ({ 
-          ...prev, 
+        setPreviewState(prev => ({
+          ...prev,
           isOpen: false,
           isMaximized: false,
-          currentSlideId: null 
+          currentSlideId: null
         }));
         break;
       case 'slide_maximize':
@@ -89,7 +121,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
 
   const startPresentation = useCallback(() => {
     if (slides.length === 0) return;
-    
+
     setPreviewState({
       isOpen: true,
       isMaximized: false,
@@ -113,7 +145,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
         slideId: previewState.currentSlideId
       });
     }
-    
+
     setPreviewState({
       isOpen: false,
       isMaximized: false,
@@ -143,7 +175,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     slides,
     previewState,
     currentSlideIndex: Math.max(0, currentSlideIndex),
-    
+
     // Actions
     addSlide,
     removeSlide,
@@ -153,7 +185,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     startPresentation,
     closePresentation,
     goToSlide,
-    
+
     // Event handling
     handleSlideEvent,
     clearSlideEvents,
