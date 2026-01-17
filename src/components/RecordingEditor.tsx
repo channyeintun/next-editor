@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import type { Recording } from '../core/src';
 
-interface SnapshotEditorProps {
+interface RecordingEditorProps {
   recording: Recording;
   onSave: (editedRecording: Recording) => void;
   onCancel: () => void;
@@ -9,7 +9,7 @@ interface SnapshotEditorProps {
   mode?: 'edit' | 'export';
 }
 
-const SnapshotEditor: React.FC<SnapshotEditorProps> = ({
+const RecordingEditor: React.FC<RecordingEditorProps> = ({
   recording,
   onSave,
   onCancel,
@@ -36,7 +36,7 @@ const SnapshotEditor: React.FC<SnapshotEditorProps> = ({
       };
 
       // Validate required fields
-      if (!editedRecording.id || !editedRecording.snapshots || !Array.isArray(editedRecording.snapshots)) {
+      if (!editedRecording.id || !editedRecording.frames || !Array.isArray(editedRecording.frames)) {
         throw new Error('Invalid recording format: missing required fields');
       }
 
@@ -60,7 +60,7 @@ const SnapshotEditor: React.FC<SnapshotEditorProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="text-lg font-semibold text-gray-800">
-            {mode === 'edit' ? 'Edit Recording JSON' : 'Edit Recording Snapshot'}
+            {mode === 'edit' ? 'Edit Recording JSON' : 'Edit Recording Frame'}
           </h2>
           <button
             onClick={onCancel}
@@ -112,4 +112,4 @@ const SnapshotEditor: React.FC<SnapshotEditorProps> = ({
   );
 };
 
-export default SnapshotEditor;
+export default RecordingEditor;

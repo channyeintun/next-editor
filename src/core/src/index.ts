@@ -20,7 +20,7 @@ export { default as NextEditorImageSaveModal } from '../../components/ShareModal
 // Type exports for users
 export type {
   MouseCursorPosition,
-  EditorSnapshot,
+  EditorFrame,
   Recording,
   UseNextEditorConfig,
   UseNextEditorReturn,

@@ -147,11 +147,11 @@ interface UseNextEditorConfig {
   onError?: (error: Error) => void;
 
   // Granular callbacks
-  onSnapshot?: (snapshot: EditorSnapshot) => void;
+  onFrame?: (frame: EditorFrame) => void;
   onStateChange?: (state: EditorState) => void;
   onPlaybackUpdate?: (
     currentTime: number,
-    snapshot: EditorSnapshot | null,
+    frame: EditorFrame | null,
   ) => void;
 
   // Slide integration callbacks
@@ -218,7 +218,7 @@ interface UseNextEditorReturn {
 
   // Helper functions
   getEditorState: () => EditorState | null;
-  getSnapshot: (timestamp?: number) => EditorSnapshot | null;
+  getFrame: (timestamp?: number) => EditorFrame | null;
 }
 ```
 
@@ -327,7 +327,7 @@ Slide data is efficiently stored in recordings:
 interface Recording {
   id: string;
   name: string;
-  snapshots: EditorSnapshot[]; // Code and slide state changes
+  frames: DeltaFrame[]; // Code and slide state changes (keyframes + deltas)
   slideEvents?: SlideEvent[]; // Slide interaction events
   slides?: Array<{ // Slide data (stored once per recording)
     id: string;
@@ -344,7 +344,7 @@ interface Recording {
 ### Best Practices
 
 1. **Efficient Storage**: Slide data is stored once per recording, while only
-   slide state changes are captured in snapshots
+   slide state changes are captured in frames
 2. **State Synchronization**: Slide state is automatically synchronized during
    playback
 3. **User Interaction**: Slide navigation is automatically disabled during
@@ -362,7 +362,7 @@ interface Recording {
 
 ### ✅ Master Timeline
 
-- Both audio and snapshots use identical start/stop timestamps
+- Both audio and frames use identical start/stop timestamps
 - Zero drift between audio and code changes
 - Perfect synchronization guaranteed
 

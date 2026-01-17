@@ -141,19 +141,13 @@ export class JsonStorage {
     const version = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
     offset += 2;
 
-    // Read JSON length based on version
-    let jsonLength: number;
-    if (version === 1) {
-      // Version 1: Uint16 for jsonLength (legacy, max 65535)
-      jsonLength = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
-      offset += 2;
-    } else if (version === 2) {
-      // Version 2: Uint32 for jsonLength (supports larger files)
-      jsonLength = new Uint32Array(binaryData.slice(offset, offset + 4).buffer)[0];
-      offset += 4;
-    } else {
-      throw new Error(`Unsupported binary format version: ${version}`);
+    if (version !== 2) {
+      throw new Error(`Unsupported binary format version: ${version}. Legacy Version 1 is no longer supported.`);
     }
+
+    // Version 2: Uint32 for jsonLength (supports larger files)
+    const jsonLength = new Uint32Array(binaryData.slice(offset, offset + 4).buffer)[0];
+    offset += 4;
 
     if (jsonLength === 0 || jsonLength > binaryData.length - offset) {
       throw new Error(`Invalid JSON length: ${jsonLength}, remaining data: ${binaryData.length - offset}`);
@@ -364,13 +358,6 @@ export class JsonStorage {
 
           const binaryData = this.base64ToBinary(stripped);
 
-          console.log('Import debug:', {
-            fileName: file.name,
-            fileSize: file.size,
-            binaryLength: binaryData.length,
-            firstBytes: Array.from(binaryData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' '),
-            magic: new TextDecoder().decode(binaryData.slice(0, 4))
-          });
 
           const importedRecordings = await this.decompressBinaryToRecordings(binaryData);
 

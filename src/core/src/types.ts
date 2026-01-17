@@ -20,9 +20,9 @@ export interface MouseCursorPosition {
 }
 
 /**
- * Editor snapshot containing the complete state at a specific timestamp
+ * Editor frame containing the complete state at a specific timestamp
  */
-export interface EditorSnapshot {
+export interface EditorFrame {
   timestamp: number;
   state: {
     content: string;
@@ -38,11 +38,17 @@ export interface EditorSnapshot {
 
 /**
  * Complete recording with metadata
+ * Version 2: uses frames array with keyframe + delta compression
  */
 export interface Recording {
+  /** Format version: Strictly 2 for delta compressed recordings */
+  version: 2;
   id: string;
   name: string;
-  snapshots: EditorSnapshot[];
+  /** Delta compressed frames (keyframes + deltas) */
+  frames: import('./utils/deltaTypes').DeltaFrame[];
+  /** Keyframe interval for reconstruction */
+  keyframeInterval: number;
   slideEvents?: SlideEvent[];
   previewEvents?: PreviewEvent[];
   slides?: Array<{ id: string; imageUrl: string; name?: string; order: number }>;
@@ -50,6 +56,7 @@ export interface Recording {
   duration: number;
   createdAt: number;
 }
+
 
 
 /**
@@ -75,10 +82,10 @@ export interface UseNextEditorConfig {
   onSeek?: (time: number) => void;
   onError?: (error: Error) => void;
 
-  // New granular callbacks
-  onSnapshot?: (snapshot: EditorSnapshot) => void;
+  // Granular callbacks
+  onFrame?: (frame: EditorFrame) => void;
   onStateChange?: (state: EditorState) => void;
-  onPlaybackUpdate?: (currentTime: number, snapshot: EditorSnapshot | null) => void;
+  onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
   onSlideEvent?: (event: SlideEvent) => void;
   getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
   applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
@@ -153,6 +160,6 @@ export interface UseNextEditorReturn {
 
   // Helper functions
   getEditorState: () => EditorState | null;
-  getSnapshot: (timestamp?: number) => EditorSnapshot | null;
+  getFrame: (timestamp?: number) => EditorFrame | null;
 
 }

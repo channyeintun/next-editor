@@ -37,7 +37,7 @@ export interface UseAudioRecordingReturn {
 
 /**
  * Hook for synchronized audio recording within the use-next-editor package
- * Ensures perfect synchronization with snapshot recording
+ * Ensures perfect synchronization with frame recording
  */
 export const useAudioRecording = (): UseAudioRecordingReturn => {
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);

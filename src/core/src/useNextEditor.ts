@@ -2,8 +2,9 @@ import { useCallback, useEffect } from 'react';
 import * as monaco from 'monaco-editor';
 import { useMachine } from '@xstate/react';
 import { editorMachine } from './machine/editorMachine';
-import type { UseNextEditorConfig, UseNextEditorReturn, EditorState, EditorSnapshot, Recording } from './types';
+import type { UseNextEditorConfig, UseNextEditorReturn, EditorState, EditorFrame, Recording } from './types';
 import type { SlideEvent, PreviewEvent } from './slides';
+import { findFrameIndexAtTime, reconstructFrameAtIndex } from './utils/frameDelta';
 
 /**
  * Main useNextEditor hook refactored with XState v5
@@ -14,6 +15,8 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
   const [state, send] = useMachine(editorMachine, {
     input: config,
   });
+
+  type MatchesParam = Parameters<typeof state.matches>[0];
 
   const { context } = state;
   const { editor } = context.editorRefs;
@@ -70,12 +73,12 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
 
   // Event Handlers for UI
   const handleEditorChange = useCallback(() => {
-    if (state.matches('recording')) {
-      send({ type: 'CAPTURE_SNAPSHOT' });
+    if (state.matches('recording' as MatchesParam)) {
+      send({ type: 'CAPTURE_FRAME' });
     }
   }, [send, state]);
 
-  const isPlaying = state.matches({ playback: 'playing' });
+  const isPlaying = state.matches({ playback: 'playing' } as MatchesParam);
 
   // Handle playback interaction detection via direct input listeners
   // This is more stable than onChange for preventing machine/user feedback loops
@@ -138,13 +141,13 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
   }, [isPlaying, send]);
 
   const handleSlideEvent = useCallback((event: SlideEvent) => {
-    if (state.matches('recording')) {
+    if (state.matches('recording' as MatchesParam)) {
       send({ type: 'SLIDE_EVENT', event });
     }
   }, [send, state]);
 
   const handlePreviewEvent = useCallback((event: PreviewEvent) => {
-    if (state.matches('recording')) {
+    if (state.matches('recording' as MatchesParam)) {
       send({ type: 'PREVIEW_EVENT', event });
     }
   }, [send, state]);
@@ -160,27 +163,25 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
     };
   }, [editor]);
 
-  const getSnapshot = useCallback((timestamp?: number): EditorSnapshot | null => {
-    if (timestamp === undefined) return context.currentSnapshot;
+  const getFrame = useCallback((timestamp?: number): EditorFrame | null => {
+    if (timestamp === undefined) return context.currentFrame;
     if (!context.recording) return null;
 
-    // Find closest snapshot at or before timestamp
-    const snapshots = context.recording.snapshots;
-    for (let i = snapshots.length - 1; i >= 0; i--) {
-      if (snapshots[i].timestamp <= timestamp) return snapshots[i];
-    }
-    return snapshots[0] || null;
-  }, [context.currentSnapshot, context.recording]);
+    // Find closest frame at or before timestamp
+    const { frames } = context.recording;
+    const index = findFrameIndexAtTime(frames, timestamp);
+    return reconstructFrameAtIndex(frames, index);
+  }, [context.currentFrame, context.recording]);
 
   return {
     // State
-    isRecording: state.matches('recording'),
+    isRecording: state.matches('recording' as MatchesParam),
     isRecordingAudio: context.audio.isRecording,
     recordingStartTime: context.session?.startedAt || null,
 
-    isPlaying: state.matches({ playback: 'playing' }),
-    isPaused: state.matches({ playback: 'paused' }) || (state.matches({ playback: 'ended' }) && context.timeline.currentTime < context.timeline.duration - 100),
-    hasEnded: state.matches({ playback: 'ended' }) && context.timeline.currentTime >= context.timeline.duration - 100,
+    isPlaying: state.matches({ playback: 'playing' } as MatchesParam),
+    isPaused: state.matches({ playback: 'paused' } as MatchesParam) || (state.matches({ playback: 'ended' } as MatchesParam) && context.timeline.currentTime < context.timeline.duration - 100),
+    hasEnded: state.matches({ playback: 'ended' } as MatchesParam) && context.timeline.currentTime >= context.timeline.duration - 100,
 
     currentTime: context.timeline.currentTime,
     playbackSpeed: context.timeline.speed,
@@ -188,7 +189,7 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
 
     // Data
     currentRecording: context.recording,
-    currentCursor: context.currentSnapshot?.state.mouseCursor || null,
+    currentCursor: context.currentFrame?.state.mouseCursor || null,
     actualDuration: context.timeline.duration / 1000, // seconds for actualDuration
 
     // Controls
@@ -210,6 +211,6 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
 
     // Helpers
     getEditorState,
-    getSnapshot,
+    getFrame,
   };
 };

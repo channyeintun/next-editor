@@ -7,7 +7,7 @@ import PlayIcon from './icon/Play';
 import PauseIcon from './icon/Pause';
 import SettingIcon from './icon/Setting';
 import ProgressBar from './ProgressBar';
-import SnapshotEditor from './SnapshotEditor';
+import RecordingEditor from './RecordingEditor';
 import type { Recording } from '../core/src';
 
 interface MediaControlsProps {
@@ -47,7 +47,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   const [showSettings, setShowSettings] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [showSnapshotEditor, setShowSnapshotEditor] = useState(false);
+  const [showRecordingEditor, setShowRecordingEditor] = useState(false);
 
   // Update recording time every 100ms when recording
   useEffect(() => {
@@ -103,21 +103,21 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   const handleEditClick = () => {
     if (currentRecording) {
-      setShowSnapshotEditor(true);
+      setShowRecordingEditor(true);
     }
   };
 
   const handleSaveRecording = async (editedRecording: Recording) => {
     try {
       loadRecording(editedRecording);
-      setShowSnapshotEditor(false);
+      setShowRecordingEditor(false);
     } catch (error) {
       console.error('Save failed:', error);
     }
   };
 
   const handleCancelExport = () => {
-    setShowSnapshotEditor(false);
+    setShowRecordingEditor(false);
   };
 
   const duration = currentRecording?.duration || 0;
@@ -246,9 +246,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({
       </div>
 
       {currentRecording && (
-        <SnapshotEditor
+        <RecordingEditor
           recording={currentRecording}
-          isVisible={showSnapshotEditor}
+          isVisible={showRecordingEditor}
           mode="edit"
           onSave={handleSaveRecording}
           onCancel={handleCancelExport}

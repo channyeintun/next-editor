@@ -1,6 +1,6 @@
 import type * as monaco from 'monaco-editor';
 import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState } from '../slides';
-import type { MouseCursorPosition, EditorSnapshot, Recording } from '../types';
+import type { MouseCursorPosition, EditorFrame, Recording } from '../types';
 
 // ============================================================================
 // Machine Status Types
@@ -50,8 +50,8 @@ export interface TimelineState {
 export interface RecordingSession {
     /** When recording started (performance.now()) */
     startedAt: number;
-    /** Collected snapshots during recording */
-    snapshots: EditorSnapshot[];
+    /** Collected frames during recording */
+    frames: EditorFrame[];
     /** Collected slide events during recording */
     slideEvents: SlideEvent[];
     /** Collected preview events during recording */
@@ -98,8 +98,8 @@ export interface EditorMachineContext {
     session: RecordingSession | null;
     /** Loaded recording data */
     recording: Recording | null;
-    /** Current snapshot being displayed */
-    currentSnapshot: EditorSnapshot | null;
+    /** Current frame being displayed */
+    currentFrame: EditorFrame | null;
     /** Audio state */
     audio: AudioState;
     /** Editor references */
@@ -124,8 +124,8 @@ export interface EditorMachineContext {
     getSlides?: () => Array<{ id: string; imageUrl: string; name?: string; order: number }>;
     /** Callback to get preview state during recording */
     getPreviewState?: () => PreviewState | null;
-    /** Index of the last applied snapshot during playback */
-    lastAppliedSnapshotIndex: number;
+    /** Index of the last applied frame during playback */
+    lastAppliedFrameIndex: number;
     /** Index of the last applied preview event during playback */
     lastAppliedPreviewEventIndex: number;
     /** Index of the last applied slide event during playback */
@@ -146,9 +146,9 @@ export type StartRecordingEvent = { type: 'START_RECORDING' };
 /** Stop recording event */
 export type StopRecordingEvent = { type: 'STOP_RECORDING' };
 
-/** Capture a snapshot during recording */
-export type CaptureSnapshotEvent = {
-    type: 'CAPTURE_SNAPSHOT';
+/** Capture a frame during recording */
+export type CaptureFrameEvent = {
+    type: 'CAPTURE_FRAME';
     isMouseMovement?: boolean;
     mousePosition?: { x: number; y: number; visible: boolean };
 };
@@ -264,7 +264,7 @@ export type AudioChunkEvent = {
 export type EditorMachineEvent =
     | StartRecordingEvent
     | StopRecordingEvent
-    | CaptureSnapshotEvent
+    | CaptureFrameEvent
     | LoadRecordingEvent
     | RecordingLoadedEvent
     | LoadFailedEvent
@@ -311,9 +311,9 @@ export interface EditorMachineInput {
     onPlaybackEnd?: () => void;
     onSeek?: (time: number) => void;
     onError?: (error: Error) => void;
-    onSnapshot?: (snapshot: EditorSnapshot) => void;
-    onStateChange?: (state: EditorSnapshot['state']) => void;
-    onPlaybackUpdate?: (currentTime: number, snapshot: EditorSnapshot | null) => void;
+    onFrame?: (frame: EditorFrame) => void;
+    onStateChange?: (state: EditorFrame['state']) => void;
+    onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
     onSlideEvent?: (event: SlideEvent) => void;
     getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
     applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
@@ -343,7 +343,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     },
     session: null,
     recording: null,
-    currentSnapshot: null,
+    currentFrame: null,
     audio: {
         blob: null,
         element: null,
@@ -360,7 +360,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
     animationFrameId: null,
     error: null,
-    lastAppliedSnapshotIndex: -1,
+    lastAppliedFrameIndex: -1,
     lastAppliedPreviewEventIndex: -1,
     lastAppliedSlideEventIndex: -1,
     lastAppliedPreviewState: undefined,

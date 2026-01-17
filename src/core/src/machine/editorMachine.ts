@@ -6,11 +6,18 @@ import type {
     EditorMachineInput,
     RecordingSession,
 } from './types';
-import type { EditorSnapshot, Recording } from '../types';
+import type { EditorFrame, Recording } from '../types';
+import type { Keyframe } from '../utils/deltaTypes';
+import {
+    compressFrames,
+    reconstructFrameAtIndex,
+    applyFrameDelta,
+    findFrameIndexAtTime
+} from '../utils/frameDelta';
 import { timelineActor } from './timelineActor';
 import { audioRecordingActor, audioPlaybackActor } from './audioActor';
 import { applyContentDiff, applyPositionDiff, applySelectionDiff } from '../utils/editorDiff';
-import { isValidSnapshotState, isEditorReady } from '../utils/validation';
+import { isValidFrameState, isEditorReady } from '../utils/validation';
 import { calculateDurationFromFileReader } from '../utils/audioDuration';
 
 
@@ -19,31 +26,31 @@ import { calculateDurationFromFileReader } from '../utils/audioDuration';
 // ============================================================================
 
 /**
- * Apply editor state from a snapshot
+ * Apply editor state from a frame
  */
-const applyEditorState = (
+const applyFrameState = (
     editor: monaco.editor.IStandaloneCodeEditor,
-    snapshot: EditorSnapshot,
+    frame: EditorFrame,
     cursorDecorations: string[],
     isPlaying: boolean
 ): string[] => {
-    if (!snapshot.state || !isEditorReady(editor)) return cursorDecorations;
+    if (!frame.state || !isEditorReady(editor)) return cursorDecorations;
 
     let updatedDecorations = cursorDecorations;
 
     try {
         // Apply content changes
-        applyContentDiff(editor, snapshot.state.content);
+        applyContentDiff(editor, frame.state.content);
 
         // Apply position and selection
-        if (editor.getValue() === snapshot.state.content) {
-            applyPositionDiff(editor, snapshot.state.position);
-            applySelectionDiff(editor, snapshot.state.selection);
+        if (editor.getValue() === frame.state.content) {
+            applyPositionDiff(editor, frame.state.position);
+            applySelectionDiff(editor, frame.state.selection);
 
             // Add cursor decorations during playback
             if (isPlaying) {
                 const newDecorations: monaco.editor.IModelDeltaDecoration[] = [];
-                const currentSelections = editor.getSelections() || [snapshot.state.selection];
+                const currentSelections = editor.getSelections() || [frame.state.selection];
 
                 currentSelections.forEach((selection) => {
                     const cursorPos = selection.getPosition();
@@ -73,9 +80,9 @@ const applyEditorState = (
             }
 
             // Restore view state (scrolling, etc.)
-            if (snapshot.state.viewState) {
+            if (frame.state.viewState) {
                 try {
-                    editor.restoreViewState(snapshot.state.viewState);
+                    editor.restoreViewState(frame.state.viewState);
                 } catch (err) {
                     console.error('Failed to restore view state:', err);
                 }
@@ -89,15 +96,15 @@ const applyEditorState = (
 };
 
 /**
- * Create a snapshot from current editor state
+ * Create a frame from current editor state
  */
-const createSnapshot = (
+const createFrame = (
     editor: monaco.editor.IStandaloneCodeEditor,
     timestamp: number,
     mouseCursor: { x: number; y: number; visible: boolean },
     getSlideState?: EditorMachineInput['getSlideState'],
     getPreviewState?: EditorMachineInput['getPreviewState']
-): EditorSnapshot => {
+): EditorFrame => {
     const content = editor.getValue();
     const selection = editor.getSelection();
     const position = editor.getPosition();
@@ -130,35 +137,8 @@ const createSnapshot = (
 };
 
 /**
- * Find the appropriate snapshot for a given timestamp (optimized)
+ * Find the appropriate frame for a given timestamp (optimized)
  */
-const findSnapshotIndexAtTime = (
-    snapshots: EditorSnapshot[],
-    time: number,
-    startIndex: number = 0
-): number => {
-    if (!snapshots.length) return -1;
-
-    // Fast path: try starting from previous index
-    let index = Math.max(0, startIndex);
-
-    // If we've jumped back, search from the beginning
-    if (snapshots[index].timestamp > time) {
-        index = 0;
-    }
-
-    // Linear search forward (efficient for incremental ticks)
-    let bestIndex = index;
-    for (let i = index; i < snapshots.length; i++) {
-        if (snapshots[i].timestamp <= time) {
-            bestIndex = i;
-        } else {
-            break;
-        }
-    }
-
-    return bestIndex;
-};
 
 // ============================================================================
 // Mouse Tracking Actor
@@ -312,7 +292,7 @@ export const editorMachine = setup({
         hasRecording: ({ context }) => context.recording !== null,
         canPlay: ({ context }) =>
             context.recording !== null &&
-            context.recording.snapshots.length > 0,
+            (context.recording.frames?.length ?? 0) > 0,
         hasAudio: ({ context }) => context.recording?.audioBlob !== undefined,
         shouldPauseOnInteraction: ({ context }) => context.pauseOnUserInteraction,
         isValidSeekTime: ({ context, event }) => {
@@ -325,22 +305,22 @@ export const editorMachine = setup({
         initRecordingSession: assign(() => ({
             session: {
                 startedAt: Date.now(),
-                snapshots: [],
+                frames: [],
                 slideEvents: [],
                 previewEvents: [],
                 lastMousePosition: { x: 0, y: 0, visible: false },
             } as RecordingSession,
         })),
 
-        captureInitialSnapshot: assign(({ context }) => {
+        captureInitialFrame: assign(({ context }) => {
             const editor = context.editorRefs.editor;
             const session = context.session;
             if (!session) return {};
 
             const lastMousePosition = session.lastMousePosition || { x: 0, y: 0, visible: false };
 
-            const snapshot = editor
-                ? createSnapshot(editor, 0, lastMousePosition, context.getSlideState, context.getPreviewState)
+            const frame = editor
+                ? createFrame(editor, 0, lastMousePosition, context.getSlideState, context.getPreviewState)
                 : {
                     timestamp: 0,
                     state: {
@@ -358,28 +338,28 @@ export const editorMachine = setup({
                         position: { lineNumber: 1, column: 1 } as monaco.Position,
                         mouseCursor: lastMousePosition,
                     }
-                } as EditorSnapshot;
+                } as EditorFrame;
 
             return {
                 session: {
                     ...session,
-                    snapshots: [snapshot],
+                    frames: [frame],
                 },
             };
         }),
 
-        captureSnapshot: assign(({ context, event }) => {
+        captureFrame: assign(({ context, event }) => {
             const editor = context.editorRefs.editor;
             if (!editor || !context.session) return {};
 
-            const isMouseMovement = event.type === 'CAPTURE_SNAPSHOT' && event.isMouseMovement;
+            const isMouseMovement = event.type === 'CAPTURE_FRAME' && event.isMouseMovement;
             const timestamp = Date.now() - context.session.startedAt;
 
-            const mousePosition = (event.type === 'CAPTURE_SNAPSHOT' && event.mousePosition)
+            const mousePosition = (event.type === 'CAPTURE_FRAME' && event.mousePosition)
                 ? event.mousePosition
                 : context.session.lastMousePosition;
 
-            const snapshot = createSnapshot(
+            const frame = createFrame(
                 editor,
                 timestamp,
                 {
@@ -393,10 +373,10 @@ export const editorMachine = setup({
             return {
                 session: {
                     ...context.session,
-                    snapshots: [...context.session.snapshots, snapshot],
+                    frames: [...context.session.frames, frame],
                     lastMousePosition: mousePosition,
                 },
-                currentSnapshot: snapshot,
+                currentFrame: frame,
             };
         }),
 
@@ -409,11 +389,16 @@ export const editorMachine = setup({
             const duration = Math.max(Date.now() - context.session.startedAt, 1);
             const slides = context.getSlides?.();
 
+            // Compress frames into delta frames
+            const frames = compressFrames(context.session.frames);
+
             const recording: Recording = {
+                version: 2, // New format
                 id: Date.now().toString(),
                 name: `Recording ${Date.now()}`,
                 createdAt: Date.now(),
-                snapshots: context.session.snapshots,
+                frames,
+                keyframeInterval: 120,
                 slideEvents: context.session.slideEvents,
                 previewEvents: context.session.previewEvents,
                 slides: slides,
@@ -428,7 +413,7 @@ export const editorMachine = setup({
                     ...context.timeline,
                     duration,
                 },
-                lastAppliedSnapshotIndex: -1,
+                lastAppliedFrameIndex: -1,
                 lastAppliedPreviewEventIndex: -1,
                 lastAppliedSlideEventIndex: -1,
             };
@@ -453,7 +438,7 @@ export const editorMachine = setup({
                     pausedDuration: 0,
                     pausedAt: 0,
                 },
-                lastAppliedSnapshotIndex: -1,
+                lastAppliedFrameIndex: -1,
                 lastAppliedPreviewEventIndex: -1,
                 lastAppliedSlideEventIndex: -1,
             };
@@ -469,39 +454,56 @@ export const editorMachine = setup({
             };
         }),
 
-        applySnapshotAtTime: assign(({ context, event }) => {
-            const { recording, editorRefs, lastAppliedSnapshotIndex } = context;
+        applyFrameAtTime: assign(({ context, event }) => {
+            const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } = context;
             const currentTime = (event.type === 'TICK' ? event.currentTime : (event.type === 'SEEK' ? event.time : context.timeline.currentTime));
 
-            if (!recording?.snapshots.length || !editorRefs.editor) {
+            if (!recording || !editorRefs.editor) {
                 return {};
             }
 
-            const snapshotIndex = findSnapshotIndexAtTime(recording.snapshots, currentTime, lastAppliedSnapshotIndex);
+            const frames = recording.frames;
+            if (!frames?.length) return {};
 
-            if (snapshotIndex === lastAppliedSnapshotIndex && lastAppliedSnapshotIndex !== -1) {
+            const frameIndex = findFrameIndexAtTime(frames, currentTime, lastAppliedFrameIndex);
+
+            if (frameIndex === lastAppliedFrameIndex && lastAppliedFrameIndex !== -1) {
                 return {};
             }
 
-            const snapshot = recording.snapshots[snapshotIndex];
-            if (!snapshot || !snapshot.state || !isValidSnapshotState(snapshot.state)) {
-                return { lastAppliedSnapshotIndex: snapshotIndex };
+            let frame: EditorFrame | null = null;
+
+            if (frameIndex === lastAppliedFrameIndex + 1 && currentFrame) {
+                // Optimization: If it's the next frame and a delta, apply incrementally
+                const deltaFrame = recording.frames[frameIndex];
+                if (deltaFrame && 'isKeyframe' in deltaFrame && !deltaFrame.isKeyframe) {
+                    frame = applyFrameDelta(currentFrame, deltaFrame);
+                } else {
+                    frame = deltaFrame as Keyframe;
+                }
+            } else {
+                // Full reconstruction for seeks or keyframes
+                frame = reconstructFrameAtIndex(recording.frames, frameIndex);
             }
 
-            const newDecorations = applyEditorState(
+            if (!frame || !frame.state || !isValidFrameState(frame.state)) {
+                return { lastAppliedFrameIndex: frameIndex };
+            }
+
+            const newDecorations = applyFrameState(
                 editorRefs.editor,
-                snapshot,
+                frame,
                 editorRefs.cursorDecorations,
                 true
             );
 
-            if (snapshot.state.slideState && snapshot.state.currentSlideIndex !== undefined && context.applySlideState) {
-                context.applySlideState(snapshot.state.slideState, snapshot.state.currentSlideIndex);
+            if (frame.state.slideState && frame.state.currentSlideIndex !== undefined && context.applySlideState) {
+                context.applySlideState(frame.state.slideState, frame.state.currentSlideIndex);
             }
 
             let nextAppliedPreviewState = context.lastAppliedPreviewState;
-            if (snapshot.state.previewState && context.applyPreviewState) {
-                const nextState = snapshot.state.previewState;
+            if (frame.state.previewState && context.applyPreviewState) {
+                const nextState = frame.state.previewState;
                 const currentState = context.lastAppliedPreviewState;
 
                 // Only apply if state has changed significantly
@@ -515,8 +517,8 @@ export const editorMachine = setup({
             }
 
             return {
-                currentSnapshot: snapshot,
-                lastAppliedSnapshotIndex: snapshotIndex,
+                currentFrame: frame,
+                lastAppliedFrameIndex: frameIndex,
                 lastAppliedPreviewState: nextAppliedPreviewState,
                 editorRefs: {
                     ...editorRefs,
@@ -533,7 +535,7 @@ export const editorMachine = setup({
                     ...context.timeline,
                     currentTime: clampedTime,
                 },
-                lastAppliedSnapshotIndex: -1,
+                lastAppliedFrameIndex: -1,
             };
         }),
 
@@ -578,8 +580,8 @@ export const editorMachine = setup({
                 pausedDuration: 0,
                 pausedAt: 0,
             },
-            currentSnapshot: null,
-            lastAppliedSnapshotIndex: -1,
+            currentFrame: null,
+            lastAppliedFrameIndex: -1,
             lastAppliedPreviewEventIndex: -1,
             lastAppliedSlideEventIndex: -1,
             lastAppliedPreviewState: undefined,
@@ -587,7 +589,7 @@ export const editorMachine = setup({
 
         clearRecording: assign({
             recording: null,
-            currentSnapshot: null,
+            currentFrame: null,
             timeline: ({ context }) => ({
                 ...context.timeline,
                 currentTime: 0,
@@ -781,7 +783,7 @@ export const editorMachine = setup({
         },
         session: null,
         recording: null,
-        currentSnapshot: null,
+        currentFrame: null,
         audio: {
             blob: null,
             element: null,
@@ -798,7 +800,7 @@ export const editorMachine = setup({
         pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
         animationFrameId: null,
         error: null,
-        lastAppliedSnapshotIndex: -1,
+        lastAppliedFrameIndex: -1,
         lastAppliedPreviewEventIndex: -1,
         lastAppliedSlideEventIndex: -1,
         applySlideState: input.applySlideState,
@@ -820,7 +822,7 @@ export const editorMachine = setup({
             on: {
                 START_RECORDING: {
                     target: 'recording',
-                    actions: ['initRecordingSession', 'captureInitialSnapshot'],
+                    actions: ['initRecordingSession', 'captureInitialFrame'],
                 },
                 LOAD_RECORDING: 'loading',
             },
@@ -832,7 +834,7 @@ export const editorMachine = setup({
                     id: 'mouseTracker',
                     input: ({ self }) => ({
                         onMouseMove: (pos: { x: number; y: number; visible: boolean }) => {
-                            self.send({ type: 'CAPTURE_SNAPSHOT', isMouseMovement: true, mousePosition: pos });
+                            self.send({ type: 'CAPTURE_FRAME', isMouseMovement: true, mousePosition: pos });
                         },
                     }),
                 }),
@@ -857,8 +859,8 @@ export const editorMachine = setup({
             ],
             exit: [],
             on: {
-                CAPTURE_SNAPSHOT: {
-                    actions: 'captureSnapshot',
+                CAPTURE_FRAME: {
+                    actions: 'captureFrame',
                 },
                 STOPPED: {
                     actions: 'storeAudioBlob',
@@ -891,7 +893,7 @@ export const editorMachine = setup({
                                 },
                             };
                         }),
-                        'captureSnapshot'
+                        'captureFrame'
                     ],
                 },
                 STOP_RECORDING: [
@@ -954,7 +956,7 @@ export const editorMachine = setup({
                                 pausedDuration: 0,
                                 pausedAt: 0,
                             }),
-                            currentSnapshot: null,
+                            currentFrame: null,
                         }),
                         ({ context, event }) => {
                             if (event.output.recording.slides && context.applySlides) {
@@ -975,7 +977,7 @@ export const editorMachine = setup({
         playback: {
             initial: 'ready',
             entry: [
-                'applySnapshotAtTime',
+                'applyFrameAtTime',
                 enqueueActions(({ context, enqueue }) => {
                     enqueue.spawnChild('timeline', {
                         id: 'timelineActor',
@@ -1009,7 +1011,7 @@ export const editorMachine = setup({
                 TICK: {
                     actions: [
                         'updateTimelineFromTick',
-                        'applySnapshotAtTime',
+                        'applyFrameAtTime',
                         'applyPreviewEventsAtTime',
                         'applySlideEventsAtTime',
                         enqueueActions(({ context, event, enqueue }) => {
@@ -1026,7 +1028,7 @@ export const editorMachine = setup({
                 SEEK: {
                     actions: [
                         'seekToTime',
-                        'applySnapshotAtTime',
+                        'applyFrameAtTime',
                         'applyPreviewEventsAtTime',
                         'applySlideEventsAtTime',
                         enqueueActions(({ event, enqueue }) => {
@@ -1086,7 +1088,7 @@ export const editorMachine = setup({
 
                 playing: {
                     entry: [
-                        'applySnapshotAtTime',
+                        'applyFrameAtTime',
                         'applyPreviewEventsAtTime',
                         'applySlideEventsAtTime',
                         enqueueActions(({ context, enqueue }) => {
@@ -1137,7 +1139,7 @@ export const editorMachine = setup({
                                 guard: ({ context }) => context.timeline.currentTime >= context.timeline.duration - 100, // Fuzzy end check
                                 actions: [
                                     'resetPlayback',
-                                    'applySnapshotAtTime',
+                                    'applyFrameAtTime',
                                     'applyPreviewEventsAtTime',
                                     'applySlideEventsAtTime',
                                     enqueueActions(({ enqueue }) => {
