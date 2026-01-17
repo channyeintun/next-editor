@@ -1,4 +1,4 @@
-import React, { type MouseEvent } from 'react';
+import React, { type MouseEvent, useRef, useState, useCallback, useEffect } from 'react';
 
 export interface ProgressBarProps {
   /**
@@ -59,16 +59,73 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   className = '',
   style = {},
 }) => {
-  const handleClick = (e: MouseEvent<HTMLDivElement>) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragProgress, setDragProgress] = useState<number | null>(null);
+
+  const calculateProgress = useCallback((clientX: number): number => {
+    if (!containerRef.current || !duration) return 0;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const percentage = Math.max(0, Math.min(x / rect.width, 1));
+    return percentage * 100;
+  }, [duration]);
+
+  const calculateTime = useCallback((clientX: number): number => {
+    if (!containerRef.current || !duration) return 0;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const percentage = Math.max(0, Math.min(x / rect.width, 1));
+    return percentage * duration;
+  }, [duration]);
+
+  const handleMouseDown = useCallback((e: MouseEvent<HTMLDivElement>) => {
     if (!onSeek || !duration) return;
-    
+    e.preventDefault();
+    setIsDragging(true);
+    setDragProgress(calculateProgress(e.clientX));
+  }, [onSeek, duration, calculateProgress]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: globalThis.MouseEvent) => {
+      setDragProgress(calculateProgress(e.clientX));
+    };
+
+    const handleMouseUp = (e: globalThis.MouseEvent) => {
+      if (onSeek && duration) {
+        const targetTime = calculateTime(e.clientX);
+        onSeek(Math.max(0, Math.min(targetTime, duration)));
+      }
+      setIsDragging(false);
+      setDragProgress(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, onSeek, duration, calculateProgress, calculateTime]);
+
+  const handleClick = (e: MouseEvent<HTMLDivElement>) => {
+    // If we just finished dragging, don't also trigger click
+    if (isDragging) return;
+    if (!onSeek || !duration) return;
+
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = clickX / rect.width;
     const targetTime = percentage * duration;
-    
+
     onSeek(Math.max(0, Math.min(targetTime, duration)));
   };
+
+  // Use drag progress while dragging, otherwise use actual progress
+  const displayProgress = isDragging && dragProgress !== null ? dragProgress : progress;
 
   const containerStyle: React.CSSProperties = {
     width,
@@ -96,7 +153,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   `;
 
   const progressStyle: React.CSSProperties = {
-    width: `${Math.max(0, Math.min(progress, 100))}%`,
+    width: `${Math.max(0, Math.min(displayProgress, 100))}%`,
     height: '100%',
     backgroundColor: progressColor,
     borderRadius: 'inherit',
@@ -105,7 +162,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   const thumbStyle: React.CSSProperties = {
     position: 'absolute',
     top: '50%',
-    left: `${Math.max(0, Math.min(progress, 100))}%`,
+    left: `${Math.max(0, Math.min(displayProgress, 100))}%`,
     width: '12px',
     height: '12px',
     backgroundColor: progressColor,
@@ -113,15 +170,18 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     transform: 'translate(-50%, -50%)',
     pointerEvents: 'none',
     zIndex: 10,
+    cursor: isDragging ? 'grabbing' : 'grab',
   };
 
   return (
     <>
       <style>{containerWithPseudo}</style>
       <div
-        className={`next-editor-progress-container ${className}`}
+        ref={containerRef}
+        className={`next-editor-progress-container ${className}${isDragging ? ' dragging' : ''}`}
         style={containerStyle}
         onClick={handleClick}
+        onMouseDown={handleMouseDown}
         onMouseEnter={(e) => {
           // Grow height on hover like the original
           e.currentTarget.style.height = '6px';
