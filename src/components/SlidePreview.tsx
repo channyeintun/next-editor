@@ -15,10 +15,10 @@ interface SlidePreviewProps {
   positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
 }
 
-export default function SlidePreview({ 
-  slides, 
-  currentSlideIndex, 
-  onSlideChange, 
+export default function SlidePreview({
+  slides,
+  currentSlideIndex,
+  onSlideChange,
   onSlideEvent,
   onStopPlayback,
   isOpen,
@@ -28,15 +28,19 @@ export default function SlidePreview({
   const { isPlaying } = useNextEditorContext();
   // Check record mode from sessionStorage (same pattern as CssCourse page)
   const recordMode = sessionStorage.getItem('recordMode') === 'true';
-  
+
   // Use isMaximized prop to determine size, but keep internal state for immediate updates
   const [size, setSize] = useState<SlidePreviewSize>(isMaximized ? 'large' : 'small');
-  
+
   // Sync internal state with prop
   useEffect(() => {
-    setSize(isMaximized ? 'large' : 'small');
+    setSize(prev => {
+      const next = isMaximized ? 'large' : 'small';
+      if (prev === next) return prev;
+      return next;
+    });
   }, [isMaximized]);
-  
+
   const currentSlide = slides[currentSlideIndex];
 
   const emitSlideEvent = useCallback((type: SlideEvent['type'], slideId?: string, isMaximized?: boolean) => {
@@ -66,7 +70,7 @@ export default function SlidePreview({
         transformOrigin: 'bottom right'
       };
     }
-    
+
     return {
       transformOrigin: 'bottom right'
     };
@@ -116,11 +120,15 @@ export default function SlidePreview({
   }, [isPlaying, currentSlideIndex, onSlideChange, emitSlideEvent, slides]);
 
   // Emit slide open event when component first opens
+  // Removing this redundant event emitter as startPresentation 
+  // already emits 'slide_open' and this was causing infinite loops
+  /*
   useEffect(() => {
     if (isOpen && currentSlide) {
       emitSlideEvent('slide_open', currentSlide.id);
     }
   }, [isOpen, currentSlide, emitSlideEvent]);
+  */
 
   // Keyboard navigation for large mode
   useEffect(() => {
@@ -248,7 +256,7 @@ export default function SlidePreview({
               `;
             }}
           />
-          
+
           {/* Keyboard navigation hint for large size - only show when not in record mode */}
           {size === 'large' && recordMode && (
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-70 text-white px-3 py-1 rounded text-sm">

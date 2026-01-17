@@ -128,6 +128,8 @@ export interface EditorMachineContext {
     lastAppliedSnapshotIndex: number;
     /** Index of the last applied preview event during playback */
     lastAppliedPreviewEventIndex: number;
+    /** Index of the last applied slide event during playback */
+    lastAppliedSlideEventIndex: number;
     /** Last applied preview state to avoid redundant updates */
     lastAppliedPreviewState?: PreviewState;
     /** Last time (performance.now()) audio was synced */
@@ -360,6 +362,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     error: null,
     lastAppliedSnapshotIndex: -1,
     lastAppliedPreviewEventIndex: -1,
+    lastAppliedSlideEventIndex: -1,
     lastAppliedPreviewState: undefined,
     applySlideState: input.applySlideState,
     applySlides: input.applySlides,

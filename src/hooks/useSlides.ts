@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { Slide, SlidePreviewState, SlideEvent } from '../types/slides';
 
 const SLIDES_STORAGE_KEY = 'next-editor-slides';
@@ -39,6 +39,12 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     isMaximized: false,
     currentSlideId: null
   });
+
+  // Use a ref for onSlideEvent to keep handleSlideEvent stable
+  const onSlideEventRef = useRef(onSlideEvent);
+  useEffect(() => {
+    onSlideEventRef.current = onSlideEvent;
+  }, [onSlideEvent]);
 
   const currentSlideIndex = slides.findIndex(slide => slide.id === previewState.currentSlideId);
   const slideEventsRef = useRef<SlideEvent[]>([]);
@@ -91,33 +97,53 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
 
   const handleSlideEvent = useCallback((event: SlideEvent) => {
     slideEventsRef.current.push(event);
-    onSlideEvent?.(event);
+    onSlideEventRef.current?.(event);
 
     // Update preview state based on event
     switch (event.type) {
       case 'slide_open':
-        setPreviewState(prev => ({
-          ...prev,
-          isOpen: true,
-          currentSlideId: event.slideId || prev.currentSlideId
-        }));
+        setPreviewState(prev => {
+          if (prev.isOpen && prev.currentSlideId === (event.slideId || prev.currentSlideId)) {
+            return prev;
+          }
+          return {
+            ...prev,
+            isOpen: true,
+            currentSlideId: event.slideId || prev.currentSlideId
+          };
+        });
         break;
       case 'slide_close':
-        setPreviewState(prev => ({
-          ...prev,
-          isOpen: false,
-          isMaximized: false,
-          currentSlideId: null
-        }));
+        setPreviewState(prev => {
+          if (!prev.isOpen && !prev.isMaximized && prev.currentSlideId === null) {
+            return prev;
+          }
+          return {
+            ...prev,
+            isOpen: false,
+            isMaximized: false,
+            currentSlideId: null
+          };
+        });
         break;
       case 'slide_maximize':
-        setPreviewState(prev => ({ ...prev, isMaximized: event.isMaximized || false }));
+        setPreviewState(prev => {
+          if (prev.isMaximized === (event.isMaximized || false)) {
+            return prev;
+          }
+          return { ...prev, isMaximized: event.isMaximized || false };
+        });
         break;
       case 'slide_minimize':
-        setPreviewState(prev => ({ ...prev, isMaximized: false }));
+        setPreviewState(prev => {
+          if (!prev.isMaximized) {
+            return prev;
+          }
+          return { ...prev, isMaximized: false };
+        });
         break;
     }
-  }, [onSlideEvent]);
+  }, []);
 
   const startPresentation = useCallback(() => {
     if (slides.length === 0) return;
@@ -170,7 +196,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     return [...slideEventsRef.current];
   }, []);
 
-  return {
+  return useMemo(() => ({
     // State
     slides,
     previewState,
@@ -190,5 +216,18 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     handleSlideEvent,
     clearSlideEvents,
     getSlideEvents,
-  };
+  }), [
+    slides,
+    previewState,
+    currentSlideIndex,
+    addSlide,
+    removeSlide,
+    reorderSlides,
+    startPresentation,
+    closePresentation,
+    goToSlide,
+    handleSlideEvent,
+    clearSlideEvents,
+    getSlideEvents
+  ]);
 };

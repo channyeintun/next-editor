@@ -430,6 +430,7 @@ export const editorMachine = setup({
                 },
                 lastAppliedSnapshotIndex: -1,
                 lastAppliedPreviewEventIndex: -1,
+                lastAppliedSlideEventIndex: -1,
             };
         }),
 
@@ -454,6 +455,7 @@ export const editorMachine = setup({
                 },
                 lastAppliedSnapshotIndex: -1,
                 lastAppliedPreviewEventIndex: -1,
+                lastAppliedSlideEventIndex: -1,
             };
         }),
 
@@ -532,7 +534,6 @@ export const editorMachine = setup({
                     currentTime: clampedTime,
                 },
                 lastAppliedSnapshotIndex: -1,
-                lastAppliedPreviewEventIndex: -1, // Reset so we can re-scan and apply correct state
             };
         }),
 
@@ -580,6 +581,7 @@ export const editorMachine = setup({
             currentSnapshot: null,
             lastAppliedSnapshotIndex: -1,
             lastAppliedPreviewEventIndex: -1,
+            lastAppliedSlideEventIndex: -1,
             lastAppliedPreviewState: undefined,
         })),
 
@@ -644,19 +646,30 @@ export const editorMachine = setup({
             }
 
             // Find and apply all events that should have happened by now
-            for (let i = newLastIndex + 1; i < previewEvents.length; i++) {
-                const event = previewEvents[i];
-                if (event.timestamp <= currentTime) {
-                    // Apply this event
-                    const nextState = {
-                        size: event.size || 'small',
-                        scrollTop: event.scrollTop,
-                        scrollLeft: event.scrollLeft,
-                        currentInteraction: event.interaction,
-                    };
+            let lastEventToApply = null;
+            const isSeeking = event.type === 'SEEK';
 
-                    applyPreviewState(nextState);
-                    nextAppliedPreviewState = nextState;
+            for (let i = newLastIndex + 1; i < previewEvents.length; i++) {
+                const previewEvent = previewEvents[i];
+                if (previewEvent.timestamp <= currentTime) {
+                    if (isSeeking) {
+                        // When seeking, just keep track of the last state-defining event
+                        // and skip interaction events (clicks, etc.)
+                        if (previewEvent.type !== 'preview_interaction') {
+                            lastEventToApply = previewEvent;
+                        }
+                    } else {
+                        // Normal playback: apply events sequentially for interactions
+                        const nextState = {
+                            size: previewEvent.size || 'small',
+                            scrollTop: previewEvent.scrollTop,
+                            scrollLeft: previewEvent.scrollLeft,
+                            currentInteraction: previewEvent.interaction,
+                        };
+
+                        applyPreviewState(nextState);
+                        nextAppliedPreviewState = nextState;
+                    }
                     newLastIndex = i;
                 } else {
                     // Events are sorted by timestamp, so stop here
@@ -664,10 +677,89 @@ export const editorMachine = setup({
                 }
             }
 
+            // If we were seeking, apply only the final state once
+            if (isSeeking && lastEventToApply) {
+                const finalState = {
+                    size: lastEventToApply.size || 'small',
+                    scrollTop: lastEventToApply.scrollTop,
+                    scrollLeft: lastEventToApply.scrollLeft,
+                    // Note: interactions are skipped during seek
+                };
+                applyPreviewState(finalState);
+                nextAppliedPreviewState = finalState;
+            }
+
             if (newLastIndex !== lastAppliedPreviewEventIndex || nextAppliedPreviewState !== context.lastAppliedPreviewState) {
                 return {
                     lastAppliedPreviewEventIndex: newLastIndex,
                     lastAppliedPreviewState: nextAppliedPreviewState
+                };
+            }
+
+            return {};
+        }),
+        applySlideEventsAtTime: assign(({ context, event }) => {
+            const { recording, applySlideState, lastAppliedSlideEventIndex } = context;
+
+            if (!recording?.slideEvents?.length || !applySlideState) {
+                return {};
+            }
+
+            const slideEvents = recording.slideEvents;
+            const currentTime = (event.type === 'TICK' ? event.currentTime : (event.type === 'SEEK' ? event.time : context.timeline.currentTime));
+            let newLastIndex = lastAppliedSlideEventIndex;
+            const isSeeking = event.type === 'SEEK';
+
+            // If we've jumped backwards, reset the index to re-scan from the beginning
+            if (newLastIndex >= 0 && newLastIndex < slideEvents.length) {
+                if (slideEvents[newLastIndex].timestamp > currentTime) {
+                    newLastIndex = -1;
+                }
+            }
+
+            let lastSlideEvent = null;
+
+            // Find and apply all events that should have happened by now
+            for (let i = newLastIndex + 1; i < slideEvents.length; i++) {
+                const slideEvent = slideEvents[i];
+                if (slideEvent.timestamp <= currentTime) {
+                    if (isSeeking) {
+                        // When seeking, just keep track of the last event to apply once at the end
+                        lastSlideEvent = slideEvent;
+                    } else {
+                        // Normal playback: apply events sequentially
+                        const slideIndex = recording.slides?.findIndex(s => s.id === slideEvent.slideId) ?? -1;
+                        if (slideIndex !== -1 || slideEvent.type === 'slide_close') {
+                            const slideState = {
+                                isOpen: slideEvent.type !== 'slide_close',
+                                isMaximized: !!slideEvent.isMaximized,
+                                currentSlideId: slideEvent.slideId || null
+                            };
+                            applySlideState(slideState, slideIndex);
+                        }
+                    }
+                    newLastIndex = i;
+                } else {
+                    break;
+                }
+            }
+
+            // If we were seeking, apply only the final state once
+            if (isSeeking && lastSlideEvent) {
+                const slideIndex = recording.slides?.findIndex(s => s.id === lastSlideEvent.slideId) ?? -1;
+                if (slideIndex !== -1 || lastSlideEvent.type === 'slide_close') {
+                    const slideState = {
+                        isOpen: lastSlideEvent.type !== 'slide_close',
+                        isMaximized: !!lastSlideEvent.isMaximized,
+                        currentSlideId: lastSlideEvent.slideId || null
+                    };
+                    applySlideState(slideState, slideIndex);
+                }
+            }
+
+            if (newLastIndex !== lastAppliedSlideEventIndex) {
+                return {
+                    lastAppliedSlideEventIndex: newLastIndex
                 };
             }
 
@@ -708,6 +800,7 @@ export const editorMachine = setup({
         error: null,
         lastAppliedSnapshotIndex: -1,
         lastAppliedPreviewEventIndex: -1,
+        lastAppliedSlideEventIndex: -1,
         applySlideState: input.applySlideState,
         applySlides: input.applySlides,
         getSlideState: input.getSlideState,
@@ -918,6 +1011,7 @@ export const editorMachine = setup({
                         'updateTimelineFromTick',
                         'applySnapshotAtTime',
                         'applyPreviewEventsAtTime',
+                        'applySlideEventsAtTime',
                         enqueueActions(({ context, event, enqueue }) => {
                             // Sync audio to timeline every 250ms or on seek
                             const lastSync = context.lastSyncTime || 0;
@@ -934,6 +1028,7 @@ export const editorMachine = setup({
                         'seekToTime',
                         'applySnapshotAtTime',
                         'applyPreviewEventsAtTime',
+                        'applySlideEventsAtTime',
                         enqueueActions(({ event, enqueue }) => {
                             const time = event.type === 'SEEK' ? event.time : 0;
                             enqueue.sendTo('timelineActor', { type: 'SEEK', time });
@@ -993,6 +1088,7 @@ export const editorMachine = setup({
                     entry: [
                         'applySnapshotAtTime',
                         'applyPreviewEventsAtTime',
+                        'applySlideEventsAtTime',
                         enqueueActions(({ context, enqueue }) => {
                             enqueue.sendTo('timelineActor', { type: 'START' });
                             enqueue.sendTo('audioPlayer', { type: 'PLAY' });
@@ -1043,6 +1139,7 @@ export const editorMachine = setup({
                                     'resetPlayback',
                                     'applySnapshotAtTime',
                                     'applyPreviewEventsAtTime',
+                                    'applySlideEventsAtTime',
                                     enqueueActions(({ enqueue }) => {
                                         enqueue.sendTo('timelineActor', { type: 'SEEK', time: 0 });
                                         enqueue.sendTo('audioPlayer', { type: 'SEEK', time: 0 });
