@@ -2,6 +2,8 @@
  * Calculates exact duration from audio blob using FileReader and AudioContext
  * This approach provides more accurate duration than HTML audio elements
  */
+import { getAudioContext } from './audioContext';
+
 export async function calculateDurationFromFileReader(audioBlob: Blob): Promise<number> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -14,20 +16,16 @@ export async function calculateDurationFromFileReader(audioBlob: Blob): Promise<
           return;
         }
 
-        const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        const audioContext = new AudioContextClass();
+        const audioContext = getAudioContext();
 
         audioContext.decodeAudioData(
           arrayBuffer,
-          buffer => {
+          (buffer: AudioBuffer) => {
             const rawDuration = buffer.duration;
-            const adjustedDuration = rawDuration;
-            audioContext.close();
-            resolve(adjustedDuration);
+            resolve(rawDuration);
           },
-          error => {
+          (error: Error) => {
             console.error('FileReader decode error:', error);
-            audioContext.close();
             reject(error);
           }
         );

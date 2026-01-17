@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Circle, Square, Plus } from 'lucide-react';
 import { useNextEditorContext } from '../hooks/useNextEditorContext';
+import { getAudioContext, unlockAudioContext } from '../core/src/utils/audioContext';
 import ReplayIcon from './icon/Replay';
 import PlayIcon from './icon/Play';
 import PauseIcon from './icon/Pause';
@@ -74,6 +75,11 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
 
   const handlePlayPause = () => {
+    // Aggressive Safari Wake: Resume context directly in the click handler
+    const ctx = getAudioContext();
+    unlockAudioContext(ctx);
+    ctx.resume().catch(() => { });
+
     if (isPlaying) {
       pause();
     } else {
@@ -82,6 +88,11 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   };
 
   const handleSeek = (targetTime: number) => {
+    // Aggressive Safari Wake: Resume context or ensure it's awake during seek
+    const ctx = getAudioContext();
+    unlockAudioContext(ctx);
+    ctx.resume().catch(() => { });
+
     seekTo(targetTime);
   };
 
