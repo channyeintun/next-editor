@@ -114,16 +114,17 @@ export async function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string
 
     const exports = wasmInstance.exports as unknown as SteganographyWasmExports;
     const memory = exports.memory;
+    const baseOffset = (exports.__heap_base?.value as number) || 65536;
 
     // Need enough memory
-    const totalSizeNeeded = pixels.length + dataToEncodeBuffer.length;
+    const totalSizeNeeded = baseOffset + pixels.length + dataToEncodeBuffer.length;
     if (memory.buffer.byteLength < totalSizeNeeded) {
         const pagesNeeded = Math.ceil((totalSizeNeeded - memory.buffer.byteLength) / 65536);
         if (pagesNeeded > 0) memory.grow(pagesNeeded);
     }
 
-    const pixelsPtr = 0;
-    const dataPtr = pixels.length;
+    const pixelsPtr = baseOffset;
+    const dataPtr = baseOffset + pixels.length;
 
     const wasmPixels = new Uint8Array(memory.buffer, pixelsPtr, pixels.length);
     const wasmData = new Uint8Array(memory.buffer, dataPtr, dataToEncodeBuffer.length);
@@ -158,15 +159,16 @@ export async function decodeDataFromCanvas(canvas: HTMLCanvasElement): Promise<s
 
     const exports = wasmInstance.exports as unknown as SteganographyWasmExports;
     const memory = exports.memory;
+    const baseOffset = (exports.__heap_base?.value as number) || 65536;
 
     // Need enough memory for pixels
-    if (memory.buffer.byteLength < pixels.length * 2) {
-        const pagesNeeded = Math.ceil((pixels.length * 2 - memory.buffer.byteLength) / 65536);
+    if (memory.buffer.byteLength < baseOffset + pixels.length * 2) {
+        const pagesNeeded = Math.ceil((baseOffset + pixels.length * 2 - memory.buffer.byteLength) / 65536);
         if (pagesNeeded > 0) memory.grow(pagesNeeded);
     }
 
-    const pixelsPtr = 0;
-    const resultPtr = pixels.length;
+    const pixelsPtr = baseOffset;
+    const resultPtr = baseOffset + pixels.length;
     const resultMaxLen = pixels.length;
 
     const wasmPixels = new Uint8Array(memory.buffer, pixelsPtr, pixels.length);
