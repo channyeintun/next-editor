@@ -1,4 +1,5 @@
 import pako from 'pako';
+import { encodeBase64Wasm, decodeBase64Wasm } from './base64Wasm';
 
 /**
  * MAGIC_PREFIX is used to identify data in images.
@@ -10,10 +11,13 @@ let wasmPromise: Promise<WebAssembly.Instance | null> | null = null;
 
 interface SteganographyWasmExports {
     memory: WebAssembly.Memory;
+    __heap_base?: WebAssembly.Global; // AssemblyScript heap start
     encodeLSB(pixelsPtr: number, pixelsLen: number, dataPtr: number, dataLen: number): void;
     decodeLSB(pixelsPtr: number, pixelsLen: number, resultPtr: number, resultMaxLen: number): number;
     findCommonPrefix(str1Ptr: number, str1Len: number, str2Ptr: number, str2Len: number): number;
     findCommonSuffix(str1Ptr: number, str1Len: number, str2Ptr: number, str2Len: number): number;
+    base64Encode(dataPtr: number, dataLen: number, outPtr: number): number;
+    base64Decode(strPtr: number, strLen: number, outPtr: number): number;
 }
 
 /**
@@ -104,14 +108,7 @@ export async function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string
     // Compress data using pako
     const compressed = pako.deflate(data);
 
-    // Create V2 formatted data: Prefix + Base64 of compressed data
-    let binaryString = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < compressed.length; i += chunkSize) {
-        const chunk = compressed.subarray(i, Math.min(i + chunkSize, compressed.length));
-        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-    }
-    const base64Data = btoa(binaryString);
+    const base64Data = encodeBase64Wasm(compressed);
     const dataToEncode = MAGIC_PREFIX + base64Data;
     const dataToEncodeBuffer = new TextEncoder().encode(dataToEncode);
 
@@ -189,11 +186,7 @@ function handleDecodedMessage(decoded: string): string | null {
     if (decoded.startsWith(MAGIC_PREFIX)) {
         try {
             const base64Data = decoded.substring(MAGIC_PREFIX.length);
-            const binaryString = atob(base64Data);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
+            const bytes = decodeBase64Wasm(base64Data);
             const decompressed = pako.inflate(bytes, { to: 'string' });
             return decompressed;
         } catch (e) {

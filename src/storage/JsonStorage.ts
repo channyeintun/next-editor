@@ -2,6 +2,7 @@ import type { Recording } from '../core/src';
 import { superjson } from './SuperJsonConfig';
 import { deflate, inflate } from 'pako';
 import { type AudioPlaceholder } from '../core/src/types';
+import { encodeBase64Wasm, decodeBase64Wasm } from '../core/src/utils/base64Wasm';
 
 interface StorageStats {
   count: number;
@@ -194,29 +195,17 @@ export class JsonStorage {
 
 
   /**
-   * Convert binary data to base64 for storage
+   * Convert binary data to base64 for storage using Wasm acceleration
    */
   private binaryToBase64(binaryData: Uint8Array): string {
-    // Handle large arrays efficiently
-    const chunkSize = 8192;
-    let result = '';
-    for (let i = 0; i < binaryData.length; i += chunkSize) {
-      const chunk = binaryData.slice(i, i + chunkSize);
-      result += String.fromCharCode(...chunk);
-    }
-    return btoa(result);
+    return encodeBase64Wasm(binaryData);
   }
 
   /**
-   * Convert base64 to binary data
+   * Convert base64 to binary data using Wasm acceleration
    */
   private base64ToBinary(base64Data: string): Uint8Array {
-    const binaryString = atob(base64Data);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
+    return decodeBase64Wasm(base64Data);
   }
 
 
@@ -357,19 +346,23 @@ export class JsonStorage {
 
           // Read file as text and validate it's not empty/undefined
           const text = await file.text();
-          if (!text || text.trim().length === 0) {
+          const trimmedText = text.trim();
+          if (!trimmedText || trimmedText.length === 0) {
             reject(new Error('File appears to be empty or corrupted'));
             return;
           }
 
-          // Validate base64 format before attempting to decode
+          // Relaxed validation: Allow whitespace/newlines and check general format
+          // Strip whitespace for the check
+          const stripped = trimmedText.replace(/\s/g, '');
           const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
-          if (!base64Pattern.test(text.trim())) {
+          if (!base64Pattern.test(stripped)) {
+            console.error('Import validation failed. Start of text:', trimmedText.substring(0, 50));
             reject(new Error('File does not contain valid base64 data'));
             return;
           }
 
-          const binaryData = this.base64ToBinary(text.trim());
+          const binaryData = this.base64ToBinary(stripped);
 
           console.log('Import debug:', {
             fileName: file.name,
