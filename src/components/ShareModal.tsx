@@ -91,6 +91,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
     // Cache the encoded canvas (without title overlay) for quick title updates
     const encodedCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const canvasDimensionsRef = useRef<{ width: number; height: number } | null>(null);
+    const imageTitleRef = useRef(imageTitle);
 
     // Generate the base image with encoding (expensive operation)
     const generateEncodedImage = useCallback(async () => {
@@ -255,7 +256,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
     const updatePreview = useCallback(() => {
         if (!encodedCanvasRef.current) return;
 
-        const finalCanvas = addTitleOverlay(encodedCanvasRef.current, imageTitle);
+        const finalCanvas = addTitleOverlay(encodedCanvasRef.current, imageTitleRef.current);
 
         finalCanvas.toBlob((blob) => {
             if (blob) {
@@ -265,7 +266,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                 setPreviewUrl(newPreviewUrl);
             }
         }, 'image/png');
-    }, [addTitleOverlay, imageTitle]);
+    }, [addTitleOverlay]);
 
     // Generate full image for download/share (re-encodes with title)
     const generateFinalImage = useCallback(async (isManualDownload: boolean = false, shareToMastodon: boolean = false) => {
@@ -284,7 +285,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
             }
 
             // Add title overlay for the final image
-            const finalCanvas = addTitleOverlay(canvas, imageTitle);
+            const finalCanvas = addTitleOverlay(canvas, imageTitleRef.current);
 
             finalCanvas.toBlob(async (blob) => {
                 if (blob) {
@@ -343,7 +344,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
 
                             const formData = new FormData();
                             formData.append('file', file);
-                            formData.append('description', `tutorial: ${imageTitle || 'Untitled'}`);
+                            formData.append('description', `tutorial: ${imageTitleRef.current || 'Untitled'}`);
 
                             const uploadUrl = `${instanceURL.replace(/\/$/, '')}/api/v2/media`;
                             const response = await fetch(uploadUrl, {
@@ -362,7 +363,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                             const mediaData = await response.json();
                             const mediaId = mediaData.id;
 
-                            const postTitle = imageTitle || 'New Tutorial';
+                            const postTitle = imageTitleRef.current || 'New Tutorial';
                             const postText = initialText
                                 ? encodeURIComponent(`${initialText}\n\n#nexteditor #tutorial`)
                                 : encodeURIComponent(`${postTitle}\n\n#nexteditor #tutorial`);
@@ -388,7 +389,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
             console.error('Failed to generate image:', err);
             setIsGenerating(false);
         }
-    }, [addTitleOverlay, generateEncodedImage, imageTitle, initialText, isVisible, onSave]);
+    }, [addTitleOverlay, generateEncodedImage, initialText, isVisible, onSave]);
 
     // Generate encoded image when modal opens or style changes
     useEffect(() => {
@@ -402,13 +403,6 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
             return () => clearTimeout(timer);
         }
     }, [isVisible, imageStyle, generateEncodedImage, updatePreview]);
-
-    // Update preview when title changes (fast - uses cached encoded canvas)
-    useEffect(() => {
-        if (encodedCanvasRef.current) {
-            updatePreview();
-        }
-    }, [imageTitle, updatePreview]);
 
     if (!isVisible) return null;
 
@@ -475,13 +469,27 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                                     <Type className="w-3 h-3" />
                                     Tutorial Title
                                 </label>
-                                <input
-                                    type="text"
-                                    value={imageTitle}
-                                    onChange={(e) => setImageTitle(e.target.value)}
-                                    placeholder="e.g. Mastering Flexbox"
-                                    className="w-full px-5 py-3.5 bg-gray-800/50 border border-gray-700/50 rounded-2xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 focus:bg-gray-800 outline-none transition-all text-white placeholder:text-gray-600"
-                                />
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={imageTitle}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setImageTitle(val);
+                                            imageTitleRef.current = val;
+                                        }}
+                                        placeholder="e.g. Mastering Flexbox"
+                                        className="w-full px-5 py-3.5 bg-gray-800/50 border border-gray-700/50 rounded-2xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 focus:bg-gray-800 outline-none transition-all text-white placeholder:text-gray-600 pr-32"
+                                    />
+                                    <button
+                                        onClick={updatePreview}
+                                        disabled={isGenerating || !encodedCanvasRef.current}
+                                        className="absolute right-2 top-2 bottom-2 px-4 bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 disabled:bg-gray-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2"
+                                    >
+                                        <Sparkles className="w-3 h-3" />
+                                        Update
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Style Grid */}
