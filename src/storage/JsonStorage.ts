@@ -89,14 +89,14 @@ export class JsonStorage {
     const jsonString = superjson.stringify(recordingsWithPlaceholders);
     const compressedJson = deflate(jsonString, { level: 9 });
 
-    // Create header
+    // Create header - version 2 uses Uint32 for jsonLength (supports files > 65KB)
     const magic = new TextEncoder().encode('SCRM');
-    const version = new Uint16Array([1]);
-    const jsonLength = new Uint16Array([compressedJson.length]);
+    const version = new Uint16Array([2]); // Version 2 uses Uint32 for jsonLength
+    const jsonLength = new Uint32Array([compressedJson.length]);
 
-    // Calculate total size
+    // Calculate total size: magic(4) + version(2) + jsonLength(4) + json + audio
     const audioDataSize = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-    const totalSize = 8 + compressedJson.length + audioDataSize;
+    const totalSize = 10 + compressedJson.length + audioDataSize;
 
     // Combine all data
     const result = new Uint8Array(totalSize);
@@ -108,7 +108,7 @@ export class JsonStorage {
     result.set(new Uint8Array(version.buffer), offset);
     offset += 2;
     result.set(new Uint8Array(jsonLength.buffer), offset);
-    offset += 2;
+    offset += 4;
 
     // Write compressed JSON
     result.set(compressedJson, offset);
@@ -140,18 +140,34 @@ export class JsonStorage {
     const version = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
     offset += 2;
 
-    if (version !== 1) {
+    // Read JSON length based on version
+    let jsonLength: number;
+    if (version === 1) {
+      // Version 1: Uint16 for jsonLength (legacy, max 65535)
+      jsonLength = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
+      offset += 2;
+    } else if (version === 2) {
+      // Version 2: Uint32 for jsonLength (supports larger files)
+      jsonLength = new Uint32Array(binaryData.slice(offset, offset + 4).buffer)[0];
+      offset += 4;
+    } else {
       throw new Error(`Unsupported binary format version: ${version}`);
     }
 
-    const jsonLength = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
-    offset += 2;
+    if (jsonLength === 0 || jsonLength > binaryData.length - offset) {
+      throw new Error(`Invalid JSON length: ${jsonLength}, remaining data: ${binaryData.length - offset}`);
+    }
 
     // Read and decompress JSON
     const compressedJson = binaryData.slice(offset, offset + jsonLength);
     offset += jsonLength;
 
     const jsonString = inflate(compressedJson, { to: 'string' });
+
+    if (!jsonString || typeof jsonString !== 'string') {
+      throw new Error('Failed to decompress JSON data - inflate returned invalid result');
+    }
+
     const recordings = superjson.parse(jsonString) as Recording[];
 
     // Read audio data and reconstruct blobs
@@ -354,6 +370,15 @@ export class JsonStorage {
           }
 
           const binaryData = this.base64ToBinary(text.trim());
+
+          console.log('Import debug:', {
+            fileName: file.name,
+            fileSize: file.size,
+            binaryLength: binaryData.length,
+            firstBytes: Array.from(binaryData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' '),
+            magic: new TextDecoder().decode(binaryData.slice(0, 4))
+          });
+
           const importedRecordings = await this.decompressBinaryToRecordings(binaryData);
 
           // Validate imported recordings

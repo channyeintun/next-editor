@@ -88,9 +88,14 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
     const [composeLink, setComposeLink] = useState<string | null>(null);
     const [linkCopied, setLinkCopied] = useState(false);
 
-    const generateImage = useCallback(async (isManualDownload: boolean = false, shareToMastodon: boolean = false) => {
-        if (!isVisible) return;
-        setIsGenerating(true);
+    // Cache the encoded canvas (without title overlay) for quick title updates
+    const encodedCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const canvasDimensionsRef = useRef<{ width: number; height: number } | null>(null);
+
+    // Generate the base image with encoding (expensive operation)
+    const generateEncodedImage = useCallback(async () => {
+        if (!isVisible) return null;
+
         try {
             // 1. Prepare data (Recording JSON)
             let audioBase64 = '';
@@ -110,7 +115,6 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
 
             // 2. Determine canvas size (with compression estimation)
             const compressed = pako.deflate(dataToSaveRaw);
-            // Convert Uint8Array to base64 in chunks to avoid stack overflow
             let binaryString = '';
             const chunkSize = 8192;
             for (let i = 0; i < compressed.length; i += chunkSize) {
@@ -120,13 +124,11 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
             const base64Data = btoa(binaryString);
             const estimatedEncodedLength = MAGIC_PREFIX.length + base64Data.length;
 
-
             const bitsNeeded = (estimatedEncodedLength) * 8 + 32;
             const pixelsNeeded = Math.ceil(bitsNeeded / 3);
             const dimension = Math.ceil(Math.sqrt(pixelsNeeded));
             const width = Math.max(400, Math.ceil(dimension / 50) * 50);
             const height = width;
-
 
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d')!;
@@ -197,34 +199,94 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                 }
             }
 
-            // 4. Add Title
-            if (imageTitle) {
-                ctx.save();
-                const oh = Math.max(80, height * 0.15);
-                const oy = (height - oh) / 2;
-                const og = ctx.createLinearGradient(0, oy, 0, oy + oh);
-                og.addColorStop(0, 'rgba(0,0,0,0)');
-                og.addColorStop(0.5, 'rgba(0,0,0,0.6)');
-                og.addColorStop(1, 'rgba(0,0,0,0)');
-                ctx.fillStyle = og;
-                ctx.fillRect(0, oy, width, oh);
-
-                const fs = Math.max(24, Math.min(48, width / 15));
-                ctx.font = `bold ${fs}px sans-serif`;
-                ctx.fillStyle = 'white';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.shadowColor = 'rgba(0,0,0,0.5)';
-                ctx.shadowBlur = 10;
-                ctx.fillText(imageTitle, width / 2, height / 2);
-                ctx.restore();
-            }
-
-            // 5. Encode Data
+            // 4. Encode Data (NOTE: title is NOT drawn yet - added separately for preview)
             await encodeDataInCanvas(canvas, dataToSaveRaw);
 
+            // Cache the encoded canvas
+            encodedCanvasRef.current = canvas;
+            canvasDimensionsRef.current = { width, height };
 
-            canvas.toBlob(async (blob) => {
+            return canvas;
+        } catch (err) {
+            console.error('Failed to generate encoded image:', err);
+            return null;
+        }
+    }, [imageStyle, isVisible, recording]);
+
+    // Add title overlay to a canvas (fast operation, doesn't re-encode)
+    const addTitleOverlay = useCallback((sourceCanvas: HTMLCanvasElement, title: string): HTMLCanvasElement => {
+        const canvas = document.createElement('canvas');
+        canvas.width = sourceCanvas.width;
+        canvas.height = sourceCanvas.height;
+        const ctx = canvas.getContext('2d')!;
+
+        // Copy the encoded canvas
+        ctx.drawImage(sourceCanvas, 0, 0);
+
+        // Add title overlay
+        if (title) {
+            ctx.save();
+            const width = canvas.width;
+            const height = canvas.height;
+            const oh = Math.max(80, height * 0.15);
+            const oy = (height - oh) / 2;
+            const og = ctx.createLinearGradient(0, oy, 0, oy + oh);
+            og.addColorStop(0, 'rgba(0,0,0,0)');
+            og.addColorStop(0.5, 'rgba(0,0,0,0.6)');
+            og.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = og;
+            ctx.fillRect(0, oy, width, oh);
+
+            const fs = Math.max(24, Math.min(48, width / 15));
+            ctx.font = `bold ${fs}px sans-serif`;
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 10;
+            ctx.fillText(title, width / 2, height / 2);
+            ctx.restore();
+        }
+
+        return canvas;
+    }, []);
+
+    // Update preview from cached canvas (fast - just adds title)
+    const updatePreview = useCallback(() => {
+        if (!encodedCanvasRef.current) return;
+
+        const finalCanvas = addTitleOverlay(encodedCanvasRef.current, imageTitle);
+
+        finalCanvas.toBlob((blob) => {
+            if (blob) {
+                if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+                const newPreviewUrl = URL.createObjectURL(blob);
+                previewUrlRef.current = newPreviewUrl;
+                setPreviewUrl(newPreviewUrl);
+            }
+        }, 'image/png');
+    }, [addTitleOverlay, imageTitle]);
+
+    // Generate full image for download/share (re-encodes with title)
+    const generateFinalImage = useCallback(async (isManualDownload: boolean = false, shareToMastodon: boolean = false) => {
+        if (!isVisible) return;
+        setIsGenerating(true);
+
+        try {
+            // Make sure we have an encoded canvas
+            let canvas = encodedCanvasRef.current;
+            if (!canvas) {
+                canvas = await generateEncodedImage();
+                if (!canvas) {
+                    setIsGenerating(false);
+                    return;
+                }
+            }
+
+            // Add title overlay for the final image
+            const finalCanvas = addTitleOverlay(canvas, imageTitle);
+
+            finalCanvas.toBlob(async (blob) => {
                 if (blob) {
                     const file = new File([blob], `next-editor-${Date.now()}.png`, { type: 'image/png' });
 
@@ -242,21 +304,16 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                     }
 
                     if (shareToMastodon) {
-                        // Open window immediately to avoid popup blocker (must be in sync click handler)
                         const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
                         const newWindow = window.open('about:blank', '_blank');
 
                         try {
-                            // 1. Get credentials from cookies
                             const getCookie = (name: string) => {
                                 const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
                                 if (!match) return undefined;
-
                                 let value = match[2];
                                 try {
-                                    // Decode and strip potential wrapping quotes
                                     value = decodeURIComponent(value).replace(/^"(.*)"$/, '$1');
-                                    // Sometimes values are double encoded
                                     if (value.includes('%')) {
                                         value = decodeURIComponent(value);
                                     }
@@ -284,7 +341,6 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                                 return;
                             }
 
-                            // 2. Upload to Mastodon
                             const formData = new FormData();
                             formData.append('file', file);
                             formData.append('description', `tutorial: ${imageTitle || 'Untitled'}`);
@@ -306,7 +362,6 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                             const mediaData = await response.json();
                             const mediaId = mediaData.id;
 
-                            // 3. Navigate to compose page in the already-opened window
                             const postTitle = imageTitle || 'New Tutorial';
                             const postText = initialText
                                 ? encodeURIComponent(`${initialText}\n\n#nexteditor #tutorial`)
@@ -333,17 +388,27 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
             console.error('Failed to generate image:', err);
             setIsGenerating(false);
         }
-    }, [imageStyle, imageTitle, initialText, isVisible, onSave, recording]);
+    }, [addTitleOverlay, generateEncodedImage, imageTitle, initialText, isVisible, onSave]);
 
-    // Auto-generate preview
+    // Generate encoded image when modal opens or style changes
     useEffect(() => {
         if (isVisible) {
-            const timer = setTimeout(() => {
-                generateImage(false, false);
+            setIsGenerating(true);
+            const timer = setTimeout(async () => {
+                await generateEncodedImage();
+                updatePreview();
+                setIsGenerating(false);
             }, 300);
             return () => clearTimeout(timer);
         }
-    }, [isVisible, generateImage]);
+    }, [isVisible, imageStyle, generateEncodedImage, updatePreview]);
+
+    // Update preview when title changes (fast - uses cached encoded canvas)
+    useEffect(() => {
+        if (encodedCanvasRef.current) {
+            updatePreview();
+        }
+    }, [imageTitle, updatePreview]);
 
     if (!isVisible) return null;
 
@@ -508,7 +573,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
 
                     <div className="flex flex-col sm:flex-row gap-4">
                         <button
-                            onClick={() => generateImage(true, false)}
+                            onClick={() => generateFinalImage(true, false)}
                             disabled={isGenerating}
                             className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gray-800 text-gray-200 font-bold rounded-2xl hover:bg-gray-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all border border-gray-700 shadow-xl"
                         >
@@ -518,7 +583,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                         <button
                             onClick={() => {
                                 setComposeLink(null);
-                                generateImage(false, true);
+                                generateFinalImage(false, true);
                             }}
                             disabled={isGenerating}
                             className="flex-[1.5] flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-500 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all shadow-[0_8px_32px_rgba(79,70,229,0.3)] group"
