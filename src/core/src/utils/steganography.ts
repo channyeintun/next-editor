@@ -42,8 +42,8 @@ export async function initWasm(url?: string): Promise<boolean> {
     wasmPromise = (async () => {
         try {
             // Default URL if not provided. In many setups, this would be served from the public folder or absolute path.
-            // Users can override this by calling initWasm('/path/to/steganography.wasm')
-            const wasmUrl = url || '/steganography.wasm';
+            // Users can override this by calling initWasm('/path/to/next-editor.wasm')
+            const wasmUrl = url || '/next-editor.wasm';
 
             let response: Response;
             try {
