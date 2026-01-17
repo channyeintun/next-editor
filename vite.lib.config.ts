@@ -6,7 +6,7 @@ export default defineConfig({
     plugins: [react()],
     build: {
         lib: {
-            entry: path.resolve(__dirname, 'src/use-next-editor/src/index.ts'),
+            entry: path.resolve(__dirname, 'src/core/src/index.ts'),
             name: 'UseNextEditor',
             fileName: (format) => `index.${format === 'es' ? 'js' : 'cjs'}`,
             formats: ['es', 'cjs'],
@@ -23,8 +23,17 @@ export default defineConfig({
                 },
             },
         },
-        outDir: 'src/use-next-editor/dist',
+        outDir: 'src/core/dist',
         emptyOutDir: true,
-        sourcemap: true, // Essential for library debugging
+        sourcemap: false,
+        minify: 'terser',
+        terserOptions: {
+            mangle: {
+                toplevel: true,
+            },
+            format: {
+                comments: false,
+            },
+        },
     },
 });

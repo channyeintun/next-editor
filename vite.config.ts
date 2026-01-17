@@ -36,6 +36,7 @@ export default defineConfig({
     },
     chunkSizeWarningLimit: 1024,
     reportCompressedSize: false, // Speed up build
+    sourcemap: false,
   },
   server: {
     hmr: {
