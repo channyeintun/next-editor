@@ -1,4 +1,5 @@
 import * as monaco from 'monaco-editor';
+import { getWasmExports } from './steganography';
 
 /**
  * Checks if two positions are equal
@@ -33,7 +34,7 @@ export const applyPositionDiff = (
   targetPosition: monaco.IPosition
 ): boolean => {
   const currentPosition = editor.getPosition();
-  
+
   if (arePositionsEqual(currentPosition, targetPosition)) {
     return true; // No change needed
   }
@@ -68,7 +69,7 @@ export const applySelectionDiff = (
   targetSelection: monaco.Selection
 ): boolean => {
   const currentSelection = editor.getSelection();
-  
+
   if (areSelectionsEqual(currentSelection, targetSelection)) {
     return true; // No change needed
   }
@@ -79,7 +80,7 @@ export const applySelectionDiff = (
 
     // Validate the selection bounds
     const lineCount = model.getLineCount();
-    
+
     const validatePosition = (lineNumber: number, column: number) => {
       const safeLineNumber = Math.min(Math.max(lineNumber, 1), lineCount);
       const lineLength = model.getLineLength(safeLineNumber);
@@ -120,14 +121,14 @@ export const applyContentDiff = (
   if (!model) return false;
 
   const currentContent = model.getValue();
-  
+
   // If content is identical, no need to apply any operations
   if (currentContent === targetContent) {
     return true;
   }
 
   try {
-    // Find the common prefix and suffix to minimize the edit range
+    // Find the common prefix and suffix to minimize the edit range (using Wasm)
     const commonPrefix = findCommonPrefix(currentContent, targetContent);
     const commonSuffix = findCommonSuffix(
       currentContent.slice(commonPrefix),
@@ -141,7 +142,7 @@ export const applyContentDiff = (
     if (commonPrefix > 0 || commonSuffix > 0 || currentMiddle !== targetMiddle) {
       const startPos = model.getPositionAt(commonPrefix);
       const endPos = model.getPositionAt(commonPrefix + currentMiddle.length);
-      
+
       const editOperation: monaco.editor.IIdentifiedSingleEditOperation = {
         range: {
           startLineNumber: startPos.lineNumber,
@@ -172,30 +173,92 @@ export const applyContentDiff = (
   }
 };
 
+// Cached encoder/decoder for string↔bytes conversion
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
 /**
- * Finds the length of the common prefix between two strings
+ * Finds the length of the common prefix between two strings using WebAssembly.
+ * Requires Wasm to be initialized via initWasm().
  */
 function findCommonPrefix(str1: string, str2: string): number {
-  let i = 0;
-  const minLength = Math.min(str1.length, str2.length);
-  
-  while (i < minLength && str1[i] === str2[i]) {
-    i++;
+  const exports = getWasmExports();
+  if (!exports) {
+    throw new Error('Wasm not initialized. Call initWasm() first.');
   }
-  
-  return i;
+
+  const memory = exports.memory;
+
+  // Encode strings to UTF-8
+  const bytes1 = textEncoder.encode(str1);
+  const bytes2 = textEncoder.encode(str2);
+
+  // Ensure enough memory
+  const totalSize = bytes1.length + bytes2.length;
+  if (memory.buffer.byteLength < totalSize) {
+    const pagesNeeded = Math.ceil((totalSize - memory.buffer.byteLength) / 65536);
+    if (pagesNeeded > 0) memory.grow(pagesNeeded);
+  }
+
+  // Copy to Wasm memory
+  const ptr1 = 0;
+  const ptr2 = bytes1.length;
+
+  new Uint8Array(memory.buffer, ptr1, bytes1.length).set(bytes1);
+  new Uint8Array(memory.buffer, ptr2, bytes2.length).set(bytes2);
+
+  // Call Wasm function
+  const prefixBytes = exports.findCommonPrefix(ptr1, bytes1.length, ptr2, bytes2.length);
+
+  // Convert byte count back to character count
+  if (prefixBytes === 0) return 0;
+  if (prefixBytes === bytes1.length) return str1.length;
+  if (prefixBytes === bytes2.length) return str2.length;
+
+  // Decode the prefix portion to get character count
+  const prefixSlice = new Uint8Array(memory.buffer, ptr1, prefixBytes);
+  return textDecoder.decode(prefixSlice).length;
 }
 
 /**
- * Finds the length of the common suffix between two strings
+ * Finds the length of the common suffix between two strings using WebAssembly.
+ * Requires Wasm to be initialized via initWasm().
  */
 function findCommonSuffix(str1: string, str2: string): number {
-  let i = 0;
-  const minLength = Math.min(str1.length, str2.length);
-  
-  while (i < minLength && str1[str1.length - 1 - i] === str2[str2.length - 1 - i]) {
-    i++;
+  const exports = getWasmExports();
+  if (!exports) {
+    throw new Error('Wasm not initialized. Call initWasm() first.');
   }
-  
-  return i;
+
+  const memory = exports.memory;
+
+  // Encode strings to UTF-8
+  const bytes1 = textEncoder.encode(str1);
+  const bytes2 = textEncoder.encode(str2);
+
+  // Ensure enough memory
+  const totalSize = bytes1.length + bytes2.length;
+  if (memory.buffer.byteLength < totalSize) {
+    const pagesNeeded = Math.ceil((totalSize - memory.buffer.byteLength) / 65536);
+    if (pagesNeeded > 0) memory.grow(pagesNeeded);
+  }
+
+  // Copy to Wasm memory
+  const ptr1 = 0;
+  const ptr2 = bytes1.length;
+
+  new Uint8Array(memory.buffer, ptr1, bytes1.length).set(bytes1);
+  new Uint8Array(memory.buffer, ptr2, bytes2.length).set(bytes2);
+
+  // Call Wasm function
+  const suffixBytes = exports.findCommonSuffix(ptr1, bytes1.length, ptr2, bytes2.length);
+
+  // Convert byte count back to character count
+  if (suffixBytes === 0) return 0;
+  if (suffixBytes === bytes1.length) return str1.length;
+  if (suffixBytes === bytes2.length) return str2.length;
+
+  // Decode the suffix portion to get character count
+  const suffixSlice = new Uint8Array(memory.buffer, ptr1 + bytes1.length - suffixBytes, suffixBytes);
+  return textDecoder.decode(suffixSlice).length;
 }

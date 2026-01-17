@@ -13,8 +13,6 @@
     }
   },
   "scripts": {
-    "build": "rollup -c",
-    "dev": "rollup -c -w",
     "test": "jest",
     "test:watch": "jest --watch",
     "type-check": "tsc --noEmit",

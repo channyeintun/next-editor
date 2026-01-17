@@ -12,6 +12,8 @@ interface SteganographyWasmExports {
     memory: WebAssembly.Memory;
     encodeLSB(pixelsPtr: number, pixelsLen: number, dataPtr: number, dataLen: number): void;
     decodeLSB(pixelsPtr: number, pixelsLen: number, resultPtr: number, resultMaxLen: number): number;
+    findCommonPrefix(str1Ptr: number, str1Len: number, str2Ptr: number, str2Len: number): number;
+    findCommonSuffix(str1Ptr: number, str1Len: number, str2Ptr: number, str2Len: number): number;
 }
 
 /**
@@ -64,6 +66,22 @@ export async function initWasm(url?: string): Promise<boolean> {
     })();
 
     return (await wasmPromise) !== null;
+}
+
+/**
+ * Gets the Wasm exports if available.
+ * Useful for external modules that want to use diff functions.
+ */
+export function getWasmExports(): SteganographyWasmExports | null {
+    if (!wasmInstance) return null;
+    return wasmInstance.exports as unknown as SteganographyWasmExports;
+}
+
+/**
+ * Checks if Wasm is initialized.
+ */
+export function isWasmInitialized(): boolean {
+    return wasmInstance !== null;
 }
 
 /**
@@ -185,4 +203,3 @@ function handleDecodedMessage(decoded: string): string | null {
     }
     return null;
 }
-
