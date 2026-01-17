@@ -77,12 +77,12 @@ const applyEditorState = (
                 try {
                     editor.restoreViewState(snapshot.state.viewState);
                 } catch (err) {
-                    console.warn('Failed to restore view state:', err);
+                    console.error('Failed to restore view state:', err);
                 }
             }
         }
     } catch (error) {
-        console.warn('Error applying editor state:', error);
+        console.error('Error applying editor state:', error);
     }
 
     return updatedDecorations;
@@ -205,7 +205,7 @@ const mouseTrackingActor = fromCallback<{ type: 'STOP' }, MouseTrackingInput>(
                 iframeListeners.set(iframe, { move: onIframeMouseMove, leave: onIframeMouseLeave });
             } catch (err) {
                 // Likely cross-origin
-                console.warn('Cannot track mouse in iframe (cross-origin):', err);
+                console.error('Cannot track mouse in iframe (cross-origin):', err);
             }
         };
 
@@ -301,7 +301,7 @@ export const editorMachine = setup({
                     // This prevents trailing silence from wall-clock overhead
                     duration = exactDuration * 1000;
                 } catch (err) {
-                    console.warn('Failed to calculate exact audio duration:', err);
+                    console.error('Failed to calculate exact audio duration:', err);
                 }
             }
 
