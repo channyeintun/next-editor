@@ -62,8 +62,12 @@ const getSupportedAudioMimeType = (): string => {
         'audio/mpeg'
     ];
 
+    if (typeof MediaRecorder === 'undefined') {
+        return '';
+    }
+
     for (const mimeType of mimeTypes) {
-        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(mimeType)) {
+        if (MediaRecorder.isTypeSupported(mimeType)) {
             return mimeType;
         }
     }

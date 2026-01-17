@@ -1,4 +1,4 @@
-import { setup, assign, spawnChild, stopChild, fromCallback, enqueueActions } from 'xstate';
+import { setup, assign, spawnChild, stopChild, fromCallback, enqueueActions, fromPromise } from 'xstate';
 import type * as monaco from 'monaco-editor';
 import type {
     EditorMachineContext,
@@ -12,7 +12,7 @@ import { audioRecordingActor, audioPlaybackActor } from './audioActor';
 import { applyContentDiff, applyPositionDiff, applySelectionDiff } from '../utils/editorDiff';
 import { isValidSnapshotState, isEditorReady } from '../utils/validation';
 import { calculateDurationFromFileReader } from '../utils/audioDuration';
-import { fromPromise } from 'xstate';
+
 
 // ============================================================================
 // Helper Functions
@@ -405,6 +405,7 @@ export const editorMachine = setup({
         finalizeRecording: assign(({ context }) => {
             if (!context.session) return { recording: null };
 
+            // Base duration from session timing
             const duration = Math.max(Date.now() - context.session.startedAt, 1);
             const slides = context.getSlides?.();
 

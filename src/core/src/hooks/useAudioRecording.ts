@@ -13,6 +13,10 @@ const getSupportedAudioMimeType = (): string => {
     'audio/mpeg'
   ];
 
+  if (typeof MediaRecorder === 'undefined') {
+    return '';
+  }
+
   for (const mimeType of mimeTypes) {
     if (MediaRecorder.isTypeSupported(mimeType)) {
       return mimeType;
@@ -64,7 +68,7 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
       if (!mimeType) {
         throw new Error('No supported audio MIME type found');
       }
-      
+
       mimeTypeRef.current = mimeType;
       const mediaRecorder = new MediaRecorder(stream, {
         audioBitsPerSecond: 32000,
@@ -95,18 +99,18 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
         // Store the original onstop callback
         const mediaRecorder = mediaRecorderRef.current;
         const stream = mediaRecorder.stream as MediaStream;
-        
+
         mediaRecorder.onstop = async () => {
           stream.getTracks().forEach(track => track.stop());
-          
+
           const audioBlob = new Blob(audioChunksRef.current, { type: mimeTypeRef.current });
-          
+
           setAudioBlob(audioBlob);
           resolve(audioBlob);
-          
+
           setIsRecordingAudio(false);
         };
-        
+
         mediaRecorder.stop();
       } else {
         resolve(null);
