@@ -119,6 +119,24 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
     }
   }, [isPlaying, editor, send]);
 
+  // Global space key listener to pause playback
+  useEffect(() => {
+    if (isPlaying) {
+      const handleGlobalKeyDown = (e: KeyboardEvent) => {
+        // Only trigger on Space key
+        if (e.code === 'Space' || e.key === ' ') {
+          e.preventDefault(); // Prevent page scrolling
+          send({ type: 'USER_INTERACTION' }); // This triggers PAUSE in the machine
+        }
+      };
+
+      window.addEventListener('keydown', handleGlobalKeyDown, true); // Use capture phase to catch it early
+      return () => {
+        window.removeEventListener('keydown', handleGlobalKeyDown, true);
+      };
+    }
+  }, [isPlaying, send]);
+
   const handleSlideEvent = useCallback((event: SlideEvent) => {
     if (state.matches('recording')) {
       send({ type: 'SLIDE_EVENT', event });
