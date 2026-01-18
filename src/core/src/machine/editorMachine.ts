@@ -820,12 +820,60 @@ export const editorMachine = setup({
     states: {
         idle: {
             on: {
-                START_RECORDING: {
+                START_RECORDING: [
+                    {
+                        target: 'startingRecording',
+                        guard: ({ context }) => context.enableAudioRecording,
+                    },
+                    {
+                        target: 'recording',
+                        actions: ['initRecordingSession', 'captureInitialFrame'],
+                    },
+                ],
+                LOAD_RECORDING: 'loading',
+            },
+        },
+
+        startingRecording: {
+            entry: [
+                enqueueActions(({ context, enqueue }) => {
+                    enqueue.spawnChild('audioRecording', {
+                        id: 'audioRecorder',
+                        input: {
+                            constraints: {
+                                autoGainControl: true,
+                                echoCancellation: true,
+                                noiseSuppression: true,
+                            }
+                        }
+                    });
+                    enqueue.sendTo('audioRecorder', { type: 'START' });
+                    enqueue.assign({
+                        audio: { ...context.audio, isRecording: true }
+                    });
+                }),
+            ],
+            on: {
+                STARTED: {
                     target: 'recording',
                     actions: ['initRecordingSession', 'captureInitialFrame'],
                 },
-                LOAD_RECORDING: 'loading',
-            },
+                ERROR: {
+                    target: 'idle',
+                    actions: assign({
+                        error: ({ event }) => event.type === 'ERROR' ? event.error : 'Failed to start audio'
+                    }),
+                },
+                STOP_RECORDING: {
+                    target: 'idle',
+                    actions: [
+                        stopChild('audioRecorder'),
+                        assign({
+                            audio: ({ context }) => ({ ...context.audio, isRecording: false })
+                        })
+                    ]
+                }
+            }
         },
 
         recording: {
@@ -837,24 +885,6 @@ export const editorMachine = setup({
                             self.send({ type: 'CAPTURE_FRAME', isMouseMovement: true, mousePosition: pos });
                         },
                     }),
-                }),
-                enqueueActions(({ context, enqueue }) => {
-                    if (context.enableAudioRecording) {
-                        enqueue.spawnChild('audioRecording', {
-                            id: 'audioRecorder',
-                            input: {
-                                constraints: {
-                                    autoGainControl: true,
-                                    echoCancellation: true,
-                                    noiseSuppression: true,
-                                }
-                            }
-                        });
-                        enqueue.sendTo('audioRecorder', { type: 'START' });
-                        enqueue.assign({
-                            audio: { ...context.audio, isRecording: true }
-                        });
-                    }
                 }),
             ],
             exit: [],

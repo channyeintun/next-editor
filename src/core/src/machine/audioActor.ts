@@ -1,5 +1,4 @@
 import { fromCallback, type ActorRefFrom } from 'xstate';
-import { getAudioContext, unlockAudioContext } from '../utils/audioContext';
 
 // ============================================================================
 // Audio Actor Types
@@ -129,12 +128,11 @@ export const audioRecordingActor = fromCallback<AudioRecordingEvent, AudioRecord
                     }
                 };
 
-                mediaRecorder.onerror = () => {
-                    sendBack({ type: 'ERROR', error: 'MediaRecorder error' });
+                mediaRecorder.onstart = () => {
+                    sendBack({ type: 'STARTED', mediaRecorder, mimeType });
                 };
 
                 mediaRecorder.start();
-                sendBack({ type: 'STARTED', mediaRecorder, mimeType });
             } catch (error) {
                 sendBack({
                     type: 'ERROR',
@@ -176,88 +174,50 @@ export const audioRecordingActor = fromCallback<AudioRecordingEvent, AudioRecord
 // ============================================================================
 
 /**
- * Audio playback actor - manages AudioContext for precise synchronized playback
+ * Audio playback actor - manages HTMLAudioElement for robust synchronized playback
  */
 export const audioPlaybackActor = fromCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
     ({ sendBack, receive, input }) => {
-        const ctx = getAudioContext();
-        unlockAudioContext(ctx);
+        let audio: HTMLAudioElement | null = null;
+        let audioUrl: string | null = null;
 
-        let audioBuffer: AudioBuffer | null = null;
-        let source: AudioBufferSourceNode | null = null;
-        const gainNode = ctx.createGain();
-        gainNode.connect(ctx.destination);
-        gainNode.gain.value = input.volume;
-
-        // Playback state
-        let startTime = 0; // When the current source started playing in ctx time
-        let pauseOffset = input.startPosition; // Where we paused (in seconds)
-        let isPlaying = false;
-        let playbackRate = input.playbackRate;
-
-        const cleanupSource = () => {
-            if (source) {
-                try {
-                    source.stop();
-                    source.disconnect();
-                } catch { /* ignore */ }
-                source = null;
+        const cleanup = () => {
+            if (audio) {
+                audio.pause();
+                audio.src = '';
+                audio.load();
+                audio = null;
+            }
+            if (audioUrl) {
+                URL.revokeObjectURL(audioUrl);
+                audioUrl = null;
             }
         };
 
-        const play = (offset: number) => {
-            if (!audioBuffer) return;
-            cleanupSource();
-
-            source = ctx.createBufferSource();
-            source.buffer = audioBuffer;
-            source.playbackRate.value = playbackRate;
-            source.connect(gainNode);
-
-            source.onended = () => {
-                const currentPos = getPosition();
-                if (currentPos >= audioBuffer!.duration - 0.01) {
-                    sendBack({ type: 'FINISHED' });
-                    isPlaying = false;
-                }
-            };
-
-            const actualOffset = Math.max(0, Math.min(offset, audioBuffer.duration));
-            source.start(0, actualOffset);
-
-            startTime = ctx.currentTime - (actualOffset / playbackRate);
-            pauseOffset = actualOffset;
-            isPlaying = true;
-
-            // Hardware Wake: Handled silently by the HTMLAudio lifeline in audioContext.ts
-            // No audible synthesized signal needed here.
-        };
-
-        const getPosition = (): number => {
-            if (!isPlaying) return pauseOffset;
-            return (ctx.currentTime - startTime) * playbackRate;
-        };
-
-        // Initialize: Load and decode audio
-        const init = async () => {
+        const init = () => {
             try {
-                // Using FileReader for maximum compatibility
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    const arrayBuffer = e.target?.result as ArrayBuffer;
-                    if (!arrayBuffer) return;
+                audioUrl = URL.createObjectURL(input.blob);
+                audio = new Audio(audioUrl);
+                audio.volume = input.volume;
+                audio.playbackRate = input.playbackRate;
+                audio.currentTime = input.startPosition;
 
-                    try {
-                        audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-                        sendBack({ type: 'READY', duration: audioBuffer.duration * 1000 });
-                    } catch {
-                        sendBack({ type: 'ERROR', error: 'Failed to decode audio' });
+                audio.oncanplaythrough = () => {
+                    if (audio) {
+                        sendBack({ type: 'READY', duration: audio.duration * 1000 });
                     }
                 };
-                reader.onerror = () => {
-                    sendBack({ type: 'ERROR', error: 'Failed to read audio blob' });
+
+                audio.onended = () => {
+                    sendBack({ type: 'FINISHED' });
                 };
-                reader.readAsArrayBuffer(input.blob);
+
+                audio.onerror = () => {
+                    sendBack({ type: 'ERROR', error: 'Audio playback error' });
+                };
+
+                // For iOS, we might need a user gesture to start, 
+                // but the machine handles PLAY event on user gesture.
             } catch (error) {
                 sendBack({
                     type: 'ERROR',
@@ -269,63 +229,48 @@ export const audioPlaybackActor = fromCallback<AudioPlaybackEvent, AudioPlayback
         init();
 
         receive((event) => {
+            if (!audio) return;
+
             switch (event.type) {
                 case 'PLAY':
-                    ctx.resume().then(() => {
-                        play(getPosition());
+                    audio.play().catch(err => {
+                        // On some browsers, play() might fail if not triggered by user gesture
+                        // even if the AudioContext was unlocked.
+                        console.warn('[AudioActor] Play failed:', err);
                     });
                     break;
 
                 case 'PAUSE':
-                    pauseOffset = getPosition();
-                    cleanupSource();
-                    isPlaying = false;
+                    audio.pause();
                     break;
 
-                case 'SEEK': {
-                    const seekTime = event.time / 1000;
-                    pauseOffset = seekTime;
-                    if (isPlaying) {
-                        play(seekTime);
-                    }
+                case 'SEEK':
+                    audio.currentTime = event.time / 1000;
                     break;
-                }
 
                 case 'SET_VOLUME':
-                    gainNode.gain.setTargetAtTime(
-                        Math.max(0, Math.min(1, event.volume)),
-                        ctx.currentTime,
-                        0.01
-                    );
+                    audio.volume = Math.max(0, Math.min(1, event.volume));
                     break;
 
                 case 'SET_PLAYBACK_RATE':
-                    playbackRate = event.rate;
-                    if (isPlaying) {
-                        play(getPosition());
-                    }
+                    audio.playbackRate = event.rate;
                     break;
 
                 case 'SYNC': {
-                    if (!isPlaying || !audioBuffer) return;
-
                     const targetTime = event.time / 1000;
-                    const currentPos = getPosition();
-                    const diff = Math.abs(currentPos - targetTime);
+                    const diff = Math.abs(audio.currentTime - targetTime);
 
-                    // With AudioContext, drift should be minimal. 
-                    // Only re-sync if it's significant (> 50ms) to avoid glitching
-                    if (diff > 0.05) {
-                        play(targetTime);
+                    // Re-sync if drift is significant (> 150ms for HTMLAudioElement)
+                    // HTMLAudioElement is less precise than AudioContext, so we use a larger threshold
+                    if (diff > 0.15) {
+                        audio.currentTime = targetTime;
                     }
                     break;
                 }
             }
         });
 
-        return () => {
-            cleanupSource();
-        };
+        return cleanup;
     }
 );
 
