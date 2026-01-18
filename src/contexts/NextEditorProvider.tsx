@@ -3,7 +3,7 @@ import type * as monaco from 'monaco-editor';
 import { useNextEditor } from '../core/src';
 import { NextEditorContext } from './NextEditorContext';
 import { createJsonStorage } from '../storage/JsonStorage';
-import type { SlidePreviewState, PreviewState } from '../types/slides';
+import type { SlidePreviewState, PreviewState, Slide } from '../types/slides';
 
 interface NextEditorProviderProps {
   children: React.ReactNode;
@@ -18,8 +18,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   const getPreviewStateRef = useRef<(() => PreviewState | null) | null>(null);
   const applyPreviewStateRef = useRef<((previewState: PreviewState) => void) | null>(null);
 
-  const getSlidesRef = useRef<(() => Array<{ id: string; imageUrl: string; name?: string; order: number }>) | null>(null);
-  const applySlidesRef = useRef<((slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void) | null>(null);
+  const getSlidesRef = useRef<(() => Slide[]) | null>(null);
+  const applySlidesRef = useRef<((slides: Slide[]) => void) | null>(null);
 
   const originalHook = useNextEditor({
     editorRef,
@@ -82,10 +82,10 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       applySlideStateRef.current = applier;
     },
     // Slides data registration
-    registerSlidesGetter: (getter: () => Array<{ id: string; imageUrl: string; name?: string; order: number }>) => {
+    registerSlidesGetter: (getter: () => Slide[]) => {
       getSlidesRef.current = getter;
     },
-    registerSlidesApplier: (applier: (slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void) => {
+    registerSlidesApplier: (applier: (slides: Slide[]) => void) => {
       applySlidesRef.current = applier;
     },
     // Preview state registration

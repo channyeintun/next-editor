@@ -10,7 +10,7 @@ export default function SlidePanel() {
     goToSlide,
     handleSlideEvent: onSlideEvent,
   } = useSlidesContext();
-  
+
   const { pause } = useNextEditorContext();
 
   return (
@@ -24,6 +24,8 @@ export default function SlidePanel() {
         onStopPlayback={pause}
         isOpen={previewState.isOpen}
         isMaximized={previewState.isMaximized}
+        verticalIndex={previewState.indexv}
+        currentInteraction={previewState.currentInteraction}
         positioning="fixed"
       />
     </>

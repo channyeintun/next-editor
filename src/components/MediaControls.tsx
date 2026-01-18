@@ -128,7 +128,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     : (currentRecording ? Math.max(0, progressDuration - currentTime) : currentTime);
 
   return (
-    <div className={`${positioning} bottom-0 left-0 w-full px-4 py-3 z-50`}>
+    <div className={`${positioning} bottom-0 left-0 w-full px-4 py-3 z-20`}>
       <div className="flex items-center gap-3 w-full h-6">
         {recordMode && (
           <button
@@ -189,7 +189,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               </button>
 
               {showSettings && (
-                <div className="absolute bottom-full right-0 mb-2 bg-white rounded-lg shadow-lg p-4 min-w-[200px] z-50">
+                <div className="absolute bottom-full right-0 mb-2 bg-white rounded-lg shadow-lg p-4 min-w-[200px] z-21">
                   <div className="text-gray-800">
                     <div className="mb-3">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Speed</label>

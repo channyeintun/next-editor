@@ -1,5 +1,5 @@
 import type * as monaco from 'monaco-editor';
-import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState } from './slides';
+import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from './slides';
 
 /**
  * Audio storage placeholder for serialization
@@ -51,7 +51,7 @@ export interface Recording {
   keyframeInterval: number;
   slideEvents?: SlideEvent[];
   previewEvents?: PreviewEvent[];
-  slides?: Array<{ id: string; imageUrl: string; name?: string; order: number }>;
+  slides?: Slide[];
   audioBlob?: Blob | AudioPlaceholder;
   duration: number;
   createdAt: number;
@@ -96,8 +96,8 @@ export interface UseNextEditorConfig {
   applyPreviewState?: (previewState: PreviewState) => void;
 
   // Slides data callbacks
-  getSlides?: () => Array<{ id: string; imageUrl: string; name?: string; order: number }>;
-  applySlides?: (slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void;
+  getSlides?: () => Slide[];
+  applySlides?: (slides: Slide[]) => void;
 }
 
 /**

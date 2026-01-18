@@ -498,9 +498,9 @@ export default function Preview() {
   const isSmall = size === 'small';
 
   const getSizeClasses = () => {
-    if (isLarge) return 'shadow-2xl border-black/10 transition-shadow';
-    if (isMedium) return 'shadow-lg border-gray-300 transition-shadow';
-    return 'shadow-md border-gray-300 cursor-pointer transition-shadow';
+    if (isLarge) return 'shadow-2xl border-black/10 transition-shadow z-[100]';
+    if (isMedium) return 'shadow-lg border-gray-300 transition-shadow z-32';
+    return 'shadow-md border-gray-300 cursor-pointer transition-shadow z-31';
   };
 
   const handleClick = () => {
@@ -574,7 +574,7 @@ export default function Preview() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-39 bg-black/10"
+            className="fixed inset-0 z-[90] bg-black/10"
             onClick={handleMinimize}
           />
         )}
@@ -587,7 +587,7 @@ export default function Preview() {
         transition={springTransition}
         onAnimationStart={() => setIsTransitioning(true)}
         onAnimationComplete={() => setIsTransitioning(false)}
-        className={`fixed bg-white rounded-xl z-40 overflow-hidden flex flex-col ${getSizeClasses()} ${isSmall ? 'hover:shadow-xl active:scale-95' : ''}`}
+        className={`fixed bg-white rounded-xl overflow-hidden flex flex-col ${getSizeClasses()} ${isSmall ? 'hover:shadow-xl active:scale-95' : ''}`}
         onClick={(e) => {
           if (isSmall) {
             e.stopPropagation();

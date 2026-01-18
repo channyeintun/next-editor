@@ -1,17 +1,27 @@
 import { useState, useCallback, useEffect } from 'react';
+import {
+  Maximize2,
+  ChevronLeft,
+  ChevronRight,
+  Monitor,
+  Keyboard
+} from 'lucide-react';
 import type { Slide, SlideEvent } from '../types/slides';
 import { useNextEditorContext } from '../hooks/useNextEditorContext';
+import RevealSlideRenderer from './RevealSlideRenderer';
 
 type SlidePreviewSize = 'small' | 'large';
 
 interface SlidePreviewProps {
   slides: Slide[];
   currentSlideIndex: number;
-  onSlideChange: (index: number) => void;
+  onSlideChange: (indexh: number, indexv?: number) => void;
   onSlideEvent?: (event: SlideEvent) => void;
   onStopPlayback?: () => void;
   isOpen: boolean;
   isMaximized?: boolean;
+  verticalIndex?: number;
+  currentInteraction?: import('../types/slides').IframeInteractionEvent;
   positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
 }
 
@@ -23,6 +33,8 @@ export default function SlidePreview({
   onStopPlayback,
   isOpen,
   isMaximized = false,
+  verticalIndex = 0,
+  currentInteraction,
   positioning = 'fixed'
 }: SlidePreviewProps) {
   const { isPlaying } = useNextEditorContext();
@@ -43,28 +55,27 @@ export default function SlidePreview({
 
   const currentSlide = slides[currentSlideIndex];
 
-  const emitSlideEvent = useCallback((type: SlideEvent['type'], slideId?: string, isMaximized?: boolean) => {
+  const emitSlideEvent = useCallback((type: SlideEvent['type'], slideId?: string, isMaximizedState?: boolean, indexv?: number) => {
     onSlideEvent?.({
       type,
       timestamp: performance.now(),
       slideId,
-      isMaximized
+      isMaximized: isMaximizedState,
+      indexv
     });
   }, [onSlideEvent]);
 
   const getSizeClasses = () => {
     switch (size) {
       case 'small':
-        return 'bottom-20 right-4 w-48 h-32';
+        return 'bottom-20 right-4 w-72 h-44 z-30';
       case 'large':
-        return 'bottom-20 right-4 w-[800px] max-w-[90vw] h-[600px] max-h-[90vh]';
+        return 'bottom-20 right-4 w-[1000px] max-w-[95vw] h-[700px] max-h-[85vh] z-[100]';
     }
   };
 
   const getSizeStyles = () => {
     if (size === 'large') {
-      // Keep it positioned at bottom-right but use transform to center it
-      // This way the positioning doesn't change, only the transform changes
       return {
         transform: 'translate(calc(-50vw + 50% + 1rem), calc(-50vh + 50% + 5rem))',
         transformOrigin: 'bottom right'
@@ -80,7 +91,6 @@ export default function SlidePreview({
     if (size === 'small') {
       setSize('large');
       emitSlideEvent('slide_maximize', currentSlide?.id, true);
-      // Pause playback when maximizing through click
       onStopPlayback?.();
     }
   };
@@ -88,47 +98,70 @@ export default function SlidePreview({
   const handleMinimize = useCallback(() => {
     setSize('small');
     emitSlideEvent('slide_minimize', currentSlide?.id, false);
-    // Stop playback when minimizing
     onStopPlayback?.();
   }, [emitSlideEvent, currentSlide?.id, onStopPlayback]);
 
   const handleMaximize = () => {
-    const newSize = size === 'large' ? 'small' : 'large';
+    const isNowMaximized = size !== 'large';
+    const newSize = isNowMaximized ? 'large' : 'small';
     setSize(newSize);
-    emitSlideEvent(newSize === 'large' ? 'slide_maximize' : 'slide_minimize', currentSlide?.id, newSize === 'large');
-    // Pause playback on any size change (both maximize and minimize)
+    emitSlideEvent(isNowMaximized ? 'slide_maximize' : 'slide_minimize', currentSlide?.id, isNowMaximized);
     onStopPlayback?.();
   };
 
+  const handleSlideChangeFromReveal = useCallback((indexh: number, indexv?: number) => {
+    if (isPlaying) return;
+    onSlideChange(indexh, indexv);
+    if (slides[indexh]) {
+      emitSlideEvent('slide_change', slides[indexh].id, size === 'large', indexv);
+    }
+  }, [isPlaying, onSlideChange, slides, emitSlideEvent, size]);
+
+  // Handle messages from the Reveal iframe
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (isPlaying) return;
+
+      const { type, payload } = event.data || {};
+      if (type === 'IFRAME_INTERACTION') {
+        const interaction = {
+          type: payload.type,
+          timestamp: performance.now(),
+          target: payload.target,
+          data: payload.data,
+        };
+
+        // Send the interaction event without stale position data
+        onSlideEvent?.({
+          type: 'slide_interaction',
+          timestamp: performance.now(),
+          slideId: currentSlide?.id,
+          interaction
+        });
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [isPlaying, emitSlideEvent, currentSlide?.id, size, verticalIndex, onSlideEvent]);
 
   const goToNextSlide = useCallback(() => {
-    if (isPlaying) return; // Disable navigation during playback
+    if (isPlaying) return;
     if (currentSlideIndex < slides.length - 1) {
       const newIndex = currentSlideIndex + 1;
-      onSlideChange(newIndex);
-      emitSlideEvent('slide_change', slides[newIndex]?.id);
+      onSlideChange(newIndex, 0);
+      emitSlideEvent('slide_change', slides[newIndex]?.id, size === 'large', 0);
     }
-  }, [isPlaying, currentSlideIndex, slides, onSlideChange, emitSlideEvent]);
+  }, [isPlaying, currentSlideIndex, slides, onSlideChange, emitSlideEvent, size]);
 
   const goToPrevSlide = useCallback(() => {
-    if (isPlaying) return; // Disable navigation during playback
+    if (isPlaying) return;
     if (currentSlideIndex > 0) {
       const newIndex = currentSlideIndex - 1;
-      onSlideChange(newIndex);
-      emitSlideEvent('slide_change', slides[newIndex]?.id);
+      onSlideChange(newIndex, 0);
+      emitSlideEvent('slide_change', slides[newIndex]?.id, size === 'large', 0);
     }
-  }, [isPlaying, currentSlideIndex, onSlideChange, emitSlideEvent, slides]);
-
-  // Emit slide open event when component first opens
-  // Removing this redundant event emitter as startPresentation 
-  // already emits 'slide_open' and this was causing infinite loops
-  /*
-  useEffect(() => {
-    if (isOpen && currentSlide) {
-      emitSlideEvent('slide_open', currentSlide.id);
-    }
-  }, [isOpen, currentSlide, emitSlideEvent]);
-  */
+  }, [isPlaying, currentSlideIndex, onSlideChange, emitSlideEvent, slides, size]);
 
   // Keyboard navigation for large mode
   useEffect(() => {
@@ -161,35 +194,34 @@ export default function SlidePreview({
 
   return (
     <>
-      {/* Overlay for click-outside-to-minimize - only for large size */}
+      {/* Backdrop for large size */}
       {size === 'large' && (
         <div
-          className="fixed inset-0 z-39"
+          className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm transition-all duration-500"
           onClick={handleMinimize}
         />
       )}
 
       <div
-        className={`${positioning} bg-white rounded shadow-lg z-40 transition-all duration-500 ease-in-out ${getSizeClasses()}`}
+        className={`${positioning} bg-slate-900 rounded-2xl transition-all duration-500 ${getSizeClasses()} overflow-hidden border border-white/10`}
         style={{
-          border: '1px solid #ccc',
           ...getSizeStyles()
         }}
         onClick={(e) => {
           e.stopPropagation();
-          handleClick();
+          if (size === 'small') handleClick();
         }}
       >
-        {/* Browser-style header */}
-        <div className="flex items-center bg-gray-100 px-3 py-2 rounded-t-lg border-b">
+        {/* Header */}
+        <div className="flex items-center bg-slate-800/80 backdrop-blur-md px-4 py-2 border-b border-white/5">
           {/* Window controls */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 mr-4">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleMinimize();
               }}
-              className="w-3 h-3 rounded-full bg-yellow-400 hover:bg-yellow-500"
+              className="w-3 h-3 rounded-full bg-amber-500 hover:bg-amber-400 transition-colors shadow-sm"
               title="Minimize"
             />
             <button
@@ -197,70 +229,98 @@ export default function SlidePreview({
                 e.stopPropagation();
                 handleMaximize();
               }}
-              className="w-3 h-3 rounded-full bg-green-400 hover:bg-green-500"
-              title={size === 'large' ? 'Minimize' : 'Maximize'}
+              className="w-3 h-3 rounded-full bg-emerald-500 hover:bg-emerald-400 transition-colors shadow-sm"
+              title={size === 'large' ? 'Shrink' : 'Maximize'}
             />
           </div>
 
-          <span className="text-sm font-medium text-gray-700 ml-4">
-            Slide {currentSlideIndex + 1} of {slides.length}
-          </span>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
+              <Monitor className="w-3 h-3 text-indigo-400" />
+            </div>
+            <span className="text-[11px] font-bold text-slate-300 tracking-tight uppercase">
+              Slide {currentSlideIndex + 1} <span className="text-slate-500">of {slides.length}</span>
+            </span>
+          </div>
 
           {/* Navigation controls */}
           {size !== 'small' && (
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-1 ml-auto">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   goToPrevSlide();
                 }}
                 disabled={currentSlideIndex === 0 || isPlaying}
-                className="text-gray-600 hover:text-gray-800 disabled:opacity-30 px-2 py-1"
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg disabled:opacity-20 transition-all"
                 title="Previous slide"
               >
-                ‹
+                <ChevronLeft className="w-4 h-4" />
               </button>
+              <div className="w-px h-4 bg-white/5 mx-1"></div>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   goToNextSlide();
                 }}
                 disabled={currentSlideIndex === slides.length - 1 || isPlaying}
-                className="text-gray-600 hover:text-gray-800 disabled:opacity-30 px-2 py-1"
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg disabled:opacity-20 transition-all"
                 title="Next slide"
               >
-                ›
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           )}
+
+          {size === 'small' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMaximize();
+              }}
+              className="ml-auto p-1 text-slate-400 hover:text-white transition-all"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
-        {/* Slide content */}
-        <div className="relative w-full border-0 rounded-b-lg overflow-hidden" style={{ height: 'calc(100% - 48px)' }}>
-          <img
-            src={currentSlide.imageUrl}
-            alt={`Slide ${currentSlideIndex + 1}`}
-            className="w-full h-full object-contain bg-gray-50"
-            style={{ imageRendering: 'crisp-edges' }}
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              target.parentElement!.innerHTML = `
-                <div class="w-full h-full flex items-center justify-center bg-gray-100">
-                  <div class="text-center text-gray-500">
-                    <div class="text-2xl mb-2">⚠️</div>
-                    <div class="text-sm">Failed to load image</div>
-                    <div class="text-xs mt-1 break-all px-4">${currentSlide.imageUrl}</div>
-                  </div>
-                </div>
-              `;
-            }}
+        {/* Slide content area */}
+        <div
+          className="relative w-full h-[calc(100%-40px)] bg-black"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <RevealSlideRenderer
+            slides={slides}
+            currentSlideIndex={currentSlideIndex}
+            currentVerticalIndex={verticalIndex}
+            currentInteraction={currentInteraction}
+            onSlideChange={handleSlideChangeFromReveal}
+            isNavigationEnabled={size !== 'small' && !isPlaying}
           />
 
-          {/* Keyboard navigation hint for large size - only show when not in record mode */}
+          {/* Keyboard navigation hint */}
           {size === 'large' && recordMode && (
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-70 text-white px-3 py-1 rounded text-sm">
-              Use ← → keys to navigate
+            <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-3 bg-slate-900/80 backdrop-blur-xl border border-white/10 px-4 py-2 rounded-2xl shadow-2xl opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none">
+              <div className="p-1.5 rounded-lg bg-indigo-500/20 border border-indigo-500/20">
+                <Keyboard className="w-4 h-4 text-indigo-400" />
+              </div>
+              <span className="text-xs font-bold text-slate-200">Use Arrow Keys to Navigate</span>
+            </div>
+          )}
+
+          {/* Small mode overlay indicator */}
+          {size === 'small' && (
+            <div
+              className="absolute inset-0 bg-indigo-600/0 hover:bg-indigo-600/10 cursor-pointer flex items-center justify-center group/overlay transition-all"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleClick();
+              }}
+            >
+              <div className="bg-slate-900/90 backdrop-blur-md border border-white/10 p-2 rounded-xl scale-90 opacity-0 group-hover/overlay:opacity-100 group-hover/overlay:scale-100 transition-all duration-300 shadow-2xl">
+                <Maximize2 className="w-4 h-4 text-indigo-400" />
+              </div>
             </div>
           )}
         </div>

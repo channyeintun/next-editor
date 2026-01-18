@@ -22,6 +22,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.12.0",
+    "reveal.js": "^5.2.1",
     "superjson": "^2.2.6",
     "xstate": "^5.25.1"
   },
@@ -31,6 +32,7 @@
     "@types/node": "^25.0.9",
     "@types/react": "^19.2.8",
     "@types/react-dom": "^19.2.3",
+    "@types/reveal.js": "^5.2.2",
     "@vitejs/plugin-react-swc": "^4.2.2",
     "autoprefixer": "^10.4.23",
     "eslint": "^9.39.2",

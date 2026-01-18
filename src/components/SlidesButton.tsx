@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Presentation, Circle } from 'lucide-react';
 import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import { useSlidesContext } from '../contexts/SlidesContext';
 import SlidesManager from './SlidesManager';
@@ -6,7 +7,7 @@ import SlidesManager from './SlidesManager';
 export default function SlidesButton() {
   const { isRecording } = useNextEditorContext();
   const [showManager, setShowManager] = useState(false);
-  
+
   const {
     slides,
     setSlides,
@@ -17,32 +18,49 @@ export default function SlidesButton() {
     <div className="relative">
       <button
         onClick={() => setShowManager(!showManager)}
-        className="px-3 py-1 text-xs text-gray-300 hover:text-white bg-gray-600 hover:bg-gray-500 rounded transition-colors"
+        className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 border shadow-sm ${showManager
+          ? 'bg-indigo-600 border-indigo-500 text-white shadow-md'
+          : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600'
+          }`}
         title="Manage presentation slides"
       >
-        📊 Slides {slides.length > 0 && `(${slides.length})`}
+        <Presentation className={`w-4 h-4 transition-transform duration-300 ${showManager ? 'scale-110' : ''}`} />
+        <span className="tracking-tight">Slides</span>
+        {slides.length > 0 && (
+          <span className={`flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md text-[10px] font-black ${showManager ? 'bg-white text-indigo-600' : 'bg-slate-700 text-slate-300'
+            }`}>
+            {slides.length}
+          </span>
+        )}
       </button>
 
       {/* Recording indicator for slides */}
-      {isRecording && slides.length > 0 && showManager && (
-        <div className="fixed top-16 left-4 z-50 bg-red-500 text-white px-2 py-1 rounded text-xs animate-pulse">
-          Recording slides events
+      {isRecording && slides.length > 0 && (
+        <div className="absolute -top-1 -right-1 flex">
+          <Circle className="w-2.5 h-2.5 fill-rose-500 text-rose-500 animate-pulse" />
         </div>
       )}
 
       {/* Slides Manager Dropdown */}
       {showManager && (
-        <div className="absolute top-full right-0 mt-2 z-50">
-          <SlidesManager
-            slides={slides}
-            onSlidesChange={setSlides}
-            onStartPresentation={() => {
-              startPresentation();
-              setShowManager(false);
-            }}
-            onClose={() => setShowManager(false)}
+        <>
+          {/* Backdrop for mobile/click away */}
+          <div
+            className="fixed inset-0 z-[49] bg-black/5"
+            onClick={() => setShowManager(false)}
           />
-        </div>
+          <div className="absolute top-full right-0 mt-3 z-[50] animate-in fade-in slide-in-from-top-2 duration-300 ease-out origin-top-right">
+            <SlidesManager
+              slides={slides}
+              onSlidesChange={setSlides}
+              onStartPresentation={() => {
+                startPresentation();
+                setShowManager(false);
+              }}
+              onClose={() => setShowManager(false)}
+            />
+          </div>
+        </>
       )}
     </div>
   );

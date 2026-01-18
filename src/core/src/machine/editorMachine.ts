@@ -160,37 +160,62 @@ const mouseTrackingActor = fromCallback<{ type: 'STOP' }, MouseTrackingInput>(
 
         // Handle iframe mouse tracking
         const iframeListeners = new Map<HTMLIFrameElement, { move: (e: MouseEvent) => void; leave: () => void }>();
+        const iframeLoadHandlers = new Map<HTMLIFrameElement, () => void>();
 
         const setupIframeListeners = (iframe: HTMLIFrameElement) => {
-            try {
-                const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-                if (!iframeDoc) return;
+            const onIframeMouseMove = (e: MouseEvent) => {
+                const rect = iframe.getBoundingClientRect();
+                input.onMouseMove({
+                    x: rect.left + e.clientX,
+                    y: rect.top + e.clientY,
+                    visible: true
+                });
+            };
 
-                const onIframeMouseMove = (e: MouseEvent) => {
-                    const rect = iframe.getBoundingClientRect();
-                    input.onMouseMove({
-                        x: rect.left + e.clientX,
-                        y: rect.top + e.clientY,
-                        visible: true
-                    });
-                };
+            const onIframeMouseLeave = () => {
+                input.onMouseMove({ x: 0, y: 0, visible: false });
+            };
 
-                const onIframeMouseLeave = () => {
-                    input.onMouseMove({ x: 0, y: 0, visible: false });
-                };
+            const attachToDocument = () => {
+                try {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                    if (!iframeDoc) return;
 
-                iframeDoc.addEventListener('mousemove', onIframeMouseMove);
-                iframeDoc.addEventListener('mouseleave', onIframeMouseLeave);
+                    // Clean up existing listeners if any
+                    const existing = iframeListeners.get(iframe);
+                    if (existing) {
+                        iframeDoc.removeEventListener('mousemove', existing.move);
+                        iframeDoc.removeEventListener('mouseleave', existing.leave);
+                    }
 
-                iframeListeners.set(iframe, { move: onIframeMouseMove, leave: onIframeMouseLeave });
-            } catch (err) {
-                // Likely cross-origin
-                console.error('Cannot track mouse in iframe (cross-origin):', err);
-            }
+                    iframeDoc.addEventListener('mousemove', onIframeMouseMove, true);
+                    iframeDoc.addEventListener('mouseleave', onIframeMouseLeave, true);
+
+                    iframeListeners.set(iframe, { move: onIframeMouseMove, leave: onIframeMouseLeave });
+                } catch (err) {
+                    // Likely cross-origin
+                    console.error('Cannot track mouse in iframe (cross-origin):', err);
+                }
+            };
+
+            const handleLoad = () => {
+                attachToDocument();
+            };
+
+            iframe.addEventListener('load', handleLoad);
+            iframeLoadHandlers.set(iframe, handleLoad);
+            attachToDocument();
         };
 
         const removeIframeListeners = (iframe: HTMLIFrameElement) => {
             const handlers = iframeListeners.get(iframe);
+            const loadHandler = iframeLoadHandlers.get(iframe);
+
+            if (loadHandler) {
+                iframe.removeEventListener('load', loadHandler);
+                iframeLoadHandlers.delete(iframe);
+            }
+
             if (handlers) {
                 try {
                     const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -205,37 +230,55 @@ const mouseTrackingActor = fromCallback<{ type: 'STOP' }, MouseTrackingInput>(
             }
         };
 
-        // Listen for new iframes
+        // Listen for new iframes and content changes
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
-                mutation.addedNodes.forEach((node) => {
-                    if (node instanceof HTMLIFrameElement) {
-                        setupIframeListeners(node);
-                    } else if (node instanceof HTMLElement) {
-                        node.querySelectorAll('iframe').forEach(setupIframeListeners);
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node instanceof HTMLIFrameElement) {
+                            setupIframeListeners(node);
+                        } else if (node instanceof HTMLElement) {
+                            node.querySelectorAll('iframe').forEach(setupIframeListeners);
+                        }
+                    });
+                    mutation.removedNodes.forEach((node) => {
+                        if (node instanceof HTMLIFrameElement) {
+                            removeIframeListeners(node);
+                        } else if (node instanceof HTMLElement) {
+                            node.querySelectorAll('iframe').forEach(removeIframeListeners);
+                        }
+                    });
+                } else if (mutation.type === 'attributes' && mutation.target instanceof HTMLIFrameElement) {
+                    if (mutation.attributeName === 'src' || mutation.attributeName === 'srcdoc') {
+                        setupIframeListeners(mutation.target);
                     }
-                });
-                mutation.removedNodes.forEach((node) => {
-                    if (node instanceof HTMLIFrameElement) {
-                        removeIframeListeners(node);
-                    } else if (node instanceof HTMLElement) {
-                        node.querySelectorAll('iframe').forEach(removeIframeListeners);
-                    }
-                });
+                }
             });
         });
 
-        observer.observe(document.body, { childList: true, subtree: true });
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['src', 'srcdoc']
+        });
 
         // Initial setup
         document.querySelectorAll('iframe').forEach(setupIframeListeners);
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseleave', handleMouseLeave);
+        document.addEventListener('mousemove', handleMouseMove, true);
+        document.addEventListener('mouseleave', handleMouseLeave, true);
 
         return () => {
             observer.disconnect();
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseleave', handleMouseLeave);
+            document.removeEventListener('mousemove', handleMouseMove, true);
+            document.removeEventListener('mouseleave', handleMouseLeave, true);
+
+            // Clean up load listeners
+            iframeLoadHandlers.forEach((handler, iframe) => {
+                iframe.removeEventListener('load', handler);
+            });
+            iframeLoadHandlers.clear();
+
             iframeListeners.forEach((handlers, iframe) => {
                 try {
                     const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -352,7 +395,6 @@ export const editorMachine = setup({
             const editor = context.editorRefs.editor;
             if (!editor || !context.session) return {};
 
-            const isMouseMovement = event.type === 'CAPTURE_FRAME' && event.isMouseMovement;
             const timestamp = Date.now() - context.session.startedAt;
 
             const mousePosition = (event.type === 'CAPTURE_FRAME' && event.mousePosition)
@@ -362,10 +404,7 @@ export const editorMachine = setup({
             const frame = createFrame(
                 editor,
                 timestamp,
-                {
-                    ...mousePosition,
-                    visible: isMouseMovement ? true : mousePosition.visible,
-                },
+                mousePosition,
                 context.getSlideState,
                 context.getPreviewState
             );
@@ -732,11 +771,38 @@ export const editorMachine = setup({
                         // Normal playback: apply events sequentially
                         const slideIndex = recording.slides?.findIndex(s => s.id === slideEvent.slideId) ?? -1;
                         if (slideIndex !== -1 || slideEvent.type === 'slide_close') {
-                            const slideState = {
-                                isOpen: slideEvent.type !== 'slide_close',
-                                isMaximized: !!slideEvent.isMaximized,
-                                currentSlideId: slideEvent.slideId || null
-                            };
+                            let slideState;
+
+                            if (slideEvent.type === 'slide_interaction') {
+                                // Strictly cursor-only: no indices, no size, no structural change.
+                                slideState = {
+                                    isOpen: true,
+                                    currentInteraction: slideEvent.interaction
+                                };
+                            } else if (slideEvent.type === 'slide_maximize' || slideEvent.type === 'slide_minimize') {
+                                // Structural change only: no indices.
+                                slideState = {
+                                    isOpen: true,
+                                    isMaximized: slideEvent.type === 'slide_maximize',
+                                    currentSlideId: slideEvent.slideId || null
+                                };
+                            } else {
+                                // Full derivation for navigation events (open, change, close)
+                                // or when seeking/resuming.
+                                const relevantEvents = slideEvents.slice(0, i + 1).reverse();
+                                const lastNav = relevantEvents.find(e =>
+                                    e.slideId === slideEvent.slideId &&
+                                    ['slide_open', 'slide_change', 'slide_maximize', 'slide_minimize', 'slide_close'].includes(e.type)
+                                );
+
+                                slideState = {
+                                    isOpen: (lastNav?.type || slideEvent.type) !== 'slide_close',
+                                    isMaximized: !!(slideEvent.isMaximized ?? lastNav?.isMaximized),
+                                    currentSlideId: slideEvent.slideId || lastNav?.slideId || null,
+                                    indexv: slideEvent.indexv ?? lastNav?.indexv ?? 0,
+                                    currentInteraction: slideEvent.interaction
+                                };
+                            }
                             applySlideState(slideState, slideIndex);
                         }
                     }
@@ -749,14 +815,21 @@ export const editorMachine = setup({
             // If we were seeking, apply only the final state once
             if (isSeeking && lastSlideEvent) {
                 const slideIndex = recording.slides?.findIndex(s => s.id === lastSlideEvent.slideId) ?? -1;
-                if (slideIndex !== -1 || lastSlideEvent.type === 'slide_close') {
-                    const slideState = {
-                        isOpen: lastSlideEvent.type !== 'slide_close',
-                        isMaximized: !!lastSlideEvent.isMaximized,
-                        currentSlideId: lastSlideEvent.slideId || null
-                    };
-                    applySlideState(slideState, slideIndex);
-                }
+                // Find the most recent navigation event for this slide to ensure we seek to the correct state
+                const relevantEvents = slideEvents.slice(0, newLastIndex + 1).reverse();
+                const lastNav = relevantEvents.find(e =>
+                    e.slideId === lastSlideEvent!.slideId &&
+                    ['slide_open', 'slide_change', 'slide_maximize', 'slide_minimize', 'slide_close'].includes(e.type)
+                );
+
+                const slideState = {
+                    isOpen: (lastNav?.type || lastSlideEvent.type) !== 'slide_close',
+                    isMaximized: !!(lastSlideEvent.isMaximized ?? lastNav?.isMaximized),
+                    currentSlideId: lastSlideEvent.slideId || lastNav?.slideId || null,
+                    indexv: lastSlideEvent.indexv ?? lastNav?.indexv ?? 0,
+                    currentInteraction: lastSlideEvent.interaction
+                };
+                applySlideState(slideState, slideIndex);
             }
 
             if (newLastIndex !== lastAppliedSlideEventIndex) {
@@ -896,18 +969,21 @@ export const editorMachine = setup({
                     actions: 'storeAudioBlob',
                 },
                 SLIDE_EVENT: {
-                    actions: assign(({ context, event }) => {
-                        if (!context.session) return {};
-                        return {
-                            session: {
-                                ...context.session,
-                                slideEvents: [
-                                    ...context.session.slideEvents,
-                                    { ...event.event, timestamp: Date.now() - context.session.startedAt },
-                                ],
-                            },
-                        };
-                    }),
+                    actions: [
+                        assign(({ context, event }) => {
+                            if (!context.session) return {};
+                            return {
+                                session: {
+                                    ...context.session,
+                                    slideEvents: [
+                                        ...context.session.slideEvents,
+                                        { ...event.event, timestamp: Date.now() - context.session.startedAt },
+                                    ],
+                                },
+                            };
+                        }),
+                        'captureFrame'
+                    ],
                 },
                 PREVIEW_EVENT: {
                     actions: [

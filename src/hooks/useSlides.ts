@@ -1,20 +1,38 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import type { Slide, SlidePreviewState, SlideEvent } from '../types/slides';
+import type { Slide, SlidePreviewState, SlideEvent, SlideContentType } from '../types/slides';
 
 const SLIDES_STORAGE_KEY = 'next-editor-slides';
+
+// Type guard for Slide
+const isSlide = (item: unknown): item is Slide => {
+  if (typeof item !== 'object' || item === null) return false;
+  const obj = item as { [K in keyof Slide]?: unknown };
+  return (
+    typeof obj.id === 'string' &&
+    typeof obj.content === 'string' &&
+    typeof obj.order === 'number' &&
+    (obj.contentType === 'html' || obj.contentType === 'markdown' || obj.contentType === undefined)
+  );
+};
 
 // Load slides from localStorage
 const loadSlidesFromStorage = (): Slide[] => {
   try {
     const saved = localStorage.getItem(SLIDES_STORAGE_KEY);
     if (saved) {
-      const parsed = JSON.parse(saved);
+      const parsed: unknown = JSON.parse(saved);
       if (Array.isArray(parsed)) {
-        return parsed;
+        // Validate and migrate slides
+        return parsed
+          .filter(isSlide)
+          .map(slide => ({
+            ...slide,
+            contentType: slide.contentType ?? 'html' // Migrate old slides missing contentType
+          }));
       }
     }
   } catch (e) {
-    console.warn('Failed to load slides from localStorage:', e);
+    console.error('Failed to load slides from localStorage:', e);
   }
   return [];
 };
@@ -24,7 +42,7 @@ const saveSlidesToStorage = (slides: Slide[]): void => {
   try {
     localStorage.setItem(SLIDES_STORAGE_KEY, JSON.stringify(slides));
   } catch (e) {
-    console.warn('Failed to save slides to localStorage:', e);
+    console.error('Failed to save slides to localStorage:', e);
   }
 };
 
@@ -37,7 +55,8 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
   const [previewState, setPreviewState] = useState<SlidePreviewState>({
     isOpen: false,
     isMaximized: false,
-    currentSlideId: null
+    currentSlideId: null,
+    indexv: 0
   });
 
   // Use a ref for onSlideEvent to keep handleSlideEvent stable
@@ -54,10 +73,11 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     saveSlidesToStorage(slides);
   }, [slides]);
 
-  const addSlide = useCallback((imageUrl: string) => {
+  const addSlide = useCallback((content: string, contentType: SlideContentType) => {
     const newSlide: Slide = {
       id: Date.now().toString(),
-      imageUrl: imageUrl.trim(),
+      content: content.trim(),
+      contentType,
       order: slides.length,
     };
     setSlides(prev => [...prev, newSlide]);
@@ -109,7 +129,8 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
           return {
             ...prev,
             isOpen: true,
-            currentSlideId: event.slideId || prev.currentSlideId
+            currentSlideId: event.slideId || prev.currentSlideId,
+            indexv: event.indexv ?? 0
           };
         });
         break;
@@ -122,7 +143,8 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
             ...prev,
             isOpen: false,
             isMaximized: false,
-            currentSlideId: null
+            currentSlideId: null,
+            indexv: 0
           };
         });
         break;
@@ -142,6 +164,30 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
           return { ...prev, isMaximized: false };
         });
         break;
+      case 'slide_change':
+        setPreviewState(prev => {
+          const targetIndexv = event.indexv ?? 0;
+          if (prev.currentSlideId === (event.slideId || prev.currentSlideId) && prev.indexv === targetIndexv) {
+            return prev;
+          }
+          return {
+            ...prev,
+            currentSlideId: event.slideId || prev.currentSlideId,
+            indexv: targetIndexv
+          };
+        });
+        break;
+      case 'slide_interaction':
+        setPreviewState(prev => {
+          if (prev.currentInteraction === event.interaction) {
+            return prev;
+          }
+          return {
+            ...prev,
+            currentInteraction: event.interaction
+          };
+        });
+        break;
     }
   }, []);
 
@@ -151,7 +197,8 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     setPreviewState({
       isOpen: true,
       isMaximized: false,
-      currentSlideId: slides[0].id
+      currentSlideId: slides[0].id,
+      indexv: 0
     });
 
     // Emit open event after setting state
@@ -175,15 +222,17 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     setPreviewState({
       isOpen: false,
       isMaximized: false,
-      currentSlideId: null
+      currentSlideId: null,
+      indexv: 0
     });
   }, [previewState.isOpen, previewState.currentSlideId, handleSlideEvent]);
 
-  const goToSlide = useCallback((index: number) => {
+  const goToSlide = useCallback((index: number, indexv?: number) => {
     if (index >= 0 && index < slides.length) {
       setPreviewState(prev => ({
         ...prev,
-        currentSlideId: slides[index].id
+        currentSlideId: slides[index].id,
+        indexv: indexv ?? 0
       }));
     }
   }, [slides]);

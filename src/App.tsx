@@ -9,7 +9,6 @@ import { NextEditorProvider } from './contexts/NextEditorProvider.tsx';
 import { SlidesProvider } from './contexts/SlidesContext';
 import { useDragAndDropUrl } from './hooks/useDragAndDropUrl';
 import { useUrlQuery } from './hooks/useUrlQuery';
-import './App.css'
 import CursorComponent from './components/Cursor.tsx';
 
 function App() {
@@ -35,8 +34,8 @@ function AppContent() {
   const readOnly = urlParams.get('readOnly') === 'true';
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900 text-white overflow-hidden">
-      <div className="flex-1 overflow-hidden relative">
+    <div className="h-screen flex flex-col bg-slate-950 text-white overflow-hidden">
+      <div className="flex-1 relative overflow-hidden">
         <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
         <Preview />

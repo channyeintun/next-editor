@@ -47,16 +47,29 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     // to avoid double event recording during playback
 
     // Set the preview state directly to match the recorded state
-    if (slideState.isOpen !== slidesData.previewState.isOpen ||
-      slideState.isMaximized !== slidesData.previewState.isMaximized ||
-      slideState.currentSlideId !== slidesData.previewState.currentSlideId) {
+    slidesData.setPreviewState(prev => {
+      const nextIsOpen = slideState.isOpen;
+      const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
+      const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
+      const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
+      const nextInteraction = slideState.currentInteraction;
 
-      slidesData.setPreviewState({
-        isOpen: slideState.isOpen,
-        isMaximized: slideState.isMaximized,
-        currentSlideId: slideState.currentSlideId
-      });
-    }
+      if (nextIsOpen !== prev.isOpen ||
+        nextIsMaximized !== prev.isMaximized ||
+        nextSlideId !== prev.currentSlideId ||
+        nextIndexv !== prev.indexv ||
+        nextInteraction !== prev.currentInteraction) {
+
+        return {
+          isOpen: nextIsOpen,
+          isMaximized: nextIsMaximized,
+          currentSlideId: nextSlideId,
+          indexv: nextIndexv,
+          currentInteraction: nextInteraction
+        };
+      }
+      return prev;
+    });
 
     // Update slide index if needed
     if (slideState.isOpen && currentSlideIndex !== slidesData.currentSlideIndex) {
@@ -70,7 +83,7 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     }
   }, [registerSlideStateApplier, slideStateApplier]);
 
-  const slidesApplier = useCallback((slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => {
+  const slidesApplier = useCallback((slides: Array<{ id: string; content: string; contentType: 'html' | 'markdown'; name?: string; order: number }>) => {
     slidesData.setSlides(slides);
   }, [slidesData]);
 

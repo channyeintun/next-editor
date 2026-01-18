@@ -1,21 +1,28 @@
+export type SlideContentType = 'html' | 'markdown';
+
 export interface Slide {
   id: string;
-  imageUrl: string;
+  content: string;
+  contentType: SlideContentType;
   name?: string;
   order: number;
 }
 
 export interface SlidePreviewState {
   isOpen: boolean;
-  isMaximized: boolean;
-  currentSlideId: string | null;
+  isMaximized?: boolean;
+  currentSlideId?: string | null;
+  indexv?: number;
+  currentInteraction?: IframeInteractionEvent;
 }
 
 export interface SlideEvent {
-  type: 'slide_open' | 'slide_close' | 'slide_change' | 'slide_maximize' | 'slide_minimize';
+  type: 'slide_open' | 'slide_close' | 'slide_change' | 'slide_maximize' | 'slide_minimize' | 'slide_interaction';
   timestamp: number;
   slideId?: string;
   isMaximized?: boolean;
+  indexv?: number;
+  interaction?: IframeInteractionEvent;
 }
 
 /**

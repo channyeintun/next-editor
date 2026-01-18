@@ -1,5 +1,5 @@
 import type * as monaco from 'monaco-editor';
-import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState } from '../slides';
+import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from '../slides';
 import type { MouseCursorPosition, EditorFrame, Recording } from '../types';
 
 // ============================================================================
@@ -115,13 +115,13 @@ export interface EditorMachineContext {
     /** Callback to apply slide state during playback */
     applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
     /** Callback to apply slides data during playback */
-    applySlides?: (slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void;
+    applySlides?: (slides: Slide[]) => void;
     /** Callback to apply preview state during playback */
     applyPreviewState?: (previewState: PreviewState) => void;
     /** Callback to get slide state during recording */
     getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
     /** Callback to get slides data during recording */
-    getSlides?: () => Array<{ id: string; imageUrl: string; name?: string; order: number }>;
+    getSlides?: () => Slide[];
     /** Callback to get preview state during recording */
     getPreviewState?: () => PreviewState | null;
     /** Index of the last applied frame during playback */
@@ -317,8 +317,8 @@ export interface EditorMachineInput {
     onSlideEvent?: (event: SlideEvent) => void;
     getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
     applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
-    getSlides?: () => Array<{ id: string; imageUrl: string; name?: string; order: number }>;
-    applySlides?: (slides: Array<{ id: string; imageUrl: string; name?: string; order: number }>) => void;
+    getSlides?: () => Slide[];
+    applySlides?: (slides: Slide[]) => void;
     onPreviewEvent?: (event: PreviewEvent) => void;
     getPreviewState?: () => PreviewState | null;
     applyPreviewState?: (previewState: PreviewState) => void;
