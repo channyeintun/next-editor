@@ -498,9 +498,9 @@ export default function Preview() {
   const isSmall = size === 'small';
 
   const getSizeClasses = () => {
-    if (isLarge) return 'inset-4 md:inset-[5%] lg:inset-[10%] shadow-2xl border-black/10';
-    if (isMedium) return 'top-20 right-4 w-80 h-[28rem] shadow-lg border-gray-300';
-    return 'top-16 right-4 w-48 h-32 shadow-md border-gray-300 cursor-pointer';
+    if (isLarge) return 'shadow-2xl border-black/10 transition-shadow';
+    if (isMedium) return 'shadow-lg border-gray-300 transition-shadow';
+    return 'shadow-md border-gray-300 cursor-pointer transition-shadow';
   };
 
   const handleClick = () => {
@@ -538,6 +538,33 @@ export default function Preview() {
     mass: 1,
   };
 
+  const previewVariants = {
+    small: {
+      top: "4rem",
+      right: "1rem",
+      width: "12rem",
+      height: "8rem",
+      left: "auto",
+      bottom: "auto"
+    },
+    medium: {
+      top: "5rem",
+      right: "1rem",
+      width: "20rem",
+      height: "28rem",
+      left: "auto",
+      bottom: "auto"
+    },
+    large: {
+      top: "10%",
+      right: "10%",
+      bottom: "10%",
+      left: "10%",
+      width: "80%",
+      height: "80%"
+    }
+  };
+
   return (
     <>
       {/* Overlay for click-outside-to-minimize - only for large size */}
@@ -554,10 +581,12 @@ export default function Preview() {
       </AnimatePresence>
 
       <motion.div
-        layout
+        variants={previewVariants}
+        initial={false}
+        animate={size}
         transition={springTransition}
-        onLayoutAnimationStart={() => setIsTransitioning(true)}
-        onLayoutAnimationComplete={() => setIsTransitioning(false)}
+        onAnimationStart={() => setIsTransitioning(true)}
+        onAnimationComplete={() => setIsTransitioning(false)}
         className={`fixed bg-white rounded-xl z-40 overflow-hidden flex flex-col ${getSizeClasses()} ${isSmall ? 'hover:shadow-xl active:scale-95' : ''}`}
         onClick={(e) => {
           if (isSmall) {
