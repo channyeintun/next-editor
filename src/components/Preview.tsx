@@ -412,144 +412,12 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
     lastContentRef.current = content;
 
     const iframe = iframeRef.current;
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc) return;
-
-    // Detect content type
-    const isHtml = content.trim().startsWith('<!DOCTYPE') ||
-      content.trim().startsWith('<html') ||
-      (content.includes('<body>') || content.includes('<head>'));
-    const isCSS = content.includes('{') && content.includes('}') &&
-      (content.includes(':') || content.includes('/*'));
-    const isJS = !isHtml && !isCSS &&
-      (content.includes('function') || content.includes('const') ||
-        content.includes('let') || content.includes('var') ||
-        content.includes('console.log') || content.includes('=>'));
-
-    let htmlContent;
-
-    if (isHtml) {
-      // If it's HTML, inject it directly
-      htmlContent = content;
-    } else if (isCSS) {
-      // If it's CSS, create a preview with sample HTML
-      htmlContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-              ${content}
-            </style>
-          </head>
-          <body>
-            <h1>CSS Preview</h1>
-            <p>This is a paragraph to show your CSS styles.</p>
-            <div class="container">
-              <h2>Sample Content</h2>
-              <p>Your CSS styles are applied to this preview.</p>
-              <button>Sample Button</button>
-            </div>
-          </body>
-        </html>
-      `;
-    } else if (isJS) {
-      // If it's JavaScript, create a simple execution environment
-      htmlContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-              body {
-                font-family: Arial, sans-serif;
-                padding: 20px;
-                background: #f9f9f9;
-              }
-              .console {
-                background: #1e1e1e;
-                color: #00ff00;
-                padding: 10px;
-                border-radius: 4px;
-                font-family: monospace;
-                margin-top: 20px;
-                white-space: pre-wrap;
-              }
-            </style>
-          </head>
-          <body>
-            <h1>JavaScript Preview</h1>
-            <p>Your JavaScript code is running. Check the console output below:</p>
-            <div id="console" class="console">Console output will appear here...</div>
-            
-            <script>
-              // Override console.log to display in the page
-              const consoleDiv = document.getElementById('console');
-              const originalConsoleLog = console.log;
-              console.log = function(...args) {
-                const message = args.map(arg => 
-                  typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-                ).join(' ');
-                consoleDiv.textContent += message + '\\n';
-                originalConsoleLog.apply(console, args);
-              };
-              
-              // Clear console first
-              consoleDiv.textContent = '';
-              
-              try {
-                ${content}
-              } catch (error) {
-                console.log('Error: ' + error.message);
-              }
-            </script>
-          </body>
-        </html>
-      `;
-    } else {
-      // If it's not recognized, display as code
-      htmlContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-              body {
-                font-family: 'Monaco', 'Menlo', monospace;
-                font-size: 14px;
-                line-height: 1.5;
-                margin: 16px;
-                background: #1e1e1e;
-                color: #d4d4d4;
-              }
-              pre {
-                white-space: pre-wrap;
-                word-wrap: break-word;
-                margin: 0;
-              }
-            </style>
-          </head>
-          <body>
-            <pre>${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
-          </body>
-        </html>
-      `;
-    }
 
     try {
-      // Use modern DOM manipulation instead of deprecated document.write
-      doc.documentElement.innerHTML = htmlContent.replace(/^<!DOCTYPE html>\s*<html[^>]*>|<\/html>\s*$/gi, '');
-
-      // Re-attach interaction listeners after content update (they get destroyed when innerHTML is replaced)
-      if (setupInteractionListenersRef.current) {
-        cleanupListenersRef.current?.();
-        cleanupListenersRef.current = setupInteractionListenersRef.current();
-      }
+      // Use srcdoc with the content directly (single HTML entry support)
+      iframe.srcdoc = content;
     } catch (error) {
-      console.error(error);
+      console.error('Error updating iframe srcdoc:', error);
     }
   }, []);
 
@@ -711,7 +579,7 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
 
         <iframe
           ref={iframeRef}
-          className="w-full border-0 rounded-b-lg"
+          className="w-full border-0 rounded-b-lg bg-white"
           style={{ height: 'calc(100% - 48px)' }}
           title="Code Preview"
           sandbox="allow-scripts allow-same-origin"
