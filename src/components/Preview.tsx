@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type * as monaco from 'monaco-editor';
+import { motion, AnimatePresence, type Transition } from 'motion/react';
 import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import type { PreviewSize, PreviewState, PreviewEvent, IframeInteractionEvent } from '../types/slides';
 
-interface PreviewProps {
-  positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
-}
+
 
 // ============================================================================
 // XPath Utility
@@ -23,9 +22,12 @@ function getElementByXPath(doc: Document, xpath: string): Element | null {
   }
 }
 
-export default function Preview({ positioning = 'fixed' }: PreviewProps) {
+export default function Preview() {
   const [size, setSize] = useState<PreviewSize>('small');
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
   const lastContentRef = useRef<string>('');
   const scrollPositionRef = useRef<{ scrollTop: number; scrollLeft: number }>({ scrollTop: 0, scrollLeft: 0 });
   const disposableRef = useRef<monaco.IDisposable | null>(null);
@@ -491,26 +493,14 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
     };
   }, [editorRef, updateIframeContent]);
 
-  const getSizeClasses = () => {
-    switch (size) {
-      case 'small':
-        return 'top-16 right-4 w-48 h-32 origin-top-right';
-      case 'medium':
-        return 'top-20 right-4 w-80 h-96 origin-top-right';
-      case 'large':
-        return 'w-[800px] max-w-[90vw] h-[600px] max-h-[90vh] origin-center';
-    }
-  };
+  const isLarge = size === 'large';
+  const isMedium = size === 'medium';
+  const isSmall = size === 'small';
 
-  const getSizeStyles = () => {
-    if (size === 'large') {
-      return {
-        top: '50%',
-        right: '50%',
-        transform: 'translate(50%, -50%)'
-      };
-    }
-    return {};
+  const getSizeClasses = () => {
+    if (isLarge) return 'inset-4 md:inset-[5%] lg:inset-[10%] shadow-2xl border-black/10';
+    if (isMedium) return 'top-20 right-4 w-80 h-[28rem] shadow-lg border-gray-300';
+    return 'top-16 right-4 w-48 h-32 shadow-md border-gray-300 cursor-pointer';
   };
 
   const handleClick = () => {
@@ -531,60 +521,77 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
     emitPreviewEvent('preview_maximize', { newSize });
   };
 
+  const springTransition: Transition = {
+    type: 'spring',
+    stiffness: 260,
+    damping: 26,
+    mass: 1,
+  };
+
   return (
     <>
       {/* Overlay for click-outside-to-minimize - only for large size */}
-      {size === 'large' && (
-        <div
-          className="fixed inset-0 z-39"
-          onClick={handleMinimize}
-        />
-      )}
+      <AnimatePresence>
+        {isLarge && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-39 bg-black/10"
+            onClick={handleMinimize}
+          />
+        )}
+      </AnimatePresence>
 
-      <div
-        className={`${positioning} bg-white rounded shadow-lg z-40 transition-all duration-500 ease-in-out ${getSizeClasses()}`}
-        style={{
-          border: '1px solid #ccc',
-          ...getSizeStyles()
-        }}
+      <motion.div
+        layout
+        transition={springTransition}
+        onLayoutAnimationStart={() => setIsTransitioning(true)}
+        onLayoutAnimationComplete={() => setIsTransitioning(false)}
+        className={`fixed bg-white rounded-xl z-40 overflow-hidden flex flex-col ${getSizeClasses()} ${isSmall ? 'hover:shadow-xl active:scale-95' : ''}`}
         onClick={(e) => {
-          e.stopPropagation();
-          handleClick();
+          if (isSmall) {
+            e.stopPropagation();
+            handleClick();
+          }
         }}
       >
         {/* Browser-style header */}
-        <div className="flex items-center bg-gray-100 px-3 py-2 rounded-t-lg border-b">
+        <div className="flex items-center bg-gray-50/80 backdrop-blur-md px-3 py-2 border-b border-gray-200">
           {/* Window controls */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleMinimize();
               }}
-              className="w-3 h-3 rounded-full bg-yellow-400 hover:bg-yellow-500"
+              className="w-3 h-3 rounded-full bg-rose-400 hover:bg-rose-500 transition-colors flex items-center justify-center group"
               title="Minimize"
-            />
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-rose-900/20 opacity-0 group-hover:opacity-100" />
+            </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleMaximize();
               }}
-              className="w-3 h-3 rounded-full bg-green-400 hover:bg-green-500"
-              title={size === 'large' ? 'Medium Size' : 'Maximize'}
-            />
+              className="w-3 h-3 rounded-full bg-amber-400 hover:bg-amber-500 transition-colors flex items-center justify-center group"
+              title={isLarge ? 'Medium Size' : 'Maximize'}
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-900/20 opacity-0 group-hover:opacity-100" />
+            </button>
           </div>
-
-          <span className="text-sm font-medium text-gray-700 ml-4">Preview</span>
         </div>
 
-        <iframe
-          ref={iframeRef}
-          className="w-full border-0 rounded-b-lg bg-white"
-          style={{ height: 'calc(100% - 48px)' }}
-          title="Code Preview"
-          sandbox="allow-scripts allow-same-origin"
-        />
-      </div>
+        <div className="relative flex-1">
+          <iframe
+            ref={iframeRef}
+            className={`w-full h-full border-0 bg-white ${isTransitioning ? 'pointer-events-none' : ''}`}
+            title="Code Preview"
+            sandbox="allow-scripts allow-same-origin"
+          />
+        </div>
+      </motion.div>
     </>
   );
 }

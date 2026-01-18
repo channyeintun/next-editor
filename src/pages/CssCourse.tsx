@@ -215,7 +215,7 @@ const CssCourse: React.FC = () => {
               `}
             showImportExport={recordMode} />
         </div>
-        <Preview positioning="absolute" />
+        <Preview />
         <CursorComponent hasParent />
         <MediaControls recordMode={recordMode} positioning="absolute" />
 
