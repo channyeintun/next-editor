@@ -285,6 +285,13 @@ export type DeleteFileEvent = {
     path: string;
 };
 
+/** Rename a file */
+export type RenameFileEvent = {
+    type: 'RENAME_FILE';
+    oldPath: string;
+    newPath: string;
+};
+
 /** Audio chunk received */
 export type AudioChunkEvent = {
     type: 'CHUNK';
@@ -322,6 +329,7 @@ export type EditorMachineEvent =
     | AudioActorStartedEvent
     | StartEvent
     | StopEventSignal
+    | RenameFileEvent
     | ErrorEvent;
 
 // ============================================================================

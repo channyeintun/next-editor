@@ -157,6 +157,7 @@ export interface UseNextEditorReturn {
   switchFile: (path: string) => void;
   addFile: (path: string, content: string) => void;
   deleteFile: (path: string) => void;
+  renameFile: (oldPath: string, newPath: string) => void;
 
   // Recording Management
   loadRecording: (recording: Recording) => void;

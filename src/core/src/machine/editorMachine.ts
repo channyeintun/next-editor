@@ -953,6 +953,44 @@ export const editorMachine = setup({
                 'captureFrame',
             ],
         },
+        RENAME_FILE: {
+            actions: [
+                'syncActiveFileContent',
+                assign(({ context, event }) => {
+                    if (event.type !== 'RENAME_FILE') return {};
+                    const { oldPath, newPath } = event;
+                    const newFiles = { ...context.files };
+                    const content = newFiles[oldPath] || '';
+                    delete newFiles[oldPath];
+                    newFiles[newPath] = content;
+
+                    let activeFile = context.activeFile;
+                    if (activeFile === oldPath) {
+                        activeFile = newPath;
+                    }
+
+                    // Update Monaco model's _filePath if it exists
+                    const mWindow = (window as unknown as MonacoWindow);
+                    const targetModel = mWindow.monaco.editor.getModels().find(m => (m as ITrackedModel)._filePath === oldPath);
+                    if (targetModel) {
+                        (targetModel as ITrackedModel)._filePath = newPath;
+                    }
+
+                    return {
+                        files: newFiles,
+                        activeFile,
+                        ...(context.session ? {
+                            session: {
+                                ...context.session,
+                                files: newFiles,
+                                activeFile,
+                            }
+                        } : {})
+                    };
+                }),
+                'captureFrame',
+            ],
+        },
     },
     states: {
         idle: {

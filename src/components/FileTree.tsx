@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { File, FilePlus, Trash2, ChevronDown } from 'lucide-react';
+import { File, FilePlus, Trash2, ChevronDown, Edit2 } from 'lucide-react';
 import { useNextEditorContext } from '../hooks/useNextEditorContext';
 
 interface FileTreeProps {
@@ -13,12 +13,15 @@ const FileTree: React.FC<FileTreeProps> = ({ className = '' }) => {
         switchFile,
         addFile,
         deleteFile,
+        renameFile,
         isRecording,
         isPlaying
     } = useNextEditorContext();
 
     const [isNewFileFocused, setIsNewFileFocused] = useState(false);
     const [newFileName, setNewFileName] = useState('');
+    const [renamingPath, setRenamingPath] = useState<string | null>(null);
+    const [newName, setNewName] = useState('');
 
     const handleAddFile = () => {
         if (newFileName && !files[newFileName]) {
@@ -33,6 +36,20 @@ const FileTree: React.FC<FileTreeProps> = ({ className = '' }) => {
         if (Object.keys(files).length > 1) {
             deleteFile(path);
         }
+    };
+
+    const startRenaming = (e: React.MouseEvent, path: string) => {
+        e.stopPropagation();
+        setRenamingPath(path);
+        setNewName(path);
+    };
+
+    const handleRename = () => {
+        if (renamingPath && newName && newName !== renamingPath && !files[newName]) {
+            renameFile(renamingPath, newName);
+        }
+        setRenamingPath(null);
+        setNewName('');
     };
 
     const fileList = Object.keys(files).sort();
@@ -60,21 +77,58 @@ const FileTree: React.FC<FileTreeProps> = ({ className = '' }) => {
 
                 <div className="mt-1">
                     {fileList.map((path) => (
-                        <div
-                            key={path}
-                            onClick={() => switchFile(path)}
-                            className={`group flex items-center px-3 py-1 cursor-pointer transition-colors ${activeFile === path ? 'bg-indigo-600/30 text-indigo-300' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                                }`}
-                        >
-                            <File size={14} className="mr-2" />
-                            <span className="flex-1 text-sm truncate">{path}</span>
-                            <button
-                                onClick={(e) => handleDeleteFile(e, path)}
-                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-red-400 transition-all"
-                                title="Delete File"
-                            >
-                                <Trash2 size={12} />
-                            </button>
+                        <div key={path}>
+                            {renamingPath === path ? (
+                                <div className="px-3 py-1">
+                                    <div className="flex items-center bg-slate-800 rounded px-2 py-1 border border-indigo-500">
+                                        <File size={14} className="mr-2 text-indigo-400" />
+                                        <input
+                                            autoFocus
+                                            type="text"
+                                            value={newName}
+                                            onChange={(e) => setNewName(e.target.value)}
+                                            onBlur={handleRename}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleRename();
+                                                if (e.key === 'Escape') setRenamingPath(null);
+                                            }}
+                                            className="bg-transparent border-none outline-none text-sm text-slate-200 w-full"
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div
+                                    onClick={() => switchFile(path)}
+                                    onDoubleClick={(e) => startRenaming(e, path)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            startRenaming(e as unknown as React.MouseEvent, path);
+                                        }
+                                    }}
+                                    tabIndex={0}
+                                    className={`group flex items-center px-3 py-1 cursor-pointer transition-colors outline-none focus:bg-slate-800 ${activeFile === path ? 'bg-indigo-600/30 text-indigo-300' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                                        }`}
+                                >
+                                    <File size={14} className="mr-2" />
+                                    <span className="flex-1 text-sm truncate">{path}</span>
+                                    <div className="flex opacity-0 group-hover:opacity-100 transition-all">
+                                        <button
+                                            onClick={(e) => startRenaming(e, path)}
+                                            className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white mr-1"
+                                            title="Rename File"
+                                        >
+                                            <Edit2 size={12} />
+                                        </button>
+                                        <button
+                                            onClick={(e) => handleDeleteFile(e, path)}
+                                            className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-red-400"
+                                            title="Delete File"
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>

@@ -75,6 +75,10 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
     send({ type: 'DELETE_FILE', path });
   }, [send]);
 
+  const renameFile = useCallback((oldPath: string, newPath: string) => {
+    send({ type: 'RENAME_FILE', oldPath, newPath });
+  }, [send]);
+
   const loadRecording = useCallback((recording: Recording) => {
     send({ type: 'LOAD_RECORDING', recording });
   }, [send]);
@@ -221,6 +225,7 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
     switchFile,
     addFile,
     deleteFile,
+    renameFile,
     loadRecording,
     clearRecording,
 

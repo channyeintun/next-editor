@@ -38,6 +38,7 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
   const nextEditorContext = useNextEditorContext();
   const { editorRef, handlePreviewEvent, isRecording, files, activeFile } = nextEditorContext;
 
+  const isUpdatingRef = useRef(false);
   const fileUrlsRef = useRef<Record<string, string>>({});
   const fileContentsRef = useRef<Record<string, string>>({});
 
@@ -75,26 +76,43 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
 
+    const resolvePath = (path: string) => {
+      // Normalize path: strip leading ./ and /
+      let normalized = path;
+      if (normalized.startsWith('./')) normalized = normalized.substring(2);
+      if (normalized.startsWith('/')) normalized = normalized.substring(1);
+      return normalized;
+    };
+
     // Handle relative references
     doc.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
       const href = link.getAttribute('href');
-      if (href && consolidatedFiles[href]) {
-        link.setAttribute('href', getFileUrl(href, consolidatedFiles[href]));
+      if (href) {
+        const normalized = resolvePath(href);
+        if (consolidatedFiles[normalized]) {
+          link.setAttribute('href', getFileUrl(normalized, consolidatedFiles[normalized]));
+        }
       }
     });
 
     doc.querySelectorAll('script[src]').forEach(script => {
       const src = script.getAttribute('src');
-      if (src && consolidatedFiles[src]) {
-        script.setAttribute('src', getFileUrl(src, consolidatedFiles[src]));
+      if (src) {
+        const normalized = resolvePath(src);
+        if (consolidatedFiles[normalized]) {
+          script.setAttribute('src', getFileUrl(normalized, consolidatedFiles[normalized]));
+        }
       }
     });
 
-    // Handle images if they are in base64/data URLs in our files record
+    // Handle images
     doc.querySelectorAll('img[src]').forEach(img => {
       const src = img.getAttribute('src');
-      if (src && consolidatedFiles[src]) {
-        img.setAttribute('src', getFileUrl(src, consolidatedFiles[src]));
+      if (src) {
+        const normalized = resolvePath(src);
+        if (consolidatedFiles[normalized]) {
+          img.setAttribute('src', getFileUrl(normalized, consolidatedFiles[normalized]));
+        }
       }
     });
 
@@ -468,7 +486,8 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
   }, [isRecording, emitPreviewEvent, size]);
 
   const updateIframeContent = useCallback((contentOverride?: string) => {
-    if (!iframeRef.current) return;
+    if (!iframeRef.current || isUpdatingRef.current) return;
+    isUpdatingRef.current = true;
 
     const consolidatedFiles = { ...files };
     if (editorRef.current && activeFile) {
@@ -590,8 +609,10 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
     }
 
     try {
-      // Use modern DOM manipulation instead of deprecated document.write
-      doc.documentElement.innerHTML = htmlContent.replace(/^<!DOCTYPE html>\s*<html[^>]*>|<\/html>\s*$/gi, '');
+      // Use doc.write to ensure scripts execute
+      doc.open();
+      doc.write(htmlContent);
+      doc.close();
 
       // Re-attach interaction listeners after content update
       if (setupInteractionListenersRef.current) {
@@ -600,6 +621,8 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
       }
     } catch (error) {
       console.error(error);
+    } finally {
+      isUpdatingRef.current = false;
     }
   }, [files, activeFile, editorRef, resolveReferences]);
 
@@ -644,19 +667,23 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
     return () => clearTimeout(timer);
   }, [size, editorRef, updateIframeContent, activeFile, files]);
 
-  // Also ensure iframe loads properly
+  // Also ensure iframe loads properly - only initial load
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    const handleIframeLoad = () => {
-      updateIframeContent();
+    let initialLoadDone = false;
+    const handleInitialLoad = () => {
+      if (!initialLoadDone) {
+        initialLoadDone = true;
+        updateIframeContent();
+      }
     };
 
-    iframe.addEventListener('load', handleIframeLoad);
+    iframe.addEventListener('load', handleInitialLoad);
 
     return () => {
-      iframe.removeEventListener('load', handleIframeLoad);
+      iframe.removeEventListener('load', handleInitialLoad);
     };
   }, [editorRef, updateIframeContent, activeFile, files]);
 
@@ -751,7 +778,7 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
           className="w-full border-0 rounded-b-lg"
           style={{ height: 'calc(100% - 48px)' }}
           title="Code Preview"
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts allow-same-origin allow-modals allow-popups allow-forms"
         />
       </div>
     </>
