@@ -9,7 +9,6 @@ import { NextEditorProvider } from './contexts/NextEditorProvider.tsx';
 import { SlidesProvider } from './contexts/SlidesContext';
 import { useDragAndDropUrl } from './hooks/useDragAndDropUrl';
 import { useUrlQuery } from './hooks/useUrlQuery';
-import CssCourse from './pages/CssCourse';
 import './App.css'
 import CursorComponent from './components/Cursor.tsx';
 
@@ -19,7 +18,6 @@ function App() {
       <SlidesProvider>
         <Routes>
           <Route path="/" element={<AppContent />} />
-          <Route path="/css-course" element={<CssCourse />} />
         </Routes>
       </SlidesProvider>
     </NextEditorProvider>

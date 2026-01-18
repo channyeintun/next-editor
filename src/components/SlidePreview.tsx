@@ -26,7 +26,7 @@ export default function SlidePreview({
   positioning = 'fixed'
 }: SlidePreviewProps) {
   const { isPlaying } = useNextEditorContext();
-  // Check record mode from sessionStorage (same pattern as CssCourse page)
+  // Check record mode from sessionStorage
   const recordMode = sessionStorage.getItem('recordMode') === 'true';
 
   // Use isMaximized prop to determine size, but keep internal state for immediate updates
