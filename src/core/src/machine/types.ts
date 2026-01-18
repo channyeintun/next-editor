@@ -50,6 +50,10 @@ export interface TimelineState {
 export interface RecordingSession {
     /** When recording started (performance.now()) */
     startedAt: number;
+    /** Current active file path */
+    activeFile: string;
+    /** Current files and their content */
+    files: Record<string, string>;
     /** Collected frames during recording */
     frames: EditorFrame[];
     /** Collected slide events during recording */
@@ -134,6 +138,10 @@ export interface EditorMachineContext {
     lastAppliedPreviewState?: PreviewState;
     /** Last time (performance.now()) audio was synced */
     lastSyncTime?: number;
+    /** Current active file path */
+    activeFile: string;
+    /** Current files and their content */
+    files: Record<string, string>;
 }
 
 // ============================================================================
@@ -169,6 +177,12 @@ export type RecordingLoadedEvent = {
 /** Recording load failed */
 export type LoadFailedEvent = {
     type: 'LOAD_FAILED';
+    error: string;
+};
+
+/** Generic error event */
+export type ErrorEvent = {
+    type: 'ERROR';
     error: string;
 };
 
@@ -252,6 +266,25 @@ export type PreviewEventOccurred = {
     event: PreviewEvent;
 };
 
+/** Switch active file */
+export type SwitchFileEvent = {
+    type: 'SWITCH_FILE';
+    activeFile: string;
+};
+
+/** Add a new file */
+export type AddFileEvent = {
+    type: 'ADD_FILE';
+    path: string;
+    content: string;
+};
+
+/** Delete a file */
+export type DeleteFileEvent = {
+    type: 'DELETE_FILE';
+    path: string;
+};
+
 /** Audio chunk received */
 export type AudioChunkEvent = {
     type: 'CHUNK';
@@ -281,11 +314,15 @@ export type EditorMachineEvent =
     | SetEditorRefEvent
     | SlideEventOccurred
     | PreviewEventOccurred
+    | SwitchFileEvent
+    | AddFileEvent
+    | DeleteFileEvent
     | AudioChunkEvent
     | AudioActorStoppedEvent
     | AudioActorStartedEvent
     | StartEvent
-    | StopEventSignal;
+    | StopEventSignal
+    | ErrorEvent;
 
 // ============================================================================
 // Machine Input (Configuration)
@@ -370,4 +407,6 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     getSlides: input.getSlides,
     applyPreviewState: input.applyPreviewState,
     getPreviewState: input.getPreviewState,
+    activeFile: 'index.html',
+    files: { 'index.html': '<html>\n    <h1>Hello world</h1>\n</html>' },
 });

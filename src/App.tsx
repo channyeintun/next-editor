@@ -5,6 +5,7 @@ import DragDropOverlay from './components/DragDropOverlay';
 import Preview from './components/Preview.tsx';
 import SlidePanel from './components/SlidePanel';
 import FloatingPlayButton from './components/FloatingPlayButton';
+import FileTree from './components/FileTree';
 import { NextEditorProvider } from './contexts/NextEditorProvider.tsx';
 import { SlidesProvider } from './contexts/SlidesContext';
 import { useDragAndDropUrl } from './hooks/useDragAndDropUrl';
@@ -38,11 +39,14 @@ function AppContent() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white overflow-hidden">
-      <div className="flex-1 overflow-hidden relative">
-        <CodeEditor showImportExport={!readOnly} />
-        <CursorComponent />
-        <Preview />
-        <SlidePanel />
+      <div className="flex-1 overflow-hidden relative flex">
+        <FileTree />
+        <div className="flex-1 relative overflow-hidden">
+          <CodeEditor showImportExport={!readOnly} />
+          <CursorComponent />
+          <Preview />
+          <SlidePanel />
+        </div>
       </div>
 
       <MediaControls recordMode={!readOnly} />

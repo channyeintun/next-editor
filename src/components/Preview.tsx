@@ -36,7 +36,70 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
   const isRecordingRef = useRef<boolean>(false);
   const handlePreviewEventRef = useRef<typeof handlePreviewEvent | null>(null);
   const nextEditorContext = useNextEditorContext();
-  const { editorRef, handlePreviewEvent, isRecording } = nextEditorContext;
+  const { editorRef, handlePreviewEvent, isRecording, files, activeFile } = nextEditorContext;
+
+  const fileUrlsRef = useRef<Record<string, string>>({});
+  const fileContentsRef = useRef<Record<string, string>>({});
+
+  // Cleanup Blob URLs on unmount
+  useEffect(() => {
+    const currentFileUrls = fileUrlsRef.current;
+    return () => {
+      Object.values(currentFileUrls).forEach(url => URL.revokeObjectURL(url));
+    };
+  }, []);
+
+  const getFileUrl = useCallback((path: string, content: string) => {
+    if (fileContentsRef.current[path] === content && fileUrlsRef.current[path]) {
+      return fileUrlsRef.current[path];
+    }
+
+    if (fileUrlsRef.current[path]) {
+      URL.revokeObjectURL(fileUrlsRef.current[path]);
+    }
+
+    let type = 'text/plain';
+    if (path.endsWith('.css')) type = 'text/css';
+    else if (path.endsWith('.js')) type = 'application/javascript';
+    else if (path.endsWith('.html')) type = 'text/html';
+
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+
+    fileContentsRef.current[path] = content;
+    fileUrlsRef.current[path] = url;
+    return url;
+  }, []);
+
+  const resolveReferences = useCallback((html: string, consolidatedFiles: Record<string, string>) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    // Handle relative references
+    doc.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+      const href = link.getAttribute('href');
+      if (href && consolidatedFiles[href]) {
+        link.setAttribute('href', getFileUrl(href, consolidatedFiles[href]));
+      }
+    });
+
+    doc.querySelectorAll('script[src]').forEach(script => {
+      const src = script.getAttribute('src');
+      if (src && consolidatedFiles[src]) {
+        script.setAttribute('src', getFileUrl(src, consolidatedFiles[src]));
+      }
+    });
+
+    // Handle images if they are in base64/data URLs in our files record
+    doc.querySelectorAll('img[src]').forEach(img => {
+      const src = img.getAttribute('src');
+      if (src && consolidatedFiles[src]) {
+        img.setAttribute('src', getFileUrl(src, consolidatedFiles[src]));
+      }
+    });
+
+    return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+  }, [getFileUrl]);
 
   // Keep refs updated synchronously
   isRecordingRef.current = isRecording;
@@ -404,33 +467,51 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
     };
   }, [isRecording, emitPreviewEvent, size]);
 
-  const updateIframeContent = useCallback((content: string) => {
+  const updateIframeContent = useCallback((contentOverride?: string) => {
     if (!iframeRef.current) return;
 
-    // Skip update if content hasn't changed
-    if (lastContentRef.current === content) return;
-    lastContentRef.current = content;
+    const consolidatedFiles = { ...files };
+    if (editorRef.current && activeFile) {
+      consolidatedFiles[activeFile] = contentOverride !== undefined ? contentOverride : editorRef.current.getValue();
+    }
+
+    // Skip update if nothing changed
+    const currentActiveContent = consolidatedFiles[activeFile] || '';
+    if (lastContentRef.current === currentActiveContent && !contentOverride) {
+      // Potentially other files changed, but we only re-render if the Entry File or Active File content changed
+      // For now, let's keep it simple and check if any file changed
+    }
+    lastContentRef.current = currentActiveContent;
 
     const iframe = iframeRef.current;
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) return;
 
+    // Determine the entry point: prefer index.html if it exists, otherwise use activeFile
+    let entryFile = activeFile;
+    if (consolidatedFiles['index.html']) {
+      entryFile = 'index.html';
+    }
+
+    const content = consolidatedFiles[entryFile] || '';
+    const extension = entryFile.split('.').pop()?.toLowerCase();
+
     // Detect content type
-    const isHtml = content.trim().startsWith('<!DOCTYPE') ||
+    const isHtml = extension === 'html' || content.trim().startsWith('<!DOCTYPE') ||
       content.trim().startsWith('<html') ||
       (content.includes('<body>') || content.includes('<head>'));
-    const isCSS = content.includes('{') && content.includes('}') &&
-      (content.includes(':') || content.includes('/*'));
-    const isJS = !isHtml && !isCSS &&
+    const isCSS = !isHtml && (extension === 'css' || (content.includes('{') && content.includes('}') &&
+      (content.includes(':') || content.includes('/*'))));
+    const isJS = !isHtml && !isCSS && (extension === 'js' ||
       (content.includes('function') || content.includes('const') ||
         content.includes('let') || content.includes('var') ||
-        content.includes('console.log') || content.includes('=>'));
+        content.includes('console.log') || content.includes('=>')));
 
     let htmlContent;
 
     if (isHtml) {
-      // If it's HTML, inject it directly
-      htmlContent = content;
+      // If it's HTML, resolve references and inject
+      htmlContent = resolveReferences(content, consolidatedFiles);
     } else if (isCSS) {
       // If it's CSS, create a preview with sample HTML
       htmlContent = `
@@ -444,7 +525,7 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
             </style>
           </head>
           <body>
-            <h1>CSS Preview</h1>
+            <h1>CSS Preview (${entryFile})</h1>
             <p>This is a paragraph to show your CSS styles.</p>
             <div class="container">
               <h2>Sample Content</h2>
@@ -463,42 +544,23 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-              body {
-                font-family: Arial, sans-serif;
-                padding: 20px;
-                background: #f9f9f9;
-              }
-              .console {
-                background: #1e1e1e;
-                color: #00ff00;
-                padding: 10px;
-                border-radius: 4px;
-                font-family: monospace;
-                margin-top: 20px;
-                white-space: pre-wrap;
-              }
+              body { font-family: sans-serif; padding: 20px; background: #f9f9f9; }
+              .console { background: #1e1e1e; color: #00ff00; padding: 10px; border-radius: 4px; font-family: monospace; margin-top: 20px; white-space: pre-wrap; }
             </style>
           </head>
           <body>
-            <h1>JavaScript Preview</h1>
+            <h1>JavaScript Preview (${entryFile})</h1>
             <p>Your JavaScript code is running. Check the console output below:</p>
             <div id="console" class="console">Console output will appear here...</div>
-            
             <script>
-              // Override console.log to display in the page
               const consoleDiv = document.getElementById('console');
               const originalConsoleLog = console.log;
               console.log = function(...args) {
-                const message = args.map(arg => 
-                  typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-                ).join(' ');
+                const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' ');
                 consoleDiv.textContent += message + '\\n';
                 originalConsoleLog.apply(console, args);
               };
-              
-              // Clear console first
               consoleDiv.textContent = '';
-              
               try {
                 ${content}
               } catch (error) {
@@ -515,21 +577,9 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
         <html>
           <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-              body {
-                font-family: 'Monaco', 'Menlo', monospace;
-                font-size: 14px;
-                line-height: 1.5;
-                margin: 16px;
-                background: #1e1e1e;
-                color: #d4d4d4;
-              }
-              pre {
-                white-space: pre-wrap;
-                word-wrap: break-word;
-                margin: 0;
-              }
+              body { font-family: monospace; font-size: 14px; line-height: 1.5; margin: 16px; background: #1e1e1e; color: #d4d4d4; }
+              pre { white-space: pre-wrap; word-wrap: break-word; margin: 0; }
             </style>
           </head>
           <body>
@@ -543,7 +593,7 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
       // Use modern DOM manipulation instead of deprecated document.write
       doc.documentElement.innerHTML = htmlContent.replace(/^<!DOCTYPE html>\s*<html[^>]*>|<\/html>\s*$/gi, '');
 
-      // Re-attach interaction listeners after content update (they get destroyed when innerHTML is replaced)
+      // Re-attach interaction listeners after content update
       if (setupInteractionListenersRef.current) {
         cleanupListenersRef.current?.();
         cleanupListenersRef.current = setupInteractionListenersRef.current();
@@ -551,32 +601,24 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
     } catch (error) {
       console.error(error);
     }
-  }, []);
+  }, [files, activeFile, editorRef, resolveReferences]);
 
   useEffect(() => {
-    const checkForEditor = () => {
-      const editor = editorRef.current;
-      if (!editor) {
-        setTimeout(checkForEditor, 100);
-        return;
-      }
+    const editor = editorRef.current;
+    if (!editor) return;
 
-      const updateContent = () => {
-        const content = editor.getValue();
-        updateIframeContent(content);
-      };
-
-      // Initial update
-      updateContent();
-
-      // Listen for changes
-      const disposable = editor.onDidChangeModelContent(updateContent);
-
-      // Store the disposable in a ref so we can clean it up later
-      disposableRef.current = disposable;
+    const updateContent = () => {
+      updateIframeContent();
     };
 
-    checkForEditor();
+    // Initial update
+    updateContent();
+
+    // Listen for changes
+    const disposable = editor.onDidChangeModelContent(updateContent);
+
+    // Store the disposable in a ref so we can clean it up later
+    disposableRef.current = disposable;
 
     // Cleanup
     return () => {
@@ -585,7 +627,7 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
         disposableRef.current = null;
       }
     };
-  }, [editorRef, updateIframeContent]);
+  }, [editorRef, updateIframeContent, activeFile, files]);
 
   // Update content when iframe becomes visible or size changes
   useEffect(() => {
@@ -596,12 +638,11 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
 
     // Small delay to ensure iframe is fully rendered
     const timer = setTimeout(() => {
-      const content = editor.getValue();
-      updateIframeContent(content);
+      updateIframeContent();
     }, 50);
 
     return () => clearTimeout(timer);
-  }, [size, editorRef, updateIframeContent]);
+  }, [size, editorRef, updateIframeContent, activeFile, files]);
 
   // Also ensure iframe loads properly
   useEffect(() => {
@@ -609,11 +650,7 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
     if (!iframe) return;
 
     const handleIframeLoad = () => {
-      const editor = editorRef.current;
-      if (editor) {
-        const content = editor.getValue();
-        updateIframeContent(content);
-      }
+      updateIframeContent();
     };
 
     iframe.addEventListener('load', handleIframeLoad);
@@ -621,7 +658,7 @@ export default function Preview({ positioning = 'fixed' }: PreviewProps) {
     return () => {
       iframe.removeEventListener('load', handleIframeLoad);
     };
-  }, [editorRef, updateIframeContent]);
+  }, [editorRef, updateIframeContent, activeFile, files]);
 
   const getSizeClasses = () => {
     switch (size) {

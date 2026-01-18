@@ -322,6 +322,17 @@ export function createFrameDelta(
         delta.previewState = next.state.previewState;
     }
 
+    // New multi-file fields
+    if (prev.state.activeFile !== next.state.activeFile) {
+        delta.activeFile = next.state.activeFile;
+    }
+
+    // Only include files if the structure changed (e.g. addition/deletion)
+    // We don't use this for content changes, which are handled by contentDelta
+    if (JSON.stringify(prev.state.files) !== JSON.stringify(next.state.files)) {
+        delta.files = next.state.files;
+    }
+
     // ViewState is complex - include if exists and differs (simple reference check)
     if (next.state.viewState && next.state.viewState !== prev.state.viewState) {
         delta.viewState = next.state.viewState;
@@ -352,6 +363,8 @@ export function applyFrameDelta(
     return {
         timestamp: delta.timestamp,
         state: {
+            activeFile: delta.activeFile !== undefined ? delta.activeFile : base.state.activeFile,
+            files: delta.files !== undefined ? delta.files : base.state.files,
             content: newContent,
             position: newPosition as monaco.Position,
             selection: newSelection,

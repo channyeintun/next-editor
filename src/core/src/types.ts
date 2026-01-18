@@ -25,6 +25,8 @@ export interface MouseCursorPosition {
 export interface EditorFrame {
   timestamp: number;
   state: {
+    activeFile: string;
+    files: Record<string, string>;
     content: string;
     selection: monaco.Selection;
     position: monaco.Position; // Text caret position
@@ -104,6 +106,8 @@ export interface UseNextEditorConfig {
  * Editor state for external manipulation
  */
 export interface EditorState {
+  activeFile: string;
+  files: Record<string, string>;
   content: string;
   selection: monaco.Selection;
   position: monaco.Position;
@@ -136,6 +140,8 @@ export interface UseNextEditorReturn {
   currentRecording: Recording | null;
   currentCursor: MouseCursorPosition | null;
   actualDuration: number;
+  activeFile: string;
+  files: Record<string, string>;
 
   // Recording Controls
   startRecording: () => void;
@@ -148,6 +154,9 @@ export interface UseNextEditorReturn {
   seekTo: (time: number) => void;
   setPlaybackSpeed: (speed: number) => void;
   setVolume: (volume: number) => void;
+  switchFile: (path: string) => void;
+  addFile: (path: string, content: string) => void;
+  deleteFile: (path: string) => void;
 
   // Recording Management
   loadRecording: (recording: Recording) => void;

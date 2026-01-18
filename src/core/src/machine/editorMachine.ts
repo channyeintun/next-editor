@@ -1,13 +1,28 @@
 import { setup, assign, spawnChild, stopChild, fromCallback, enqueueActions, fromPromise } from 'xstate';
 import type * as monaco from 'monaco-editor';
-import type {
-    EditorMachineContext,
-    EditorMachineEvent,
-    EditorMachineInput,
-    RecordingSession,
+import {
+    createInitialContext,
+    type EditorMachineContext,
+    type EditorMachineEvent,
+    type EditorMachineInput,
+    type RecordingSession,
 } from './types';
 import type { EditorFrame, Recording } from '../types';
 import type { Keyframe } from '../utils/deltaTypes';
+
+/**
+ * Extended model type to track file paths
+ */
+interface ITrackedModel extends monaco.editor.ITextModel {
+    _filePath?: string;
+}
+
+/**
+ * Extended window type for Monaco access
+ */
+interface MonacoWindow extends Window {
+    monaco: typeof monaco;
+}
 import {
     compressFrames,
     reconstructFrameAtIndex,
@@ -39,7 +54,35 @@ const applyFrameState = (
     let updatedDecorations = cursorDecorations;
 
     try {
-        // Apply content changes
+        // Handle file switch if activeFile changed or model doesn't match
+        const model = editor.getModel() as ITrackedModel | null;
+        const currentPath = model?._filePath || '';
+
+        if (frame.state.activeFile !== currentPath) {
+            const mWindow = (window as unknown as MonacoWindow);
+            let targetModel = mWindow.monaco.editor.getModels().find(m => (m as ITrackedModel)._filePath === frame.state.activeFile);
+
+            if (!targetModel) {
+                // If model doesn't exist, create it from files state
+                const content = frame.state.files[frame.state.activeFile] || '';
+                const extension = frame.state.activeFile.split('.').pop() || '';
+                const language = extension === 'html' ? 'html' : (extension === 'css' ? 'css' : 'javascript');
+                targetModel = mWindow.monaco.editor.createModel(content, language);
+                (targetModel as ITrackedModel)._filePath = frame.state.activeFile;
+            } else {
+                // Ensure content is correct if it's a keyframe or we're seeking
+                // In deltas, we rely on applyContentDiff later
+                // But if the model was just switched, we might want to ensure it's up to date
+                const targetContent = frame.state.files[frame.state.activeFile] || '';
+                if (targetModel.getValue() !== targetContent && isPlaying) {
+                    // For playback, we might need a hard set if it's far off
+                    // applyContentDiff handles the minimal update
+                }
+            }
+            editor.setModel(targetModel);
+        }
+
+        // Apply content changes to the active model
         applyContentDiff(editor, frame.state.content);
 
         // Apply position and selection
@@ -55,7 +98,7 @@ const applyFrameState = (
                 currentSelections.forEach((selection) => {
                     const cursorPos = selection.getPosition();
                     newDecorations.push({
-                        range: new (window as unknown as { monaco: typeof monaco }).monaco.Range(
+                        range: new (window as unknown as MonacoWindow).monaco.Range(
                             cursorPos.lineNumber,
                             cursorPos.column,
                             cursorPos.lineNumber,
@@ -102,6 +145,8 @@ const createFrame = (
     editor: monaco.editor.IStandaloneCodeEditor,
     timestamp: number,
     mouseCursor: { x: number; y: number; visible: boolean },
+    activeFile: string,
+    files: Record<string, string>,
     getSlideState?: EditorMachineInput['getSlideState'],
     getPreviewState?: EditorMachineInput['getPreviewState']
 ): EditorFrame => {
@@ -112,9 +157,14 @@ const createFrame = (
     const slideState = getSlideState?.();
     const previewState = getPreviewState?.();
 
+    // Update the content of the active file in the files map
+    const updatedFiles = { ...files, [activeFile]: content };
+
     return {
         timestamp,
         state: {
+            activeFile,
+            files: updatedFiles,
             content,
             selection: selection || {
                 startLineNumber: 1,
@@ -305,6 +355,8 @@ export const editorMachine = setup({
         initRecordingSession: assign(() => ({
             session: {
                 startedAt: Date.now(),
+                activeFile: 'index.html',
+                files: { 'index.html': '<html>\n    <h1>Hello world</h1>\n</html>' },
                 frames: [],
                 slideEvents: [],
                 previewEvents: [],
@@ -320,10 +372,12 @@ export const editorMachine = setup({
             const lastMousePosition = session.lastMousePosition || { x: 0, y: 0, visible: false };
 
             const frame = editor
-                ? createFrame(editor, 0, lastMousePosition, context.getSlideState, context.getPreviewState)
+                ? createFrame(editor, 0, lastMousePosition, session.activeFile, session.files, context.getSlideState, context.getPreviewState)
                 : {
                     timestamp: 0,
                     state: {
+                        activeFile: session.activeFile,
+                        files: session.files,
                         content: '',
                         selection: {
                             startLineNumber: 1,
@@ -366,6 +420,8 @@ export const editorMachine = setup({
                     ...mousePosition,
                     visible: isMouseMovement ? true : mousePosition.visible,
                 },
+                context.session.activeFile,
+                context.session.files,
                 context.getSlideState,
                 context.getPreviewState
             );
@@ -374,6 +430,7 @@ export const editorMachine = setup({
                 session: {
                     ...context.session,
                     frames: [...context.session.frames, frame],
+                    files: frame.state.files,
                     lastMousePosition: mousePosition,
                 },
                 currentFrame: frame,
@@ -748,7 +805,7 @@ export const editorMachine = setup({
 
             // If we were seeking, apply only the final state once
             if (isSeeking && lastSlideEvent) {
-                const slideIndex = recording.slides?.findIndex(s => s.id === lastSlideEvent.slideId) ?? -1;
+                const slideIndex = (recording.slides as Array<{ id: string }> | undefined)?.findIndex(s => s.id === lastSlideEvent.slideId) ?? -1;
                 if (slideIndex !== -1 || lastSlideEvent.type === 'slide_close') {
                     const slideState = {
                         isOpen: lastSlideEvent.type !== 'slide_close',
@@ -767,54 +824,134 @@ export const editorMachine = setup({
 
             return {};
         }),
+        switchEditorModel: ({ context }) => {
+            const editor = context.editorRefs.editor;
+            if (!editor) return;
+
+            const mWindow = (window as unknown as MonacoWindow);
+            let targetModel = mWindow.monaco.editor.getModels().find(m => (m as ITrackedModel)._filePath === context.activeFile);
+
+            if (!targetModel) {
+                const content = context.files[context.activeFile] || '';
+                const extension = context.activeFile.split('.').pop() || '';
+                const language = extension === 'html' ? 'html' : (extension === 'css' ? 'css' : 'javascript');
+                targetModel = mWindow.monaco.editor.createModel(content, language);
+                (targetModel as ITrackedModel)._filePath = context.activeFile;
+            }
+            editor.setModel(targetModel);
+        },
+        syncActiveFileContent: assign(({ context }) => {
+            const editor = context.editorRefs.editor;
+            if (!editor || !context.activeFile) return {};
+
+            const content = editor.getValue();
+            const newFiles = {
+                ...context.files,
+                [context.activeFile]: content,
+            };
+
+            return {
+                files: newFiles,
+                ...(context.session ? {
+                    session: {
+                        ...context.session,
+                        files: {
+                            ...context.session.files,
+                            [context.activeFile]: content,
+                        },
+                    }
+                } : {})
+            };
+        }),
     },
 
 }).createMachine({
     id: 'editor',
-    context: ({ input }) => ({
-        timeline: {
-            currentTime: 0,
-            duration: 0,
-            speed: input.defaultPlaybackSpeed ?? 1,
-            volume: 1,
-            startedAt: 0,
-            pausedDuration: 0,
-            pausedAt: 0,
-        },
-        session: null,
-        recording: null,
-        currentFrame: null,
-        audio: {
-            blob: null,
-            element: null,
-            isRecording: false,
-            mediaRecorder: null,
-            chunks: [],
-            mimeType: '',
-        },
-        editorRefs: {
-            editor: input.editorRef.current,
-            cursorDecorations: [],
-        },
-        enableAudioRecording: input.enableAudioRecording ?? false,
-        pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
-        animationFrameId: null,
-        error: null,
-        lastAppliedFrameIndex: -1,
-        lastAppliedPreviewEventIndex: -1,
-        lastAppliedSlideEventIndex: -1,
-        applySlideState: input.applySlideState,
-        applySlides: input.applySlides,
-        getSlideState: input.getSlideState,
-        getSlides: input.getSlides,
-        applyPreviewState: input.applyPreviewState,
-        getPreviewState: input.getPreviewState,
-    }),
+    context: ({ input }) => createInitialContext(input),
 
     initial: 'idle',
     on: {
         SET_EDITOR_REF: {
-            actions: 'setEditorRef',
+            actions: [
+                assign(({ context, event }) => {
+                    if (event.type !== 'SET_EDITOR_REF') return {};
+                    return {
+                        editorRefs: {
+                            ...context.editorRefs,
+                            editor: event.editor,
+                        }
+                    };
+                }),
+                'syncActiveFileContent',
+            ],
+        },
+        SWITCH_FILE: {
+            actions: [
+                'syncActiveFileContent',
+                assign(({ context, event }) => {
+                    if (event.type !== 'SWITCH_FILE') return {};
+                    return {
+                        activeFile: event.activeFile,
+                        ...(context.session ? {
+                            session: {
+                                ...context.session,
+                                activeFile: event.activeFile,
+                            }
+                        } : {})
+                    };
+                }),
+                'switchEditorModel',
+                'captureFrame',
+            ],
+        },
+        ADD_FILE: {
+            actions: [
+                'syncActiveFileContent',
+                assign(({ context, event }) => {
+                    if (event.type !== 'ADD_FILE') return {};
+                    const newFiles = {
+                        ...context.files,
+                        [event.path]: '', // New files should be empty
+                    };
+                    return {
+                        files: newFiles,
+                        ...(context.session ? {
+                            session: {
+                                ...context.session,
+                                files: newFiles,
+                            }
+                        } : {})
+                    };
+                }),
+                'captureFrame',
+            ],
+        },
+        DELETE_FILE: {
+            actions: [
+                'syncActiveFileContent',
+                assign(({ context, event }) => {
+                    if (event.type !== 'DELETE_FILE') return {};
+                    const newFiles = { ...context.files };
+                    delete newFiles[event.path];
+                    let activeFile = context.activeFile;
+                    if (activeFile === event.path) {
+                        activeFile = Object.keys(newFiles)[0] || 'index.html';
+                    }
+                    return {
+                        files: newFiles,
+                        activeFile,
+                        ...(context.session ? {
+                            session: {
+                                ...context.session,
+                                files: newFiles,
+                                activeFile,
+                            }
+                        } : {})
+                    };
+                }),
+                'switchEditorModel',
+                'captureFrame',
+            ],
         },
     },
     states: {

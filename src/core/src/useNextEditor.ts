@@ -63,6 +63,18 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
     send({ type: 'SET_VOLUME', volume });
   }, [send]);
 
+  const switchFile = useCallback((activeFile: string) => {
+    send({ type: 'SWITCH_FILE', activeFile });
+  }, [send]);
+
+  const addFile = useCallback((path: string, content: string) => {
+    send({ type: 'ADD_FILE', path, content });
+  }, [send]);
+
+  const deleteFile = useCallback((path: string) => {
+    send({ type: 'DELETE_FILE', path });
+  }, [send]);
+
   const loadRecording = useCallback((recording: Recording) => {
     send({ type: 'LOAD_RECORDING', recording });
   }, [send]);
@@ -156,12 +168,14 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
   const getEditorState = useCallback((): EditorState | null => {
     if (!editor) return null;
     return {
+      activeFile: context.activeFile,
+      files: context.files,
       content: editor.getValue(),
       selection: editor.getSelection()!,
       position: editor.getPosition()!,
       viewState: editor.saveViewState(),
     };
-  }, [editor]);
+  }, [editor, context.activeFile, context.files]);
 
   const getFrame = useCallback((timestamp?: number): EditorFrame | null => {
     if (timestamp === undefined) return context.currentFrame;
@@ -187,6 +201,9 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
     playbackSpeed: context.timeline.speed,
     volume: context.timeline.volume,
 
+    activeFile: context.activeFile,
+    files: context.files,
+
     // Data
     currentRecording: context.recording,
     currentCursor: context.currentFrame?.state.mouseCursor || null,
@@ -201,6 +218,9 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
     seekTo,
     setPlaybackSpeed,
     setVolume,
+    switchFile,
+    addFile,
+    deleteFile,
     loadRecording,
     clearRecording,
 

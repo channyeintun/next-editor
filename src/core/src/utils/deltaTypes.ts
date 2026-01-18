@@ -44,6 +44,10 @@ export interface FrameDelta {
   timestamp: number;
   /** If true, this is a keyframe with full state */
   isKeyframe: false;
+  /** Active file path (only included if changed) */
+  activeFile?: string;
+  /** Files record (only included if changed, e.g. add/rename/delete) */
+  files?: Record<string, string>;
   /** Content delta (omitted if content unchanged) */
   contentDelta?: ContentDelta;
   /** Position delta (omitted if position unchanged) */
