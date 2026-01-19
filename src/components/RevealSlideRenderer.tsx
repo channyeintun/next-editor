@@ -12,6 +12,7 @@ interface RevealSlideRendererProps {
   onSlideChange?: (indexh: number, indexv?: number) => void;
   isNavigationEnabled?: boolean;
   currentInteraction?: import('../types/slides').IframeInteractionEvent;
+  registerSlideNavigator?: (navigator: (indexh: number, indexv: number) => void) => void;
 }
 
 // Generate the complete HTML for the reveal.js presentation
@@ -191,7 +192,8 @@ export default function RevealSlideRenderer({
   currentVerticalIndex,
   onSlideChange,
   isNavigationEnabled = true,
-  currentInteraction
+  currentInteraction,
+  registerSlideNavigator
 }: RevealSlideRendererProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isReady, setIsReady] = useState(false);
@@ -255,6 +257,21 @@ export default function RevealSlideRenderer({
       setIsReady(false); // Reset ready state since we're reloading
     }
   }, [slides]); // Only reload if content changes, not when navigation state changes
+
+  // Register direct navigation channel
+  useEffect(() => {
+    if (registerSlideNavigator) {
+      registerSlideNavigator((indexh, indexv) => {
+        if (iframeRef.current && iframeRef.current.contentWindow) {
+          iframeRef.current.contentWindow.postMessage({
+            type: 'reveal-goto',
+            indexh,
+            indexv
+          }, '*');
+        }
+      });
+    }
+  }, [registerSlideNavigator]);
 
   // Sync slide index when it changes externally
   useEffect(() => {

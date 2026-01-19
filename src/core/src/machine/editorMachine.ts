@@ -1,13 +1,12 @@
 import { setup, assign, spawnChild, stopChild, fromCallback, enqueueActions, fromPromise } from 'xstate';
 import type * as monaco from 'monaco-editor';
+import type { SlideEvent, PreviewEvent } from '../slides';
 import type {
     EditorMachineContext,
     EditorMachineEvent,
     EditorMachineInput,
-    RecordingSession,
 } from './types';
 import type { EditorFrame, Recording } from '../types';
-import type { Keyframe } from '../utils/deltaTypes';
 import {
     compressFrames,
     reconstructFrameAtIndex,
@@ -53,13 +52,13 @@ const applyFrameState = (
                 const currentSelections = editor.getSelections() || [frame.state.selection];
 
                 currentSelections.forEach((selection) => {
-                    const cursorPos = selection.getPosition();
+                    const Range = (window as unknown as { monaco: typeof monaco }).monaco.Range;
                     newDecorations.push({
-                        range: new (window as unknown as { monaco: typeof monaco }).monaco.Range(
-                            cursorPos.lineNumber,
-                            cursorPos.column,
-                            cursorPos.lineNumber,
-                            cursorPos.column
+                        range: new Range(
+                            selection.positionLineNumber,
+                            selection.positionColumn,
+                            selection.positionLineNumber,
+                            selection.positionColumn
                         ),
                         options: {
                             className: 'playback-cursor-decoration',
@@ -125,8 +124,8 @@ const createFrame = (
                 selectionStartColumn: 1,
                 positionLineNumber: 1,
                 positionColumn: 1,
-            } as monaco.Selection,
-            position: position || { lineNumber: 1, column: 1 } as monaco.Position,
+            },
+            position: position || { lineNumber: 1, column: 1 },
             viewState,
             mouseCursor,
             slideState: slideState?.previewState,
@@ -286,8 +285,8 @@ const mouseTrackingActor = fromCallback<{ type: 'STOP' }, MouseTrackingInput>(
                         iframeDoc.removeEventListener('mousemove', handlers.move);
                         iframeDoc.removeEventListener('mouseleave', handlers.leave);
                     }
-                } catch {
-                    // Ignore
+                } catch (err) {
+                    console.error('Failed to cleanup iframe listeners:', err);
                 }
             });
             iframeListeners.clear();
@@ -345,26 +344,66 @@ export const editorMachine = setup({
     },
     actions: {
         // Recording actions
-        initRecordingSession: assign(() => ({
-            session: {
-                startedAt: Date.now(),
-                frames: [],
-                slideEvents: [],
-                previewEvents: [],
-                lastMousePosition: { x: 0, y: 0, visible: false },
-            } as RecordingSession,
-        })),
+        initRecordingSession: assign(({ context }) => {
+            const startedAt = Date.now();
+            const slideEvents: SlideEvent[] = [];
+            const previewEvents: PreviewEvent[] = [];
+
+            // Capture initial slide state if open
+            const initialSlideState = context.getSlideState?.();
+            if (initialSlideState?.previewState?.isOpen) {
+                slideEvents.push({
+                    type: 'slide_open',
+                    timestamp: 0,
+                    slideId: initialSlideState.previewState.currentSlideId || undefined,
+                    isMaximized: initialSlideState.previewState.isMaximized,
+                    indexv: initialSlideState.previewState.indexv
+                });
+            }
+
+            // Capture initial preview state
+            const initialPreviewState = context.getPreviewState?.();
+            if (initialPreviewState) {
+                previewEvents.push({
+                    type: 'preview_open',
+                    timestamp: 0,
+                    size: initialPreviewState.size,
+                    scrollTop: initialPreviewState.scrollTop,
+                    scrollLeft: initialPreviewState.scrollLeft
+                });
+            }
+
+            return {
+                session: {
+                    startedAt,
+                    frames: [],
+                    slideEvents,
+                    previewEvents,
+                    lastMousePosition: { x: 0, y: 0, visible: false },
+                },
+            };
+        }),
 
         captureInitialFrame: assign(({ context }) => {
-            const editor = context.editorRefs.editor;
             const session = context.session;
             if (!session) return {};
 
             const lastMousePosition = session.lastMousePosition || { x: 0, y: 0, visible: false };
 
-            const frame = editor
-                ? createFrame(editor, 0, lastMousePosition, context.getSlideState, context.getPreviewState)
-                : {
+            // Use createFrame for the initial frame to ensure it has all metadata
+            const editor = context.editorRefs.editor;
+            let initialFrame: EditorFrame;
+
+            if (editor) {
+                initialFrame = createFrame(
+                    editor,
+                    0,
+                    lastMousePosition,
+                    context.getSlideState,
+                    context.getPreviewState
+                );
+            } else {
+                initialFrame = {
                     timestamp: 0,
                     state: {
                         content: '',
@@ -377,16 +416,18 @@ export const editorMachine = setup({
                             selectionStartColumn: 1,
                             positionLineNumber: 1,
                             positionColumn: 1,
-                        } as monaco.Selection,
-                        position: { lineNumber: 1, column: 1 } as monaco.Position,
+                        },
+                        position: { lineNumber: 1, column: 1 },
+                        viewState: null,
                         mouseCursor: lastMousePosition,
                     }
-                } as EditorFrame;
+                };
+            }
 
             return {
                 session: {
                     ...session,
-                    frames: [frame],
+                    frames: [initialFrame],
                 },
             };
         }),
@@ -517,8 +558,8 @@ export const editorMachine = setup({
                 const deltaFrame = recording.frames[frameIndex];
                 if (deltaFrame && 'isKeyframe' in deltaFrame && !deltaFrame.isKeyframe) {
                     frame = applyFrameDelta(currentFrame, deltaFrame);
-                } else {
-                    frame = deltaFrame as Keyframe;
+                } else if (deltaFrame && 'isKeyframe' in deltaFrame && deltaFrame.isKeyframe) {
+                    frame = deltaFrame;
                 }
             } else {
                 // Full reconstruction for seeks or keyframes
@@ -537,7 +578,11 @@ export const editorMachine = setup({
             );
 
             if (frame.state.slideState && frame.state.currentSlideIndex !== undefined && context.applySlideState) {
-                context.applySlideState(frame.state.slideState, frame.state.currentSlideIndex);
+                // If we also apply slide events, those MUST be the absolute source of truth during playback.
+                // We only apply frame-based state if there are NO slide events in the recording.
+                if (!recording.slideEvents?.length) {
+                    context.applySlideState(frame.state.slideState, frame.state.currentSlideIndex);
+                }
             }
 
             let nextAppliedPreviewState = context.lastAppliedPreviewState;
@@ -545,13 +590,16 @@ export const editorMachine = setup({
                 const nextState = frame.state.previewState;
                 const currentState = context.lastAppliedPreviewState;
 
-                // Only apply if state has changed significantly
-                if (!currentState ||
-                    nextState.size !== currentState.size ||
-                    Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) > 1 ||
-                    Math.abs((nextState.scrollLeft || 0) - (currentState.scrollLeft || 0)) > 1) {
-                    context.applyPreviewState(nextState);
-                    nextAppliedPreviewState = nextState;
+                // If we also apply preview events, those MUST be the absolute source of truth.
+                if (!recording.previewEvents?.length) {
+                    // Only apply if state has changed significantly
+                    if (!currentState ||
+                        nextState.size !== currentState.size ||
+                        Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) > 1 ||
+                        Math.abs((nextState.scrollLeft || 0) - (currentState.scrollLeft || 0)) > 1) {
+                        context.applyPreviewState(nextState);
+                        nextAppliedPreviewState = nextState;
+                    }
                 }
             }
 
@@ -773,33 +821,40 @@ export const editorMachine = setup({
                         if (slideIndex !== -1 || slideEvent.type === 'slide_close') {
                             let slideState;
 
-                            if (slideEvent.type === 'slide_interaction') {
-                                // Strictly cursor-only: no indices, no size, no structural change.
+                            if (slideEvent.type === 'slide_close') {
                                 slideState = {
-                                    isOpen: true,
-                                    currentInteraction: slideEvent.interaction
-                                };
-                            } else if (slideEvent.type === 'slide_maximize' || slideEvent.type === 'slide_minimize') {
-                                // Structural change only: no indices.
-                                slideState = {
-                                    isOpen: true,
-                                    isMaximized: slideEvent.type === 'slide_maximize',
-                                    currentSlideId: slideEvent.slideId || null
+                                    isOpen: false,
+                                    currentSlideId: null,
+                                    indexv: 0,
+                                    currentInteraction: undefined
                                 };
                             } else {
-                                // Full derivation for navigation events (open, change, close)
-                                // or when seeking/resuming.
+                                // Full derivation for all other events (open, change, interaction, maximize, minimize)
                                 const relevantEvents = slideEvents.slice(0, i + 1).reverse();
+
+                                // Find the most recent navigation event that defines the current location
                                 const lastNav = relevantEvents.find(e =>
-                                    e.slideId === slideEvent.slideId &&
-                                    ['slide_open', 'slide_change', 'slide_maximize', 'slide_minimize', 'slide_close'].includes(e.type)
+                                    ['slide_open', 'slide_change', 'slide_close'].includes(e.type)
+                                );
+
+                                // Find the most recent state-defining event to preserve structural state (maximize, etc.)
+                                const lastStructural = relevantEvents.find(e =>
+                                    ['slide_maximize', 'slide_minimize'].includes(e.type)
+                                );
+
+                                // Most important: always look for the LAST KNOWN indexv for THIS slide
+                                // if the current event doesn't have it (e.g. structural change or back-navigation without indexv)
+                                const targetSlideId = slideEvent.slideId || lastNav?.slideId;
+                                const lastWithIndexv = relevantEvents.find(e =>
+                                    (targetSlideId ? e.slideId === targetSlideId : true) &&
+                                    e.indexv !== undefined && e.indexv !== null
                                 );
 
                                 slideState = {
                                     isOpen: (lastNav?.type || slideEvent.type) !== 'slide_close',
-                                    isMaximized: !!(slideEvent.isMaximized ?? lastNav?.isMaximized),
+                                    isMaximized: lastStructural ? lastStructural.type === 'slide_maximize' : (slideEvent.isMaximized ?? lastNav?.isMaximized ?? false),
                                     currentSlideId: slideEvent.slideId || lastNav?.slideId || null,
-                                    indexv: slideEvent.indexv ?? lastNav?.indexv ?? 0,
+                                    indexv: slideEvent.indexv ?? lastWithIndexv?.indexv ?? lastNav?.indexv,
                                     currentInteraction: slideEvent.interaction
                                 };
                             }
@@ -817,16 +872,26 @@ export const editorMachine = setup({
                 const slideIndex = recording.slides?.findIndex(s => s.id === lastSlideEvent.slideId) ?? -1;
                 // Find the most recent navigation event for this slide to ensure we seek to the correct state
                 const relevantEvents = slideEvents.slice(0, newLastIndex + 1).reverse();
+
                 const lastNav = relevantEvents.find(e =>
-                    e.slideId === lastSlideEvent!.slideId &&
-                    ['slide_open', 'slide_change', 'slide_maximize', 'slide_minimize', 'slide_close'].includes(e.type)
+                    ['slide_open', 'slide_change', 'slide_close'].includes(e.type)
+                );
+
+                const lastStructural = relevantEvents.find(e =>
+                    ['slide_maximize', 'slide_minimize'].includes(e.type)
+                );
+
+                const targetSearchSlideId = lastSlideEvent.slideId || lastNav?.slideId;
+                const lastWithIndexv = relevantEvents.find(e =>
+                    (targetSearchSlideId ? e.slideId === targetSearchSlideId : true) &&
+                    e.indexv !== undefined && e.indexv !== null
                 );
 
                 const slideState = {
                     isOpen: (lastNav?.type || lastSlideEvent.type) !== 'slide_close',
-                    isMaximized: !!(lastSlideEvent.isMaximized ?? lastNav?.isMaximized),
+                    isMaximized: lastStructural ? lastStructural.type === 'slide_maximize' : (lastSlideEvent.isMaximized ?? lastNav?.isMaximized ?? false),
                     currentSlideId: lastSlideEvent.slideId || lastNav?.slideId || null,
-                    indexv: lastSlideEvent.indexv ?? lastNav?.indexv ?? 0,
+                    indexv: lastSlideEvent.indexv ?? lastWithIndexv?.indexv ?? lastNav?.indexv,
                     currentInteraction: lastSlideEvent.interaction
                 };
                 applySlideState(slideState, slideIndex);

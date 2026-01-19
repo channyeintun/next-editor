@@ -1,10 +1,11 @@
 import * as monaco from 'monaco-editor';
 import { getWasmExports } from './steganography';
+import type { EditorPosition, EditorSelection } from '../types';
 
 /**
  * Checks if two positions are equal
  */
-function arePositionsEqual(pos1: monaco.IPosition | null, pos2: monaco.IPosition | null): boolean {
+function arePositionsEqual(pos1: EditorPosition | null, pos2: EditorPosition | null): boolean {
   if (!pos1 || !pos2) return pos1 === pos2;
   return pos1.lineNumber === pos2.lineNumber && pos1.column === pos2.column;
 }
@@ -12,7 +13,7 @@ function arePositionsEqual(pos1: monaco.IPosition | null, pos2: monaco.IPosition
 /**
  * Checks if two selections are equal
  */
-function areSelectionsEqual(sel1: monaco.Selection | null, sel2: monaco.Selection | null): boolean {
+function areSelectionsEqual(sel1: EditorSelection | null, sel2: EditorSelection | null): boolean {
   if (!sel1 || !sel2) return sel1 === sel2;
   return (
     sel1.startLineNumber === sel2.startLineNumber &&
@@ -31,7 +32,7 @@ function areSelectionsEqual(sel1: monaco.Selection | null, sel2: monaco.Selectio
  */
 export const applyPositionDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
-  targetPosition: monaco.IPosition
+  targetPosition: EditorPosition
 ): boolean => {
   const currentPosition = editor.getPosition();
 
@@ -66,7 +67,7 @@ export const applyPositionDiff = (
  */
 export const applySelectionDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
-  targetSelection: monaco.Selection
+  targetSelection: EditorSelection
 ): boolean => {
   const currentSelection = editor.getSelection();
 

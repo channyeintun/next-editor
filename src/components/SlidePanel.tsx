@@ -11,6 +11,9 @@ export default function SlidePanel() {
     handleSlideEvent: onSlideEvent,
   } = useSlidesContext();
 
+  const nextEditorContext = useNextEditorContext();
+  const registerSlideNavigator = 'registerSlideNavigator' in nextEditorContext ? nextEditorContext.registerSlideNavigator : undefined;
+
   const { pause } = useNextEditorContext();
 
   return (
@@ -26,6 +29,7 @@ export default function SlidePanel() {
         isMaximized={previewState.isMaximized}
         verticalIndex={previewState.indexv}
         currentInteraction={previewState.currentInteraction}
+        registerSlideNavigator={registerSlideNavigator}
         positioning="fixed"
       />
     </>

@@ -67,6 +67,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
 
   const currentSlideIndex = slides.findIndex(slide => slide.id === previewState.currentSlideId);
   const slideEventsRef = useRef<SlideEvent[]>([]);
+  const lastVerticalIndicesRef = useRef<Record<string, number>>({});
 
   // Persist slides to localStorage whenever they change
   useEffect(() => {
@@ -189,6 +190,11 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
         });
         break;
     }
+
+    // Capture vertical index if provided to maintain memory per slide
+    if (event.slideId && event.indexv !== undefined && event.indexv !== null) {
+      lastVerticalIndicesRef.current[event.slideId] = event.indexv;
+    }
   }, []);
 
   const startPresentation = useCallback(() => {
@@ -229,10 +235,13 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
 
   const goToSlide = useCallback((index: number, indexv?: number) => {
     if (index >= 0 && index < slides.length) {
+      const slideId = slides[index].id;
+      const targetIndexv = indexv ?? lastVerticalIndicesRef.current[slideId] ?? 0;
+
       setPreviewState(prev => ({
         ...prev,
-        currentSlideId: slides[index].id,
-        indexv: indexv ?? 0
+        currentSlideId: slideId,
+        indexv: targetIndexv
       }));
     }
   }, [slides]);

@@ -15,7 +15,8 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
   const registerSlideStateGetter = 'registerSlideStateGetter' in nextEditorContext ? nextEditorContext.registerSlideStateGetter : undefined;
   const registerSlideStateApplier = 'registerSlideStateApplier' in nextEditorContext ? nextEditorContext.registerSlideStateApplier : undefined;
   const registerSlidesGetter = 'registerSlidesGetter' in nextEditorContext ? nextEditorContext.registerSlidesGetter : undefined;
-  const registerSlidesApplier = 'registerSlidesApplier' in nextEditorContext ? nextEditorContext.registerSlidesApplier : undefined;
+  const registerSlidesApplier = nextEditorContext.registerSlidesApplier;
+  const navigateSlidesDirect = nextEditorContext.navigateSlidesDirect;
 
   const slidesData = useSlides({
     onSlideEvent: handleSlideEvent
@@ -51,6 +52,7 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
       const nextIsOpen = slideState.isOpen;
       const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
       const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
+      // Preserve the current vertical index if slideState.indexv is undefined
       const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
       const nextInteraction = slideState.currentInteraction;
 
@@ -72,10 +74,21 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     });
 
     // Update slide index if needed
-    if (slideState.isOpen && currentSlideIndex !== slidesData.currentSlideIndex) {
-      slidesData.goToSlide(currentSlideIndex);
+    if (slideState.isOpen) {
+      const nextIndexv = slideState.indexv ?? slidesData.previewState.indexv ?? 0;
+      const prevIndexv = slidesData.previewState.indexv ?? 0;
+
+      if (currentSlideIndex !== slidesData.currentSlideIndex || (slideState.indexv !== undefined && nextIndexv !== prevIndexv)) {
+        // ALWAYS use direct navigation for playback events to ensure sequential processing
+        // even if React batches the state updates below.
+        if (navigateSlidesDirect) {
+          navigateSlidesDirect(currentSlideIndex, nextIndexv);
+        }
+
+        slidesData.goToSlide(currentSlideIndex, nextIndexv);
+      }
     }
-  }, [slidesData]); // slidesData is stable because of useMemo in useSlides
+  }, [slidesData, navigateSlidesDirect]); // Added navigateSlidesDirect to dependencies
 
   useEffect(() => {
     if (registerSlideStateApplier && typeof registerSlideStateApplier === 'function') {

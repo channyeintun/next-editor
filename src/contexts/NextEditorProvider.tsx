@@ -95,6 +95,10 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     registerPreviewStateApplier: (applier: (previewState: PreviewState) => void) => {
       applyPreviewStateRef.current = applier;
     },
+    // Direct navigation channel
+    registerSlideNavigator: (navigator: (indexh: number, indexv: number) => void) => {
+      editorHook.navigateSlidesDirect = navigator;
+    },
   };
 
   return (

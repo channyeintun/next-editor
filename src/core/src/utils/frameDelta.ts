@@ -1,5 +1,4 @@
-import type * as monaco from 'monaco-editor';
-import type { EditorFrame, MouseCursorPosition } from '../types';
+import type { EditorFrame, MouseCursorPosition, EditorSelection, EditorPosition } from '../types';
 import type { SlidePreviewState, PreviewState } from '../slides';
 import type {
     ContentDelta,
@@ -162,8 +161,8 @@ export function applyContentDelta(base: string, delta: ContentDelta): string {
  * Creates a position delta, returns null if identical.
  */
 export function createPositionDelta(
-    prev: monaco.IPosition,
-    next: monaco.IPosition
+    prev: EditorPosition,
+    next: EditorPosition
 ): PositionDelta | null {
     const lineDelta = next.lineNumber - prev.lineNumber;
     const columnDelta = next.column - prev.column;
@@ -175,9 +174,9 @@ export function createPositionDelta(
  * Applies a position delta to a base position.
  */
 export function applyPositionDelta(
-    base: monaco.IPosition,
+    base: EditorPosition,
     delta: PositionDelta
-): monaco.IPosition {
+): EditorPosition {
     return {
         lineNumber: base.lineNumber + delta.lineDelta,
         column: base.column + delta.columnDelta,
@@ -188,8 +187,8 @@ export function applyPositionDelta(
  * Creates a selection delta, returns null if identical.
  */
 export function createSelectionDelta(
-    prev: monaco.Selection,
-    next: monaco.Selection
+    prev: EditorSelection,
+    next: EditorSelection
 ): SelectionDelta | null {
     const startLineDelta = next.startLineNumber - prev.startLineNumber;
     const startColumnDelta = next.startColumn - prev.startColumn;
@@ -208,9 +207,9 @@ export function createSelectionDelta(
  * Applies a selection delta to a base selection.
  */
 export function applySelectionDelta(
-    base: monaco.Selection,
+    base: EditorSelection,
     delta: SelectionDelta
-): monaco.Selection {
+): EditorSelection {
     return {
         startLineNumber: base.startLineNumber + (delta.startLineDelta || 0),
         startColumn: base.startColumn + (delta.startColumnDelta || 0),
@@ -220,7 +219,7 @@ export function applySelectionDelta(
         selectionStartColumn: base.selectionStartColumn + (delta.startColumnDelta || 0),
         positionLineNumber: base.positionLineNumber + (delta.endLineDelta || 0),
         positionColumn: base.positionColumn + (delta.endColumnDelta || 0),
-    } as monaco.Selection;
+    };
 }
 
 // ============================================================================
@@ -353,7 +352,7 @@ export function applyFrameDelta(
         timestamp: delta.timestamp,
         state: {
             content: newContent,
-            position: newPosition as monaco.Position,
+            position: newPosition,
             selection: newSelection,
             viewState: delta.viewState !== undefined ? delta.viewState : base.state.viewState,
             mouseCursor: delta.mouseCursor !== undefined ? delta.mouseCursor : base.state.mouseCursor,

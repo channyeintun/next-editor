@@ -22,6 +22,7 @@ interface SlidePreviewProps {
   isMaximized?: boolean;
   verticalIndex?: number;
   currentInteraction?: import('../types/slides').IframeInteractionEvent;
+  registerSlideNavigator?: (navigator: (indexh: number, indexv: number) => void) => void;
   positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
 }
 
@@ -35,6 +36,7 @@ export default function SlidePreview({
   isMaximized = false,
   verticalIndex = 0,
   currentInteraction,
+  registerSlideNavigator,
   positioning = 'fixed'
 }: SlidePreviewProps) {
   const { isPlaying } = useNextEditorContext();
@@ -143,14 +145,14 @@ export default function SlidePreview({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [isPlaying, emitSlideEvent, currentSlide?.id, size, verticalIndex, onSlideEvent]);
+  }, [isPlaying, currentSlide?.id, onSlideEvent]);
 
   const goToNextSlide = useCallback(() => {
     if (isPlaying) return;
     if (currentSlideIndex < slides.length - 1) {
       const newIndex = currentSlideIndex + 1;
-      onSlideChange(newIndex, 0);
-      emitSlideEvent('slide_change', slides[newIndex]?.id, size === 'large', 0);
+      onSlideChange(newIndex); // Leave indexv undefined to use memory
+      emitSlideEvent('slide_change', slides[newIndex]?.id, size === 'large');
     }
   }, [isPlaying, currentSlideIndex, slides, onSlideChange, emitSlideEvent, size]);
 
@@ -158,8 +160,8 @@ export default function SlidePreview({
     if (isPlaying) return;
     if (currentSlideIndex > 0) {
       const newIndex = currentSlideIndex - 1;
-      onSlideChange(newIndex, 0);
-      emitSlideEvent('slide_change', slides[newIndex]?.id, size === 'large', 0);
+      onSlideChange(newIndex); // Leave indexv undefined to use memory
+      emitSlideEvent('slide_change', slides[newIndex]?.id, size === 'large');
     }
   }, [isPlaying, currentSlideIndex, onSlideChange, emitSlideEvent, slides, size]);
 
@@ -297,6 +299,7 @@ export default function SlidePreview({
             currentInteraction={currentInteraction}
             onSlideChange={handleSlideChangeFromReveal}
             isNavigationEnabled={size !== 'small' && !isPlaying}
+            registerSlideNavigator={registerSlideNavigator}
           />
 
           {/* Keyboard navigation hint */}

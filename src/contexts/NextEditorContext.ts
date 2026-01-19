@@ -23,4 +23,7 @@ export const NextEditorContext = createContext<(UseNextEditorReturn & {
   // Preview state registration
   registerPreviewStateGetter: (getter: () => PreviewState | null) => void;
   registerPreviewStateApplier: (applier: (previewState: PreviewState) => void) => void;
+  // Slide navigation
+  registerSlideNavigator: (navigator: (indexh: number, indexv: number) => void) => void;
+  navigateSlidesDirect?: (indexh: number, indexv: number) => void;
 }) | null>(null);

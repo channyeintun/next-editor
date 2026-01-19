@@ -11,6 +11,17 @@ export interface AudioPlaceholder {
 }
 
 /**
+ * Data-only type for monaco.Selection that includes both selection and range info.
+ * This is compatible with monaco.ISelection and monaco.IRange.
+ */
+export type EditorSelection = monaco.ISelection & monaco.IRange;
+
+/**
+ * Data-only type for monaco.IPosition.
+ */
+export type EditorPosition = monaco.IPosition;
+
+/**
  * Mouse cursor position relative to editor container
  */
 export interface MouseCursorPosition {
@@ -19,6 +30,7 @@ export interface MouseCursorPosition {
   visible: boolean; // Whether cursor is within editor bounds
 }
 
+
 /**
  * Editor frame containing the complete state at a specific timestamp
  */
@@ -26,8 +38,8 @@ export interface EditorFrame {
   timestamp: number;
   state: {
     content: string;
-    selection: monaco.Selection;
-    position: monaco.Position; // Text caret position
+    selection: EditorSelection;
+    position: EditorPosition; // Text caret position
     viewState: monaco.editor.ICodeEditorViewState | null;
     mouseCursor?: MouseCursorPosition; // Mouse cursor position
     slideState?: SlidePreviewState; // Slide preview state
@@ -105,8 +117,8 @@ export interface UseNextEditorConfig {
  */
 export interface EditorState {
   content: string;
-  selection: monaco.Selection;
-  position: monaco.Position;
+  selection: EditorSelection;
+  position: EditorPosition;
   viewState: monaco.editor.ICodeEditorViewState | null;
   mouseCursor?: MouseCursorPosition;
   slideState?: SlidePreviewState;
@@ -162,4 +174,14 @@ export interface UseNextEditorReturn {
   getEditorState: () => EditorState | null;
   getFrame: (timestamp?: number) => EditorFrame | null;
 
+  // Registration helpers
+  registerSlideNavigator?: (navigator: (indexh: number, indexv: number) => void) => void;
+  navigateSlidesDirect?: (indexh: number, indexv: number) => void;
+
+  registerSlideStateGetter?: (getter: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null) => void;
+  registerSlideStateApplier?: (applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void) => void;
+  registerSlidesGetter?: (getter: () => Slide[]) => void;
+  registerSlidesApplier?: (applier: (slides: Slide[]) => void) => void;
+  registerPreviewStateGetter?: (getter: () => PreviewState | null) => void;
+  registerPreviewStateApplier?: (applier: (previewState: PreviewState) => void) => void;
 }

@@ -1,6 +1,6 @@
 import type * as monaco from 'monaco-editor';
 import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from '../slides';
-import type { MouseCursorPosition, EditorFrame, Recording } from '../types';
+import type { MouseCursorPosition, EditorFrame, Recording, EditorSelection, EditorPosition } from '../types';
 
 // ============================================================================
 // Machine Status Types
@@ -327,6 +327,8 @@ export interface EditorMachineInput {
 // ============================================================================
 // Helper Types
 // ============================================================================
+
+export type { EditorSelection, EditorPosition };
 
 /**
  * Initial context factory
