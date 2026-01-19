@@ -49,7 +49,7 @@ export default function SlidesButton() {
             className="fixed inset-0 z-[49] bg-black/5"
             onClick={() => setShowManager(false)}
           />
-          <div className="absolute top-full right-0 mt-3 z-[50] animate-in fade-in slide-in-from-top-2 duration-300 ease-out origin-top-right">
+          <div className="fixed inset-x-4 top-16 z-[50] sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-3 sm:w-auto animate-in fade-in slide-in-from-top-2 duration-300 ease-out origin-top sm:origin-top-right">
             <SlidesManager
               slides={slides}
               onSlidesChange={setSlides}
