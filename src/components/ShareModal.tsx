@@ -8,17 +8,13 @@ import {
     Share2,
     Palette,
     Type,
-    ChevronRight,
     Check,
     Waves,
     Grid3X3,
     Wind,
     Shapes,
-    Sparkles,
-    Copy,
-    ExternalLink
+    Sparkles
 } from 'lucide-react';
-import MastodonIcon from './icon/Mastodon';
 import { MAGIC_PREFIX } from '../core/src/utils/steganography';
 
 
@@ -28,7 +24,6 @@ interface NextEditorImageSaveModalProps {
     isVisible: boolean;
     onSave: (file: File) => void;
     onCancel: () => void;
-    initialText?: string;
 }
 
 type ImageStyle = 'gradient' | 'pixelated' | 'abstract' | 'noise' | 'geometric';
@@ -77,16 +72,13 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
     recording,
     isVisible,
     onSave,
-    onCancel,
-    initialText
+    onCancel
 }) => {
     const [imageTitle, setImageTitle] = useState('');
     const [imageStyle, setImageStyle] = useState<ImageStyle>('gradient');
     const [isGenerating, setIsGenerating] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const previewUrlRef = useRef<string | null>(null);
-    const [composeLink, setComposeLink] = useState<string | null>(null);
-    const [linkCopied, setLinkCopied] = useState(false);
 
     // Cache the encoded canvas (without title overlay) for quick title updates
     const encodedCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -263,7 +255,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
     }, [generateEncodedImage]);
 
     // Generate full image for download/share (re-encodes with title)
-    const generateFinalImage = useCallback(async (isManualDownload: boolean = false, shareToMastodon: boolean = false) => {
+    const generateFinalImage = useCallback(async (isManualDownload: boolean = false) => {
         if (!isVisible) return;
         setIsGenerating(true);
 
@@ -303,84 +295,6 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                         a.download = file.name;
                         a.click();
                     }
-
-                    if (shareToMastodon) {
-                        const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:9003' : 'https://mastodon.website';
-                        const newWindow = window.open('about:blank', '_blank');
-
-                        try {
-                            const getCookie = (name: string) => {
-                                const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-                                if (!match) return undefined;
-                                let value = match[2];
-                                try {
-                                    value = decodeURIComponent(value).replace(/^"(.*)"$/, '$1');
-                                    if (value.includes('%')) {
-                                        value = decodeURIComponent(value);
-                                    }
-                                    return value;
-                                } catch {
-                                    return value;
-                                }
-                            };
-
-                            const accessToken = getCookie('accessToken');
-                            const instanceURL = getCookie('instanceURL');
-
-                            if (!accessToken || !instanceURL) {
-                                newWindow?.close();
-                                alert('Please sign in to Mastodon first.');
-                                setIsGenerating(false);
-                                return;
-                            }
-
-                            if (!instanceURL.startsWith('http')) {
-                                newWindow?.close();
-                                console.error('Invalid instance URL from cookie:', instanceURL);
-                                alert(`Invalid Mastodon instance URL: ${instanceURL}`);
-                                setIsGenerating(false);
-                                return;
-                            }
-
-                            const formData = new FormData();
-                            formData.append('file', file);
-                            formData.append('description', `tutorial: ${imageTitleRef.current || 'Untitled'}`);
-
-                            const uploadUrl = `${instanceURL.replace(/\/$/, '')}/api/v2/media`;
-                            const response = await fetch(uploadUrl, {
-                                method: 'POST',
-                                headers: {
-                                    'Authorization': `Bearer ${accessToken}`,
-                                },
-                                body: formData,
-                            });
-
-                            if (!response.ok) {
-                                newWindow?.close();
-                                throw new Error('Failed to upload to Mastodon');
-                            }
-
-                            const mediaData = await response.json();
-                            const mediaId = mediaData.id;
-
-                            const postTitle = imageTitleRef.current || 'New Tutorial';
-                            const postText = initialText
-                                ? encodeURIComponent(`${initialText}\n\n#nexteditor #tutorial`)
-                                : encodeURIComponent(`${postTitle}\n\n#nexteditor #tutorial`);
-
-                            const finalComposeUrl = `${baseUrl}/compose?media_ids=${mediaId}&text=${postText}`;
-                            setComposeLink(finalComposeUrl);
-
-                            if (newWindow) {
-                                newWindow.location.href = finalComposeUrl;
-                            }
-
-                        } catch (err) {
-                            newWindow?.close();
-                            console.error('Sharing failed:', err);
-                            alert('Failed to share on Mastodon. Please try again.');
-                        }
-                    }
                 }
                 setIsGenerating(false);
             }, 'image/png');
@@ -389,7 +303,7 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
             console.error('Failed to generate image:', err);
             setIsGenerating(false);
         }
-    }, [generateEncodedImage, initialText, isVisible, onSave]);
+    }, [generateEncodedImage, isVisible, onSave]);
 
     // Generate encoded image when modal opens or style changes
     useEffect(() => {
@@ -537,67 +451,21 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                                 <Sparkles className="w-4 h-4 text-indigo-400" />
                             </div>
                             <p className="text-xs text-indigo-300 leading-relaxed">
-                                <strong>Steganography magic:</strong> Your tutorial data is invisible to the human eye but embedded in the image pixels. Upload to Mastodon and others can play it instantly!
+                                <strong>Steganography magic:</strong> Your tutorial data is invisible to the human eye but embedded in the image pixels. Share the image and others can play it instantly!
                             </p>
                         </div>
                     </div>
                 </div>
 
                 <div className="p-8 bg-gray-900/50 border-t border-gray-700/50 flex flex-col gap-4 shrink-0">
-                    {/* Show compose link after successful upload */}
-                    {composeLink && (
-                        <div className="flex flex-col gap-3 p-4 bg-green-500/10 border border-green-500/30 rounded-2xl">
-                            <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
-                                <Check className="w-4 h-4" />
-                                Upload complete! If the tab didn&apos;t open, use the buttons below:
-                            </div>
-                            <div className="flex gap-2">
-                                <a
-                                    href={composeLink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white font-medium rounded-xl hover:bg-green-500 transition-colors"
-                                >
-                                    <ExternalLink className="w-4 h-4" />
-                                    Open Link
-                                </a>
-                                <button
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(composeLink);
-                                        setLinkCopied(true);
-                                        setTimeout(() => setLinkCopied(false), 2000);
-                                    }}
-                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-700 text-white font-medium rounded-xl hover:bg-gray-600 transition-colors"
-                                >
-                                    <Copy className="w-4 h-4" />
-                                    {linkCopied ? 'Copied!' : 'Copy Link'}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
                     <div className="flex flex-col sm:flex-row gap-4">
                         <button
-                            onClick={() => generateFinalImage(true, false)}
+                            onClick={() => generateFinalImage(true)}
                             disabled={isGenerating}
-                            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gray-800 text-gray-200 font-bold rounded-2xl hover:bg-gray-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all border border-gray-700 shadow-xl"
+                            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-500 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all shadow-[0_8px_32px_rgba(79,70,229,0.3)] border border-indigo-400/20"
                         >
                             <Download className="w-5 h-5" />
                             Download Image
-                        </button>
-                        <button
-                            onClick={() => {
-                                setComposeLink(null);
-                                generateFinalImage(false, true);
-                            }}
-                            disabled={isGenerating}
-                            className="flex-[1.5] flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-500 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all shadow-[0_8px_32px_rgba(79,70,229,0.3)] group"
-                        >
-                            <div className="transition-transform group-hover:rotate-12">
-                                <MastodonIcon />
-                            </div>
-                            Share on Mastodon
-                            <ChevronRight className="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform" />
                         </button>
                     </div>
                 </div>

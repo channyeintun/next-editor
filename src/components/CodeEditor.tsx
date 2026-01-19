@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { Share2 } from 'lucide-react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import NextEditorImageSaveModal from './ShareModal';
-import MastodonIcon from './icon/Mastodon';
 import SlidesButton from './SlidesButton';
 
 interface CodeEditorProps {
@@ -10,7 +10,6 @@ interface CodeEditorProps {
   theme?: string;
   defaultContent?: string;
   showImportExport?: boolean;
-  text?: string;
 }
 
 /**
@@ -22,8 +21,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   defaultContent = `<html>
     <h1>Hello world</h1>
 </html>`,
-  showImportExport = false,
-  text
+  showImportExport = false
 }) => {
   const selectedLanguage = 'html';
   const {
@@ -251,9 +249,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
             <button
               onClick={() => setShowImageSaveModal(true)}
               className="p-1.5 text-white bg-indigo-600 hover:bg-indigo-500 rounded transition-colors flex items-center justify-center shadow-sm"
-              title="Share on Mastodon"
+              title="Download/Share Image"
             >
-              <MastodonIcon />
+              <Share2 className="w-4 h-4" />
             </button>
           )}
 
@@ -321,7 +319,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           isVisible={showImageSaveModal}
           onSave={() => setShowImageSaveModal(false)}
           onCancel={() => setShowImageSaveModal(false)}
-          initialText={text}
         />
       )}
     </div>
