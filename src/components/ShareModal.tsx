@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { Recording } from '../core/src';
-import { encodeDataInCanvas } from '../core/src/utils/steganography';
+import { encodeDataInCanvas, injectPngMetadata } from '../core/src/utils/steganography';
 import pako from 'pako';
 import {
     X,
@@ -92,9 +92,10 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
     const encodedCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const canvasDimensionsRef = useRef<{ width: number; height: number } | null>(null);
     const imageTitleRef = useRef(imageTitle);
+    const lastEncodedDataRef = useRef<string | null>(null);
 
     // Generate the base image with encoding (expensive operation)
-    const generateEncodedImage = useCallback(async () => {
+    const generateEncodedImage = useCallback(async (title: string) => {
         if (!isVisible) return null;
 
         try {
@@ -113,26 +114,28 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                 audioBlob: undefined,
                 audioBase64
             });
+            lastEncodedDataRef.current = dataToSaveRaw;
 
             // 2. Determine canvas size (with compression estimation)
+            // encodeDataInCanvas will deflate + base64 the data, so we estimate that size.
             const compressed = pako.deflate(dataToSaveRaw);
-            let binaryString = '';
-            const chunkSize = 8192;
-            for (let i = 0; i < compressed.length; i += chunkSize) {
-                const chunk = compressed.subarray(i, Math.min(i + chunkSize, compressed.length));
-                binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-            }
-            const base64Data = btoa(binaryString);
-            const estimatedEncodedLength = MAGIC_PREFIX.length + base64Data.length;
+            const estimatedEncodedLength = MAGIC_PREFIX.length + Math.ceil(compressed.length * 4 / 3);
 
             const bitsNeeded = (estimatedEncodedLength) * 8 + 32;
             const pixelsNeeded = Math.ceil(bitsNeeded / 3);
             const dimension = Math.ceil(Math.sqrt(pixelsNeeded));
-            const width = Math.max(400, Math.ceil(dimension / 50) * 50);
+
+            // Add extra 10% padding to dimensions to ensure we have enough pixels even with UI elements
+            // and to avoid browser boundary issues.
+            const width = Math.max(800, Math.ceil((dimension * 1.1) / 50) * 50);
             const height = width;
 
             const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d')!;
+            // Use srgb color space to ensure deterministic pixel values across different browsers
+            const ctx = canvas.getContext('2d', {
+                colorSpace: 'srgb',
+                willReadFrequently: true
+            })!;
             canvas.width = width;
             canvas.height = height;
 
@@ -200,8 +203,33 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                 }
             }
 
-            // 4. Encode Data (NOTE: title is NOT drawn yet - added separately for preview)
-            await encodeDataInCanvas(canvas, dataToSaveRaw);
+            // 4. Draw title overlay BEFORE encoding data
+            // This ensures the steganography data is encoded into the pixels AFTER they are drawn
+            if (title) {
+                ctx.save();
+                const oh = Math.max(80, height * 0.15);
+                const oy = (height - oh) / 2;
+                const og = ctx.createLinearGradient(0, oy, 0, oy + oh);
+                og.addColorStop(0, 'rgba(0,0,0,0)');
+                og.addColorStop(0.5, 'rgba(0,0,0,0.6)');
+                og.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = og;
+                ctx.fillRect(0, oy, width, oh);
+
+                const fs = Math.max(24, Math.min(48, width / 15));
+                ctx.font = `bold ${fs}px sans-serif`;
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                ctx.shadowBlur = 10;
+                ctx.fillText(title, width / 2, height / 2);
+                ctx.restore();
+            }
+
+            // 5. Encode Data
+            const encodedData = await encodeDataInCanvas(canvas, dataToSaveRaw);
+            lastEncodedDataRef.current = encodedData;
 
             // Cache the encoded canvas
             encodedCanvasRef.current = canvas;
@@ -214,49 +242,14 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
         }
     }, [imageStyle, isVisible, recording]);
 
-    // Add title overlay to a canvas (fast operation, doesn't re-encode)
-    const addTitleOverlay = useCallback((sourceCanvas: HTMLCanvasElement, title: string): HTMLCanvasElement => {
-        const canvas = document.createElement('canvas');
-        canvas.width = sourceCanvas.width;
-        canvas.height = sourceCanvas.height;
-        const ctx = canvas.getContext('2d')!;
-
-        // Copy the encoded canvas
-        ctx.drawImage(sourceCanvas, 0, 0);
-
-        // Add title overlay
-        if (title) {
-            ctx.save();
-            const width = canvas.width;
-            const height = canvas.height;
-            const oh = Math.max(80, height * 0.15);
-            const oy = (height - oh) / 2;
-            const og = ctx.createLinearGradient(0, oy, 0, oy + oh);
-            og.addColorStop(0, 'rgba(0,0,0,0)');
-            og.addColorStop(0.5, 'rgba(0,0,0,0.6)');
-            og.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = og;
-            ctx.fillRect(0, oy, width, oh);
-
-            const fs = Math.max(24, Math.min(48, width / 15));
-            ctx.font = `bold ${fs}px sans-serif`;
-            ctx.fillStyle = 'white';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.shadowColor = 'rgba(0,0,0,0.5)';
-            ctx.shadowBlur = 10;
-            ctx.fillText(title, width / 2, height / 2);
-            ctx.restore();
+    // Generate preview from current title and style
+    const updatePreview = useCallback(async () => {
+        setIsGenerating(true);
+        const finalCanvas = await generateEncodedImage(imageTitleRef.current);
+        if (!finalCanvas) {
+            setIsGenerating(false);
+            return;
         }
-
-        return canvas;
-    }, []);
-
-    // Update preview from cached canvas (fast - just adds title)
-    const updatePreview = useCallback(() => {
-        if (!encodedCanvasRef.current) return;
-
-        const finalCanvas = addTitleOverlay(encodedCanvasRef.current, imageTitleRef.current);
 
         finalCanvas.toBlob((blob) => {
             if (blob) {
@@ -265,8 +258,9 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
                 previewUrlRef.current = newPreviewUrl;
                 setPreviewUrl(newPreviewUrl);
             }
+            setIsGenerating(false);
         }, 'image/png');
-    }, [addTitleOverlay]);
+    }, [generateEncodedImage]);
 
     // Generate full image for download/share (re-encodes with title)
     const generateFinalImage = useCallback(async (isManualDownload: boolean = false, shareToMastodon: boolean = false) => {
@@ -274,25 +268,31 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
         setIsGenerating(true);
 
         try {
-            // Make sure we have an encoded canvas
-            let canvas = encodedCanvasRef.current;
-            if (!canvas) {
-                canvas = await generateEncodedImage();
-                if (!canvas) {
-                    setIsGenerating(false);
-                    return;
-                }
+            // Always generate a fresh encoded image with style + title
+            const finalCanvas = await generateEncodedImage(imageTitleRef.current);
+            if (!finalCanvas) {
+                setIsGenerating(false);
+                return;
             }
-
-            // Add title overlay for the final image
-            const finalCanvas = addTitleOverlay(canvas, imageTitleRef.current);
 
             finalCanvas.toBlob(async (blob) => {
                 if (blob) {
-                    const file = new File([blob], `next-editor-${Date.now()}.png`, { type: 'image/png' });
+                    // Inject metadata chunk for 100% reliable import on Mac/Retina
+                    let finalBlob = blob;
+                    if (lastEncodedDataRef.current) {
+                        try {
+                            const buffer = await blob.arrayBuffer();
+                            const injected = injectPngMetadata(new Uint8Array(buffer), 'NEXT_EDITOR_v2_DATA', lastEncodedDataRef.current);
+                            finalBlob = new Blob([injected as BlobPart], { type: 'image/png' });
+                        } catch (err) {
+                            console.error('Failed to inject PNG metadata:', err);
+                        }
+                    }
+
+                    const file = new File([finalBlob], `next-editor-${Date.now()}.png`, { type: 'image/png' });
 
                     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-                    const newPreviewUrl = URL.createObjectURL(blob);
+                    const newPreviewUrl = URL.createObjectURL(finalBlob);
                     previewUrlRef.current = newPreviewUrl;
                     setPreviewUrl(newPreviewUrl);
 
@@ -389,20 +389,17 @@ const NextEditorImageSaveModal: React.FC<NextEditorImageSaveModalProps> = ({
             console.error('Failed to generate image:', err);
             setIsGenerating(false);
         }
-    }, [addTitleOverlay, generateEncodedImage, initialText, isVisible, onSave]);
+    }, [generateEncodedImage, initialText, isVisible, onSave]);
 
     // Generate encoded image when modal opens or style changes
     useEffect(() => {
         if (isVisible) {
-            setIsGenerating(true);
             const timer = setTimeout(async () => {
-                await generateEncodedImage();
-                updatePreview();
-                setIsGenerating(false);
+                await updatePreview();
             }, 300);
             return () => clearTimeout(timer);
         }
-    }, [isVisible, imageStyle, generateEncodedImage, updatePreview]);
+    }, [isVisible, imageStyle, updatePreview]);
 
     if (!isVisible) return null;
 

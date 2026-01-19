@@ -1,5 +1,5 @@
 import type { Recording } from '../core/src';
-import { decodeDataFromCanvas } from '../core/src/utils/steganography';
+import { decodeDataFromCanvas, extractPngMetadata, handleDecodedMessage } from '../core/src/utils/steganography';
 
 /**
  * Extracts recordings from a PNG file using steganography
@@ -10,18 +10,33 @@ export async function extractRecordingsFromPng(file: File): Promise<Recording[]>
         reader.onload = async (e) => {
             const img = new Image();
             img.onload = async () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    reject(new Error('Could not get canvas context'));
-                    return;
-                }
-                ctx.drawImage(img, 0, 0);
-
                 try {
-                    const decodedData = await decodeDataFromCanvas(canvas);
+                    // 1. Try to extract from PNG metadata chunks FIRST (100% reliable)
+                    const arrayBuffer = await file.arrayBuffer();
+                    const metadata = extractPngMetadata(new Uint8Array(arrayBuffer), 'NEXT_EDITOR_v2_DATA');
+
+                    let decodedData: string | null = null;
+                    if (metadata) {
+                        console.warn('Steganography: Successfully extracted data from PNG metadata chunk.');
+                        decodedData = handleDecodedMessage(metadata);
+                    } else {
+                        console.warn('Steganography: No PNG metadata chunk found. Falling back to canvas LSB decoding.');
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d', {
+                            colorSpace: 'srgb',
+                            willReadFrequently: true
+                        });
+                        if (!ctx) {
+                            reject(new Error('Could not get canvas context'));
+                            return;
+                        }
+                        ctx.imageSmoothingEnabled = false;
+                        ctx.drawImage(img, 0, 0);
+                        decodedData = await decodeDataFromCanvas(canvas);
+                    }
+
                     if (!decodedData) {
                         reject(new Error('No data found in image'));
                         return;

@@ -107,6 +107,10 @@ export function base64Decode(strPtr: usize, strLen: i32, outPtr: usize): i32 {
   if (strLen == 0) return 0;
 
   if (!isDecoderInitialized) {
+    // Initialize with 0xFF (invalid)
+    for (let k = 0; k < 256; k++) {
+      decoderLookup[k] = 0xFF;
+    }
     for (let k = 0; k < 64; k++) {
       decoderLookup[ALPHABET.charCodeAt(k)] = k as u8;
     }
@@ -115,25 +119,24 @@ export function base64Decode(strPtr: usize, strLen: i32, outPtr: usize): i32 {
 
   let i: i32 = 0;
   let j: i32 = 0;
+  let buffer: u32 = 0;
+  let bitsCollected: i32 = 0;
 
-  // Process in chunks of 4 characters
-  while (i + 4 <= strLen) {
-    const s0 = load<u8>(strPtr + i++);
-    const s1 = load<u8>(strPtr + i++);
-    const s2 = load<u8>(strPtr + i++);
-    const s3 = load<u8>(strPtr + i++);
+  while (i < strLen) {
+    const char = load<u8>(strPtr + i++);
 
-    const v0 = decoderLookup[s0];
-    const v1 = decoderLookup[s1];
-    const v2 = decoderLookup[s2];
-    const v3 = decoderLookup[s3];
+    // Skip '=' padding and whitespace/invalid chars
+    if (char == 61) break; // Stop at first '='
 
-    store<u8>(outPtr + j++, (v0 << 2) | (v1 >> 4));
-    if (s2 != 61) { // Not '='
-      store<u8>(outPtr + j++, (v1 << 4) | (v2 >> 2));
-      if (s3 != 61) { // Not '='
-        store<u8>(outPtr + j++, (v2 << 6) | v3);
-      }
+    const val = decoderLookup[char];
+    if (val == 0xFF) continue; // Skip invalid chars
+
+    buffer = (buffer << 6) | (val as u32);
+    bitsCollected += 6;
+
+    if (bitsCollected >= 8) {
+      bitsCollected -= 8;
+      store<u8>(outPtr + j++, (buffer >> bitsCollected) as u8);
     }
   }
 
@@ -162,6 +165,10 @@ export function encodeLSB(pixelsPtr: usize, pixelsLen: i32, dataPtr: usize, data
     const pixelIndex = (bitIndex / 3 | 0) * 4;
     const colorChannel = bitIndex % 3;
     const addr = pixelsPtr + (pixelIndex + colorChannel);
+
+    // Safety check
+    if (pixelIndex + colorChannel >= pixelsLen) return;
+
     const val = load<u8>(addr);
     store<u8>(addr, (val & 0xFE) | (bit as u8));
     bitIndex++;
@@ -175,6 +182,10 @@ export function encodeLSB(pixelsPtr: usize, pixelsLen: i32, dataPtr: usize, data
       const pixelIndex = (bitIndex / 3 | 0) * 4;
       const colorChannel = bitIndex % 3;
       const addr = pixelsPtr + (pixelIndex + colorChannel);
+
+      // Safety check
+      if (pixelIndex + colorChannel >= pixelsLen) return;
+
       const val = load<u8>(addr);
       store<u8>(addr, (val & 0xFE) | (bit as u8));
       bitIndex++;
@@ -200,6 +211,10 @@ export function decodeLSB(pixelsPtr: usize, pixelsLen: i32, resultPtr: usize, re
     const pixelIndex = (bitIndex / 3 | 0) * 4;
     const colorChannel = bitIndex % 3;
     const addr = pixelsPtr + (pixelIndex + colorChannel);
+
+    // Safety check
+    if (pixelIndex + colorChannel >= pixelsLen) return -3;
+
     const bit = (load<u8>(addr) & 1) as u32;
     totalBits = (totalBits << 1) | bit;
     bitIndex++;
@@ -222,6 +237,10 @@ export function decodeLSB(pixelsPtr: usize, pixelsLen: i32, resultPtr: usize, re
       const pixelIndex = (bitIndex / 3 | 0) * 4;
       const colorChannel = bitIndex % 3;
       const addr = pixelsPtr + (pixelIndex + colorChannel);
+
+      // Safety check
+      if (pixelIndex + colorChannel >= pixelsLen) return -3;
+
       const bit = (load<u8>(addr) & 1) as u8;
       byte = (byte << 1) | bit;
       bitIndex++;
