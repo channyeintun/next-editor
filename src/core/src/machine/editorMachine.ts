@@ -1064,7 +1064,6 @@ export const editorMachine = setup({
                                 },
                             };
                         }),
-                        'captureFrame'
                     ],
                 },
                 STOP_RECORDING: [

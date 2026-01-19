@@ -34,6 +34,13 @@ export default function Preview() {
   const pendingInteractionRef = useRef<IframeInteractionEvent | null>(null);
   const setupInteractionListenersRef = useRef<(() => (() => void) | undefined) | null>(null);
   const cleanupListenersRef = useRef<(() => void) | undefined>(undefined);
+
+  // Refs for scroll throttling
+  const targetScrollRef = useRef<{ scrollTop: number; scrollLeft: number } | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const isUserScrollingRef = useRef<boolean>(false);
+  const userScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Refs to store latest recording state and handler (to bypass closure issues)
   const isRecordingRef = useRef<boolean>(false);
   const handlePreviewEventRef = useRef<typeof handlePreviewEvent | null>(null);
@@ -92,6 +99,19 @@ export default function Preview() {
           };
 
           if (isRecordingRef.current && handlePreviewEventRef.current) {
+            // Mark as user scrolling to disable LERP temporarily (avoids fighting)
+            isUserScrollingRef.current = true;
+            if (userScrollTimeoutRef.current) clearTimeout(userScrollTimeoutRef.current);
+            userScrollTimeoutRef.current = setTimeout(() => {
+              isUserScrollingRef.current = false;
+            }, 100);
+
+            // Sync target rewf
+            targetScrollRef.current = {
+              scrollTop: payload.data.scrollTop,
+              scrollLeft: payload.data.scrollLeft
+            };
+
             handlePreviewEventRef.current({
               type: 'preview_scroll',
               timestamp: Date.now(),
@@ -157,47 +177,69 @@ export default function Preview() {
         const iframeWindow = iframe.contentWindow;
         if (!iframeDoc || !iframeWindow) return;
 
-        // Apply scroll position (idempotent and non-smooth to stay in sync with ticks)
+        // Apply scroll position with LERP
         if (previewState.scrollTop !== undefined || previewState.scrollLeft !== undefined) {
           const targetTop = previewState.scrollTop ?? 0;
           const targetLeft = previewState.scrollLeft ?? 0;
 
-          let currentTop: number = 0;
-          let currentLeft: number = 0;
-          let scrollTarget: Element | Window | null = null;
-
-          if (previewState.currentInteraction?.type === 'scroll' && previewState.currentInteraction.data && !previewState.currentInteraction.data.isDocument) {
-            // Sub-element scroll
-            const targetElement = getElementByXPath(iframeDoc, previewState.currentInteraction.target.xpath);
-            if (targetElement instanceof Element) {
-              scrollTarget = targetElement;
-              currentTop = targetElement.scrollTop;
-              currentLeft = targetElement.scrollLeft;
-            }
+          // If we are recording, don't fight the user's scroll
+          if (isRecordingRef.current && isUserScrollingRef.current) {
+            return;
           }
 
-          if (!scrollTarget) {
-            // Default to window/document scroll
-            currentTop = iframeWindow.scrollY || iframeDoc.documentElement.scrollTop;
-            currentLeft = iframeWindow.scrollX || iframeDoc.documentElement.scrollLeft;
-            scrollTarget = iframeWindow;
-          }
+          // Update target
+          targetScrollRef.current = { scrollTop: targetTop, scrollLeft: targetLeft };
 
-          // Relaxed threshold to 1px for smoother low-speed scroll replay
-          if (Math.abs(currentTop - targetTop) > 1 || Math.abs(currentLeft - targetLeft) > 1) {
-            try {
-              if (scrollTarget === iframeWindow) {
-                iframeWindow.scrollTo({ top: targetTop, left: targetLeft, behavior: 'auto' });
-              } else if (scrollTarget instanceof Element) {
-                scrollTarget.scrollTop = targetTop;
-                scrollTarget.scrollLeft = targetLeft;
+          // Apply in RAF to allow coalescing of rapid updates and match display refresh rate
+          if (!rafRef.current) {
+            rafRef.current = requestAnimationFrame(() => {
+              rafRef.current = null;
+
+              const target = targetScrollRef.current;
+              if (!target || !iframeRef.current) return;
+
+              const iframe = iframeRef.current;
+              const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+              const iframeWindow = iframe.contentWindow;
+
+              if (!iframeDoc || !iframeWindow) return;
+
+              // Determine scroll target (window vs element)
+              let scrollTarget: Element | Window = iframeWindow;
+
+              if (previewState.currentInteraction?.type === 'scroll' && previewState.currentInteraction.data && !previewState.currentInteraction.data.isDocument) {
+                const el = getElementByXPath(iframeDoc, previewState.currentInteraction.target.xpath);
+                if (el instanceof Element) scrollTarget = el;
               }
-            } catch {
-              if (iframeDoc.documentElement && scrollTarget === iframeWindow) {
-                iframeDoc.documentElement.scrollTop = targetTop;
-                iframeDoc.documentElement.scrollLeft = targetLeft;
+
+              // Get current scroll to check threshold
+              let currentTop = 0;
+              let currentLeft = 0;
+              try {
+                if (scrollTarget === iframeWindow) {
+                  currentTop = iframeWindow.scrollY || iframeDoc.documentElement.scrollTop;
+                  currentLeft = iframeWindow.scrollX || iframeDoc.documentElement.scrollLeft;
+                } else if (scrollTarget instanceof Element) {
+                  currentTop = scrollTarget.scrollTop;
+                  currentLeft = scrollTarget.scrollLeft;
+                }
+              } catch (error: unknown) {
+                console.warn('Failed to read scroll position:', error);
               }
-            }
+
+              // Threshold check (0.1px) for efficiency
+              if (Math.abs(currentTop - target.scrollTop) > 0.1 || Math.abs(currentLeft - target.scrollLeft) > 0.1) {
+                try {
+                  if (scrollTarget === iframeWindow) {
+                    iframeWindow.scrollTo({ top: target.scrollTop, left: target.scrollLeft, behavior: 'instant' });
+                  } else if (scrollTarget instanceof Element) {
+                    scrollTarget.scrollTo({ top: target.scrollTop, left: target.scrollLeft, behavior: 'instant' });
+                  }
+                } catch (error: unknown) {
+                  console.warn('Failed to update scroll position:', error);
+                }
+              }
+            });
           }
         }
 
@@ -341,22 +383,30 @@ export default function Preview() {
               }
             }, true);
 
+            let scrollTicking = false;
             document.addEventListener('scroll', (e) => {
+              if (scrollTicking) return;
+              
               const target = e.target;
-              if (target === document || target === window || target === document.body || target === document.documentElement) {
-                const doc = document.scrollingElement || document.documentElement;
-                emit('scroll', document.body, { 
-                  scrollTop: doc.scrollTop, 
-                  scrollLeft: doc.scrollLeft,
-                  isDocument: true
-                });
-              } else if (target instanceof Element) {
-                emit('scroll', target, { 
-                  scrollTop: target.scrollTop, 
-                  scrollLeft: target.scrollLeft,
-                  isDocument: false
-                });
-              }
+              scrollTicking = true;
+              
+              requestAnimationFrame(() => {
+                if (target === document || target === window || target === document.body || target === document.documentElement) {
+                  const doc = document.scrollingElement || document.documentElement;
+                  emit('scroll', document.body, { 
+                    scrollTop: doc.scrollTop, 
+                    scrollLeft: doc.scrollLeft,
+                    isDocument: true
+                  });
+                } else if (target instanceof Element) {
+                  emit('scroll', target, { 
+                    scrollTop: target.scrollTop, 
+                    scrollLeft: target.scrollLeft,
+                    isDocument: false
+                  });
+                }
+                scrollTicking = false;
+              });
             }, true);
           })();
         `;
