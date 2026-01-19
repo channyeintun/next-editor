@@ -315,7 +315,7 @@ export default function SlidePreview({
           {/* Small mode overlay indicator */}
           {size === 'small' && (
             <div
-              className="absolute inset-0 bg-indigo-600/0 hover:bg-indigo-600/10 cursor-pointer flex items-center justify-center group/overlay transition-all"
+              className="absolute inset-0 bg-indigo-600/0 cursor-pointer flex items-center justify-center group/overlay transition-all"
               onClick={(e) => {
                 e.stopPropagation();
                 handleClick();

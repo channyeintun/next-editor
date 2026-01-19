@@ -226,12 +226,7 @@ export default function Preview() {
                   elementWithStyle.style.boxShadow = '';
                 }, 300);
                 break;
-              case 'hover_start':
-                elementWithStyle.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
-                break;
-              case 'hover_end':
-                elementWithStyle.style.backgroundColor = '';
-                break;
+
               case 'focus':
                 elementWithStyle.focus();
                 break;
