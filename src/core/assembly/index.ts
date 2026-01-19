@@ -62,86 +62,8 @@ export function findCommonSuffix(str1Ptr: usize, str1Len: i32, str2Ptr: usize, s
 }
 
 // ============================================================
-// BASE64 ENCODING/DECODING
+// BASE64 ENCODING/DECODING REMOVED (Use JS implementation)
 // ============================================================
-
-
-const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-/**
- * Encodes binary data to a Base64 string in Wasm memory.
- */
-export function base64Encode(dataPtr: usize, dataLen: i32, outPtr: usize): i32 {
-  let i: i32 = 0;
-  let j: i32 = 0;
-
-  while (i < dataLen) {
-    const b0 = load<u8>(dataPtr + i++);
-    const hasB1 = i < dataLen;
-    const b1 = hasB1 ? load<u8>(dataPtr + i++) : 0;
-    const hasB2 = i < dataLen;
-    const b2 = hasB2 ? load<u8>(dataPtr + i++) : 0;
-
-    const c0 = b0 >> 2;
-    const c1 = ((b0 & 0x03) << 4) | (b1 >> 4);
-    const c2 = ((b1 & 0x0F) << 2) | (b2 >> 6);
-    const c3 = b2 & 0x3F;
-
-    store<u8>(outPtr + j++, ALPHABET.charCodeAt(c0));
-    store<u8>(outPtr + j++, ALPHABET.charCodeAt(c1));
-    store<u8>(outPtr + j++, hasB1 ? ALPHABET.charCodeAt(c2) : 61); // '='
-    store<u8>(outPtr + j++, hasB2 ? ALPHABET.charCodeAt(c3) : 61); // '='
-  }
-
-  return j;
-}
-
-// Global lookup table for decoding
-const decoderLookup = new Uint8Array(256);
-let isDecoderInitialized = false;
-
-/**
- * Decodes a Base64 string from Wasm memory to binary data.
- */
-export function base64Decode(strPtr: usize, strLen: i32, outPtr: usize): i32 {
-  if (strLen == 0) return 0;
-
-  if (!isDecoderInitialized) {
-    // Initialize with 0xFF (invalid)
-    for (let k = 0; k < 256; k++) {
-      decoderLookup[k] = 0xFF;
-    }
-    for (let k = 0; k < 64; k++) {
-      decoderLookup[ALPHABET.charCodeAt(k)] = k as u8;
-    }
-    isDecoderInitialized = true;
-  }
-
-  let i: i32 = 0;
-  let j: i32 = 0;
-  let buffer: u32 = 0;
-  let bitsCollected: i32 = 0;
-
-  while (i < strLen) {
-    const char = load<u8>(strPtr + i++);
-
-    // Skip '=' padding and whitespace/invalid chars
-    if (char == 61) break; // Stop at first '='
-
-    const val = decoderLookup[char];
-    if (val == 0xFF) continue; // Skip invalid chars
-
-    buffer = (buffer << 6) | (val as u32);
-    bitsCollected += 6;
-
-    if (bitsCollected >= 8) {
-      bitsCollected -= 8;
-      store<u8>(outPtr + j++, (buffer >> bitsCollected) as u8);
-    }
-  }
-
-  return j;
-}
 
 // ============================================================
 // LSB STEGANOGRAPHY

@@ -33,8 +33,6 @@ interface SteganographyWasmExports {
     decodeLSB(pixelsPtr: number, pixelsLen: number, resultPtr: number, resultMaxLen: number): number;
     findCommonPrefix(str1Ptr: number, str1Len: number, str2Ptr: number, str2Len: number): number;
     findCommonSuffix(str1Ptr: number, str1Len: number, str2Ptr: number, str2Len: number): number;
-    base64Encode(dataPtr: number, dataLen: number, outPtr: number): number;
-    base64Decode(strPtr: number, strLen: number, outPtr: number): number;
 }
 
 /**
