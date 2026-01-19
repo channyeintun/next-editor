@@ -4,7 +4,7 @@
 /**
  * Encodes a Uint8Array to a Base64 string using standard JS btoa.
  */
-export function encodeBase64Wasm(data: Uint8Array): string {
+export function encodeBase64(data: Uint8Array): string {
     let binary = '';
     const chunkSize = 8192; // Process in chunks to avoid stack overflow with apply()
     for (let i = 0; i < data.length; i += chunkSize) {
@@ -17,7 +17,7 @@ export function encodeBase64Wasm(data: Uint8Array): string {
 /**
  * Decodes a Base64 string to a Uint8Array using standard JS atob.
  */
-export function decodeBase64Wasm(base64: string): Uint8Array {
+export function decodeBase64(base64: string): Uint8Array {
     try {
         // Clean the string (remove whitespace/newlines)
         const cleanBase64 = base64.replace(/\s/g, '');

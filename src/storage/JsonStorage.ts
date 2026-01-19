@@ -2,7 +2,7 @@ import type { Recording } from '../core/src';
 import { superjson } from './SuperJsonConfig';
 import { deflate, inflate } from 'pako';
 import { type AudioPlaceholder } from '../core/src/types';
-import { encodeBase64Wasm, decodeBase64Wasm } from '../core/src/utils/base64Wasm';
+import { encodeBase64, decodeBase64 } from '../core/src/utils/base64';
 
 interface StorageStats {
   count: number;
@@ -192,14 +192,14 @@ export class JsonStorage {
    * Convert binary data to base64 for storage using Wasm acceleration
    */
   private binaryToBase64(binaryData: Uint8Array): string {
-    return encodeBase64Wasm(binaryData);
+    return encodeBase64(binaryData);
   }
 
   /**
    * Convert base64 to binary data using Wasm acceleration
    */
   private base64ToBinary(base64Data: string): Uint8Array {
-    return decodeBase64Wasm(base64Data);
+    return decodeBase64(base64Data);
   }
 
 

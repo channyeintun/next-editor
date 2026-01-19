@@ -1,5 +1,5 @@
 import pako from 'pako';
-import { encodeBase64Wasm, decodeBase64Wasm } from './base64Wasm';
+import { encodeBase64, decodeBase64 } from './base64';
 
 // CRC32 implementation for PNG chunks (since pako might not export it directly in all versions)
 function crc32(data: Uint8Array): number {
@@ -133,7 +133,7 @@ export async function encodeDataInCanvas(canvas: HTMLCanvasElement, data: string
     // Compress data using pako
     const compressed = pako.deflate(data);
 
-    const base64Data = encodeBase64Wasm(compressed);
+    const base64Data = encodeBase64(compressed);
     const dataToEncode = MAGIC_PREFIX + base64Data;
     const dataToEncodeBuffer = new TextEncoder().encode(dataToEncode);
 
@@ -225,7 +225,7 @@ export function handleDecodedMessage(decoded: string): string | null {
         try {
             const base64Data = decoded.substring(MAGIC_PREFIX.length).trim();
 
-            const bytes = decodeBase64Wasm(base64Data);
+            const bytes = decodeBase64(base64Data);
 
             if (bytes.length === 0) {
                 console.error('Steganography: Decoded base64 resulted in empty bytes');
