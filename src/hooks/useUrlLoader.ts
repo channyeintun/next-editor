@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { Recording, AudioPlaceholder } from '../core/src/types';
+import { decodeBase64 } from '../core/src/utils/base64';
 import { useNextEditorContext } from './useNextEditorContext';
 
 export const useUrlLoader = () => {
@@ -27,8 +28,23 @@ export const useUrlLoader = () => {
         }
       } else if (file.name.endsWith('.ne')) {
         const text = await file.text();
-        const binaryData = base64ToBinary(text.trim());
+        const trimmedText = text.trim();
+
+        if (!trimmedText || trimmedText.length === 0) {
+          throw new Error('File appears to be empty or corrupted');
+        }
+
+        // Relaxed validation: Allow whitespace/newlines and check general format
+        // Strip whitespace for the check
+        const stripped = trimmedText.replace(/\s/g, '');
+        const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
+        if (!base64Pattern.test(stripped)) {
+          throw new Error('File does not contain valid base64 data');
+        }
+
+        const binaryData = decodeBase64(stripped);
         const recordings = await decompressBinaryToRecordings(binaryData);
+        
         if (recordings.length > 0) {
           loadRecording(recordings[0]);
         }
@@ -91,15 +107,6 @@ export const useUrlLoader = () => {
   }, [importNextEditorFile]);
 
   // Helper functions from JsonStorage (still needed for .ne files)
-  const base64ToBinary = (base64Data: string): Uint8Array => {
-    const binaryString = atob(base64Data);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
-  };
-
   const decompressBinaryToRecordings = async (binaryData: Uint8Array) => {
     const { inflate } = await import('pako');
     const { superjson } = await import('../storage/SuperJsonConfig');
