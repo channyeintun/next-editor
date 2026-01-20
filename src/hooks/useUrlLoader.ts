@@ -124,18 +124,28 @@ export const useUrlLoader = () => {
     const version = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
     offset += 2;
 
-    if (version !== 1) {
-      throw new Error(`Unsupported binary format version: ${version}`);
+    if (version !== 2) {
+      throw new Error(`Unsupported binary format version: ${version}. Legacy Version 1 is no longer supported.`);
     }
 
-    const jsonLength = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
-    offset += 2;
+    // Version 2: Uint32 for jsonLength (supports larger files)
+    const jsonLength = new Uint32Array(binaryData.slice(offset, offset + 4).buffer)[0];
+    offset += 4;
+
+    if (jsonLength === 0 || jsonLength > binaryData.length - offset) {
+      throw new Error(`Invalid JSON length: ${jsonLength}, remaining data: ${binaryData.length - offset}`);
+    }
 
     // Read and decompress JSON
     const compressedJson = binaryData.slice(offset, offset + jsonLength);
     offset += jsonLength;
 
     const jsonString = inflate(compressedJson, { to: 'string' });
+
+    if (!jsonString || typeof jsonString !== 'string') {
+      throw new Error('Failed to decompress JSON data - inflate returned invalid result');
+    }
+
     const recordings = superjson.parse(jsonString) as Recording[];
 
     // Read audio data and reconstruct blobs
