@@ -127,8 +127,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     ? recordingTime
     : (currentRecording ? Math.max(0, progressDuration - currentTime) : currentTime);
 
+  if (!recordMode && !currentRecording && !isRecording) {
+    return null;
+  }
+
   return (
-    <div className={`${positioning} bottom-0 left-0 w-full px-4 py-3 z-20`}>
+    <div className={`${positioning} bottom-0 left-0 w-full px-4 py-3 z-20 pointer-events-none`}>
       <div className="flex items-center gap-3 w-full h-6">
         {recordMode && (
           <button
@@ -144,7 +148,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               }
             }}
             disabled={isPlaying}
-            className={`flex items-center justify-center transition-colors relative ${isPlaying ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80 cursor-pointer'}`}
+            className={`flex items-center justify-center transition-colors relative pointer-events-auto ${isPlaying ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80 cursor-pointer'}`}
             title={isRecording ? "Stop Recording" : (currentRecording ? "New Recording" : "Start Recording")}
           >
             {isRecording ? (
@@ -164,11 +168,11 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
         {currentRecording && !isRecording && (
           <>
-            <button onClick={handlePlayPause} className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer w-6">
+            <button onClick={handlePlayPause} className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer w-6 pointer-events-auto">
               {isPlaying ? <PauseIcon /> : (hasEnded ? <ReplayIcon /> : <PlayIcon />)}
             </button>
 
-            <div className="flex-1 mx-1 flex items-center">
+            <div className="flex-1 mx-1 flex items-center pointer-events-auto">
               <ProgressBar
                 progress={progressDuration > 0 ? Math.min((currentTime / progressDuration) * 100, 100) : 0}
                 duration={progressDuration}
@@ -180,7 +184,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               />
             </div>
 
-            <div className="relative">
+            <div className="relative pointer-events-auto">
               <button
                 onClick={() => setShowSettings(prev => !prev)}
                 className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer"
@@ -239,20 +243,22 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         )}
 
         {(isRecording || currentRecording) && (
-          <span className="text-slate-400 text-sm font-mono">
+          <span className="text-slate-400 text-sm font-mono pointer-events-auto">
             {isRecording ? formatTime(displayTime) : `-${formatTime(displayTime)}`}
           </span>
         )}
       </div>
 
       {currentRecording && (
-        <RecordingEditor
-          recording={currentRecording}
-          isVisible={showRecordingEditor}
-          mode="edit"
-          onSave={handleSaveRecording}
-          onCancel={handleCancelExport}
-        />
+        <div className="pointer-events-auto">
+          <RecordingEditor
+            recording={currentRecording}
+            isVisible={showRecordingEditor}
+            mode="edit"
+            onSave={handleSaveRecording}
+            onCancel={handleCancelExport}
+          />
+        </div>
       )}
     </div>
   );
