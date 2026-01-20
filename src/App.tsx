@@ -34,7 +34,7 @@ function AppContent() {
   const readOnly = urlParams.get('readOnly') === 'true';
 
   return (
-    <div className="h-screen flex flex-col bg-slate-950 text-white overflow-hidden">
+    <div className="h-[100dvh] flex flex-col bg-slate-950 text-white overflow-hidden">
       <div className="flex-1 relative overflow-hidden">
         <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
