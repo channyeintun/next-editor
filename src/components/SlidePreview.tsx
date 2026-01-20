@@ -70,20 +70,13 @@ export default function SlidePreview({
   const getSizeClasses = () => {
     switch (size) {
       case 'small':
-        return 'bottom-20 right-4 w-72 h-44 z-30';
+        return 'bottom-20 right-4 w-72 h-44 z-30 translate-x-0 translate-y-0';
       case 'large':
-        return 'bottom-20 right-4 w-[1000px] max-w-[95vw] h-[700px] max-h-[85vh] z-[100]';
+        return 'bottom-1/2 right-1/2 translate-x-1/2 translate-y-1/2 w-[1000px] max-w-[95vw] h-[700px] max-h-[82dvh] z-[100]';
     }
   };
 
   const getSizeStyles = () => {
-    if (size === 'large') {
-      return {
-        transform: 'translate(calc(-50vw + 50% + 1rem), calc(-50vh + 50% + 5rem))',
-        transformOrigin: 'bottom right'
-      };
-    }
-
     return {
       transformOrigin: 'bottom right'
     };
