@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type * as monaco from 'monaco-editor';
 import { motion, AnimatePresence, type Transition } from 'motion/react';
 import { useNextEditorContext } from '../hooks/useNextEditorContext';
 import type { PreviewSize, PreviewState, PreviewEvent, IframeInteractionEvent } from '../types/slides';
@@ -30,7 +29,6 @@ export default function Preview() {
 
   const lastContentRef = useRef<string>('');
   const scrollPositionRef = useRef<{ scrollTop: number; scrollLeft: number }>({ scrollTop: 0, scrollLeft: 0 });
-  const disposableRef = useRef<monaco.IDisposable | null>(null);
   const pendingInteractionRef = useRef<IframeInteractionEvent | null>(null);
   const setupInteractionListenersRef = useRef<(() => (() => void) | undefined) | null>(null);
   const cleanupListenersRef = useRef<(() => void) | undefined>(undefined);
@@ -51,6 +49,9 @@ export default function Preview() {
   isRecordingRef.current = isRecording;
   handlePreviewEventRef.current = handlePreviewEvent;
 
+  const sizeRef = useRef<PreviewSize>(size);
+  sizeRef.current = size;
+
   // Get registration functions from context
   const registerPreviewStateGetter = 'registerPreviewStateGetter' in nextEditorContext ? nextEditorContext.registerPreviewStateGetter : undefined;
   const registerPreviewStateApplier = 'registerPreviewStateApplier' in nextEditorContext ? nextEditorContext.registerPreviewStateApplier : undefined;
@@ -60,23 +61,25 @@ export default function Preview() {
     eventType: PreviewEvent['type'],
     options?: {
       newSize?: PreviewSize;
+      content?: string;
       scrollTop?: number;
       scrollLeft?: number;
       interaction?: IframeInteractionEvent;
     }
   ) => {
-    if (isRecording && handlePreviewEvent) {
+    if (isRecordingRef.current && handlePreviewEventRef.current) {
       const event: PreviewEvent = {
         type: eventType,
         timestamp: performance.now(),
-        size: options?.newSize ?? size,
+        size: options?.newSize ?? sizeRef.current,
+        content: options?.content,
         scrollTop: options?.scrollTop,
         scrollLeft: options?.scrollLeft,
         interaction: options?.interaction,
       };
-      handlePreviewEvent(event);
+      handlePreviewEventRef.current(event);
     }
-  }, [isRecording, handlePreviewEvent, size]);
+  }, []);
 
   // Emit interaction event
 
@@ -154,6 +157,7 @@ export default function Preview() {
 
         return {
           size,
+          content: lastContentRef.current,
           scrollTop: scrollPositionRef.current.scrollTop,
           scrollLeft: scrollPositionRef.current.scrollLeft,
           currentInteraction: interaction || undefined,
@@ -162,12 +166,33 @@ export default function Preview() {
     }
   }, [registerPreviewStateGetter, size]);
 
+  const updateIframeContent = useCallback((content: string) => {
+    if (!iframeRef.current) return;
+
+    // Skip update if content hasn't changed
+    if (lastContentRef.current === content) return;
+    lastContentRef.current = content;
+
+    const iframe = iframeRef.current;
+
+    try {
+      // Use srcdoc with the content directly (single HTML entry support)
+      iframe.srcdoc = content;
+    } catch (error) {
+      console.error('Error updating iframe srcdoc:', error);
+    }
+  }, []);
+
   // Register preview state applier (handles playback)
   useEffect(() => {
     if (registerPreviewStateApplier && typeof registerPreviewStateApplier === 'function') {
       registerPreviewStateApplier((previewState: PreviewState) => {
-        if (previewState.size !== size) {
+        if (JSON.stringify(previewState.size) !== JSON.stringify(size)) {
           setSize(previewState.size);
+        }
+
+        if (previewState.content !== undefined && previewState.content !== lastContentRef.current) {
+          updateIframeContent(previewState.content);
         }
 
         const iframe = iframeRef.current;
@@ -292,7 +317,7 @@ export default function Preview() {
         }
       });
     }
-  }, [registerPreviewStateApplier, size]);
+  }, [registerPreviewStateApplier, size, updateIframeContent]);
 
   // Track all interaction events in iframe during recording
   useEffect(() => {
@@ -451,22 +476,6 @@ export default function Preview() {
     };
   }, [isRecording, emitPreviewEvent, size]);
 
-  const updateIframeContent = useCallback((content: string) => {
-    if (!iframeRef.current) return;
-
-    // Skip update if content hasn't changed
-    if (lastContentRef.current === content) return;
-    lastContentRef.current = content;
-
-    const iframe = iframeRef.current;
-
-    try {
-      // Use srcdoc with the content directly (single HTML entry support)
-      iframe.srcdoc = content;
-    } catch (error) {
-      console.error('Error updating iframe srcdoc:', error);
-    }
-  }, []);
 
   useEffect(() => {
     const checkForEditor = () => {
@@ -476,47 +485,15 @@ export default function Preview() {
         return;
       }
 
-      const updateContent = () => {
-        const content = editor.getValue();
-        updateIframeContent(content);
-      };
-
-      // Initial update
-      updateContent();
-
-      // Listen for changes
-      const disposable = editor.onDidChangeModelContent(updateContent);
-
-      // Store the disposable in a ref so we can clean it up later
-      disposableRef.current = disposable;
+      // Initial update if not already set
+      if (!lastContentRef.current) {
+        updateIframeContent(editor.getValue());
+      }
     };
 
     checkForEditor();
-
-    // Cleanup
-    return () => {
-      if (disposableRef.current) {
-        disposableRef.current.dispose();
-        disposableRef.current = null;
-      }
-    };
   }, [editorRef, updateIframeContent]);
 
-  // Update content when iframe becomes visible or size changes
-  useEffect(() => {
-    if (size === 'small') return;
-
-    const editor = editorRef.current;
-    if (!editor) return;
-
-    // Small delay to ensure iframe is fully rendered
-    const timer = setTimeout(() => {
-      const content = editor.getValue();
-      updateIframeContent(content);
-    }, 50);
-
-    return () => clearTimeout(timer);
-  }, [size, editorRef, updateIframeContent]);
 
   // Also ensure iframe loads properly
   useEffect(() => {
@@ -566,15 +543,76 @@ export default function Preview() {
     emitPreviewEvent('preview_maximize', { newSize });
   };
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const handleRefresh = useCallback(() => {
     const editor = editorRef.current;
     if (editor) {
+      setIsRefreshing(true);
+      const content = editor.getValue();
       // Force refresh by clearing lastContentRef and manually calling update
       lastContentRef.current = '';
-      const content = editor.getValue();
       updateIframeContent(content);
+      emitPreviewEvent('preview_refresh', { content });
+
+      // Stop spinning after a delay to show it happen
+      setTimeout(() => setIsRefreshing(false), 600);
     }
-  }, [editorRef, updateIframeContent]);
+  }, [editorRef, updateIframeContent, emitPreviewEvent]);
+
+  const [isResizing, setIsResizing] = useState(false);
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const rect = iframe.parentElement?.getBoundingClientRect();
+    if (!rect) return;
+
+    const startWidth = rect.width;
+    const startHeight = rect.height;
+
+    let resizeRaf: number | null = null;
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      // Anchored at top-right, so dragging left increases width
+      const deltaX = startX - moveEvent.clientX;
+      const deltaY = moveEvent.clientY - startY;
+
+      const maxWidth = window.innerWidth - 32; // 1rem padding right + 1rem padding left
+      const maxHeight = window.innerHeight - 96; // 5rem top offset + small bottom padding
+
+      const newWidth = Math.min(maxWidth, Math.max(160, startWidth + deltaX));
+      const newHeight = Math.min(maxHeight, Math.max(120, startHeight + deltaY));
+
+      const newSize = { width: newWidth, height: newHeight };
+      setSize(newSize);
+
+      // Record resizing event during the drag for granular replay
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(() => {
+        emitPreviewEvent('preview_resize', { newSize });
+      });
+    };
+
+    const onMouseUp = () => {
+      setIsResizing(false);
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      // One final emit to ensure accuracy
+      emitPreviewEvent('preview_resize');
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
 
   const springTransition: Transition = {
     type: 'spring',
@@ -583,32 +621,52 @@ export default function Preview() {
     mass: 1,
   };
 
-  const previewVariants = {
-    small: {
-      top: "4rem",
-      right: "1rem",
-      width: "12rem",
-      height: "8rem",
-      left: "auto",
-      bottom: "auto"
-    },
-    medium: {
-      top: "5rem",
-      right: "1rem",
-      width: "20rem",
-      height: "28rem",
-      left: "auto",
-      bottom: "auto"
-    },
-    large: {
-      top: "10%",
-      right: "10%",
-      bottom: "10%",
-      left: "10%",
-      width: "80%",
-      height: "80%"
+  const getPreviewVariants = () => {
+    const base = {
+      small: {
+        top: "4rem",
+        right: "1rem",
+        width: "12rem",
+        height: "8rem",
+        left: "auto",
+        bottom: "auto"
+      },
+      medium: {
+        top: "5rem",
+        right: "1rem",
+        width: "20rem",
+        height: "28rem",
+        left: "auto",
+        bottom: "auto"
+      },
+      large: {
+        top: "10%",
+        right: "10%",
+        bottom: "10%",
+        left: "10%",
+        width: "80%",
+        height: "80%"
+      }
+    };
+
+    if (typeof size === 'object') {
+      return {
+        ...base,
+        custom: {
+          top: "5rem",
+          right: "1rem",
+          width: `${size.width}px`,
+          height: `${size.height}px`,
+          left: "auto",
+          bottom: "auto"
+        }
+      };
     }
+    return base;
   };
+
+  const variants = getPreviewVariants();
+  const animateState = typeof size === 'object' ? 'custom' : size;
 
   return (
     <>
@@ -626,13 +684,13 @@ export default function Preview() {
       </AnimatePresence>
 
       <motion.div
-        variants={previewVariants}
+        variants={variants}
         initial={false}
-        animate={size}
+        animate={animateState}
         transition={springTransition}
         onAnimationStart={() => setIsTransitioning(true)}
         onAnimationComplete={() => setIsTransitioning(false)}
-        className={`fixed bg-transparent rounded-xl overflow-hidden flex flex-col ${getSizeClasses()} ${isSmall ? 'hover:shadow-xl active:scale-95' : ''}`}
+        className={`fixed bg-white rounded-xl overflow-hidden flex flex-col ${getSizeClasses()} ${isSmall ? 'hover:shadow-xl active:scale-95' : ''}`}
         onClick={(e) => {
           if (isSmall) {
             e.stopPropagation();
@@ -687,7 +745,7 @@ export default function Preview() {
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className={isTransitioning ? 'animate-spin' : ''}
+              className={isRefreshing ? 'animate-spin' : ''}
             >
               <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
               <path d="M21 3v5h-5" />
@@ -700,10 +758,31 @@ export default function Preview() {
         <div className="relative flex-1">
           <iframe
             ref={iframeRef}
-            className={`absolute inset-0 w-full h-full block border-0 bg-transparent align-middle ${isTransitioning ? 'pointer-events-none' : ''}`}
+            className={`absolute inset-0 w-full h-full block border-0 bg-transparent align-middle ${isTransitioning || isResizing ? 'pointer-events-none' : ''}`}
             title="Code Preview"
             sandbox="allow-scripts allow-same-origin"
           />
+
+          {/* Resize handle */}
+          <div
+            onMouseDown={handleResizeStart}
+            className="absolute bottom-0 left-0 w-8 h-8 cursor-sw-resize flex items-end justify-start z-50 group hover:bg-black/5 rounded-tr-3xl transition-colors"
+            title="Drag to resize"
+          >
+            <div className="mb-1.5 ml-1.5 flex flex-col items-start gap-[2px]">
+              <div className="w-4 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />
+              <div className="w-2.5 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />
+              <div className="w-1 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />
+            </div>
+
+            {/* Visual background triangle */}
+            <svg
+              className="absolute bottom-0 left-0 w-8 h-8 text-gray-200/50 group-hover:text-blue-500/10 transition-colors -z-10"
+              viewBox="0 0 32 32"
+            >
+              <path d="M0 32 L32 32 L0 0 Z" fill="currentColor" />
+            </svg>
+          </div>
         </div>
       </motion.div>
     </>

@@ -368,6 +368,7 @@ export const editorMachine = setup({
                     type: 'preview_open',
                     timestamp: 0,
                     size: initialPreviewState.size,
+                    content: initialPreviewState.content,
                     scrollTop: initialPreviewState.scrollTop,
                     scrollLeft: initialPreviewState.scrollLeft
                 });
@@ -594,7 +595,8 @@ export const editorMachine = setup({
                 if (!recording.previewEvents?.length) {
                     // Only apply if state has changed significantly
                     if (!currentState ||
-                        nextState.size !== currentState.size ||
+                        JSON.stringify(nextState.size) !== JSON.stringify(currentState.size) ||
+                        nextState.content !== currentState.content ||
                         Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) > 1 ||
                         Math.abs((nextState.scrollLeft || 0) - (currentState.scrollLeft || 0)) > 1) {
                         context.applyPreviewState(nextState);
@@ -735,7 +737,8 @@ export const editorMachine = setup({
             }
 
             // Find and apply all events that should have happened by now
-            let lastEventToApply = null;
+            let latestStateEvent: PreviewEvent | null = null;
+            let latestContent: string | undefined = undefined;
             const isSeeking = event.type === 'SEEK';
 
             for (let i = newLastIndex + 1; i < previewEvents.length; i++) {
@@ -745,12 +748,16 @@ export const editorMachine = setup({
                         // When seeking, just keep track of the last state-defining event
                         // and skip interaction events (clicks, etc.)
                         if (previewEvent.type !== 'preview_interaction') {
-                            lastEventToApply = previewEvent;
+                            latestStateEvent = previewEvent;
+                            if (previewEvent.content) {
+                                latestContent = previewEvent.content;
+                            }
                         }
                     } else {
                         // Normal playback: apply events sequentially for interactions
                         const nextState = {
                             size: previewEvent.size || 'small',
+                            content: previewEvent.content,
                             scrollTop: previewEvent.scrollTop,
                             scrollLeft: previewEvent.scrollLeft,
                             currentInteraction: previewEvent.interaction,
@@ -766,16 +773,30 @@ export const editorMachine = setup({
                 }
             }
 
-            // If we were seeking, apply only the final state once
-            if (isSeeking && lastEventToApply) {
-                const finalState = {
-                    size: lastEventToApply.size || 'small',
-                    scrollTop: lastEventToApply.scrollTop,
-                    scrollLeft: lastEventToApply.scrollLeft,
-                    // Note: interactions are skipped during seek
-                };
-                applyPreviewState(finalState);
-                nextAppliedPreviewState = finalState;
+            // If we were seeking, apply only the final combined state once
+            if (isSeeking) {
+                // If we didn't find content in the current scanned range, 
+                // we might need to look back for the latest content BEFORE newLastIndex
+                if (latestStateEvent && !latestContent) {
+                    for (let j = newLastIndex; j >= 0; j--) {
+                        if (previewEvents[j].content) {
+                            latestContent = previewEvents[j].content;
+                            break;
+                        }
+                    }
+                }
+
+                if (latestStateEvent) {
+                    const finalState = {
+                        size: latestStateEvent.size || 'small',
+                        content: latestContent,
+                        scrollTop: latestStateEvent.scrollTop,
+                        scrollLeft: latestStateEvent.scrollLeft,
+                        // Note: interactions are skipped during seek
+                    };
+                    applyPreviewState(finalState);
+                    nextAppliedPreviewState = finalState;
+                }
             }
 
             if (newLastIndex !== lastAppliedPreviewEventIndex || nextAppliedPreviewState !== context.lastAppliedPreviewState) {

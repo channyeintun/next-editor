@@ -28,7 +28,7 @@ export interface SlideEvent {
 /**
  * Preview panel state (for code preview iframe)
  */
-export type PreviewSize = 'small' | 'medium' | 'large';
+export type PreviewSize = 'small' | 'medium' | 'large' | { width: number; height: number };
 
 /**
  * Iframe interaction event types
@@ -81,15 +81,17 @@ export interface IframeInteractionEvent {
 
 export interface PreviewState {
   size: PreviewSize;
+  content?: string;
   scrollTop?: number;
   scrollLeft?: number;
   currentInteraction?: IframeInteractionEvent;
 }
 
 export interface PreviewEvent {
-  type: 'preview_open' | 'preview_minimize' | 'preview_maximize' | 'preview_scroll' | 'preview_interaction';
+  type: 'preview_open' | 'preview_minimize' | 'preview_maximize' | 'preview_scroll' | 'preview_interaction' | 'preview_refresh' | 'preview_resize';
   timestamp: number;
   size?: PreviewSize;
+  content?: string;
   scrollTop?: number;
   scrollLeft?: number;
   interaction?: IframeInteractionEvent;
