@@ -732,7 +732,7 @@ export default function Preview() {
         }}
       >
         {/* Browser-style header */}
-        <div className="flex items-center bg-gray-50/80 backdrop-blur-md px-3 py-2 border-b border-gray-200">
+        <div className="flex items-center bg-gray-50 px-3 py-2 border-b border-gray-200">
           {/* Window controls */}
           <div className="flex items-center gap-1.5">
             <button

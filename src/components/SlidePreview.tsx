@@ -199,7 +199,7 @@ export default function SlidePreview({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[90] bg-black/80"
           onClick={handleMinimize}
         />
       )}
@@ -218,7 +218,7 @@ export default function SlidePreview({
         }}
       >
         {/* Header */}
-        <div className="flex items-center bg-slate-800/80 backdrop-blur-md px-4 py-2 border-b border-white/5">
+        <div className="flex items-center bg-slate-900 px-4 py-2 border-b border-white/5">
           {/* Window controls */}
           <div className="flex items-center gap-2 mr-4">
             <button
@@ -307,7 +307,7 @@ export default function SlidePreview({
 
           {/* Keyboard navigation hint */}
           {size === 'large' && recordMode && (
-            <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-3 bg-slate-900/80 backdrop-blur-xl border border-white/10 px-4 py-2 rounded-2xl shadow-2xl opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none">
+            <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-3 bg-slate-900 border border-white/10 px-4 py-2 rounded-2xl shadow-2xl opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none">
               <div className="p-1.5 rounded-lg bg-indigo-500/20 border border-indigo-500/20">
                 <Keyboard className="w-4 h-4 text-indigo-400" />
               </div>

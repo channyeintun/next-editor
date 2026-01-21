@@ -109,7 +109,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
   };
 
   return (
-    <div className="flex flex-col bg-[#11141c]/95 backdrop-blur-xl rounded-2xl border border-slate-700/50 w-full sm:w-[420px] max-h-[calc(100dvh-120px)] sm:max-h-[600px] overflow-hidden">
+    <div className="flex flex-col bg-[#11141c] rounded-2xl border border-slate-700/50 w-full sm:w-[420px] max-h-[calc(100dvh-120px)] sm:max-h-[600px] overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-gradient-to-r from-[#11141c] via-[#11141c]/50 to-[#11141c]">
         <div className="flex items-center gap-3">

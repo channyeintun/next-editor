@@ -13,7 +13,7 @@ const Navbar = () => {
       <div className="flex items-center gap-4">
         <Link
           to="/code"
-          className="px-6 py-2 rounded-full border border-white/10 bg-white/5 backdrop-blur-md text-white text-sm font-semibold hover:bg-white hover:text-slate-950 transition-all"
+          className="px-6 py-2 rounded-full border border-white/10 bg-white/10 text-white text-sm font-semibold hover:bg-white hover:text-slate-950 transition-all"
         >
           Start creating
         </Link>

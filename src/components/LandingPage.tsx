@@ -18,8 +18,9 @@ const TerminalMockup = () => {
     const totalLength = codeSegments.reduce((acc, s) => acc + s.text.length, 0);
 
     useEffect(() => {
+        let interval: ReturnType<typeof setInterval>;
         const timer = setTimeout(() => {
-            const interval = setInterval(() => {
+            interval = setInterval(() => {
                 setVisibleChars(prev => {
                     if (prev >= totalLength) {
                         clearInterval(interval);
@@ -28,9 +29,11 @@ const TerminalMockup = () => {
                     return prev + 1;
                 });
             }, 50);
-            return () => clearInterval(interval);
         }, 1000);
-        return () => clearTimeout(timer);
+        return () => {
+            clearTimeout(timer);
+            if (interval) clearInterval(interval);
+        };
     }, [totalLength]);
 
     const renderedSegments = [];
@@ -65,9 +68,9 @@ const LandingPage = () => {
             <main className="relative pt-32 pb-20 px-6 max-w-7xl mx-auto">
                 {/* Background Colorful Blobs */}
                 <div className="absolute top-0 left-0 w-full h-full -z-10 overflow-hidden pointer-events-none">
-                    <div className="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-pinata-purple/30 rounded-full blur-[120px]" />
-                    <div className="absolute bottom-[10%] left-[-10%] w-[500px] h-[500px] bg-pinata-cyan/20 rounded-full blur-[100px]" />
-                    <div className="absolute top-[40%] left-[30%] w-[400px] h-[400px] bg-pinata-yellow/10 rounded-full blur-[100px]" />
+                    <div className="absolute top-[-10%] right-[-5%] w-[350px] h-[350px] md:w-[700px] md:h-[700px] bg-[radial-gradient(circle,hsla(248,100%,67%,0.3)_0%,hsla(248,100%,67%,0)_70%)] rounded-full will-change-transform" />
+                    <div className="absolute bottom-[10%] left-[-10%] w-[300px] h-[300px] md:w-[600px] md:h-[600px] bg-[radial-gradient(circle,hsla(174,76%,60%,0.2)_0%,hsla(174,76%,60%,0)_70%)] rounded-full will-change-transform" />
+                    <div className="absolute top-[40%] left-[30%] w-[250px] h-[250px] md:w-[500px] md:h-[500px] bg-[radial-gradient(circle,hsla(45,100%,66%,0.1)_0%,hsla(45,100%,66%,0)_70%)] rounded-full will-change-transform" />
                 </div>
 
                 <div className="flex flex-col items-center">
@@ -101,7 +104,7 @@ const LandingPage = () => {
                                                     strokeWidth="4"
                                                     strokeLinecap="round"
                                                     strokeLinejoin="round"
-                                                    className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_forwards]"
+                                                    className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_forwards] will-change-[stroke-dasharray]"
                                                 />
                                                 <path
                                                     d="M5 16C50 18 100 18 140 17C170 16 190 14 195 10"
@@ -109,7 +112,7 @@ const LandingPage = () => {
                                                     strokeWidth="2.5"
                                                     strokeLinecap="round"
                                                     strokeLinejoin="round"
-                                                    className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_0.15s_forwards]"
+                                                    className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_0.15s_forwards] will-change-[stroke-dasharray]"
                                                     opacity="0.8"
                                                 />
                                             </svg>
@@ -152,6 +155,7 @@ const LandingPage = () => {
                                                             strokeDasharray="100 200"
                                                             animate={{ strokeDashoffset: [-300, 0] }}
                                                             transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
+                                                            className="will-change-[stroke-dashoffset]"
                                                         />
                                                     </g>
                                                 </svg>
@@ -163,7 +167,7 @@ const LandingPage = () => {
 
                                 {/* Mockup code terminal */}
                                 <div className="hidden lg:block w-[400px] shrink-0">
-                                    <div className="bg-[#181d24] rounded-3xl p-6 shadow-2xl border border-slate-800 rotate-2">
+                                    <div className="bg-[#181d24] rounded-3xl p-6 shadow-2xl border border-slate-800 rotate-2 will-change-transform">
                                         <div className="flex gap-1.5 mb-6">
                                             <div className="w-3 h-3 rounded-full bg-[#FF5F56]" />
                                             <div className="w-3 h-3 rounded-full bg-[#FFBD2E]" />
@@ -182,7 +186,7 @@ const LandingPage = () => {
                                                 <motion.div
                                                     animate={{ opacity: [1, 0.4, 1] }}
                                                     transition={{ duration: 2, repeat: Infinity }}
-                                                    className="w-2 h-2 rounded-full bg-red-500"
+                                                    className="w-2 h-2 rounded-full bg-red-500 will-change-opacity"
                                                 />
                                             </div>
                                         </motion.div>
@@ -193,9 +197,9 @@ const LandingPage = () => {
                                         <motion.div
                                             animate={{ y: [0, -10, 0] }}
                                             transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                                            className="w-32 h-32 relative"
+                                            className="w-32 h-32 relative will-change-transform"
                                         >
-                                            <div className="absolute inset-0 bg-pinata-purple/10 rounded-3xl blur-xl" />
+                                            <div className="absolute inset-0 bg-[radial-gradient(circle,hsla(248,100%,67%,0.15)_0%,hsla(248,100%,67%,0)_70%)] rounded-3xl" />
                                             <img src="/logo.png" alt="Logo" className="w-full h-full object-contain relative z-10" />
                                         </motion.div>
                                     </div>
@@ -231,7 +235,7 @@ const LandingPage = () => {
                                 textColor: "#020617"
                             }
                         ].map((feature, i) => (
-                            <div key={i} className="bg-[#181d24]/50 backdrop-blur-xl border border-slate-800 p-8 rounded-[32px] text-left hover:border-slate-700 transition-colors">
+                            <div key={i} className="bg-[#181d24]/90 border border-slate-800 p-8 rounded-[32px] text-left hover:border-slate-700 transition-colors will-change-[border-color,background-color]">
                                 <div
                                     style={{ backgroundColor: feature.color, color: feature.textColor }}
                                     className="w-12 h-12 rounded-2xl mb-6 flex items-center justify-center font-bold text-xl"
