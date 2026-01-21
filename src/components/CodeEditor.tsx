@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react';
-import Editor, { type OnMount } from '@monaco-editor/react';
+import Editor, { type OnMount, type BeforeMount, type Monaco } from '@monaco-editor/react';
 import { useNextEditorActions, useNextEditorMetadata } from '../hooks/useNextEditorContext';
 import EditorHeader from './EditorHeader';
 
@@ -92,16 +92,22 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
    * Handle Monaco Editor mount event
    * Sets up the editor reference for use in recording and replay
    */
-  const handleEditorDidMount: OnMount = (editor, monaco) => {
+  const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
     setIsEditorReady(true);
+  };
 
-    // Define dark theme
+  /**
+   * Handle Monaco Editor before mount event
+   * Defines the custom theme so it's available when the editor initializes
+   */
+  const handleEditorBeforeMount: BeforeMount = (monaco: Monaco) => {
+    // Define dark theme based on yCe configuration
     monaco.editor.defineTheme('next-editor-dark', {
       base: 'vs-dark',
       inherit: false,
       rules: [
-        { token: '', foreground: 'D4D4D4', background: '202732' },
+        { token: '', foreground: 'D4D4D4', background: '181d24' },
         { token: 'invalid', foreground: 'D4D4D4' },
         { token: 'emphasis', fontStyle: 'italic' },
         { token: 'strong', fontStyle: 'bold' },
@@ -192,6 +198,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         { token: 'keyword.flow.scss', foreground: 'ff9696' },
         { token: 'operator.scss', foreground: '909090' },
         { token: 'operator.sql', foreground: '778899' },
+        { token: 'operator.swift', foreground: '909090' },
         { token: 'predefined.sql', foreground: 'FF00FF' },
         { token: 'entity.name.selector.css', foreground: 'e9e19b' },
         { token: 'support.type.property-name.css', foreground: '75AAFF' },
@@ -200,6 +207,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         { token: 'style.property', foreground: 'e0ade3' },
         { token: 'style.property.modifier', foreground: 'df8de4' },
         { token: 'style.mixin', foreground: 'ffc87c' },
+        { token: 'delimiter.style', foreground: 'dbaadf' },
         { token: 'style.value', foreground: 'a49feb' },
         { token: 'style.value.size', foreground: 'ff8c8c' },
         { token: 'style.start-operator', foreground: '6d829b' },
@@ -208,14 +216,14 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       ],
       colors: {
         'foreground': '#D4D4D4',
-        'editor.background': '#202732',
-        'editorGutter.background': '#202732',
+        'editor.background': '#181d24',
+        'editorGutter.background': '#181d24',
         'editor.selectionBackground': '#30455f',
-        'editorLineNumber.foreground': '#3c4e5d',
+        'editorLineNumber.foreground': '#3b4750',
         'editorWidget.background': '#2d3748',
         'editorWidget.border': '#222a38',
         'list.focusBackground': '#33393f',
-        'list.hoverBackground': '#202732',
+        'list.hoverBackground': '#181d24',
         'list.highlightForeground': '#ffffff',
         'input.foreground': '#ffffff',
         'editorSuggestWidget.foreground': '#D4D4D4',
@@ -224,13 +232,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         'editorError.foreground': '#f56565',
         'editorCursor.foreground': '#ffed4f',
         'widget.shadow': '#252d37',
-        'input.background': '#252c37',
+        'input.background': '#202732',
         'input.border': '#2a323f'
       }
     });
-
-    // Apply the theme
-    monaco.editor.setTheme('next-editor-dark');
   };
 
   return (
@@ -244,15 +249,16 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           theme={theme}
           defaultValue={defaultContent}
           onMount={handleEditorDidMount}
+          beforeMount={handleEditorBeforeMount}
           options={{
             minimap: { enabled: false },
             fontSize: 14,
             lineNumbers: 'on',
             roundedSelection: false,
-            scrollBeyondLastLine: false,
+            scrollBeyondLastLine: true,
             readOnly: false, // Keep editor writable to allow cursor blinking
             cursorStyle: 'line',
-            cursorBlinking: isPlaying ? 'solid' : 'blink',
+            cursorBlinking: isPlaying ? 'solid' : 'smooth',
             renderValidationDecorations: 'on',
             automaticLayout: true,
             // Disable code suggestions and IntelliSense
@@ -260,8 +266,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             suggestOnTriggerCharacters: false,
             acceptSuggestionOnEnter: 'off',
             tabCompletion: 'off',
-            wordBasedSuggestions: 'off',
+            wordBasedSuggestions: 'currentDocument',
             parameterHints: { enabled: false },
+            fontWeight: "normal",
             hover: { enabled: false },
             contextmenu: false,
             // Disable other distracting features
@@ -272,6 +279,34 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             occurrencesHighlight: 'off',
             selectionHighlight: false,
             renderLineHighlight: 'none',
+            fontFamily: "Source Code Pro",
+            fontLigatures: false,
+            wordWrap: 'wordWrapColumn',
+            wordWrapColumn: 100,
+            wrappingIndent: 'same',
+            dragAndDrop: false,
+            hideCursorInOverviewRuler: true,
+            overviewRulerBorder: false,
+            lineNumbersMinChars: 3,
+            glyphMargin: false,
+            lineDecorationsWidth: "1ch",
+            colorDecorators: false,
+            guides: {
+              indentation: false,
+            },
+            renderWhitespace: 'selection',
+            matchBrackets: 'never',
+            links: false,
+            padding: { top: 12 },
+            scrollbar: {
+              useShadows: false,
+              verticalScrollbarSize: 8,
+              horizontalScrollbarSize: 8,
+              horizontal: 'hidden'
+            },
+            unicodeHighlight: {
+              ambiguousCharacters: false
+            }
           }}
         />
       </div>

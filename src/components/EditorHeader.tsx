@@ -60,7 +60,7 @@ interface EditorHeaderProps {
 
 const EditorHeader = memo(function EditorHeader({ showImportExport }: EditorHeaderProps) {
     return (
-        <div className="bg-slate-800 px-4 py-1.5 flex items-center justify-between border-b border-slate-700">
+        <div className="bg-[#11141c] px-4 py-1.5 flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
             {showImportExport && (
                 <div className="flex items-center gap-2">

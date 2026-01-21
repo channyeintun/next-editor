@@ -109,9 +109,9 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
   };
 
   return (
-    <div className="flex flex-col bg-slate-900/95 backdrop-blur-xl rounded-2xl border border-slate-700/50 w-full sm:w-[420px] max-h-[calc(100dvh-120px)] sm:max-h-[600px] overflow-hidden">
+    <div className="flex flex-col bg-[#11141c]/95 backdrop-blur-xl rounded-2xl border border-slate-700/50 w-full sm:w-[420px] max-h-[calc(100dvh-120px)] sm:max-h-[600px] overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-gradient-to-r from-slate-900 via-slate-800/50 to-slate-900">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-gradient-to-r from-[#11141c] via-[#11141c]/50 to-[#11141c]">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
             <Monitor className="w-4 h-4 text-indigo-400" />
@@ -138,7 +138,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
       <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
         {/* Add Section */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-1 bg-slate-800/80 rounded-xl border border-white/5">
+          <div className="flex items-center justify-between p-1 bg-[#11141c]/80 rounded-xl border border-white/5">
             <button
               onClick={() => setContentType('markdown')}
               className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-medium transition-all duration-300 ${contentType === 'markdown'
@@ -300,7 +300,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
       </div>
 
       {/* Footer / CTA */}
-      <div className="p-5 bg-slate-900 border-t border-white/5">
+      <div className="p-5 bg-[#11141c] border-t border-white/5">
         <button
           onClick={onStartPresentation}
           disabled={slides.length === 0}

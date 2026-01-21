@@ -63,34 +63,21 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: transparent;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
   transition: all 0.3s ease;
   z-index: 25;
 }
 
 .floating-play-button:hover {
   transform: translate(-50%, -50%) scale(1.1);
-  box-shadow: 0 12px 40px rgba(59, 130, 246, 0.5), 0 6px 20px rgba(0, 0, 0, 0.4);
+  filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.3));
 }
 
 .floating-play-button:active {
   transform: translate(-50%, -50%) scale(0.95);
-}
-
-.floating-play-button .play-icon {
-  width: 0;
-  height: 0;
-  border-left: 24px solid white;
-  border-top: 16px solid transparent;
-  border-bottom: 16px solid transparent;
-  margin-left: 6px;
 }
