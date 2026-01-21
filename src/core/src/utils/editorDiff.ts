@@ -1,5 +1,5 @@
 import * as monaco from 'monaco-editor';
-import { getWasmExports } from './steganography';
+import { getWasmExports } from './wasm';
 import type { EditorPosition, EditorSelection } from '../types';
 
 /**

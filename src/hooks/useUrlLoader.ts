@@ -1,3 +1,4 @@
+
 import { useCallback, useState } from 'react';
 import type { Recording, AudioPlaceholder } from '../core/src/types';
 import { decodeBase64 } from '../core/src/utils/base64';
@@ -11,7 +12,7 @@ export const useUrlLoader = () => {
     try {
       const urlObj = new URL(url);
       const pathname = urlObj.pathname.toLowerCase();
-      return pathname.endsWith('.ne') || pathname.endsWith('.png');
+      return pathname.endsWith('.ne');
     } catch {
       return false;
     }
@@ -20,13 +21,7 @@ export const useUrlLoader = () => {
   const importNextEditorFile = useCallback(async (file: File) => {
     try {
       setIsLoading(true);
-      if (file.name.endsWith('.png')) {
-        const { extractRecordingsFromPng } = await import('../storage/ImportUtils');
-        const recordings = await extractRecordingsFromPng(file);
-        if (recordings.length > 0) {
-          loadRecording(recordings[0]);
-        }
-      } else if (file.name.endsWith('.ne')) {
+      if (file.name.endsWith('.ne')) {
         const text = await file.text();
         const trimmedText = text.trim();
 
@@ -44,7 +39,7 @@ export const useUrlLoader = () => {
 
         const binaryData = decodeBase64(stripped);
         const recordings = await decompressBinaryToRecordings(binaryData);
-        
+
         if (recordings.length > 0) {
           loadRecording(recordings[0]);
         }
@@ -59,7 +54,7 @@ export const useUrlLoader = () => {
 
   const fetchNextEditorFile = useCallback(async (url: string) => {
     if (!isNextEditorUrl(url)) {
-      throw new Error('URL does not point to a supported file (.ne, .png)');
+      throw new Error('URL does not point to a supported file (.ne)');
     }
 
     try {

@@ -1,6 +1,6 @@
-# AssemblyScript Steganography Module
+# AssemblyScript String Diffing Module
 
-This directory contains the AssemblyScript source code for the high-performance steganography engine used in `use-next-editor`.
+This directory contains the AssemblyScript source code for the high-performance string diffing engine used in `use-next-editor`.
 
 ## Why AssemblyScript?
 

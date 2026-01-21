@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Share2 } from 'lucide-react';
+
+import React, { useEffect } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { useNextEditorContext } from '../hooks/useNextEditorContext';
-import NextEditorImageSaveModal from './ShareModal';
 import SlidesButton from './SlidesButton';
 
 interface CodeEditorProps {
@@ -34,8 +33,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     loadRecording,
     exportAsFile,
   } = useNextEditorContext();
-
-  const [showImageSaveModal, setShowImageSaveModal] = useState(false);
 
   // Listen for cursor/selection changes during recording
   // This captures caret movements from keyboard navigation (arrow keys, etc.)
@@ -245,16 +242,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       <div className="bg-slate-800 px-4 py-1.5 flex items-center justify-between border-b border-slate-700">
         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
         {showImportExport && (<div className="flex items-center gap-2">
-          {currentRecording && (
-            <button
-              onClick={() => setShowImageSaveModal(true)}
-              className="p-1.5 text-white bg-indigo-600 hover:bg-indigo-500 rounded transition-colors flex items-center justify-center shadow-sm"
-              title="Download/Share Image"
-            >
-              <Share2 className="w-4 h-4" />
-            </button>
-          )}
-
           <button
             onClick={handleImport}
             className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
@@ -313,14 +300,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           }}
         />
       </div>
-      {currentRecording && (
-        <NextEditorImageSaveModal
-          recording={currentRecording}
-          isVisible={showImageSaveModal}
-          onSave={() => setShowImageSaveModal(false)}
-          onCancel={() => setShowImageSaveModal(false)}
-        />
-      )}
     </div>
   );
 };

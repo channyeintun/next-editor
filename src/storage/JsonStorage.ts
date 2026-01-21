@@ -321,7 +321,7 @@ export class JsonStorage {
     return new Promise((resolve, reject) => {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.ne,.png';
+      input.accept = '.ne';
 
       input.onchange = async (event) => {
         const file = (event.target as HTMLInputElement).files?.[0];
@@ -331,12 +331,6 @@ export class JsonStorage {
         }
 
         try {
-          if (file.name.endsWith('.png')) {
-            const { extractRecordingsFromPng } = await import('./ImportUtils');
-            const recordings = await extractRecordingsFromPng(file);
-            resolve(recordings);
-            return;
-          }
 
           // Read file as text and validate it's not empty/undefined
           const text = await file.text();

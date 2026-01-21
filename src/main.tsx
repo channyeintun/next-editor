@@ -5,7 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import { initWasm } from './core/src'
 
-// Initialize WebAssembly for steganography
+// Initialize WebAssembly for high-performance string diffing
 initWasm();
 
 createRoot(document.getElementById('root')!).render(

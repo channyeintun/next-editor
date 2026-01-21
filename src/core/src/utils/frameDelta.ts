@@ -9,7 +9,7 @@ import type {
     DeltaFrame,
 } from './deltaTypes';
 import { DELTA_CONFIG, isKeyframe } from './deltaTypes';
-import { getWasmExports } from './steganography';
+import { getWasmExports } from './wasm';
 
 // ============================================================================
 // Text Encoding Utilities
