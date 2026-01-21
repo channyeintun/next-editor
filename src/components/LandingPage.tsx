@@ -5,13 +5,13 @@ import { useState, useEffect } from 'react';
 
 const TerminalMockup = () => {
     const codeSegments = [
-        { text: "<html>", color: "#6D57FF" },
-        { text: "\n  ", color: "#6D57FF" },
-        { text: "<h1>", color: "#4DE5D6" },
+        { text: "<html>", color: "#e9e19b" },
+        { text: "\n  ", color: "#e9e19b" },
+        { text: "<h1>", color: "#e9e19b" },
         { text: "Hello world", color: "#fff" },
-        { text: "</h1>", color: "#4DE5D6" },
-        { text: "\n", color: "#6D57FF" },
-        { text: "</html>", color: "#6D57FF" }
+        { text: "</h1>", color: "#e9e19b" },
+        { text: "\n", color: "#e9e19b" },
+        { text: "</html>", color: "#e9e19b" }
     ];
 
     const [visibleChars, setVisibleChars] = useState(0);
@@ -58,7 +58,7 @@ const TerminalMockup = () => {
 
 const LandingPage = () => {
     return (
-        <div className="min-h-screen bg-slate-950 text-white overflow-hidden selection:bg-pinata-purple selection:text-white font-telegraf">
+        <div className="min-h-screen bg-[#11141c] text-white overflow-hidden selection:bg-pinata-purple selection:text-white font-telegraf">
             <Navbar />
 
             {/* Hero Section */}
@@ -122,24 +122,48 @@ const LandingPage = () => {
                                             to="/code"
                                             className="px-10 py-4 rounded-full bg-slate-950 text-white text-lg font-semibold hover:scale-105 active:scale-95 transition-all shadow-xl"
                                         >
-                                            Start Creating
+                                            Start creating
                                         </Link>
                                         <Link
                                             to="/code?url=/introduction.ne"
-                                            className="px-10 py-4 rounded-full border-2 border-slate-200 text-slate-950 text-lg font-semibold hover:bg-slate-50 transition-all flex items-center gap-2"
+                                            className="px-10 py-4 rounded-full bg-[#4de5a6] text-slate-950 text-lg font-semibold hover:bg-[#3cd495] transition-all flex items-center gap-2 shadow-xl"
                                         >
-                                            <span className="relative flex h-3 w-3">
-                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                                            </span>
-                                            Watch Demo
+                                            <div className="relative">
+                                                <svg viewBox="0 0 256 256" className="w-5 h-5 overflow-visible">
+                                                    <path
+                                                        d="M240,128a15.74,15.74,0,0,1-7.6,13.51L88.32,229.65a16,16,0,0,1-16.2.3A15.86,15.86,0,0,1,64,216.13V39.87a15.86,15.86,0,0,1,8.12-13.82,16,16,0,0,1,16.2.3L232.4,114.49A15.74,15.74,0,0,1,240,128Z"
+                                                        className="fill-[#3b82f6]"
+                                                    />
+                                                    <defs>
+                                                        <linearGradient id="larvaGradient" gradientUnits="userSpaceOnUse">
+                                                            <stop offset="0%" stopColor="white" stopOpacity="1" />
+                                                            <stop offset="20%" stopColor="white" stopOpacity="0.8" />
+                                                            <stop offset="60%" stopColor="white" stopOpacity="0.2" />
+                                                            <stop offset="100%" stopColor="white" stopOpacity="0" />
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <g style={{ transform: 'scale(1.2)', transformOrigin: 'center' }}>
+                                                        <motion.path
+                                                            d="M240,128a15.74,15.74,0,0,1-7.6,13.51L88.32,229.65a16,16,0,0,1-16.2.3A15.86,15.86,0,0,1,64,216.13V39.87a15.86,15.86,0,0,1,8.12-13.82,16,16,0,0,1,16.2.3L232.4,114.49A15.74,15.74,0,0,1,240,128Z"
+                                                            fill="none"
+                                                            stroke="url(#larvaGradient)"
+                                                            strokeWidth="12"
+                                                            strokeLinecap="round"
+                                                            strokeDasharray="100 200"
+                                                            animate={{ strokeDashoffset: [-300, 0] }}
+                                                            transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
+                                                        />
+                                                    </g>
+                                                </svg>
+                                            </div>
+                                            Watch demo
                                         </Link>
                                     </div>
                                 </div>
 
                                 {/* Mockup code terminal */}
                                 <div className="hidden lg:block w-[400px] shrink-0">
-                                    <div className="bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-800 rotate-2">
+                                    <div className="bg-[#181d24] rounded-3xl p-6 shadow-2xl border border-slate-800 rotate-2">
                                         <div className="flex gap-1.5 mb-6">
                                             <div className="w-3 h-3 rounded-full bg-[#FF5F56]" />
                                             <div className="w-3 h-3 rounded-full bg-[#FFBD2E]" />
@@ -154,13 +178,12 @@ const LandingPage = () => {
                                             transition={{ delay: 0.2 }}
                                             className="pt-4 mt-4 border-t border-slate-800 flex items-center justify-start"
                                         >
-                                            <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20">
+                                            <div className="p-1 rounded-full bg-red-500/10 border border-red-500/20">
                                                 <motion.div
                                                     animate={{ opacity: [1, 0.4, 1] }}
                                                     transition={{ duration: 2, repeat: Infinity }}
                                                     className="w-2 h-2 rounded-full bg-red-500"
                                                 />
-                                                <span className="text-[10px] font-mono text-red-500 font-bold uppercase tracking-wider">REC</span>
                                             </div>
                                         </motion.div>
                                     </div>
@@ -208,7 +231,7 @@ const LandingPage = () => {
                                 textColor: "#020617"
                             }
                         ].map((feature, i) => (
-                            <div key={i} className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 p-8 rounded-[32px] text-left hover:border-slate-700 transition-colors">
+                            <div key={i} className="bg-[#181d24]/50 backdrop-blur-xl border border-slate-800 p-8 rounded-[32px] text-left hover:border-slate-700 transition-colors">
                                 <div
                                     style={{ backgroundColor: feature.color, color: feature.textColor }}
                                     className="w-12 h-12 rounded-2xl mb-6 flex items-center justify-center font-bold text-xl"
