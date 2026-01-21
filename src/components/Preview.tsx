@@ -25,6 +25,7 @@ export default function Preview() {
   const [isTransitioning, setIsTransitioning] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const lastContentRef = useRef<string>('');
   const scrollPositionRef = useRef<{ scrollTop: number; scrollLeft: number }>({ scrollTop: 0, scrollLeft: 0 });
@@ -584,7 +585,7 @@ export default function Preview() {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    const rect = iframe.parentElement?.getBoundingClientRect();
+    const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
 
     const startWidth = rect.width;
@@ -709,6 +710,7 @@ export default function Preview() {
         initial={false}
         animate={animateState}
         transition={springTransition}
+        ref={containerRef}
         onAnimationStart={() => setIsTransitioning(true)}
         onAnimationComplete={() => setIsTransitioning(false)}
         className={`fixed bg-white rounded-xl overflow-hidden flex flex-col ${getSizeClasses()} ${isSmall ? 'hover:shadow-xl active:scale-95' : ''}`}
@@ -788,7 +790,8 @@ export default function Preview() {
           <div
             onMouseDown={handleResizeStart}
             onTouchStart={handleResizeStart}
-            className="absolute bottom-0 left-0 w-10 h-10 cursor-sw-resize flex items-end justify-start z-50 group hover:bg-black/5 rounded-tr-3xl transition-colors touch-none"
+            onDoubleClick={(e) => e.stopPropagation()}
+            className="absolute bottom-0 left-0 w-10 h-10 cursor-sw-resize flex items-end justify-start z-50 group transition-colors touch-none"
             title="Drag to resize"
           >
             <div className="mb-2 ml-2 flex flex-col items-start gap-[2px]">
@@ -799,7 +802,7 @@ export default function Preview() {
 
             {/* Visual background triangle */}
             <svg
-              className="absolute bottom-0 left-0 w-10 h-10 text-gray-200/50 group-hover:text-blue-500/10 transition-colors -z-10"
+              className="absolute bottom-0 left-0 w-10 h-10 text-gray-200/50 group-hover:text-blue-500/20 transition-colors -z-10"
               viewBox="0 0 40 40"
             >
               <path d="M0 40 L40 40 L0 0 Z" fill="currentColor" />
