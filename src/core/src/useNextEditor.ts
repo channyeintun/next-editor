@@ -73,10 +73,8 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
 
   // Event Handlers for UI
   const handleEditorChange = useCallback(() => {
-    if (state.matches('recording' as MatchesParam)) {
-      send({ type: 'CAPTURE_FRAME' });
-    }
-  }, [send, state]);
+    send({ type: 'CAPTURE_FRAME' });
+  }, [send]);
 
   const isPlaying = state.matches({ playback: 'playing' } as MatchesParam);
 
@@ -141,16 +139,12 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
   }, [isPlaying, send]);
 
   const handleSlideEvent = useCallback((event: SlideEvent) => {
-    if (state.matches('recording' as MatchesParam)) {
-      send({ type: 'SLIDE_EVENT', event });
-    }
-  }, [send, state]);
+    send({ type: 'SLIDE_EVENT', event });
+  }, [send]);
 
   const handlePreviewEvent = useCallback((event: PreviewEvent) => {
-    if (state.matches('recording' as MatchesParam)) {
-      send({ type: 'PREVIEW_EVENT', event });
-    }
-  }, [send, state]);
+    send({ type: 'PREVIEW_EVENT', event });
+  }, [send]);
 
   // Helper functions
   const getEditorState = useCallback((): EditorState | null => {

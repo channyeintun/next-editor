@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Presentation, Circle } from 'lucide-react';
-import { useNextEditorContext } from '../hooks/useNextEditorContext';
+import { useNextEditorMetadata } from '../hooks/useNextEditorContext';
 import { useSlidesContext } from '../contexts/SlidesContext';
 import SlidesManager from './SlidesManager';
 
 export default function SlidesButton() {
-  const { isRecording } = useNextEditorContext();
+  const { isRecording } = useNextEditorMetadata();
   const [showManager, setShowManager] = useState(false);
 
   const {

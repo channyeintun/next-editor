@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, type Transition } from 'motion/react';
-import { useNextEditorContext } from '../hooks/useNextEditorContext';
+import { useNextEditorActions, useNextEditorMetadata } from '../hooks/useNextEditorContext';
 import type { PreviewSize, PreviewState, PreviewEvent, IframeInteractionEvent } from '../types/slides';
-
 
 
 // ============================================================================
@@ -41,9 +40,16 @@ export default function Preview() {
 
   // Refs to store latest recording state and handler (to bypass closure issues)
   const isRecordingRef = useRef<boolean>(false);
-  const handlePreviewEventRef = useRef<typeof handlePreviewEvent | null>(null);
-  const nextEditorContext = useNextEditorContext();
-  const { editorRef, handlePreviewEvent, isRecording } = nextEditorContext;
+  const handlePreviewEventRef = useRef<((event: PreviewEvent) => void) | null>(null);
+
+  const {
+    editorRef,
+    handlePreviewEvent,
+    registerPreviewStateGetter,
+    registerPreviewStateApplier,
+  } = useNextEditorActions();
+
+  const { isRecording } = useNextEditorMetadata();
 
   // Keep refs updated synchronously
   isRecordingRef.current = isRecording;
@@ -51,10 +57,6 @@ export default function Preview() {
 
   const sizeRef = useRef<PreviewSize>(size);
   sizeRef.current = size;
-
-  // Get registration functions from context
-  const registerPreviewStateGetter = 'registerPreviewStateGetter' in nextEditorContext ? nextEditorContext.registerPreviewStateGetter : undefined;
-  const registerPreviewStateApplier = 'registerPreviewStateApplier' in nextEditorContext ? nextEditorContext.registerPreviewStateApplier : undefined;
 
   // Emit preview event
   const emitPreviewEvent = useCallback((
@@ -578,6 +580,9 @@ export default function Preview() {
 
     const startWidth = rect.width;
     const startHeight = rect.height;
+
+    // Immediately set to custom size to prevent jump when switching from preset
+    setSize({ width: startWidth, height: startHeight });
 
     let resizeRaf: number | null = null;
     const onMouseMove = (moveEvent: MouseEvent) => {

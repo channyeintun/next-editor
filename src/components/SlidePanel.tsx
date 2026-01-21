@@ -1,5 +1,5 @@
 import { useSlidesContext } from '../contexts/SlidesContext';
-import { useNextEditorContext } from '../hooks/useNextEditorContext';
+import { useNextEditorActions } from '../hooks/useNextEditorContext';
 import SlidePreview from './SlidePreview';
 
 export default function SlidePanel() {
@@ -11,10 +11,7 @@ export default function SlidePanel() {
     handleSlideEvent: onSlideEvent,
   } = useSlidesContext();
 
-  const nextEditorContext = useNextEditorContext();
-  const registerSlideNavigator = 'registerSlideNavigator' in nextEditorContext ? nextEditorContext.registerSlideNavigator : undefined;
-
-  const { pause } = useNextEditorContext();
+  const { registerSlideNavigator, pause } = useNextEditorActions();
 
   return (
     <>

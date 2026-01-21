@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNextEditorContext } from '../hooks/useNextEditorContext';
+import { useNextEditorMetadata, useNextEditorPlayback } from '../hooks/useNextEditorContext';
 import type { MouseCursorPosition } from '../core/src';
 
 /**
@@ -70,7 +70,8 @@ const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
 const CursorComponent: React.FC<{
   hasParent?: boolean;
 }> = (props) => {
-  const { isPlaying, currentCursor } = useNextEditorContext();
+  const { isPlaying } = useNextEditorMetadata();
+  const { currentCursor } = useNextEditorPlayback();
 
   // Render fake cursor during playback - fixed to viewport with smooth transitions
   return (

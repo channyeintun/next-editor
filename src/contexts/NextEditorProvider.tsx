@@ -1,7 +1,11 @@
-import React, { useRef } from 'react';
+import { useRef, useMemo, useCallback } from 'react';
 import type * as monaco from 'monaco-editor';
-import { useNextEditor } from '../core/src';
-import { NextEditorContext } from './NextEditorContext';
+import { useNextEditor, type Recording } from '../core/src';
+import {
+  NextEditorActionsContext,
+  NextEditorMetadataContext,
+  NextEditorPlaybackContext
+} from './NextEditorContext';
 import { createJsonStorage } from '../storage/JsonStorage';
 import type { SlidePreviewState, PreviewState, Slide } from '../types/slides';
 
@@ -44,67 +48,193 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     applySlides: (slides) => applySlidesRef.current?.(slides),
   });
 
+  const {
+    clearRecording: clearRecordingBase,
+    startRecording,
+    stopRecording,
+    play,
+    pause,
+    stop,
+    seekTo,
+    setPlaybackSpeed,
+    setVolume,
+    loadRecording,
+    handleEditorChange,
+    handleSlideEvent,
+    handlePreviewEvent,
+    navigateSlidesDirect,
+    isRecording,
+    isRecordingAudio,
+    isPlaying,
+    isPaused,
+    hasEnded,
+    currentRecording,
+    recordingStartTime,
+    currentTime,
+    playbackSpeed,
+    volume,
+    actualDuration,
+    currentCursor,
+  } = originalHook;
 
-  // Create enhanced hook with JSON storage methods
-  const editorHook = {
-    ...originalHook,
-    // JSON Storage methods
-    exportAsFile: jsonStorage.current.exportAsFile.bind(jsonStorage.current),
-    exportAllAsFile: jsonStorage.current.exportAllAsFile.bind(jsonStorage.current),
-    importFromFile: jsonStorage.current.importFromFile.bind(jsonStorage.current),
-    clearStorage: jsonStorage.current.clear.bind(jsonStorage.current),
-    getStorageStats: jsonStorage.current.getStats.bind(jsonStorage.current),
-    deleteFromStorage: jsonStorage.current.delete.bind(jsonStorage.current),
-    clearRecording: () => {
-      originalHook.clearRecording();
-      if (editorRef.current) {
-        editorRef.current.setValue(`<html>
-    <h1>Hello world</h1>
+  // Stabilize storage and registration methods
+  const exportAsFile = useCallback((recording: Recording, filename?: string) => jsonStorage.current.exportAsFile(recording, filename), []);
+  const exportAllAsFile = useCallback((filename?: string) => jsonStorage.current.exportAllAsFile(filename), []);
+  const importFromFile = useCallback(() => jsonStorage.current.importFromFile(), []);
+  const clearStorage = useCallback(() => jsonStorage.current.clear(), []);
+  const getStorageStats = useCallback(() => jsonStorage.current.getStats(), []);
+  const deleteFromStorage = useCallback((id: string) => jsonStorage.current.delete(id), []);
+
+  const loadRecordingsFromStorage = useCallback(async () => {
+    try {
+      return await jsonStorage.current.load();
+    } catch (error) {
+      console.warn('Failed to load recordings from storage:', error);
+      return [];
+    }
+  }, []);
+
+  const clearRecording = useCallback(() => {
+    clearRecordingBase();
+    if (editorRef.current) {
+      editorRef.current.setValue(`<html>
+  <h1>Hello world</h1>
 </html>`);
-      }
-    },
-    loadRecordingsFromStorage: async () => {
-      try {
-        const loadedRecordings = await jsonStorage.current.load();
-        // Just return the recordings array - don't load them into the hook
-        // The hook only handles one recording at a time for playback
-        return loadedRecordings;
-      } catch (error) {
-        console.warn('Failed to load recordings from storage:', error);
-        return [];
-      }
-    },
-    // Slide state registration
-    registerSlideStateGetter: (getter: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null) => {
-      getSlideStateRef.current = getter;
-    },
-    registerSlideStateApplier: (applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void) => {
-      applySlideStateRef.current = applier;
-    },
-    // Slides data registration
-    registerSlidesGetter: (getter: () => Slide[]) => {
-      getSlidesRef.current = getter;
-    },
-    registerSlidesApplier: (applier: (slides: Slide[]) => void) => {
-      applySlidesRef.current = applier;
-    },
-    // Preview state registration
-    registerPreviewStateGetter: (getter: () => PreviewState | null) => {
-      getPreviewStateRef.current = getter;
-    },
-    registerPreviewStateApplier: (applier: (previewState: PreviewState) => void) => {
-      applyPreviewStateRef.current = applier;
-    },
-    // Direct navigation channel
-    registerSlideNavigator: (navigator: (indexh: number, indexv: number) => void) => {
-      editorHook.navigateSlidesDirect = navigator;
-    },
-  };
+    }
+  }, [clearRecordingBase]);
+
+  const registerSlideStateGetter = useCallback((getter: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null) => {
+    getSlideStateRef.current = getter;
+  }, []);
+
+  const registerSlideStateApplier = useCallback((applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void) => {
+    applySlideStateRef.current = applier;
+  }, []);
+
+  const registerSlidesGetter = useCallback((getter: () => Slide[]) => {
+    getSlidesRef.current = getter;
+  }, []);
+
+  const registerSlidesApplier = useCallback((applier: (slides: Slide[]) => void) => {
+    applySlidesRef.current = applier;
+  }, []);
+
+  const registerPreviewStateGetter = useCallback((getter: () => PreviewState | null) => {
+    getPreviewStateRef.current = getter;
+  }, []);
+
+  const registerPreviewStateApplier = useCallback((applier: (previewState: PreviewState) => void) => {
+    applyPreviewStateRef.current = applier;
+  }, []);
+
+  const registerSlideNavigator = useCallback((navigator: (indexh: number, indexv: number) => void) => {
+    originalHook.navigateSlidesDirect = navigator;
+  }, [originalHook]);
+
+  // 1. Memoize Stable Actions
+  const actionsValue = useMemo(() => ({
+    editorRef,
+    startRecording,
+    stopRecording,
+    play,
+    pause,
+    stop,
+    seekTo,
+    setPlaybackSpeed,
+    setVolume,
+    loadRecording,
+    handleEditorChange,
+    handleSlideEvent,
+    handlePreviewEvent,
+    clearRecording,
+    exportAsFile,
+    exportAllAsFile,
+    importFromFile,
+    clearStorage,
+    getStorageStats,
+    loadRecordingsFromStorage,
+    deleteFromStorage,
+    registerSlideStateGetter,
+    registerSlideStateApplier,
+    registerSlidesGetter,
+    registerSlidesApplier,
+    registerPreviewStateGetter,
+    registerPreviewStateApplier,
+    registerSlideNavigator,
+    navigateSlidesDirect,
+  }), [
+    startRecording,
+    stopRecording,
+    play,
+    pause,
+    stop,
+    seekTo,
+    setPlaybackSpeed,
+    setVolume,
+    loadRecording,
+    handleEditorChange,
+    handleSlideEvent,
+    handlePreviewEvent,
+    navigateSlidesDirect,
+    clearRecording,
+    exportAsFile,
+    exportAllAsFile,
+    importFromFile,
+    clearStorage,
+    getStorageStats,
+    loadRecordingsFromStorage,
+    deleteFromStorage,
+    registerSlideStateGetter,
+    registerSlideStateApplier,
+    registerSlidesGetter,
+    registerSlidesApplier,
+    registerPreviewStateGetter,
+    registerPreviewStateApplier,
+    registerSlideNavigator,
+  ]);
+
+  // 2. Memoize Metadata (flags)
+  const metadataValue = useMemo(() => ({
+    isRecording,
+    isRecordingAudio,
+    isPlaying,
+    isPaused,
+    hasEnded,
+    currentRecording,
+    recordingStartTime,
+  }), [
+    isRecording,
+    isRecordingAudio,
+    isPlaying,
+    isPaused,
+    hasEnded,
+    currentRecording,
+    recordingStartTime
+  ]);
+
+  // 3. Playback (Directly from hook to allow reactivity where needed)
+  const playbackValue = useMemo(() => ({
+    currentTime,
+    playbackSpeed,
+    volume,
+    duration: actualDuration,
+    currentCursor,
+  }), [
+    currentTime,
+    playbackSpeed,
+    volume,
+    actualDuration,
+    currentCursor
+  ]);
 
   return (
-    <NextEditorContext value={{ ...editorHook, editorRef }}>
-      {children}
-    </NextEditorContext>
+    <NextEditorActionsContext value={actionsValue}>
+      <NextEditorMetadataContext value={metadataValue}>
+        <NextEditorPlaybackContext value={playbackValue}>
+          {children}
+        </NextEditorPlaybackContext>
+      </NextEditorMetadataContext>
+    </NextEditorActionsContext>
   );
 };
 

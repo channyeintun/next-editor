@@ -2,11 +2,19 @@ export { useNextEditor } from './useNextEditor';
 
 // Contexts
 export { NextEditorProvider } from '../../contexts/NextEditorProvider';
-export { NextEditorContext } from '../../contexts/NextEditorContext';
+export {
+  NextEditorActionsContext,
+  NextEditorMetadataContext,
+  NextEditorPlaybackContext
+} from '../../contexts/NextEditorContext';
 export { SlidesProvider } from '../../contexts/SlidesContext';
 
 // Hooks
-export { useNextEditorContext } from '../../hooks/useNextEditorContext';
+export {
+  useNextEditorActions,
+  useNextEditorMetadata,
+  useNextEditorPlayback
+} from '../../hooks/useNextEditorContext';
 export { useSlides } from '../../hooks/useSlides';
 
 // Components

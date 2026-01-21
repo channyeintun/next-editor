@@ -13,17 +13,23 @@ import CursorComponent from './components/Cursor.tsx';
 
 function App() {
   return (
+    <Routes>
+      <Route path="/" element={<AppContent />} />
+    </Routes>
+  );
+}
+
+function AppContent() {
+  return (
     <NextEditorProvider>
       <SlidesProvider>
-        <Routes>
-          <Route path="/" element={<AppContent />} />
-        </Routes>
+        <EditorLayout />
       </SlidesProvider>
     </NextEditorProvider>
   );
 }
 
-function AppContent() {
+function EditorLayout() {
   const { isDragging, isLoading: dragLoading } = useDragAndDropUrl();
   const { isLoading: urlLoading } = useUrlQuery();
 

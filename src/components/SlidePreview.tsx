@@ -7,7 +7,7 @@ import {
   Keyboard
 } from 'lucide-react';
 import type { Slide, SlideEvent } from '../types/slides';
-import { useNextEditorContext } from '../hooks/useNextEditorContext';
+import { useNextEditorMetadata } from '../hooks/useNextEditorContext';
 import RevealSlideRenderer from './RevealSlideRenderer';
 
 type SlidePreviewSize = 'small' | 'large';
@@ -39,7 +39,7 @@ export default function SlidePreview({
   registerSlideNavigator,
   positioning = 'fixed'
 }: SlidePreviewProps) {
-  const { isPlaying } = useNextEditorContext();
+  const { isPlaying } = useNextEditorMetadata();
   // Check record mode from sessionStorage
   const recordMode = sessionStorage.getItem('recordMode') === 'true';
 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useCallback } from 'react';
 import { useSlides } from '../hooks/useSlides';
-import { useNextEditorContext } from '../hooks/useNextEditorContext';
+import { useNextEditorActions } from '../hooks/useNextEditorContext';
 import type { SlidePreviewState } from '../types/slides';
 
 const SlidesContext = createContext<ReturnType<typeof useSlides> | null>(null);
@@ -10,13 +10,14 @@ interface SlidesProviderProps {
 }
 
 export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
-  const nextEditorContext = useNextEditorContext();
-  const { handleSlideEvent } = nextEditorContext;
-  const registerSlideStateGetter = 'registerSlideStateGetter' in nextEditorContext ? nextEditorContext.registerSlideStateGetter : undefined;
-  const registerSlideStateApplier = 'registerSlideStateApplier' in nextEditorContext ? nextEditorContext.registerSlideStateApplier : undefined;
-  const registerSlidesGetter = 'registerSlidesGetter' in nextEditorContext ? nextEditorContext.registerSlidesGetter : undefined;
-  const registerSlidesApplier = nextEditorContext.registerSlidesApplier;
-  const navigateSlidesDirect = nextEditorContext.navigateSlidesDirect;
+  const {
+    handleSlideEvent,
+    registerSlideStateGetter,
+    registerSlideStateApplier,
+    registerSlidesGetter,
+    registerSlidesApplier,
+    navigateSlidesDirect,
+  } = useNextEditorActions();
 
   const slidesData = useSlides({
     onSlideEvent: handleSlideEvent

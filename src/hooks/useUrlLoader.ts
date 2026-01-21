@@ -2,11 +2,11 @@
 import { useCallback, useState } from 'react';
 import type { Recording, AudioPlaceholder } from '../core/src/types';
 import { decodeBase64 } from '../core/src/utils/base64';
-import { useNextEditorContext } from './useNextEditorContext';
+import { useNextEditorActions } from './useNextEditorContext';
 
 export const useUrlLoader = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const { loadRecording } = useNextEditorContext();
+  const { loadRecording } = useNextEditorActions();
 
   const isNextEditorUrl = (url: string): boolean => {
     try {

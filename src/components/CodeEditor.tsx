@@ -1,8 +1,7 @@
-
-import React, { useEffect } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { useNextEditorContext } from '../hooks/useNextEditorContext';
-import SlidesButton from './SlidesButton';
+import { useNextEditorActions, useNextEditorMetadata } from '../hooks/useNextEditorContext';
+import EditorHeader from './EditorHeader';
 
 interface CodeEditorProps {
   language?: string;
@@ -15,7 +14,7 @@ interface CodeEditorProps {
  * CodeEditor Component - Monaco Editor wrapper with recording and replay capabilities
  */
 
-const CodeEditor: React.FC<CodeEditorProps> = ({
+const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   theme = 'next-editor-dark',
   defaultContent = `<html>
     <h1>Hello world</h1>
@@ -26,18 +25,28 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const {
     handleEditorChange,
     editorRef,
-    isPlaying,
-    isRecording,
-    currentRecording,
-    importFromFile,
-    loadRecording,
-    exportAsFile,
-  } = useNextEditorContext();
+  } = useNextEditorActions();
 
-  // Listen for cursor/selection changes during recording
-  // This captures caret movements from keyboard navigation (arrow keys, etc.)
+  // Only subscribe to the flags we actually need for rendering decisions
+  const {
+    isPlaying,
+  } = useNextEditorMetadata();
+
+  // Track if the editor is ready to attach listeners
+  const [isEditorReady, setIsEditorReady] = useState(false);
+
+  // useEffectEvent provides a stable function reference that always reads
+  // the latest isPlaying value without causing dependency issues
+  const onEditorChange = useEffectEvent(() => {
+    if (isPlaying) return; // Skip during playback
+    handleEditorChange();
+  });
+
+  // Consolidated Monaco event listeners. By using native listeners instead of the onChange prop,
+  // we follow React 19 best practices for useEffectEvent (keeping it inside an effect)
+  // and ensure zero re-renders of the Monaco component during playback.
   useEffect(() => {
-    if (!isRecording || !editorRef.current) return;
+    if (!editorRef.current || !isEditorReady) return;
 
     const editor = editorRef.current;
     const model = editor.getModel();
@@ -45,31 +54,38 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 
     const disposables: { dispose(): void }[] = [];
 
+    // Listen for content changes
+    disposables.push(
+      editor.onDidChangeModelContent(() => {
+        onEditorChange();
+      })
+    );
+
     // Listen for cursor position changes (keyboard navigation, etc.)
     disposables.push(
       editor.onDidChangeCursorPosition(() => {
-        handleEditorChange();
+        onEditorChange();
       })
     );
 
     // Listen for selection changes (shift+arrow, shift+click, etc.)
     disposables.push(
       editor.onDidChangeCursorSelection(() => {
-        handleEditorChange();
+        onEditorChange();
       })
     );
 
     // Listen for scroll changes
     disposables.push(
       editor.onDidScrollChange(() => {
-        handleEditorChange();
+        onEditorChange();
       })
     );
 
     return () => {
       disposables.forEach(d => d.dispose());
     };
-  }, [isRecording, editorRef, handleEditorChange]);
+  }, [isEditorReady, editorRef]);
 
   /**
    * Handle Monaco Editor mount event
@@ -77,6 +93,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
    */
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
+    setIsEditorReady(true);
 
     // Define dark theme
     monaco.editor.defineTheme('next-editor-dark', {
@@ -215,51 +232,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     monaco.editor.setTheme('next-editor-dark');
   };
 
-  const handleImport = async () => {
-    try {
-      const importedRecordings = await importFromFile();
-      if (importedRecordings.length > 0) {
-        loadRecording(importedRecordings[0]);
-      }
-    } catch (error) {
-      console.error('Import failed:', error);
-    }
-  };
-
-  const handleNextEditorExport = async () => {
-    if (currentRecording) {
-      try {
-        await exportAsFile(currentRecording);
-      } catch (error) {
-        console.error('Export failed:', error);
-      }
-    }
-  };
-
-
   return (
     <div className="h-full flex flex-col">
-      <div className="bg-slate-800 px-4 py-1.5 flex items-center justify-between border-b border-slate-700">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
-        {showImportExport && (<div className="flex items-center gap-2">
-          <button
-            onClick={handleImport}
-            className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
-          >
-            Import
-          </button>
-          <button
-            onClick={handleNextEditorExport}
-            disabled={!currentRecording}
-            className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
-          >
-            Export
-          </button>
-
-          <div className="w-[1px] h-4 bg-slate-700 mx-1" />
-          <SlidesButton />
-        </div>)}
-      </div>
+      <EditorHeader showImportExport={showImportExport} />
       {/* Monaco Editor */}
       <div className={"flex-1" + (isPlaying ? " playback-mode" : "")}>
         <Editor
@@ -268,7 +243,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           theme={theme}
           defaultValue={defaultContent}
           onMount={handleEditorDidMount}
-          onChange={handleEditorChange}
           options={{
             minimap: { enabled: false },
             fontSize: 14,
@@ -304,4 +278,4 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   );
 };
 
-export default CodeEditor;
+export default CodeEditorComponent;
