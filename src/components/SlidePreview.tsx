@@ -198,7 +198,7 @@ export default function SlidePreview({
       )}
 
       <div
-        className={`${positioning} bg-slate-900 rounded-2xl transition-all duration-500 ${getSizeClasses()} overflow-hidden border border-white/10`}
+        className={`${positioning} bg-slate-900 rounded-2xl transition-all duration-500 ${getSizeClasses()} overflow-hidden border border-white/10 flex flex-col`}
         style={{
           ...getSizeStyles()
         }}
@@ -282,7 +282,7 @@ export default function SlidePreview({
 
         {/* Slide content area */}
         <div
-          className="relative w-full h-[calc(100%-40px)] bg-black"
+          className="relative w-full flex-1 bg-black"
           onClick={(e) => e.stopPropagation()}
         >
           <RevealSlideRenderer

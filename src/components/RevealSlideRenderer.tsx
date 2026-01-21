@@ -315,7 +315,7 @@ export default function RevealSlideRenderer({
     <iframe
       ref={iframeRef}
       title="Reveal.js Presentation"
-      className="w-full h-full border-0"
+      className="block w-full h-full border-0 align-middle"
       sandbox="allow-scripts allow-same-origin"
     />
   );

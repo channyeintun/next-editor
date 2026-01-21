@@ -543,9 +543,9 @@ export default function Preview() {
   const isSmall = size === 'small';
 
   const getSizeClasses = () => {
-    if (isLarge) return 'shadow-2xl border-black/10 transition-shadow z-[100]';
-    if (isMedium) return 'shadow-lg border-gray-300 transition-shadow z-32';
-    return 'shadow-md border-gray-300 cursor-pointer transition-shadow z-31';
+    if (isLarge) return 'shadow-2xl border border-black/10 transition-shadow z-[100]';
+    if (isMedium) return 'shadow-lg border border-gray-300 transition-shadow z-32';
+    return 'shadow-md border border-gray-300 cursor-pointer transition-shadow z-31';
   };
 
   const handleClick = () => {
@@ -632,7 +632,7 @@ export default function Preview() {
         transition={springTransition}
         onAnimationStart={() => setIsTransitioning(true)}
         onAnimationComplete={() => setIsTransitioning(false)}
-        className={`fixed bg-white rounded-xl overflow-hidden flex flex-col ${getSizeClasses()} ${isSmall ? 'hover:shadow-xl active:scale-95' : ''}`}
+        className={`fixed bg-transparent rounded-xl overflow-hidden flex flex-col ${getSizeClasses()} ${isSmall ? 'hover:shadow-xl active:scale-95' : ''}`}
         onClick={(e) => {
           if (isSmall) {
             e.stopPropagation();
@@ -700,7 +700,7 @@ export default function Preview() {
         <div className="relative flex-1">
           <iframe
             ref={iframeRef}
-            className={`w-full h-full border-0 bg-white ${isTransitioning ? 'pointer-events-none' : ''}`}
+            className={`absolute inset-0 w-full h-full block border-0 bg-transparent align-middle ${isTransitioning ? 'pointer-events-none' : ''}`}
             title="Code Preview"
             sandbox="allow-scripts allow-same-origin"
           />
