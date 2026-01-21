@@ -10,11 +10,13 @@ import { SlidesProvider } from './contexts/SlidesContext';
 import { useDragAndDropUrl } from './hooks/useDragAndDropUrl';
 import { useUrlQuery } from './hooks/useUrlQuery';
 import CursorComponent from './components/Cursor.tsx';
+import LandingPage from './components/LandingPage';
 
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<AppContent />} />
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/code" element={<AppContent />} />
     </Routes>
   );
 }

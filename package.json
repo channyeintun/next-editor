@@ -24,6 +24,7 @@
     "react-router-dom": "^7.12.0",
     "reveal.js": "^5.2.1",
     "superjson": "^2.2.6",
+    "typewriter-effect": "^2.22.0",
     "xstate": "^5.25.1"
   },
   "devDependencies": {

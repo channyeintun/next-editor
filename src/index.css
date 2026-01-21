@@ -1,6 +1,70 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "PP Neue Machina Inktrap Ultrabold";
+  src: url("/fonts/pp-neue-machina-inktrap-ultrabold.woff2") format("woff2");
+  font-display: block;
+  font-style: normal;
+  font-weight: 800;
+}
+
+@font-face {
+  font-family: "PP Telegraf Regular";
+  src: url("/fonts/pp-telegraf-regular.woff2") format("woff2");
+  font-display: block;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "PP Telegraf Semibold";
+  src: url("/fonts/pp-telegraf-semibold.woff2") format("woff2");
+  font-display: block;
+  font-style: normal;
+  font-weight: 600;
+}
+
+@font-face {
+  font-family: "PP Telegraf Medium";
+  src: url("/fonts/pp-telegraf-medium.woff2") format("woff2");
+  font-display: block;
+  font-style: normal;
+  font-weight: 500;
+}
+
+@theme {
+  --font-machina: "PP Neue Machina Inktrap Ultrabold", sans-serif;
+  --font-telegraf: "PP Telegraf Regular", sans-serif;
+
+  --color-pinata-purple: #6D57FF;
+  --color-pinata-cyan: #4DE5D6;
+  --color-pinata-green: #3ACE8C;
+  --color-pinata-orange: #FF8F33;
+  --color-pinata-yellow: #FFD255;
+  --color-slate-950: #020617;
+}
+
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
+  background-color: var(--color-slate-950);
+  color: white;
+}
+
+@keyframes terminal-blink {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
+.terminal-caret {
+  animation: terminal-blink 1s step-end infinite;
+  display: inline-block;
+  vertical-align: baseline;
+  margin-left: 1px;
 }
