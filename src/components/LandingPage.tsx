@@ -91,7 +91,29 @@ const LandingPage = () => {
                                     </h1>
 
                                     <p className="text-xl md:text-2xl text-slate-600 font-telegraf max-w-xl leading-relaxed mb-10">
-                                        The robust HTML, CSS, and JavaScript playground with built-in recording.
+                                        The robust HTML, CSS, and JavaScript playground with{' '}
+                                        <span className="relative inline-block whitespace-nowrap group-hover:text-slate-950 transition-colors">
+                                            built-in recording
+                                            <svg className="absolute -bottom-3 left-0 w-[105%] h-5 text-pinata-cyan overflow-visible px-1" viewBox="0 0 200 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path
+                                                    d="M2 12C40 13 80 13 120 12C160 11 185 9 198 5"
+                                                    stroke="currentColor"
+                                                    strokeWidth="4"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_forwards]"
+                                                />
+                                                <path
+                                                    d="M5 16C50 18 100 18 140 17C170 16 190 14 195 10"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2.5"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_0.15s_forwards]"
+                                                    opacity="0.8"
+                                                />
+                                            </svg>
+                                        </span>.
                                         Turn your coding sessions into interactive, shareable presentations.
                                     </p>
 
@@ -101,6 +123,16 @@ const LandingPage = () => {
                                             className="px-10 py-4 rounded-full bg-slate-950 text-white text-lg font-semibold hover:scale-105 active:scale-95 transition-all shadow-xl"
                                         >
                                             Start Creating
+                                        </Link>
+                                        <Link
+                                            to="/code?url=/introduction.ne"
+                                            className="px-10 py-4 rounded-full border-2 border-slate-200 text-slate-950 text-lg font-semibold hover:bg-slate-50 transition-all flex items-center gap-2"
+                                        >
+                                            <span className="relative flex h-3 w-3">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                            </span>
+                                            Watch Demo
                                         </Link>
                                     </div>
                                 </div>
