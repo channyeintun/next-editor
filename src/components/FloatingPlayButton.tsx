@@ -7,10 +7,10 @@ import '../App.css';
  * Clicking it triggers playback of the recording.
  */
 const FloatingPlayButton = () => {
-    const { currentRecording, isPlaying, isRecording, play } = useNextEditorContext();
+    const { currentRecording, isPlaying, isRecording, play, currentTime } = useNextEditorContext();
 
-    // Only show when there's a recording loaded and not currently playing or recording
-    const shouldShow = currentRecording && !isPlaying && !isRecording;
+    // Only show when there's a recording loaded, not currently playing or recording, and progress is at zero
+    const shouldShow = currentRecording && !isPlaying && !isRecording && currentTime === 0;
 
     if (!shouldShow) {
         return null;
