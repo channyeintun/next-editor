@@ -564,13 +564,22 @@ export default function Preview() {
 
   const [isResizing, setIsResizing] = useState(false);
 
-  const handleResizeStart = (e: React.MouseEvent) => {
+  const handleResizeStart = (e: React.MouseEvent | React.TouchEvent) => {
+    // Only handle primary touch/click
+    if ('button' in e && e.button !== 0) return;
+
     e.preventDefault();
     e.stopPropagation();
     setIsResizing(true);
 
-    const startX = e.clientX;
-    const startY = e.clientY;
+    const getCoords = (ev: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent) => {
+      if ('touches' in ev) {
+        return { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+      }
+      return { x: ev.clientX, y: ev.clientY };
+    };
+
+    const { x: startX, y: startY } = getCoords(e);
 
     const iframe = iframeRef.current;
     if (!iframe) return;
@@ -585,10 +594,13 @@ export default function Preview() {
     setSize({ width: startWidth, height: startHeight });
 
     let resizeRaf: number | null = null;
-    const onMouseMove = (moveEvent: MouseEvent) => {
+    const onMove = (moveEvent: MouseEvent | TouchEvent) => {
+      if (moveEvent.cancelable) moveEvent.preventDefault();
+      const { x: currentX, y: currentY } = getCoords(moveEvent);
+
       // Anchored at top-right, so dragging left increases width
-      const deltaX = startX - moveEvent.clientX;
-      const deltaY = moveEvent.clientY - startY;
+      const deltaX = startX - currentX;
+      const deltaY = currentY - startY;
 
       const maxWidth = window.innerWidth - 32; // 1rem padding right + 1rem padding left
       const maxHeight = window.innerHeight - 96; // 5rem top offset + small bottom padding
@@ -606,17 +618,21 @@ export default function Preview() {
       });
     };
 
-    const onMouseUp = () => {
+    const onEnd = () => {
       setIsResizing(false);
       if (resizeRaf) cancelAnimationFrame(resizeRaf);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onEnd);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
       // One final emit to ensure accuracy
       emitPreviewEvent('preview_resize');
     };
 
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onEnd);
   };
 
   const springTransition: Transition = {
@@ -771,21 +787,22 @@ export default function Preview() {
           {/* Resize handle */}
           <div
             onMouseDown={handleResizeStart}
-            className="absolute bottom-0 left-0 w-8 h-8 cursor-sw-resize flex items-end justify-start z-50 group hover:bg-black/5 rounded-tr-3xl transition-colors"
+            onTouchStart={handleResizeStart}
+            className="absolute bottom-0 left-0 w-10 h-10 cursor-sw-resize flex items-end justify-start z-50 group hover:bg-black/5 rounded-tr-3xl transition-colors touch-none"
             title="Drag to resize"
           >
-            <div className="mb-1.5 ml-1.5 flex flex-col items-start gap-[2px]">
-              <div className="w-4 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />
-              <div className="w-2.5 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />
-              <div className="w-1 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />
+            <div className="mb-2 ml-2 flex flex-col items-start gap-[2px]">
+              <div className="w-5 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />
+              <div className="w-3.5 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />
+              <div className="w-2 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />
             </div>
 
             {/* Visual background triangle */}
             <svg
-              className="absolute bottom-0 left-0 w-8 h-8 text-gray-200/50 group-hover:text-blue-500/10 transition-colors -z-10"
-              viewBox="0 0 32 32"
+              className="absolute bottom-0 left-0 w-10 h-10 text-gray-200/50 group-hover:text-blue-500/10 transition-colors -z-10"
+              viewBox="0 0 40 40"
             >
-              <path d="M0 32 L32 32 L0 0 Z" fill="currentColor" />
+              <path d="M0 40 L40 40 L0 0 Z" fill="currentColor" />
             </svg>
           </div>
         </div>

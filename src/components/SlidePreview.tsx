@@ -1,3 +1,4 @@
+import { motion, type Transition } from 'motion/react';
 import { useState, useCallback, useEffect } from 'react';
 import {
   Maximize2,
@@ -70,16 +71,10 @@ export default function SlidePreview({
   const getSizeClasses = () => {
     switch (size) {
       case 'small':
-        return 'bottom-20 right-4 w-72 h-44 z-30 translate-x-0 translate-y-0';
+        return 'bottom-6 right-6 w-72 h-44 z-30';
       case 'large':
-        return 'bottom-1/2 right-1/2 translate-x-1/2 translate-y-1/2 w-[1000px] max-w-[95vw] h-[700px] max-h-[82dvh] z-[100]';
+        return 'top-[10%] left-[10%] right-[10%] bottom-[10%] w-[80%] h-[80%] z-[100]';
     }
-  };
-
-  const getSizeStyles = () => {
-    return {
-      transformOrigin: 'bottom right'
-    };
   };
 
   const handleClick = () => {
@@ -187,21 +182,36 @@ export default function SlidePreview({
     return null;
   }
 
+  const layoutTransition: Transition = {
+    type: 'spring',
+    stiffness: 300,
+    damping: 30,
+    mass: 0.8,
+  };
+
+  // Transition already defined above
+
   return (
     <>
       {/* Backdrop for large size */}
       {size === 'large' && (
-        <div
-          className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm transition-all duration-500"
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm"
           onClick={handleMinimize}
         />
       )}
 
-      <div
-        className={`${positioning} bg-slate-900 rounded-2xl transition-all duration-500 ${getSizeClasses()} overflow-hidden border border-white/10 flex flex-col`}
+      <motion.div
+        layout
+        transition={layoutTransition}
         style={{
-          ...getSizeStyles()
+          transformOrigin: 'bottom right',
+          willChange: 'transform'
         }}
+        className={`${positioning} bg-slate-900 rounded-2xl ${getSizeClasses()} overflow-hidden border border-white/10 flex flex-col shadow-2xl transition-shadow`}
         onClick={(e) => {
           e.stopPropagation();
           if (size === 'small') handleClick();
@@ -320,7 +330,7 @@ export default function SlidePreview({
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
     </>
   );
 }
