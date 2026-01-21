@@ -281,8 +281,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             renderLineHighlight: 'none',
             fontFamily: "Source Code Pro",
             fontLigatures: false,
-            wordWrap: 'wordWrapColumn',
-            wordWrapColumn: 100,
             wrappingIndent: 'same',
             dragAndDrop: false,
             hideCursorInOverviewRuler: true,

@@ -190,8 +190,18 @@ export default function Preview() {
   useEffect(() => {
     if (registerPreviewStateApplier && typeof registerPreviewStateApplier === 'function') {
       registerPreviewStateApplier((previewState: PreviewState) => {
-        if (JSON.stringify(previewState.size) !== JSON.stringify(size)) {
-          setSize(previewState.size);
+        let sizeToApply = previewState.size;
+
+        // Clamp custom sizes to viewport to prevent overflow on mobile/small screens
+        if (typeof sizeToApply === 'object') {
+          sizeToApply = {
+            width: Math.min(sizeToApply.width, window.innerWidth - 32),
+            height: Math.min(sizeToApply.height, window.innerHeight - 96)
+          };
+        }
+
+        if (JSON.stringify(sizeToApply) !== JSON.stringify(sizeRef.current)) {
+          setSize(sizeToApply);
         }
 
         if (previewState.content !== undefined && previewState.content !== lastContentRef.current) {
