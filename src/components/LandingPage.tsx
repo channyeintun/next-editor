@@ -230,7 +230,7 @@ const LandingPage = () => {
                             },
                             {
                                 title: "Unique Portability",
-                                desc: "Your code and recordings live in a single .ne file. Host it anywhere and share via URL—absolutely zero backend required.",
+                                desc: "Your code and recordings live in a single .ne file. Host it anywhere and share via URL.",
                                 color: "#FFD255",
                                 textColor: "#020617"
                             }
