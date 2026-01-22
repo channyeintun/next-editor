@@ -21,7 +21,6 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "composite": true
   },
   "include": ["src"],
   "exclude": ["src/**/__tests__/*", "src/**/*.test.ts", "src/**/*.spec.ts"]
