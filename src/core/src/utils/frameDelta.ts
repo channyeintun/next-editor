@@ -8,7 +8,8 @@ import type {
     Keyframe,
     DeltaFrame,
 } from './deltaTypes';
-import { DELTA_CONFIG, isKeyframe } from './deltaTypes';
+import { DELTA_CONFIG, isKeyframe, isDelta } from './deltaTypes';
+export { isKeyframe, isDelta };
 import { getWasmExports } from './wasm';
 
 // ============================================================================

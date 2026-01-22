@@ -31,8 +31,9 @@ export async function initWasm(url?: string): Promise<boolean> {
             try {
                 response = await fetch(wasmUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            } catch {
-                console.warn(`Failed to fetch wasm from ${wasmUrl}. Performance optimizations will be disabled.`);
+            } catch (err) {
+                console.warn(`Failed to fetch wasm from ${wasmUrl}:`, err);
+                console.warn('Performance optimizations will be disabled.');
                 return null;
             }
 

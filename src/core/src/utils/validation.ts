@@ -76,8 +76,8 @@ export const isEditorReady = (editor: monaco.editor.IStandaloneCodeEditor | null
     editor.getValue();
 
     return true;
-  } catch {
-    // Editor is not ready if any basic operation throws
+  } catch (err) {
+    console.debug('Editor not ready yet:', err);
     return false;
   }
 };

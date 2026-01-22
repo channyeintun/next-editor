@@ -28,7 +28,9 @@ export function unlockAudioContext(ctx: AudioContext): void {
                 isUnlocked = true;
                 removeListeners();
             }
-        }).catch(() => { });
+        }).catch((err) => {
+            console.warn('Failed to resume AudioContext:', err);
+        });
     };
 
     const removeListeners = () => {

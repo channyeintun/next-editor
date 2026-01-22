@@ -11,7 +11,8 @@ import {
     compressFrames,
     reconstructFrameAtIndex,
     applyFrameDelta,
-    findFrameIndexAtTime
+    findFrameIndexAtTime,
+    isKeyframe
 } from '../utils/frameDelta';
 import { timelineActor } from './timelineActor';
 import { audioRecordingActor, audioPlaybackActor } from './audioActor';
@@ -558,18 +559,17 @@ export const editorMachine = setup({
             }
 
             let frame: EditorFrame | null = null;
+            const targetFrame = frames[frameIndex];
 
-            if (frameIndex === lastAppliedFrameIndex + 1 && currentFrame) {
-                // Optimization: If it's the next frame and a delta, apply incrementally
-                const deltaFrame = recording.frames[frameIndex];
-                if (deltaFrame && 'isKeyframe' in deltaFrame && !deltaFrame.isKeyframe) {
-                    frame = applyFrameDelta(currentFrame, deltaFrame);
-                } else if (deltaFrame && 'isKeyframe' in deltaFrame && deltaFrame.isKeyframe) {
-                    frame = deltaFrame;
-                }
+            if (isKeyframe(targetFrame)) {
+                // Keyframe: always use directly, most efficient
+                frame = targetFrame;
+            } else if (frameIndex === lastAppliedFrameIndex + 1 && currentFrame) {
+                // Consecutive delta: apply incrementally
+                frame = applyFrameDelta(currentFrame, targetFrame);
             } else {
-                // Full reconstruction for seeks or keyframes
-                frame = reconstructFrameAtIndex(recording.frames, frameIndex);
+                // Jump into delta: full reconstruction required
+                frame = reconstructFrameAtIndex(frames, frameIndex);
             }
 
             if (!frame || !frame.state || !isValidFrameState(frame.state)) {
