@@ -1,11 +1,15 @@
 import { useContext } from 'react';
+import { useSelector } from '@xstate/react';
+import { type SnapshotFrom } from 'xstate';
+import { timelineMachine } from '../core/src/machine/timelineMachine';
 import {
   NextEditorActionsContext,
   NextEditorMetadataContext,
   NextEditorPlaybackContext,
   type NextEditorActions,
   type NextEditorMetadata,
-  type NextEditorPlayback
+  type NextEditorPlayback,
+  type TimelineActorRef
 } from '../contexts/NextEditorContext';
 
 /**
@@ -42,4 +46,15 @@ export const useNextEditorPlayback = (): NextEditorPlayback => {
     throw new Error('useNextEditorPlayback must be used within a NextEditorProvider');
   }
   return context;
+};
+
+/**
+ * Hook to access live playback time with high frequency.
+ * Only the component using this hook will re-render on every tick.
+ */
+export const useLiveTime = () => {
+  const playback = useNextEditorPlayback();
+  const timelineActor = playback.timelineActor;
+  const liveTime = useSelector(timelineActor as TimelineActorRef, (state: SnapshotFrom<typeof timelineMachine> | undefined) => state?.context?.currentTime);
+  return liveTime ?? playback.currentTime;
 };

@@ -5,7 +5,7 @@ import type { EditorPosition, EditorSelection } from '../types';
 /**
  * Checks if two positions are equal
  */
-function arePositionsEqual(pos1: EditorPosition | null, pos2: EditorPosition | null): boolean {
+export function arePositionsEqual(pos1: EditorPosition | null, pos2: EditorPosition | null): boolean {
   if (!pos1 || !pos2) return pos1 === pos2;
   return pos1.lineNumber === pos2.lineNumber && pos1.column === pos2.column;
 }
@@ -13,7 +13,7 @@ function arePositionsEqual(pos1: EditorPosition | null, pos2: EditorPosition | n
 /**
  * Checks if two selections are equal
  */
-function areSelectionsEqual(sel1: EditorSelection | null, sel2: EditorSelection | null): boolean {
+export function areSelectionsEqual(sel1: EditorSelection | null, sel2: EditorSelection | null): boolean {
   if (!sel1 || !sel2) return sel1 === sel2;
   return (
     sel1.startLineNumber === sel2.startLineNumber &&
@@ -32,9 +32,10 @@ function areSelectionsEqual(sel1: EditorSelection | null, sel2: EditorSelection 
  */
 export const applyPositionDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
-  targetPosition: EditorPosition
+  targetPosition: EditorPosition,
+  knownCurrentPosition?: EditorPosition | null
 ): boolean => {
-  const currentPosition = editor.getPosition();
+  const currentPosition = knownCurrentPosition !== undefined ? knownCurrentPosition : editor.getPosition();
 
   if (arePositionsEqual(currentPosition, targetPosition)) {
     return true; // No change needed
@@ -67,9 +68,10 @@ export const applyPositionDiff = (
  */
 export const applySelectionDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
-  targetSelection: EditorSelection
+  targetSelection: EditorSelection,
+  knownCurrentSelection?: EditorSelection | null
 ): boolean => {
-  const currentSelection = editor.getSelection();
+  const currentSelection = knownCurrentSelection !== undefined ? knownCurrentSelection : editor.getSelection();
 
   if (areSelectionsEqual(currentSelection, targetSelection)) {
     return true; // No change needed
@@ -116,12 +118,15 @@ export const applySelectionDiff = (
  */
 export const applyContentDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
-  targetContent: string
+  targetContent: string,
+  knownCurrentContent?: string | null
 ): boolean => {
   const model = editor.getModel();
   if (!model) return false;
 
-  const currentContent = model.getValue();
+  const currentContent = knownCurrentContent !== undefined && knownCurrentContent !== null
+    ? knownCurrentContent
+    : model.getValue();
 
   // If content is identical, no need to apply any operations
   if (currentContent === targetContent) {

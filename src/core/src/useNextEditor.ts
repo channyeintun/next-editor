@@ -5,6 +5,7 @@ import { editorMachine } from './machine/editorMachine';
 import type { UseNextEditorConfig, UseNextEditorReturn, EditorState, EditorFrame, Recording } from './types';
 import type { SlideEvent, PreviewEvent } from './slides';
 import { findFrameIndexAtTime, reconstructFrameAtIndex } from './utils/frameDelta';
+import type { TimelineActorRef } from './machine/timelineMachine';
 import type { SnapshotFrom } from 'xstate';
 
 // ============================================================================
@@ -39,6 +40,7 @@ const selectRecording = (state: EditorMachineSnapshot) => state.context.recordin
 const selectCurrentFrame = (state: EditorMachineSnapshot) => state.context.currentFrame;
 const selectCurrentCursor = (state: EditorMachineSnapshot) => state.context.currentFrame?.state.mouseCursor || null;
 const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.editor;
+const selectTimelineActor = (state: EditorMachineSnapshot) => state.children.timelineActor as TimelineActorRef | undefined;
 
 /**
  * Main useNextEditor hook refactored with XState v5
@@ -73,6 +75,7 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
   const currentFrame = useSelector(actorRef, selectCurrentFrame, shallowEqual);
   const currentCursor = useSelector(actorRef, selectCurrentCursor, shallowEqual);
   const editor = useSelector(actorRef, selectEditor);
+  const timelineActor = useSelector(actorRef, selectTimelineActor);
 
   // Handle editor ref synchronization - run on every render to catch ref changes
   useEffect(() => {
@@ -229,6 +232,7 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
     hasEnded,
 
     currentTime,
+    timelineActor,
     playbackSpeed,
     volume,
 

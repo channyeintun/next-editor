@@ -14,9 +14,9 @@ import {
     findFrameIndexAtTime,
     isKeyframe
 } from '../utils/frameDelta';
-import { timelineActor } from './timelineActor';
+import { timelineMachine } from './timelineMachine';
 import { audioRecordingActor, audioPlaybackActor } from './audioActor';
-import { applyContentDiff, applyPositionDiff, applySelectionDiff } from '../utils/editorDiff';
+import { applyContentDiff, applyPositionDiff, applySelectionDiff, areSelectionsEqual } from '../utils/editorDiff';
 import { isValidFrameState, isEditorReady } from '../utils/validation';
 import { calculateDurationFromFileReader } from '../utils/audioDuration';
 
@@ -32,7 +32,8 @@ const applyFrameState = (
     editor: monaco.editor.IStandaloneCodeEditor,
     frame: EditorFrame,
     decorationsCollection: monaco.editor.IEditorDecorationsCollection | null,
-    isPlaying: boolean
+    isPlaying: boolean,
+    previousFrame?: EditorFrame | null
 ): monaco.editor.IEditorDecorationsCollection | null => {
     if (!frame.state || !isEditorReady(editor)) return decorationsCollection;
 
@@ -40,15 +41,18 @@ const applyFrameState = (
 
     try {
         // Apply content changes
-        applyContentDiff(editor, frame.state.content);
+        applyContentDiff(editor, frame.state.content, previousFrame?.state.content);
 
         // Apply position and selection
-        if (editor.getValue() === frame.state.content) {
-            applyPositionDiff(editor, frame.state.position);
-            applySelectionDiff(editor, frame.state.selection);
+        applyPositionDiff(editor, frame.state.position, previousFrame?.state.position);
+        applySelectionDiff(editor, frame.state.selection, previousFrame?.state.selection);
 
-            // Add cursor decorations during playback
-            if (isPlaying) {
+        // Add cursor decorations during playback
+        if (isPlaying) {
+            // Only update decorations if selection changed or collection is missing
+            const selectionChanged = !previousFrame || !areSelectionsEqual(previousFrame.state.selection, frame.state.selection);
+
+            if (selectionChanged || !collection) {
                 const newDecorations: monaco.editor.IModelDeltaDecoration[] = [];
                 const currentSelections = editor.getSelections() || [frame.state.selection];
 
@@ -83,14 +87,14 @@ const applyFrameState = (
                     collection.set(newDecorations);
                 }
             }
+        }
 
-            // Restore view state (scrolling, etc.)
-            if (frame.state.viewState) {
-                try {
-                    editor.restoreViewState(frame.state.viewState);
-                } catch (err) {
-                    console.error('Failed to restore view state:', err);
-                }
+        // Restore view state (scrolling, etc.)
+        if (frame.state.viewState && (!previousFrame || JSON.stringify(frame.state.viewState) !== JSON.stringify(previousFrame.state.viewState))) {
+            try {
+                editor.restoreViewState(frame.state.viewState);
+            } catch (err) {
+                console.error('Failed to restore view state:', err);
             }
         }
     } catch (error) {
@@ -311,7 +315,7 @@ export const editorMachine = setup({
         input: {} as EditorMachineInput,
     },
     actors: {
-        timeline: timelineActor,
+        timeline: timelineMachine,
         audioRecording: audioRecordingActor,
         audioPlayback: audioPlaybackActor,
         mouseTracking: mouseTrackingActor,
@@ -531,15 +535,6 @@ export const editorMachine = setup({
             };
         }),
 
-        updateTimelineFromTick: assign(({ context, event }) => {
-            if (event.type !== 'TICK') return {};
-            return {
-                timeline: {
-                    ...context.timeline,
-                    currentTime: event.currentTime,
-                },
-            };
-        }),
 
         applyFrameAtTime: assign(({ context, event }) => {
             const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } = context;
@@ -554,7 +549,7 @@ export const editorMachine = setup({
 
             const frameIndex = findFrameIndexAtTime(frames, currentTime, lastAppliedFrameIndex);
 
-            if (frameIndex === lastAppliedFrameIndex && lastAppliedFrameIndex !== -1) {
+            if (frameIndex === lastAppliedFrameIndex) {
                 return {};
             }
 
@@ -580,45 +575,45 @@ export const editorMachine = setup({
                 editorRefs.editor,
                 frame,
                 editorRefs.cursorDecorationsCollection,
-                true
+                true,
+                currentFrame
             );
 
+            const updates: Partial<EditorMachineContext> = {
+                lastAppliedFrameIndex: frameIndex,
+                currentFrame: frame,
+            };
+
+            if (newCollection !== editorRefs.cursorDecorationsCollection) {
+                updates.editorRefs = {
+                    ...editorRefs,
+                    cursorDecorationsCollection: newCollection,
+                };
+            }
+
             if (frame.state.slideState && frame.state.currentSlideIndex !== undefined && context.applySlideState) {
-                // If we also apply slide events, those MUST be the absolute source of truth during playback.
-                // We only apply frame-based state if there are NO slide events in the recording.
                 if (!recording.slideEvents?.length) {
                     context.applySlideState(frame.state.slideState, frame.state.currentSlideIndex);
                 }
             }
 
-            let nextAppliedPreviewState = context.lastAppliedPreviewState;
             if (frame.state.previewState && context.applyPreviewState) {
                 const nextState = frame.state.previewState;
                 const currentState = context.lastAppliedPreviewState;
 
-                // If we also apply preview events, those MUST be the absolute source of truth.
                 if (!recording.previewEvents?.length) {
-                    // Only apply if state has changed significantly
                     if (!currentState ||
                         JSON.stringify(nextState.size) !== JSON.stringify(currentState.size) ||
                         nextState.content !== currentState.content ||
                         Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) > 1 ||
                         Math.abs((nextState.scrollLeft || 0) - (currentState.scrollLeft || 0)) > 1) {
                         context.applyPreviewState(nextState);
-                        nextAppliedPreviewState = nextState;
+                        updates.lastAppliedPreviewState = nextState;
                     }
                 }
             }
 
-            return {
-                currentFrame: frame,
-                lastAppliedFrameIndex: frameIndex,
-                lastAppliedPreviewState: nextAppliedPreviewState,
-                editorRefs: {
-                    ...editorRefs,
-                    cursorDecorationsCollection: newCollection,
-                },
-            };
+            return updates;
         }),
 
         seekToTime: assign(({ context, event }) => {
@@ -713,7 +708,9 @@ export const editorMachine = setup({
         }),
 
         setEditorRef: assign(({ context, event }) => {
-            if (event.type !== 'SET_EDITOR_REF') return {};
+            if (event.type !== 'SET_EDITOR_REF' || event.editor === context.editorRefs.editor) {
+                return {};
+            }
             return {
                 editorRefs: {
                     ...context.editorRefs,
@@ -1206,7 +1203,6 @@ export const editorMachine = setup({
             on: {
                 TICK: {
                     actions: [
-                        'updateTimelineFromTick',
                         'applyFrameAtTime',
                         'applyPreviewEventsAtTime',
                         'applySlideEventsAtTime',

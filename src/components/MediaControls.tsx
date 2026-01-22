@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Circle, Square, Plus } from 'lucide-react';
-import { useNextEditorActions, useNextEditorMetadata, useNextEditorPlayback } from '../hooks/useNextEditorContext';
+import { useNextEditorActions, useNextEditorMetadata, useNextEditorPlayback, useLiveTime } from '../hooks/useNextEditorContext';
 import { getAudioContext, unlockAudioContext } from '../core/src/utils/audioContext';
 import ReplayIcon from './icon/Replay';
 import PlayIcon from './icon/Play';
@@ -45,11 +45,11 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   } = useNextEditorMetadata();
 
   const {
-    currentTime,
     playbackSpeed,
     volume,
     duration: actualDuration,
   } = useNextEditorPlayback();
+  const currentTime = useLiveTime();
 
   const [showSettings, setShowSettings] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);

@@ -71,6 +71,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     currentRecording,
     recordingStartTime,
     currentTime,
+    timelineActor,
     playbackSpeed,
     volume,
     actualDuration,
@@ -215,12 +216,14 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   // 3. Playback (Directly from hook to allow reactivity where needed)
   const playbackValue = useMemo(() => ({
     currentTime,
+    timelineActor,
     playbackSpeed,
     volume,
     duration: actualDuration,
     currentCursor,
   }), [
     currentTime,
+    timelineActor,
     playbackSpeed,
     volume,
     actualDuration,

@@ -73,7 +73,7 @@ export const isEditorReady = (editor: monaco.editor.IStandaloneCodeEditor | null
 
     // Try to get basic properties - if these throw, editor isn't ready
     model.getLineCount();
-    editor.getValue();
+    model.getValueLength();
 
     return true;
   } catch (err) {
