@@ -1,4 +1,4 @@
-import { useNextEditorActions, useNextEditorMetadata, useNextEditorPlayback } from '../hooks/useNextEditorContext';
+import { useNextEditorActions, useNextEditorMetadata, useLiveTime } from '../hooks/useNextEditorContext';
 import '../App.css';
 
 /**
@@ -9,7 +9,7 @@ import '../App.css';
 const FloatingPlayButton = () => {
     const { play } = useNextEditorActions();
     const { currentRecording, isPlaying, isRecording } = useNextEditorMetadata();
-    const { currentTime } = useNextEditorPlayback();
+    const currentTime = useLiveTime();
 
     // Only show when there's a recording loaded, not currently playing or recording, and progress is at zero
     const shouldShow = currentRecording && !isPlaying && !isRecording && currentTime === 0;

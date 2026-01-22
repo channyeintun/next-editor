@@ -1,5 +1,5 @@
 import { motion, type Transition } from 'motion/react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, memo, useRef } from 'react';
 import {
   Maximize2,
   ChevronLeft,
@@ -27,7 +27,7 @@ interface SlidePreviewProps {
   positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
 }
 
-export default function SlidePreview({
+const SlidePreview = memo(function SlidePreview({
   slides,
   currentSlideIndex,
   onSlideChange,
@@ -47,6 +47,12 @@ export default function SlidePreview({
   // Use isMaximized prop to determine size, but keep internal state for immediate updates
   const [size, setSize] = useState<SlidePreviewSize>(isMaximized ? 'large' : 'small');
 
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+
+  const onSlideEventRef = useRef(onSlideEvent);
+  onSlideEventRef.current = onSlideEvent;
+
   // Sync internal state with prop
   useEffect(() => {
     setSize(prev => {
@@ -59,14 +65,14 @@ export default function SlidePreview({
   const currentSlide = slides[currentSlideIndex];
 
   const emitSlideEvent = useCallback((type: SlideEvent['type'], slideId?: string, isMaximizedState?: boolean, indexv?: number) => {
-    onSlideEvent?.({
+    onSlideEventRef.current?.({
       type,
       timestamp: performance.now(),
       slideId,
       isMaximized: isMaximizedState,
       indexv
     });
-  }, [onSlideEvent]);
+  }, []);
 
   const getSizeClasses = () => {
     switch (size) {
@@ -103,9 +109,9 @@ export default function SlidePreview({
     if (isPlaying) return;
     onSlideChange(indexh, indexv);
     if (slides[indexh]) {
-      emitSlideEvent('slide_change', slides[indexh].id, size === 'large', indexv);
+      emitSlideEvent('slide_change', slides[indexh].id, sizeRef.current === 'large', indexv);
     }
-  }, [isPlaying, onSlideChange, slides, emitSlideEvent, size]);
+  }, [isPlaying, onSlideChange, slides, emitSlideEvent]);
 
   // Handle messages from the Reveal iframe
   useEffect(() => {
@@ -122,7 +128,7 @@ export default function SlidePreview({
         };
 
         // Send the interaction event without stale position data
-        onSlideEvent?.({
+        onSlideEventRef.current?.({
           type: 'slide_interaction',
           timestamp: performance.now(),
           slideId: currentSlide?.id,
@@ -133,25 +139,25 @@ export default function SlidePreview({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [isPlaying, currentSlide?.id, onSlideEvent]);
+  }, [isPlaying, currentSlide?.id]);
 
   const goToNextSlide = useCallback(() => {
     if (isPlaying) return;
     if (currentSlideIndex < slides.length - 1) {
       const newIndex = currentSlideIndex + 1;
       onSlideChange(newIndex); // Leave indexv undefined to use memory
-      emitSlideEvent('slide_change', slides[newIndex]?.id, size === 'large');
+      emitSlideEvent('slide_change', slides[newIndex]?.id, sizeRef.current === 'large');
     }
-  }, [isPlaying, currentSlideIndex, slides, onSlideChange, emitSlideEvent, size]);
+  }, [isPlaying, currentSlideIndex, slides, onSlideChange, emitSlideEvent]);
 
   const goToPrevSlide = useCallback(() => {
     if (isPlaying) return;
     if (currentSlideIndex > 0) {
       const newIndex = currentSlideIndex - 1;
       onSlideChange(newIndex); // Leave indexv undefined to use memory
-      emitSlideEvent('slide_change', slides[newIndex]?.id, size === 'large');
+      emitSlideEvent('slide_change', slides[newIndex]?.id, sizeRef.current === 'large');
     }
-  }, [isPlaying, currentSlideIndex, onSlideChange, emitSlideEvent, slides, size]);
+  }, [isPlaying, currentSlideIndex, onSlideChange, emitSlideEvent, slides]);
 
   // Keyboard navigation for large mode
   useEffect(() => {
@@ -333,4 +339,6 @@ export default function SlidePreview({
       </motion.div>
     </>
   );
-}
+});
+
+export default SlidePreview;

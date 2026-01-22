@@ -24,6 +24,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
 
   const getSlidesRef = useRef<(() => Slide[]) | null>(null);
   const applySlidesRef = useRef<((slides: Slide[]) => void) | null>(null);
+  const navigateSlidesDirectRef = useRef<((indexh: number, indexv: number) => void) | null>(null);
 
   const originalHook = useNextEditor({
     editorRef,
@@ -62,7 +63,6 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     handleEditorChange,
     handleSlideEvent,
     handlePreviewEvent,
-    navigateSlidesDirect,
     isRecording,
     isRecordingAudio,
     isPlaying,
@@ -70,12 +70,11 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     hasEnded,
     currentRecording,
     recordingStartTime,
-    currentTime,
     timelineActor,
+    editorActor,
     playbackSpeed,
     volume,
     actualDuration,
-    currentCursor,
   } = originalHook;
 
   // Stabilize storage and registration methods
@@ -129,8 +128,12 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   }, []);
 
   const registerSlideNavigator = useCallback((navigator: (indexh: number, indexv: number) => void) => {
-    originalHook.navigateSlidesDirect = navigator;
-  }, [originalHook]);
+    navigateSlidesDirectRef.current = navigator;
+  }, []);
+
+  const navigateSlidesDirect = useCallback((indexh: number, indexv: number) => {
+    navigateSlidesDirectRef.current?.(indexh, indexv);
+  }, []);
 
   // 1. Memoize Stable Actions
   const actionsValue = useMemo(() => ({
@@ -215,19 +218,17 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
 
   // 3. Playback (Directly from hook to allow reactivity where needed)
   const playbackValue = useMemo(() => ({
-    currentTime,
     timelineActor,
+    editorActor,
     playbackSpeed,
     volume,
     duration: actualDuration,
-    currentCursor,
   }), [
-    currentTime,
     timelineActor,
+    editorActor,
     playbackSpeed,
     volume,
     actualDuration,
-    currentCursor
   ]);
 
   return (

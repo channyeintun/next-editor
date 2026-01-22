@@ -1,6 +1,7 @@
 import type * as monaco from 'monaco-editor';
 import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from './slides';
 import type { TimelineActorRef } from './machine/timelineMachine';
+import type { EditorActorRef } from './useNextEditor';
 
 /**
  * Audio storage placeholder for serialization
@@ -143,6 +144,7 @@ export interface UseNextEditorReturn {
   hasEnded: boolean;
   currentTime: number;
   timelineActor: TimelineActorRef | undefined;
+  editorActor: EditorActorRef;
   playbackSpeed: number;
   volume: number;
 

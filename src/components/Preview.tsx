@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { motion, AnimatePresence, type Transition } from 'motion/react';
 import { useNextEditorActions, useNextEditorMetadata } from '../hooks/useNextEditorContext';
 import type { PreviewSize, PreviewState, PreviewEvent, IframeInteractionEvent } from '../types/slides';
@@ -20,7 +20,7 @@ function getElementByXPath(doc: Document, xpath: string): Element | null {
   }
 }
 
-export default function Preview() {
+const Preview = memo(function Preview() {
   const [size, setSize] = useState<PreviewSize>('small');
   const [isTransitioning, setIsTransitioning] = useState(false);
 
@@ -121,7 +121,7 @@ export default function Preview() {
             handlePreviewEventRef.current({
               type: 'preview_scroll',
               timestamp: Date.now(),
-              size: size,
+              size: sizeRef.current,
               scrollTop: payload.data.scrollTop,
               scrollLeft: payload.data.scrollLeft,
             });
@@ -138,7 +138,7 @@ export default function Preview() {
           handlePreviewEventRef.current({
             type: 'preview_interaction',
             timestamp: Date.now(),
-            size: size,
+            size: sizeRef.current,
             scrollTop: scrollPositionRef.current.scrollTop,
             scrollLeft: scrollPositionRef.current.scrollLeft,
             interaction,
@@ -149,7 +149,7 @@ export default function Preview() {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [size]); // size is used in the event object
+  }, []); // size is used via sizeRef
 
   // Register preview state getter
   useEffect(() => {
@@ -159,7 +159,7 @@ export default function Preview() {
         pendingInteractionRef.current = null; // Consume the interaction
 
         return {
-          size,
+          size: sizeRef.current,
           content: lastContentRef.current,
           scrollTop: scrollPositionRef.current.scrollTop,
           scrollLeft: scrollPositionRef.current.scrollLeft,
@@ -167,7 +167,7 @@ export default function Preview() {
         };
       });
     }
-  }, [registerPreviewStateGetter, size]);
+  }, [registerPreviewStateGetter]); // size is used via sizeRef
 
   const updateIframeContent = useCallback((content: string) => {
     if (!iframeRef.current) return;
@@ -330,7 +330,7 @@ export default function Preview() {
         }
       });
     }
-  }, [registerPreviewStateApplier, size, updateIframeContent]);
+  }, [registerPreviewStateApplier, updateIframeContent]);
 
   // Track all interaction events in iframe during recording
   useEffect(() => {
@@ -822,4 +822,6 @@ export default function Preview() {
       </motion.div>
     </>
   );
-}
+});
+
+export default Preview;

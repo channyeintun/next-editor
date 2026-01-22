@@ -1,7 +1,8 @@
 import { useContext } from 'react';
-import { useSelector } from '@xstate/react';
+import { useSelector, shallowEqual } from '@xstate/react';
 import { type SnapshotFrom } from 'xstate';
 import { timelineMachine } from '../core/src/machine/timelineMachine';
+import { editorMachine } from '../core/src/machine/editorMachine';
 import {
   NextEditorActionsContext,
   NextEditorMetadataContext,
@@ -9,7 +10,8 @@ import {
   type NextEditorActions,
   type NextEditorMetadata,
   type NextEditorPlayback,
-  type TimelineActorRef
+  type TimelineActorRef,
+  type EditorActorRef
 } from '../contexts/NextEditorContext';
 
 /**
@@ -37,8 +39,8 @@ export const useNextEditorMetadata = (): NextEditorMetadata => {
 };
 
 /**
- * Hook to access high-frequency playback state (currentTime, volume).
- * Component using this WILL re-render on every machine tick during playback.
+ * Hook to access high-frequency playback state refs (volume, duration).
+ * Component using this will NOT re-render on machine ticks.
  */
 export const useNextEditorPlayback = (): NextEditorPlayback => {
   const context = useContext(NextEditorPlaybackContext);
@@ -55,6 +57,15 @@ export const useNextEditorPlayback = (): NextEditorPlayback => {
 export const useLiveTime = () => {
   const playback = useNextEditorPlayback();
   const timelineActor = playback.timelineActor;
-  const liveTime = useSelector(timelineActor as TimelineActorRef, (state: SnapshotFrom<typeof timelineMachine> | undefined) => state?.context?.currentTime);
-  return liveTime ?? playback.currentTime;
+  return useSelector(timelineActor as TimelineActorRef, (state: SnapshotFrom<typeof timelineMachine> | undefined) => state?.context?.currentTime) ?? 0;
+};
+
+/**
+ * Hook to access live cursor position with high frequency.
+ * Only the component using this hook will re-render on cursor movement.
+ */
+export const useLiveCursor = () => {
+  const playback = useNextEditorPlayback();
+  const editorActor = playback.editorActor;
+  return useSelector(editorActor as EditorActorRef, (state: SnapshotFrom<typeof editorMachine> | undefined) => state?.context?.currentFrame?.state?.mouseCursor || null, shallowEqual);
 };

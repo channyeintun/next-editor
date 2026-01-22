@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import * as monaco from 'monaco-editor';
 import { useActorRef, useSelector, shallowEqual } from '@xstate/react';
+import type { ActorRefFrom } from 'xstate';
 import { editorMachine } from './machine/editorMachine';
 import type { UseNextEditorConfig, UseNextEditorReturn, EditorState, EditorFrame, Recording } from './types';
 import type { SlideEvent, PreviewEvent } from './slides';
@@ -12,6 +13,7 @@ import type { SnapshotFrom } from 'xstate';
 // Type for machine snapshot
 // ============================================================================
 type EditorMachineSnapshot = SnapshotFrom<typeof editorMachine>;
+export type EditorActorRef = ActorRefFrom<typeof editorMachine>;
 
 // ============================================================================
 // Selectors - Memoized functions for extracting state slices
@@ -30,15 +32,12 @@ const selectHasEnded = (state: EditorMachineSnapshot) =>
   state.matches({ playback: 'ended' }) && state.context.timeline.currentTime >= state.context.timeline.duration - 100;
 
 // Timeline selectors (high-frequency updates)
-const selectCurrentTime = (state: EditorMachineSnapshot) => state.context.timeline.currentTime;
 const selectPlaybackSpeed = (state: EditorMachineSnapshot) => state.context.timeline.speed;
 const selectVolume = (state: EditorMachineSnapshot) => state.context.timeline.volume;
 const selectDuration = (state: EditorMachineSnapshot) => state.context.timeline.duration;
 
 // Data selectors
 const selectRecording = (state: EditorMachineSnapshot) => state.context.recording;
-const selectCurrentFrame = (state: EditorMachineSnapshot) => state.context.currentFrame;
-const selectCurrentCursor = (state: EditorMachineSnapshot) => state.context.currentFrame?.state.mouseCursor || null;
 const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.editor;
 const selectTimelineActor = (state: EditorMachineSnapshot) => state.children.timelineActor as TimelineActorRef | undefined;
 
@@ -65,15 +64,12 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
   const hasEnded = useSelector(actorRef, selectHasEnded);
 
   // Timeline state (high-frequency)
-  const currentTime = useSelector(actorRef, selectCurrentTime);
   const playbackSpeed = useSelector(actorRef, selectPlaybackSpeed);
   const volume = useSelector(actorRef, selectVolume);
   const duration = useSelector(actorRef, selectDuration);
 
   // Data - using shallowEqual for object selectors per XState docs
   const currentRecording = useSelector(actorRef, selectRecording, shallowEqual);
-  const currentFrame = useSelector(actorRef, selectCurrentFrame, shallowEqual);
-  const currentCursor = useSelector(actorRef, selectCurrentCursor, shallowEqual);
   const editor = useSelector(actorRef, selectEditor);
   const timelineActor = useSelector(actorRef, selectTimelineActor);
 
@@ -212,14 +208,18 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
   }, [editor]);
 
   const getFrame = useCallback((timestamp?: number): EditorFrame | null => {
-    if (timestamp === undefined) return currentFrame;
     if (!currentRecording) return null;
+
+    if (timestamp === undefined) {
+      // Get current frame from actor context directly to avoid hook-level re-renders
+      return actorRef.getSnapshot().context.currentFrame;
+    }
 
     // Find closest frame at or before timestamp
     const { frames } = currentRecording;
     const index = findFrameIndexAtTime(frames, timestamp);
     return reconstructFrameAtIndex(frames, index);
-  }, [currentFrame, currentRecording]);
+  }, [actorRef, currentRecording]);
 
   return {
     // State
@@ -231,14 +231,13 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
     isPaused,
     hasEnded,
 
-    currentTime,
     timelineActor,
+    editorActor: actorRef,
     playbackSpeed,
     volume,
 
     // Data
     currentRecording,
-    currentCursor,
     actualDuration: duration / 1000, // seconds for actualDuration
 
     // Controls

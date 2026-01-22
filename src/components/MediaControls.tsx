@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Circle, Square, Plus } from 'lucide-react';
 import { useNextEditorActions, useNextEditorMetadata, useNextEditorPlayback, useLiveTime } from '../hooks/useNextEditorContext';
 import { getAudioContext, unlockAudioContext } from '../core/src/utils/audioContext';
@@ -18,7 +18,54 @@ interface MediaControlsProps {
   positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
 }
 
-const MediaControls: React.FC<MediaControlsProps> = ({
+const formatTime = (milliseconds: number): string => {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
+
+const PlaybackProgress = memo(({ progressDuration, onSeek }: { progressDuration: number, onSeek: (time: number) => void }) => {
+  const currentTime = useLiveTime();
+  return (
+    <div className="flex-1 mx-1 flex items-center pointer-events-auto">
+      <ProgressBar
+        progress={progressDuration > 0 ? Math.min((currentTime / progressDuration) * 100, 100) : 0}
+        duration={progressDuration}
+        currentTime={currentTime}
+        onSeek={onSeek}
+        backgroundColor="#475569"
+        progressColor="#3b82f6"
+        className="w-full"
+      />
+    </div>
+  );
+});
+
+const PlaybackTimer = memo(({
+  isRecording,
+  recordingTime,
+  currentRecording,
+  progressDuration
+}: {
+  isRecording: boolean;
+  recordingTime: number;
+  currentRecording: Recording | null;
+  progressDuration: number;
+}) => {
+  const currentTime = useLiveTime();
+  const displayTime = isRecording
+    ? recordingTime
+    : (currentRecording ? Math.max(0, progressDuration - currentTime) : currentTime);
+
+  return (
+    <span className="text-slate-400 text-sm font-mono pointer-events-auto">
+      {isRecording ? formatTime(displayTime) : `-${formatTime(displayTime)}`}
+    </span>
+  );
+});
+
+const MediaControls: React.FC<MediaControlsProps> = memo(({
   onRecord,
   onStopRecording,
   recordMode = true,
@@ -49,7 +96,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     volume,
     duration: actualDuration,
   } = useNextEditorPlayback();
-  const currentTime = useLiveTime();
 
   const [showSettings, setShowSettings] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -71,16 +117,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     };
   }, [isRecording, recordingStartTime]);
 
-  const formatTime = (milliseconds: number): string => {
-    const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-
-
-  const handlePlayPause = () => {
+  const handlePlayPause = useCallback(() => {
     // Aggressive Safari Wake: Resume context directly in the click handler
     const ctx = getAudioContext();
     unlockAudioContext(ctx);
@@ -91,47 +128,43 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     } else {
       play();
     }
-  };
+  }, [isPlaying, pause, play]);
 
-  const handleSeek = (targetTime: number) => {
+  const handleSeek = useCallback((targetTime: number) => {
     // Aggressive Safari Wake: Resume context or ensure it's awake during seek
     const ctx = getAudioContext();
     unlockAudioContext(ctx);
     ctx.resume().catch(() => { });
 
     seekTo(targetTime);
-  };
+  }, [seekTo]);
 
-  const handleVolumeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVolumeChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(event.target.value);
     setVolume(newVolume);
-  };
+  }, [setVolume]);
 
-  const handleEditClick = () => {
+  const handleEditClick = useCallback(() => {
     if (currentRecording) {
       setShowRecordingEditor(true);
     }
-  };
+  }, [currentRecording]);
 
-  const handleSaveRecording = async (editedRecording: Recording) => {
+  const handleSaveRecording = useCallback(async (editedRecording: Recording) => {
     try {
       loadRecording(editedRecording);
       setShowRecordingEditor(false);
     } catch (error) {
       console.error('Save failed:', error);
     }
-  };
+  }, [loadRecording]);
 
-  const handleCancelExport = () => {
+  const handleCancelExport = useCallback(() => {
     setShowRecordingEditor(false);
-  };
+  }, []);
 
   const duration = currentRecording?.duration || 0;
   const progressDuration = actualDuration > 0 ? actualDuration * 1000 : duration;
-
-  const displayTime = isRecording
-    ? recordingTime
-    : (currentRecording ? Math.max(0, progressDuration - currentTime) : currentTime);
 
   if (!recordMode && !currentRecording && !isRecording) {
     return null;
@@ -178,17 +211,10 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               {isPlaying ? <PauseIcon /> : (hasEnded ? <ReplayIcon /> : <PlayIcon />)}
             </button>
 
-            <div className="flex-1 mx-1 flex items-center pointer-events-auto">
-              <ProgressBar
-                progress={progressDuration > 0 ? Math.min((currentTime / progressDuration) * 100, 100) : 0}
-                duration={progressDuration}
-                currentTime={currentTime}
-                onSeek={handleSeek}
-                backgroundColor="#475569"
-                progressColor="#3b82f6"
-                className="w-full"
-              />
-            </div>
+            <PlaybackProgress
+              progressDuration={progressDuration}
+              onSeek={handleSeek}
+            />
 
             <div className="relative pointer-events-auto">
               <button
@@ -199,12 +225,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               </button>
 
               {showSettings && (
-                <div className="absolute bottom-full right-0 mb-2 bg-white rounded-lg shadow-lg p-4 min-w-[200px] z-21">
+                <div className="absolute bottom-full right-0 mb-2 bg-white rounded-lg shadow-lg p-4 min-w-50 z-21">
                   <div className="text-gray-800">
                     <div className="mb-3">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Speed</label>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm text-gray-500 min-w-[32px]">{playbackSpeed}x</span>
+                        <span className="text-sm text-gray-500 min-w-8">{playbackSpeed}x</span>
                         <input
                           type="range"
                           min="0.5"
@@ -219,7 +245,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                     <div className="mb-3">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Volume</label>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm text-gray-500 min-w-[32px]">{Math.round(volume * 100)}</span>
+                        <span className="text-sm text-gray-500 min-w-8">{Math.round(volume * 100)}</span>
                         <input
                           type="range"
                           min="0"
@@ -249,9 +275,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         )}
 
         {(isRecording || currentRecording) && (
-          <span className="text-slate-400 text-sm font-mono pointer-events-auto">
-            {isRecording ? formatTime(displayTime) : `-${formatTime(displayTime)}`}
-          </span>
+          <PlaybackTimer
+            isRecording={isRecording}
+            recordingTime={recordingTime}
+            currentRecording={currentRecording}
+            progressDuration={progressDuration}
+          />
         )}
       </div>
 
@@ -268,6 +297,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
       )}
     </div>
   );
-};
+});
 
 export default MediaControls;

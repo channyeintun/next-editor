@@ -1,8 +1,9 @@
+import { memo } from 'react';
 import { useSlidesContext } from '../contexts/SlidesContext';
 import { useNextEditorActions } from '../hooks/useNextEditorContext';
 import SlidePreview from './SlidePreview';
 
-export default function SlidePanel() {
+export default memo(function SlidePanel() {
   const {
     slides,
     previewState,
@@ -31,4 +32,4 @@ export default function SlidePanel() {
       />
     </>
   );
-}
+});

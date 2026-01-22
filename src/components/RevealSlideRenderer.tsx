@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, memo } from 'react';
 import type { SlideContentType } from '../types/slides';
 
 interface RevealSlideRendererProps {
@@ -186,7 +186,7 @@ function generateRevealHtml(
 </html>`;
 }
 
-export default function RevealSlideRenderer({
+const RevealSlideRenderer = memo(function RevealSlideRenderer({
   slides,
   currentSlideIndex,
   currentVerticalIndex,
@@ -319,4 +319,6 @@ export default function RevealSlideRenderer({
       sandbox="allow-scripts allow-same-origin"
     />
   );
-}
+});
+
+export default RevealSlideRenderer;

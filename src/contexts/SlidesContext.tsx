@@ -85,8 +85,6 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
         if (navigateSlidesDirect) {
           navigateSlidesDirect(currentSlideIndex, nextIndexv);
         }
-
-        slidesData.goToSlide(currentSlideIndex, nextIndexv);
       }
     }
   }, [slidesData, navigateSlidesDirect]); // Added navigateSlidesDirect to dependencies

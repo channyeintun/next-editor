@@ -592,8 +592,21 @@ export const editorMachine = setup({
             }
 
             if (frame.state.slideState && frame.state.currentSlideIndex !== undefined && context.applySlideState) {
+                // Check if this slide state has changed to prevent excessive re-renders
+                // We only do this check if we don't have separate slide events
                 if (!recording.slideEvents?.length) {
-                    context.applySlideState(frame.state.slideState, frame.state.currentSlideIndex);
+                    const prevSlideState = currentFrame?.state.slideState;
+                    const prevSlideIndex = currentFrame?.state.currentSlideIndex;
+
+                    const hasChanged = !prevSlideState ||
+                        frame.state.slideState.isOpen !== prevSlideState.isOpen ||
+                        frame.state.slideState.currentSlideId !== prevSlideState.currentSlideId ||
+                        frame.state.slideState.indexv !== prevSlideState.indexv ||
+                        frame.state.currentSlideIndex !== prevSlideIndex;
+
+                    if (hasChanged) {
+                        context.applySlideState(frame.state.slideState, frame.state.currentSlideIndex);
+                    }
                 }
             }
 
