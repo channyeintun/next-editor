@@ -330,6 +330,23 @@ export function createFrameDelta(
 }
 
 /**
+ * Checks if a delta has any actual changes.
+ * Returns false if the delta only contains timestamp and isKeyframe.
+ */
+export function hasChanges(delta: FrameDelta): boolean {
+    return !!(
+        delta.contentDelta ||
+        delta.positionDelta ||
+        delta.selectionDelta ||
+        delta.viewState !== undefined ||
+        delta.mouseCursor !== undefined ||
+        delta.slideState !== undefined ||
+        delta.currentSlideIndex !== undefined ||
+        delta.previewState !== undefined
+    );
+}
+
+/**
  * Reconstructs a full frame by applying a delta to a base frame.
  */
 export function applyFrameDelta(
@@ -417,15 +434,23 @@ export function compressFrames(fullFrames: EditorFrame[]): DeltaFrame[] {
     if (fullFrames.length === 0) return [];
 
     const frames: DeltaFrame[] = [];
+    let lastStoredFrame: EditorFrame = fullFrames[0];
 
     for (let i = 0; i < fullFrames.length; i++) {
         if (shouldBeKeyframe(i)) {
-            // Create keyframe
+            // Always store keyframes
             frames.push(createKeyframe(fullFrames[i]));
+            lastStoredFrame = fullFrames[i];
         } else {
-            // Create delta from previous full frame
-            const delta = createFrameDelta(fullFrames[i - 1], fullFrames[i]);
-            frames.push(delta);
+            // Create delta from last stored frame (not necessarily i-1)
+            const delta = createFrameDelta(lastStoredFrame, fullFrames[i]);
+
+            // Only store if there are actual changes
+            if (hasChanges(delta)) {
+                frames.push(delta);
+                lastStoredFrame = fullFrames[i];
+            }
+            // Otherwise skip - empty frames are not stored
         }
     }
 
