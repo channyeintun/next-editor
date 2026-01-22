@@ -385,14 +385,24 @@ export function applyFrameDelta(
 // ============================================================================
 
 /**
- * Finds the index of the keyframe at or before the given frame index.
+ * Finds the index of the nearest keyframe at or before the given frame index.
+ * Searches backwards from targetIndex to find the first keyframe.
  */
-export function findKeyframeIndex(frameIndex: number): number {
-    return Math.floor(frameIndex / DELTA_CONFIG.KEYFRAME_INTERVAL) * DELTA_CONFIG.KEYFRAME_INTERVAL;
+export function findNearestKeyframeIndex(
+    frames: DeltaFrame[],
+    targetIndex: number
+): number {
+    for (let i = Math.min(targetIndex, frames.length - 1); i >= 0; i--) {
+        if (isKeyframe(frames[i])) {
+            return i;
+        }
+    }
+    return -1; // No keyframe found (should not happen if first frame is always keyframe)
 }
 
 /**
  * Reconstructs a frame at the given index from the delta frames array.
+ * Works correctly with sparse frame arrays where empty frames are skipped.
  */
 export function reconstructFrameAtIndex(
     frames: DeltaFrame[],
@@ -400,12 +410,16 @@ export function reconstructFrameAtIndex(
 ): EditorFrame | null {
     if (targetIndex < 0 || targetIndex >= frames.length) return null;
 
-    // Find the keyframe at or before target
-    const keyframeIndex = findKeyframeIndex(targetIndex);
-    const keyframe = frames[keyframeIndex];
+    // Find the nearest keyframe at or before target
+    const keyframeIndex = findNearestKeyframeIndex(frames, targetIndex);
 
-    if (!keyframe || !isKeyframe(keyframe)) {
-        // Invalid state - first frame of every block should be keyframe
+    if (keyframeIndex < 0) {
+        console.error('No keyframe found at or before index', targetIndex);
+        return null;
+    }
+
+    const keyframe = frames[keyframeIndex];
+    if (!isKeyframe(keyframe)) {
         console.error('Expected keyframe at index', keyframeIndex);
         return null;
     }
@@ -417,7 +431,7 @@ export function reconstructFrameAtIndex(
     for (let i = keyframeIndex + 1; i <= targetIndex; i++) {
         const frame = frames[i];
         if (isKeyframe(frame)) {
-            // Unexpected keyframe - use it as new base
+            // Another keyframe - use it as new base
             current = frame;
         } else {
             current = applyFrameDelta(current, frame);
@@ -429,28 +443,43 @@ export function reconstructFrameAtIndex(
 
 /**
  * Converts an array of full frames to delta frames.
+ * Skips frames with no changes to reduce storage.
+ * First frame is always stored as keyframe.
+ * Subsequent keyframe slots only stored if there are changes.
  */
 export function compressFrames(fullFrames: EditorFrame[]): DeltaFrame[] {
     if (fullFrames.length === 0) return [];
 
     const frames: DeltaFrame[] = [];
-    let lastStoredFrame: EditorFrame = fullFrames[0];
+    let lastStoredFrame: EditorFrame | null = null;
 
     for (let i = 0; i < fullFrames.length; i++) {
-        if (shouldBeKeyframe(i)) {
-            // Always store keyframes
-            frames.push(createKeyframe(fullFrames[i]));
-            lastStoredFrame = fullFrames[i];
-        } else {
-            // Create delta from last stored frame (not necessarily i-1)
-            const delta = createFrameDelta(lastStoredFrame, fullFrames[i]);
+        const currentFrame = fullFrames[i];
 
-            // Only store if there are actual changes
-            if (hasChanges(delta)) {
-                frames.push(delta);
-                lastStoredFrame = fullFrames[i];
+        if (i === 0) {
+            // First frame is always stored as keyframe
+            frames.push(createKeyframe(currentFrame));
+            lastStoredFrame = currentFrame;
+        } else if (shouldBeKeyframe(i)) {
+            // Keyframe slot - but only store if there are changes
+            if (lastStoredFrame) {
+                const delta = createFrameDelta(lastStoredFrame, currentFrame);
+                if (hasChanges(delta)) {
+                    // Store as keyframe for efficient seeking
+                    frames.push(createKeyframe(currentFrame));
+                    lastStoredFrame = currentFrame;
+                }
+                // If no changes, skip - previous frame state persists
             }
-            // Otherwise skip - empty frames are not stored
+        } else {
+            // Delta slot - only store if there are changes
+            if (lastStoredFrame) {
+                const delta = createFrameDelta(lastStoredFrame, currentFrame);
+                if (hasChanges(delta)) {
+                    frames.push(delta);
+                    lastStoredFrame = currentFrame;
+                }
+            }
         }
     }
 
