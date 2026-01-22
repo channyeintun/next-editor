@@ -142,7 +142,6 @@ export interface UseNextEditorReturn {
   isPlaying: boolean;
   isPaused: boolean;
   hasEnded: boolean;
-  currentTime: number;
   timelineActor: TimelineActorRef | undefined;
   editorActor: EditorActorRef;
   playbackSpeed: number;
@@ -150,7 +149,6 @@ export interface UseNextEditorReturn {
 
   // Data
   currentRecording: Recording | null;
-  currentCursor: MouseCursorPosition | null;
   actualDuration: number;
 
   // Recording Controls
