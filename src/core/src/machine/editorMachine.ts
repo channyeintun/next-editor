@@ -975,7 +975,12 @@ export const editorMachine = setup({
     initial: 'idle',
     on: {
         SET_EDITOR_REF: {
-            actions: 'setEditorRef',
+            actions: [
+                'setEditorRef',
+                'applyFrameAtTime',
+                'applyPreviewEventsAtTime',
+                'applySlideEventsAtTime'
+            ],
         },
     },
     states: {
@@ -1150,6 +1155,9 @@ export const editorMachine = setup({
                                 pausedAt: 0,
                             }),
                             currentFrame: null,
+                            lastAppliedFrameIndex: -1,
+                            lastAppliedPreviewEventIndex: -1,
+                            lastAppliedSlideEventIndex: -1,
                         }),
                         ({ context, event }) => {
                             if (event.output.recording.slides && context.applySlides) {
