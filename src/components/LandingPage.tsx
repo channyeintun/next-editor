@@ -230,7 +230,37 @@ const LandingPage = () => {
                             },
                             {
                                 title: "Unique Portability",
-                                desc: "Your code and recordings live in a single .ne file. Host it anywhere and share via URL.",
+                                desc: (
+                                    <div className="space-y-4">
+                                        <p>Your code and recordings live in a single .ne file. Manage fully and control where your file is hosted.</p>
+                                        <div className="relative pt-2">
+                                            <div className="bg-white rounded-lg p-2 text-slate-900 font-mono text-xs flex items-center shadow-lg border border-slate-200">
+                                                <span className="text-slate-400">nexteditor.dev/code?</span>
+                                                <span className="relative inline-block text-slate-950 font-bold whitespace-nowrap">
+                                                    url=css.ne
+                                                    <svg className="absolute -bottom-2.5 left-0 w-full h-4 text-pinata-cyan overflow-visible px-0.5" viewBox="0 0 100 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        <path
+                                                            d="M2 12C20 13 40 13 60 12C80 11 92 9 98 5"
+                                                            stroke="currentColor"
+                                                            strokeWidth="4"
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_forwards] will-change-[stroke-dasharray]"
+                                                        />
+                                                        <path
+                                                            d="M5 16C25 18 50 18 70 17C85 16 95 14 97 10"
+                                                            stroke="currentColor"
+                                                            strokeWidth="2.5"
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_0.15s_forwards] will-change-[stroke-dasharray]"
+                                                        />
+                                                    </svg>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ),
                                 color: "#FFD255",
                                 textColor: "#020617"
                             }
