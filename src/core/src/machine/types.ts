@@ -84,8 +84,8 @@ export interface AudioState {
 export interface EditorRefs {
     /** Monaco editor instance */
     editor: monaco.editor.IStandaloneCodeEditor | null;
-    /** Current cursor decorations */
-    cursorDecorations: string[];
+    /** Current cursor decorations collection */
+    cursorDecorationsCollection: monaco.editor.IEditorDecorationsCollection | null;
 }
 
 /**
@@ -356,7 +356,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     },
     editorRefs: {
         editor: input.editorRef.current,
-        cursorDecorations: [],
+        cursorDecorationsCollection: null,
     },
     enableAudioRecording: input.enableAudioRecording ?? false,
     pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,

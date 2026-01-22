@@ -30,12 +30,12 @@ import { calculateDurationFromFileReader } from '../utils/audioDuration';
 const applyFrameState = (
     editor: monaco.editor.IStandaloneCodeEditor,
     frame: EditorFrame,
-    cursorDecorations: string[],
+    decorationsCollection: monaco.editor.IEditorDecorationsCollection | null,
     isPlaying: boolean
-): string[] => {
-    if (!frame.state || !isEditorReady(editor)) return cursorDecorations;
+): monaco.editor.IEditorDecorationsCollection | null => {
+    if (!frame.state || !isEditorReady(editor)) return decorationsCollection;
 
-    let updatedDecorations = cursorDecorations;
+    let collection = decorationsCollection;
 
     try {
         // Apply content changes
@@ -75,7 +75,12 @@ const applyFrameState = (
                     });
                 });
 
-                updatedDecorations = editor.deltaDecorations(cursorDecorations, newDecorations);
+                // Create collection if it doesn't exist, otherwise update it
+                if (!collection) {
+                    collection = editor.createDecorationsCollection(newDecorations);
+                } else {
+                    collection.set(newDecorations);
+                }
             }
 
             // Restore view state (scrolling, etc.)
@@ -91,7 +96,7 @@ const applyFrameState = (
         console.error('Error applying editor state:', error);
     }
 
-    return updatedDecorations;
+    return collection;
 };
 
 /**
@@ -571,10 +576,10 @@ export const editorMachine = setup({
                 return { lastAppliedFrameIndex: frameIndex };
             }
 
-            const newDecorations = applyFrameState(
+            const newCollection = applyFrameState(
                 editorRefs.editor,
                 frame,
-                editorRefs.cursorDecorations,
+                editorRefs.cursorDecorationsCollection,
                 true
             );
 
@@ -611,7 +616,7 @@ export const editorMachine = setup({
                 lastAppliedPreviewState: nextAppliedPreviewState,
                 editorRefs: {
                     ...editorRefs,
-                    cursorDecorations: newDecorations,
+                    cursorDecorationsCollection: newCollection,
                 },
             };
         }),
@@ -650,13 +655,13 @@ export const editorMachine = setup({
 
         clearCursorDecorations: assign(({ context }) => {
             const { editorRefs } = context;
-            if (editorRefs.editor && editorRefs.cursorDecorations.length > 0) {
-                editorRefs.editor.deltaDecorations(editorRefs.cursorDecorations, []);
+            if (editorRefs.cursorDecorationsCollection) {
+                editorRefs.cursorDecorationsCollection.clear();
             }
             return {
                 editorRefs: {
                     ...editorRefs,
-                    cursorDecorations: [],
+                    cursorDecorationsCollection: null,
                 },
             };
         }),
@@ -953,7 +958,7 @@ export const editorMachine = setup({
         },
         editorRefs: {
             editor: input.editorRef.current,
-            cursorDecorations: [],
+            cursorDecorationsCollection: null,
         },
         enableAudioRecording: input.enableAudioRecording ?? false,
         pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
