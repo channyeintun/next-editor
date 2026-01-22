@@ -1,82 +1,133 @@
 import { useCallback, useEffect } from 'react';
 import * as monaco from 'monaco-editor';
-import { useMachine } from '@xstate/react';
+import { useActorRef, useSelector, shallowEqual } from '@xstate/react';
 import { editorMachine } from './machine/editorMachine';
 import type { UseNextEditorConfig, UseNextEditorReturn, EditorState, EditorFrame, Recording } from './types';
 import type { SlideEvent, PreviewEvent } from './slides';
 import { findFrameIndexAtTime, reconstructFrameAtIndex } from './utils/frameDelta';
+import type { SnapshotFrom } from 'xstate';
+
+// ============================================================================
+// Type for machine snapshot
+// ============================================================================
+type EditorMachineSnapshot = SnapshotFrom<typeof editorMachine>;
+
+// ============================================================================
+// Selectors - Memoized functions for extracting state slices
+// ============================================================================
+
+// Recording state selectors
+const selectIsRecording = (state: EditorMachineSnapshot) => state.matches('recording');
+const selectIsRecordingAudio = (state: EditorMachineSnapshot) => state.context.audio.isRecording;
+const selectRecordingStartTime = (state: EditorMachineSnapshot) => state.context.session?.startedAt || null;
+
+// Playback state selectors
+const selectIsPlaying = (state: EditorMachineSnapshot) => state.matches({ playback: 'playing' });
+const selectIsPaused = (state: EditorMachineSnapshot) =>
+  state.matches({ playback: 'paused' }) || (state.matches({ playback: 'ended' }) && state.context.timeline.currentTime < state.context.timeline.duration - 100);
+const selectHasEnded = (state: EditorMachineSnapshot) =>
+  state.matches({ playback: 'ended' }) && state.context.timeline.currentTime >= state.context.timeline.duration - 100;
+
+// Timeline selectors (high-frequency updates)
+const selectCurrentTime = (state: EditorMachineSnapshot) => state.context.timeline.currentTime;
+const selectPlaybackSpeed = (state: EditorMachineSnapshot) => state.context.timeline.speed;
+const selectVolume = (state: EditorMachineSnapshot) => state.context.timeline.volume;
+const selectDuration = (state: EditorMachineSnapshot) => state.context.timeline.duration;
+
+// Data selectors
+const selectRecording = (state: EditorMachineSnapshot) => state.context.recording;
+const selectCurrentFrame = (state: EditorMachineSnapshot) => state.context.currentFrame;
+const selectCurrentCursor = (state: EditorMachineSnapshot) => state.context.currentFrame?.state.mouseCursor || null;
+const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.editor;
 
 /**
  * Main useNextEditor hook refactored with XState v5
- * Provides a clean, actor-based architecture for recording and playback.
+ * Uses useActorRef + useSelector for optimized re-renders.
+ * Components using specific selectors only re-render when those values change.
  */
 export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn => {
-  // Initialize the machine with input config
-  const [state, send] = useMachine(editorMachine, {
+  // Initialize the actor ref (stable reference, doesn't cause re-renders)
+  const actorRef = useActorRef(editorMachine, {
     input: config,
   });
 
-  type MatchesParam = Parameters<typeof state.matches>[0];
+  // Subscribe to specific state slices using selectors
+  // Recording state
+  const isRecording = useSelector(actorRef, selectIsRecording);
+  const isRecordingAudio = useSelector(actorRef, selectIsRecordingAudio);
+  const recordingStartTime = useSelector(actorRef, selectRecordingStartTime);
 
-  const { context } = state;
-  const { editor } = context.editorRefs;
+  // Playback state
+  const isPlaying = useSelector(actorRef, selectIsPlaying);
+  const isPaused = useSelector(actorRef, selectIsPaused);
+  const hasEnded = useSelector(actorRef, selectHasEnded);
+
+  // Timeline state (high-frequency)
+  const currentTime = useSelector(actorRef, selectCurrentTime);
+  const playbackSpeed = useSelector(actorRef, selectPlaybackSpeed);
+  const volume = useSelector(actorRef, selectVolume);
+  const duration = useSelector(actorRef, selectDuration);
+
+  // Data - using shallowEqual for object selectors per XState docs
+  const currentRecording = useSelector(actorRef, selectRecording, shallowEqual);
+  const currentFrame = useSelector(actorRef, selectCurrentFrame, shallowEqual);
+  const currentCursor = useSelector(actorRef, selectCurrentCursor, shallowEqual);
+  const editor = useSelector(actorRef, selectEditor);
 
   // Handle editor ref synchronization - run on every render to catch ref changes
   useEffect(() => {
     const currentEditor = config.editorRef.current;
     if (currentEditor && currentEditor !== editor) {
-      send({ type: 'SET_EDITOR_REF', editor: currentEditor });
+      actorRef.send({ type: 'SET_EDITOR_REF', editor: currentEditor });
     }
   }); // No dependencies - run on every render to catch ref changes
 
   // Recording Controls
   const startRecording = useCallback(() => {
-    send({ type: 'START_RECORDING' });
-  }, [send]);
+    actorRef.send({ type: 'START_RECORDING' });
+  }, [actorRef]);
 
   const stopRecording = useCallback(() => {
-    send({ type: 'STOP_RECORDING' });
-  }, [send]);
+    actorRef.send({ type: 'STOP_RECORDING' });
+  }, [actorRef]);
 
   // Playback Controls
   const play = useCallback(() => {
-    send({ type: 'PLAY' });
-  }, [send]);
+    actorRef.send({ type: 'PLAY' });
+  }, [actorRef]);
 
   const pause = useCallback(() => {
-    send({ type: 'PAUSE' });
-  }, [send]);
+    actorRef.send({ type: 'PAUSE' });
+  }, [actorRef]);
 
   const stop = useCallback(() => {
-    send({ type: 'STOP' });
-  }, [send]);
+    actorRef.send({ type: 'STOP' });
+  }, [actorRef]);
 
   const seekTo = useCallback((time: number) => {
-    send({ type: 'SEEK', time });
-  }, [send]);
+    actorRef.send({ type: 'SEEK', time });
+  }, [actorRef]);
 
   const setPlaybackSpeed = useCallback((speed: number) => {
-    send({ type: 'SET_SPEED', speed });
-  }, [send]);
+    actorRef.send({ type: 'SET_SPEED', speed });
+  }, [actorRef]);
 
-  const setVolume = useCallback((volume: number) => {
-    send({ type: 'SET_VOLUME', volume });
-  }, [send]);
+  const setVolume = useCallback((vol: number) => {
+    actorRef.send({ type: 'SET_VOLUME', volume: vol });
+  }, [actorRef]);
 
   const loadRecording = useCallback((recording: Recording) => {
-    send({ type: 'LOAD_RECORDING', recording });
-  }, [send]);
+    actorRef.send({ type: 'LOAD_RECORDING', recording });
+  }, [actorRef]);
 
   const clearRecording = useCallback(() => {
-    send({ type: 'UNLOAD' });
-  }, [send]);
+    actorRef.send({ type: 'UNLOAD' });
+  }, [actorRef]);
 
   // Event Handlers for UI
   const handleEditorChange = useCallback(() => {
-    send({ type: 'CAPTURE_FRAME' });
-  }, [send]);
-
-  const isPlaying = state.matches({ playback: 'playing' } as MatchesParam);
+    actorRef.send({ type: 'CAPTURE_FRAME' });
+  }, [actorRef]);
 
   // Handle playback interaction detection via direct input listeners
   // This is more stable than onChange for preventing machine/user feedback loops
@@ -102,7 +153,7 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
           ];
 
           if (!ignoreKeys.includes(e.keyCode)) {
-            send({ type: 'USER_INTERACTION' });
+            actorRef.send({ type: 'USER_INTERACTION' });
           }
         })
       );
@@ -110,7 +161,7 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
       // Listen for paste events
       disposables.push(
         editor.onDidPaste(() => {
-          send({ type: 'USER_INTERACTION' });
+          actorRef.send({ type: 'USER_INTERACTION' });
         })
       );
 
@@ -118,7 +169,7 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
         disposables.forEach(d => d.dispose());
       };
     }
-  }, [isPlaying, editor, send]);
+  }, [isPlaying, editor, actorRef]);
 
   // Global space key listener to pause playback
   useEffect(() => {
@@ -127,7 +178,7 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
         // Only trigger on Space key
         if (e.code === 'Space' || e.key === ' ') {
           e.preventDefault(); // Prevent page scrolling
-          send({ type: 'USER_INTERACTION' }); // This triggers PAUSE in the machine
+          actorRef.send({ type: 'USER_INTERACTION' }); // This triggers PAUSE in the machine
         }
       };
 
@@ -136,15 +187,15 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
         window.removeEventListener('keydown', handleGlobalKeyDown, true);
       };
     }
-  }, [isPlaying, send]);
+  }, [isPlaying, actorRef]);
 
   const handleSlideEvent = useCallback((event: SlideEvent) => {
-    send({ type: 'SLIDE_EVENT', event });
-  }, [send]);
+    actorRef.send({ type: 'SLIDE_EVENT', event });
+  }, [actorRef]);
 
   const handlePreviewEvent = useCallback((event: PreviewEvent) => {
-    send({ type: 'PREVIEW_EVENT', event });
-  }, [send]);
+    actorRef.send({ type: 'PREVIEW_EVENT', event });
+  }, [actorRef]);
 
   // Helper functions
   const getEditorState = useCallback((): EditorState | null => {
@@ -158,33 +209,33 @@ export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn 
   }, [editor]);
 
   const getFrame = useCallback((timestamp?: number): EditorFrame | null => {
-    if (timestamp === undefined) return context.currentFrame;
-    if (!context.recording) return null;
+    if (timestamp === undefined) return currentFrame;
+    if (!currentRecording) return null;
 
     // Find closest frame at or before timestamp
-    const { frames } = context.recording;
+    const { frames } = currentRecording;
     const index = findFrameIndexAtTime(frames, timestamp);
     return reconstructFrameAtIndex(frames, index);
-  }, [context.currentFrame, context.recording]);
+  }, [currentFrame, currentRecording]);
 
   return {
     // State
-    isRecording: state.matches('recording' as MatchesParam),
-    isRecordingAudio: context.audio.isRecording,
-    recordingStartTime: context.session?.startedAt || null,
+    isRecording,
+    isRecordingAudio,
+    recordingStartTime,
 
-    isPlaying: state.matches({ playback: 'playing' } as MatchesParam),
-    isPaused: state.matches({ playback: 'paused' } as MatchesParam) || (state.matches({ playback: 'ended' } as MatchesParam) && context.timeline.currentTime < context.timeline.duration - 100),
-    hasEnded: state.matches({ playback: 'ended' } as MatchesParam) && context.timeline.currentTime >= context.timeline.duration - 100,
+    isPlaying,
+    isPaused,
+    hasEnded,
 
-    currentTime: context.timeline.currentTime,
-    playbackSpeed: context.timeline.speed,
-    volume: context.timeline.volume,
+    currentTime,
+    playbackSpeed,
+    volume,
 
     // Data
-    currentRecording: context.recording,
-    currentCursor: context.currentFrame?.state.mouseCursor || null,
-    actualDuration: context.timeline.duration / 1000, // seconds for actualDuration
+    currentRecording,
+    currentCursor,
+    actualDuration: duration / 1000, // seconds for actualDuration
 
     // Controls
     startRecording,
