@@ -273,9 +273,9 @@ const LandingPage = () => {
                                     {i + 1}
                                 </div>
                                 <h3 className="text-2xl font-machina mb-4">{feature.title}</h3>
-                                <p className="text-slate-400 leading-relaxed">
+                                <div className="text-slate-400 leading-relaxed">
                                     {feature.desc}
-                                </p>
+                                </div>
                             </div>
                         ))}
                     </motion.div>
