@@ -103,8 +103,14 @@ export const useUrlLoader = () => {
 
   // Helper functions from JsonStorage (still needed for .ne files)
   const decompressBinaryToRecordings = async (binaryData: Uint8Array) => {
-    const { inflate } = await import('pako');
-    const { superjson } = await import('../storage/SuperJsonConfig');
+    const pakoModule = await import('pako');
+    const inflate = pakoModule.inflate || pakoModule.default;
+
+    if (!inflate) {
+      throw new Error('Storage configuration error: pako is not available');
+    }
+    const superjsonModule = await import('../storage/SuperJsonConfig');
+    const superjson = superjsonModule.superjson || superjsonModule.default;
 
     let offset = 0;
 
@@ -141,6 +147,9 @@ export const useUrlLoader = () => {
       throw new Error('Failed to decompress JSON data - inflate returned invalid result');
     }
 
+    if (!superjson || typeof superjson.parse !== 'function') {
+      throw new Error('Storage configuration error: superjson is not available');
+    }
     const recordings = superjson.parse(jsonString) as Recording[];
 
     // Read audio data and reconstruct blobs

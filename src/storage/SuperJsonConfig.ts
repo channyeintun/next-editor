@@ -75,4 +75,5 @@ export const blobHelpers = {
 };
 
 // Export configured superjson instance
+export default superjson;
 export { superjson };
