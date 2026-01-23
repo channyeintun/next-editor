@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "start": "vite",
-    "build": "npm run asbuild && tsc -b && rolldown -c rolldown.config.js",
+    "build": "npm run asbuild && tsc -b && rolldown -c rolldown.config.js && mkdir -p dist && cp index.html dist/ && sed -i '' 's/src\\/main.tsx/main.js/g' dist/index.html && cp -rn public/* dist/",
     "build:lib": "rolldown -c rolldown.config.js",
     "asbuild:debug": "asc src/core/assembly/index.ts --target debug",
     "asbuild:release": "asc src/core/assembly/index.ts --target release",
