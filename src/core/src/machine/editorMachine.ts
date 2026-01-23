@@ -638,6 +638,8 @@ export const editorMachine = setup({
                     currentTime: clampedTime,
                 },
                 lastAppliedFrameIndex: -1,
+                lastAppliedSlideEventIndex: -1,
+                lastAppliedPreviewEventIndex: -1,
             };
         }),
 
