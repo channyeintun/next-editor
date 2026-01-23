@@ -109,8 +109,9 @@ export const useUrlLoader = () => {
     if (!inflate) {
       throw new Error('Storage configuration error: pako is not available');
     }
-    const superjsonModule = await import('../storage/SuperJsonConfig');
-    const superjson = superjsonModule.superjson || superjsonModule.default;
+    // Import superjson directly from package to avoid code splitting issues on Vercel
+    const superjsonModule = await import('superjson');
+    const superjson = superjsonModule.default;
 
     let offset = 0;
 
