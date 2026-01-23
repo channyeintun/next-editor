@@ -1,14 +1,14 @@
 {
   "targets": {
     "debug": {
-      "outFile": "build/next-editor.debug.wasm",
-      "textFile": "build/debug.wat",
+      "outFile": "public/next-editor.debug.wasm",
+      "textFile": "public/next-editor.debug.wat",
       "sourceMap": true,
       "debug": true
     },
     "release": {
-      "outFile": "build/next-editor.wasm",
-      "textFile": "build/release.wat",
+      "outFile": "public/next-editor.wasm",
+      "textFile": "public/next-editor.wat",
       "sourceMap": true,
       "optimizeLevel": 3,
       "shrinkLevel": 0,

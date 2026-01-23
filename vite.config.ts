@@ -15,27 +15,9 @@ export default defineConfig({
     }),
   ],
   build: {
-    minify: 'terser',
-    terserOptions: {
-      mangle: {
-        toplevel: true,
-      },
-      format: {
-        comments: false,
-      },
-    },
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          editor: ['@monaco-editor/react', 'monaco-editor'],
-          xstate: ['xstate', '@xstate/react'],
-          utils: ['pako', 'superjson']
-        },
-      },
-    },
+    minify: true,
     chunkSizeWarningLimit: 1024,
-    reportCompressedSize: false, // Speed up build
+    reportCompressedSize: false,
     sourcemap: false,
   },
   server: {
