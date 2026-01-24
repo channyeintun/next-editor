@@ -3,65 +3,71 @@
 <div align="center">
   <img src="public/logo.png" alt="Next Editor Logo" width="200" />
   <br />
+  <h1>Next-Level Code Recording & Presentation</h1>
 </div>
 
-A powerful code editor focused on recording, playback, and presentation. Next Editor allows you to record your coding sessions, synchronize them with interactive slides, and share them easily.
+Next Editor is a powerful, high-fidelity code playground and recording engine. It allows you to record your coding sessions, synchronize them with interactive slides, and export them as a single, portable file. Designed for developers who want to share their knowledge through interactive experiences rather than just static videos.
 
-## Features
+## 🚀 Key Features
 
-- 🎥 **Code Recording & Playback**: Record your typing, cursor movements, and interactions for high-fidelity playback.
-- 📊 **Presentation Slides**: Integrated Reveal.js support for adding HTML or Markdown slides to your recordings.
-- 🖼️ **Live Preview**: Instant preview of your code changes properly isolated in an iframe.
-- 💾 **Steganography Storage**: Save your entire project and recording history embedded inside a single PNG image.
-- 📝 **Rich Editing**: Powered by Monaco Editor for a VS Code-like editing experience.
-- 🎯 **Cursor Tracking**: strict isolation and accurate reproduction of cursor movements.
+- 🎥 **High-Fidelity Recording**: Capture every keystroke, cursor movement, and interaction with strict isolation and accurate reproduction.
+- 📊 **Interactive Slides**: Built-in [reveal.js](https://revealjs.com/) support. Add HTML or Markdown slides that sync perfectly with your code playback.
+- 🖼️ **Live Preview**: Instant, isolated preview of your code changes (HTML/CSS/JS) inside a secure iframe.
+- 💾 **Portable Project Files**: Save your entire project—code, recording, and slides—in a single `.ne` file. Since we record events rather than pixels, `.ne` files are exceptionally small compared to traditional video formats.
+- 📝 **Pro-Grade Editor**: Powered by [Monaco Editor](https://microsoft.github.io/monaco-editor/) for a familiar, VS Code-like experience.
+- 🎨 **Modern Aesthetics**: A premium, dynamic UI built with Tailwind CSS 4 and Motion.
 
-## Getting Started
+## 🛠️ Tech Stack
+
+Next Editor uses a cutting-edge stack for maximum performance and developer experience:
+
+- **Core**: [React 19](https://react.dev/), [Vite 8](https://vitejs.dev/) (Beta), [Rolldown](https://rolldown.rs/) (High-performance bundler)
+- **State Management**: [XState 5](https://stately.ai/docs/xstate) (Robust state machine for recording/playback)
+- **Styling**: [Tailwind CSS 4](https://tailwindcss.com/) & [Motion](https://motion.dev/)
+- **Serialization**: [SuperJSON](https://github.com/blitz-js/superjson) & [Pako](https://github.com/nodeca/pako) (zlib compression)
+- **Performance**: [OXC](https://oxc-project.github.io/) for ultrafast minification.
+
+## 📂 Project Structure
+
+- `src/core`: The "brain" of the editor—state machines and the recording/playback engine.
+- `src/storage`: Serialization and data management logic.
+- `src/components`: UI components including the Landing Page, Editor, and Preview.
+- `src/contexts`: React contexts for global state management.
+- `src/hooks`: Custom hooks for editor interactions and state access.
+- `public`: Static assets used by the application.
+
+## 🚦 Getting Started
 
 ### Prerequisites
 
-- Node.js (Latest LTS recommended)
-- [Bun](https://bun.sh/) (Recommended, as `bun.lock` is present)
+- [Bun](https://bun.sh/) (Recommended package manager)
+- Node.js (Latest LTS)
 
 ### Installation
 
-Clone the repository and install dependencies:
-
 ```bash
 bun install
-# or
-npm install
 ```
 
 ### Development
 
-Start the local development server:
-
 ```bash
 bun dev
-# or
-npm run dev
 ```
 
-The application will launch at `http://localhost:5173`.
+The application will be available at `http://localhost:5173`.
 
 ### Production Build
 
-Build the application for production:
-
 ```bash
 bun run build
-# or
-npm run build
 ```
 
-## Project Structure
+## 📖 Learn More
 
-- `src/core`: Core logic for the editor state machine and recording/playback engine.
-- `src/components`: React components for the UI.
-- `src/contexts`: Context providers for state management.
-- `public`: Static assets including the WASM module for steganography.
+- [Slides Usage Guide](SLIDES_USAGE.md) - Learn how to add and customize presentation slides.
 
-## License
+## 📄 License
 
-Private
+Private / Confidential
+
