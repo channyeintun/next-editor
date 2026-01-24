@@ -88,7 +88,7 @@ const LandingPage = () => {
                             <div className="absolute -right-20 bottom-10 w-40 h-40 bg-pinata-purple rounded-full z-0 opacity-20" />
 
                             <div className="relative z-10 flex flex-col md:flex-row items-center gap-12">
-                                <div className="flex-1 text-left">
+                                <div className="flex-1 text-left order-2 md:order-1">
                                     <h1 className="text-5xl md:text-8xl font-machina text-slate-950 leading-[0.9] mb-8 tracking-tight uppercase">
                                         CODE'S <br />
                                         NEXT LEVEL
@@ -167,7 +167,7 @@ const LandingPage = () => {
                                 </div>
 
                                 {/* Mockup code terminal */}
-                                <div className="hidden lg:block w-[400px] shrink-0">
+                                <div className="w-full lg:w-[400px] shrink-0 order-1 md:order-2">
                                     <div className="bg-[#181d24] rounded-3xl p-6 shadow-2xl border border-slate-800 rotate-2 will-change-transform">
                                         <div className="flex gap-1.5 mb-6">
                                             <div className="w-3 h-3 rounded-full bg-[#FF5F56]" />
