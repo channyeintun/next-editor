@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import Navbar from './Navbar';
 import { useState, useEffect } from 'react';
+import EventRecordingAnimation from './EventRecordingAnimation';
 
 const TerminalMockup = () => {
     const codeSegments = [
@@ -180,7 +181,7 @@ const LandingPage = () => {
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ delay: 0.2 }}
-                                            className="pt-4 mt-4 border-t border-slate-800 flex items-center justify-start"
+                                            className="pt-4 mt-4 border-t border-slate-800 flex items-center justify-start gap-1"
                                         >
                                             <div className="p-1 rounded-full bg-red-500/10 border border-red-500/20">
                                                 <motion.div
@@ -188,6 +189,10 @@ const LandingPage = () => {
                                                     transition={{ duration: 2, repeat: Infinity }}
                                                     className="w-2 h-2 rounded-full bg-red-500 will-change-opacity"
                                                 />
+                                            </div>
+
+                                            <div className="relative overflow-visible flex items-center h-4">
+                                                <EventRecordingAnimation variant="compact" />
                                             </div>
                                         </motion.div>
                                     </div>
@@ -229,15 +234,15 @@ const LandingPage = () => {
                                 textColor: "#020617"
                             },
                             {
-                                title: "Unique Portability",
+                                title: "Event-Based Efficiency",
                                 desc: (
                                     <div className="space-y-4">
-                                        <p>Your code and recordings live in a single .ne file. Manage fully and control where your file is hosted.</p>
+                                        <p>We record DOM events, not pixels. This makes .ne files 100x smaller than videos while remaining fully interactive.</p>
                                         <div className="relative pt-2">
                                             <div className="bg-white rounded-lg p-2 text-slate-900 font-mono text-xs flex items-center shadow-lg border border-slate-200">
                                                 <span className="text-slate-400">nexteditor.dev/code?</span>
                                                 <span className="relative inline-block text-slate-950 font-bold whitespace-nowrap">
-                                                    url=css.ne
+                                                    url=intro.ne
                                                     <svg className="absolute -bottom-2.5 left-0 w-full h-4 text-pinata-cyan overflow-visible px-0.5" viewBox="0 0 100 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                                                         <path
                                                             d="M2 12C20 13 40 13 60 12C80 11 92 9 98 5"
@@ -279,6 +284,8 @@ const LandingPage = () => {
                             </div>
                         ))}
                     </motion.div>
+
+
                 </div>
             </main>
 
