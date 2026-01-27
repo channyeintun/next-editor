@@ -1,8 +1,9 @@
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import Navbar from './Navbar';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import EventRecordingAnimation from './EventRecordingAnimation';
+import { animate } from 'animejs';
 
 const TerminalMockup = () => {
     const codeSegments = [
@@ -17,23 +18,23 @@ const TerminalMockup = () => {
 
     const [visibleChars, setVisibleChars] = useState(0);
     const totalLength = codeSegments.reduce((acc, s) => acc + s.text.length, 0);
+    const animationRef = useRef<{ value: number }>({ value: 0 });
 
     useEffect(() => {
-        let interval: ReturnType<typeof setInterval>;
         const timer = setTimeout(() => {
-            interval = setInterval(() => {
-                setVisibleChars(prev => {
-                    if (prev >= totalLength) {
-                        clearInterval(interval);
-                        return prev;
-                    }
-                    return prev + 1;
-                });
-            }, 50);
+            animate(animationRef.current, {
+                value: totalLength,
+                round: 1,
+                duration: totalLength * 50, // Match the previous ~50ms per character
+                easing: 'linear',
+                onRender: () => {
+                    setVisibleChars(animationRef.current.value);
+                }
+            });
         }, 1000);
+
         return () => {
             clearTimeout(timer);
-            if (interval) clearInterval(interval);
         };
     }, [totalLength]);
 
@@ -43,7 +44,7 @@ const TerminalMockup = () => {
     for (let i = 0; i < codeSegments.length; i++) {
         if (remaining <= 0) break;
         const segment = codeSegments[i];
-        const textToShow = segment.text.slice(0, remaining);
+        const textToShow = segment.text.slice(0, Math.floor(remaining));
         renderedSegments.push(
             <span key={i} style={{ color: segment.color }}>
                 {textToShow}

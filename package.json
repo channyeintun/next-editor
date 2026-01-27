@@ -21,6 +21,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@types/pako": "^2.0.4",
     "@xstate/react": "^6.0.0",
+    "animejs": "^4.3.5",
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.562.0",
     "motion": "^12.26.2",
@@ -30,7 +31,6 @@
     "react-router-dom": "^7.12.0",
     "reveal.js": "^5.2.1",
     "superjson": "^2.2.6",
-    "typewriter-effect": "^2.22.0",
     "xstate": "^5.25.1"
   },
   "devDependencies": {
