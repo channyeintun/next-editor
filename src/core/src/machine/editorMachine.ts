@@ -676,6 +676,34 @@ export const editorMachine = setup({
             };
         }),
 
+        storeRecordedFrameAtPause: assign(({ context }) => {
+            return {
+                recordedFrameAtPause: context.currentFrame,
+            };
+        }),
+
+        restoreRecordedFrameFromPause: (({ context }) => {
+            const { editorRefs, recordedFrameAtPause } = context;
+            if (!editorRefs.editor || !recordedFrameAtPause || !recordedFrameAtPause.state) {
+                return;
+            }
+
+            // Force restore the exact recorded frame by setting all state directly
+            try {
+                const model = editorRefs.editor.getModel();
+                if (model) {
+                    model.setValue(recordedFrameAtPause.state.content);
+                }
+                editorRefs.editor.setPosition(recordedFrameAtPause.state.position);
+                editorRefs.editor.setSelection(recordedFrameAtPause.state.selection);
+                if (recordedFrameAtPause.state.viewState) {
+                    editorRefs.editor.restoreViewState(recordedFrameAtPause.state.viewState);
+                }
+            } catch (error) {
+                console.error('Error restoring recorded frame from pause:', error);
+            }
+        }),
+
         resetPlayback: assign(({ context }) => ({
             timeline: {
                 ...context.timeline,
@@ -1226,6 +1254,17 @@ export const editorMachine = setup({
             on: {
                 TICK: {
                     actions: [
+                        assign(({ context, event }) => {
+                            if (event.type === 'TICK') {
+                                return {
+                                    timeline: {
+                                        ...context.timeline,
+                                        currentTime: event.currentTime
+                                    }
+                                };
+                            }
+                            return {};
+                        }),
                         'applyFrameAtTime',
                         'applyPreviewEventsAtTime',
                         'applySlideEventsAtTime',
@@ -1339,9 +1378,35 @@ export const editorMachine = setup({
                 },
 
                 paused: {
+                    entry: [
+                        'storeRecordedFrameAtPause',
+                    ],
                     on: {
+                        TICK: {
+                            actions: [
+                                'applyFrameAtTime',
+                                'applyPreviewEventsAtTime',
+                                'applySlideEventsAtTime',
+                                'storeRecordedFrameAtPause',
+                            ],
+                        },
+                        SEEK: {
+                            actions: [
+                                'seekToTime',
+                                'applyFrameAtTime',
+                                'applyPreviewEventsAtTime',
+                                'applySlideEventsAtTime',
+                                'storeRecordedFrameAtPause',
+                                enqueueActions(({ event, enqueue }) => {
+                                    const time = event.type === 'SEEK' ? event.time : 0;
+                                    enqueue.sendTo('timelineActor', { type: 'SEEK', time });
+                                    enqueue.sendTo('audioPlayer', { type: 'SEEK', time: time / 1000 });
+                                }),
+                            ],
+                        },
                         PLAY: {
                             target: 'playing',
+                            actions: 'restoreRecordedFrameFromPause',
                         },
                     },
                 },
