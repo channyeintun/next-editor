@@ -21,11 +21,11 @@ Next Editor is a powerful, high-fidelity code playground and recording engine. I
 
 Next Editor uses a cutting-edge stack for maximum performance and developer experience:
 
-- **Core**: [React 19](https://react.dev/), [Vite 8](https://vitejs.dev/) (Beta), [Rolldown](https://rolldown.rs/) (High-performance bundler)
+- **Core**: [React 19](https://react.dev/), [Vite 8](https://vitejs.dev/), [Rolldown](https://rolldown.rs/) (High-performance bundler)
 - **State Management**: [XState 5](https://stately.ai/docs/xstate) (Robust state machine for recording/playback)
 - **Styling**: [Tailwind CSS 4](https://tailwindcss.com/) & [Motion](https://motion.dev/)
 - **Serialization**: [SuperJSON](https://github.com/blitz-js/superjson) & [Pako](https://github.com/nodeca/pako) (zlib compression)
-- **Performance**: [OXC](https://oxc-project.github.io/) for ultrafast minification.
+- **Performance**: [OXC](https://oxc-project.github.io/) for ultrafast linting and minification.
 
 ## 📂 Project Structure
 
@@ -70,4 +70,3 @@ bun run build
 ## 📄 License
 
 Private / Confidential
-

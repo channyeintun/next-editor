@@ -1,8 +1,8 @@
-import type { Recording } from '../core/src';
-import { superjson } from './SuperJsonConfig';
-import { deflate, inflate } from 'pako';
-import { type AudioPlaceholder } from '../core/src/types';
-import { encodeBase64, decodeBase64 } from '../core/src/utils/base64';
+import type { Recording } from "../core/src";
+import { superjson } from "./SuperJsonConfig";
+import { deflate, inflate } from "pako";
+import { type AudioPlaceholder } from "../core/src/types";
+import { encodeBase64, decodeBase64 } from "../core/src/utils/base64";
 
 interface StorageStats {
   count: number;
@@ -11,25 +11,38 @@ interface StorageStats {
   compressionRatio?: string;
 }
 
-
-
-
 /**
  * JSON Storage Interface for use-next-editor
  * Provides export/import functionality for recordings as JSON files with compression
  */
 export class JsonStorage {
-  private localStorageKey = 'next-editor-recordings';
+  private localStorageKey = "next-editor-recordings";
+
+  /**
+   * Normalize supported recording versions while preserving legacy version 2 files.
+   */
+  private normalizeRecording(recording: Recording): Recording {
+    if (recording.version === 2 || recording.version === 3) {
+      return recording;
+    }
+
+    throw new Error(
+      `Unsupported recording version: ${(recording as Recording & { version?: unknown }).version ?? "unknown"}`,
+    );
+  }
 
   /**
    * Extract audio data from all recordings (helper for stats)
    */
-  private async extractAllAudioData(recordings: Recording[]): Promise<{ recordingsWithPlaceholders: Recording[] }> {
+  private async extractAllAudioData(
+    recordings: Recording[],
+  ): Promise<{ recordingsWithPlaceholders: Recording[] }> {
     const recordingsWithPlaceholders = await Promise.all(
       recordings.map(async (recording) => {
-        const { recordingWithPlaceholders } = await this.extractAudioData(recording);
+        const { recordingWithPlaceholders } =
+          await this.extractAudioData(recording);
         return recordingWithPlaceholders;
-      })
+      }),
     );
     return { recordingsWithPlaceholders };
   }
@@ -37,7 +50,12 @@ export class JsonStorage {
   /**
    * Extract audio blobs from recording and replace with placeholders
    */
-  private async extractAudioData(recording: Recording): Promise<{ recordingWithPlaceholders: Recording; audioData: Uint8Array | null }> {
+  private async extractAudioData(
+    recording: Recording,
+  ): Promise<{
+    recordingWithPlaceholders: Recording;
+    audioData: Uint8Array | null;
+  }> {
     if (!recording.audioBlob || !(recording.audioBlob instanceof Blob)) {
       return { recordingWithPlaceholders: recording, audioData: null };
     }
@@ -50,13 +68,13 @@ export class JsonStorage {
     const placeholder: AudioPlaceholder = {
       __audio_offset: 0, // Will be set during concatenation
       __audio_size: audioData.length,
-      __audio_type: recording.audioBlob.type
+      __audio_type: recording.audioBlob.type,
     };
 
     // Create recording with placeholder
     const recordingWithPlaceholders: Recording = {
       ...recording,
-      audioBlob: placeholder
+      audioBlob: placeholder,
     };
 
     return { recordingWithPlaceholders, audioData };
@@ -65,25 +83,29 @@ export class JsonStorage {
   /**
    * Compress recordings to binary format (JSON + audio concatenation)
    */
-  private async compressRecordingsToBinary(recordings: Recording[]): Promise<Uint8Array> {
+  private async compressRecordingsToBinary(
+    recordings: Recording[],
+  ): Promise<Uint8Array> {
     const audioChunks: Uint8Array[] = [];
     let currentOffset = 0;
 
     // Process recordings and extract audio
     const recordingsWithPlaceholders = await Promise.all(
       recordings.map(async (recording) => {
-        const { recordingWithPlaceholders, audioData } = await this.extractAudioData(recording);
+        const { recordingWithPlaceholders, audioData } =
+          await this.extractAudioData(recording);
 
         if (audioData) {
           // Update placeholder with actual offset
-          const placeholder = recordingWithPlaceholders.audioBlob as AudioPlaceholder;
+          const placeholder =
+            recordingWithPlaceholders.audioBlob as AudioPlaceholder;
           placeholder.__audio_offset = currentOffset;
           audioChunks.push(audioData);
           currentOffset += audioData.length;
         }
 
         return recordingWithPlaceholders;
-      })
+      }),
     );
 
     // Serialize JSON without audio blobs
@@ -91,12 +113,15 @@ export class JsonStorage {
     const compressedJson = deflate(jsonString, { level: 9 });
 
     // Create header - version 2 uses Uint32 for jsonLength (supports files > 65KB)
-    const magic = new TextEncoder().encode('SCRM');
+    const magic = new TextEncoder().encode("SCRM");
     const version = new Uint16Array([2]); // Version 2 uses Uint32 for jsonLength
     const jsonLength = new Uint32Array([compressedJson.length]);
 
     // Calculate total size: magic(4) + version(2) + jsonLength(4) + json + audio
-    const audioDataSize = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const audioDataSize = audioChunks.reduce(
+      (sum, chunk) => sum + chunk.length,
+      0,
+    );
     const totalSize = 10 + compressedJson.length + audioDataSize;
 
     // Combine all data
@@ -127,40 +152,54 @@ export class JsonStorage {
   /**
    * Decompress binary format back to recordings with audio blobs
    */
-  private async decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
+  private async decompressBinaryToRecordings(
+    binaryData: Uint8Array,
+  ): Promise<Recording[]> {
     let offset = 0;
 
     // Read header
-    const magic = new TextDecoder().decode(binaryData.slice(offset, offset + 4));
+    const magic = new TextDecoder().decode(
+      binaryData.slice(offset, offset + 4),
+    );
     offset += 4;
 
-    if (magic !== 'SCRM') {
-      throw new Error('Invalid binary format: bad magic number');
+    if (magic !== "SCRM") {
+      throw new Error("Invalid binary format: bad magic number");
     }
 
-    const version = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
+    const version = new Uint16Array(
+      binaryData.slice(offset, offset + 2).buffer,
+    )[0];
     offset += 2;
 
     if (version !== 2) {
-      throw new Error(`Unsupported binary format version: ${version}. Legacy Version 1 is no longer supported.`);
+      throw new Error(
+        `Unsupported binary format version: ${version}. Legacy Version 1 is no longer supported.`,
+      );
     }
 
     // Version 2: Uint32 for jsonLength (supports larger files)
-    const jsonLength = new Uint32Array(binaryData.slice(offset, offset + 4).buffer)[0];
+    const jsonLength = new Uint32Array(
+      binaryData.slice(offset, offset + 4).buffer,
+    )[0];
     offset += 4;
 
     if (jsonLength === 0 || jsonLength > binaryData.length - offset) {
-      throw new Error(`Invalid JSON length: ${jsonLength}, remaining data: ${binaryData.length - offset}`);
+      throw new Error(
+        `Invalid JSON length: ${jsonLength}, remaining data: ${binaryData.length - offset}`,
+      );
     }
 
     // Read and decompress JSON
     const compressedJson = binaryData.slice(offset, offset + jsonLength);
     offset += jsonLength;
 
-    const jsonString = inflate(compressedJson, { to: 'string' });
+    const jsonString = inflate(compressedJson, { to: "string" });
 
-    if (!jsonString || typeof jsonString !== 'string') {
-      throw new Error('Failed to decompress JSON data - inflate returned invalid result');
+    if (!jsonString || typeof jsonString !== "string") {
+      throw new Error(
+        "Failed to decompress JSON data - inflate returned invalid result",
+      );
     }
 
     const recordings = superjson.parse(jsonString) as Recording[];
@@ -169,24 +208,30 @@ export class JsonStorage {
     const audioDataStart = offset;
     const audioData = binaryData.slice(audioDataStart);
 
-    return recordings.map(recording => {
-      const audioPlaceholder = recording.audioBlob as AudioPlaceholder | undefined;
+    return recordings.map((rawRecording) => {
+      const recording = this.normalizeRecording(rawRecording);
+      const audioPlaceholder = recording.audioBlob as
+        | AudioPlaceholder
+        | undefined;
 
-      if (audioPlaceholder && (audioPlaceholder as AudioPlaceholder).__audio_offset !== undefined) {
+      if (
+        audioPlaceholder &&
+        (audioPlaceholder as AudioPlaceholder).__audio_offset !== undefined
+      ) {
         const audioOffset = audioPlaceholder.__audio_offset;
         const audioSize = audioPlaceholder.__audio_size;
         const audioType = audioPlaceholder.__audio_type;
 
-        const audioBytes = audioData.slice(audioOffset, audioOffset + audioSize);
+        const audioBytes = audioData.slice(
+          audioOffset,
+          audioOffset + audioSize,
+        );
         recording.audioBlob = new Blob([audioBytes], { type: audioType });
       }
 
       return recording;
     });
   }
-
-
-
 
   /**
    * Convert binary data to base64 for storage using Wasm acceleration
@@ -202,22 +247,27 @@ export class JsonStorage {
     return decodeBase64(base64Data);
   }
 
-
   /**
    * Save recording to localStorage using new binary format (JSON + audio concatenation)
    */
   async save(recording: Recording): Promise<void> {
     try {
       const existingRecordings = await this.load();
-      const updatedRecordings = [...existingRecordings.filter(r => r.id !== recording.id), recording];
+      const updatedRecordings = [
+        ...existingRecordings.filter((r) => r.id !== recording.id),
+        recording,
+      ];
 
       // Use new binary format that separates JSON and audio data
-      const binaryData = await this.compressRecordingsToBinary(updatedRecordings);
+      const binaryData =
+        await this.compressRecordingsToBinary(updatedRecordings);
       const base64Data = this.binaryToBase64(binaryData);
       localStorage.setItem(this.localStorageKey, base64Data);
     } catch (error) {
-      console.error('JsonStorage: Failed to save recording:', error);
-      throw new Error(`Failed to save recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("JsonStorage: Failed to save recording:", error);
+      throw new Error(
+        `Failed to save recording: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -232,11 +282,10 @@ export class JsonStorage {
       const binaryData = this.base64ToBinary(stored);
       return await this.decompressBinaryToRecordings(binaryData);
     } catch (error) {
-      console.error('Failed to load recordings from localStorage:', error);
+      console.error("Failed to load recordings from localStorage:", error);
       return [];
     }
   }
-
 
   /**
    * Delete recording from localStorage using SuperJSON with compression
@@ -244,14 +293,16 @@ export class JsonStorage {
   async delete(id: string): Promise<void> {
     try {
       const recordings = await this.load();
-      const filtered = recordings.filter(r => r.id !== id);
+      const filtered = recordings.filter((r) => r.id !== id);
 
       // Save using new binary format
       const binaryData = await this.compressRecordingsToBinary(filtered);
       const base64Data = this.binaryToBase64(binaryData);
       localStorage.setItem(this.localStorageKey, base64Data);
     } catch (error) {
-      throw new Error(`Failed to delete recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to delete recording: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -265,13 +316,14 @@ export class JsonStorage {
       const base64Data = this.binaryToBase64(binaryData);
 
       // Create blob with base64 data (will be decoded on import)
-      const blob = new Blob([base64Data], { type: 'application/octet-stream' });
+      const blob = new Blob([base64Data], { type: "application/octet-stream" });
       const url = URL.createObjectURL(blob);
 
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
       // Use .ne extension to indicate new binary format
-      const baseFilename = filename?.replace(/\.json$/, '') || `recording-${recording.id}`;
+      const baseFilename =
+        filename?.replace(/\.json$/, "") || `recording-${recording.id}`;
       link.download = `${baseFilename}.ne`;
       document.body.appendChild(link);
       link.click();
@@ -280,7 +332,9 @@ export class JsonStorage {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (error) {
-      throw new Error(`Failed to export recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to export recording: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -295,13 +349,15 @@ export class JsonStorage {
       const base64Data = this.binaryToBase64(binaryData);
 
       // Create blob with base64 data (will be decoded on import)
-      const blob = new Blob([base64Data], { type: 'application/octet-stream' });
+      const blob = new Blob([base64Data], { type: "application/octet-stream" });
       const url = URL.createObjectURL(blob);
 
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
       // Use .ne extension to indicate new binary format
-      const baseFilename = filename?.replace(/\.json$/, '') || `next-editor-recordings-${Date.now()}`;
+      const baseFilename =
+        filename?.replace(/\.json$/, "") ||
+        `next-editor-recordings-${Date.now()}`;
       link.download = `${baseFilename}.ne`;
       document.body.appendChild(link);
       link.click();
@@ -310,7 +366,9 @@ export class JsonStorage {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (error) {
-      throw new Error(`Failed to export recordings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to export recordings: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -319,45 +377,50 @@ export class JsonStorage {
    */
   importFromFile(): Promise<Recording[]> {
     return new Promise((resolve, reject) => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.ne';
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".ne";
 
       input.onchange = async (event) => {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (!file) {
-          reject(new Error('No file selected'));
+          reject(new Error("No file selected"));
           return;
         }
 
         try {
-
           // Read file as text and validate it's not empty/undefined
           const text = await file.text();
           const trimmedText = text.trim();
           if (!trimmedText || trimmedText.length === 0) {
-            reject(new Error('File appears to be empty or corrupted'));
+            reject(new Error("File appears to be empty or corrupted"));
             return;
           }
 
           // Relaxed validation: Allow whitespace/newlines and check general format
           // Strip whitespace for the check
-          const stripped = trimmedText.replace(/\s/g, '');
+          const stripped = trimmedText.replace(/\s/g, "");
           const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
           if (!base64Pattern.test(stripped)) {
-            console.error('Import validation failed. Start of text:', trimmedText.substring(0, 50));
-            reject(new Error('File does not contain valid base64 data'));
+            console.error(
+              "Import validation failed. Start of text:",
+              trimmedText.substring(0, 50),
+            );
+            reject(new Error("File does not contain valid base64 data"));
             return;
           }
 
           const binaryData = this.base64ToBinary(stripped);
 
-
-          const importedRecordings = await this.decompressBinaryToRecordings(binaryData);
+          const importedRecordings =
+            await this.decompressBinaryToRecordings(binaryData);
 
           // Validate imported recordings
-          if (!Array.isArray(importedRecordings) || importedRecordings.length === 0) {
-            reject(new Error('No valid recordings found in file'));
+          if (
+            !Array.isArray(importedRecordings) ||
+            importedRecordings.length === 0
+          ) {
+            reject(new Error("No valid recordings found in file"));
             return;
           }
 
@@ -365,8 +428,9 @@ export class JsonStorage {
           // Just return the imported recordings for immediate use
           resolve(importedRecordings);
         } catch (error) {
-          console.error('Import error details:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Invalid file format';
+          console.error("Import error details:", error);
+          const errorMessage =
+            error instanceof Error ? error.message : "Invalid file format";
           reject(new Error(`Failed to import recordings: ${errorMessage}`));
         }
       };
@@ -374,7 +438,6 @@ export class JsonStorage {
       input.click();
     });
   }
-
 
   /**
    * Clear all recordings from localStorage
@@ -390,7 +453,12 @@ export class JsonStorage {
     const recordings = await this.load();
 
     if (recordings.length === 0) {
-      return { count: 0, totalSize: '0 B', compressedSize: '0 B', compressionRatio: '0%' };
+      return {
+        count: 0,
+        totalSize: "0 B",
+        compressedSize: "0 B",
+        compressionRatio: "0%",
+      };
     }
 
     // Get actual compressed size from localStorage
@@ -399,7 +467,8 @@ export class JsonStorage {
 
     // Calculate what the size would be without compression
     // (simulate old base64 + JSON format for fair comparison)
-    const { recordingsWithPlaceholders } = await this.extractAllAudioData(recordings);
+    const { recordingsWithPlaceholders } =
+      await this.extractAllAudioData(recordings);
     const jsonString = superjson.stringify(recordingsWithPlaceholders);
     const jsonSize = new Blob([jsonString]).size;
     const audioSize = recordings.reduce((total, recording) => {
@@ -408,11 +477,13 @@ export class JsonStorage {
     }, 0);
 
     // Simulate old format: JSON + base64 audio (33% overhead) + base64 storage (33% overhead)
-    const simulatedOldFormatSize = Math.round((jsonSize + audioSize * 1.33) * 1.33);
+    const simulatedOldFormatSize = Math.round(
+      (jsonSize + audioSize * 1.33) * 1.33,
+    );
 
     // Convert to human-readable format
     const formatSize = (bytes: number): string => {
-      const units = ['B', 'KB', 'MB', 'GB'];
+      const units = ["B", "KB", "MB", "GB"];
       let size = bytes;
       let unitIndex = 0;
 
@@ -425,15 +496,16 @@ export class JsonStorage {
     };
 
     const compressedSize = formatSize(actualCompressedSize);
-    const compressionRatio = simulatedOldFormatSize > 0
-      ? `${((1 - actualCompressedSize / simulatedOldFormatSize) * 100).toFixed(1)}%`
-      : '0%';
+    const compressionRatio =
+      simulatedOldFormatSize > 0
+        ? `${((1 - actualCompressedSize / simulatedOldFormatSize) * 100).toFixed(1)}%`
+        : "0%";
 
     return {
       count: recordings.length,
       totalSize: compressedSize, // Show compressed size as the main size
       compressedSize,
-      compressionRatio
+      compressionRatio,
     };
   }
 }

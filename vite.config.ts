@@ -1,6 +1,11 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import checker from 'vite-plugin-checker'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import checker from "vite-plugin-checker";
+
+const crossOriginHeaders = {
+  "Cross-Origin-Embedder-Policy": "require-corp",
+  "Cross-Origin-Opener-Policy": "same-origin",
+};
 
 // https://viteplus.dev/ alignment
 export default defineConfig({
@@ -8,32 +13,28 @@ export default defineConfig({
     react(),
     checker({
       typescript: true,
-      eslint: {
-        useFlatConfig: true,
-        lintCommand: 'eslint "./src/**/*.{ts,tsx}"',
-      },
     }),
   ],
   build: {
-    minify: 'oxc',
+    minify: "oxc",
     rolldownOptions: {
       output: {
         codeSplitting: {
           groups: [
             {
-              name: 'vendor',
+              name: "vendor",
               test: /[\\/]node_modules[\\/](react|react-dom|react-router-dom)[\\/]/,
             },
             {
-              name: 'editor',
+              name: "editor",
               test: /[\\/]node_modules[\\/](@monaco-editor|monaco-editor)[\\/]/,
             },
             {
-              name: 'xstate',
+              name: "xstate",
               test: /[\\/]node_modules[\\/](xstate|@xstate\/react)[\\/]/,
             },
             {
-              name: 'utils',
+              name: "utils",
               test: /[\\/]node_modules[\\/](pako|superjson)[\\/]/,
             },
           ],
@@ -45,8 +46,12 @@ export default defineConfig({
     sourcemap: false,
   },
   server: {
+    headers: crossOriginHeaders,
     hmr: {
       overlay: true, // Show errors in overlay
     },
   },
-})
+  preview: {
+    headers: crossOriginHeaders,
+  },
+});

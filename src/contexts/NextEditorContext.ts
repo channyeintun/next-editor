@@ -1,7 +1,17 @@
-import { createContext, type RefObject } from 'react';
-import type { Recording, TimelineActorRef, EditorActorRef } from '../core/src';
-import type { SlidePreviewState, PreviewState, Slide, SlideEvent, PreviewEvent } from '../types/slides';
-import type * as monaco from 'monaco-editor';
+import { createContext, type RefObject } from "react";
+import type { Recording, TimelineActorRef, EditorActorRef } from "../core/src";
+import type {
+  SlidePreviewState,
+  PreviewState,
+  Slide,
+  SlideEvent,
+  PreviewEvent,
+} from "../types/slides";
+import type {
+  RuntimePanelRecordingState,
+  RuntimeRecordingSnapshot,
+} from "../types/runtime";
+import type * as monaco from "monaco-editor";
 
 export type { TimelineActorRef, EditorActorRef };
 
@@ -21,6 +31,8 @@ export interface NextEditorActions {
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
+  handleWorkspaceEvent: () => void;
+  handleRuntimeEvent: () => void;
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;
   exportAllAsFile: (filename?: string) => Promise<void>;
   importFromFile: () => Promise<Recording[]>;
@@ -28,17 +40,36 @@ export interface NextEditorActions {
   getStorageStats: () => Promise<{ count: number; totalSize: string }>;
   loadRecordingsFromStorage: () => Promise<Recording[]>;
   deleteFromStorage: (id: string) => Promise<void>;
-  registerSlideStateGetter: (getter: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null) => void;
-  registerSlideStateApplier: (applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void) => void;
+  registerSlideStateGetter: (
+    getter: () => {
+      previewState: SlidePreviewState;
+      currentSlideIndex: number;
+    } | null,
+  ) => void;
+  registerSlideStateApplier: (
+    applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void,
+  ) => void;
   registerSlidesGetter: (getter: () => Slide[]) => void;
   registerSlidesApplier: (applier: (slides: Slide[]) => void) => void;
   registerPreviewStateGetter: (getter: () => PreviewState | null) => void;
-  registerPreviewStateApplier: (applier: (previewState: PreviewState) => void) => void;
-  registerSlideNavigator: (navigator: (indexh: number, indexv: number) => void) => void;
+  registerPreviewStateApplier: (
+    applier: (previewState: PreviewState) => void,
+  ) => void;
+  registerRuntimeStateGetter: (
+    getter: () => RuntimePanelRecordingState | null,
+  ) => void;
+  registerRuntimeStateApplier: (
+    applier: (snapshot: RuntimeRecordingSnapshot) => void,
+  ) => void;
+  registerSlideNavigator: (
+    navigator: (indexh: number, indexv: number) => void,
+  ) => void;
   navigateSlidesDirect?: (indexh: number, indexv: number) => void;
 }
 
-export const NextEditorActionsContext = createContext<NextEditorActions | null>(null);
+export const NextEditorActionsContext = createContext<NextEditorActions | null>(
+  null,
+);
 
 // 2. Metadata Context: Relatively stable state (flags)
 export interface NextEditorMetadata {
@@ -51,7 +82,8 @@ export interface NextEditorMetadata {
   recordingStartTime: number | null;
 }
 
-export const NextEditorMetadataContext = createContext<NextEditorMetadata | null>(null);
+export const NextEditorMetadataContext =
+  createContext<NextEditorMetadata | null>(null);
 
 // 3. Playback Context: High-frequency state (ticks)
 export interface NextEditorPlayback {
@@ -62,4 +94,5 @@ export interface NextEditorPlayback {
   duration: number; // actualDuration
 }
 
-export const NextEditorPlaybackContext = createContext<NextEditorPlayback | null>(null);
+export const NextEditorPlaybackContext =
+  createContext<NextEditorPlayback | null>(null);

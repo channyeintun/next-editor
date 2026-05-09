@@ -1,6 +1,8 @@
-import type * as monaco from 'monaco-editor';
-import type { MouseCursorPosition, EditorFrame } from '../types';
-import type { SlidePreviewState, PreviewState } from '../slides';
+import type * as monaco from "monaco-editor";
+import type { MouseCursorPosition, EditorFrame } from "../types";
+import type { SlidePreviewState, PreviewState } from "../slides";
+import type { RuntimeRecordingEvent } from "../../../types/runtime";
+import type { WorkspaceRecordingEvent } from "../../../types/workspace";
 
 // ============================================================================
 // Delta Compression Types
@@ -79,18 +81,25 @@ export type DeltaFrame = Keyframe | FrameDelta;
  * Recording format with delta compression
  */
 export interface DeltaRecording {
-  /** Format version (2 = delta compressed) */
-  version: 2;
+  /** Recording schema version using delta-compressed frames. */
+  version: 2 | 3;
   id: string;
   name: string;
   /** Number of frames between keyframes */
   keyframeInterval: number;
   /** Compressed frames (keyframes + deltas) */
   frames: DeltaFrame[];
-  slideEvents?: import('../slides').SlideEvent[];
-  previewEvents?: import('../slides').PreviewEvent[];
-  slides?: Array<{ id: string; imageUrl: string; name?: string; order: number }>;
-  audioBlob?: Blob | import('../types').AudioPlaceholder;
+  slideEvents?: import("../slides").SlideEvent[];
+  previewEvents?: import("../slides").PreviewEvent[];
+  workspaceEvents?: WorkspaceRecordingEvent[];
+  runtimeEvents?: RuntimeRecordingEvent[];
+  slides?: Array<{
+    id: string;
+    imageUrl: string;
+    name?: string;
+    order: number;
+  }>;
+  audioBlob?: Blob | import("../types").AudioPlaceholder;
   duration: number;
   createdAt: number;
 }
@@ -102,31 +111,34 @@ export const DELTA_CONFIG = {
   /** Number of frames between keyframes (at 60fps, 120 = 2 seconds) */
   KEYFRAME_INTERVAL: 120,
   /** Format version identifier */
-  VERSION: 2 as const,
+  VERSION: 3 as const,
 } as const;
 
 /**
  * Type guard to check if a frame is a keyframe
  */
 export function isKeyframe(frame: DeltaFrame): frame is Keyframe {
-  return 'isKeyframe' in frame && frame.isKeyframe === true;
+  return "isKeyframe" in frame && frame.isKeyframe === true;
 }
 
 /**
  * Type guard to check if a frame is a delta
  */
 export function isDelta(frame: DeltaFrame): frame is FrameDelta {
-  return 'isKeyframe' in frame && frame.isKeyframe === false;
+  return "isKeyframe" in frame && frame.isKeyframe === false;
 }
 
 /**
  * Type guard to check if a recording uses delta compression
  */
-export function isDeltaRecording(recording: unknown): recording is DeltaRecording {
+export function isDeltaRecording(
+  recording: unknown,
+): recording is DeltaRecording {
   return (
-    typeof recording === 'object' &&
+    typeof recording === "object" &&
     recording !== null &&
-    'version' in recording &&
-    (recording as DeltaRecording).version === 2
+    "version" in recording &&
+    ((recording as DeltaRecording).version === 2 ||
+      (recording as DeltaRecording).version === 3)
   );
 }
