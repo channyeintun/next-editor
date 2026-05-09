@@ -20,6 +20,7 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@types/pako": "^2.0.4",
+    "@webcontainer/api": "^1.6.4",
     "@xstate/react": "^6.0.0",
     "animejs": "^4.3.5",
     "lottie-react": "^2.4.1",
