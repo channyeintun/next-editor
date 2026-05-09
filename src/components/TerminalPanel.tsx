@@ -218,7 +218,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const runnerOutput = content || "Waiting for runner output...";
 
   return (
-    <div className="fixed bottom-12 left-4 right-4 z-40 flex flex-col overflow-hidden rounded-xl border border-slate-900 bg-[#1d1f29] shadow-[0_18px_40px_rgba(2,6,23,0.42)] md:left-[19rem]">
+    <div className="fixed bottom-12 left-4 right-4 z-40 flex flex-col overflow-visible rounded-xl border border-slate-900 bg-[#1d1f29] shadow-[0_18px_40px_rgba(2,6,23,0.42)] md:left-[19rem]">
       <div className="flex items-center border-b border-slate-800 bg-[#232633] px-2">
         {DOCK_TABS.map((tab) => {
           const isActive = tab.id === activeTab;
@@ -346,70 +346,68 @@ const TerminalPanel = memo(function TerminalPanel() {
       )}
 
       {isSettingsOpen && (
-        <div className="absolute inset-0 z-10 bg-[#0b0d12]/45">
-          <div className="absolute left-1/2 top-1/2 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-800 bg-[#151821] p-5 shadow-[0_24px_48px_rgba(2,6,23,0.55)]">
-            <div className="space-y-5">
-              <RunnerToggle
-                checked={runnerConfig.enabled}
-                label="Enable Runner"
-                onChange={(checked) => updateRunnerConfig({ enabled: checked })}
-              />
-              <RunnerToggle
-                checked={runnerConfig.runOnStartup}
-                label="Run on startup"
-                description="Execute script immediately when opening the project"
-                onChange={(checked) =>
-                  updateRunnerConfig({ runOnStartup: checked })
+        <div className="absolute bottom-full left-1/2 z-20 mb-3 w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-slate-800 bg-[#151821] p-5 shadow-[0_24px_48px_rgba(2,6,23,0.55)] max-h-[min(75vh,36rem)] overflow-y-auto">
+          <div className="space-y-5">
+            <RunnerToggle
+              checked={runnerConfig.enabled}
+              label="Enable Runner"
+              onChange={(checked) => updateRunnerConfig({ enabled: checked })}
+            />
+            <RunnerToggle
+              checked={runnerConfig.runOnStartup}
+              label="Run on startup"
+              description="Execute script immediately when opening the project"
+              onChange={(checked) =>
+                updateRunnerConfig({ runOnStartup: checked })
+              }
+            />
+            <RunnerToggle
+              checked={runnerConfig.runOnFileSave}
+              label="Run on file-save"
+              description="Execute script when saving a file"
+              onChange={(checked) =>
+                updateRunnerConfig({ runOnFileSave: checked })
+              }
+            />
+            <label className="block">
+              <span className="block text-sm font-medium text-slate-100">
+                Init Command
+              </span>
+              <input
+                value={runnerConfig.initCommand}
+                onChange={(event) =>
+                  updateRunnerConfig({ initCommand: event.target.value })
                 }
+                className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500"
               />
-              <RunnerToggle
-                checked={runnerConfig.runOnFileSave}
-                label="Run on file-save"
-                description="Execute script when saving a file"
-                onChange={(checked) =>
-                  updateRunnerConfig({ runOnFileSave: checked })
+              <span className="mt-2 block text-xs text-slate-500">
+                Command to run when booting the project
+              </span>
+            </label>
+            <label className="block">
+              <span className="block text-sm font-medium text-slate-100">
+                Run Command
+              </span>
+              <input
+                value={runnerConfig.runCommand}
+                onChange={(event) =>
+                  updateRunnerConfig({ runCommand: event.target.value })
                 }
+                className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500"
               />
-              <label className="block">
-                <span className="block text-sm font-medium text-slate-100">
-                  Init Command
-                </span>
-                <input
-                  value={runnerConfig.initCommand}
-                  onChange={(event) =>
-                    updateRunnerConfig({ initCommand: event.target.value })
-                  }
-                  className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500"
-                />
-                <span className="mt-2 block text-xs text-slate-500">
-                  Command to run when booting the project
-                </span>
-              </label>
-              <label className="block">
-                <span className="block text-sm font-medium text-slate-100">
-                  Run Command
-                </span>
-                <input
-                  value={runnerConfig.runCommand}
-                  onChange={(event) =>
-                    updateRunnerConfig({ runCommand: event.target.value })
-                  }
-                  className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500"
-                />
-                <span className="mt-2 block text-xs text-slate-500">
-                  Command to run inside the workspace
-                </span>
-              </label>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsSettingsOpen(false)}
-              className="mt-5 inline-flex items-center text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:text-white"
-            >
-              Close
-            </button>
+              <span className="mt-2 block text-xs text-slate-500">
+                Command to run inside the workspace
+              </span>
+            </label>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(false)}
+            className="mt-5 inline-flex items-center text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:text-white"
+          >
+            Close
+          </button>
         </div>
       )}
     </div>
