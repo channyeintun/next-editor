@@ -12,6 +12,11 @@ export interface WorkspaceProject {
   files: Record<string, WorkspaceFile>;
 }
 
+export interface WorkspaceRecordingSnapshot {
+  project: WorkspaceProject;
+  activeFilePath: string;
+}
+
 export const DEFAULT_WORKSPACE_ENTRY_PATH = "index.html";
 
 export const DEFAULT_WORKSPACE_FILE_CONTENT = `<html>

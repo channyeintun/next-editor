@@ -6,9 +6,15 @@ import {
   NextEditorMetadataContext,
   NextEditorPlaybackContext,
 } from "./NextEditorContext";
+import { useWebContainerRuntimeMetadata } from "../hooks/useWebContainerRuntime";
+import {
+  useWorkspaceActions,
+  useWorkspaceMetadata,
+} from "../hooks/useWorkspace";
 import { createJsonStorage } from "../storage/JsonStorage";
 import type { SlidePreviewState, PreviewState, Slide } from "../types/slides";
 import { DEFAULT_WORKSPACE_FILE_CONTENT } from "../types/workspace";
+import type { RuntimeRecordingSnapshot } from "../types/runtime";
 
 interface NextEditorProviderProps {
   children: React.ReactNode;
@@ -19,6 +25,9 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
 }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
+  const { getProject, loadProject } = useWorkspaceActions();
+  const { activeFilePath } = useWorkspaceMetadata();
+  const runtimeMetadata = useWebContainerRuntimeMetadata();
   const getSlideStateRef = useRef<
     | (() => {
         previewState: SlidePreviewState;
@@ -64,6 +73,22 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
 
     getSlides: () => getSlidesRef.current?.() || [],
     applySlides: (slides) => applySlidesRef.current?.(slides),
+    getWorkspaceSnapshot: () => ({
+      project: structuredClone(getProject()),
+      activeFilePath,
+    }),
+    applyWorkspaceSnapshot: (snapshot) => {
+      loadProject({
+        ...snapshot.project,
+        entryFilePath: snapshot.activeFilePath,
+      });
+    },
+    getRuntimeSnapshot: (): RuntimeRecordingSnapshot => ({
+      mode: runtimeMetadata.previewUrl ? "webcontainer" : "single-file",
+      status: runtimeMetadata.status,
+      previewUrl: runtimeMetadata.previewUrl,
+      terminalOutput: runtimeMetadata.lastOutput,
+    }),
   });
 
   const {

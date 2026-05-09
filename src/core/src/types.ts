@@ -1,7 +1,15 @@
-import type * as monaco from 'monaco-editor';
-import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from './slides';
-import type { TimelineActorRef } from './machine/timelineMachine';
-import type { EditorActorRef } from './useNextEditor';
+import type * as monaco from "monaco-editor";
+import type {
+  SlideEvent,
+  SlidePreviewState,
+  PreviewEvent,
+  PreviewState,
+  Slide,
+} from "./slides";
+import type { TimelineActorRef } from "./machine/timelineMachine";
+import type { EditorActorRef } from "./useNextEditor";
+import type { RuntimeRecordingSnapshot } from "../../types/runtime";
+import type { WorkspaceRecordingSnapshot } from "../../types/workspace";
 
 /**
  * Audio storage placeholder for serialization
@@ -32,7 +40,6 @@ export interface MouseCursorPosition {
   visible: boolean; // Whether cursor is within editor bounds
 }
 
-
 /**
  * Editor frame containing the complete state at a specific timestamp
  */
@@ -52,26 +59,27 @@ export interface EditorFrame {
 
 /**
  * Complete recording with metadata
- * Version 2: uses frames array with keyframe + delta compression
+ * Version 3: uses frames array with keyframe + delta compression plus
+ * workspace and runtime snapshots for multi-file mode.
  */
 export interface Recording {
-  /** Format version: Strictly 2 for delta compressed recordings */
-  version: 2;
+  /** Recording schema version. Version 2 recordings remain supported on import. */
+  version: 2 | 3;
   id: string;
   name: string;
   /** Delta compressed frames (keyframes + deltas) */
-  frames: import('./utils/deltaTypes').DeltaFrame[];
+  frames: import("./utils/deltaTypes").DeltaFrame[];
   /** Keyframe interval for reconstruction */
   keyframeInterval: number;
   slideEvents?: SlideEvent[];
   previewEvents?: PreviewEvent[];
   slides?: Slide[];
   audioBlob?: Blob | AudioPlaceholder;
+  workspaceSnapshot?: WorkspaceRecordingSnapshot;
+  runtimeSnapshot?: RuntimeRecordingSnapshot;
   duration: number;
   createdAt: number;
 }
-
-
 
 /**
  * Configuration options for useNextEditor hook
@@ -101,8 +109,14 @@ export interface UseNextEditorConfig {
   onStateChange?: (state: EditorState) => void;
   onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
   onSlideEvent?: (event: SlideEvent) => void;
-  getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
-  applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
+  getSlideState?: () => {
+    previewState: SlidePreviewState;
+    currentSlideIndex: number;
+  } | null;
+  applySlideState?: (
+    slideState: SlidePreviewState,
+    currentSlideIndex: number,
+  ) => void;
 
   // Preview state callbacks
   onPreviewEvent?: (event: PreviewEvent) => void;
@@ -112,6 +126,11 @@ export interface UseNextEditorConfig {
   // Slides data callbacks
   getSlides?: () => Slide[];
   applySlides?: (slides: Slide[]) => void;
+
+  // Workspace and runtime snapshots
+  getWorkspaceSnapshot?: () => WorkspaceRecordingSnapshot | null;
+  applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
+  getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
 }
 
 /**
@@ -127,7 +146,6 @@ export interface EditorState {
   currentSlideIndex?: number;
   previewState?: PreviewState;
 }
-
 
 /**
  * Return type of useNextEditor hook
@@ -177,13 +195,24 @@ export interface UseNextEditorReturn {
   getFrame: (timestamp?: number) => EditorFrame | null;
 
   // Registration helpers
-  registerSlideNavigator?: (navigator: (indexh: number, indexv: number) => void) => void;
+  registerSlideNavigator?: (
+    navigator: (indexh: number, indexv: number) => void,
+  ) => void;
   navigateSlidesDirect?: (indexh: number, indexv: number) => void;
 
-  registerSlideStateGetter?: (getter: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null) => void;
-  registerSlideStateApplier?: (applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void) => void;
+  registerSlideStateGetter?: (
+    getter: () => {
+      previewState: SlidePreviewState;
+      currentSlideIndex: number;
+    } | null,
+  ) => void;
+  registerSlideStateApplier?: (
+    applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void,
+  ) => void;
   registerSlidesGetter?: (getter: () => Slide[]) => void;
   registerSlidesApplier?: (applier: (slides: Slide[]) => void) => void;
   registerPreviewStateGetter?: (getter: () => PreviewState | null) => void;
-  registerPreviewStateApplier?: (applier: (previewState: PreviewState) => void) => void;
+  registerPreviewStateApplier?: (
+    applier: (previewState: PreviewState) => void,
+  ) => void;
 }

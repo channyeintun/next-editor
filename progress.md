@@ -5,6 +5,7 @@
 - Runtime boot policy: boot WebContainers on demand when the workspace mode is entered, not on initial app load.
 - Browser policy for the first release: Chromium-based browsers are the primary supported target for WebContainers mode.
 - Compatibility policy: keep the existing single-file recorder working while the WebContainers workspace path is added incrementally.
+- Mode policy: WebContainer multi-file recordings remain opt-in runtime mode, not the default editor path.
 
 ## Phase Status
 
@@ -12,8 +13,8 @@
 - Phase 2: Completed
 - Phase 3: Completed
 - Phase 4: Completed
-- Phase 5: In progress
-- Phase 6: Not started
+- Phase 5: Completed
+- Phase 6: Completed
 
 ## Completed Work
 
@@ -39,9 +40,13 @@
 - Kept the legacy `srcdoc` preview path as the fallback for the existing single-file recording flow.
 - Added a read-only terminal panel backed by WebContainer process output.
 - Validated the Phase 4 changes with `bun run build` and `bun run lint`.
+- Introduced recording version 3 metadata for workspace and runtime snapshots while preserving version 2 imports.
+- Captured workspace and runtime snapshots when recordings are finalized.
+- Let the terminal panel fall back to recorded runtime output when no live runtime is active.
+- Validated the Phase 5 changes with `bun run build` and `bun run lint`.
+- Added explicit recording-version normalization on import/load to keep version 2 and version 3 files supported.
+- Kept the single-file preview path as the compatibility fallback for legacy recordings and non-runtime sessions.
 
 ## Current Task
 
-- Introduce a new recording format that can carry workspace and runtime state.
-- Capture enough multi-file and terminal metadata to replay the new runtime mode safely.
-- Maintain import and playback compatibility for existing version 2 recordings.
+- All planned phases are complete.
