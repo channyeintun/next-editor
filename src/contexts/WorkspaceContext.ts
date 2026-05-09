@@ -9,6 +9,7 @@ export interface WorkspaceActions {
   deleteFile: (path: string) => void;
   updateFileContent: (path: string, content: string) => void;
   updateActiveFileContent: (content: string) => void;
+  saveProject: () => void;
   loadProject: (project: WorkspaceProject) => void;
   resetProject: () => void;
   getProject: () => WorkspaceProject;

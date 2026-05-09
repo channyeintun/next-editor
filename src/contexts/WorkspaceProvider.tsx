@@ -23,6 +23,13 @@ interface WorkspaceProviderProps {
   children: React.ReactNode;
 }
 
+interface StoredWorkspaceSnapshot {
+  activeFilePath: string;
+  project: WorkspaceProject;
+}
+
+const WORKSPACE_STORAGE_KEY = "next-editor-workspace";
+
 function getDefaultFile(project: WorkspaceProject): WorkspaceFile {
   return (
     project.files[project.entryFilePath] ??
@@ -74,11 +81,58 @@ function normalizeProject(project: WorkspaceProject): WorkspaceProject {
   };
 }
 
+function loadStoredWorkspaceSnapshot(): StoredWorkspaceSnapshot | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+
+    if (!stored) {
+      return null;
+    }
+
+    const parsed = JSON.parse(stored) as StoredWorkspaceSnapshot;
+    const project = normalizeProject(parsed.project);
+    const activeFilePath = project.files[parsed.activeFilePath]
+      ? parsed.activeFilePath
+      : project.entryFilePath;
+
+    return {
+      activeFilePath,
+      project,
+    };
+  } catch (error) {
+    console.warn("Failed to load workspace snapshot:", error);
+    return null;
+  }
+}
+
+function createInitialWorkspaceSnapshot(): StoredWorkspaceSnapshot {
+  const storedSnapshot = loadStoredWorkspaceSnapshot();
+
+  if (storedSnapshot) {
+    return storedSnapshot;
+  }
+
+  const project = createStarterWorkspaceProject();
+  return {
+    activeFilePath: project.entryFilePath,
+    project,
+  };
+}
+
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   children,
 }) => {
-  const projectRef = useRef<WorkspaceProject>(createStarterWorkspaceProject());
-  const activeFilePathRef = useRef(projectRef.current.entryFilePath);
+  const initialSnapshotRef = useRef<StoredWorkspaceSnapshot>(
+    createInitialWorkspaceSnapshot(),
+  );
+  const projectRef = useRef<WorkspaceProject>(
+    initialSnapshotRef.current.project,
+  );
+  const activeFilePathRef = useRef(initialSnapshotRef.current.activeFilePath);
   const [activeFilePath, setActiveFilePathState] = useState(
     activeFilePathRef.current,
   );
@@ -292,6 +346,24 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     [updateFileContent],
   );
 
+  const saveProject = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        WORKSPACE_STORAGE_KEY,
+        JSON.stringify({
+          activeFilePath: activeFilePathRef.current,
+          project: projectRef.current,
+        } satisfies StoredWorkspaceSnapshot),
+      );
+    } catch (error) {
+      console.warn("Failed to save workspace snapshot:", error);
+    }
+  }, []);
+
   const loadProject = useCallback(
     (project: WorkspaceProject) => {
       const normalizedProject = normalizeProject(project);
@@ -327,6 +399,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       deleteFile,
       updateFileContent,
       updateActiveFileContent,
+      saveProject,
       loadProject,
       resetProject,
       getProject,
@@ -343,6 +416,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       loadProject,
       renameFile,
       resetProject,
+      saveProject,
       setActiveFilePath,
       updateActiveFileContent,
       updateFileContent,

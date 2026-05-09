@@ -67,6 +67,7 @@
 - Converted the runner settings UI into a full-page overlay modal with a dimmed backdrop instead of a dock-local popover.
 - Removed the modal title bar and bottom close action so the runner settings overlay uses only the backdrop for dismissal.
 - Fixed the sidebar inline create and rename input so the default filename selection happens only when the input opens, not on every keystroke.
+- Added explicit workspace save persistence so `CMD+S` stores the current project and active file in local storage before triggering any runtime save behavior.
 - Moved rerun into the editor header with a dedicated `CMD+S to save` hint and removed the extra runtime toolbar controls.
 - Restored the original editor header layout so the save hint and rerun button are additive controls instead of a full toolbar replacement.
 - Simplified the sidebar header to only show `FILES`, `Create file`, and `Create folder` controls without the extra description chrome.

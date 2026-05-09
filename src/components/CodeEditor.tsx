@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import Editor, {
   type OnMount,
   type BeforeMount,
@@ -34,9 +34,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   showImportExport = false,
 }) => {
   const { handleEditorChange, editorRef } = useNextEditorActions();
-  const { updateActiveFileContent } = useWorkspaceActions();
+  const { saveProject, updateActiveFileContent } = useWorkspaceActions();
   const { saveWorkspace } = useWebContainerRuntimeActions();
   const { activeFile, projectVersion } = useWorkspaceMetadata();
+  const monacoRef = useRef<Monaco | null>(null);
   const selectedLanguage = activeFile.language || "html";
 
   // Only subscribe to the flags we actually need for rendering decisions
@@ -52,6 +53,17 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     handleEditorChange();
   });
 
+  const runSaveAction = useEffectEvent(async () => {
+    const editor = editorRef.current;
+
+    if (editor) {
+      updateActiveFileContent(editor.getValue());
+    }
+
+    saveProject();
+    await saveWorkspace();
+  });
+
   const onSaveShortcut = useEffectEvent((event: KeyboardEvent) => {
     const isSaveShortcut =
       (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s";
@@ -61,7 +73,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     }
 
     event.preventDefault();
-    void saveWorkspace();
+    void runSaveAction();
   });
 
   useEffect(() => {
@@ -129,6 +141,14 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
     updateActiveFileContent(editor.getValue());
+    if (monacoRef.current) {
+      editor.addCommand(
+        monacoRef.current.KeyMod.CtrlCmd | monacoRef.current.KeyCode.KeyS,
+        () => {
+          void runSaveAction();
+        },
+      );
+    }
     setIsEditorReady(true);
   };
 
@@ -137,6 +157,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
    * Defines the custom theme so it's available when the editor initializes
    */
   const handleEditorBeforeMount: BeforeMount = (monaco: Monaco) => {
+    monacoRef.current = monaco;
+
     // Define dark theme based on yCe configuration
     monaco.editor.defineTheme("next-editor-dark", {
       base: "vs-dark",
