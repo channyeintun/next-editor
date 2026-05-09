@@ -223,7 +223,12 @@ const FileSidebar = memo(function FileSidebar() {
     renameFile,
     setActiveFilePath,
   } = useWorkspaceActions();
-  const { activeFilePath, files, folders } = useWorkspaceMetadata();
+  const { activeFilePath, dirtyFilePaths, files, folders } =
+    useWorkspaceMetadata();
+  const dirtyFilePathSet = useMemo(
+    () => new Set(dirtyFilePaths),
+    [dirtyFilePaths],
+  );
   const tree = useMemo(
     () => buildWorkspaceTree(files, folders, activeFilePath),
     [activeFilePath, files, folders],
@@ -449,6 +454,7 @@ const FileSidebar = memo(function FileSidebar() {
     const isEditing =
       editState?.mode === "rename" && editState.path === node.path;
     const isActive = activeFilePath === node.path;
+    const isDirty = dirtyFilePathSet.has(node.path);
 
     if (isEditing) {
       return <div key={node.path}>{renderInlineInput("file", depth)}</div>;
@@ -470,7 +476,16 @@ const FileSidebar = memo(function FileSidebar() {
           <span className="flex h-5 w-5 shrink-0 items-center justify-center">
             {getFileIcon(node.file)}
           </span>
-          <span className="truncate text-sm font-medium">{node.name}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-sm font-medium">{node.name}</span>
+            {isDirty ? (
+              <span
+                aria-label="Unsaved changes"
+                title="Unsaved changes"
+                className="h-2 w-2 shrink-0 rounded-full bg-amber-300"
+              />
+            ) : null}
+          </span>
         </button>
       </div>
     );

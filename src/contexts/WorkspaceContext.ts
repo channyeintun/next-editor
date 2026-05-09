@@ -21,8 +21,10 @@ export interface WorkspaceMetadata {
   activeFilePath: string;
   activeFile: WorkspaceFile;
   files: WorkspaceFile[];
+  dirtyFilePaths: string[];
   folders: string[];
   fileCount: number;
+  hasUnsavedChanges: boolean;
   projectName: string;
   projectVersion: number;
   syncVersion: number;

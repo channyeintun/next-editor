@@ -30,6 +30,33 @@ interface StoredWorkspaceSnapshot {
 
 const WORKSPACE_STORAGE_KEY = "next-editor-workspace";
 
+function cloneWorkspaceSnapshot(
+  snapshot: StoredWorkspaceSnapshot,
+): StoredWorkspaceSnapshot {
+  return {
+    activeFilePath: snapshot.activeFilePath,
+    project: structuredClone(snapshot.project),
+  };
+}
+
+function getDirtyFilePaths(
+  currentProject: WorkspaceProject,
+  savedProject: WorkspaceProject,
+): string[] {
+  return Object.values(currentProject.files)
+    .filter((file) => {
+      const savedFile = savedProject.files[file.path];
+
+      if (!savedFile) {
+        return true;
+      }
+
+      return savedFile.content !== file.content;
+    })
+    .map((file) => file.path)
+    .sort((left, right) => left.localeCompare(right));
+}
+
 function getDefaultFile(project: WorkspaceProject): WorkspaceFile {
   return (
     project.files[project.entryFilePath] ??
@@ -128,6 +155,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
 }) => {
   const initialSnapshotRef = useRef<StoredWorkspaceSnapshot>(
     createInitialWorkspaceSnapshot(),
+  );
+  const savedSnapshotRef = useRef<StoredWorkspaceSnapshot>(
+    cloneWorkspaceSnapshot(initialSnapshotRef.current),
   );
   const projectRef = useRef<WorkspaceProject>(
     initialSnapshotRef.current.project,
@@ -359,16 +389,25 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
           project: projectRef.current,
         } satisfies StoredWorkspaceSnapshot),
       );
+      savedSnapshotRef.current = {
+        activeFilePath: activeFilePathRef.current,
+        project: structuredClone(projectRef.current),
+      };
+      bumpProjectVersion();
     } catch (error) {
       console.warn("Failed to save workspace snapshot:", error);
     }
-  }, []);
+  }, [bumpProjectVersion]);
 
   const loadProject = useCallback(
     (project: WorkspaceProject) => {
       const normalizedProject = normalizeProject(project);
       projectRef.current = normalizedProject;
       activeFilePathRef.current = normalizedProject.entryFilePath;
+      savedSnapshotRef.current = {
+        activeFilePath: normalizedProject.entryFilePath,
+        project: structuredClone(normalizedProject),
+      };
       setActiveFilePathState(normalizedProject.entryFilePath);
       bumpProjectVersion();
       bumpSyncVersion();
@@ -427,19 +466,25 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     ...projectRef.current,
     entryFilePath: activeFilePath,
   });
+  const dirtyFilePaths = getDirtyFilePaths(
+    projectRef.current,
+    savedSnapshotRef.current.project,
+  );
 
   const metadataValue = useMemo<WorkspaceMetadata>(
     () => ({
       activeFilePath,
       activeFile,
       files: listProjectFiles(projectRef.current),
+      dirtyFilePaths,
       folders: projectRef.current.folders,
       fileCount: Object.keys(projectRef.current.files).length,
+      hasUnsavedChanges: dirtyFilePaths.length > 0,
       projectName: projectRef.current.name,
       projectVersion,
       syncVersion,
     }),
-    [activeFile, activeFilePath, projectVersion, syncVersion],
+    [activeFile, activeFilePath, dirtyFilePaths, projectVersion, syncVersion],
   );
 
   return (
