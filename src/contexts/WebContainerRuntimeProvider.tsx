@@ -51,17 +51,14 @@ function sanitizeTerminalChunk(chunk: string): string {
 function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
   const tree: FileSystemTree = {};
 
-  for (const file of Object.values(project.files)) {
-    const segments = file.path.split("/");
-    const fileName = segments.pop();
-
-    if (!fileName) {
-      continue;
+  const ensureTreeDirectory = (directoryPath: string) => {
+    if (!directoryPath) {
+      return;
     }
 
     let currentDirectory = tree;
 
-    for (const segment of segments) {
+    for (const segment of directoryPath.split("/")) {
       const existingEntry = currentDirectory[segment];
 
       if (!existingEntry || !("directory" in existingEntry)) {
@@ -71,7 +68,32 @@ function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
       const nextEntry = currentDirectory[segment];
 
       if (!nextEntry || !("directory" in nextEntry)) {
-        continue;
+        return;
+      }
+
+      currentDirectory = nextEntry.directory;
+    }
+  };
+
+  for (const folderPath of project.folders) {
+    ensureTreeDirectory(folderPath);
+  }
+
+  for (const file of Object.values(project.files)) {
+    const segments = file.path.split("/");
+    const fileName = segments.pop();
+
+    if (!fileName) {
+      continue;
+    }
+
+    ensureTreeDirectory(segments.join("/"));
+
+    let currentDirectory = tree;
+    for (const segment of segments) {
+      const nextEntry = currentDirectory[segment];
+      if (!nextEntry || !("directory" in nextEntry)) {
+        return tree;
       }
 
       currentDirectory = nextEntry.directory;
@@ -89,9 +111,9 @@ function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
 
 async function ensureDirectory(
   instance: WebContainer,
-  filePath: string,
+  directoryPath: string,
 ): Promise<void> {
-  const segments = filePath.split("/").slice(0, -1);
+  const segments = directoryPath.split("/").filter(Boolean);
   let currentPath = "";
 
   for (const segment of segments) {
@@ -105,6 +127,11 @@ async function ensureDirectory(
   }
 }
 
+function getFileDirectory(path: string): string {
+  const segments = path.split("/").slice(0, -1);
+  return segments.join("/");
+}
+
 async function syncWorkspaceProject(
   instance: WebContainer,
   previousProject: WorkspaceProject | null,
@@ -112,6 +139,15 @@ async function syncWorkspaceProject(
 ): Promise<void> {
   const previousFiles = previousProject?.files ?? {};
   const nextFiles = nextProject.files;
+  const previousFolders = new Set(previousProject?.folders ?? []);
+
+  for (const folderPath of nextProject.folders) {
+    if (previousFolders.has(folderPath)) {
+      continue;
+    }
+
+    await ensureDirectory(instance, folderPath);
+  }
 
   const deletedPaths = Object.keys(previousFiles).filter(
     (path) => !nextFiles[path],
@@ -134,7 +170,7 @@ async function syncWorkspaceProject(
       continue;
     }
 
-    await ensureDirectory(instance, path);
+    await ensureDirectory(instance, getFileDirectory(path));
     await instance.fs.writeFile(path, file.content);
   }
 }

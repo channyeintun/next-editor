@@ -44,7 +44,12 @@
 - Added workspace file operations for create, rename, delete, and active-file switching.
 - Added a dedicated workspace sidebar so users can manage files directly in the editor layout.
 - Reworked the workspace sidebar to use inline create and rename flows plus per-file hover actions instead of prompt-driven file management.
+- Added first-class workspace folder state so empty folders can be created and kept in the project tree.
+- Rebuilt the sidebar into a folder-aware tree with dedicated `new file` and `new folder` controls.
+- Added a right-click file context menu with `New File`, `New Folder`, `Copy Path`, `Copy Relative Path`, `Rename`, and `Delete File` actions.
+- Changed rename to a buttonless inline text selection flow that highlights the editable filename portion instead of opening a save/cancel editor.
 - Synced WebContainer filesystem state to workspace file mutations so runtime preview uses the active project tree instead of a disconnected starter mount.
+- Synced explicit folder creation into the WebContainer filesystem so empty directories are represented in the runtime too.
 - Upgraded the terminal panel from read-only output to command execution with cleaned runtime stream rendering.
 - Replaced the floating terminal card with a bottom runtime dock that exposes `Runner`, `Terminal`, and `Console` tabs without changing the rest of the editor chrome.
 - Polished the workspace sidebar and terminal chrome to match the rest of the editor UI more closely.

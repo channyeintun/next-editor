@@ -1,27 +1,63 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check,
-  File,
   FileCode2,
   FileJson2,
   FilePlus2,
   FileText,
+  Folder,
+  FolderOpen,
+  FolderPlus,
   Globe,
   Package,
   Palette,
-  PencilLine,
-  Trash2,
-  X,
 } from "lucide-react";
 import {
+  getParentWorkspacePath,
+  getWorkspaceBaseName,
   inferLanguageFromPath,
-  normalizeWorkspacePath,
+  joinWorkspacePath,
   type WorkspaceFile,
 } from "../types/workspace";
 import {
   useWorkspaceActions,
   useWorkspaceMetadata,
 } from "../hooks/useWorkspace";
+
+type WorkspaceTreeNode =
+  | {
+      kind: "file";
+      path: string;
+      name: string;
+      file: WorkspaceFile;
+    }
+  | {
+      kind: "folder";
+      path: string;
+      name: string;
+      hasActiveFile: boolean;
+      children: WorkspaceTreeNode[];
+    };
+
+type SidebarEditState =
+  | {
+      mode: "create";
+      kind: "file" | "folder";
+      parentPath: string;
+    }
+  | {
+      mode: "rename";
+      kind: "file";
+      path: string;
+      parentPath: string;
+    }
+  | null;
+
+interface SidebarContextMenuState {
+  x: number;
+  y: number;
+  path: string;
+  parentPath: string;
+}
 
 const FILE_TEMPLATES: Record<string, string> = {
   css: "body {\n  margin: 0;\n}\n",
@@ -32,24 +68,13 @@ const FILE_TEMPLATES: Record<string, string> = {
   typescript: "export function main(): null {\n  return null;\n}\n",
 };
 
-function getDirectoryLabel(path: string): string {
-  const segments = normalizeWorkspacePath(path).split("/");
-  return segments.length > 1 ? segments.slice(0, -1).join("/") : "root";
-}
-
 function getDefaultFileContent(path: string): string {
   const language = inferLanguageFromPath(path);
   return FILE_TEMPLATES[language] ?? "";
 }
 
-function getDefaultDraftPath(activeFilePath: string): string {
-  const directoryLabel = getDirectoryLabel(activeFilePath);
-
-  if (directoryLabel === "root") {
-    return "new-file.js";
-  }
-
-  return `${directoryLabel}/new-file.js`;
+function getDefaultDraftName(kind: "file" | "folder"): string {
+  return kind === "file" ? "new-file.js" : "new-folder";
 }
 
 function getFileIcon(file: WorkspaceFile) {
@@ -80,64 +105,248 @@ function getFileIcon(file: WorkspaceFile) {
   return <FileText size={14} className="text-slate-300" />;
 }
 
-const FileSidebar = memo(function FileSidebar() {
-  const [draftPath, setDraftPath] = useState("");
-  const [editingPath, setEditingPath] = useState<string | null>(null);
-  const { createFile, deleteFile, renameFile, setActiveFilePath } =
-    useWorkspaceActions();
-  const { activeFilePath, fileCount, files, projectName } =
-    useWorkspaceMetadata();
-  const groupedFiles = useMemo(
-    () =>
-      files.reduce<Record<string, WorkspaceFile[]>>((groups, file) => {
-        const directoryLabel = getDirectoryLabel(file.path);
-        groups[directoryLabel] = groups[directoryLabel] ?? [];
-        groups[directoryLabel].push(file);
-        return groups;
-      }, {}),
-    [files],
-  );
-  const hasPendingCreate = editingPath === "__new__";
+function getEditableSelectionEnd(name: string, kind: "file" | "folder") {
+  if (kind === "folder") {
+    return name.length;
+  }
 
-  const resetDraft = () => {
-    setEditingPath(null);
-    setDraftPath("");
+  const extensionIndex = name.lastIndexOf(".");
+  if (extensionIndex <= 0) {
+    return name.length;
+  }
+
+  return extensionIndex;
+}
+
+function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    void navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "absolute";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
+function buildWorkspaceTree(
+  files: WorkspaceFile[],
+  folders: string[],
+  activeFilePath: string,
+): WorkspaceTreeNode[] {
+  const root = {
+    kind: "folder" as const,
+    path: "",
+    name: "",
+    hasActiveFile: true,
+    children: [] as WorkspaceTreeNode[],
+  };
+  const folderMap = new Map<
+    string,
+    Extract<WorkspaceTreeNode, { kind: "folder" }>
+  >([["", root]]);
+
+  const ensureFolderNode = (folderPath: string) => {
+    if (folderMap.has(folderPath)) {
+      return folderMap.get(folderPath)!;
+    }
+
+    const parentPath = getParentWorkspacePath(folderPath);
+    const parentNode = ensureFolderNode(parentPath);
+    const folderNode: Extract<WorkspaceTreeNode, { kind: "folder" }> = {
+      kind: "folder",
+      path: folderPath,
+      name: getWorkspaceBaseName(folderPath),
+      hasActiveFile:
+        activeFilePath === folderPath ||
+        activeFilePath.startsWith(`${folderPath}/`),
+      children: [],
+    };
+
+    parentNode.children.push(folderNode);
+    folderMap.set(folderPath, folderNode);
+    return folderNode;
+  };
+
+  for (const folderPath of folders) {
+    ensureFolderNode(folderPath);
+  }
+
+  for (const file of files) {
+    const parentPath = getParentWorkspacePath(file.path);
+    const parentNode = ensureFolderNode(parentPath);
+    parentNode.children.push({
+      kind: "file",
+      path: file.path,
+      name: file.name,
+      file,
+    });
+  }
+
+  const sortNodes = (nodes: WorkspaceTreeNode[]) => {
+    nodes.sort((left, right) => {
+      if (left.kind !== right.kind) {
+        return left.kind === "folder" ? -1 : 1;
+      }
+
+      return left.name.localeCompare(right.name);
+    });
+
+    for (const node of nodes) {
+      if (node.kind === "folder") {
+        sortNodes(node.children);
+      }
+    }
+  };
+
+  sortNodes(root.children);
+  return root.children;
+}
+
+const FileSidebar = memo(function FileSidebar() {
+  const [draftName, setDraftName] = useState("");
+  const [editState, setEditState] = useState<SidebarEditState>(null);
+  const [contextMenu, setContextMenu] =
+    useState<SidebarContextMenuState | null>(null);
+  const editInputRef = useRef<HTMLInputElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const {
+    createFile,
+    createFolder,
+    deleteFile,
+    renameFile,
+    setActiveFilePath,
+  } = useWorkspaceActions();
+  const { activeFilePath, fileCount, files, folders, projectName } =
+    useWorkspaceMetadata();
+  const tree = useMemo(
+    () => buildWorkspaceTree(files, folders, activeFilePath),
+    [activeFilePath, files, folders],
+  );
+  const activeParentPath = getParentWorkspacePath(activeFilePath);
+  const menuStyle = useMemo(() => {
+    if (!contextMenu) {
+      return undefined;
+    }
+
+    return {
+      left: Math.min(contextMenu.x, window.innerWidth - 240),
+      top: Math.min(contextMenu.y, window.innerHeight - 240),
+    };
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (!editState || !editInputRef.current) {
+      return;
+    }
+
+    const input = editInputRef.current;
+    input.focus();
+    const selectionEnd = getEditableSelectionEnd(draftName, editState.kind);
+    input.setSelectionRange(0, selectionEnd);
+  }, [draftName, editState]);
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (contextMenuRef.current?.contains(event.target as Node)) {
+        return;
+      }
+
+      setContextMenu(null);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setContextMenu(null);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [contextMenu]);
+
+  const clearInlineEdit = () => {
+    setEditState(null);
+    setDraftName("");
+  };
+
+  const openCreateInput = (kind: "file" | "folder", parentPath: string) => {
+    setContextMenu(null);
+    setEditState({
+      mode: "create",
+      kind,
+      parentPath,
+    });
+    setDraftName(getDefaultDraftName(kind));
   };
 
   const handleCreateFile = () => {
-    setEditingPath("__new__");
-    setDraftPath(getDefaultDraftPath(activeFilePath));
+    openCreateInput("file", activeParentPath);
   };
 
-  const handleRenameFile = (path: string) => {
-    setEditingPath(path);
-    setDraftPath(path);
+  const handleCreateFolder = () => {
+    openCreateInput("folder", activeParentPath);
   };
 
-  const handleSubmitDraft = () => {
-    const nextPath = normalizeWorkspacePath(draftPath);
+  const startRenameFile = (path: string) => {
+    setContextMenu(null);
+    setEditState({
+      mode: "rename",
+      kind: "file",
+      path,
+      parentPath: getParentWorkspacePath(path),
+    });
+    setDraftName(getWorkspaceBaseName(path));
+  };
 
-    if (!nextPath) {
-      resetDraft();
+  const commitInlineEdit = () => {
+    if (!editState) {
       return;
     }
 
-    if (editingPath === "__new__") {
-      createFile(nextPath, getDefaultFileContent(nextPath));
-      resetDraft();
+    const normalizedName = draftName.trim();
+    if (!normalizedName) {
+      clearInlineEdit();
       return;
     }
 
-    if (!editingPath || nextPath === editingPath) {
-      resetDraft();
+    const nextPath = joinWorkspacePath(editState.parentPath, normalizedName);
+
+    if (editState.mode === "create") {
+      if (editState.kind === "file") {
+        createFile(nextPath, getDefaultFileContent(nextPath));
+      } else {
+        createFolder(nextPath);
+      }
+
+      clearInlineEdit();
       return;
     }
 
-    renameFile(editingPath, nextPath);
-    resetDraft();
+    if (nextPath !== editState.path) {
+      renameFile(editState.path, nextPath);
+    }
+
+    clearInlineEdit();
   };
 
   const handleDeleteFile = (path: string) => {
+    setContextMenu(null);
+
     const confirmed = window.confirm(`Delete ${path}?`);
 
     if (!confirmed) {
@@ -150,14 +359,122 @@ const FileSidebar = memo(function FileSidebar() {
   const handleDraftKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      handleSubmitDraft();
+      commitInlineEdit();
       return;
     }
 
     if (event.key === "Escape") {
       event.preventDefault();
-      resetDraft();
+      clearInlineEdit();
     }
+  };
+
+  const handleRowContextMenu = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    path: string,
+  ) => {
+    event.preventDefault();
+    setActiveFilePath(path);
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      path,
+      parentPath: getParentWorkspacePath(path),
+    });
+  };
+
+  const renderInlineInput = (kind: "file" | "folder", depth: number) => {
+    const icon =
+      kind === "folder" ? (
+        <FolderPlus size={14} className="text-slate-400" />
+      ) : (
+        <FilePlus2 size={14} className="text-slate-400" />
+      );
+
+    return (
+      <div className="px-2">
+        <div
+          className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-900 px-3 py-2"
+          style={{ paddingLeft: `${depth * 16 + 12}px` }}
+        >
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+            {icon}
+          </span>
+          <input
+            ref={editInputRef}
+            value={draftName}
+            onChange={(event) => setDraftName(event.target.value)}
+            onKeyDown={handleDraftKeyDown}
+            onBlur={commitInlineEdit}
+            className="min-w-0 flex-1 bg-transparent text-sm text-slate-100 outline-none"
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const renderNode = (
+    node: WorkspaceTreeNode,
+    depth: number,
+  ): React.ReactNode => {
+    if (node.kind === "folder") {
+      return (
+        <div key={node.path} className="space-y-1">
+          <div className="px-2">
+            <div
+              className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm ${
+                node.hasActiveFile ? "text-slate-200" : "text-slate-400"
+              }`}
+              style={{ paddingLeft: `${depth * 16 + 12}px` }}
+            >
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                {node.hasActiveFile ? (
+                  <FolderOpen size={14} className="text-sky-300" />
+                ) : (
+                  <Folder size={14} className="text-slate-500" />
+                )}
+              </span>
+              <span className="truncate font-medium">{node.name}</span>
+            </div>
+          </div>
+
+          {editState?.mode === "create" && editState.parentPath === node.path
+            ? renderInlineInput(editState.kind, depth + 1)
+            : null}
+
+          {node.children.map((child) => renderNode(child, depth + 1))}
+        </div>
+      );
+    }
+
+    const isEditing =
+      editState?.mode === "rename" && editState.path === node.path;
+    const isActive = activeFilePath === node.path;
+
+    if (isEditing) {
+      return <div key={node.path}>{renderInlineInput("file", depth)}</div>;
+    }
+
+    return (
+      <div key={node.path} className="px-2">
+        <button
+          type="button"
+          onClick={() => setActiveFilePath(node.path)}
+          onContextMenu={(event) => handleRowContextMenu(event, node.path)}
+          className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors ${
+            isActive
+              ? "bg-slate-800 text-white"
+              : "text-slate-300 hover:bg-slate-900 hover:text-white"
+          }`}
+          style={{ paddingLeft: `${depth * 16 + 12}px` }}
+        >
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+            {getFileIcon(node.file)}
+          </span>
+          <span className="truncate text-sm font-medium">{node.name}</span>
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -181,147 +498,84 @@ const FileSidebar = memo(function FileSidebar() {
           >
             <FilePlus2 size={15} />
           </button>
+          <button
+            type="button"
+            onClick={handleCreateFolder}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+            aria-label="Create folder"
+            title="Create folder"
+          >
+            <FolderPlus size={15} />
+          </button>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
-        <div className="space-y-4">
-          {hasPendingCreate && (
-            <div className="mx-2 rounded-md border border-sky-500/40 bg-slate-900 px-3 py-2">
-              <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-sky-300">
-                <File size={13} />
-                New File
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  autoFocus
-                  value={draftPath}
-                  onChange={(event) => setDraftPath(event.target.value)}
-                  onKeyDown={handleDraftKeyDown}
-                  className="h-9 flex-1 rounded-md border border-slate-700 bg-[#0d1117] px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-500"
-                />
-                <button
-                  type="button"
-                  onClick={handleSubmitDraft}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-950 text-slate-300 transition-colors hover:border-emerald-500 hover:text-emerald-200"
-                  title="Create file"
-                >
-                  <Check size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={resetDraft}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-950 text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
-                  title="Cancel"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {Object.entries(groupedFiles).map(
-            ([directoryLabel, directoryFiles]) => (
-              <section key={directoryLabel} className="space-y-1.5">
-                <div className="px-2 py-1">
-                  <p className="truncate text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                    {directoryLabel}
-                  </p>
-                </div>
-                {directoryFiles.map((file) => {
-                  const isActive = file.path === activeFilePath;
-                  const isEditing = editingPath === file.path;
-
-                  return (
-                    <div key={file.path} className="px-2">
-                      {isEditing ? (
-                        <div className="rounded-md border border-sky-500/40 bg-slate-900 px-3 py-2">
-                          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-sky-300">
-                            Rename File
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <input
-                              autoFocus
-                              value={draftPath}
-                              onChange={(event) =>
-                                setDraftPath(event.target.value)
-                              }
-                              onKeyDown={handleDraftKeyDown}
-                              className="h-9 flex-1 rounded-md border border-slate-700 bg-[#0d1117] px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-500"
-                            />
-                            <button
-                              type="button"
-                              onClick={handleSubmitDraft}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-950 text-slate-300 transition-colors hover:border-emerald-500 hover:text-emerald-200"
-                              title="Save rename"
-                            >
-                              <Check size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={resetDraft}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-950 text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
-                              title="Cancel rename"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div
-                          className={`group flex w-full items-center gap-2 rounded-md px-3 py-2 transition-colors ${
-                            isActive
-                              ? "bg-slate-800 text-white"
-                              : "text-slate-300 hover:bg-slate-900 hover:text-white"
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setActiveFilePath(file.path)}
-                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                          >
-                            <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                              {getFileIcon(file)}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-medium">
-                                {file.name}
-                              </span>
-                            </span>
-                          </button>
-                          <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleRenameFile(file.path);
-                              }}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
-                              title={`Rename ${file.name}`}
-                            >
-                              <PencilLine size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleDeleteFile(file.path);
-                              }}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
-                              title={`Delete ${file.name}`}
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </section>
-            ),
-          )}
+      <div className="relative min-h-0 flex-1 overflow-y-auto px-2 py-3">
+        <div className="space-y-1">
+          {editState?.mode === "create" && editState.parentPath === ""
+            ? renderInlineInput(editState.kind, 0)
+            : null}
+          {tree.map((node) => renderNode(node, 0))}
         </div>
+
+        {contextMenu && (
+          <div
+            ref={contextMenuRef}
+            className="fixed z-[60] min-w-56 overflow-hidden rounded-xl border border-slate-700 bg-[#1b2029] py-2 shadow-[0_20px_40px_rgba(2,6,23,0.55)]"
+            style={menuStyle}
+          >
+            <button
+              type="button"
+              onClick={() => openCreateInput("file", contextMenu.parentPath)}
+              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
+            >
+              New File
+            </button>
+            <button
+              type="button"
+              onClick={() => openCreateInput("folder", contextMenu.parentPath)}
+              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
+            >
+              New Folder
+            </button>
+            <div className="my-2 border-t border-slate-700" />
+            <button
+              type="button"
+              onClick={() => {
+                copyTextToClipboard(`/${contextMenu.path}`);
+                setContextMenu(null);
+              }}
+              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
+            >
+              Copy Path
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                copyTextToClipboard(contextMenu.path);
+                setContextMenu(null);
+              }}
+              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
+            >
+              Copy Relative Path
+            </button>
+            <div className="my-2 border-t border-slate-700" />
+            <button
+              type="button"
+              onClick={() => startRenameFile(contextMenu.path)}
+              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteFile(contextMenu.path)}
+              className="flex w-full items-center px-4 py-2 text-sm text-rose-200 transition-colors hover:bg-rose-500/10"
+            >
+              Delete File
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

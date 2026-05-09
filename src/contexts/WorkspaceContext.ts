@@ -4,6 +4,7 @@ import type { WorkspaceFile, WorkspaceProject } from "../types/workspace";
 export interface WorkspaceActions {
   setActiveFilePath: (path: string) => void;
   createFile: (path: string, content?: string) => void;
+  createFolder: (path: string) => void;
   renameFile: (currentPath: string, nextPath: string) => void;
   deleteFile: (path: string) => void;
   updateFileContent: (path: string, content: string) => void;
@@ -19,6 +20,7 @@ export interface WorkspaceMetadata {
   activeFilePath: string;
   activeFile: WorkspaceFile;
   files: WorkspaceFile[];
+  folders: string[];
   fileCount: number;
   projectName: string;
   projectVersion: number;

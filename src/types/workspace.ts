@@ -9,6 +9,7 @@ export interface WorkspaceProject {
   id: string;
   name: string;
   entryFilePath: string;
+  folders: string[];
   files: Record<string, WorkspaceFile>;
 }
 
@@ -30,6 +31,60 @@ export function normalizeWorkspacePath(path: string): string {
     .replace(/\\/g, "/")
     .replace(/\/+/g, "/")
     .trim();
+}
+
+export function normalizeWorkspaceFolderPath(path: string): string {
+  return normalizeWorkspacePath(path).replace(/\/+$/, "");
+}
+
+export function getWorkspaceBaseName(path: string): string {
+  const normalizedPath = normalizeWorkspacePath(path);
+  const segments = normalizedPath.split("/");
+  return segments[segments.length - 1] || normalizedPath;
+}
+
+export function getParentWorkspacePath(path: string): string {
+  const normalizedPath = normalizeWorkspacePath(path);
+  const segments = normalizedPath.split("/");
+  segments.pop();
+  return segments.join("/");
+}
+
+export function joinWorkspacePath(parentPath: string, name: string): string {
+  const normalizedParentPath = normalizeWorkspaceFolderPath(parentPath);
+  const normalizedName = normalizeWorkspacePath(name);
+
+  if (!normalizedParentPath) {
+    return normalizedName;
+  }
+
+  return normalizeWorkspacePath(`${normalizedParentPath}/${normalizedName}`);
+}
+
+export function collectWorkspaceFolders(
+  filePaths: string[],
+  extraFolders: string[] = [],
+): string[] {
+  const folders = new Set<string>();
+
+  const addFolderPath = (folderPath: string) => {
+    let currentPath = normalizeWorkspaceFolderPath(folderPath);
+
+    while (currentPath) {
+      folders.add(currentPath);
+      currentPath = getParentWorkspacePath(currentPath);
+    }
+  };
+
+  for (const folderPath of extraFolders) {
+    addFolderPath(folderPath);
+  }
+
+  for (const filePath of filePaths) {
+    addFolderPath(getParentWorkspacePath(filePath));
+  }
+
+  return Array.from(folders).sort((left, right) => left.localeCompare(right));
 }
 
 export function inferLanguageFromPath(path: string): string {
@@ -64,51 +119,46 @@ export function inferLanguageFromPath(path: string): string {
 
 function createWorkspaceFile(path: string, content: string): WorkspaceFile {
   const normalizedPath = normalizeWorkspacePath(path);
-  const segments = normalizedPath.split("/");
 
   return {
     path: normalizedPath,
-    name: segments[segments.length - 1] || normalizedPath,
+    name: getWorkspaceBaseName(normalizedPath),
     language: inferLanguageFromPath(normalizedPath),
     content,
   };
 }
 
 export function createStarterWorkspaceProject(): WorkspaceProject {
-  return {
-    id: "starter-workspace",
-    name: "Next Editor SPA",
-    entryFilePath: DEFAULT_WORKSPACE_APP_PATH,
-    files: {
-      "package.json": createWorkspaceFile(
-        "package.json",
-        JSON.stringify(
-          {
-            name: "next-editor-webcontainer-starter",
-            private: true,
-            version: "0.0.0",
-            type: "module",
-            scripts: {
-              dev: "vite --host 0.0.0.0 --port 4173",
-              build: "vite build",
-              preview: "vite preview --host 0.0.0.0 --port 4173",
-            },
-            dependencies: {
-              react: "^19.2.0",
-              "react-dom": "^19.2.0",
-            },
-            devDependencies: {
-              "@vitejs/plugin-react": "^6.0.1",
-              vite: "^8.0.11",
-            },
+  const files = {
+    "package.json": createWorkspaceFile(
+      "package.json",
+      JSON.stringify(
+        {
+          name: "next-editor-webcontainer-starter",
+          private: true,
+          version: "0.0.0",
+          type: "module",
+          scripts: {
+            dev: "vite --host 0.0.0.0 --port 4173",
+            build: "vite build",
+            preview: "vite preview --host 0.0.0.0 --port 4173",
           },
-          null,
-          2,
-        ),
+          dependencies: {
+            react: "^19.2.0",
+            "react-dom": "^19.2.0",
+          },
+          devDependencies: {
+            "@vitejs/plugin-react": "^6.0.1",
+            vite: "^8.0.11",
+          },
+        },
+        null,
+        2,
       ),
-      "index.html": createWorkspaceFile(
-        "index.html",
-        `<!doctype html>
+    ),
+    "index.html": createWorkspaceFile(
+      "index.html",
+      `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -120,19 +170,19 @@ export function createStarterWorkspaceProject(): WorkspaceProject {
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>`,
-      ),
-      "vite.config.js": createWorkspaceFile(
-        "vite.config.js",
-        `import { defineConfig } from "vite";
+    ),
+    "vite.config.js": createWorkspaceFile(
+      "vite.config.js",
+      `import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
 });`,
-      ),
-      "src/main.jsx": createWorkspaceFile(
-        "src/main.jsx",
-        `import React from "react";
+    ),
+    "src/main.jsx": createWorkspaceFile(
+      "src/main.jsx",
+      `import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./styles.css";
@@ -142,10 +192,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <App />
   </React.StrictMode>,
 );`,
-      ),
-      "src/App.jsx": createWorkspaceFile(
-        "src/App.jsx",
-        `export default function App() {
+    ),
+    "src/App.jsx": createWorkspaceFile(
+      "src/App.jsx",
+      `export default function App() {
   return (
     <main className="app-shell">
       <p className="eyebrow">WebContainer Runtime</p>
@@ -157,10 +207,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     </main>
   );
 }`,
-      ),
-      "src/styles.css": createWorkspaceFile(
-        "src/styles.css",
-        `:root {
+    ),
+    "src/styles.css": createWorkspaceFile(
+      "src/styles.css",
+      `:root {
   color: #e2e8f0;
   background: radial-gradient(circle at top, #1e293b, #020617 65%);
   font-family: "IBM Plex Sans", system-ui, sans-serif;
@@ -197,8 +247,15 @@ p {
   margin: 0;
   max-width: 40rem;
 }`,
-      ),
-    },
+    ),
+  };
+
+  return {
+    id: "starter-workspace",
+    name: "Next Editor SPA",
+    entryFilePath: DEFAULT_WORKSPACE_APP_PATH,
+    folders: collectWorkspaceFolders(Object.keys(files)),
+    files,
   };
 }
 
@@ -209,6 +266,7 @@ export function createSingleFileWorkspace(
     id: "default-workspace",
     name: "Next Editor Workspace",
     entryFilePath: DEFAULT_WORKSPACE_ENTRY_PATH,
+    folders: collectWorkspaceFolders([DEFAULT_WORKSPACE_ENTRY_PATH]),
     files: {
       [DEFAULT_WORKSPACE_ENTRY_PATH]: createWorkspaceFile(
         DEFAULT_WORKSPACE_ENTRY_PATH,
