@@ -17,12 +17,15 @@ export interface RunnerConfig {
   runCommand: string;
 }
 
+export type EnvironmentVariables = Record<string, string>;
+
 export interface WebContainerRuntimeActions {
   startRuntime: () => Promise<void>;
   resetRuntime: () => void;
   rerunRunner: () => Promise<void>;
   runCommand: (commandLine: string) => Promise<void>;
   saveWorkspace: () => Promise<void>;
+  updateEnvironmentVariables: (variables: EnvironmentVariables) => void;
   updateRunnerConfig: (config: Partial<RunnerConfig>) => void;
 }
 
@@ -33,6 +36,7 @@ export interface WebContainerRuntimeMetadata {
   errorMessage: string | null;
   lastOutput: string | null;
   activeCommand: string | null;
+  environmentVariables: EnvironmentVariables;
   runnerConfig: RunnerConfig;
   workspaceRoot: string;
 }

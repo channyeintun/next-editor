@@ -25,6 +25,38 @@ export const DEFAULT_WORKSPACE_FILE_CONTENT = `<html>
   <h1>Hello world</h1>
 </html>`;
 
+export function createStarterWorkspacePackageJson(projectName: string): string {
+  const normalizedProjectName = projectName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return JSON.stringify(
+    {
+      name: normalizedProjectName || "next-editor-webcontainer-starter",
+      private: true,
+      version: "0.0.0",
+      type: "module",
+      scripts: {
+        dev: "vite --host 0.0.0.0 --port 4173",
+        build: "vite build",
+        preview: "vite preview --host 0.0.0.0 --port 4173",
+      },
+      dependencies: {
+        react: "^19.2.0",
+        "react-dom": "^19.2.0",
+      },
+      devDependencies: {
+        "@vitejs/plugin-react": "^6.0.1",
+        vite: "^8.0.11",
+      },
+    },
+    null,
+    2,
+  );
+}
+
 export function normalizeWorkspacePath(path: string): string {
   return path
     .replace(/^\/+/, "")
@@ -132,29 +164,7 @@ export function createStarterWorkspaceProject(): WorkspaceProject {
   const files = {
     "package.json": createWorkspaceFile(
       "package.json",
-      JSON.stringify(
-        {
-          name: "next-editor-webcontainer-starter",
-          private: true,
-          version: "0.0.0",
-          type: "module",
-          scripts: {
-            dev: "vite --host 0.0.0.0 --port 4173",
-            build: "vite build",
-            preview: "vite preview --host 0.0.0.0 --port 4173",
-          },
-          dependencies: {
-            react: "^19.2.0",
-            "react-dom": "^19.2.0",
-          },
-          devDependencies: {
-            "@vitejs/plugin-react": "^6.0.1",
-            vite: "^8.0.11",
-          },
-        },
-        null,
-        2,
-      ),
+      createStarterWorkspacePackageJson("next-editor-webcontainer-starter"),
     ),
     "index.html": createWorkspaceFile(
       "index.html",

@@ -73,9 +73,12 @@
 - Added sidebar unsaved indicators driven by workspace dirty-file tracking, so files show a dot while their content differs from the last saved workspace snapshot.
 - Replaced the runtime-start fallback preview with a dedicated runtime placeholder so booting/installing/starting states no longer render raw source code under the "Single-file preview" label.
 - Simplified the non-ready runtime placeholder to a plain spinner, keeping raw source hidden while the WebContainer preview is still booting.
+- Added `Edit Environment` and `Download As Zip` toolbar actions so the workspace can jump straight into `package.json` and export the current multi-file project as a zip archive.
+- Corrected `Edit Environment` so it now edits WebContainer Node env values via a modal and injects them into every spawned runtime command instead of opening `package.json`.
 - Moved rerun into the editor header with a dedicated `CMD+S to save` hint and removed the extra runtime toolbar controls.
 - Restored the original editor header layout so the save hint and rerun button are additive controls instead of a full toolbar replacement.
 - Simplified the sidebar header to only show `FILES`, `Create file`, and `Create folder` controls without the extra description chrome.
+- Collapsed `Edit Environment` and `Download As Zip` behind a settings icon popup and reduced the environment modal header to only `Edit Environment`.
 
 ## Current Task
 

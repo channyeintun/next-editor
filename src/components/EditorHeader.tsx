@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import {
   useNextEditorActions,
   useNextEditorMetadata,
@@ -7,7 +7,60 @@ import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
 } from "../hooks/useWebContainerRuntime";
+import { downloadWorkspaceProjectAsZip } from "../utils/workspaceZip";
+import { useWorkspaceActions } from "../hooks/useWorkspace";
+import SettingIcon from "./icon/Setting";
 import SlidesButton from "./SlidesButton";
+
+function stringifyEnvironmentVariables(
+  variables: Record<string, string>,
+): string {
+  return Object.entries(variables)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+}
+
+function parseEnvironmentInput(value: string): {
+  environmentVariables: Record<string, string>;
+  errorMessage: string | null;
+} {
+  const environmentVariables: Record<string, string> = {};
+  const lines = value.split(/\r?\n/);
+
+  for (const [index, line] of lines.entries()) {
+    const trimmedLine = line.trim();
+
+    if (!trimmedLine || trimmedLine.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf("=");
+
+    if (separatorIndex <= 0) {
+      return {
+        environmentVariables: {},
+        errorMessage: `Line ${index + 1} must use KEY=value format.`,
+      };
+    }
+
+    const key = line.slice(0, separatorIndex).trim();
+
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      return {
+        environmentVariables: {},
+        errorMessage: `Line ${index + 1} has an invalid variable name.`,
+      };
+    }
+
+    environmentVariables[key] = line.slice(separatorIndex + 1);
+  }
+
+  return {
+    environmentVariables,
+    errorMessage: null,
+  };
+}
 
 const SaveAndRerunControls = memo(function SaveAndRerunControls() {
   const { rerunRunner } = useWebContainerRuntimeActions();
@@ -87,6 +140,174 @@ const ImportButton = memo(function ImportButton() {
   );
 });
 
+const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
+  const [draftValue, setDraftValue] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { rerunRunner, updateEnvironmentVariables } =
+    useWebContainerRuntimeActions();
+  const { environmentVariables, runnerConfig, status } =
+    useWebContainerRuntimeMetadata();
+  const { getProject } = useWorkspaceActions();
+
+  const isBusy =
+    status === "booting" ||
+    status === "mounting" ||
+    status === "installing" ||
+    status === "starting";
+
+  useEffect(() => {
+    if (!isEnvironmentModalOpen) {
+      return;
+    }
+
+    setDraftValue(stringifyEnvironmentVariables(environmentVariables));
+    setErrorMessage(null);
+  }, [environmentVariables, isEnvironmentModalOpen]);
+
+  const closeEnvironmentModal = () => {
+    setIsEnvironmentModalOpen(false);
+    setErrorMessage(null);
+  };
+
+  const handleEditEnvironment = () => {
+    setIsMenuOpen(false);
+    setIsEnvironmentModalOpen(true);
+  };
+
+  const handleDownload = async () => {
+    setIsMenuOpen(false);
+
+    try {
+      await downloadWorkspaceProjectAsZip(getProject());
+    } catch (error) {
+      console.error("Zip download failed:", error);
+    }
+  };
+
+  const handleSave = () => {
+    const parsed = parseEnvironmentInput(draftValue);
+
+    if (parsed.errorMessage) {
+      setErrorMessage(parsed.errorMessage);
+      return;
+    }
+
+    updateEnvironmentVariables(parsed.environmentVariables);
+    closeEnvironmentModal();
+
+    if (runnerConfig.enabled && !isBusy) {
+      void rerunRunner();
+    }
+  };
+
+  return (
+    <>
+      <div className="relative">
+        <button
+          type="button"
+          aria-label="Open workspace settings"
+          aria-expanded={isMenuOpen}
+          aria-haspopup="menu"
+          onClick={() => setIsMenuOpen((current) => !current)}
+          className="relative z-50 flex h-8 w-8 items-center justify-center rounded bg-slate-700 text-slate-300 transition-colors hover:bg-slate-600 hover:text-white"
+        >
+          <SettingIcon />
+        </button>
+
+        {isMenuOpen ? (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setIsMenuOpen(false)}
+            />
+            <div
+              role="menu"
+              className="absolute right-0 top-full z-50 mt-2 w-44 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleEditEnvironment}
+                className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
+              >
+                Edit Environment
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  void handleDownload();
+                }}
+                className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
+              >
+                Download As Zip
+              </button>
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      {isEnvironmentModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-[#0b0d12]/62 px-4 py-8 backdrop-blur-[2px]"
+          onClick={closeEnvironmentModal}
+        >
+          <div
+            className="mx-auto flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#151821] shadow-[0_24px_48px_rgba(2,6,23,0.55)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="space-y-5 overflow-y-auto px-5 py-5">
+              <p className="text-sm font-medium text-slate-100">
+                Edit Environment
+              </p>
+
+              <label className="block">
+                <span className="sr-only">Environment variables</span>
+                <textarea
+                  value={draftValue}
+                  onChange={(event) => {
+                    setDraftValue(event.target.value);
+                    if (errorMessage) {
+                      setErrorMessage(null);
+                    }
+                  }}
+                  rows={12}
+                  spellCheck={false}
+                  className="min-h-64 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 py-3 font-mono text-sm leading-6 text-slate-100 outline-none transition-colors focus:border-slate-500"
+                  placeholder="API_URL=https://example.com\nNODE_ENV=development"
+                />
+              </label>
+
+              {errorMessage ? (
+                <p className="text-sm text-rose-300">{errorMessage}</p>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeEnvironmentModal}
+                  className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400 transition-colors hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="rounded bg-emerald-500 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-950 transition-colors hover:bg-emerald-400"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+});
+
 interface EditorHeaderProps {
   showImportExport: boolean;
 }
@@ -105,7 +326,8 @@ const EditorHeader = memo(function EditorHeader({
           <>
             <ImportButton />
             <ExportButton />
-            <div className="w-[1px] h-4 bg-slate-700 mx-1" />
+            <WorkspaceSettingsButton />
+            <div className="h-4 w-px bg-slate-700 mx-1" />
             <SlidesButton />
           </>
         )}

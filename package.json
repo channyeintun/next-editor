@@ -23,6 +23,7 @@
     "@webcontainer/api": "^1.6.4",
     "@xstate/react": "^6.0.0",
     "animejs": "^4.3.5",
+    "jszip": "^3.10.1",
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.562.0",
     "motion": "^12.26.2",

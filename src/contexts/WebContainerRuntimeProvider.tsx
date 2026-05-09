@@ -7,6 +7,7 @@ import type {
 import {
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
+  type EnvironmentVariables,
   type RunnerConfig,
   type WebContainerRuntimeActions,
   type WebContainerRuntimeMetadata,
@@ -29,6 +30,7 @@ const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   initCommand: "npm install",
   runCommand: "npm run dev",
 };
+const RUNTIME_ENVIRONMENT_STORAGE_KEY = "next-editor-runtime-environment";
 
 const ESCAPE_CHARACTER = String.fromCharCode(27);
 const BELL_CHARACTER = String.fromCharCode(7);
@@ -215,6 +217,37 @@ function getWorkspaceRoot(projectName: string): string {
   return `~/projects/${normalizedProjectName || "next-editor"}`;
 }
 
+function normalizeEnvironmentVariables(
+  variables: EnvironmentVariables,
+): EnvironmentVariables {
+  const entries = Object.entries(variables)
+    .map(([key, value]) => [key.trim(), String(value)] as const)
+    .filter(([key]) => key.length > 0)
+    .sort(([left], [right]) => left.localeCompare(right));
+
+  return Object.fromEntries(entries);
+}
+
+function loadStoredEnvironmentVariables(): EnvironmentVariables {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const stored = window.localStorage.getItem(RUNTIME_ENVIRONMENT_STORAGE_KEY);
+
+    if (!stored) {
+      return {};
+    }
+
+    const parsed = JSON.parse(stored) as EnvironmentVariables;
+    return normalizeEnvironmentVariables(parsed);
+  } catch (error) {
+    console.warn("Failed to load runtime environment variables:", error);
+    return {};
+  }
+}
+
 export const WebContainerRuntimeProvider: React.FC<
   WebContainerRuntimeProviderProps
 > = ({ children }) => {
@@ -232,6 +265,8 @@ export const WebContainerRuntimeProvider: React.FC<
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastOutput, setLastOutput] = useState<string | null>(null);
   const [activeCommand, setActiveCommand] = useState<string | null>(null);
+  const [environmentVariables, setEnvironmentVariables] =
+    useState<EnvironmentVariables>(loadStoredEnvironmentVariables);
   const [runnerConfig, setRunnerConfig] = useState<RunnerConfig>(
     DEFAULT_RUNNER_CONFIG,
   );
@@ -333,6 +368,9 @@ export const WebContainerRuntimeProvider: React.FC<
         const process = await instance.spawn(
           parsedCommand.command,
           parsedCommand.args,
+          Object.keys(environmentVariables).length > 0
+            ? { env: environmentVariables }
+            : undefined,
         );
 
         process.output.pipeTo(
@@ -355,7 +393,7 @@ export const WebContainerRuntimeProvider: React.FC<
         }
       }
     },
-    [appendOutput],
+    [appendOutput, environmentVariables],
   );
 
   const prepareRuntime = useCallback(async () => {
@@ -423,6 +461,9 @@ export const WebContainerRuntimeProvider: React.FC<
         const process = await instance.spawn(
           parsedCommand.command,
           parsedCommand.args,
+          Object.keys(environmentVariables).length > 0
+            ? { env: environmentVariables }
+            : undefined,
         );
         runnerProcessRef.current = process;
 
@@ -462,7 +503,7 @@ export const WebContainerRuntimeProvider: React.FC<
         setErrorMessage(getRuntimeErrorMessage(error));
       }
     },
-    [appendOutput, stopRunnerProcess],
+    [appendOutput, environmentVariables, stopRunnerProcess],
   );
 
   const startRuntime = useCallback(async () => {
@@ -563,12 +604,7 @@ export const WebContainerRuntimeProvider: React.FC<
     }
 
     await rerunRunner();
-  }, [
-    rerunRunner,
-    runnerConfig.enabled,
-    runnerConfig.runOnFileSave,
-    status,
-  ]);
+  }, [rerunRunner, runnerConfig.enabled, runnerConfig.runOnFileSave, status]);
 
   const updateRunnerConfig = useCallback((config: Partial<RunnerConfig>) => {
     setRunnerConfig((current) => ({
@@ -576,6 +612,33 @@ export const WebContainerRuntimeProvider: React.FC<
       ...config,
     }));
   }, []);
+
+  const updateEnvironmentVariables = useCallback(
+    (variables: EnvironmentVariables) => {
+      const normalizedVariables = normalizeEnvironmentVariables(variables);
+
+      setEnvironmentVariables(normalizedVariables);
+
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      try {
+        if (Object.keys(normalizedVariables).length === 0) {
+          window.localStorage.removeItem(RUNTIME_ENVIRONMENT_STORAGE_KEY);
+          return;
+        }
+
+        window.localStorage.setItem(
+          RUNTIME_ENVIRONMENT_STORAGE_KEY,
+          JSON.stringify(normalizedVariables),
+        );
+      } catch (error) {
+        console.warn("Failed to persist runtime environment variables:", error);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (
@@ -630,6 +693,7 @@ export const WebContainerRuntimeProvider: React.FC<
       rerunRunner,
       runCommand,
       saveWorkspace,
+      updateEnvironmentVariables,
       updateRunnerConfig,
     }),
     [
@@ -638,6 +702,7 @@ export const WebContainerRuntimeProvider: React.FC<
       runCommand,
       saveWorkspace,
       startRuntime,
+      updateEnvironmentVariables,
       updateRunnerConfig,
     ],
   );
@@ -650,11 +715,13 @@ export const WebContainerRuntimeProvider: React.FC<
       errorMessage,
       lastOutput,
       activeCommand,
+      environmentVariables,
       runnerConfig,
       workspaceRoot,
     }),
     [
       activeCommand,
+      environmentVariables,
       errorMessage,
       isSupported,
       lastOutput,
