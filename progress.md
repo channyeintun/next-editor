@@ -79,6 +79,7 @@
 - Restored the original editor header layout so the save hint and rerun button are additive controls instead of a full toolbar replacement.
 - Simplified the sidebar header to only show `FILES`, `Create file`, and `Create folder` controls without the extra description chrome.
 - Collapsed `Edit Environment` and `Download As Zip` behind a settings icon popup and reduced the environment modal header to only `Edit Environment`.
+- Added workspace lesson types so users can switch between `SPA Lesson` and `HTML/CSS Lesson`, with HTML/CSS lessons using static preview and hiding runner and terminal UI.
 
 ## Current Task
 

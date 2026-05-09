@@ -5,9 +5,12 @@ export interface WorkspaceFile {
   content: string;
 }
 
+export type WorkspaceLessonType = "spa" | "html-css";
+
 export interface WorkspaceProject {
   id: string;
   name: string;
+  lessonType: WorkspaceLessonType;
   entryFilePath: string;
   folders: string[];
   files: Record<string, WorkspaceFile>;
@@ -263,6 +266,7 @@ p {
   return {
     id: "starter-workspace",
     name: "Next Editor SPA",
+    lessonType: "spa",
     entryFilePath: DEFAULT_WORKSPACE_APP_PATH,
     folders: collectWorkspaceFolders(Object.keys(files)),
     files,
@@ -275,6 +279,7 @@ export function createSingleFileWorkspace(
   return {
     id: "default-workspace",
     name: "Next Editor Workspace",
+    lessonType: "html-css",
     entryFilePath: DEFAULT_WORKSPACE_ENTRY_PATH,
     folders: collectWorkspaceFolders([DEFAULT_WORKSPACE_ENTRY_PATH]),
     files: {

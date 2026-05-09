@@ -8,9 +8,27 @@ import {
   useWebContainerRuntimeMetadata,
 } from "../hooks/useWebContainerRuntime";
 import { downloadWorkspaceProjectAsZip } from "../utils/workspaceZip";
-import { useWorkspaceActions } from "../hooks/useWorkspace";
+import {
+  useWorkspaceActions,
+  useWorkspaceMetadata,
+} from "../hooks/useWorkspace";
+import type { WorkspaceLessonType } from "../types/workspace";
 import SettingIcon from "./icon/Setting";
 import SlidesButton from "./SlidesButton";
+
+const LESSON_TYPE_OPTIONS: Array<{
+  value: WorkspaceLessonType;
+  label: string;
+}> = [
+  {
+    value: "spa",
+    label: "SPA Lesson",
+  },
+  {
+    value: "html-css",
+    label: "HTML/CSS Lesson",
+  },
+];
 
 function stringifyEnvironmentVariables(
   variables: Record<string, string>,
@@ -66,6 +84,7 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
   const { rerunRunner } = useWebContainerRuntimeActions();
   const { isSupported, runnerConfig, status } =
     useWebContainerRuntimeMetadata();
+  const { lessonType } = useWorkspaceMetadata();
   const isBusy =
     status === "booting" ||
     status === "mounting" ||
@@ -77,16 +96,18 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
       <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
         CMD+S to save
       </span>
-      <button
-        type="button"
-        onClick={() => {
-          void rerunRunner();
-        }}
-        disabled={!isSupported || !runnerConfig.enabled || isBusy}
-        className="px-3 py-1 text-xs text-emerald-300 hover:text-emerald-200 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors font-semibold"
-      >
-        RERUN
-      </button>
+      {lessonType === "spa" ? (
+        <button
+          type="button"
+          onClick={() => {
+            void rerunRunner();
+          }}
+          disabled={!isSupported || !runnerConfig.enabled || isBusy}
+          className="px-3 py-1 text-xs text-emerald-300 hover:text-emerald-200 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors font-semibold"
+        >
+          RERUN
+        </button>
+      ) : null}
     </div>
   );
 });
@@ -145,11 +166,12 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { rerunRunner, updateEnvironmentVariables } =
+  const { rerunRunner, updateEnvironmentVariables, updateRunnerConfig } =
     useWebContainerRuntimeActions();
   const { environmentVariables, runnerConfig, status } =
     useWebContainerRuntimeMetadata();
-  const { getProject } = useWorkspaceActions();
+  const { getProject, saveProject, updateLessonType } = useWorkspaceActions();
+  const { lessonType } = useWorkspaceMetadata();
 
   const isBusy =
     status === "booting" ||
@@ -184,6 +206,18 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
     } catch (error) {
       console.error("Zip download failed:", error);
     }
+  };
+
+  const handleSelectLessonType = (nextLessonType: WorkspaceLessonType) => {
+    setIsMenuOpen(false);
+
+    if (lessonType === nextLessonType) {
+      return;
+    }
+
+    updateLessonType(nextLessonType);
+    saveProject();
+    updateRunnerConfig({ enabled: nextLessonType === "spa" });
   };
 
   const handleSave = () => {
@@ -224,16 +258,46 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
             />
             <div
               role="menu"
-              className="absolute right-0 top-full z-50 mt-2 w-44 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
+              className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
             >
-              <button
-                type="button"
-                role="menuitem"
-                onClick={handleEditEnvironment}
-                className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-              >
-                Edit Environment
-              </button>
+              {LESSON_TYPE_OPTIONS.map((option) => {
+                const isActive = option.value === lessonType;
+
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={isActive}
+                    onClick={() => handleSelectLessonType(option.value)}
+                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+                      isActive
+                        ? "bg-slate-700 text-white"
+                        : "text-slate-200 hover:bg-slate-700 hover:text-white"
+                    }`}
+                  >
+                    <span>{option.label}</span>
+                    {isActive ? (
+                      <span className="rounded-full bg-slate-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-200">
+                        Active
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+
+              <div className="my-1 h-px bg-slate-700" />
+
+              {lessonType === "spa" ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleEditEnvironment}
+                  className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
+                >
+                  Edit Environment
+                </button>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"

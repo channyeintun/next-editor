@@ -10,12 +10,14 @@ import { SlidesProvider } from "../contexts/SlidesContext";
 import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
+import { useWorkspaceMetadata } from "../hooks/useWorkspace";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import CursorComponent from "./Cursor.tsx";
 
 export function EditorLayout() {
   const { isDragging, isLoading: dragLoading } = useDragAndDropUrl();
   const { isLoading: urlLoading } = useUrlQuery();
+  const { lessonType } = useWorkspaceMetadata();
 
   const isLoading = dragLoading || urlLoading;
 
@@ -24,12 +26,12 @@ export function EditorLayout() {
   const readOnly = urlParams.get("readOnly") === "true";
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-slate-950 text-white overflow-hidden">
+    <div className="h-dvh flex flex-col bg-slate-950 text-white overflow-hidden">
       <div className="flex-1 relative overflow-hidden">
         <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
         <Preview />
-        <TerminalPanel />
+        {lessonType === "spa" ? <TerminalPanel /> : null}
         <SlidePanel />
       </div>
 

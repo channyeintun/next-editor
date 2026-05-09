@@ -1,5 +1,9 @@
 import { createContext } from "react";
-import type { WorkspaceFile, WorkspaceProject } from "../types/workspace";
+import type {
+  WorkspaceFile,
+  WorkspaceLessonType,
+  WorkspaceProject,
+} from "../types/workspace";
 
 export interface WorkspaceActions {
   setActiveFilePath: (path: string) => void;
@@ -12,6 +16,7 @@ export interface WorkspaceActions {
   saveProject: () => void;
   loadProject: (project: WorkspaceProject) => void;
   resetProject: () => void;
+  updateLessonType: (lessonType: WorkspaceLessonType) => void;
   getProject: () => WorkspaceProject;
   getFile: (path: string) => WorkspaceFile | null;
   listFiles: () => WorkspaceFile[];
@@ -26,6 +31,7 @@ export interface WorkspaceMetadata {
   fileCount: number;
   hasUnsavedChanges: boolean;
   projectName: string;
+  lessonType: WorkspaceLessonType;
   projectVersion: number;
   syncVersion: number;
 }

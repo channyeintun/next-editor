@@ -252,7 +252,7 @@ export const WebContainerRuntimeProvider: React.FC<
   WebContainerRuntimeProviderProps
 > = ({ children }) => {
   const { getProject } = useWorkspaceActions();
-  const { projectName, syncVersion } = useWorkspaceMetadata();
+  const { lessonType, projectName, syncVersion } = useWorkspaceMetadata();
   const instanceRef = useRef<WebContainer | null>(null);
   const runnerProcessRef = useRef<WebContainerProcess | null>(null);
   const devServerListenerCleanupRef = useRef<(() => void) | null>(null);
@@ -507,6 +507,11 @@ export const WebContainerRuntimeProvider: React.FC<
   );
 
   const startRuntime = useCallback(async () => {
+    if (lessonType !== "spa") {
+      resetRuntime();
+      return;
+    }
+
     if (
       status === "booting" ||
       status === "mounting" ||
@@ -535,7 +540,9 @@ export const WebContainerRuntimeProvider: React.FC<
       setErrorMessage(getRuntimeErrorMessage(error));
     }
   }, [
+    lessonType,
     prepareRuntime,
+    resetRuntime,
     runnerConfig.enabled,
     runnerConfig.runCommand,
     startRunnerProcess,
@@ -543,6 +550,11 @@ export const WebContainerRuntimeProvider: React.FC<
   ]);
 
   const rerunRunner = useCallback(async () => {
+    if (lessonType !== "spa") {
+      resetRuntime();
+      return;
+    }
+
     try {
       setStatus("booting");
       const instance = await prepareRuntime();
@@ -562,7 +574,9 @@ export const WebContainerRuntimeProvider: React.FC<
       setErrorMessage(getRuntimeErrorMessage(error));
     }
   }, [
+    lessonType,
     prepareRuntime,
+    resetRuntime,
     runnerConfig.enabled,
     runnerConfig.runCommand,
     startRunnerProcess,
@@ -570,6 +584,10 @@ export const WebContainerRuntimeProvider: React.FC<
 
   const runCommand = useCallback(
     async (commandLine: string) => {
+      if (lessonType !== "spa") {
+        return;
+      }
+
       const parsedCommand = parseCommand(commandLine);
 
       if (!parsedCommand) {
@@ -585,11 +603,15 @@ export const WebContainerRuntimeProvider: React.FC<
         trackAsActiveCommand: true,
       });
     },
-    [prepareRuntime, runForegroundCommand],
+    [lessonType, prepareRuntime, runForegroundCommand],
   );
 
   const saveWorkspace = useCallback(async () => {
-    if (!runnerConfig.enabled || !runnerConfig.runOnFileSave) {
+    if (
+      lessonType !== "spa" ||
+      !runnerConfig.enabled ||
+      !runnerConfig.runOnFileSave
+    ) {
       return;
     }
 
@@ -604,7 +626,13 @@ export const WebContainerRuntimeProvider: React.FC<
     }
 
     await rerunRunner();
-  }, [rerunRunner, runnerConfig.enabled, runnerConfig.runOnFileSave, status]);
+  }, [
+    lessonType,
+    rerunRunner,
+    runnerConfig.enabled,
+    runnerConfig.runOnFileSave,
+    status,
+  ]);
 
   const updateRunnerConfig = useCallback((config: Partial<RunnerConfig>) => {
     setRunnerConfig((current) => ({
@@ -641,7 +669,16 @@ export const WebContainerRuntimeProvider: React.FC<
   );
 
   useEffect(() => {
+    hasAutoStartedRef.current = false;
+
+    if (lessonType === "html-css") {
+      resetRuntime();
+    }
+  }, [lessonType, resetRuntime]);
+
+  useEffect(() => {
     if (
+      lessonType !== "spa" ||
       !isSupported ||
       hasAutoStartedRef.current ||
       !runnerConfig.enabled ||
@@ -653,6 +690,7 @@ export const WebContainerRuntimeProvider: React.FC<
     hasAutoStartedRef.current = true;
     void startRuntime();
   }, [
+    lessonType,
     isSupported,
     runnerConfig.enabled,
     runnerConfig.runOnStartup,

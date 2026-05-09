@@ -4,8 +4,19 @@ import {
   useNextEditorActions,
   useNextEditorMetadata,
 } from "../hooks/useNextEditorContext";
+import {
+  useWorkspaceActions,
+  useWorkspaceMetadata,
+} from "../hooks/useWorkspace";
 import { useWebContainerRuntimeMetadata } from "../hooks/useWebContainerRuntime";
 import type { WebContainerRuntimeStatus } from "../contexts/WebContainerRuntimeContext";
+import {
+  DEFAULT_WORKSPACE_ENTRY_PATH,
+  getParentWorkspacePath,
+  joinWorkspacePath,
+  normalizeWorkspacePath,
+  type WorkspaceProject,
+} from "../types/workspace";
 import type {
   PreviewSize,
   PreviewState,
@@ -232,6 +243,126 @@ function createRuntimePreviewPlaceholder(
 </html>`;
 }
 
+function isLocalWorkspaceAssetPath(path: string): boolean {
+  return !/^(?:[a-z]+:|\/\/|#|data:|blob:)/i.test(path);
+}
+
+function resolveWorkspaceAssetPath(
+  sourcePath: string,
+  assetPath: string,
+): string {
+  if (assetPath.startsWith("/")) {
+    return normalizeWorkspacePath(assetPath);
+  }
+
+  return joinWorkspacePath(getParentWorkspacePath(sourcePath), assetPath);
+}
+
+function getStaticPreviewEntry(project: WorkspaceProject) {
+  return (
+    project.files[DEFAULT_WORKSPACE_ENTRY_PATH] ??
+    project.files[project.entryFilePath] ??
+    Object.values(project.files).find((file) => file.language === "html") ??
+    null
+  );
+}
+
+function supportsStaticWorkspaceScript(
+  assetPath: string,
+  content: string,
+): boolean {
+  if (/\.(?:jsx|tsx)$/i.test(assetPath)) {
+    return false;
+  }
+
+  return !/\b(?:import|export)\b/.test(content);
+}
+
+function createStaticWorkspacePreview(project: WorkspaceProject): string {
+  const entryFile = getStaticPreviewEntry(project);
+
+  if (!entryFile) {
+    return createRuntimePreviewPlaceholder(
+      "message",
+      "HTML/CSS preview unavailable",
+      "Add an index.html file to render this lesson preview.",
+    );
+  }
+
+  try {
+    const parser = new DOMParser();
+    const document = parser.parseFromString(entryFile.content, "text/html");
+
+    for (const link of Array.from(
+      document.querySelectorAll('link[rel="stylesheet"][href]'),
+    )) {
+      const href = link.getAttribute("href");
+
+      if (!href || !isLocalWorkspaceAssetPath(href)) {
+        continue;
+      }
+
+      const assetPath = resolveWorkspaceAssetPath(entryFile.path, href);
+      const assetFile = project.files[assetPath];
+
+      if (!assetFile) {
+        continue;
+      }
+
+      const style = document.createElement("style");
+      style.setAttribute("data-source", assetFile.path);
+      style.textContent = assetFile.content;
+      link.replaceWith(style);
+    }
+
+    for (const script of Array.from(document.querySelectorAll("script[src]"))) {
+      const src = script.getAttribute("src");
+
+      if (!src || !isLocalWorkspaceAssetPath(src)) {
+        continue;
+      }
+
+      const assetPath = resolveWorkspaceAssetPath(entryFile.path, src);
+      const assetFile = project.files[assetPath];
+
+      if (!assetFile) {
+        continue;
+      }
+
+      if (!supportsStaticWorkspaceScript(assetFile.path, assetFile.content)) {
+        return createRuntimePreviewPlaceholder(
+          "message",
+          "HTML/CSS preview unavailable",
+          "HTML/CSS lessons only support plain HTML, CSS, and vanilla JavaScript files without package imports.",
+        );
+      }
+
+      const inlineScript = document.createElement("script");
+
+      for (const attribute of Array.from(script.attributes)) {
+        if (attribute.name === "src") {
+          continue;
+        }
+
+        inlineScript.setAttribute(attribute.name, attribute.value);
+      }
+
+      inlineScript.textContent = assetFile.content;
+      script.replaceWith(inlineScript);
+    }
+
+    return `<!doctype html>\n${document.documentElement.outerHTML}`;
+  } catch (error) {
+    console.warn("Failed to create static workspace preview:", error);
+
+    return createRuntimePreviewPlaceholder(
+      "message",
+      "HTML/CSS preview unavailable",
+      "The current lesson could not be rendered as a static workspace preview.",
+    );
+  }
+}
+
 const Preview = memo(function Preview() {
   const [size, setSize] = useState<PreviewSize>("small");
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -271,6 +402,8 @@ const Preview = memo(function Preview() {
     registerPreviewStateGetter,
     registerPreviewStateApplier,
   } = useNextEditorActions();
+  const { getProject } = useWorkspaceActions();
+  const { lessonType } = useWorkspaceMetadata();
   const {
     previewUrl: runtimePreviewUrl,
     status: runtimeStatus,
@@ -280,9 +413,12 @@ const Preview = memo(function Preview() {
   } = useWebContainerRuntimeMetadata();
 
   const { isRecording } = useNextEditorMetadata();
+  const isStaticWorkspacePreview = lessonType === "html-css";
   const isRuntimePreviewActive =
-    runtimeStatus === "ready" && Boolean(runtimePreviewUrl);
-  const isRuntimeManagedPreview = runnerConfig.enabled;
+    lessonType === "spa" &&
+    runtimeStatus === "ready" &&
+    Boolean(runtimePreviewUrl);
+  const isRuntimeManagedPreview = lessonType === "spa" && runnerConfig.enabled;
   const runtimePreviewState = useMemo(
     () =>
       getRuntimePreviewState(
@@ -305,6 +441,9 @@ const Preview = memo(function Preview() {
       runtimePreviewState.title,
     ],
   );
+  const staticWorkspacePreview = isStaticWorkspacePreview
+    ? createStaticWorkspacePreview(getProject())
+    : "";
 
   // Keep refs updated synchronously
   isRecordingRef.current = isRecording;
@@ -811,7 +950,7 @@ const Preview = memo(function Preview() {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    if (runtimePreviewUrl) {
+    if (lessonType === "spa" && runtimePreviewUrl) {
       lastContentRef.current = "";
       iframe.removeAttribute("srcdoc");
       iframe.src = runtimePreviewUrl;
@@ -829,6 +968,11 @@ const Preview = memo(function Preview() {
       return;
     }
 
+    if (isStaticWorkspacePreview) {
+      updateIframeContent(staticWorkspacePreview);
+      return;
+    }
+
     const editor = editorRef.current;
     if (editor) {
       lastContentRef.current = "";
@@ -836,14 +980,23 @@ const Preview = memo(function Preview() {
     }
   }, [
     editorRef,
+    isStaticWorkspacePreview,
     isRuntimeManagedPreview,
+    lessonType,
     runtimePreviewPlaceholder,
     runtimePreviewUrl,
+    staticWorkspacePreview,
     updateIframeContent,
   ]);
 
   useEffect(() => {
-    if (runtimePreviewUrl || isRuntimeManagedPreview) return;
+    if (
+      runtimePreviewUrl ||
+      isRuntimeManagedPreview ||
+      isStaticWorkspacePreview
+    ) {
+      return;
+    }
 
     const checkForEditor = () => {
       const editor = editorRef.current;
@@ -862,6 +1015,7 @@ const Preview = memo(function Preview() {
   }, [
     editorRef,
     isRuntimeManagedPreview,
+    isStaticWorkspacePreview,
     runtimePreviewUrl,
     updateIframeContent,
   ]);
@@ -1109,7 +1263,7 @@ const Preview = memo(function Preview() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[90] bg-black/10"
+            className="fixed inset-0 z-90 bg-black/10"
             onClick={handleMinimize}
           />
         )}
@@ -1162,7 +1316,9 @@ const Preview = memo(function Preview() {
               ? runtimePreviewUrl
               : isRuntimeManagedPreview
                 ? runtimePreviewState.label
-                : "Single-file preview"}
+                : isStaticWorkspacePreview
+                  ? "HTML/CSS preview"
+                  : "Single-file preview"}
           </div>
 
           {/* Refresh button */}
@@ -1210,7 +1366,7 @@ const Preview = memo(function Preview() {
             className="absolute bottom-0 left-0 w-10 h-10 cursor-sw-resize flex items-end justify-start z-50 group transition-colors touch-none"
             title="Drag to resize"
           >
-            <div className="mb-2 ml-2 flex flex-col items-start gap-[2px]">
+            <div className="mb-2 ml-2 flex flex-col items-start gap-0.5">
               <div className="w-5 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />
               <div className="w-3.5 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />
               <div className="w-2 h-[1.5px] bg-gray-400 group-hover:bg-blue-500 transform rotate-45 origin-left opacity-40 group-hover:opacity-100 transition-all" />

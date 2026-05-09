@@ -16,6 +16,7 @@ import {
   normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
   type WorkspaceFile,
+  type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
 
@@ -87,6 +88,24 @@ function createWorkspaceFile(path: string, content: string): WorkspaceFile {
   };
 }
 
+function inferWorkspaceLessonType(
+  project: Pick<WorkspaceProject, "files"> & {
+    lessonType?: WorkspaceLessonType;
+  },
+): WorkspaceLessonType {
+  if (project.lessonType === "html-css") {
+    return "html-css";
+  }
+
+  if (project.lessonType === "spa") {
+    return "spa";
+  }
+
+  return project.files["package.json"] || project.files["vite.config.js"]
+    ? "spa"
+    : "html-css";
+}
+
 function normalizeProject(project: WorkspaceProject): WorkspaceProject {
   const fallbackProject = createSingleFileWorkspace();
   const files =
@@ -94,9 +113,11 @@ function normalizeProject(project: WorkspaceProject): WorkspaceProject {
       ? project.files
       : fallbackProject.files;
   const defaultFile = getDefaultFile({ ...project, files });
+  const lessonType = inferWorkspaceLessonType({ ...project, files });
 
   return {
     ...project,
+    lessonType,
     entryFilePath: files[project.entryFilePath]
       ? project.entryFilePath
       : defaultFile.path,
@@ -419,6 +440,23 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     loadProject(createStarterWorkspaceProject());
   }, [loadProject]);
 
+  const updateLessonType = useCallback(
+    (lessonType: WorkspaceLessonType) => {
+      if (projectRef.current.lessonType === lessonType) {
+        return;
+      }
+
+      projectRef.current = {
+        ...projectRef.current,
+        lessonType,
+      };
+
+      bumpProjectVersion();
+      bumpSyncVersion();
+    },
+    [bumpProjectVersion, bumpSyncVersion],
+  );
+
   const getProject = useCallback(() => projectRef.current, []);
 
   const getFile = useCallback((path: string) => {
@@ -441,6 +479,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       saveProject,
       loadProject,
       resetProject,
+      updateLessonType,
       getProject,
       getFile,
       listFiles,
@@ -457,6 +496,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       resetProject,
       saveProject,
       setActiveFilePath,
+      updateLessonType,
       updateActiveFileContent,
       updateFileContent,
     ],
@@ -481,6 +521,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       fileCount: Object.keys(projectRef.current.files).length,
       hasUnsavedChanges: dirtyFilePaths.length > 0,
       projectName: projectRef.current.name,
+      lessonType: projectRef.current.lessonType,
       projectVersion,
       syncVersion,
     }),
