@@ -1027,7 +1027,13 @@ const Preview = memo(function Preview() {
 
   // Also ensure iframe loads properly
   useEffect(() => {
-    if (runtimePreviewUrl || isRuntimeManagedPreview) return;
+    if (
+      runtimePreviewUrl ||
+      isRuntimeManagedPreview ||
+      isStaticWorkspacePreview
+    ) {
+      return;
+    }
 
     const iframe = iframeRef.current;
     if (!iframe) return;
@@ -1047,6 +1053,7 @@ const Preview = memo(function Preview() {
     };
   }, [
     editorRef,
+    isStaticWorkspacePreview,
     isRuntimeManagedPreview,
     runtimePreviewUrl,
     updateIframeContent,
@@ -1105,6 +1112,15 @@ const Preview = memo(function Preview() {
       return;
     }
 
+    if (isStaticWorkspacePreview) {
+      setIsRefreshing(true);
+      lastContentRef.current = "";
+      updateIframeContent(staticWorkspacePreview);
+      emitPreviewEvent("preview_refresh", { content: staticWorkspacePreview });
+      setTimeout(() => setIsRefreshing(false), 600);
+      return;
+    }
+
     const editor = editorRef.current;
     if (editor) {
       setIsRefreshing(true);
@@ -1122,8 +1138,10 @@ const Preview = memo(function Preview() {
     emitPreviewEvent,
     isRuntimePreviewActive,
     isRuntimeManagedPreview,
+    isStaticWorkspacePreview,
     runtimePreviewPlaceholder,
     runtimePreviewUrl,
+    staticWorkspacePreview,
     updateIframeContent,
   ]);
 

@@ -81,7 +81,8 @@
 - Collapsed `Edit Environment` and `Download As Zip` behind a settings icon popup and reduced the environment modal header to only `Edit Environment`.
 - Added workspace lesson types so users can switch between `SPA Lesson` and `HTML/CSS Lesson`, with HTML/CSS lessons using static preview and hiding runner and terminal UI.
 - Added `Open in Preview` to the file context menu for HTML/CSS lessons and switched the save hint to `CMD+S` or `CTRL+S` based on the current user agent.
+- Fixed HTML/CSS preview refresh so it stays pinned to the selected preview file instead of falling back to the active editor buffer.
 
 ## Current Task
 
-- Latest follow-up completed: HTML/CSS lessons now expose `Open in Preview`, preserve the selected preview file across restore, and show the correct save shortcut hint for the current platform.
+- Latest follow-up completed: HTML/CSS preview refresh now remains pinned to the file selected with `Open in Preview` until another file is explicitly chosen.
