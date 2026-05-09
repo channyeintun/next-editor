@@ -10,8 +10,8 @@
 
 - Phase 1: Completed
 - Phase 2: Completed
-- Phase 3: In progress
-- Phase 4: Not started
+- Phase 3: Completed
+- Phase 4: In progress
 - Phase 5: Not started
 - Phase 6: Not started
 
@@ -31,9 +31,13 @@
 - Replaced the ESLint toolchain with Oxlint and removed the ESLint config.
 - Updated the Vite checker setup to use TypeScript checks only.
 - Validated the toolchain migration with `bun run build` and `bun run lint`.
+- Added a dedicated lazy WebContainer runtime provider with a single-instance boot path.
+- Mounted an in-memory Vite starter project inside the runtime and started `npm install` plus `npm run dev`.
+- Exposed runtime status, errors, and preview URL through the editor header without changing the legacy iframe preview yet.
+- Validated the Phase 3 changes with `bun run build` and `bun run lint`.
 
 ## Current Task
 
-- Boot a single WebContainer instance behind a dedicated runtime layer.
-- Mount an in-memory starter project and expose runtime status.
-- Keep the current single-file flow intact while the runtime path is introduced.
+- Replace the legacy `srcdoc` preview path with the WebContainer server URL when the runtime is ready.
+- Add a read-only terminal panel backed by WebContainer process output.
+- Preserve the current single-file preview as the fallback path until recording is redesigned.
