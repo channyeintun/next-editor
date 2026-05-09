@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   useNextEditorActions,
   useNextEditorMetadata,
@@ -29,6 +29,28 @@ const LESSON_TYPE_OPTIONS: Array<{
     label: "HTML/CSS Lesson",
   },
 ];
+
+function isAppleUserAgent(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  const navigatorWithUserAgentData = navigator as Navigator & {
+    userAgentData?: {
+      platform?: string;
+    };
+  };
+  const userAgentDataPlatform =
+    navigatorWithUserAgentData.userAgentData?.platform;
+  const platform = userAgentDataPlatform ?? navigator.platform ?? "";
+  const userAgent = navigator.userAgent ?? "";
+
+  return /Mac|iPhone|iPad|iPod/i.test(`${platform} ${userAgent}`);
+}
+
+function getSaveShortcutLabel(): string {
+  return isAppleUserAgent() ? "CMD+S to save" : "CTRL+S to save";
+}
 
 function stringifyEnvironmentVariables(
   variables: Record<string, string>,
@@ -85,6 +107,7 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
   const { isSupported, runnerConfig, status } =
     useWebContainerRuntimeMetadata();
   const { lessonType } = useWorkspaceMetadata();
+  const saveShortcutLabel = useMemo(() => getSaveShortcutLabel(), []);
   const isBusy =
     status === "booting" ||
     status === "mounting" ||
@@ -94,7 +117,7 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
   return (
     <div className="flex items-center gap-3">
       <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-        CMD+S to save
+        {saveShortcutLabel}
       </span>
       {lessonType === "spa" ? (
         <button

@@ -221,10 +221,18 @@ const FileSidebar = memo(function FileSidebar() {
     createFolder,
     deleteFile,
     renameFile,
+    saveProject,
     setActiveFilePath,
+    setPreviewFilePath,
   } = useWorkspaceActions();
-  const { activeFilePath, dirtyFilePaths, files, folders } =
-    useWorkspaceMetadata();
+  const {
+    activeFilePath,
+    dirtyFilePaths,
+    files,
+    folders,
+    lessonType,
+    previewFilePath,
+  } = useWorkspaceMetadata();
   const dirtyFilePathSet = useMemo(
     () => new Set(dirtyFilePaths),
     [dirtyFilePaths],
@@ -244,6 +252,16 @@ const FileSidebar = memo(function FileSidebar() {
       top: Math.min(contextMenu.y, window.innerHeight - 240),
     };
   }, [contextMenu]);
+  const contextMenuFile = useMemo(() => {
+    if (!contextMenu) {
+      return null;
+    }
+
+    return files.find((file) => file.path === contextMenu.path) ?? null;
+  }, [contextMenu, files]);
+  const canOpenContextFileInPreview =
+    lessonType !== "spa" && contextMenuFile?.language === "html";
+  const isContextFileInPreview = contextMenu?.path === previewFilePath;
 
   useEffect(() => {
     if (!editState || !editInputRef.current) {
@@ -358,6 +376,12 @@ const FileSidebar = memo(function FileSidebar() {
     }
 
     deleteFile(path);
+  };
+
+  const handleOpenFileInPreview = (path: string) => {
+    setPreviewFilePath(path);
+    saveProject();
+    setContextMenu(null);
   };
 
   const handleDraftKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -532,7 +556,7 @@ const FileSidebar = memo(function FileSidebar() {
         {contextMenu && (
           <div
             ref={contextMenuRef}
-            className="fixed z-[60] min-w-56 overflow-hidden rounded-xl border border-slate-700 bg-[#1b2029] py-2 shadow-[0_20px_40px_rgba(2,6,23,0.55)]"
+            className="fixed z-60 min-w-56 overflow-hidden rounded-xl border border-slate-700 bg-[#1b2029] py-2 shadow-[0_20px_40px_rgba(2,6,23,0.55)]"
             style={menuStyle}
           >
             <button
@@ -549,6 +573,19 @@ const FileSidebar = memo(function FileSidebar() {
             >
               New Folder
             </button>
+            {canOpenContextFileInPreview ? (
+              <button
+                type="button"
+                onClick={() => handleOpenFileInPreview(contextMenu.path)}
+                className={`flex w-full items-center px-4 py-2 text-sm transition-colors ${
+                  isContextFileInPreview
+                    ? "text-sky-200 hover:bg-slate-800"
+                    : "text-slate-200 hover:bg-slate-800"
+                }`}
+              >
+                Open in Preview
+              </button>
+            ) : null}
             <div className="my-2 border-t border-slate-700" />
             <button
               type="button"

@@ -77,10 +77,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       activeFilePath,
     }),
     applyWorkspaceSnapshot: (snapshot) => {
-      loadProject({
-        ...snapshot.project,
-        entryFilePath: snapshot.activeFilePath,
-      });
+      loadProject(snapshot.project, snapshot.activeFilePath);
     },
     getRuntimeSnapshot: (): RuntimeRecordingSnapshot => ({
       mode: runtimeMetadata.previewUrl ? "webcontainer" : "single-file",

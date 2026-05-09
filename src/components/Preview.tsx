@@ -259,9 +259,14 @@ function resolveWorkspaceAssetPath(
 }
 
 function getStaticPreviewEntry(project: WorkspaceProject) {
+  const configuredEntry = project.files[project.entryFilePath];
+
+  if (configuredEntry?.language === "html") {
+    return configuredEntry;
+  }
+
   return (
     project.files[DEFAULT_WORKSPACE_ENTRY_PATH] ??
-    project.files[project.entryFilePath] ??
     Object.values(project.files).find((file) => file.language === "html") ??
     null
   );

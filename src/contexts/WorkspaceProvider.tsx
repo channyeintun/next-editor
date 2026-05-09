@@ -212,6 +212,28 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     setActiveFilePathState(normalizedPath);
   }, []);
 
+  const setPreviewFilePath = useCallback(
+    (path: string) => {
+      const normalizedPath = normalizeWorkspacePath(path);
+
+      if (
+        !projectRef.current.files[normalizedPath] ||
+        projectRef.current.entryFilePath === normalizedPath
+      ) {
+        return;
+      }
+
+      projectRef.current = {
+        ...projectRef.current,
+        entryFilePath: normalizedPath,
+      };
+
+      bumpProjectVersion();
+      bumpSyncVersion();
+    },
+    [bumpProjectVersion, bumpSyncVersion],
+  );
+
   const createFile = useCallback(
     (path: string, content = "") => {
       const normalizedPath = normalizeWorkspacePath(path);
@@ -421,15 +443,21 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   }, [bumpProjectVersion]);
 
   const loadProject = useCallback(
-    (project: WorkspaceProject) => {
+    (project: WorkspaceProject, nextActiveFilePath?: string) => {
       const normalizedProject = normalizeProject(project);
+      const resolvedActiveFilePath = normalizedProject.files[
+        normalizeWorkspacePath(nextActiveFilePath ?? "")
+      ]
+        ? normalizeWorkspacePath(nextActiveFilePath ?? "")
+        : normalizedProject.entryFilePath;
+
       projectRef.current = normalizedProject;
-      activeFilePathRef.current = normalizedProject.entryFilePath;
+      activeFilePathRef.current = resolvedActiveFilePath;
       savedSnapshotRef.current = {
-        activeFilePath: normalizedProject.entryFilePath,
+        activeFilePath: resolvedActiveFilePath,
         project: structuredClone(normalizedProject),
       };
-      setActiveFilePathState(normalizedProject.entryFilePath);
+      setActiveFilePathState(resolvedActiveFilePath);
       bumpProjectVersion();
       bumpSyncVersion();
     },
@@ -470,6 +498,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   const actionsValue = useMemo<WorkspaceActions>(
     () => ({
       setActiveFilePath,
+      setPreviewFilePath,
       createFile,
       createFolder,
       renameFile,
@@ -496,6 +525,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       resetProject,
       saveProject,
       setActiveFilePath,
+      setPreviewFilePath,
       updateLessonType,
       updateActiveFileContent,
       updateFileContent,
@@ -522,6 +552,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       hasUnsavedChanges: dirtyFilePaths.length > 0,
       projectName: projectRef.current.name,
       lessonType: projectRef.current.lessonType,
+      previewFilePath: projectRef.current.entryFilePath,
       projectVersion,
       syncVersion,
     }),

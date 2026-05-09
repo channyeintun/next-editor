@@ -7,6 +7,7 @@ import type {
 
 export interface WorkspaceActions {
   setActiveFilePath: (path: string) => void;
+  setPreviewFilePath: (path: string) => void;
   createFile: (path: string, content?: string) => void;
   createFolder: (path: string) => void;
   renameFile: (currentPath: string, nextPath: string) => void;
@@ -14,7 +15,7 @@ export interface WorkspaceActions {
   updateFileContent: (path: string, content: string) => void;
   updateActiveFileContent: (content: string) => void;
   saveProject: () => void;
-  loadProject: (project: WorkspaceProject) => void;
+  loadProject: (project: WorkspaceProject, activeFilePath?: string) => void;
   resetProject: () => void;
   updateLessonType: (lessonType: WorkspaceLessonType) => void;
   getProject: () => WorkspaceProject;
@@ -32,6 +33,7 @@ export interface WorkspaceMetadata {
   hasUnsavedChanges: boolean;
   projectName: string;
   lessonType: WorkspaceLessonType;
+  previewFilePath: string;
   projectVersion: number;
   syncVersion: number;
 }
