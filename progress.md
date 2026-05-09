@@ -9,8 +9,8 @@
 ## Phase Status
 
 - Phase 1: Completed
-- Phase 2: In progress
-- Phase 3: Not started
+- Phase 2: Completed
+- Phase 3: In progress
 - Phase 4: Not started
 - Phase 5: Not started
 - Phase 6: Not started
@@ -22,8 +22,14 @@
 - Added cross-origin isolation headers to Vite dev and preview servers.
 - Added matching COOP/COEP headers to the Vercel deployment config.
 - Validated the Phase 1 changes with `bun run build`.
+- Added workspace project and file types for the upcoming multi-file model.
+- Added a workspace provider with active-file state and ref-backed content synchronization.
+- Connected Monaco to the workspace compatibility layer without changing the recording engine yet.
+- Reused the workspace default document across the editor and recorder reset path.
+- Validated the Phase 2 changes with `bun run build`.
 
 ## Current Task
 
-- Define workspace file-tree types and active-file state.
-- Add the first compatibility layer so single-file editing can map into a workspace model.
+- Boot a single WebContainer instance behind a dedicated runtime layer.
+- Mount an in-memory starter project and expose runtime status.
+- Keep the current single-file flow intact while the runtime path is introduced.
