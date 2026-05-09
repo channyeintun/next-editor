@@ -30,6 +30,14 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   const { getProject, loadProject, resetProject } = useWorkspaceActions();
   const { activeFilePath } = useWorkspaceMetadata();
   const runtimeMetadata = useWebContainerRuntimeMetadata();
+  const activeFilePathRef = useRef(activeFilePath);
+  const runtimeSnapshotRef = useRef({
+    previewUrl: runtimeMetadata.previewUrl,
+    status: runtimeMetadata.status,
+    lastOutput: runtimeMetadata.lastOutput,
+    activeCommand: runtimeMetadata.activeCommand,
+    errorMessage: runtimeMetadata.errorMessage,
+  });
   const getSlideStateRef = useRef<
     | (() => {
         previewState: SlidePreviewState;
@@ -58,6 +66,15 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     ((indexh: number, indexv: number) => void) | null
   >(null);
 
+  activeFilePathRef.current = activeFilePath;
+  runtimeSnapshotRef.current = {
+    previewUrl: runtimeMetadata.previewUrl,
+    status: runtimeMetadata.status,
+    lastOutput: runtimeMetadata.lastOutput,
+    activeCommand: runtimeMetadata.activeCommand,
+    errorMessage: runtimeMetadata.errorMessage,
+  };
+
   const originalHook = useNextEditor({
     editorRef,
     enableAudioRecording: true, // Enable built-in synchronized audio recording
@@ -83,20 +100,24 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     applySlides: (slides) => applySlidesRef.current?.(slides),
     getWorkspaceSnapshot: () => ({
       project: structuredClone(getProject()),
-      activeFilePath,
+      activeFilePath: activeFilePathRef.current,
     }),
     applyWorkspaceSnapshot: (snapshot) => {
       loadProject(snapshot.project, snapshot.activeFilePath);
     },
-    getRuntimeSnapshot: (): RuntimeRecordingSnapshot => ({
-      mode: runtimeMetadata.previewUrl ? "webcontainer" : "single-file",
-      status: runtimeMetadata.status,
-      previewUrl: runtimeMetadata.previewUrl,
-      terminalOutput: runtimeMetadata.lastOutput,
-      activeCommand: runtimeMetadata.activeCommand,
-      errorMessage: runtimeMetadata.errorMessage,
-      ...getRuntimeStateRef.current?.(),
-    }),
+    getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
+      const snapshot = runtimeSnapshotRef.current;
+
+      return {
+        mode: snapshot.previewUrl ? "webcontainer" : "single-file",
+        status: snapshot.status,
+        previewUrl: snapshot.previewUrl,
+        terminalOutput: snapshot.lastOutput,
+        activeCommand: snapshot.activeCommand,
+        errorMessage: snapshot.errorMessage,
+        ...getRuntimeStateRef.current?.(),
+      };
+    },
     applyRuntimeSnapshot: (snapshot) => {
       applyRuntimeStateRef.current?.(snapshot);
     },

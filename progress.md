@@ -91,8 +91,12 @@
 - Guarded preview-state playback from touching cross-origin WebContainer iframes, so runtime-backed replay no longer throws when preview state is applied.
 - Validated the recording/replay fidelity changes with `bun run lint`, `bun run build`, and an interactive browser pass focused on file switching, dock toggling, and rerun transitions.
 - Removed the HTML/CSS preview unavailable placeholder copy so unsupported or empty static previews now render blank instead of showing extra messaging.
+- Fixed recorder snapshot getters in the provider to read the latest active file and runtime metadata instead of stale values captured when the recorder actor was first created.
+- Forced playback start and resume to invalidate previously applied frame and workspace indexes so replay always restores the recorded file tab for the current timeline position, even if a different tab was opened manually beforehand.
+- Revalidated replay behavior in the browser by starting playback from the wrong manually opened tab and confirming the editor snapped back to the recorded start file before later switching to the recorded `index.html` frame.
 
 ## Current Task
 
 - Latest follow-up completed: recording/replay now captures workspace and runtime timeline changes for file switching, dock toggling, and reruns without depending on final snapshots only.
 - Latest follow-up completed: HTML/CSS preview no longer shows the unavailable placeholder text when there is nothing to render.
+- Latest follow-up completed: replay now restores the recorded active file on play/resume instead of keeping the last manually opened tab.

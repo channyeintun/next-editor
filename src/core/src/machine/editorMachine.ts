@@ -862,6 +862,16 @@ export const editorMachine = setup({
       lastAppliedPreviewState: undefined,
     })),
 
+    invalidateAppliedPlaybackState: assign(() => ({
+      currentFrame: null,
+      lastAppliedFrameIndex: -1,
+      lastAppliedPreviewEventIndex: -1,
+      lastAppliedSlideEventIndex: -1,
+      lastAppliedWorkspaceEventIndex: -1,
+      lastAppliedRuntimeEventIndex: -1,
+      lastAppliedPreviewState: undefined,
+    })),
+
     clearRecording: assign({
       recording: null,
       currentFrame: null,
@@ -1693,6 +1703,7 @@ export const editorMachine = setup({
 
         playing: {
           entry: [
+            "invalidateAppliedPlaybackState",
             "applyFrameAtTime",
             "applyWorkspaceEventsAtTime",
             "applyRuntimeEventsAtTime",
