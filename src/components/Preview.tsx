@@ -287,11 +287,7 @@ function createStaticWorkspacePreview(project: WorkspaceProject): string {
   const entryFile = getStaticPreviewEntry(project);
 
   if (!entryFile) {
-    return createRuntimePreviewPlaceholder(
-      "message",
-      "HTML/CSS preview unavailable",
-      "Add an index.html file to render this lesson preview.",
-    );
+    return "";
   }
 
   try {
@@ -335,11 +331,7 @@ function createStaticWorkspacePreview(project: WorkspaceProject): string {
       }
 
       if (!supportsStaticWorkspaceScript(assetFile.path, assetFile.content)) {
-        return createRuntimePreviewPlaceholder(
-          "message",
-          "HTML/CSS preview unavailable",
-          "HTML/CSS lessons only support plain HTML, CSS, and vanilla JavaScript files without package imports.",
-        );
+        return "";
       }
 
       const inlineScript = document.createElement("script");
@@ -360,11 +352,7 @@ function createStaticWorkspacePreview(project: WorkspaceProject): string {
   } catch (error) {
     console.warn("Failed to create static workspace preview:", error);
 
-    return createRuntimePreviewPlaceholder(
-      "message",
-      "HTML/CSS preview unavailable",
-      "The current lesson could not be rendered as a static workspace preview.",
-    );
+    return "";
   }
 }
 

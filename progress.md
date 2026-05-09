@@ -90,7 +90,9 @@
 - Replaced the circular Monaco `SET_EDITOR_REF` payload with getter-based editor syncing so replay controls no longer crash XState when the editor instance is refreshed.
 - Guarded preview-state playback from touching cross-origin WebContainer iframes, so runtime-backed replay no longer throws when preview state is applied.
 - Validated the recording/replay fidelity changes with `bun run lint`, `bun run build`, and an interactive browser pass focused on file switching, dock toggling, and rerun transitions.
+- Removed the HTML/CSS preview unavailable placeholder copy so unsupported or empty static previews now render blank instead of showing extra messaging.
 
 ## Current Task
 
 - Latest follow-up completed: recording/replay now captures workspace and runtime timeline changes for file switching, dock toggling, and reruns without depending on final snapshots only.
+- Latest follow-up completed: HTML/CSS preview no longer shows the unavailable placeholder text when there is nothing to render.
