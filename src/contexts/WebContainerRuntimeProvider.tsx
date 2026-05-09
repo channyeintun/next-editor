@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FileSystemTree, WebContainer } from "@webcontainer/api";
+import type {
+  FileSystemTree,
+  WebContainer,
+  WebContainerProcess,
+} from "@webcontainer/api";
 import {
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
+  type RunnerConfig,
   type WebContainerRuntimeActions,
   type WebContainerRuntimeMetadata,
   type WebContainerRuntimeStatus,
@@ -16,6 +21,14 @@ import type { WorkspaceProject } from "../types/workspace";
 interface WebContainerRuntimeProviderProps {
   children: React.ReactNode;
 }
+
+const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
+  enabled: true,
+  runOnStartup: true,
+  runOnFileSave: true,
+  initCommand: "npm install",
+  runCommand: "npm run dev",
+};
 
 const ESCAPE_CHARACTER = String.fromCharCode(27);
 const BELL_CHARACTER = String.fromCharCode(7);
@@ -188,14 +201,30 @@ function parseCommand(
   return { command, args };
 }
 
+function formatCommandError(commandLine: string): string {
+  return `"${commandLine}" failed inside the WebContainer runtime`;
+}
+
+function getWorkspaceRoot(projectName: string): string {
+  const normalizedProjectName = projectName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `~/projects/${normalizedProjectName || "next-editor"}`;
+}
+
 export const WebContainerRuntimeProvider: React.FC<
   WebContainerRuntimeProviderProps
 > = ({ children }) => {
   const { getProject } = useWorkspaceActions();
-  const { syncVersion } = useWorkspaceMetadata();
+  const { projectName, syncVersion } = useWorkspaceMetadata();
   const instanceRef = useRef<WebContainer | null>(null);
+  const runnerProcessRef = useRef<WebContainerProcess | null>(null);
   const devServerListenerCleanupRef = useRef<(() => void) | null>(null);
   const hasMountedProjectRef = useRef(false);
+  const hasRunInitCommandRef = useRef(false);
   const lastSyncedProjectRef = useRef<WorkspaceProject | null>(null);
   const hasAutoStartedRef = useRef(false);
   const [status, setStatus] = useState<WebContainerRuntimeStatus>("idle");
@@ -203,8 +232,15 @@ export const WebContainerRuntimeProvider: React.FC<
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastOutput, setLastOutput] = useState<string | null>(null);
   const [activeCommand, setActiveCommand] = useState<string | null>(null);
+  const [runnerConfig, setRunnerConfig] = useState<RunnerConfig>(
+    DEFAULT_RUNNER_CONFIG,
+  );
 
   const isSupported = window.crossOriginIsolated;
+  const workspaceRoot = useMemo(
+    () => getWorkspaceRoot(projectName),
+    [projectName],
+  );
 
   const appendOutput = useCallback((chunk: string) => {
     const sanitizedChunk = sanitizeTerminalChunk(chunk);
@@ -219,19 +255,32 @@ export const WebContainerRuntimeProvider: React.FC<
     });
   }, []);
 
+  const stopRunnerProcess = useCallback(() => {
+    const process = runnerProcessRef.current;
+
+    if (!process) {
+      return;
+    }
+
+    runnerProcessRef.current = null;
+    process.kill();
+  }, []);
+
   const resetRuntime = useCallback(() => {
+    stopRunnerProcess();
     devServerListenerCleanupRef.current?.();
     devServerListenerCleanupRef.current = null;
     instanceRef.current?.teardown();
     instanceRef.current = null;
     hasMountedProjectRef.current = false;
+    hasRunInitCommandRef.current = false;
     lastSyncedProjectRef.current = null;
     setStatus("idle");
     setPreviewUrl(null);
     setErrorMessage(null);
     setLastOutput(null);
     setActiveCommand(null);
-  }, []);
+  }, [stopRunnerProcess]);
 
   const bootInstance = useCallback(async () => {
     if (instanceRef.current) {
@@ -244,107 +293,41 @@ export const WebContainerRuntimeProvider: React.FC<
       workdirName: "next-editor-runtime",
     });
 
+    devServerListenerCleanupRef.current?.();
+    devServerListenerCleanupRef.current = instance.on(
+      "server-ready",
+      (_port, url) => {
+        setPreviewUrl(url);
+        setStatus("ready");
+      },
+    );
+
     instanceRef.current = instance;
 
     return instance;
   }, []);
 
-  const startRuntime = useCallback(async () => {
-    if (!isSupported) {
-      setStatus("error");
-      setErrorMessage(
-        "WebContainers require cross-origin isolation. Reload the app from the configured dev or deployed host.",
-      );
-      return;
-    }
-
-    if (status === "ready") {
-      return;
-    }
-
-    if (
-      status === "booting" ||
-      status === "mounting" ||
-      status === "installing" ||
-      status === "starting"
-    ) {
-      return;
-    }
-
-    try {
-      setErrorMessage(null);
-      setLastOutput(null);
-      setPreviewUrl(null);
-      setStatus("booting");
-
-      const instance = await bootInstance();
-      const project = getProject();
-
-      if (!hasMountedProjectRef.current) {
-        setStatus("mounting");
-        await instance.mount(createWorkspaceTree(project));
-        lastSyncedProjectRef.current = structuredClone(project);
-        hasMountedProjectRef.current = true;
-      }
-
-      setStatus("installing");
-      const installProcess = await instance.spawn("npm", ["install"]);
-      installProcess.output.pipeTo(
-        new WritableStream({
-          write(chunk) {
-            appendOutput(chunk);
-          },
-        }),
-      );
-
-      const installExitCode = await installProcess.exit;
-      if (installExitCode !== 0) {
-        throw new Error("npm install failed inside the WebContainer runtime");
-      }
-
-      devServerListenerCleanupRef.current?.();
-      devServerListenerCleanupRef.current = instance.on(
-        "server-ready",
-        (_port, url) => {
-          setPreviewUrl(url);
-          setStatus("ready");
-        },
-      );
-
-      setStatus("starting");
-      const devProcess = await instance.spawn("npm", ["run", "dev"]);
-      devProcess.output.pipeTo(
-        new WritableStream({
-          write(chunk) {
-            appendOutput(chunk);
-          },
-        }),
-      );
-    } catch (error) {
-      setStatus("error");
-      setErrorMessage(getRuntimeErrorMessage(error));
-    }
-  }, [appendOutput, bootInstance, getProject, isSupported, status]);
-
-  const runCommand = useCallback(
-    async (commandLine: string) => {
+  const runForegroundCommand = useCallback(
+    async (
+      instance: WebContainer,
+      commandLine: string,
+      options: { clearOutput?: boolean; trackAsActiveCommand?: boolean } = {},
+    ) => {
       const parsedCommand = parseCommand(commandLine);
 
       if (!parsedCommand) {
-        return;
+        return 0;
       }
 
-      if (status !== "ready") {
-        await startRuntime();
+      if (options.clearOutput) {
+        setLastOutput(null);
       }
 
-      const instance = instanceRef.current;
-      if (!instance) {
-        return;
-      }
+      appendOutput(`$ ${commandLine}\n`);
 
-      setActiveCommand(commandLine);
-      appendOutput(`\n$ ${commandLine}\n`);
+      if (options.trackAsActiveCommand) {
+        setActiveCommand(commandLine);
+      }
 
       try {
         const process = await instance.spawn(
@@ -362,31 +345,251 @@ export const WebContainerRuntimeProvider: React.FC<
 
         const exitCode = await process.exit;
         appendOutput(`\nCommand exited with code ${exitCode}\n`);
+        return exitCode;
       } catch (error) {
         appendOutput(`\n${getRuntimeErrorMessage(error)}\n`);
+        return -1;
       } finally {
-        setActiveCommand(null);
+        if (options.trackAsActiveCommand) {
+          setActiveCommand(null);
+        }
       }
     },
-    [appendOutput, startRuntime, status],
+    [appendOutput],
   );
 
+  const prepareRuntime = useCallback(async () => {
+    if (!isSupported) {
+      setStatus("error");
+      setErrorMessage(
+        "WebContainers require cross-origin isolation. Reload the app from the configured dev or deployed host.",
+      );
+      return null;
+    }
+
+    setErrorMessage(null);
+
+    const instance = await bootInstance();
+    const project = getProject();
+
+    if (!hasMountedProjectRef.current) {
+      setStatus("mounting");
+      await instance.mount(createWorkspaceTree(project));
+      lastSyncedProjectRef.current = structuredClone(project);
+      hasMountedProjectRef.current = true;
+    }
+
+    const initCommand = runnerConfig.initCommand.trim();
+    if (!initCommand || hasRunInitCommandRef.current) {
+      return instance;
+    }
+
+    setStatus("installing");
+    const initExitCode = await runForegroundCommand(instance, initCommand, {
+      clearOutput: true,
+    });
+
+    if (initExitCode !== 0) {
+      throw new Error(formatCommandError(initCommand));
+    }
+
+    hasRunInitCommandRef.current = true;
+    return instance;
+  }, [
+    bootInstance,
+    getProject,
+    isSupported,
+    runForegroundCommand,
+    runnerConfig.initCommand,
+  ]);
+
+  const startRunnerProcess = useCallback(
+    async (instance: WebContainer, commandLine: string) => {
+      const parsedCommand = parseCommand(commandLine);
+
+      if (!parsedCommand) {
+        setStatus("ready");
+        return;
+      }
+
+      stopRunnerProcess();
+      setPreviewUrl(null);
+      setErrorMessage(null);
+      setLastOutput(null);
+      setStatus("starting");
+      appendOutput(`$ ${commandLine}\n`);
+
+      try {
+        const process = await instance.spawn(
+          parsedCommand.command,
+          parsedCommand.args,
+        );
+        runnerProcessRef.current = process;
+
+        process.output.pipeTo(
+          new WritableStream({
+            write(chunk) {
+              appendOutput(chunk);
+            },
+          }),
+        );
+
+        setStatus("ready");
+
+        void process.exit
+          .then((exitCode) => {
+            if (runnerProcessRef.current !== process) {
+              return;
+            }
+
+            runnerProcessRef.current = null;
+            appendOutput(`\nRunner exited with code ${exitCode}\n`);
+
+            if (exitCode !== 0) {
+              setStatus("error");
+              setErrorMessage(formatCommandError(commandLine));
+            }
+          })
+          .catch((error) => {
+            if (runnerProcessRef.current !== process) {
+              return;
+            }
+
+            runnerProcessRef.current = null;
+            setStatus("error");
+            setErrorMessage(getRuntimeErrorMessage(error));
+          });
+      } catch (error) {
+        setStatus("error");
+        setErrorMessage(getRuntimeErrorMessage(error));
+      }
+    },
+    [appendOutput, stopRunnerProcess],
+  );
+
+  const startRuntime = useCallback(async () => {
+    if (
+      status === "booting" ||
+      status === "mounting" ||
+      status === "installing" ||
+      status === "starting"
+    ) {
+      return;
+    }
+
+    try {
+      setStatus("booting");
+
+      const instance = await prepareRuntime();
+      if (!instance) {
+        return;
+      }
+
+      if (!runnerConfig.enabled) {
+        setStatus("ready");
+        return;
+      }
+
+      await startRunnerProcess(instance, runnerConfig.runCommand);
+    } catch (error) {
+      setStatus("error");
+      setErrorMessage(getRuntimeErrorMessage(error));
+    }
+  }, [
+    prepareRuntime,
+    runnerConfig.enabled,
+    runnerConfig.runCommand,
+    startRunnerProcess,
+    status,
+  ]);
+
+  const rerunRunner = useCallback(async () => {
+    try {
+      setStatus("booting");
+      const instance = await prepareRuntime();
+
+      if (!instance) {
+        return;
+      }
+
+      if (!runnerConfig.enabled) {
+        setStatus("ready");
+        return;
+      }
+
+      await startRunnerProcess(instance, runnerConfig.runCommand);
+    } catch (error) {
+      setStatus("error");
+      setErrorMessage(getRuntimeErrorMessage(error));
+    }
+  }, [
+    prepareRuntime,
+    runnerConfig.enabled,
+    runnerConfig.runCommand,
+    startRunnerProcess,
+  ]);
+
+  const runCommand = useCallback(
+    async (commandLine: string) => {
+      const parsedCommand = parseCommand(commandLine);
+
+      if (!parsedCommand) {
+        return;
+      }
+
+      const instance = await prepareRuntime();
+      if (!instance) {
+        return;
+      }
+
+      await runForegroundCommand(instance, commandLine, {
+        trackAsActiveCommand: true,
+      });
+    },
+    [prepareRuntime, runForegroundCommand],
+  );
+
+  const saveWorkspace = useCallback(async () => {
+    if (!runnerConfig.enabled || !runnerConfig.runOnFileSave) {
+      return;
+    }
+
+    await rerunRunner();
+  }, [rerunRunner, runnerConfig.enabled, runnerConfig.runOnFileSave]);
+
+  const updateRunnerConfig = useCallback((config: Partial<RunnerConfig>) => {
+    setRunnerConfig((current) => ({
+      ...current,
+      ...config,
+    }));
+  }, []);
+
   useEffect(() => {
-    if (!isSupported || hasAutoStartedRef.current) {
+    if (
+      !isSupported ||
+      hasAutoStartedRef.current ||
+      !runnerConfig.enabled ||
+      !runnerConfig.runOnStartup
+    ) {
       return;
     }
 
     hasAutoStartedRef.current = true;
     void startRuntime();
-  }, [isSupported, startRuntime]);
+  }, [
+    isSupported,
+    runnerConfig.enabled,
+    runnerConfig.runOnStartup,
+    startRuntime,
+  ]);
 
   useEffect(() => {
-    if (status !== "ready") {
-      return;
-    }
+    hasRunInitCommandRef.current = false;
+  }, [runnerConfig.initCommand]);
 
+  useEffect(() => {
     const instance = instanceRef.current;
-    if (!instance) {
+    if (!instance || !hasMountedProjectRef.current) {
       return;
     }
 
@@ -411,9 +614,19 @@ export const WebContainerRuntimeProvider: React.FC<
     () => ({
       startRuntime,
       resetRuntime,
+      rerunRunner,
       runCommand,
+      saveWorkspace,
+      updateRunnerConfig,
     }),
-    [resetRuntime, runCommand, startRuntime],
+    [
+      resetRuntime,
+      rerunRunner,
+      runCommand,
+      saveWorkspace,
+      startRuntime,
+      updateRunnerConfig,
+    ],
   );
 
   const metadataValue = useMemo<WebContainerRuntimeMetadata>(
@@ -424,8 +637,19 @@ export const WebContainerRuntimeProvider: React.FC<
       errorMessage,
       lastOutput,
       activeCommand,
+      runnerConfig,
+      workspaceRoot,
     }),
-    [activeCommand, errorMessage, isSupported, lastOutput, previewUrl, status],
+    [
+      activeCommand,
+      errorMessage,
+      isSupported,
+      lastOutput,
+      previewUrl,
+      runnerConfig,
+      status,
+      workspaceRoot,
+    ],
   );
 
   return (

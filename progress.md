@@ -61,7 +61,12 @@
 - Validated the Phase 5 changes with `bun run build` and `bun run lint`.
 - Added explicit recording-version normalization on import/load to keep version 2 and version 3 files supported.
 - Kept the single-file preview path as the compatibility fallback for legacy recordings and non-runtime sessions.
+- Reworked the runner dock to match the footer-style `Runner`, `Terminal`, and `Console` layout more closely, including a collapsible shell-like terminal view.
+- Added configurable runner settings for `Enable Runner`, `Run on startup`, `Run on file-save`, `Init Command`, and `Run Command`.
+- Moved rerun into the editor header with a dedicated `CMD+S to save` hint and removed the extra runtime toolbar controls.
+- Restored the original editor header layout so the save hint and rerun button are additive controls instead of a full toolbar replacement.
+- Simplified the sidebar header to only show `FILES`, `Create file`, and `Create folder` controls without the extra description chrome.
 
 ## Current Task
 
-- Carry real multi-file workspace behavior through recording and replay, and finish the remaining runtime preview cleanup.
+- Carry real multi-file workspace behavior through recording and replay, and finish the remaining runtime preview cleanup after the latest runtime chrome pass.

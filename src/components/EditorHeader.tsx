@@ -9,61 +9,35 @@ import {
 } from "../hooks/useWebContainerRuntime";
 import SlidesButton from "./SlidesButton";
 
-const RuntimeControls = memo(function RuntimeControls() {
-  const { startRuntime, resetRuntime } = useWebContainerRuntimeActions();
-  const { status, previewUrl, isSupported, errorMessage } =
+const SaveAndRerunControls = memo(function SaveAndRerunControls() {
+  const { rerunRunner } = useWebContainerRuntimeActions();
+  const { isSupported, runnerConfig, status } =
     useWebContainerRuntimeMetadata();
-
   const isBusy =
     status === "booting" ||
     status === "mounting" ||
     status === "installing" ||
     status === "starting";
-  const canStart = isSupported && (status === "idle" || status === "error");
-
-  const handleClick = async () => {
-    if (status === "ready") {
-      resetRuntime();
-      return;
-    }
-
-    if (canStart) {
-      await startRuntime();
-    }
-  };
-
-  const buttonLabel =
-    status === "ready"
-      ? "Reset Runtime"
-      : isBusy
-        ? "Starting Runtime"
-        : "Start Runtime";
-
-  const statusLabel = errorMessage
-    ? `Runtime error: ${errorMessage}`
-    : previewUrl
-      ? `Runtime ready: ${previewUrl}`
-      : `Runtime ${status}`;
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="max-w-72 truncate rounded bg-slate-800/80 px-2 py-1 text-[11px] text-slate-300">
-        {isSupported
-          ? statusLabel
-          : "Runtime unavailable: cross-origin isolation required"}
+    <div className="flex items-center gap-3">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        CMD+S to save
       </span>
       <button
-        onClick={handleClick}
-        disabled={isBusy || (!canStart && status !== "ready")}
-        className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+        type="button"
+        onClick={() => {
+          void rerunRunner();
+        }}
+        disabled={!isSupported || !runnerConfig.enabled || isBusy}
+        className="px-3 py-1 text-xs text-emerald-300 hover:text-emerald-200 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors font-semibold"
       >
-        {buttonLabel}
+        RERUN
       </button>
     </div>
   );
 });
 
-// Separate component for Export button to isolate currentRecording subscription
 const ExportButton = memo(function ExportButton() {
   const { exportAsFile } = useNextEditorActions();
   const { currentRecording } = useNextEditorMetadata();
@@ -89,7 +63,6 @@ const ExportButton = memo(function ExportButton() {
   );
 });
 
-// Separate component for Import button
 const ImportButton = memo(function ImportButton() {
   const { importFromFile, loadRecording } = useNextEditorActions();
 
@@ -114,7 +87,6 @@ const ImportButton = memo(function ImportButton() {
   );
 });
 
-// Separate header component to isolate re-renders from Monaco
 interface EditorHeaderProps {
   showImportExport: boolean;
 }
@@ -128,7 +100,7 @@ const EditorHeader = memo(function EditorHeader({
         Editor
       </span>
       <div className="flex items-center gap-2">
-        <RuntimeControls />
+        <SaveAndRerunControls />
         {showImportExport && (
           <>
             <ImportButton />

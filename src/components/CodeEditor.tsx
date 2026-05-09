@@ -12,6 +12,7 @@ import {
   useWorkspaceActions,
   useWorkspaceMetadata,
 } from "../hooks/useWorkspace";
+import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import { DEFAULT_WORKSPACE_FILE_CONTENT } from "../types/workspace";
@@ -34,6 +35,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 }) => {
   const { handleEditorChange, editorRef } = useNextEditorActions();
   const { updateActiveFileContent } = useWorkspaceActions();
+  const { saveWorkspace } = useWebContainerRuntimeActions();
   const { activeFile, projectVersion } = useWorkspaceMetadata();
   const selectedLanguage = activeFile.language || "html";
 
@@ -49,6 +51,30 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     if (isPlaying) return; // Skip during playback
     handleEditorChange();
   });
+
+  const onSaveShortcut = useEffectEvent((event: KeyboardEvent) => {
+    const isSaveShortcut =
+      (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s";
+
+    if (!isSaveShortcut) {
+      return;
+    }
+
+    event.preventDefault();
+    void saveWorkspace();
+  });
+
+  useEffect(() => {
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      onSaveShortcut(event);
+    };
+
+    window.addEventListener("keydown", handleWindowKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown, true);
+    };
+  }, []);
 
   // Consolidated Monaco event listeners. By using native listeners instead of the onChange prop,
   // we follow React 19 best practices for useEffectEvent (keeping it inside an effect)
@@ -253,9 +279,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <FileSidebar />
         {/* Monaco Editor */}
-        <div
-          className={"min-w-0 flex-1" + (isPlaying ? " playback-mode" : "")}
-        >
+        <div className={"min-w-0 flex-1" + (isPlaying ? " playback-mode" : "")}>
           <Editor
             key={`${activeFile.path}:${projectVersion}`}
             height="100%"

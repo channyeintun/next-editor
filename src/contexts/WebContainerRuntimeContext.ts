@@ -9,10 +9,21 @@ export type WebContainerRuntimeStatus =
   | "ready"
   | "error";
 
+export interface RunnerConfig {
+  enabled: boolean;
+  runOnStartup: boolean;
+  runOnFileSave: boolean;
+  initCommand: string;
+  runCommand: string;
+}
+
 export interface WebContainerRuntimeActions {
   startRuntime: () => Promise<void>;
   resetRuntime: () => void;
+  rerunRunner: () => Promise<void>;
   runCommand: (commandLine: string) => Promise<void>;
+  saveWorkspace: () => Promise<void>;
+  updateRunnerConfig: (config: Partial<RunnerConfig>) => void;
 }
 
 export interface WebContainerRuntimeMetadata {
@@ -22,6 +33,8 @@ export interface WebContainerRuntimeMetadata {
   errorMessage: string | null;
   lastOutput: string | null;
   activeCommand: string | null;
+  runnerConfig: RunnerConfig;
+  workspaceRoot: string;
 }
 
 export const WebContainerRuntimeActionsContext =

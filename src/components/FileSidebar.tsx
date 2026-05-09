@@ -223,8 +223,7 @@ const FileSidebar = memo(function FileSidebar() {
     renameFile,
     setActiveFilePath,
   } = useWorkspaceActions();
-  const { activeFilePath, fileCount, files, folders, projectName } =
-    useWorkspaceMetadata();
+  const { activeFilePath, files, folders } = useWorkspaceMetadata();
   const tree = useMemo(
     () => buildWorkspaceTree(files, folders, activeFilePath),
     [activeFilePath, files, folders],
@@ -481,32 +480,29 @@ const FileSidebar = memo(function FileSidebar() {
     <aside className="flex h-full w-72 shrink-0 flex-col border-r border-slate-800 bg-[#11141c] text-slate-100">
       <div className="border-b border-slate-800 px-4 py-3">
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-              Files
-            </p>
-            <p className="mt-1 truncate text-xs text-slate-500">
-              {projectName} • {fileCount} files
-            </p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+            Files
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCreateFile}
+              className="inline-flex h-6 w-6 items-center justify-center text-slate-400 transition-colors hover:text-white"
+              aria-label="Create file"
+              title="Create file"
+            >
+              <FilePlus2 size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateFolder}
+              className="inline-flex h-6 w-6 items-center justify-center text-slate-400 transition-colors hover:text-white"
+              aria-label="Create folder"
+              title="Create folder"
+            >
+              <FolderPlus size={15} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleCreateFile}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
-            aria-label="Create file"
-            title="Create file"
-          >
-            <FilePlus2 size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={handleCreateFolder}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
-            aria-label="Create folder"
-            title="Create folder"
-          >
-            <FolderPlus size={15} />
-          </button>
         </div>
       </div>
 
