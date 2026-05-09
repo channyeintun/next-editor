@@ -247,9 +247,9 @@ const FileSidebar = memo(function FileSidebar() {
 
     const input = editInputRef.current;
     input.focus();
-    const selectionEnd = getEditableSelectionEnd(draftName, editState.kind);
+    const selectionEnd = getEditableSelectionEnd(input.value, editState.kind);
     input.setSelectionRange(0, selectionEnd);
-  }, [draftName, editState]);
+  }, [editState]);
 
   useEffect(() => {
     if (!contextMenu) {
