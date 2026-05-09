@@ -397,7 +397,7 @@ const Preview = memo(function Preview() {
     registerPreviewStateApplier,
   } = useNextEditorActions();
   const { getProject } = useWorkspaceActions();
-  const { activeFile, lessonType } = useWorkspaceMetadata();
+  const { lessonType } = useWorkspaceMetadata();
   const {
     previewUrl: runtimePreviewUrl,
     status: runtimeStatus,
@@ -1400,22 +1400,10 @@ const Preview = memo(function Preview() {
             <button
               type="button"
               onClick={handleRuntimeReplayUnlock}
-              className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/12 backdrop-blur-[1px] px-4 text-left"
+              className="absolute inset-0 z-40 bg-transparent"
+              aria-label="Pause playback and interact with the live preview"
               title="Pause playback and interact with the live preview"
-            >
-              <div className="max-w-xs rounded-2xl border border-white/60 bg-white/92 px-4 py-3 shadow-[0_20px_50px_rgba(15,23,42,0.18)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-700">
-                  Replay Preview
-                </p>
-                <h2 className="mt-2 text-sm font-semibold text-slate-900">
-                  Live interaction is paused during playback.
-                </h2>
-                <p className="mt-2 text-xs leading-5 text-slate-600">
-                  Replaying {activeFile.path}. Click here or pause replay to
-                  hand control back to the live runtime preview.
-                </p>
-              </div>
-            </button>
+            />
           )}
 
           {/* Resize handle */}

@@ -98,6 +98,7 @@
 - Added a runtime replay lock overlay for SPA preview so the live iframe stays visible during playback while interaction and refresh are paused until the learner pauses replay.
 - Wired the replay lock overlay to pause playback on click, handing control back to the live WebContainer preview instead of forcing users to hunt for playback controls first.
 - Revalidated the SPA preview handoff in the browser by starting replay, confirming the overlay and disabled refresh state, then clicking the overlay to pause and restore live preview control.
+- Removed the visible SPA replay overlay copy, keeping only the silent click-to-pause lock so playback handoff still works without the extra preview message card.
 
 ## Current Task
 
@@ -106,3 +107,4 @@
 - Latest follow-up completed: replay now restores the recorded active file on play/resume instead of keeping the last manually opened tab.
 - Latest follow-up completed: README now reflects the current product surface instead of the old single-file playground description.
 - Latest follow-up completed: SPA replay now uses a locked preview handoff that pauses into the live iframe when the learner clicks to interact.
+- Latest follow-up completed: SPA replay lock no longer shows the extra message card over the preview.
