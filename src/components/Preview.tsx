@@ -52,6 +52,7 @@ function getRuntimePreviewState(
   label: string;
   title: string;
   description: string;
+  placeholderKind: "spinner" | "message";
 } {
   if (!isSupported) {
     return {
@@ -59,6 +60,7 @@ function getRuntimePreviewState(
       title: "Runtime preview unavailable",
       description:
         "WebContainers need cross-origin isolation before the app preview can run.",
+      placeholderKind: "message",
     };
   }
 
@@ -69,6 +71,7 @@ function getRuntimePreviewState(
       description:
         errorMessage ??
         "Check the runner output, fix the error, and rerun the preview.",
+      placeholderKind: "message",
     };
   }
 
@@ -78,6 +81,7 @@ function getRuntimePreviewState(
       title: "Installing dependencies",
       description:
         "The project is preparing packages before the live preview can start.",
+      placeholderKind: "spinner",
     };
   }
 
@@ -87,6 +91,7 @@ function getRuntimePreviewState(
       title: "Starting live preview",
       description:
         "The dev server is booting and will replace this placeholder when it is ready.",
+      placeholderKind: "spinner",
     };
   }
 
@@ -96,6 +101,7 @@ function getRuntimePreviewState(
       title: "Preparing runtime preview",
       description:
         "The workspace is mounting into the WebContainer before the preview starts.",
+      placeholderKind: "spinner",
     };
   }
 
@@ -103,13 +109,60 @@ function getRuntimePreviewState(
     label: "Runtime preview",
     title: "Runtime preview is waiting",
     description: "Run or rerun the project to open the live app preview here.",
+    placeholderKind: "spinner",
   };
 }
 
 function createRuntimePreviewPlaceholder(
+  placeholderKind: "spinner" | "message",
   title: string,
   description: string,
 ): string {
+  if (placeholderKind === "spinner") {
+    return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f8fafc;
+      }
+
+      .spinner {
+        width: 32px;
+        height: 32px;
+        border-radius: 999px;
+        border: 3px solid rgba(148, 163, 184, 0.28);
+        border-top-color: #0f766e;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="spinner" role="status" aria-label="${escapePreviewHtml(title)}"></div>
+  </body>
+</html>`;
+  }
+
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -242,10 +295,15 @@ const Preview = memo(function Preview() {
   const runtimePreviewPlaceholder = useMemo(
     () =>
       createRuntimePreviewPlaceholder(
+        runtimePreviewState.placeholderKind,
         runtimePreviewState.title,
         runtimePreviewState.description,
       ),
-    [runtimePreviewState.description, runtimePreviewState.title],
+    [
+      runtimePreviewState.description,
+      runtimePreviewState.placeholderKind,
+      runtimePreviewState.title,
+    ],
   );
 
   // Keep refs updated synchronously

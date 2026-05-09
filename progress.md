@@ -72,6 +72,7 @@
 - Fixed the Monaco listener lifecycle by rebinding editor listeners on every mount, so newly switched files start syncing immediately and no longer revert when you leave and reopen them.
 - Added sidebar unsaved indicators driven by workspace dirty-file tracking, so files show a dot while their content differs from the last saved workspace snapshot.
 - Replaced the runtime-start fallback preview with a dedicated runtime placeholder so booting/installing/starting states no longer render raw source code under the "Single-file preview" label.
+- Simplified the non-ready runtime placeholder to a plain spinner, keeping raw source hidden while the WebContainer preview is still booting.
 - Moved rerun into the editor header with a dedicated `CMD+S to save` hint and removed the extra runtime toolbar controls.
 - Restored the original editor header layout so the save hint and rerun button are additive controls instead of a full toolbar replacement.
 - Simplified the sidebar header to only show `FILES`, `Create file`, and `Create folder` controls without the extra description chrome.
