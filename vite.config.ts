@@ -13,10 +13,6 @@ export default defineConfig({
     react(),
     checker({
       typescript: true,
-      eslint: {
-        useFlatConfig: true,
-        lintCommand: 'eslint "./src/**/*.{ts,tsx}"',
-      },
     }),
   ],
   build: {

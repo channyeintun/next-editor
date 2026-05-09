@@ -93,8 +93,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     return () => {
       disposables.forEach((d) => d.dispose());
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditorReady, editorRef]);
+  }, [editorRef, isEditorReady, updateActiveFileContent]);
 
   /**
    * Handle Monaco Editor mount event
