@@ -193,7 +193,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
     useWebContainerRuntimeActions();
   const { environmentVariables, runnerConfig, status } =
     useWebContainerRuntimeMetadata();
-  const { createNewEditor, getProject, saveProject, updateLessonType } =
+  const { createNewEditor, getProject, resetProject, saveProject } =
     useWorkspaceActions();
   const { fileCount, hasUnsavedChanges, lessonType } = useWorkspaceMetadata();
 
@@ -251,13 +251,33 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
   };
 
   const handleSelectLessonType = (nextLessonType: WorkspaceLessonType) => {
-    setIsMenuOpen(false);
-
     if (lessonType === nextLessonType) {
+      setIsMenuOpen(false);
       return;
     }
 
-    updateLessonType(nextLessonType);
+    const nextLessonLabel =
+      nextLessonType === "spa"
+        ? "a fresh SPA lesson"
+        : "a fresh HTML/CSS lesson";
+    const confirmMessage = hasUnsavedChanges
+      ? `Discard the current workspace and unsaved changes? Switching lesson type will replace it with ${nextLessonLabel}.`
+      : fileCount > 0
+        ? `Discard the current workspace? Switching lesson type will replace it with ${nextLessonLabel}.`
+        : `Switch to ${nextLessonLabel}?`;
+
+    setIsMenuOpen(false);
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    if (nextLessonType === "spa") {
+      resetProject();
+    } else {
+      createNewEditor();
+    }
+
     saveProject();
     updateRunnerConfig({ enabled: nextLessonType === "spa" });
   };

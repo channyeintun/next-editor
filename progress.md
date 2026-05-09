@@ -84,7 +84,8 @@
 - Fixed HTML/CSS preview refresh so it stays pinned to the selected preview file instead of falling back to the active editor buffer.
 - Added `New Editor` to the settings popup so users can discard the current workspace after confirmation and reset to a fresh single-file `index.html` editor.
 - Fixed the WebContainer startup path so refreshing no longer races into `Only a single WebContainer instance can be booted` during React StrictMode remounts.
+- Changed lesson-type switching so moving between `SPA Lesson` and `HTML/CSS Lesson` now confirms before discarding the current persisted workspace and loading the correct default files for that mode.
 
 ## Current Task
 
-- Latest follow-up completed: refreshing the editor no longer triggers duplicate WebContainer boot attempts during startup.
+- Latest follow-up completed: lesson-type switching now confirms and replaces the persisted workspace instead of only toggling the mode flag.
