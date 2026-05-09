@@ -12,6 +12,7 @@ export type WebContainerRuntimeStatus =
 export interface WebContainerRuntimeActions {
   startRuntime: () => Promise<void>;
   resetRuntime: () => void;
+  runCommand: (commandLine: string) => Promise<void>;
 }
 
 export interface WebContainerRuntimeMetadata {
@@ -20,6 +21,7 @@ export interface WebContainerRuntimeMetadata {
   isSupported: boolean;
   errorMessage: string | null;
   lastOutput: string | null;
+  activeCommand: string | null;
 }
 
 export const WebContainerRuntimeActionsContext =

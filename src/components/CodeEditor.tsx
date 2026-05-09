@@ -13,6 +13,7 @@ import {
   useWorkspaceMetadata,
 } from "../hooks/useWorkspace";
 import EditorHeader from "./EditorHeader";
+import FileSidebar from "./FileSidebar";
 import { DEFAULT_WORKSPACE_FILE_CONTENT } from "../types/workspace";
 
 interface CodeEditorProps {
@@ -249,74 +250,79 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   return (
     <div className="h-full flex flex-col">
       <EditorHeader showImportExport={showImportExport} />
-      {/* Monaco Editor */}
-      <div className={"flex-1" + (isPlaying ? " playback-mode" : "")}>
-        <Editor
-          key={`${activeFile.path}:${projectVersion}`}
-          height="100%"
-          path={activeFile.path}
-          language={selectedLanguage}
-          theme={theme}
-          defaultValue={activeFile.content || defaultContent}
-          onMount={handleEditorDidMount}
-          beforeMount={handleEditorBeforeMount}
-          options={{
-            minimap: { enabled: false },
-            fontSize: 14,
-            lineNumbers: "on",
-            roundedSelection: false,
-            scrollBeyondLastLine: true,
-            readOnly: false, // Keep editor writable to allow cursor blinking
-            cursorStyle: "line",
-            cursorBlinking: isPlaying ? "solid" : "smooth",
-            renderValidationDecorations: "on",
-            automaticLayout: true,
-            // Disable code suggestions and IntelliSense
-            quickSuggestions: false,
-            suggestOnTriggerCharacters: false,
-            acceptSuggestionOnEnter: "off",
-            tabCompletion: "off",
-            wordBasedSuggestions: "currentDocument",
-            parameterHints: { enabled: false },
-            fontWeight: "normal",
-            hover: { enabled: false },
-            contextmenu: false,
-            // Disable other distracting features
-            folding: false,
-            foldingHighlight: false,
-            unfoldOnClickAfterEndOfLine: false,
-            showUnused: false,
-            occurrencesHighlight: "off",
-            selectionHighlight: false,
-            renderLineHighlight: "none",
-            fontFamily: "Source Code Pro",
-            fontLigatures: false,
-            wrappingIndent: "same",
-            dragAndDrop: false,
-            hideCursorInOverviewRuler: true,
-            overviewRulerBorder: false,
-            lineNumbersMinChars: 3,
-            glyphMargin: false,
-            lineDecorationsWidth: "1ch",
-            colorDecorators: false,
-            guides: {
-              indentation: false,
-            },
-            renderWhitespace: "selection",
-            matchBrackets: "never",
-            links: false,
-            padding: { top: 12 },
-            scrollbar: {
-              useShadows: false,
-              verticalScrollbarSize: 8,
-              horizontalScrollbarSize: 8,
-              horizontal: "hidden",
-            },
-            unicodeHighlight: {
-              ambiguousCharacters: false,
-            },
-          }}
-        />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <FileSidebar />
+        {/* Monaco Editor */}
+        <div
+          className={"min-w-0 flex-1" + (isPlaying ? " playback-mode" : "")}
+        >
+          <Editor
+            key={`${activeFile.path}:${projectVersion}`}
+            height="100%"
+            path={activeFile.path}
+            language={selectedLanguage}
+            theme={theme}
+            defaultValue={activeFile.content || defaultContent}
+            onMount={handleEditorDidMount}
+            beforeMount={handleEditorBeforeMount}
+            options={{
+              minimap: { enabled: false },
+              fontSize: 14,
+              lineNumbers: "on",
+              roundedSelection: false,
+              scrollBeyondLastLine: true,
+              readOnly: false, // Keep editor writable to allow cursor blinking
+              cursorStyle: "line",
+              cursorBlinking: isPlaying ? "solid" : "smooth",
+              renderValidationDecorations: "on",
+              automaticLayout: true,
+              // Disable code suggestions and IntelliSense
+              quickSuggestions: false,
+              suggestOnTriggerCharacters: false,
+              acceptSuggestionOnEnter: "off",
+              tabCompletion: "off",
+              wordBasedSuggestions: "currentDocument",
+              parameterHints: { enabled: false },
+              fontWeight: "normal",
+              hover: { enabled: false },
+              contextmenu: false,
+              // Disable other distracting features
+              folding: false,
+              foldingHighlight: false,
+              unfoldOnClickAfterEndOfLine: false,
+              showUnused: false,
+              occurrencesHighlight: "off",
+              selectionHighlight: false,
+              renderLineHighlight: "none",
+              fontFamily: "Source Code Pro",
+              fontLigatures: false,
+              wrappingIndent: "same",
+              dragAndDrop: false,
+              hideCursorInOverviewRuler: true,
+              overviewRulerBorder: false,
+              lineNumbersMinChars: 3,
+              glyphMargin: false,
+              lineDecorationsWidth: "1ch",
+              colorDecorators: false,
+              guides: {
+                indentation: false,
+              },
+              renderWhitespace: "selection",
+              matchBrackets: "never",
+              links: false,
+              padding: { top: 12 },
+              scrollbar: {
+                useShadows: false,
+                verticalScrollbarSize: 8,
+                horizontalScrollbarSize: 8,
+                horizontal: "hidden",
+              },
+              unicodeHighlight: {
+                ambiguousCharacters: false,
+              },
+            }}
+          />
+        </div>
       </div>
     </div>
   );

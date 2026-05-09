@@ -7,141 +7,26 @@ import {
   type WebContainerRuntimeMetadata,
   type WebContainerRuntimeStatus,
 } from "./WebContainerRuntimeContext";
+import {
+  useWorkspaceActions,
+  useWorkspaceMetadata,
+} from "../hooks/useWorkspace";
+import type { WorkspaceProject } from "../types/workspace";
 
 interface WebContainerRuntimeProviderProps {
   children: React.ReactNode;
 }
 
-const starterProjectFiles: FileSystemTree = {
-  "package.json": {
-    file: {
-      contents: JSON.stringify(
-        {
-          name: "next-editor-webcontainer-starter",
-          private: true,
-          version: "0.0.0",
-          type: "module",
-          scripts: {
-            dev: "vite --host 0.0.0.0 --port 4173",
-            build: "vite build",
-            preview: "vite preview --host 0.0.0.0 --port 4173",
-          },
-          dependencies: {
-            react: "^19.2.0",
-            "react-dom": "^19.2.0",
-          },
-          devDependencies: {
-            "@vitejs/plugin-react": "^6.0.1",
-            vite: "^8.0.11",
-          },
-        },
-        null,
-        2,
-      ),
-    },
-  },
-  "index.html": {
-    file: {
-      contents: `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Next Editor Starter</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>`,
-    },
-  },
-  "vite.config.js": {
-    file: {
-      contents: `import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-
-export default defineConfig({
-  plugins: [react()],
-});`,
-    },
-  },
-  src: {
-    directory: {
-      "main.jsx": {
-        file: {
-          contents: `import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App.jsx";
-import "./styles.css";
-
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);`,
-        },
-      },
-      "App.jsx": {
-        file: {
-          contents: `export default function App() {
-  return (
-    <main className="app-shell">
-      <p className="eyebrow">WebContainer Runtime</p>
-      <h1>Next Editor starter project is running.</h1>
-      <p>
-        This runtime is mounted separately from the existing single-file preview
-        while the WebContainer integration is phased in.
-      </p>
-    </main>
-  );
-}`,
-        },
-      },
-      "styles.css": {
-        file: {
-          contents: `:root {
-  color: #e2e8f0;
-  background: radial-gradient(circle at top, #1e293b, #020617 65%);
-  font-family: "IBM Plex Sans", system-ui, sans-serif;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-}
-
-#root {
-  min-height: 100vh;
-}
-
-.app-shell {
-  min-height: 100vh;
-  display: grid;
-  align-content: center;
-  gap: 1rem;
-  padding: 3rem;
-}
-
-.eyebrow {
-  margin: 0;
-  color: #38bdf8;
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-h1,
-p {
-  margin: 0;
-  max-width: 40rem;
-}`,
-        },
-      },
-    },
-  },
-};
+const ESCAPE_CHARACTER = String.fromCharCode(27);
+const BELL_CHARACTER = String.fromCharCode(7);
+const OSC_PATTERN = new RegExp(
+  `${ESCAPE_CHARACTER}\\][^${BELL_CHARACTER}]*(?:${BELL_CHARACTER}|${ESCAPE_CHARACTER}\\\\)`,
+  "g",
+);
+const ANSI_PATTERN = new RegExp(
+  `${ESCAPE_CHARACTER}\\[[0-9;?]*[ -/]*[@-~]`,
+  "g",
+);
 
 function getRuntimeErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -151,23 +36,150 @@ function getRuntimeErrorMessage(error: unknown): string {
   return "Unknown WebContainer runtime error";
 }
 
+function sanitizeTerminalChunk(chunk: string): string {
+  const withoutOsc = chunk.replace(OSC_PATTERN, "");
+  const withoutAnsi = withoutOsc.replace(ANSI_PATTERN, "");
+  const normalized = withoutAnsi.replace(/\r/g, "");
+
+  if (/^[\\|/-]$/.test(normalized.trim())) {
+    return "";
+  }
+
+  return normalized;
+}
+
+function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
+  const tree: FileSystemTree = {};
+
+  for (const file of Object.values(project.files)) {
+    const segments = file.path.split("/");
+    const fileName = segments.pop();
+
+    if (!fileName) {
+      continue;
+    }
+
+    let currentDirectory = tree;
+
+    for (const segment of segments) {
+      const existingEntry = currentDirectory[segment];
+
+      if (!existingEntry || !("directory" in existingEntry)) {
+        currentDirectory[segment] = { directory: {} };
+      }
+
+      const nextEntry = currentDirectory[segment];
+
+      if (!nextEntry || !("directory" in nextEntry)) {
+        continue;
+      }
+
+      currentDirectory = nextEntry.directory;
+    }
+
+    currentDirectory[fileName] = {
+      file: {
+        contents: file.content,
+      },
+    };
+  }
+
+  return tree;
+}
+
+async function ensureDirectory(
+  instance: WebContainer,
+  filePath: string,
+): Promise<void> {
+  const segments = filePath.split("/").slice(0, -1);
+  let currentPath = "";
+
+  for (const segment of segments) {
+    currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+
+    try {
+      await instance.fs.mkdir(currentPath);
+    } catch {
+      // Ignore directories that already exist.
+    }
+  }
+}
+
+async function syncWorkspaceProject(
+  instance: WebContainer,
+  previousProject: WorkspaceProject | null,
+  nextProject: WorkspaceProject,
+): Promise<void> {
+  const previousFiles = previousProject?.files ?? {};
+  const nextFiles = nextProject.files;
+
+  const deletedPaths = Object.keys(previousFiles).filter(
+    (path) => !nextFiles[path],
+  );
+
+  for (const path of deletedPaths.sort(
+    (left, right) => right.length - left.length,
+  )) {
+    try {
+      await instance.fs.rm(path);
+    } catch {
+      // Ignore files that are already absent.
+    }
+  }
+
+  for (const [path, file] of Object.entries(nextFiles)) {
+    const previousFile = previousFiles[path];
+
+    if (previousFile && previousFile.content === file.content) {
+      continue;
+    }
+
+    await ensureDirectory(instance, path);
+    await instance.fs.writeFile(path, file.content);
+  }
+}
+
+function parseCommand(
+  commandLine: string,
+): { command: string; args: string[] } | null {
+  const parts = commandLine.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) {
+    return null;
+  }
+
+  const [command, ...args] = parts;
+  return { command, args };
+}
+
 export const WebContainerRuntimeProvider: React.FC<
   WebContainerRuntimeProviderProps
 > = ({ children }) => {
+  const { getProject } = useWorkspaceActions();
+  const { syncVersion } = useWorkspaceMetadata();
   const instanceRef = useRef<WebContainer | null>(null);
   const devServerListenerCleanupRef = useRef<(() => void) | null>(null);
-  const hasMountedStarterRef = useRef(false);
+  const hasMountedProjectRef = useRef(false);
+  const lastSyncedProjectRef = useRef<WorkspaceProject | null>(null);
+  const hasAutoStartedRef = useRef(false);
   const [status, setStatus] = useState<WebContainerRuntimeStatus>("idle");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastOutput, setLastOutput] = useState<string | null>(null);
+  const [activeCommand, setActiveCommand] = useState<string | null>(null);
 
   const isSupported = window.crossOriginIsolated;
 
   const appendOutput = useCallback((chunk: string) => {
+    const sanitizedChunk = sanitizeTerminalChunk(chunk);
+
+    if (!sanitizedChunk) {
+      return;
+    }
+
     setLastOutput((current) => {
-      const next = `${current ?? ""}${chunk}`;
-      return next.slice(-2000);
+      const next = `${current ?? ""}${sanitizedChunk}`;
+      return next.slice(-6000);
     });
   }, []);
 
@@ -176,11 +188,13 @@ export const WebContainerRuntimeProvider: React.FC<
     devServerListenerCleanupRef.current = null;
     instanceRef.current?.teardown();
     instanceRef.current = null;
-    hasMountedStarterRef.current = false;
+    hasMountedProjectRef.current = false;
+    lastSyncedProjectRef.current = null;
     setStatus("idle");
     setPreviewUrl(null);
     setErrorMessage(null);
     setLastOutput(null);
+    setActiveCommand(null);
   }, []);
 
   const bootInstance = useCallback(async () => {
@@ -208,6 +222,10 @@ export const WebContainerRuntimeProvider: React.FC<
       return;
     }
 
+    if (status === "ready") {
+      return;
+    }
+
     if (
       status === "booting" ||
       status === "mounting" ||
@@ -224,11 +242,13 @@ export const WebContainerRuntimeProvider: React.FC<
       setStatus("booting");
 
       const instance = await bootInstance();
+      const project = getProject();
 
-      if (!hasMountedStarterRef.current) {
+      if (!hasMountedProjectRef.current) {
         setStatus("mounting");
-        await instance.mount(starterProjectFiles);
-        hasMountedStarterRef.current = true;
+        await instance.mount(createWorkspaceTree(project));
+        lastSyncedProjectRef.current = structuredClone(project);
+        hasMountedProjectRef.current = true;
       }
 
       setStatus("installing");
@@ -268,7 +288,82 @@ export const WebContainerRuntimeProvider: React.FC<
       setStatus("error");
       setErrorMessage(getRuntimeErrorMessage(error));
     }
-  }, [appendOutput, bootInstance, isSupported, status]);
+  }, [appendOutput, bootInstance, getProject, isSupported, status]);
+
+  const runCommand = useCallback(
+    async (commandLine: string) => {
+      const parsedCommand = parseCommand(commandLine);
+
+      if (!parsedCommand) {
+        return;
+      }
+
+      if (status !== "ready") {
+        await startRuntime();
+      }
+
+      const instance = instanceRef.current;
+      if (!instance) {
+        return;
+      }
+
+      setActiveCommand(commandLine);
+      appendOutput(`\n$ ${commandLine}\n`);
+
+      try {
+        const process = await instance.spawn(
+          parsedCommand.command,
+          parsedCommand.args,
+        );
+
+        process.output.pipeTo(
+          new WritableStream({
+            write(chunk) {
+              appendOutput(chunk);
+            },
+          }),
+        );
+
+        const exitCode = await process.exit;
+        appendOutput(`\nCommand exited with code ${exitCode}\n`);
+      } catch (error) {
+        appendOutput(`\n${getRuntimeErrorMessage(error)}\n`);
+      } finally {
+        setActiveCommand(null);
+      }
+    },
+    [appendOutput, startRuntime, status],
+  );
+
+  useEffect(() => {
+    if (!isSupported || hasAutoStartedRef.current) {
+      return;
+    }
+
+    hasAutoStartedRef.current = true;
+    void startRuntime();
+  }, [isSupported, startRuntime]);
+
+  useEffect(() => {
+    if (status !== "ready") {
+      return;
+    }
+
+    const instance = instanceRef.current;
+    if (!instance) {
+      return;
+    }
+
+    const project = getProject();
+
+    void syncWorkspaceProject(instance, lastSyncedProjectRef.current, project)
+      .then(() => {
+        lastSyncedProjectRef.current = structuredClone(project);
+      })
+      .catch((error) => {
+        setErrorMessage(getRuntimeErrorMessage(error));
+      });
+  }, [getProject, status, syncVersion]);
 
   useEffect(() => {
     return () => {
@@ -280,8 +375,9 @@ export const WebContainerRuntimeProvider: React.FC<
     () => ({
       startRuntime,
       resetRuntime,
+      runCommand,
     }),
-    [resetRuntime, startRuntime],
+    [resetRuntime, runCommand, startRuntime],
   );
 
   const metadataValue = useMemo<WebContainerRuntimeMetadata>(
@@ -291,8 +387,9 @@ export const WebContainerRuntimeProvider: React.FC<
       isSupported,
       errorMessage,
       lastOutput,
+      activeCommand,
     }),
-    [errorMessage, isSupported, lastOutput, previewUrl, status],
+    [activeCommand, errorMessage, isSupported, lastOutput, previewUrl, status],
   );
 
   return (

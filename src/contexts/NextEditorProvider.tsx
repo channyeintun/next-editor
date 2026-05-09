@@ -13,7 +13,6 @@ import {
 } from "../hooks/useWorkspace";
 import { createJsonStorage } from "../storage/JsonStorage";
 import type { SlidePreviewState, PreviewState, Slide } from "../types/slides";
-import { DEFAULT_WORKSPACE_FILE_CONTENT } from "../types/workspace";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
 
 interface NextEditorProviderProps {
@@ -25,7 +24,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
 }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
-  const { getProject, loadProject } = useWorkspaceActions();
+  const { getProject, loadProject, resetProject } = useWorkspaceActions();
   const { activeFilePath } = useWorkspaceMetadata();
   const runtimeMetadata = useWebContainerRuntimeMetadata();
   const getSlideStateRef = useRef<
@@ -151,10 +150,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
 
   const clearRecording = useCallback(() => {
     clearRecordingBase();
-    if (editorRef.current) {
-      editorRef.current.setValue(DEFAULT_WORKSPACE_FILE_CONTENT);
-    }
-  }, [clearRecordingBase]);
+    resetProject();
+  }, [clearRecordingBase, resetProject]);
 
   const registerSlideStateGetter = useCallback(
     (

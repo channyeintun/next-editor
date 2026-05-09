@@ -12,9 +12,9 @@
 - Phase 1: Completed
 - Phase 2: Completed
 - Phase 3: Completed
-- Phase 4: Completed
-- Phase 5: Completed
-- Phase 6: Completed
+- Phase 4: In Progress
+- Phase 5: In Progress
+- Phase 6: In Progress
 
 ## Completed Work
 
@@ -40,6 +40,13 @@
 - Kept the legacy `srcdoc` preview path as the fallback for the existing single-file recording flow.
 - Added a read-only terminal panel backed by WebContainer process output.
 - Validated the Phase 4 changes with `bun run build` and `bun run lint`.
+- Promoted the workspace default from a single HTML document to a starter multi-file Vite SPA project tree.
+- Added workspace file operations for create, rename, delete, and active-file switching.
+- Added a dedicated workspace sidebar so users can manage files directly in the editor layout.
+- Synced WebContainer filesystem state to workspace file mutations so runtime preview uses the active project tree instead of a disconnected starter mount.
+- Upgraded the terminal panel from read-only output to command execution with cleaned runtime stream rendering.
+- Polished the workspace sidebar and terminal chrome to match the rest of the editor UI more closely.
+- Validated the workspace UI and runtime sync changes with `bun run build`, `bun run lint`, and a local browser check on `/code`.
 - Introduced recording version 3 metadata for workspace and runtime snapshots while preserving version 2 imports.
 - Captured workspace and runtime snapshots when recordings are finalized.
 - Let the terminal panel fall back to recorded runtime output when no live runtime is active.
@@ -49,4 +56,4 @@
 
 ## Current Task
 
-- All planned phases are complete.
+- Carry real multi-file workspace behavior through recording and replay, and finish the remaining runtime preview cleanup.

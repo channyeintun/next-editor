@@ -7,8 +7,11 @@ import {
 } from "./WorkspaceContext";
 import {
   createSingleFileWorkspace,
+  createStarterWorkspaceProject,
   DEFAULT_WORKSPACE_ENTRY_PATH,
   DEFAULT_WORKSPACE_FILE_CONTENT,
+  inferLanguageFromPath,
+  normalizeWorkspacePath,
   type WorkspaceFile,
   type WorkspaceProject,
 } from "../types/workspace";
@@ -28,6 +31,24 @@ function getDefaultFile(project: WorkspaceProject): WorkspaceFile {
       content: DEFAULT_WORKSPACE_FILE_CONTENT,
     }
   );
+}
+
+function listProjectFiles(project: WorkspaceProject): WorkspaceFile[] {
+  return Object.values(project.files).sort((left, right) =>
+    left.path.localeCompare(right.path),
+  );
+}
+
+function createWorkspaceFile(path: string, content: string): WorkspaceFile {
+  const normalizedPath = normalizeWorkspacePath(path);
+  const segments = normalizedPath.split("/");
+
+  return {
+    path: normalizedPath,
+    name: segments[segments.length - 1] || normalizedPath,
+    language: inferLanguageFromPath(normalizedPath),
+    content,
+  };
 }
 
 function normalizeProject(project: WorkspaceProject): WorkspaceProject {
@@ -50,24 +71,148 @@ function normalizeProject(project: WorkspaceProject): WorkspaceProject {
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   children,
 }) => {
-  const projectRef = useRef<WorkspaceProject>(createSingleFileWorkspace());
+  const projectRef = useRef<WorkspaceProject>(createStarterWorkspaceProject());
   const activeFilePathRef = useRef(projectRef.current.entryFilePath);
   const [activeFilePath, setActiveFilePathState] = useState(
     activeFilePathRef.current,
   );
   const [projectVersion, setProjectVersion] = useState(0);
+  const [syncVersion, setSyncVersion] = useState(0);
+
+  const bumpProjectVersion = useCallback(() => {
+    setProjectVersion((version) => version + 1);
+  }, []);
+
+  const bumpSyncVersion = useCallback(() => {
+    setSyncVersion((version) => version + 1);
+  }, []);
 
   const setActiveFilePath = useCallback((path: string) => {
-    if (!projectRef.current.files[path] || activeFilePathRef.current === path) {
+    const normalizedPath = normalizeWorkspacePath(path);
+
+    if (
+      !projectRef.current.files[normalizedPath] ||
+      activeFilePathRef.current === normalizedPath
+    ) {
       return;
     }
 
-    activeFilePathRef.current = path;
-    setActiveFilePathState(path);
+    activeFilePathRef.current = normalizedPath;
+    setActiveFilePathState(normalizedPath);
   }, []);
 
+  const createFile = useCallback(
+    (path: string, content = "") => {
+      const normalizedPath = normalizeWorkspacePath(path);
+
+      if (!normalizedPath || projectRef.current.files[normalizedPath]) {
+        return;
+      }
+
+      const file = createWorkspaceFile(normalizedPath, content);
+      projectRef.current = {
+        ...projectRef.current,
+        files: {
+          ...projectRef.current.files,
+          [normalizedPath]: file,
+        },
+      };
+
+      activeFilePathRef.current = normalizedPath;
+      setActiveFilePathState(normalizedPath);
+      bumpProjectVersion();
+      bumpSyncVersion();
+    },
+    [bumpProjectVersion, bumpSyncVersion],
+  );
+
+  const renameFile = useCallback(
+    (currentPath: string, nextPath: string) => {
+      const normalizedCurrentPath = normalizeWorkspacePath(currentPath);
+      const normalizedNextPath = normalizeWorkspacePath(nextPath);
+      const existingFile = projectRef.current.files[normalizedCurrentPath];
+
+      if (
+        !existingFile ||
+        !normalizedNextPath ||
+        normalizedCurrentPath === normalizedNextPath ||
+        projectRef.current.files[normalizedNextPath]
+      ) {
+        return;
+      }
+
+      const updatedFile = createWorkspaceFile(
+        normalizedNextPath,
+        existingFile.content,
+      );
+      const nextFiles = { ...projectRef.current.files };
+      delete nextFiles[normalizedCurrentPath];
+      nextFiles[normalizedNextPath] = updatedFile;
+
+      projectRef.current = {
+        ...projectRef.current,
+        files: nextFiles,
+      };
+
+      if (activeFilePathRef.current === normalizedCurrentPath) {
+        activeFilePathRef.current = normalizedNextPath;
+        setActiveFilePathState(normalizedNextPath);
+      }
+
+      if (projectRef.current.entryFilePath === normalizedCurrentPath) {
+        projectRef.current = {
+          ...projectRef.current,
+          entryFilePath: normalizedNextPath,
+        };
+      }
+
+      bumpProjectVersion();
+      bumpSyncVersion();
+    },
+    [bumpProjectVersion, bumpSyncVersion],
+  );
+
+  const deleteFile = useCallback(
+    (path: string) => {
+      const normalizedPath = normalizeWorkspacePath(path);
+
+      if (!projectRef.current.files[normalizedPath]) {
+        return;
+      }
+
+      const nextFiles = { ...projectRef.current.files };
+      delete nextFiles[normalizedPath];
+
+      if (Object.keys(nextFiles).length === 0) {
+        const fallbackProject = createSingleFileWorkspace();
+        projectRef.current = fallbackProject;
+        activeFilePathRef.current = fallbackProject.entryFilePath;
+        setActiveFilePathState(fallbackProject.entryFilePath);
+      } else {
+        projectRef.current = {
+          ...projectRef.current,
+          files: nextFiles,
+          entryFilePath: nextFiles[projectRef.current.entryFilePath]
+            ? projectRef.current.entryFilePath
+            : Object.keys(nextFiles)[0],
+        };
+
+        if (!nextFiles[activeFilePathRef.current]) {
+          const fallbackPath = projectRef.current.entryFilePath;
+          activeFilePathRef.current = fallbackPath;
+          setActiveFilePathState(fallbackPath);
+        }
+      }
+
+      bumpProjectVersion();
+      bumpSyncVersion();
+    },
+    [bumpProjectVersion, bumpSyncVersion],
+  );
+
   const updateFileContent = useCallback((path: string, content: string) => {
-    const existingFile = projectRef.current.files[path];
+    const normalizedPath = normalizeWorkspacePath(path);
+    const existingFile = projectRef.current.files[normalizedPath];
 
     if (!existingFile || existingFile.content === content) {
       return;
@@ -77,13 +222,14 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       ...projectRef.current,
       files: {
         ...projectRef.current.files,
-        [path]: {
+        [normalizedPath]: {
           ...existingFile,
           content,
         },
       },
     };
-  }, []);
+    bumpSyncVersion();
+  }, [bumpSyncVersion]);
 
   const updateActiveFileContent = useCallback(
     (content: string) => {
@@ -97,26 +243,30 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     projectRef.current = normalizedProject;
     activeFilePathRef.current = normalizedProject.entryFilePath;
     setActiveFilePathState(normalizedProject.entryFilePath);
-    setProjectVersion((version) => version + 1);
-  }, []);
+    bumpProjectVersion();
+    bumpSyncVersion();
+  }, [bumpProjectVersion, bumpSyncVersion]);
 
   const resetProject = useCallback(() => {
-    loadProject(createSingleFileWorkspace());
+    loadProject(createStarterWorkspaceProject());
   }, [loadProject]);
 
   const getProject = useCallback(() => projectRef.current, []);
 
   const getFile = useCallback((path: string) => {
-    return projectRef.current.files[path] ?? null;
+    return projectRef.current.files[normalizeWorkspacePath(path)] ?? null;
   }, []);
 
   const listFiles = useCallback(() => {
-    return Object.values(projectRef.current.files);
+    return listProjectFiles(projectRef.current);
   }, []);
 
   const actionsValue = useMemo<WorkspaceActions>(
     () => ({
       setActiveFilePath,
+      createFile,
+      renameFile,
+      deleteFile,
       updateFileContent,
       updateActiveFileContent,
       loadProject,
@@ -126,10 +276,13 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       listFiles,
     }),
     [
+      createFile,
+      deleteFile,
       getFile,
       getProject,
       listFiles,
       loadProject,
+      renameFile,
       resetProject,
       setActiveFilePath,
       updateActiveFileContent,
@@ -146,11 +299,13 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     () => ({
       activeFilePath,
       activeFile,
+      files: listProjectFiles(projectRef.current),
       fileCount: Object.keys(projectRef.current.files).length,
       projectName: projectRef.current.name,
       projectVersion,
+      syncVersion,
     }),
-    [activeFile, activeFilePath, projectVersion],
+    [activeFile, activeFilePath, projectVersion, syncVersion],
   );
 
   return (

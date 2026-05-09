@@ -3,6 +3,9 @@ import type { WorkspaceFile, WorkspaceProject } from "../types/workspace";
 
 export interface WorkspaceActions {
   setActiveFilePath: (path: string) => void;
+  createFile: (path: string, content?: string) => void;
+  renameFile: (currentPath: string, nextPath: string) => void;
+  deleteFile: (path: string) => void;
   updateFileContent: (path: string, content: string) => void;
   updateActiveFileContent: (content: string) => void;
   loadProject: (project: WorkspaceProject) => void;
@@ -15,9 +18,11 @@ export interface WorkspaceActions {
 export interface WorkspaceMetadata {
   activeFilePath: string;
   activeFile: WorkspaceFile;
+  files: WorkspaceFile[];
   fileCount: number;
   projectName: string;
   projectVersion: number;
+  syncVersion: number;
 }
 
 export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(
