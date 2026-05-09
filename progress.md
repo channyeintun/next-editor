@@ -64,6 +64,8 @@
 - Reworked the runner dock to match the footer-style `Runner`, `Terminal`, and `Console` layout more closely, including a collapsible shell-like terminal view.
 - Added configurable runner settings for `Enable Runner`, `Run on startup`, `Run on file-save`, `Init Command`, and `Run Command`.
 - Moved the runner settings popover above the dock and removed the dock clipping so the full config panel stays visible.
+- Converted the runner settings UI into a full-page overlay modal with a dimmed backdrop instead of a dock-local popover.
+- Removed the modal title bar and bottom close action so the runner settings overlay uses only the backdrop for dismissal.
 - Moved rerun into the editor header with a dedicated `CMD+S to save` hint and removed the extra runtime toolbar controls.
 - Restored the original editor header layout so the save hint and rerun button are additive controls instead of a full toolbar replacement.
 - Simplified the sidebar header to only show `FILES`, `Create file`, and `Create folder` controls without the extra description chrome.

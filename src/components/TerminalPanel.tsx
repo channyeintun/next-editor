@@ -218,199 +218,203 @@ const TerminalPanel = memo(function TerminalPanel() {
   const runnerOutput = content || "Waiting for runner output...";
 
   return (
-    <div className="fixed bottom-12 left-4 right-4 z-40 flex flex-col overflow-visible rounded-xl border border-slate-900 bg-[#1d1f29] shadow-[0_18px_40px_rgba(2,6,23,0.42)] md:left-[19rem]">
-      <div className="flex items-center border-b border-slate-800 bg-[#232633] px-2">
-        {DOCK_TABS.map((tab) => {
-          const isActive = tab.id === activeTab;
+    <>
+      <div className="fixed bottom-12 left-4 right-4 z-40 flex flex-col overflow-hidden rounded-xl border border-slate-900 bg-[#1d1f29] shadow-[0_18px_40px_rgba(2,6,23,0.42)] md:left-[19rem]">
+        <div className="flex items-center border-b border-slate-800 bg-[#232633] px-2">
+          {DOCK_TABS.map((tab) => {
+            const isActive = tab.id === activeTab;
 
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`inline-flex items-center gap-2 border-r border-slate-800 px-4 py-3 text-xs font-medium transition-colors ${
-                isActive
-                  ? "border-b border-b-[#5da4ff] bg-[#1d1f29] text-white"
-                  : "text-slate-400 hover:bg-[#1d1f29] hover:text-white"
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          );
-        })}
-
-        <button
-          type="button"
-          onClick={() => setIsSettingsOpen(true)}
-          className="inline-flex h-10 w-10 items-center justify-center text-slate-500 transition-colors hover:text-white"
-          aria-label="Open runner settings"
-          title="Open runner settings"
-        >
-          <Plus size={15} />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setIsCollapsed((current) => !current)}
-          className="ml-auto inline-flex h-10 w-10 items-center justify-center text-slate-500 transition-colors hover:text-white"
-          aria-label={
-            isCollapsed ? "Expand runtime dock" : "Collapse runtime dock"
-          }
-          title={isCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
-        >
-          {isCollapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-      </div>
-
-      {!isCollapsed && (
-        <>
-          {activeTab === "runner" && (
-            <div className="flex h-72 flex-col bg-[#1d1f29]">
-              <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-[13px] text-slate-300">
-                    {runnerConfig.enabled ? runnerCommand : "Runner disabled"}
-                  </p>
-                </div>
-                <div className="ml-4 flex items-center gap-4">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    {statusLabel}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void rerunRunner();
-                    }}
-                    disabled={!runnerConfig.enabled || isBusy}
-                    className="text-sm font-semibold uppercase tracking-[0.08em] text-[#13d77d] transition-colors hover:text-[#39f39a] disabled:cursor-not-allowed disabled:text-slate-600"
-                  >
-                    RERUN
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsSettingsOpen(true)}
-                    className="text-slate-500 transition-colors hover:text-white"
-                    aria-label="Open runner settings"
-                    title="Open runner settings"
-                  >
-                    <Settings2 size={17} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-auto px-5 py-6">
-                <pre className="font-mono text-[13px] leading-7 text-slate-200 whitespace-pre-wrap">
-                  {runnerOutput}
-                </pre>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "terminal" && (
-            <div className="flex h-72 flex-col bg-[#1d1f29] px-5 py-6">
-              <div className="min-h-0 flex-1 overflow-auto font-mono text-[13px] leading-7 text-slate-200">
-                {content && content !== "Waiting for runtime output..." ? (
-                  <pre className="mb-5 whitespace-pre-wrap">{content}</pre>
-                ) : null}
-                <p className="text-[14px] font-semibold text-[#5ca3ff]">
-                  {workspaceRoot}
-                </p>
-                <form
-                  onSubmit={handleSubmit}
-                  className="mt-2 flex items-center gap-3"
-                >
-                  <span className="text-[28px] leading-none text-[#b183f7]">
-                    ›
-                  </span>
-                  <input
-                    value={command}
-                    onChange={(event) => setCommand(event.target.value)}
-                    placeholder=""
-                    disabled={Boolean(activeCommand)}
-                    className="h-8 min-w-0 flex-1 bg-transparent text-[13px] text-slate-100 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed"
-                  />
-                </form>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "console" && (
-            <div className="h-72 overflow-hidden bg-[#1d1f29]">
-              <pre className="h-full overflow-auto px-5 py-6 font-mono text-[12px] leading-6 text-slate-300 whitespace-pre-wrap">
-                {consoleContent}
-              </pre>
-            </div>
-          )}
-        </>
-      )}
-
-      {isSettingsOpen && (
-        <div className="absolute bottom-full left-1/2 z-20 mb-3 w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-slate-800 bg-[#151821] p-5 shadow-[0_24px_48px_rgba(2,6,23,0.55)] max-h-[min(75vh,36rem)] overflow-y-auto">
-          <div className="space-y-5">
-            <RunnerToggle
-              checked={runnerConfig.enabled}
-              label="Enable Runner"
-              onChange={(checked) => updateRunnerConfig({ enabled: checked })}
-            />
-            <RunnerToggle
-              checked={runnerConfig.runOnStartup}
-              label="Run on startup"
-              description="Execute script immediately when opening the project"
-              onChange={(checked) =>
-                updateRunnerConfig({ runOnStartup: checked })
-              }
-            />
-            <RunnerToggle
-              checked={runnerConfig.runOnFileSave}
-              label="Run on file-save"
-              description="Execute script when saving a file"
-              onChange={(checked) =>
-                updateRunnerConfig({ runOnFileSave: checked })
-              }
-            />
-            <label className="block">
-              <span className="block text-sm font-medium text-slate-100">
-                Init Command
-              </span>
-              <input
-                value={runnerConfig.initCommand}
-                onChange={(event) =>
-                  updateRunnerConfig({ initCommand: event.target.value })
-                }
-                className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500"
-              />
-              <span className="mt-2 block text-xs text-slate-500">
-                Command to run when booting the project
-              </span>
-            </label>
-            <label className="block">
-              <span className="block text-sm font-medium text-slate-100">
-                Run Command
-              </span>
-              <input
-                value={runnerConfig.runCommand}
-                onChange={(event) =>
-                  updateRunnerConfig({ runCommand: event.target.value })
-                }
-                className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500"
-              />
-              <span className="mt-2 block text-xs text-slate-500">
-                Command to run inside the workspace
-              </span>
-            </label>
-          </div>
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`inline-flex items-center gap-2 border-r border-slate-800 px-4 py-3 text-xs font-medium transition-colors ${
+                  isActive
+                    ? "border-b border-b-[#5da4ff] bg-[#1d1f29] text-white"
+                    : "text-slate-400 hover:bg-[#1d1f29] hover:text-white"
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            );
+          })}
 
           <button
             type="button"
-            onClick={() => setIsSettingsOpen(false)}
-            className="mt-5 inline-flex items-center text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:text-white"
+            onClick={() => setIsSettingsOpen(true)}
+            className="inline-flex h-10 w-10 items-center justify-center text-slate-500 transition-colors hover:text-white"
+            aria-label="Open runner settings"
+            title="Open runner settings"
           >
-            Close
+            <Plus size={15} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsCollapsed((current) => !current)}
+            className="ml-auto inline-flex h-10 w-10 items-center justify-center text-slate-500 transition-colors hover:text-white"
+            aria-label={
+              isCollapsed ? "Expand runtime dock" : "Collapse runtime dock"
+            }
+            title={
+              isCollapsed ? "Expand runtime dock" : "Collapse runtime dock"
+            }
+          >
+            {isCollapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
         </div>
+
+        {!isCollapsed && (
+          <>
+            {activeTab === "runner" && (
+              <div className="flex h-72 flex-col bg-[#1d1f29]">
+                <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-[13px] text-slate-300">
+                      {runnerConfig.enabled ? runnerCommand : "Runner disabled"}
+                    </p>
+                  </div>
+                  <div className="ml-4 flex items-center gap-4">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      {statusLabel}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void rerunRunner();
+                      }}
+                      disabled={!runnerConfig.enabled || isBusy}
+                      className="text-sm font-semibold uppercase tracking-[0.08em] text-[#13d77d] transition-colors hover:text-[#39f39a] disabled:cursor-not-allowed disabled:text-slate-600"
+                    >
+                      RERUN
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsSettingsOpen(true)}
+                      className="text-slate-500 transition-colors hover:text-white"
+                      aria-label="Open runner settings"
+                      title="Open runner settings"
+                    >
+                      <Settings2 size={17} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-auto px-5 py-6">
+                  <pre className="font-mono text-[13px] leading-7 text-slate-200 whitespace-pre-wrap">
+                    {runnerOutput}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "terminal" && (
+              <div className="flex h-72 flex-col bg-[#1d1f29] px-5 py-6">
+                <div className="min-h-0 flex-1 overflow-auto font-mono text-[13px] leading-7 text-slate-200">
+                  {content && content !== "Waiting for runtime output..." ? (
+                    <pre className="mb-5 whitespace-pre-wrap">{content}</pre>
+                  ) : null}
+                  <p className="text-[14px] font-semibold text-[#5ca3ff]">
+                    {workspaceRoot}
+                  </p>
+                  <form
+                    onSubmit={handleSubmit}
+                    className="mt-2 flex items-center gap-3"
+                  >
+                    <span className="text-[28px] leading-none text-[#b183f7]">
+                      ›
+                    </span>
+                    <input
+                      value={command}
+                      onChange={(event) => setCommand(event.target.value)}
+                      placeholder=""
+                      disabled={Boolean(activeCommand)}
+                      className="h-8 min-w-0 flex-1 bg-transparent text-[13px] text-slate-100 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed"
+                    />
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "console" && (
+              <div className="h-72 overflow-hidden bg-[#1d1f29]">
+                <pre className="h-full overflow-auto px-5 py-6 font-mono text-[12px] leading-6 text-slate-300 whitespace-pre-wrap">
+                  {consoleContent}
+                </pre>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {isSettingsOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-[#0b0d12]/62 px-4 py-8 backdrop-blur-[2px]"
+          onClick={() => setIsSettingsOpen(false)}
+        >
+          <div
+            className="mx-auto flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#151821] shadow-[0_24px_48px_rgba(2,6,23,0.55)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="space-y-5 overflow-y-auto px-5 py-5">
+              <RunnerToggle
+                checked={runnerConfig.enabled}
+                label="Enable Runner"
+                onChange={(checked) => updateRunnerConfig({ enabled: checked })}
+              />
+              <RunnerToggle
+                checked={runnerConfig.runOnStartup}
+                label="Run on startup"
+                description="Execute script immediately when opening the project"
+                onChange={(checked) =>
+                  updateRunnerConfig({ runOnStartup: checked })
+                }
+              />
+              <RunnerToggle
+                checked={runnerConfig.runOnFileSave}
+                label="Run on file-save"
+                description="Execute script when saving a file"
+                onChange={(checked) =>
+                  updateRunnerConfig({ runOnFileSave: checked })
+                }
+              />
+              <label className="block">
+                <span className="block text-sm font-medium text-slate-100">
+                  Init Command
+                </span>
+                <input
+                  value={runnerConfig.initCommand}
+                  onChange={(event) =>
+                    updateRunnerConfig({ initCommand: event.target.value })
+                  }
+                  className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500"
+                />
+                <span className="mt-2 block text-xs text-slate-500">
+                  Command to run when booting the project
+                </span>
+              </label>
+              <label className="block">
+                <span className="block text-sm font-medium text-slate-100">
+                  Run Command
+                </span>
+                <input
+                  value={runnerConfig.runCommand}
+                  onChange={(event) =>
+                    updateRunnerConfig({ runCommand: event.target.value })
+                  }
+                  className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500"
+                />
+                <span className="mt-2 block text-xs text-slate-500">
+                  Command to run inside the workspace
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
       )}
-    </div>
+    </>
   );
 });
 
