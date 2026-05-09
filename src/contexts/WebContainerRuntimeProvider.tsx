@@ -434,8 +434,6 @@ export const WebContainerRuntimeProvider: React.FC<
           }),
         );
 
-        setStatus("ready");
-
         void process.exit
           .then((exitCode) => {
             if (runnerProcessRef.current !== process) {
@@ -554,8 +552,23 @@ export const WebContainerRuntimeProvider: React.FC<
       return;
     }
 
+    if (
+      runnerProcessRef.current ||
+      status === "booting" ||
+      status === "mounting" ||
+      status === "installing" ||
+      status === "starting"
+    ) {
+      return;
+    }
+
     await rerunRunner();
-  }, [rerunRunner, runnerConfig.enabled, runnerConfig.runOnFileSave]);
+  }, [
+    rerunRunner,
+    runnerConfig.enabled,
+    runnerConfig.runOnFileSave,
+    status,
+  ]);
 
   const updateRunnerConfig = useCallback((config: Partial<RunnerConfig>) => {
     setRunnerConfig((current) => ({

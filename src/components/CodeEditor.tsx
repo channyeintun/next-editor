@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import Editor, {
   type OnMount,
   type BeforeMount,
@@ -38,13 +38,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const { saveWorkspace } = useWebContainerRuntimeActions();
   const { activeFile, projectVersion } = useWorkspaceMetadata();
   const monacoRef = useRef<Monaco | null>(null);
+  const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const selectedLanguage = activeFile.language || "html";
 
   // Only subscribe to the flags we actually need for rendering decisions
   const { isPlaying } = useNextEditorMetadata();
-
-  // Track if the editor is ready to attach listeners
-  const [isEditorReady, setIsEditorReady] = useState(false);
 
   // useEffectEvent provides a stable function reference that always reads
   // the latest isPlaying value without causing dependency issues
@@ -88,57 +86,25 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     };
   }, []);
 
-  // Consolidated Monaco event listeners. By using native listeners instead of the onChange prop,
-  // we follow React 19 best practices for useEffectEvent (keeping it inside an effect)
-  // and ensure zero re-renders of the Monaco component during playback.
+  const disposeEditorListeners = () => {
+    editorDisposablesRef.current.forEach((disposable) => {
+      disposable.dispose();
+    });
+    editorDisposablesRef.current = [];
+  };
+
   useEffect(() => {
-    if (!editorRef.current || !isEditorReady) return;
-
-    const editor = editorRef.current;
-    const model = editor.getModel();
-    if (!model) return;
-
-    const disposables: { dispose(): void }[] = [];
-
-    // Listen for content changes
-    disposables.push(
-      editor.onDidChangeModelContent(() => {
-        updateActiveFileContent(editor.getValue());
-        onEditorChange();
-      }),
-    );
-
-    // Listen for cursor position changes (keyboard navigation, etc.)
-    disposables.push(
-      editor.onDidChangeCursorPosition(() => {
-        onEditorChange();
-      }),
-    );
-
-    // Listen for selection changes (shift+arrow, shift+click, etc.)
-    disposables.push(
-      editor.onDidChangeCursorSelection(() => {
-        onEditorChange();
-      }),
-    );
-
-    // Listen for scroll changes
-    disposables.push(
-      editor.onDidScrollChange(() => {
-        onEditorChange();
-      }),
-    );
-
     return () => {
-      disposables.forEach((d) => d.dispose());
+      disposeEditorListeners();
     };
-  }, [editorRef, isEditorReady, updateActiveFileContent]);
+  }, []);
 
   /**
    * Handle Monaco Editor mount event
    * Sets up the editor reference for use in recording and replay
    */
   const handleEditorDidMount: OnMount = (editor) => {
+    disposeEditorListeners();
     editorRef.current = editor;
     updateActiveFileContent(editor.getValue());
     if (monacoRef.current) {
@@ -149,7 +115,22 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         },
       );
     }
-    setIsEditorReady(true);
+
+    editorDisposablesRef.current = [
+      editor.onDidChangeModelContent(() => {
+        updateActiveFileContent(editor.getValue());
+        onEditorChange();
+      }),
+      editor.onDidChangeCursorPosition(() => {
+        onEditorChange();
+      }),
+      editor.onDidChangeCursorSelection(() => {
+        onEditorChange();
+      }),
+      editor.onDidScrollChange(() => {
+        onEditorChange();
+      }),
+    ];
   };
 
   /**
