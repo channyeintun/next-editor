@@ -32,6 +32,14 @@ const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
 };
 const RUNTIME_ENVIRONMENT_STORAGE_KEY = "next-editor-runtime-environment";
 
+const sharedWebContainerState: {
+  instance: WebContainer | null;
+  bootPromise: Promise<WebContainer> | null;
+} = {
+  instance: null,
+  bootPromise: null,
+};
+
 const ESCAPE_CHARACTER = String.fromCharCode(27);
 const BELL_CHARACTER = String.fromCharCode(7);
 const OSC_PATTERN = new RegExp(
@@ -248,6 +256,32 @@ function loadStoredEnvironmentVariables(): EnvironmentVariables {
   }
 }
 
+async function getOrBootSharedWebContainer(): Promise<WebContainer> {
+  if (sharedWebContainerState.instance) {
+    return sharedWebContainerState.instance;
+  }
+
+  if (!sharedWebContainerState.bootPromise) {
+    sharedWebContainerState.bootPromise = import("@webcontainer/api")
+      .then(({ WebContainer }) =>
+        WebContainer.boot({
+          coep: "require-corp",
+          workdirName: "next-editor-runtime",
+        }),
+      )
+      .then((instance) => {
+        sharedWebContainerState.instance = instance;
+        return instance;
+      })
+      .catch((error) => {
+        sharedWebContainerState.bootPromise = null;
+        throw error;
+      });
+  }
+
+  return sharedWebContainerState.bootPromise;
+}
+
 export const WebContainerRuntimeProvider: React.FC<
   WebContainerRuntimeProviderProps
 > = ({ children }) => {
@@ -260,6 +294,7 @@ export const WebContainerRuntimeProvider: React.FC<
   const hasRunInitCommandRef = useRef(false);
   const lastSyncedProjectRef = useRef<WorkspaceProject | null>(null);
   const hasAutoStartedRef = useRef(false);
+  const isMountedRef = useRef(true);
   const [status, setStatus] = useState<WebContainerRuntimeStatus>("idle");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -305,7 +340,14 @@ export const WebContainerRuntimeProvider: React.FC<
     stopRunnerProcess();
     devServerListenerCleanupRef.current?.();
     devServerListenerCleanupRef.current = null;
-    instanceRef.current?.teardown();
+    if (
+      instanceRef.current &&
+      instanceRef.current === sharedWebContainerState.instance
+    ) {
+      instanceRef.current.teardown();
+      sharedWebContainerState.instance = null;
+      sharedWebContainerState.bootPromise = null;
+    }
     instanceRef.current = null;
     hasMountedProjectRef.current = false;
     hasRunInitCommandRef.current = false;
@@ -322,11 +364,11 @@ export const WebContainerRuntimeProvider: React.FC<
       return instanceRef.current;
     }
 
-    const { WebContainer } = await import("@webcontainer/api");
-    const instance = await WebContainer.boot({
-      coep: "require-corp",
-      workdirName: "next-editor-runtime",
-    });
+    const instance = await getOrBootSharedWebContainer();
+
+    if (!isMountedRef.current) {
+      return instance;
+    }
 
     devServerListenerCleanupRef.current?.();
     devServerListenerCleanupRef.current = instance.on(
@@ -408,6 +450,11 @@ export const WebContainerRuntimeProvider: React.FC<
     setErrorMessage(null);
 
     const instance = await bootInstance();
+
+    if (!instance || !isMountedRef.current) {
+      return null;
+    }
+
     const project = getProject();
 
     if (!hasMountedProjectRef.current) {
@@ -667,6 +714,14 @@ export const WebContainerRuntimeProvider: React.FC<
     },
     [],
   );
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     hasAutoStartedRef.current = false;

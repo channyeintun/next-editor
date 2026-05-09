@@ -83,7 +83,8 @@
 - Added `Open in Preview` to the file context menu for HTML/CSS lessons and switched the save hint to `CMD+S` or `CTRL+S` based on the current user agent.
 - Fixed HTML/CSS preview refresh so it stays pinned to the selected preview file instead of falling back to the active editor buffer.
 - Added `New Editor` to the settings popup so users can discard the current workspace after confirmation and reset to a fresh single-file `index.html` editor.
+- Fixed the WebContainer startup path so refreshing no longer races into `Only a single WebContainer instance can be booted` during React StrictMode remounts.
 
 ## Current Task
 
-- Latest follow-up completed: the settings popup now includes `New Editor`, which confirms before discarding the current workspace and resets to a fresh `index.html` editor.
+- Latest follow-up completed: refreshing the editor no longer triggers duplicate WebContainer boot attempts during startup.
