@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback, memo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { motion, AnimatePresence, type Transition } from "motion/react";
 import {
   useNextEditorActions,
   useNextEditorMetadata,
 } from "../hooks/useNextEditorContext";
 import { useWebContainerRuntimeMetadata } from "../hooks/useWebContainerRuntime";
+import type { WebContainerRuntimeStatus } from "../contexts/WebContainerRuntimeContext";
 import type {
   PreviewSize,
   PreviewState,
@@ -32,6 +33,150 @@ function getElementByXPath(doc: Document, xpath: string): Element | null {
   } catch {
     return null;
   }
+}
+
+function escapePreviewHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function getRuntimePreviewState(
+  status: WebContainerRuntimeStatus,
+  errorMessage: string | null,
+  isSupported: boolean,
+): {
+  label: string;
+  title: string;
+  description: string;
+} {
+  if (!isSupported) {
+    return {
+      label: "Runtime preview unavailable",
+      title: "Runtime preview unavailable",
+      description:
+        "WebContainers need cross-origin isolation before the app preview can run.",
+    };
+  }
+
+  if (status === "error") {
+    return {
+      label: "Runtime preview error",
+      title: "Runtime preview failed",
+      description:
+        errorMessage ??
+        "Check the runner output, fix the error, and rerun the preview.",
+    };
+  }
+
+  if (status === "installing") {
+    return {
+      label: "Installing runtime",
+      title: "Installing dependencies",
+      description:
+        "The project is preparing packages before the live preview can start.",
+    };
+  }
+
+  if (status === "starting") {
+    return {
+      label: "Starting runtime",
+      title: "Starting live preview",
+      description:
+        "The dev server is booting and will replace this placeholder when it is ready.",
+    };
+  }
+
+  if (status === "mounting" || status === "booting") {
+    return {
+      label: "Preparing runtime",
+      title: "Preparing runtime preview",
+      description:
+        "The workspace is mounting into the WebContainer before the preview starts.",
+    };
+  }
+
+  return {
+    label: "Runtime preview",
+    title: "Runtime preview is waiting",
+    description: "Run or rerun the project to open the live app preview here.",
+  };
+}
+
+function createRuntimePreviewPlaceholder(
+  title: string,
+  description: string,
+): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+        background: #f6f7fb;
+        color: #0f172a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at top, rgba(125, 211, 252, 0.18), transparent 35%),
+          linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+      }
+
+      main {
+        width: min(420px, calc(100vw - 32px));
+        padding: 28px;
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+      }
+
+      .eyebrow {
+        margin: 0 0 14px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #0f766e;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.15;
+      }
+
+      p {
+        margin: 14px 0 0;
+        font-size: 15px;
+        line-height: 1.6;
+        color: #334155;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Runtime Preview</p>
+      <h1>${escapePreviewHtml(title)}</h1>
+      <p>${escapePreviewHtml(description)}</p>
+    </main>
+  </body>
+</html>`;
 }
 
 const Preview = memo(function Preview() {
@@ -73,12 +218,35 @@ const Preview = memo(function Preview() {
     registerPreviewStateGetter,
     registerPreviewStateApplier,
   } = useNextEditorActions();
-  const { previewUrl: runtimePreviewUrl, status: runtimeStatus } =
-    useWebContainerRuntimeMetadata();
+  const {
+    previewUrl: runtimePreviewUrl,
+    status: runtimeStatus,
+    errorMessage: runtimeErrorMessage,
+    isSupported: isRuntimeSupported,
+    runnerConfig,
+  } = useWebContainerRuntimeMetadata();
 
   const { isRecording } = useNextEditorMetadata();
   const isRuntimePreviewActive =
     runtimeStatus === "ready" && Boolean(runtimePreviewUrl);
+  const isRuntimeManagedPreview = runnerConfig.enabled;
+  const runtimePreviewState = useMemo(
+    () =>
+      getRuntimePreviewState(
+        runtimeStatus,
+        runtimeErrorMessage,
+        isRuntimeSupported,
+      ),
+    [isRuntimeSupported, runtimeErrorMessage, runtimeStatus],
+  );
+  const runtimePreviewPlaceholder = useMemo(
+    () =>
+      createRuntimePreviewPlaceholder(
+        runtimePreviewState.title,
+        runtimePreviewState.description,
+      ),
+    [runtimePreviewState.description, runtimePreviewState.title],
+  );
 
   // Keep refs updated synchronously
   isRecordingRef.current = isRecording;
@@ -592,15 +760,32 @@ const Preview = memo(function Preview() {
       return;
     }
 
+    if (isRuntimeManagedPreview) {
+      if (lastContentRef.current === runtimePreviewPlaceholder) {
+        return;
+      }
+
+      lastContentRef.current = runtimePreviewPlaceholder;
+      iframe.removeAttribute("src");
+      iframe.srcdoc = runtimePreviewPlaceholder;
+      return;
+    }
+
     const editor = editorRef.current;
     if (editor) {
       lastContentRef.current = "";
       updateIframeContent(editor.getValue());
     }
-  }, [editorRef, runtimePreviewUrl, updateIframeContent]);
+  }, [
+    editorRef,
+    isRuntimeManagedPreview,
+    runtimePreviewPlaceholder,
+    runtimePreviewUrl,
+    updateIframeContent,
+  ]);
 
   useEffect(() => {
-    if (runtimePreviewUrl) return;
+    if (runtimePreviewUrl || isRuntimeManagedPreview) return;
 
     const checkForEditor = () => {
       const editor = editorRef.current;
@@ -616,11 +801,16 @@ const Preview = memo(function Preview() {
     };
 
     checkForEditor();
-  }, [editorRef, runtimePreviewUrl, updateIframeContent]);
+  }, [
+    editorRef,
+    isRuntimeManagedPreview,
+    runtimePreviewUrl,
+    updateIframeContent,
+  ]);
 
   // Also ensure iframe loads properly
   useEffect(() => {
-    if (runtimePreviewUrl) return;
+    if (runtimePreviewUrl || isRuntimeManagedPreview) return;
 
     const iframe = iframeRef.current;
     if (!iframe) return;
@@ -638,7 +828,12 @@ const Preview = memo(function Preview() {
     return () => {
       iframe.removeEventListener("load", handleIframeLoad);
     };
-  }, [editorRef, runtimePreviewUrl, updateIframeContent]);
+  }, [
+    editorRef,
+    isRuntimeManagedPreview,
+    runtimePreviewUrl,
+    updateIframeContent,
+  ]);
 
   const isLarge = size === "large";
   const isMedium = size === "medium";
@@ -683,6 +878,16 @@ const Preview = memo(function Preview() {
       return;
     }
 
+    if (isRuntimeManagedPreview && iframe) {
+      setIsRefreshing(true);
+      lastContentRef.current = runtimePreviewPlaceholder;
+      iframe.removeAttribute("src");
+      iframe.srcdoc = runtimePreviewPlaceholder;
+      emitPreviewEvent("preview_refresh");
+      setTimeout(() => setIsRefreshing(false), 600);
+      return;
+    }
+
     const editor = editorRef.current;
     if (editor) {
       setIsRefreshing(true);
@@ -699,6 +904,8 @@ const Preview = memo(function Preview() {
     editorRef,
     emitPreviewEvent,
     isRuntimePreviewActive,
+    isRuntimeManagedPreview,
+    runtimePreviewPlaceholder,
     runtimePreviewUrl,
     updateIframeContent,
   ]);
@@ -893,7 +1100,11 @@ const Preview = memo(function Preview() {
           </div>
 
           <div className="flex-1 px-3 text-center text-[11px] font-medium text-gray-500 truncate">
-            {isRuntimePreviewActive ? runtimePreviewUrl : "Single-file preview"}
+            {isRuntimePreviewActive
+              ? runtimePreviewUrl
+              : isRuntimeManagedPreview
+                ? runtimePreviewState.label
+                : "Single-file preview"}
           </div>
 
           {/* Refresh button */}
