@@ -82,7 +82,8 @@
 - Added workspace lesson types so users can switch between `SPA Lesson` and `HTML/CSS Lesson`, with HTML/CSS lessons using static preview and hiding runner and terminal UI.
 - Added `Open in Preview` to the file context menu for HTML/CSS lessons and switched the save hint to `CMD+S` or `CTRL+S` based on the current user agent.
 - Fixed HTML/CSS preview refresh so it stays pinned to the selected preview file instead of falling back to the active editor buffer.
+- Added `New Editor` to the settings popup so users can discard the current workspace after confirmation and reset to a fresh single-file `index.html` editor.
 
 ## Current Task
 
-- Latest follow-up completed: HTML/CSS preview refresh now remains pinned to the file selected with `Open in Preview` until another file is explicitly chosen.
+- Latest follow-up completed: the settings popup now includes `New Editor`, which confirms before discarding the current workspace and resets to a fresh `index.html` editor.

@@ -8,6 +8,7 @@ import type {
 export interface WorkspaceActions {
   setActiveFilePath: (path: string) => void;
   setPreviewFilePath: (path: string) => void;
+  createNewEditor: () => void;
   createFile: (path: string, content?: string) => void;
   createFolder: (path: string) => void;
   renameFile: (currentPath: string, nextPath: string) => void;

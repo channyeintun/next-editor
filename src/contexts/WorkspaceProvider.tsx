@@ -464,6 +464,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     [bumpProjectVersion, bumpSyncVersion],
   );
 
+  const createNewEditor = useCallback(() => {
+    loadProject(createSingleFileWorkspace());
+  }, [loadProject]);
+
   const resetProject = useCallback(() => {
     loadProject(createStarterWorkspaceProject());
   }, [loadProject]);
@@ -499,6 +503,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     () => ({
       setActiveFilePath,
       setPreviewFilePath,
+      createNewEditor,
       createFile,
       createFolder,
       renameFile,
@@ -514,6 +519,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       listFiles,
     }),
     [
+      createNewEditor,
       createFile,
       createFolder,
       deleteFile,

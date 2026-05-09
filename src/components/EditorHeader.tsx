@@ -193,8 +193,9 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
     useWebContainerRuntimeActions();
   const { environmentVariables, runnerConfig, status } =
     useWebContainerRuntimeMetadata();
-  const { getProject, saveProject, updateLessonType } = useWorkspaceActions();
-  const { lessonType } = useWorkspaceMetadata();
+  const { createNewEditor, getProject, saveProject, updateLessonType } =
+    useWorkspaceActions();
+  const { fileCount, hasUnsavedChanges, lessonType } = useWorkspaceMetadata();
 
   const isBusy =
     status === "booting" ||
@@ -229,6 +230,24 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
     } catch (error) {
       console.error("Zip download failed:", error);
     }
+  };
+
+  const handleCreateNewEditor = () => {
+    const confirmMessage = hasUnsavedChanges
+      ? "Discard the current workspace and unsaved changes? This will reset the editor to a fresh index.html file."
+      : fileCount > 0
+        ? "Discard the current workspace? This will reset the editor to a fresh index.html file."
+        : "Create a new editor with a fresh index.html file?";
+
+    setIsMenuOpen(false);
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    createNewEditor();
+    saveProject();
+    updateRunnerConfig({ enabled: false });
   };
 
   const handleSelectLessonType = (nextLessonType: WorkspaceLessonType) => {
@@ -308,6 +327,17 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
                   </button>
                 );
               })}
+
+              <div className="my-1 h-px bg-slate-700" />
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleCreateNewEditor}
+                className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
+              >
+                New Editor
+              </button>
 
               <div className="my-1 h-px bg-slate-700" />
 
