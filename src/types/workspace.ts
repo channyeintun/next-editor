@@ -21,6 +21,11 @@ export interface WorkspaceRecordingSnapshot {
   activeFilePath: string;
 }
 
+export interface WorkspaceRecordingEvent {
+  timestamp: number;
+  snapshot: WorkspaceRecordingSnapshot;
+}
+
 export const DEFAULT_WORKSPACE_ENTRY_PATH = "index.html";
 export const DEFAULT_WORKSPACE_APP_PATH = "src/App.jsx";
 

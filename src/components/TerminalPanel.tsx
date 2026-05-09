@@ -13,6 +13,11 @@ import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
 } from "../hooks/useWebContainerRuntime";
+import { useNextEditorActions } from "../hooks/useNextEditorContext";
+import type {
+  RuntimeDockTab,
+  RuntimeRecordingSnapshot,
+} from "../types/runtime";
 
 function formatTerminalContent(content: string): string {
   return content.replace(/\n{3,}/g, "\n\n").trim();
@@ -36,8 +41,6 @@ function getStatusLabel(status: string): string {
       return "Idle";
   }
 }
-
-type RuntimeDockTab = "runner" | "terminal" | "console";
 
 interface RuntimeDockTabConfig {
   id: RuntimeDockTab;
@@ -108,9 +111,16 @@ const TerminalPanel = memo(function TerminalPanel() {
   const [command, setCommand] = useState("");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [playbackRuntimeSnapshot, setPlaybackRuntimeSnapshot] =
+    useState<RuntimeRecordingSnapshot | null>(null);
   const [consoleLines, setConsoleLines] = useState<string[]>([
     "[runner] Runtime dock is ready.",
   ]);
+  const {
+    handleRuntimeEvent,
+    registerRuntimeStateApplier,
+    registerRuntimeStateGetter,
+  } = useNextEditorActions();
   const { rerunRunner, runCommand, updateRunnerConfig } =
     useWebContainerRuntimeActions();
   const {
@@ -122,37 +132,97 @@ const TerminalPanel = memo(function TerminalPanel() {
     runnerConfig,
     workspaceRoot,
   } = useWebContainerRuntimeMetadata();
-  const { currentRecording } = useNextEditorMetadata();
-  const recordedRuntimeSnapshot = currentRecording?.runtimeSnapshot;
+  const { currentRecording, isRecording } = useNextEditorMetadata();
+  const recordedRuntimeSnapshot =
+    playbackRuntimeSnapshot ??
+    (isRecording ? null : currentRecording?.runtimeSnapshot) ??
+    null;
   const runtimeStatus =
     status === "idle" ? (recordedRuntimeSnapshot?.status ?? status) : status;
   const recordedOutput = recordedRuntimeSnapshot?.terminalOutput ?? null;
+  const effectivePreviewUrl = previewUrl || recordedRuntimeSnapshot?.previewUrl;
+  const effectiveActiveCommand =
+    activeCommand || recordedRuntimeSnapshot?.activeCommand || null;
+  const effectiveErrorMessage =
+    errorMessage || recordedRuntimeSnapshot?.errorMessage || null;
+  const isPlaybackSnapshotActive = Boolean(
+    currentRecording && playbackRuntimeSnapshot,
+  );
   const previousStatusRef = useRef<string | null>(null);
   const previousPreviewUrlRef = useRef<string | null>(null);
   const previousCommandRef = useRef<string | null>(null);
   const previousErrorRef = useRef<string | null>(null);
+  const previousRuntimeEventKeyRef = useRef<string | null>(null);
+  const previousOutputRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    registerRuntimeStateGetter(() => ({
+      activeTab,
+      isCollapsed,
+      isSettingsOpen,
+      consoleLines,
+    }));
+  }, [
+    activeTab,
+    consoleLines,
+    isCollapsed,
+    isSettingsOpen,
+    registerRuntimeStateGetter,
+  ]);
+
+  useEffect(() => {
+    registerRuntimeStateApplier((snapshot) => {
+      setPlaybackRuntimeSnapshot(snapshot);
+      setActiveTab(snapshot.activeTab ?? "runner");
+      setIsCollapsed(snapshot.isCollapsed ?? false);
+      setIsSettingsOpen(snapshot.isSettingsOpen ?? false);
+      setConsoleLines(
+        snapshot.consoleLines?.length
+          ? snapshot.consoleLines
+          : ["[runner] Runtime dock is ready."],
+      );
+    });
+  }, [registerRuntimeStateApplier]);
+
+  useEffect(() => {
+    if (!currentRecording) {
+      setPlaybackRuntimeSnapshot(null);
+    }
+  }, [currentRecording]);
 
   const appendConsoleLine = (message: string) => {
     setConsoleLines((current) => [...current.slice(-24), message]);
   };
 
   useEffect(() => {
+    if (isPlaybackSnapshotActive) {
+      return;
+    }
+
     if (previousStatusRef.current !== runtimeStatus) {
       previousStatusRef.current = runtimeStatus;
       appendConsoleLine(
         `[runtime] ${new Date().toLocaleTimeString()} ${getStatusLabel(runtimeStatus)}`,
       );
     }
-  }, [runtimeStatus]);
+  }, [isPlaybackSnapshotActive, runtimeStatus]);
 
   useEffect(() => {
+    if (isPlaybackSnapshotActive) {
+      return;
+    }
+
     if (previewUrl && previousPreviewUrlRef.current !== previewUrl) {
       previousPreviewUrlRef.current = previewUrl;
       appendConsoleLine(`[preview] ${previewUrl}`);
     }
-  }, [previewUrl]);
+  }, [isPlaybackSnapshotActive, previewUrl]);
 
   useEffect(() => {
+    if (isPlaybackSnapshotActive) {
+      return;
+    }
+
     if (activeCommand && previousCommandRef.current !== activeCommand) {
       previousCommandRef.current = activeCommand;
       appendConsoleLine(`[command] ${activeCommand}`);
@@ -162,9 +232,13 @@ const TerminalPanel = memo(function TerminalPanel() {
     if (!activeCommand) {
       previousCommandRef.current = null;
     }
-  }, [activeCommand]);
+  }, [activeCommand, isPlaybackSnapshotActive]);
 
   useEffect(() => {
+    if (isPlaybackSnapshotActive) {
+      return;
+    }
+
     if (errorMessage && previousErrorRef.current !== errorMessage) {
       previousErrorRef.current = errorMessage;
       appendConsoleLine(`[error] ${errorMessage}`);
@@ -174,7 +248,58 @@ const TerminalPanel = memo(function TerminalPanel() {
     if (!errorMessage) {
       previousErrorRef.current = null;
     }
-  }, [errorMessage]);
+  }, [errorMessage, isPlaybackSnapshotActive]);
+
+  const runtimeEventKey = JSON.stringify({
+    activeTab,
+    isCollapsed,
+    isSettingsOpen,
+    status: runtimeStatus,
+    previewUrl: effectivePreviewUrl,
+    activeCommand: effectiveActiveCommand,
+    errorMessage: effectiveErrorMessage,
+    consoleLines,
+  });
+
+  useEffect(() => {
+    if (!isRecording || isPlaybackSnapshotActive) {
+      previousRuntimeEventKeyRef.current = runtimeEventKey;
+      return;
+    }
+
+    if (previousRuntimeEventKeyRef.current === null) {
+      previousRuntimeEventKeyRef.current = runtimeEventKey;
+      return;
+    }
+
+    if (previousRuntimeEventKeyRef.current !== runtimeEventKey) {
+      previousRuntimeEventKeyRef.current = runtimeEventKey;
+      handleRuntimeEvent();
+    }
+  }, [
+    handleRuntimeEvent,
+    isPlaybackSnapshotActive,
+    isRecording,
+    runtimeEventKey,
+  ]);
+
+  useEffect(() => {
+    if (!isRecording || isPlaybackSnapshotActive) {
+      previousOutputRef.current = lastOutput;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (previousOutputRef.current !== lastOutput) {
+        previousOutputRef.current = lastOutput;
+        handleRuntimeEvent();
+      }
+    }, 200);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [handleRuntimeEvent, isPlaybackSnapshotActive, isRecording, lastOutput]);
 
   const isBusy =
     runtimeStatus === "booting" ||
@@ -195,8 +320,8 @@ const TerminalPanel = memo(function TerminalPanel() {
     await runCommand(nextCommand);
   };
 
-  const rawContent = errorMessage
-    ? `Runtime error\n${errorMessage}`
+  const rawContent = effectiveErrorMessage
+    ? `Runtime error\n${effectiveErrorMessage}`
     : lastOutput ||
       recordedOutput ||
       (runtimeStatus === "installing"
@@ -219,7 +344,7 @@ const TerminalPanel = memo(function TerminalPanel() {
 
   return (
     <>
-      <div className="fixed bottom-12 left-4 right-4 z-40 flex flex-col overflow-hidden rounded-xl border border-slate-900 bg-[#1d1f29] shadow-[0_18px_40px_rgba(2,6,23,0.42)] md:left-[19rem]">
+      <div className="fixed bottom-12 left-4 right-4 z-40 flex flex-col overflow-hidden rounded-xl border border-slate-900 bg-[#1d1f29] shadow-[0_18px_40px_rgba(2,6,23,0.42)] md:left-76">
         <div className="flex items-center border-b border-slate-800 bg-[#232633] px-2">
           {DOCK_TABS.map((tab) => {
             const isActive = tab.id === activeTab;
@@ -330,7 +455,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                       value={command}
                       onChange={(event) => setCommand(event.target.value)}
                       placeholder=""
-                      disabled={Boolean(activeCommand)}
+                      disabled={Boolean(effectiveActiveCommand)}
                       className="h-8 min-w-0 flex-1 bg-transparent text-[13px] text-slate-100 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed"
                     />
                   </form>

@@ -85,7 +85,12 @@
 - Added `New Editor` to the settings popup so users can discard the current workspace after confirmation and reset to a fresh single-file `index.html` editor.
 - Fixed the WebContainer startup path so refreshing no longer races into `Only a single WebContainer instance can be booted` during React StrictMode remounts.
 - Changed lesson-type switching so moving between `SPA Lesson` and `HTML/CSS Lesson` now confirms before discarding the current persisted workspace and loading the correct default files for that mode.
+- Added timed workspace and runtime recording events so file switches, dock state changes, and rerun lifecycle updates replay on the timeline instead of collapsing into the final snapshot only.
+- Wired the editor and runtime dock into those sparse events, including active-file transitions, dock tab/collapse state, console history, and runtime status/output snapshots.
+- Replaced the circular Monaco `SET_EDITOR_REF` payload with getter-based editor syncing so replay controls no longer crash XState when the editor instance is refreshed.
+- Guarded preview-state playback from touching cross-origin WebContainer iframes, so runtime-backed replay no longer throws when preview state is applied.
+- Validated the recording/replay fidelity changes with `bun run lint`, `bun run build`, and an interactive browser pass focused on file switching, dock toggling, and rerun transitions.
 
 ## Current Task
 
-- Latest follow-up completed: lesson-type switching now confirms and replaces the persisted workspace instead of only toggling the mode flag.
+- Latest follow-up completed: recording/replay now captures workspace and runtime timeline changes for file switching, dock toggling, and reruns without depending on final snapshots only.

@@ -14,7 +14,10 @@ import type {
   EditorMachineEvent,
   EditorMachineInput,
 } from "./types";
+import { createInitialContext } from "./types";
 import type { EditorFrame, Recording } from "../types";
+import type { RuntimeRecordingEvent } from "../../../types/runtime";
+import type { WorkspaceRecordingEvent } from "../../../types/workspace";
 import {
   compressFrames,
   reconstructFrameAtIndex,
@@ -406,6 +409,8 @@ export const editorMachine = setup({
       const startedAt = Date.now();
       const slideEvents: SlideEvent[] = [];
       const previewEvents: PreviewEvent[] = [];
+      const workspaceEvents: WorkspaceRecordingEvent[] = [];
+      const runtimeEvents: RuntimeRecordingEvent[] = [];
 
       // Capture initial slide state if open
       const initialSlideState = context.getSlideState?.();
@@ -432,12 +437,30 @@ export const editorMachine = setup({
         });
       }
 
+      const initialWorkspaceSnapshot = context.getWorkspaceSnapshot?.();
+      if (initialWorkspaceSnapshot) {
+        workspaceEvents.push({
+          timestamp: 0,
+          snapshot: initialWorkspaceSnapshot,
+        });
+      }
+
+      const initialRuntimeSnapshot = context.getRuntimeSnapshot?.();
+      if (initialRuntimeSnapshot) {
+        runtimeEvents.push({
+          timestamp: 0,
+          snapshot: initialRuntimeSnapshot,
+        });
+      }
+
       return {
         session: {
           startedAt,
           frames: [],
           slideEvents,
           previewEvents,
+          workspaceEvents,
+          runtimeEvents,
           lastMousePosition: { x: 0, y: 0, visible: false },
         },
       };
@@ -545,6 +568,8 @@ export const editorMachine = setup({
         keyframeInterval: 120,
         slideEvents: context.session.slideEvents,
         previewEvents: context.session.previewEvents,
+        workspaceEvents: context.session.workspaceEvents,
+        runtimeEvents: context.session.runtimeEvents,
         slides: slides,
         duration,
         audioBlob: context.audio.blob || undefined,
@@ -562,6 +587,8 @@ export const editorMachine = setup({
         lastAppliedFrameIndex: -1,
         lastAppliedPreviewEventIndex: -1,
         lastAppliedSlideEventIndex: -1,
+        lastAppliedWorkspaceEventIndex: -1,
+        lastAppliedRuntimeEventIndex: -1,
       };
     }),
 
@@ -569,12 +596,29 @@ export const editorMachine = setup({
     setRecording: assign(({ context, event }) => {
       if (event.type !== "RECORDING_LOADED") return {};
 
+      const initialWorkspaceEvent = event.recording.workspaceEvents?.[0];
+      const initialRuntimeEvent = event.recording.runtimeEvents?.[0];
+
       if (event.recording.slides && context.applySlides) {
         context.applySlides(event.recording.slides);
       }
 
-      if (event.recording.workspaceSnapshot && context.applyWorkspaceSnapshot) {
+      if (initialWorkspaceEvent && context.applyWorkspaceSnapshot) {
+        context.applyWorkspaceSnapshot(initialWorkspaceEvent.snapshot);
+      } else if (
+        event.recording.workspaceSnapshot &&
+        context.applyWorkspaceSnapshot
+      ) {
         context.applyWorkspaceSnapshot(event.recording.workspaceSnapshot);
+      }
+
+      if (initialRuntimeEvent && context.applyRuntimeSnapshot) {
+        context.applyRuntimeSnapshot(initialRuntimeEvent.snapshot);
+      } else if (
+        event.recording.runtimeSnapshot &&
+        context.applyRuntimeSnapshot
+      ) {
+        context.applyRuntimeSnapshot(event.recording.runtimeSnapshot);
       }
 
       return {
@@ -591,6 +635,8 @@ export const editorMachine = setup({
         lastAppliedFrameIndex: -1,
         lastAppliedPreviewEventIndex: -1,
         lastAppliedSlideEventIndex: -1,
+        lastAppliedWorkspaceEventIndex: initialWorkspaceEvent ? 0 : -1,
+        lastAppliedRuntimeEventIndex: initialRuntimeEvent ? 0 : -1,
       };
     }),
 
@@ -727,6 +773,8 @@ export const editorMachine = setup({
         lastAppliedFrameIndex: -1,
         lastAppliedSlideEventIndex: -1,
         lastAppliedPreviewEventIndex: -1,
+        lastAppliedWorkspaceEventIndex: -1,
+        lastAppliedRuntimeEventIndex: -1,
       };
     }),
 
@@ -809,12 +857,20 @@ export const editorMachine = setup({
       lastAppliedFrameIndex: -1,
       lastAppliedPreviewEventIndex: -1,
       lastAppliedSlideEventIndex: -1,
+      lastAppliedWorkspaceEventIndex: -1,
+      lastAppliedRuntimeEventIndex: -1,
       lastAppliedPreviewState: undefined,
     })),
 
     clearRecording: assign({
       recording: null,
       currentFrame: null,
+      lastAppliedFrameIndex: -1,
+      lastAppliedPreviewEventIndex: -1,
+      lastAppliedSlideEventIndex: -1,
+      lastAppliedWorkspaceEventIndex: -1,
+      lastAppliedRuntimeEventIndex: -1,
+      lastAppliedPreviewState: undefined,
       timeline: ({ context }) => ({
         ...context.timeline,
         currentTime: 0,
@@ -844,16 +900,19 @@ export const editorMachine = setup({
     }),
 
     setEditorRef: assign(({ context, event }) => {
-      if (
-        event.type !== "SET_EDITOR_REF" ||
-        event.editor === context.editorRefs.editor
-      ) {
+      if (event.type !== "SET_EDITOR_REF") {
         return {};
       }
+
+      const editor = context.getEditorInstance();
+      if (editor === context.editorRefs.editor) {
+        return {};
+      }
+
       return {
         editorRefs: {
           ...context.editorRefs,
-          editor: event.editor,
+          editor,
         },
       };
     }),
@@ -954,6 +1013,106 @@ export const editorMachine = setup({
           lastAppliedPreviewEventIndex: newLastIndex,
           lastAppliedPreviewState: nextAppliedPreviewState,
         };
+      }
+
+      return {};
+    }),
+    applyWorkspaceEventsAtTime: assign(({ context, event }) => {
+      const {
+        recording,
+        applyWorkspaceSnapshot,
+        lastAppliedWorkspaceEventIndex,
+      } = context;
+
+      if (!recording?.workspaceEvents?.length || !applyWorkspaceSnapshot) {
+        return {};
+      }
+
+      const workspaceEvents = recording.workspaceEvents;
+      const currentTime =
+        event.type === "TICK"
+          ? event.currentTime
+          : event.type === "SEEK"
+            ? event.time
+            : context.timeline.currentTime;
+      let newLastIndex = lastAppliedWorkspaceEventIndex;
+
+      if (newLastIndex >= 0 && newLastIndex < workspaceEvents.length) {
+        if (workspaceEvents[newLastIndex].timestamp > currentTime) {
+          newLastIndex = -1;
+        }
+      }
+
+      let latestWorkspaceEvent =
+        newLastIndex >= 0 ? workspaceEvents[newLastIndex] : null;
+
+      for (let i = newLastIndex + 1; i < workspaceEvents.length; i++) {
+        const workspaceEvent = workspaceEvents[i];
+        if (workspaceEvent.timestamp <= currentTime) {
+          latestWorkspaceEvent = workspaceEvent;
+          newLastIndex = i;
+        } else {
+          break;
+        }
+      }
+
+      if (
+        latestWorkspaceEvent &&
+        newLastIndex !== lastAppliedWorkspaceEventIndex
+      ) {
+        applyWorkspaceSnapshot(latestWorkspaceEvent.snapshot);
+        return { lastAppliedWorkspaceEventIndex: newLastIndex };
+      }
+
+      if (newLastIndex !== lastAppliedWorkspaceEventIndex) {
+        return { lastAppliedWorkspaceEventIndex: newLastIndex };
+      }
+
+      return {};
+    }),
+    applyRuntimeEventsAtTime: assign(({ context, event }) => {
+      const { recording, applyRuntimeSnapshot, lastAppliedRuntimeEventIndex } =
+        context;
+
+      if (!recording?.runtimeEvents?.length || !applyRuntimeSnapshot) {
+        return {};
+      }
+
+      const runtimeEvents = recording.runtimeEvents;
+      const currentTime =
+        event.type === "TICK"
+          ? event.currentTime
+          : event.type === "SEEK"
+            ? event.time
+            : context.timeline.currentTime;
+      let newLastIndex = lastAppliedRuntimeEventIndex;
+
+      if (newLastIndex >= 0 && newLastIndex < runtimeEvents.length) {
+        if (runtimeEvents[newLastIndex].timestamp > currentTime) {
+          newLastIndex = -1;
+        }
+      }
+
+      let latestRuntimeEvent =
+        newLastIndex >= 0 ? runtimeEvents[newLastIndex] : null;
+
+      for (let i = newLastIndex + 1; i < runtimeEvents.length; i++) {
+        const runtimeEvent = runtimeEvents[i];
+        if (runtimeEvent.timestamp <= currentTime) {
+          latestRuntimeEvent = runtimeEvent;
+          newLastIndex = i;
+        } else {
+          break;
+        }
+      }
+
+      if (latestRuntimeEvent && newLastIndex !== lastAppliedRuntimeEventIndex) {
+        applyRuntimeSnapshot(latestRuntimeEvent.snapshot);
+        return { lastAppliedRuntimeEventIndex: newLastIndex };
+      }
+
+      if (newLastIndex !== lastAppliedRuntimeEventIndex) {
+        return { lastAppliedRuntimeEventIndex: newLastIndex };
       }
 
       return {};
@@ -1104,48 +1263,7 @@ export const editorMachine = setup({
   },
 }).createMachine({
   id: "editor",
-  context: ({ input }) => ({
-    timeline: {
-      currentTime: 0,
-      duration: 0,
-      speed: input.defaultPlaybackSpeed ?? 1,
-      volume: 1,
-      startedAt: 0,
-      pausedDuration: 0,
-      pausedAt: 0,
-    },
-    session: null,
-    recording: null,
-    currentFrame: null,
-    audio: {
-      blob: null,
-      element: null,
-      isRecording: false,
-      mediaRecorder: null,
-      chunks: [],
-      mimeType: "",
-    },
-    editorRefs: {
-      editor: input.editorRef.current,
-      cursorDecorationsCollection: null,
-    },
-    enableAudioRecording: input.enableAudioRecording ?? false,
-    pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
-    animationFrameId: null,
-    error: null,
-    lastAppliedFrameIndex: -1,
-    lastAppliedPreviewEventIndex: -1,
-    lastAppliedSlideEventIndex: -1,
-    applySlideState: input.applySlideState,
-    applySlides: input.applySlides,
-    getSlideState: input.getSlideState,
-    getSlides: input.getSlides,
-    applyPreviewState: input.applyPreviewState,
-    getPreviewState: input.getPreviewState,
-    getWorkspaceSnapshot: input.getWorkspaceSnapshot,
-    applyWorkspaceSnapshot: input.applyWorkspaceSnapshot,
-    getRuntimeSnapshot: input.getRuntimeSnapshot,
-  }),
+  context: ({ input }) => createInitialContext(input),
 
   initial: "idle",
   on: {
@@ -1276,6 +1394,72 @@ export const editorMachine = setup({
                     {
                       ...event.event,
                       timestamp: Date.now() - context.session.startedAt,
+                    },
+                  ],
+                },
+              };
+            }),
+          ],
+        },
+        WORKSPACE_EVENT: {
+          actions: [
+            assign(({ context }) => {
+              const snapshot = context.getWorkspaceSnapshot?.();
+              if (!context.session || !snapshot) return {};
+
+              const previousEvent =
+                context.session.workspaceEvents[
+                  context.session.workspaceEvents.length - 1
+                ];
+              if (
+                previousEvent &&
+                JSON.stringify(previousEvent.snapshot) ===
+                  JSON.stringify(snapshot)
+              ) {
+                return {};
+              }
+
+              return {
+                session: {
+                  ...context.session,
+                  workspaceEvents: [
+                    ...context.session.workspaceEvents,
+                    {
+                      timestamp: Date.now() - context.session.startedAt,
+                      snapshot,
+                    },
+                  ],
+                },
+              };
+            }),
+          ],
+        },
+        RUNTIME_EVENT: {
+          actions: [
+            assign(({ context }) => {
+              const snapshot = context.getRuntimeSnapshot?.();
+              if (!context.session || !snapshot) return {};
+
+              const previousEvent =
+                context.session.runtimeEvents[
+                  context.session.runtimeEvents.length - 1
+                ];
+              if (
+                previousEvent &&
+                JSON.stringify(previousEvent.snapshot) ===
+                  JSON.stringify(snapshot)
+              ) {
+                return {};
+              }
+
+              return {
+                session: {
+                  ...context.session,
+                  runtimeEvents: [
+                    ...context.session.runtimeEvents,
+                    {
+                      timestamp: Date.now() - context.session.startedAt,
+                      snapshot,
                     },
                   ],
                 },
@@ -1415,6 +1599,8 @@ export const editorMachine = setup({
               return {};
             }),
             "applyFrameAtTime",
+            "applyWorkspaceEventsAtTime",
+            "applyRuntimeEventsAtTime",
             "applyPreviewEventsAtTime",
             "applySlideEventsAtTime",
             enqueueActions(({ context, event, enqueue }) => {
@@ -1435,6 +1621,8 @@ export const editorMachine = setup({
           actions: [
             "seekToTime",
             "applyFrameAtTime",
+            "applyWorkspaceEventsAtTime",
+            "applyRuntimeEventsAtTime",
             "applyPreviewEventsAtTime",
             "applySlideEventsAtTime",
             enqueueActions(({ event, enqueue }) => {
@@ -1477,6 +1665,11 @@ export const editorMachine = setup({
           target: ".ready",
           actions: [
             "resetPlayback",
+            "applyFrameAtTime",
+            "applyWorkspaceEventsAtTime",
+            "applyRuntimeEventsAtTime",
+            "applyPreviewEventsAtTime",
+            "applySlideEventsAtTime",
             enqueueActions(({ enqueue }) => {
               enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
               enqueue.sendTo("audioPlayer", { type: "SEEK", time: 0 });
@@ -1501,6 +1694,8 @@ export const editorMachine = setup({
         playing: {
           entry: [
             "applyFrameAtTime",
+            "applyWorkspaceEventsAtTime",
+            "applyRuntimeEventsAtTime",
             "applyPreviewEventsAtTime",
             "applySlideEventsAtTime",
             enqueueActions(({ context, enqueue }) => {
@@ -1547,6 +1742,8 @@ export const editorMachine = setup({
             TICK: {
               actions: [
                 "applyFrameAtTime",
+                "applyWorkspaceEventsAtTime",
+                "applyRuntimeEventsAtTime",
                 "applyPreviewEventsAtTime",
                 "applySlideEventsAtTime",
                 "storeRecordedFrameAtPause",
@@ -1556,6 +1753,8 @@ export const editorMachine = setup({
               actions: [
                 "seekToTime",
                 "applyFrameAtTime",
+                "applyWorkspaceEventsAtTime",
+                "applyRuntimeEventsAtTime",
                 "applyPreviewEventsAtTime",
                 "applySlideEventsAtTime",
                 "storeRecordedFrameAtPause",
@@ -1587,6 +1786,8 @@ export const editorMachine = setup({
                 actions: [
                   "resetPlayback",
                   "applyFrameAtTime",
+                  "applyWorkspaceEventsAtTime",
+                  "applyRuntimeEventsAtTime",
                   "applyPreviewEventsAtTime",
                   "applySlideEventsAtTime",
                   enqueueActions(({ enqueue }) => {

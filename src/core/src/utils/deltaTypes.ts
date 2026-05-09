@@ -1,6 +1,8 @@
 import type * as monaco from "monaco-editor";
 import type { MouseCursorPosition, EditorFrame } from "../types";
 import type { SlidePreviewState, PreviewState } from "../slides";
+import type { RuntimeRecordingEvent } from "../../../types/runtime";
+import type { WorkspaceRecordingEvent } from "../../../types/workspace";
 
 // ============================================================================
 // Delta Compression Types
@@ -89,6 +91,8 @@ export interface DeltaRecording {
   frames: DeltaFrame[];
   slideEvents?: import("../slides").SlideEvent[];
   previewEvents?: import("../slides").PreviewEvent[];
+  workspaceEvents?: WorkspaceRecordingEvent[];
+  runtimeEvents?: RuntimeRecordingEvent[];
   slides?: Array<{
     id: string;
     imageUrl: string;

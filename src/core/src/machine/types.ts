@@ -13,8 +13,14 @@ import type {
   EditorSelection,
   EditorPosition,
 } from "../types";
-import type { RuntimeRecordingSnapshot } from "../../../types/runtime";
-import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type {
+  RuntimeRecordingEvent,
+  RuntimeRecordingSnapshot,
+} from "../../../types/runtime";
+import type {
+  WorkspaceRecordingEvent,
+  WorkspaceRecordingSnapshot,
+} from "../../../types/workspace";
 
 // ============================================================================
 // Machine Status Types
@@ -70,6 +76,10 @@ export interface RecordingSession {
   slideEvents: SlideEvent[];
   /** Collected preview events during recording */
   previewEvents: PreviewEvent[];
+  /** Collected workspace events during recording */
+  workspaceEvents: WorkspaceRecordingEvent[];
+  /** Collected runtime events during recording */
+  runtimeEvents: RuntimeRecordingEvent[];
   /** Last known mouse position */
   lastMousePosition: MouseCursorPosition;
 }
@@ -118,6 +128,8 @@ export interface EditorMachineContext {
   audio: AudioState;
   /** Editor references */
   editorRefs: EditorRefs;
+  /** Getter for the live Monaco editor instance */
+  getEditorInstance: () => monaco.editor.IStandaloneCodeEditor | null;
   /** Whether audio recording is enabled */
   enableAudioRecording: boolean;
   /** Whether to pause on user interaction */
@@ -150,12 +162,18 @@ export interface EditorMachineContext {
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   /** Callback to get runtime snapshot during recording */
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
+  /** Callback to apply runtime snapshot during playback */
+  applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
   /** Index of the last applied frame during playback */
   lastAppliedFrameIndex: number;
   /** Index of the last applied preview event during playback */
   lastAppliedPreviewEventIndex: number;
   /** Index of the last applied slide event during playback */
   lastAppliedSlideEventIndex: number;
+  /** Index of the last applied workspace event during playback */
+  lastAppliedWorkspaceEventIndex: number;
+  /** Index of the last applied runtime event during playback */
+  lastAppliedRuntimeEventIndex: number;
   /** Last applied preview state to avoid redundant updates */
   lastAppliedPreviewState?: PreviewState;
   /** Last time (performance.now()) audio was synced */
@@ -253,6 +271,12 @@ export type AudioActorStartedEvent = {
   mimeType: string;
 };
 
+/** Audio actor error event */
+export type AudioActorErrorEvent = {
+  type: "ERROR";
+  error: string;
+};
+
 /** User interaction during playback */
 export type UserInteractionEvent = { type: "USER_INTERACTION" };
 
@@ -265,7 +289,6 @@ export type StopEventSignal = { type: "STOP" };
 /** Update editor reference */
 export type SetEditorRefEvent = {
   type: "SET_EDITOR_REF";
-  editor: monaco.editor.IStandaloneCodeEditor | null;
 };
 
 /** Slide event occurred */
@@ -278,6 +301,16 @@ export type SlideEventOccurred = {
 export type PreviewEventOccurred = {
   type: "PREVIEW_EVENT";
   event: PreviewEvent;
+};
+
+/** Workspace event occurred */
+export type WorkspaceEventOccurred = {
+  type: "WORKSPACE_EVENT";
+};
+
+/** Runtime event occurred */
+export type RuntimeEventOccurred = {
+  type: "RUNTIME_EVENT";
 };
 
 /** Audio chunk received */
@@ -309,9 +342,12 @@ export type EditorMachineEvent =
   | SetEditorRefEvent
   | SlideEventOccurred
   | PreviewEventOccurred
+  | WorkspaceEventOccurred
+  | RuntimeEventOccurred
   | AudioChunkEvent
   | AudioActorStoppedEvent
   | AudioActorStartedEvent
+  | AudioActorErrorEvent
   | StartEvent
   | StopEventSignal;
 
@@ -359,6 +395,7 @@ export interface EditorMachineInput {
   getWorkspaceSnapshot?: () => WorkspaceRecordingSnapshot | null;
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
+  applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
 }
 
 // ============================================================================
@@ -397,6 +434,7 @@ export const createInitialContext = (
     editor: input.editorRef.current,
     cursorDecorationsCollection: null,
   },
+  getEditorInstance: () => input.editorRef.current,
   enableAudioRecording: input.enableAudioRecording ?? false,
   pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
   animationFrameId: null,
@@ -404,6 +442,8 @@ export const createInitialContext = (
   lastAppliedFrameIndex: -1,
   lastAppliedPreviewEventIndex: -1,
   lastAppliedSlideEventIndex: -1,
+  lastAppliedWorkspaceEventIndex: -1,
+  lastAppliedRuntimeEventIndex: -1,
   lastAppliedPreviewState: undefined,
   applySlideState: input.applySlideState,
   applySlides: input.applySlides,
@@ -414,4 +454,5 @@ export const createInitialContext = (
   getWorkspaceSnapshot: input.getWorkspaceSnapshot,
   applyWorkspaceSnapshot: input.applyWorkspaceSnapshot,
   getRuntimeSnapshot: input.getRuntimeSnapshot,
+  applyRuntimeSnapshot: input.applyRuntimeSnapshot,
 });

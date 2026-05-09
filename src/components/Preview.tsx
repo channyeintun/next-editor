@@ -628,7 +628,7 @@ const Preview = memo(function Preview() {
         }
 
         const iframe = iframeRef.current;
-        if (!iframe) return;
+        if (!iframe || isRuntimePreviewActive) return;
 
         const iframeDoc =
           iframe.contentDocument || iframe.contentWindow?.document;
@@ -788,7 +788,11 @@ const Preview = memo(function Preview() {
         }
       });
     }
-  }, [registerPreviewStateApplier, updateIframeContent]);
+  }, [
+    isRuntimePreviewActive,
+    registerPreviewStateApplier,
+    updateIframeContent,
+  ]);
 
   // Track all interaction events in iframe during recording
   useEffect(() => {

@@ -8,8 +8,14 @@ import type {
 } from "./slides";
 import type { TimelineActorRef } from "./machine/timelineMachine";
 import type { EditorActorRef } from "./useNextEditor";
-import type { RuntimeRecordingSnapshot } from "../../types/runtime";
-import type { WorkspaceRecordingSnapshot } from "../../types/workspace";
+import type {
+  RuntimeRecordingEvent,
+  RuntimeRecordingSnapshot,
+} from "../../types/runtime";
+import type {
+  WorkspaceRecordingEvent,
+  WorkspaceRecordingSnapshot,
+} from "../../types/workspace";
 
 /**
  * Audio storage placeholder for serialization
@@ -73,6 +79,8 @@ export interface Recording {
   keyframeInterval: number;
   slideEvents?: SlideEvent[];
   previewEvents?: PreviewEvent[];
+  workspaceEvents?: WorkspaceRecordingEvent[];
+  runtimeEvents?: RuntimeRecordingEvent[];
   slides?: Slide[];
   audioBlob?: Blob | AudioPlaceholder;
   workspaceSnapshot?: WorkspaceRecordingSnapshot;
@@ -131,6 +139,7 @@ export interface UseNextEditorConfig {
   getWorkspaceSnapshot?: () => WorkspaceRecordingSnapshot | null;
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
+  applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
 }
 
 /**
@@ -189,6 +198,8 @@ export interface UseNextEditorReturn {
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
+  handleWorkspaceEvent: () => void;
+  handleRuntimeEvent: () => void;
 
   // Helper functions
   getEditorState: () => EditorState | null;

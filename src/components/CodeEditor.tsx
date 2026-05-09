@@ -33,7 +33,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   defaultContent = DEFAULT_WORKSPACE_FILE_CONTENT,
   showImportExport = false,
 }) => {
-  const { handleEditorChange, editorRef } = useNextEditorActions();
+  const { handleEditorChange, handleWorkspaceEvent, editorRef } =
+    useNextEditorActions();
   const { saveProject, updateActiveFileContent } = useWorkspaceActions();
   const { saveWorkspace } = useWebContainerRuntimeActions();
   const { activeFile, projectVersion } = useWorkspaceMetadata();
@@ -42,7 +43,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const selectedLanguage = activeFile.language || "html";
 
   // Only subscribe to the flags we actually need for rendering decisions
-  const { isPlaying } = useNextEditorMetadata();
+  const { isPlaying, isRecording } = useNextEditorMetadata();
+  const previousWorkspaceRef = useRef<{
+    activeFilePath: string;
+    projectVersion: number;
+  } | null>(null);
 
   // useEffectEvent provides a stable function reference that always reads
   // the latest isPlaying value without causing dependency issues
@@ -85,6 +90,34 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       window.removeEventListener("keydown", handleWindowKeyDown, true);
     };
   }, []);
+
+  useEffect(() => {
+    const nextWorkspaceState = {
+      activeFilePath: activeFile.path,
+      projectVersion,
+    };
+
+    if (!isRecording) {
+      previousWorkspaceRef.current = nextWorkspaceState;
+      return;
+    }
+
+    const previousWorkspaceState = previousWorkspaceRef.current;
+    previousWorkspaceRef.current = nextWorkspaceState;
+
+    if (!previousWorkspaceState) {
+      return;
+    }
+
+    if (
+      previousWorkspaceState.activeFilePath !==
+        nextWorkspaceState.activeFilePath ||
+      previousWorkspaceState.projectVersion !==
+        nextWorkspaceState.projectVersion
+    ) {
+      handleWorkspaceEvent();
+    }
+  }, [activeFile.path, handleWorkspaceEvent, isRecording, projectVersion]);
 
   const disposeEditorListeners = () => {
     editorDisposablesRef.current.forEach((disposable) => {

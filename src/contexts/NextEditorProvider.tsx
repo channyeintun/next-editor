@@ -13,7 +13,10 @@ import {
 } from "../hooks/useWorkspace";
 import { createJsonStorage } from "../storage/JsonStorage";
 import type { SlidePreviewState, PreviewState, Slide } from "../types/slides";
-import type { RuntimeRecordingSnapshot } from "../types/runtime";
+import type {
+  RuntimePanelRecordingState,
+  RuntimeRecordingSnapshot,
+} from "../types/runtime";
 
 interface NextEditorProviderProps {
   children: React.ReactNode;
@@ -41,6 +44,12 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   const getPreviewStateRef = useRef<(() => PreviewState | null) | null>(null);
   const applyPreviewStateRef = useRef<
     ((previewState: PreviewState) => void) | null
+  >(null);
+  const getRuntimeStateRef = useRef<
+    (() => RuntimePanelRecordingState | null) | null
+  >(null);
+  const applyRuntimeStateRef = useRef<
+    ((snapshot: RuntimeRecordingSnapshot) => void) | null
   >(null);
 
   const getSlidesRef = useRef<(() => Slide[]) | null>(null);
@@ -84,7 +93,13 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       status: runtimeMetadata.status,
       previewUrl: runtimeMetadata.previewUrl,
       terminalOutput: runtimeMetadata.lastOutput,
+      activeCommand: runtimeMetadata.activeCommand,
+      errorMessage: runtimeMetadata.errorMessage,
+      ...getRuntimeStateRef.current?.(),
     }),
+    applyRuntimeSnapshot: (snapshot) => {
+      applyRuntimeStateRef.current?.(snapshot);
+    },
   });
 
   const {
@@ -101,6 +116,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     handleEditorChange,
     handleSlideEvent,
     handlePreviewEvent,
+    handleWorkspaceEvent,
+    handleRuntimeEvent,
     isRecording,
     isRecordingAudio,
     isPlaying,
@@ -199,6 +216,20 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     [],
   );
 
+  const registerRuntimeStateGetter = useCallback(
+    (getter: () => RuntimePanelRecordingState | null) => {
+      getRuntimeStateRef.current = getter;
+    },
+    [],
+  );
+
+  const registerRuntimeStateApplier = useCallback(
+    (applier: (snapshot: RuntimeRecordingSnapshot) => void) => {
+      applyRuntimeStateRef.current = applier;
+    },
+    [],
+  );
+
   const registerSlideNavigator = useCallback(
     (navigator: (indexh: number, indexv: number) => void) => {
       navigateSlidesDirectRef.current = navigator;
@@ -226,6 +257,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       handleEditorChange,
       handleSlideEvent,
       handlePreviewEvent,
+      handleWorkspaceEvent,
+      handleRuntimeEvent,
       clearRecording,
       exportAsFile,
       exportAllAsFile,
@@ -240,6 +273,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       registerSlidesApplier,
       registerPreviewStateGetter,
       registerPreviewStateApplier,
+      registerRuntimeStateGetter,
+      registerRuntimeStateApplier,
       registerSlideNavigator,
       navigateSlidesDirect,
     }),
@@ -256,6 +291,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       handleEditorChange,
       handleSlideEvent,
       handlePreviewEvent,
+      handleWorkspaceEvent,
+      handleRuntimeEvent,
       navigateSlidesDirect,
       clearRecording,
       exportAsFile,
@@ -271,6 +308,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       registerSlidesApplier,
       registerPreviewStateGetter,
       registerPreviewStateApplier,
+      registerRuntimeStateGetter,
+      registerRuntimeStateApplier,
       registerSlideNavigator,
     ],
   );
