@@ -1,16 +1,17 @@
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
+  Check,
+  File,
   FileCode2,
   FileJson2,
   FilePlus2,
   FileText,
-  FolderTree,
   Globe,
   Package,
   Palette,
   PencilLine,
-  Search,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   inferLanguageFromPath,
@@ -39,6 +40,16 @@ function getDirectoryLabel(path: string): string {
 function getDefaultFileContent(path: string): string {
   const language = inferLanguageFromPath(path);
   return FILE_TEMPLATES[language] ?? "";
+}
+
+function getDefaultDraftPath(activeFilePath: string): string {
+  const directoryLabel = getDirectoryLabel(activeFilePath);
+
+  if (directoryLabel === "root") {
+    return "new-file.js";
+  }
+
+  return `${directoryLabel}/new-file.js`;
 }
 
 function getFileIcon(file: WorkspaceFile) {
@@ -70,211 +81,246 @@ function getFileIcon(file: WorkspaceFile) {
 }
 
 const FileSidebar = memo(function FileSidebar() {
-  const [filterQuery, setFilterQuery] = useState("");
+  const [draftPath, setDraftPath] = useState("");
+  const [editingPath, setEditingPath] = useState<string | null>(null);
   const { createFile, deleteFile, renameFile, setActiveFilePath } =
     useWorkspaceActions();
   const { activeFilePath, fileCount, files, projectName } =
     useWorkspaceMetadata();
-  const normalizedQuery = filterQuery.trim().toLowerCase();
-  const filteredFiles = files.filter((file) => {
-    if (!normalizedQuery) {
-      return true;
-    }
-
-    return (
-      file.path.toLowerCase().includes(normalizedQuery) ||
-      file.language.toLowerCase().includes(normalizedQuery)
-    );
-  });
-  const groupedFiles = filteredFiles.reduce<Record<string, WorkspaceFile[]>>(
-    (groups, file) => {
-      const directoryLabel = getDirectoryLabel(file.path);
-      groups[directoryLabel] = groups[directoryLabel] ?? [];
-      groups[directoryLabel].push(file);
-      return groups;
-    },
-    {},
+  const groupedFiles = useMemo(
+    () =>
+      files.reduce<Record<string, WorkspaceFile[]>>((groups, file) => {
+        const directoryLabel = getDirectoryLabel(file.path);
+        groups[directoryLabel] = groups[directoryLabel] ?? [];
+        groups[directoryLabel].push(file);
+        return groups;
+      }, {}),
+    [files],
   );
-  const activeFile = files.find((file) => file.path === activeFilePath) ?? null;
+  const hasPendingCreate = editingPath === "__new__";
+
+  const resetDraft = () => {
+    setEditingPath(null);
+    setDraftPath("");
+  };
 
   const handleCreateFile = () => {
-    const requestedPath = window.prompt(
-      "Create a file in the workspace",
-      "src/NewFile.jsx",
-    );
+    setEditingPath("__new__");
+    setDraftPath(getDefaultDraftPath(activeFilePath));
+  };
 
-    if (!requestedPath) {
-      return;
-    }
+  const handleRenameFile = (path: string) => {
+    setEditingPath(path);
+    setDraftPath(path);
+  };
 
-    const nextPath = normalizeWorkspacePath(requestedPath);
+  const handleSubmitDraft = () => {
+    const nextPath = normalizeWorkspacePath(draftPath);
+
     if (!nextPath) {
+      resetDraft();
       return;
     }
 
-    createFile(nextPath, getDefaultFileContent(nextPath));
+    if (editingPath === "__new__") {
+      createFile(nextPath, getDefaultFileContent(nextPath));
+      resetDraft();
+      return;
+    }
+
+    if (!editingPath || nextPath === editingPath) {
+      resetDraft();
+      return;
+    }
+
+    renameFile(editingPath, nextPath);
+    resetDraft();
   };
 
-  const handleRenameFile = () => {
-    const requestedPath = window.prompt(
-      "Rename the active file",
-      activeFilePath,
-    );
-
-    if (!requestedPath) {
-      return;
-    }
-
-    const nextPath = normalizeWorkspacePath(requestedPath);
-    if (!nextPath || nextPath === activeFilePath) {
-      return;
-    }
-
-    renameFile(activeFilePath, nextPath);
-  };
-
-  const handleDeleteFile = () => {
-    const confirmed = window.confirm(`Delete ${activeFilePath}?`);
+  const handleDeleteFile = (path: string) => {
+    const confirmed = window.confirm(`Delete ${path}?`);
 
     if (!confirmed) {
       return;
     }
 
-    deleteFile(activeFilePath);
+    deleteFile(path);
+  };
+
+  const handleDraftKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleSubmitDraft();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      resetDraft();
+    }
   };
 
   return (
-    <aside className="relative flex h-full w-80 shrink-0 flex-col border-r border-slate-800/90 bg-[#0b1120] text-slate-100 shadow-[inset_-1px_0_0_rgba(30,41,59,0.55)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.12),_transparent_38%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))]" />
-      <div className="relative border-b border-slate-800/80 px-4 py-4">
-        <div className="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4 shadow-[0_20px_50px_rgba(2,6,23,0.35)] backdrop-blur">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-400">
-                <FolderTree size={14} />
-                Workspace
-              </div>
-              <p className="mt-3 truncate text-sm font-semibold text-slate-50">
-                {projectName}
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                {fileCount} files in active project
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleCreateFile}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700/80 bg-slate-950/80 text-slate-200 shadow-[0_10px_24px_rgba(2,6,23,0.28)] transition-all hover:-translate-y-0.5 hover:border-sky-500/60 hover:text-white"
-              aria-label="Create file"
-              title="Create file"
-            >
-              <FilePlus2 size={16} />
-            </button>
+    <aside className="flex h-full w-72 shrink-0 flex-col border-r border-slate-800 bg-[#11141c] text-slate-100">
+      <div className="border-b border-slate-800 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+              Files
+            </p>
+            <p className="mt-1 truncate text-xs text-slate-500">
+              {projectName} • {fileCount} files
+            </p>
           </div>
-
-          <label className="mt-4 flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-400 transition-colors focus-within:border-sky-500/60 focus-within:text-sky-300">
-            <Search size={14} />
-            <input
-              value={filterQuery}
-              onChange={(event) => setFilterQuery(event.target.value)}
-              placeholder="Jump to file"
-              className="w-full bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
-            />
-          </label>
-
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={handleRenameFile}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-white"
-              title="Rename active file"
-            >
-              <PencilLine size={14} />
-              Rename
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteFile}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs font-medium text-rose-200 transition-colors hover:border-rose-500/60 hover:text-rose-100"
-              title="Delete active file"
-            >
-              <Trash2 size={14} />
-              Delete
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleCreateFile}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+            aria-label="Create file"
+            title="Create file"
+          >
+            <FilePlus2 size={15} />
+          </button>
         </div>
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto px-3 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
         <div className="space-y-4">
+          {hasPendingCreate && (
+            <div className="mx-2 rounded-md border border-sky-500/40 bg-slate-900 px-3 py-2">
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-sky-300">
+                <File size={13} />
+                New File
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={draftPath}
+                  onChange={(event) => setDraftPath(event.target.value)}
+                  onKeyDown={handleDraftKeyDown}
+                  className="h-9 flex-1 rounded-md border border-slate-700 bg-[#0d1117] px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleSubmitDraft}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-950 text-slate-300 transition-colors hover:border-emerald-500 hover:text-emerald-200"
+                  title="Create file"
+                >
+                  <Check size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={resetDraft}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-950 text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+                  title="Cancel"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+
           {Object.entries(groupedFiles).map(
             ([directoryLabel, directoryFiles]) => (
               <section key={directoryLabel} className="space-y-1.5">
-                <div className="px-2">
-                  <p className="truncate text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
+                <div className="px-2 py-1">
+                  <p className="truncate text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                     {directoryLabel}
                   </p>
                 </div>
                 {directoryFiles.map((file) => {
                   const isActive = file.path === activeFilePath;
+                  const isEditing = editingPath === file.path;
 
                   return (
-                    <button
-                      key={file.path}
-                      type="button"
-                      onClick={() => setActiveFilePath(file.path)}
-                      className={`group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl border px-3 py-3 text-left transition-all ${
-                        isActive
-                          ? "border-sky-500/40 bg-sky-500/10 text-white shadow-[0_14px_30px_rgba(14,165,233,0.12)]"
-                          : "border-transparent bg-slate-950/20 text-slate-300 hover:border-slate-800 hover:bg-slate-900/80 hover:text-white"
-                      }`}
-                    >
-                      <span
-                        className={`absolute inset-y-2 left-0 w-1 rounded-full ${
-                          isActive ? "bg-sky-400" : "bg-transparent"
-                        }`}
-                      />
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-800/80 bg-slate-950/80">
-                        {getFileIcon(file)}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">
-                          {file.name}
-                        </span>
-                        <span className="mt-1 flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-slate-500 group-hover:text-slate-400">
-                          <span>{file.language}</span>
-                          <span className="h-1 w-1 rounded-full bg-slate-600" />
-                          <span className="truncate">{file.path}</span>
-                        </span>
-                      </span>
-                    </button>
+                    <div key={file.path} className="px-2">
+                      {isEditing ? (
+                        <div className="rounded-md border border-sky-500/40 bg-slate-900 px-3 py-2">
+                          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-sky-300">
+                            Rename File
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              autoFocus
+                              value={draftPath}
+                              onChange={(event) =>
+                                setDraftPath(event.target.value)
+                              }
+                              onKeyDown={handleDraftKeyDown}
+                              className="h-9 flex-1 rounded-md border border-slate-700 bg-[#0d1117] px-3 text-sm text-slate-100 outline-none transition-colors focus:border-sky-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleSubmitDraft}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-950 text-slate-300 transition-colors hover:border-emerald-500 hover:text-emerald-200"
+                              title="Save rename"
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={resetDraft}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-950 text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+                              title="Cancel rename"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          className={`group flex w-full items-center gap-2 rounded-md px-3 py-2 transition-colors ${
+                            isActive
+                              ? "bg-slate-800 text-white"
+                              : "text-slate-300 hover:bg-slate-900 hover:text-white"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setActiveFilePath(file.path)}
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                          >
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                              {getFileIcon(file)}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium">
+                                {file.name}
+                              </span>
+                            </span>
+                          </button>
+                          <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleRenameFile(file.path);
+                              }}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
+                              title={`Rename ${file.name}`}
+                            >
+                              <PencilLine size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleDeleteFile(file.path);
+                              }}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
+                              title={`Delete ${file.name}`}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </section>
             ),
           )}
-
-          {filteredFiles.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/40 px-4 py-6 text-center text-sm text-slate-400">
-              No files match this filter.
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="relative border-t border-slate-800/80 px-4 py-3">
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-slate-200">
-              {activeFile?.name ?? "No file selected"}
-            </p>
-            <p className="truncate text-[11px] uppercase tracking-[0.2em] text-slate-500">
-              {activeFile?.path ?? "workspace idle"}
-            </p>
-          </div>
-          <span className="rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">
-            {activeFile?.language ?? "none"}
-          </span>
         </div>
       </div>
     </aside>

@@ -43,9 +43,12 @@
 - Promoted the workspace default from a single HTML document to a starter multi-file Vite SPA project tree.
 - Added workspace file operations for create, rename, delete, and active-file switching.
 - Added a dedicated workspace sidebar so users can manage files directly in the editor layout.
+- Reworked the workspace sidebar to use inline create and rename flows plus per-file hover actions instead of prompt-driven file management.
 - Synced WebContainer filesystem state to workspace file mutations so runtime preview uses the active project tree instead of a disconnected starter mount.
 - Upgraded the terminal panel from read-only output to command execution with cleaned runtime stream rendering.
+- Replaced the floating terminal card with a bottom runtime dock that exposes `Runner`, `Terminal`, and `Console` tabs without changing the rest of the editor chrome.
 - Polished the workspace sidebar and terminal chrome to match the rest of the editor UI more closely.
+- Fixed the sidebar row structure and dock placement after browser validation so footer tabs do not block file actions.
 - Validated the workspace UI and runtime sync changes with `bun run build`, `bun run lint`, and a local browser check on `/code`.
 - Introduced recording version 3 metadata for workspace and runtime snapshots while preserving version 2 imports.
 - Captured workspace and runtime snapshots when recordings are finalized.
