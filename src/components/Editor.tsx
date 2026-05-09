@@ -3,6 +3,7 @@ import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import Preview from "./Preview.tsx";
 import SlidePanel from "./SlidePanel";
+import TerminalPanel from "./TerminalPanel";
 import FloatingPlayButton from "./FloatingPlayButton";
 import { NextEditorProvider } from "../contexts/NextEditorProvider.tsx";
 import { SlidesProvider } from "../contexts/SlidesContext";
@@ -28,6 +29,7 @@ export function EditorLayout() {
         <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
         <Preview />
+        <TerminalPanel />
         <SlidePanel />
       </div>
 

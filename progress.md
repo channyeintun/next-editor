@@ -11,8 +11,8 @@
 - Phase 1: Completed
 - Phase 2: Completed
 - Phase 3: Completed
-- Phase 4: In progress
-- Phase 5: Not started
+- Phase 4: Completed
+- Phase 5: In progress
 - Phase 6: Not started
 
 ## Completed Work
@@ -35,9 +35,13 @@
 - Mounted an in-memory Vite starter project inside the runtime and started `npm install` plus `npm run dev`.
 - Exposed runtime status, errors, and preview URL through the editor header without changing the legacy iframe preview yet.
 - Validated the Phase 3 changes with `bun run build` and `bun run lint`.
+- Added a runtime-backed preview bridge that prefers the WebContainer dev-server URL when available.
+- Kept the legacy `srcdoc` preview path as the fallback for the existing single-file recording flow.
+- Added a read-only terminal panel backed by WebContainer process output.
+- Validated the Phase 4 changes with `bun run build` and `bun run lint`.
 
 ## Current Task
 
-- Replace the legacy `srcdoc` preview path with the WebContainer server URL when the runtime is ready.
-- Add a read-only terminal panel backed by WebContainer process output.
-- Preserve the current single-file preview as the fallback path until recording is redesigned.
+- Introduce a new recording format that can carry workspace and runtime state.
+- Capture enough multi-file and terminal metadata to replay the new runtime mode safely.
+- Maintain import and playback compatibility for existing version 2 recordings.
