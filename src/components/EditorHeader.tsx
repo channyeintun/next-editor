@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
+import { RotateCw } from "lucide-react";
 import {
   useNextEditorActions,
   useNextEditorMetadata,
@@ -49,7 +50,7 @@ function isAppleUserAgent(): boolean {
 }
 
 function getSaveShortcutLabel(): string {
-  return isAppleUserAgent() ? "CMD + S to refresh" : "CTRL + S to refresh";
+  return isAppleUserAgent() ? "CMD + S" : "CTRL + S";
 }
 
 function stringifyEnvironmentVariables(
@@ -116,8 +117,12 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
 
   return (
     <div className="flex items-center gap-3">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+      <span
+        className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500"
+        title="Save and refresh"
+      >
         {saveShortcutLabel}
+        <RotateCw size={11} strokeWidth={2.25} aria-hidden="true" />
       </span>
       {lessonType === "node.js" ? (
         <button
