@@ -19,3 +19,4 @@
 - Post-plan follow-up: `CMD+S` / `CTRL+S` now creates explicit save checkpoints, and preview/runtime updates plus replayed preview changes follow those checkpoints instead of every edit.
 - Post-plan follow-up: starting a recording now refreshes the preview immediately so playback begins from the recording's initial visible result, and the header shortcut label now says refresh instead of save/checkpoint.
 - Post-plan follow-up: runtime replay now captures a replayable iframe snapshot so playback start restores the recording's initial preview state instead of leaking the last live runtime result.
+- Post-plan follow-up: playback-applied preview HTML now overrides the live runtime iframe immediately, so replay starts from the recorded initial result instead of waiting for the next checkpoint.

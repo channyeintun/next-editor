@@ -642,8 +642,13 @@ const Preview = memo(function Preview() {
   }, [captureRuntimePreviewSnapshot, isRuntimePreviewActive, registerPreviewStateGetter]); // size is used via sizeRef
 
   const updateIframeContent = useCallback(
-    (content: string) => {
-      if (!iframeRef.current || (isRuntimePreviewActive && !isPlaying)) return;
+    (content: string, options?: { force?: boolean }) => {
+      if (
+        !iframeRef.current ||
+        (isRuntimePreviewActive && !options?.force)
+      ) {
+        return;
+      }
 
       // Skip update if content hasn't changed
       if (lastContentRef.current === content) return;
@@ -659,7 +664,7 @@ const Preview = memo(function Preview() {
         console.error("Error updating iframe srcdoc:", error);
       }
     },
-    [isPlaying, isRuntimePreviewActive],
+    [isRuntimePreviewActive],
   );
 
   useEffect(() => {
@@ -710,7 +715,7 @@ const Preview = memo(function Preview() {
           previewState.content !== undefined &&
           previewState.content !== lastContentRef.current
         ) {
-          updateIframeContent(previewState.content);
+          updateIframeContent(previewState.content, { force: true });
         }
 
         const iframe = iframeRef.current;
