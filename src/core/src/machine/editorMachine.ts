@@ -699,6 +699,19 @@ export const editorMachine = setup({
 
       let frame: EditorFrame | null = null;
       const targetFrame = frames[frameIndex];
+      const latestWorkspaceEvent =
+        recording.workspaceEvents?.[context.lastAppliedWorkspaceEventIndex] ??
+        null;
+
+      if (
+        latestWorkspaceEvent &&
+        targetFrame.timestamp < latestWorkspaceEvent.timestamp
+      ) {
+        return {
+          lastAppliedFrameIndex: frameIndex,
+          currentFrame: null,
+        };
+      }
 
       if (isKeyframe(targetFrame)) {
         // Keyframe: always use directly, most efficient
@@ -1611,11 +1624,11 @@ export const editorMachine = setup({
               }
               return {};
             }),
-            "applyFrameAtTime",
             "applyWorkspaceEventsAtTime",
             "applyRuntimeEventsAtTime",
             "applyPreviewEventsAtTime",
             "applySlideEventsAtTime",
+            "applyFrameAtTime",
             enqueueActions(({ context, event, enqueue }) => {
               // Sync audio to timeline every 250ms or on seek
               const lastSync = context.lastSyncTime || 0;
@@ -1633,11 +1646,11 @@ export const editorMachine = setup({
         SEEK: {
           actions: [
             "seekToTime",
-            "applyFrameAtTime",
             "applyWorkspaceEventsAtTime",
             "applyRuntimeEventsAtTime",
             "applyPreviewEventsAtTime",
             "applySlideEventsAtTime",
+            "applyFrameAtTime",
             enqueueActions(({ event, enqueue }) => {
               const time = event.type === "SEEK" ? event.time : 0;
               enqueue.sendTo("timelineActor", { type: "SEEK", time });
@@ -1678,11 +1691,11 @@ export const editorMachine = setup({
           target: ".ready",
           actions: [
             "resetPlayback",
-            "applyFrameAtTime",
             "applyWorkspaceEventsAtTime",
             "applyRuntimeEventsAtTime",
             "applyPreviewEventsAtTime",
             "applySlideEventsAtTime",
+            "applyFrameAtTime",
             enqueueActions(({ enqueue }) => {
               enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
               enqueue.sendTo("audioPlayer", { type: "SEEK", time: 0 });
@@ -1707,11 +1720,11 @@ export const editorMachine = setup({
         playing: {
           entry: [
             "invalidateAppliedPlaybackState",
-            "applyFrameAtTime",
             "applyWorkspaceEventsAtTime",
             "applyRuntimeEventsAtTime",
             "applyPreviewEventsAtTime",
             "applySlideEventsAtTime",
+            "applyFrameAtTime",
             enqueueActions(({ context, enqueue }) => {
               enqueue.sendTo("timelineActor", { type: "START" });
               enqueue.sendTo("audioPlayer", { type: "PLAY" });
@@ -1755,22 +1768,22 @@ export const editorMachine = setup({
           on: {
             TICK: {
               actions: [
-                "applyFrameAtTime",
                 "applyWorkspaceEventsAtTime",
                 "applyRuntimeEventsAtTime",
                 "applyPreviewEventsAtTime",
                 "applySlideEventsAtTime",
+                "applyFrameAtTime",
                 "storeRecordedFrameAtPause",
               ],
             },
             SEEK: {
               actions: [
                 "seekToTime",
-                "applyFrameAtTime",
                 "applyWorkspaceEventsAtTime",
                 "applyRuntimeEventsAtTime",
                 "applyPreviewEventsAtTime",
                 "applySlideEventsAtTime",
+                "applyFrameAtTime",
                 "storeRecordedFrameAtPause",
                 enqueueActions(({ event, enqueue }) => {
                   const time = event.type === "SEEK" ? event.time : 0;
@@ -1799,11 +1812,11 @@ export const editorMachine = setup({
                   context.timeline.duration - 100, // Fuzzy end check
                 actions: [
                   "resetPlayback",
-                  "applyFrameAtTime",
                   "applyWorkspaceEventsAtTime",
                   "applyRuntimeEventsAtTime",
                   "applyPreviewEventsAtTime",
                   "applySlideEventsAtTime",
+                  "applyFrameAtTime",
                   enqueueActions(({ enqueue }) => {
                     enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
                     enqueue.sendTo("audioPlayer", { type: "SEEK", time: 0 });

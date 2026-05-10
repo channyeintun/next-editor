@@ -15,7 +15,10 @@ import {
 import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
-import { DEFAULT_WORKSPACE_FILE_CONTENT } from "../types/workspace";
+import {
+  DEFAULT_WORKSPACE_FILE_CONTENT,
+  normalizeWorkspacePath,
+} from "../types/workspace";
 
 interface CodeEditorProps {
   language?: string;
@@ -86,6 +89,11 @@ declare module "*.svg" {
 ] as const;
 
 let hasConfiguredMonacoTypeScript = false;
+const MONACO_BUNDLER_MODULE_RESOLUTION = 100;
+
+function toMonacoModelPath(workspacePath: string) {
+  return `file:///${encodeURI(normalizeWorkspacePath(workspacePath))}`;
+}
 
 function configureMonacoTypeScript(monaco: Monaco) {
   if (hasConfiguredMonacoTypeScript) {
@@ -100,9 +108,12 @@ function configureMonacoTypeScript(monaco: Monaco) {
     esModuleInterop: true,
     jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
     module: monaco.languages.typescript.ModuleKind.ESNext,
-    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+    moduleResolution: MONACO_BUNDLER_MODULE_RESOLUTION,
     noEmit: true,
+    resolvePackageJsonExports: true,
+    resolvePackageJsonImports: true,
     target: monaco.languages.typescript.ScriptTarget.ESNext,
+    verbatimModuleSyntax: true,
   };
 
   const defaults = [
@@ -139,6 +150,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const { activeFile, projectVersion, saveVersion } = useWorkspaceMetadata();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
+  const editorModelPath = toMonacoModelPath(activeFile.path);
   const selectedLanguage = activeFile.language || language || "html";
 
   // Only subscribe to the flags we actually need for rendering decisions
@@ -442,7 +454,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           <Editor
             key={`${activeFile.path}:${projectVersion}`}
             height="100%"
-            path={activeFile.path}
+            path={editorModelPath}
             language={selectedLanguage}
             theme={theme}
             defaultValue={activeFile.content || defaultContent}
