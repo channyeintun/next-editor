@@ -128,6 +128,7 @@ const TerminalPanel = memo(function TerminalPanel() {
     lastOutput,
     errorMessage,
     activeCommand,
+    latestPreviewMessage,
     previewUrl,
     runnerConfig,
     workspaceRoot,
@@ -152,6 +153,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const previousPreviewUrlRef = useRef<string | null>(null);
   const previousCommandRef = useRef<string | null>(null);
   const previousErrorRef = useRef<string | null>(null);
+  const previousPreviewMessageIdRef = useRef<number | null>(null);
   const previousRuntimeEventKeyRef = useRef<string | null>(null);
   const previousOutputRef = useRef<string | null>(null);
 
@@ -249,6 +251,27 @@ const TerminalPanel = memo(function TerminalPanel() {
       previousErrorRef.current = null;
     }
   }, [errorMessage, isPlaybackSnapshotActive]);
+
+  useEffect(() => {
+    if (isPlaybackSnapshotActive || !latestPreviewMessage) {
+      return;
+    }
+
+    if (previousPreviewMessageIdRef.current === latestPreviewMessage.id) {
+      return;
+    }
+
+    previousPreviewMessageIdRef.current = latestPreviewMessage.id;
+
+    const location = latestPreviewMessage.pathname
+      ? ` ${latestPreviewMessage.pathname}`
+      : "";
+
+    appendConsoleLine(
+      `[preview:${latestPreviewMessage.kind}]${location} ${latestPreviewMessage.text}`.trim(),
+    );
+    setActiveTab("console");
+  }, [isPlaybackSnapshotActive, latestPreviewMessage]);
 
   const runtimeEventKey = JSON.stringify({
     activeTab,

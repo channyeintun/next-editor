@@ -9,6 +9,7 @@ import {
   WebContainerRuntimeMetadataContext,
   type EnvironmentVariables,
   type RunnerConfig,
+  type RuntimePreviewMessage,
   type WebContainerRuntimeActions,
   type WebContainerRuntimeMetadata,
   type WebContainerRuntimeStatus,
@@ -57,6 +58,54 @@ function getRuntimeErrorMessage(error: unknown): string {
   }
 
   return "Unknown WebContainer runtime error";
+}
+
+function stringifyPreviewMessageArg(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    value === null ||
+    value === undefined
+  ) {
+    return String(value);
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "[unserializable preview error]";
+  }
+}
+
+function formatPreviewMessage(message: {
+  args?: unknown[];
+  message?: string;
+  pathname?: string;
+  port?: number;
+  type?: string;
+}): Omit<RuntimePreviewMessage, "id"> {
+  const kind =
+    message.type === "console-error"
+      ? "console-error"
+      : message.type === "unhandledrejection"
+        ? "unhandled-rejection"
+        : "uncaught-exception";
+  const text =
+    kind === "console-error"
+      ? (message.args ?? []).map(stringifyPreviewMessageArg).join(" ") ||
+        "console.error called inside preview"
+      : message.message?.trim() || "Preview error";
+
+  return {
+    kind,
+    text,
+    port: typeof message.port === "number" ? message.port : null,
+    pathname: message.pathname ?? "",
+  };
 }
 
 function sanitizeTerminalChunk(chunk: string): string {
@@ -266,6 +315,7 @@ async function getOrBootSharedWebContainer(): Promise<WebContainer> {
       .then(({ WebContainer }) =>
         WebContainer.boot({
           coep: "require-corp",
+          forwardPreviewErrors: true,
           workdirName: "next-editor-runtime",
         }),
       )
@@ -290,6 +340,8 @@ export const WebContainerRuntimeProvider: React.FC<
   const instanceRef = useRef<WebContainer | null>(null);
   const runnerProcessRef = useRef<WebContainerProcess | null>(null);
   const devServerListenerCleanupRef = useRef<(() => void) | null>(null);
+  const previewMessageListenerCleanupRef = useRef<(() => void) | null>(null);
+  const previewMessageIdRef = useRef(0);
   const hasMountedProjectRef = useRef(false);
   const hasRunInitCommandRef = useRef(false);
   const lastSyncedProjectRef = useRef<WorkspaceProject | null>(null);
@@ -298,6 +350,8 @@ export const WebContainerRuntimeProvider: React.FC<
   const [status, setStatus] = useState<WebContainerRuntimeStatus>("idle");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [latestPreviewMessage, setLatestPreviewMessage] =
+    useState<RuntimePreviewMessage | null>(null);
   const [lastOutput, setLastOutput] = useState<string | null>(null);
   const [activeCommand, setActiveCommand] = useState<string | null>(null);
   const [environmentVariables, setEnvironmentVariables] =
@@ -340,6 +394,8 @@ export const WebContainerRuntimeProvider: React.FC<
     stopRunnerProcess();
     devServerListenerCleanupRef.current?.();
     devServerListenerCleanupRef.current = null;
+    previewMessageListenerCleanupRef.current?.();
+    previewMessageListenerCleanupRef.current = null;
     if (
       instanceRef.current &&
       instanceRef.current === sharedWebContainerState.instance
@@ -355,6 +411,7 @@ export const WebContainerRuntimeProvider: React.FC<
     setStatus("idle");
     setPreviewUrl(null);
     setErrorMessage(null);
+    setLatestPreviewMessage(null);
     setLastOutput(null);
     setActiveCommand(null);
   }, [stopRunnerProcess]);
@@ -376,6 +433,17 @@ export const WebContainerRuntimeProvider: React.FC<
       (_port, url) => {
         setPreviewUrl(url);
         setStatus("ready");
+      },
+    );
+
+    previewMessageListenerCleanupRef.current?.();
+    previewMessageListenerCleanupRef.current = instance.on(
+      "preview-message",
+      (message) => {
+        setLatestPreviewMessage({
+          id: ++previewMessageIdRef.current,
+          ...formatPreviewMessage(message),
+        });
       },
     );
 
@@ -806,6 +874,7 @@ export const WebContainerRuntimeProvider: React.FC<
       previewUrl,
       isSupported,
       errorMessage,
+      latestPreviewMessage,
       lastOutput,
       activeCommand,
       environmentVariables,
@@ -818,6 +887,7 @@ export const WebContainerRuntimeProvider: React.FC<
       errorMessage,
       isSupported,
       lastOutput,
+      latestPreviewMessage,
       previewUrl,
       runnerConfig,
       status,

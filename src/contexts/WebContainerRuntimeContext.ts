@@ -19,6 +19,19 @@ export interface RunnerConfig {
 
 export type EnvironmentVariables = Record<string, string>;
 
+export type RuntimePreviewMessageKind =
+  | "console-error"
+  | "uncaught-exception"
+  | "unhandled-rejection";
+
+export interface RuntimePreviewMessage {
+  id: number;
+  kind: RuntimePreviewMessageKind;
+  text: string;
+  port: number | null;
+  pathname: string;
+}
+
 export interface WebContainerRuntimeActions {
   startRuntime: () => Promise<void>;
   resetRuntime: () => void;
@@ -34,6 +47,7 @@ export interface WebContainerRuntimeMetadata {
   previewUrl: string | null;
   isSupported: boolean;
   errorMessage: string | null;
+  latestPreviewMessage: RuntimePreviewMessage | null;
   lastOutput: string | null;
   activeCommand: string | null;
   environmentVariables: EnvironmentVariables;
