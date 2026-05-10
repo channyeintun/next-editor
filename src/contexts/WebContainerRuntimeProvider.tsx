@@ -788,7 +788,7 @@ export const WebContainerRuntimeProvider: React.FC<
   );
 
   const startRuntime = useCallback(async () => {
-    if (lessonType !== "spa") {
+    if (lessonType !== "node.js") {
       resetRuntime();
       return;
     }
@@ -831,7 +831,7 @@ export const WebContainerRuntimeProvider: React.FC<
   ]);
 
   const rerunRunner = useCallback(async () => {
-    if (lessonType !== "spa") {
+    if (lessonType !== "node.js") {
       resetRuntime();
       return;
     }
@@ -864,7 +864,7 @@ export const WebContainerRuntimeProvider: React.FC<
   ]);
 
   const startTerminalSession = useCallback(async () => {
-    if (lessonType !== "spa") {
+    if (lessonType !== "node.js") {
       return;
     }
 
@@ -878,7 +878,7 @@ export const WebContainerRuntimeProvider: React.FC<
 
   const sendTerminalInput = useCallback(
     async (input: string) => {
-      if (lessonType !== "spa") {
+      if (lessonType !== "node.js") {
         return;
       }
 
@@ -907,7 +907,7 @@ export const WebContainerRuntimeProvider: React.FC<
 
   const saveWorkspace = useCallback(async () => {
     if (
-      lessonType !== "spa" ||
+      lessonType !== "node.js" ||
       !runnerConfig.enabled ||
       !runnerConfig.runOnFileSave
     ) {
@@ -985,7 +985,7 @@ export const WebContainerRuntimeProvider: React.FC<
 
   useEffect(() => {
     if (
-      lessonType !== "spa" ||
+      lessonType !== "node.js" ||
       !isSupported ||
       hasAutoStartedRef.current ||
       !runnerConfig.enabled ||

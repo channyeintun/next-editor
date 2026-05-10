@@ -260,7 +260,7 @@ const FileSidebar = memo(function FileSidebar() {
     return files.find((file) => file.path === contextMenu.path) ?? null;
   }, [contextMenu, files]);
   const canOpenContextFileInPreview =
-    lessonType !== "spa" && contextMenuFile?.language === "html";
+    lessonType !== "node.js" && contextMenuFile?.language === "html";
   const isContextFileInPreview = contextMenu?.path === previewFilePath;
   const contextMenuCreateParentPath =
     contextMenu?.kind === "folder"

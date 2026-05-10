@@ -31,7 +31,7 @@ export function EditorLayout() {
         <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
         <Preview />
-        {lessonType === "spa" ? <TerminalPanel /> : null}
+        {lessonType === "node.js" ? <TerminalPanel /> : null}
         <SlidePanel />
       </div>
 

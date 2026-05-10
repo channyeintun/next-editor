@@ -458,10 +458,11 @@ const Preview = memo(function Preview() {
   const { isPlaying, isRecording } = useNextEditorMetadata();
   const isStaticWorkspacePreview = lessonType === "html-css";
   const isRuntimePreviewActive =
-    lessonType === "spa" &&
+    lessonType === "node.js" &&
     runtimeStatus === "ready" &&
     Boolean(runtimePreviewUrl);
-  const isRuntimeManagedPreview = lessonType === "spa" && runnerConfig.enabled;
+  const isRuntimeManagedPreview =
+    lessonType === "node.js" && runnerConfig.enabled;
   const runtimePreviewState = useMemo(
     () =>
       getRuntimePreviewState(
@@ -1058,7 +1059,7 @@ const Preview = memo(function Preview() {
     const shouldEmitRefresh =
       previousSaveVersion !== null && previousSaveVersion !== saveVersion;
 
-    if (lessonType === "spa" && runtimePreviewUrl) {
+    if (lessonType === "node.js" && runtimePreviewUrl) {
       captureRuntimePreviewSnapshot();
       iframe.removeAttribute("srcdoc");
       iframe.src = runtimePreviewUrl;

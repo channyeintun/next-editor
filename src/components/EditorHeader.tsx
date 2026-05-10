@@ -21,8 +21,8 @@ const LESSON_TYPE_OPTIONS: Array<{
   label: string;
 }> = [
   {
-    value: "spa",
-    label: "Node App Lesson",
+    value: "node.js",
+    label: "Node.js Lesson",
   },
   {
     value: "html-css",
@@ -119,7 +119,7 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
       <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
         {saveShortcutLabel}
       </span>
-      {lessonType === "spa" ? (
+      {lessonType === "node.js" ? (
         <button
           type="button"
           onClick={() => {
@@ -257,8 +257,8 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
     }
 
     const nextLessonLabel =
-      nextLessonType === "spa"
-        ? "a fresh Node app lesson"
+      nextLessonType === "node.js"
+        ? "a fresh Node.js lesson"
         : "a fresh HTML/CSS lesson";
     const confirmMessage = hasUnsavedChanges
       ? `Discard the current workspace and unsaved changes? Switching lesson type will replace it with ${nextLessonLabel}.`
@@ -272,14 +272,14 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
       return;
     }
 
-    if (nextLessonType === "spa") {
+    if (nextLessonType === "node.js") {
       resetProject();
     } else {
       createNewEditor();
     }
 
     saveProject();
-    updateRunnerConfig({ enabled: nextLessonType === "spa" });
+    updateRunnerConfig({ enabled: nextLessonType === "node.js" });
   };
 
   const handleSave = () => {
@@ -361,7 +361,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
 
               <div className="my-1 h-px bg-slate-700" />
 
-              {lessonType === "spa" ? (
+              {lessonType === "node.js" ? (
                 <button
                   type="button"
                   role="menuitem"

@@ -5,7 +5,7 @@ export interface WorkspaceFile {
   content: string;
 }
 
-export type WorkspaceLessonType = "spa" | "html-css";
+export type WorkspaceLessonType = "node.js" | "html-css";
 
 export interface WorkspaceProject {
   id: string;
@@ -530,8 +530,8 @@ code {
 
   return {
     id: "starter-workspace",
-    name: "Next Editor SPA",
-    lessonType: "spa",
+    name: "Next Editor Node.js",
+    lessonType: "node.js",
     entryFilePath: DEFAULT_WORKSPACE_APP_PATH,
     folders: collectWorkspaceFolders(Object.keys(files)),
     files,

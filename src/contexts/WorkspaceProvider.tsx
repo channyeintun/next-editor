@@ -106,19 +106,19 @@ function replacePathPrefix(
 
 function inferWorkspaceLessonType(
   project: Pick<WorkspaceProject, "files"> & {
-    lessonType?: WorkspaceLessonType;
+    lessonType?: string;
   },
 ): WorkspaceLessonType {
   if (project.lessonType === "html-css") {
     return "html-css";
   }
 
-  if (project.lessonType === "spa") {
-    return "spa";
+  if (project.lessonType === "node.js") {
+    return "node.js";
   }
 
   return project.files["package.json"] || project.files["vite.config.js"]
-    ? "spa"
+    ? "node.js"
     : "html-css";
 }
 
