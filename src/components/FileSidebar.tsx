@@ -80,6 +80,19 @@ function getDefaultDraftName(kind: "file" | "folder"): string {
   return kind === "file" ? "new-file.js" : "new-folder";
 }
 
+function removeFolderFromCollapsedState(
+  current: Set<string>,
+  folderPath: string,
+): Set<string> {
+  if (!folderPath || !current.has(folderPath)) {
+    return current;
+  }
+
+  const next = new Set(current);
+  next.delete(folderPath);
+  return next;
+}
+
 function getFileIcon(file: WorkspaceFile) {
   if (file.path === "package.json") {
     return <Package size={14} className="text-emerald-300" />;
@@ -213,6 +226,9 @@ function buildWorkspaceTree(
 }
 
 const FileSidebar = memo(function FileSidebar() {
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [draftName, setDraftName] = useState("");
   const [editState, setEditState] = useState<SidebarEditState>(null);
   const [contextMenu, setContextMenu] =
@@ -305,6 +321,49 @@ const FileSidebar = memo(function FileSidebar() {
     };
   }, [contextMenu]);
 
+  useEffect(() => {
+    const validFolders = new Set(folders);
+
+    setCollapsedFolders((current) => {
+      let changed = false;
+      const next = new Set<string>();
+
+      for (const folderPath of current) {
+        if (validFolders.has(folderPath)) {
+          next.add(folderPath);
+          continue;
+        }
+
+        changed = true;
+      }
+
+      return changed ? next : current;
+    });
+  }, [folders]);
+
+  useEffect(() => {
+    let folderPath = getParentWorkspacePath(activeFilePath);
+
+    if (!folderPath) {
+      return;
+    }
+
+    setCollapsedFolders((current) => {
+      let next = current;
+
+      while (folderPath) {
+        const updated = removeFolderFromCollapsedState(next, folderPath);
+        if (updated !== next) {
+          next = updated;
+        }
+
+        folderPath = getParentWorkspacePath(folderPath);
+      }
+
+      return next;
+    });
+  }, [activeFilePath]);
+
   const clearInlineEdit = () => {
     setEditState(null);
     setDraftName("");
@@ -312,6 +371,9 @@ const FileSidebar = memo(function FileSidebar() {
 
   const openCreateInput = (kind: SidebarEntryKind, parentPath: string) => {
     setContextMenu(null);
+    setCollapsedFolders((current) =>
+      removeFolderFromCollapsedState(current, parentPath),
+    );
     setEditState({
       mode: "create",
       kind,
@@ -434,6 +496,20 @@ const FileSidebar = memo(function FileSidebar() {
     });
   };
 
+  const toggleFolder = (path: string) => {
+    setCollapsedFolders((current) => {
+      const next = new Set(current);
+
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+
+      return next;
+    });
+  };
+
   const renderInlineInput = (kind: "file" | "folder", depth: number) => {
     const icon =
       kind === "folder" ? (
@@ -471,6 +547,8 @@ const FileSidebar = memo(function FileSidebar() {
     if (node.kind === "folder") {
       const isEditing =
         editState?.mode === "rename" && editState.path === node.path;
+      const isCollapsed = collapsedFolders.has(node.path);
+      const isExpanded = !isCollapsed;
 
       return (
         <div key={node.path} className="space-y-1">
@@ -478,24 +556,27 @@ const FileSidebar = memo(function FileSidebar() {
             renderInlineInput("folder", depth)
           ) : (
             <div className="px-2">
-              <div
+              <button
+                type="button"
+                onClick={() => toggleFolder(node.path)}
                 onContextMenu={(event) =>
                   handleRowContextMenu(event, "folder", node.path)
                 }
-                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-900 ${
+                className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-slate-900 ${
                   node.hasActiveFile ? "text-slate-200" : "text-slate-400"
                 }`}
                 style={{ paddingLeft: `${depth * 16 + 12}px` }}
+                aria-expanded={isExpanded}
               >
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                  {node.hasActiveFile ? (
+                  {isExpanded || node.hasActiveFile ? (
                     <FolderOpen size={14} className="text-sky-300" />
                   ) : (
                     <Folder size={14} className="text-slate-500" />
                   )}
                 </span>
                 <span className="truncate font-medium">{node.name}</span>
-              </div>
+              </button>
             </div>
           )}
 
@@ -503,7 +584,9 @@ const FileSidebar = memo(function FileSidebar() {
             ? renderInlineInput(editState.kind, depth + 1)
             : null}
 
-          {node.children.map((child) => renderNode(child, depth + 1))}
+          {isExpanded
+            ? node.children.map((child) => renderNode(child, depth + 1))
+            : null}
         </div>
       );
     }
