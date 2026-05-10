@@ -22,7 +22,7 @@ const LESSON_TYPE_OPTIONS: Array<{
 }> = [
   {
     value: "spa",
-    label: "SPA Lesson",
+    label: "Node App Lesson",
   },
   {
     value: "html-css",
@@ -232,7 +232,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
 
     const nextLessonLabel =
       nextLessonType === "spa"
-        ? "a fresh SPA lesson"
+        ? "a fresh Node app lesson"
         : "a fresh HTML/CSS lesson";
     const confirmMessage = hasUnsavedChanges
       ? `Discard the current workspace and unsaved changes? Switching lesson type will replace it with ${nextLessonLabel}.`

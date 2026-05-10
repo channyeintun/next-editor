@@ -6,13 +6,13 @@
   <h1>Interactive Code Recording For Real Workspaces</h1>
 </div>
 
-Next Editor is a browser-based coding lesson editor and recording engine. It combines a Monaco-powered editor, a multi-file workspace, WebContainers runtime support for SPA lessons, static preview for HTML/CSS lessons, synchronized slides, and portable recording export so learners can replay an interactive coding session instead of watching a flat video.
+Next Editor is a browser-based coding lesson editor and recording engine. It combines a Monaco-powered editor, a multi-file workspace, WebContainers runtime support for Node app lessons, static preview for HTML/CSS lessons, synchronized slides, and portable recording export so learners can replay an interactive coding session instead of watching a flat video.
 
 ## Overview
 
 - Multi-file workspace with file and folder management from the sidebar.
 - Two lesson modes:
-  - `SPA Lesson` runs inside WebContainers with npm packages, runtime preview, and a dock for runner, terminal, and console output.
+  - `Node App Lesson` runs inside WebContainers with npm packages, terminal commands, runtime preview, and a dock for runner, terminal, and console output.
   - `HTML/CSS Lesson` renders a static preview from local HTML, CSS, and vanilla JavaScript files and supports pinning a file as the preview entry.
 - High-fidelity recording that captures editor frames and timed workspace/runtime events, not just final snapshots.
 - Playback that restores the recorded active file, preview state, reruns, runtime dock state, and synced slide state from the timeline.
@@ -22,7 +22,7 @@ Next Editor is a browser-based coding lesson editor and recording engine. It com
 ## Key Features
 
 - Workspace-first editing: create, rename, delete, and switch files without leaving the editor.
-- Runtime-backed SPA preview: run package-based apps in-browser through WebContainers.
+- Runtime-backed Node app preview: run package-based apps, including server-style apps, in-browser through WebContainers.
 - Static lesson preview: preview HTML/CSS lessons without the runtime dock.
 - Recording and replay: capture cursor movement, content changes, file switches, preview interactions, and runtime state changes.
 - Local persistence: save the current workspace with `CMD+S` or `CTRL+S` and continue where you left off.
@@ -31,7 +31,7 @@ Next Editor is a browser-based coding lesson editor and recording engine. It com
 
 ## Browser Support
 
-- Chromium-based browsers are the primary supported target for `SPA Lesson` runtime features because WebContainers require cross-origin isolation and modern browser capabilities.
+- Chromium-based browsers are the primary supported target for `Node App Lesson` runtime features because WebContainers require cross-origin isolation and modern browser capabilities.
 - `HTML/CSS Lesson` mode continues to work as the lightweight static preview path when a full runtime is not needed.
 
 ## Tech Stack
