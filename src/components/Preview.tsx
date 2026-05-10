@@ -1486,15 +1486,7 @@ const Preview = memo(function Preview() {
             </button>
           </div>
 
-          <div className="flex-1 px-3 text-center text-[11px] font-medium text-gray-500 truncate">
-            {isRuntimePreviewActive
-              ? runtimePreviewUrl
-              : isRuntimeManagedPreview
-                ? runtimePreviewState.label
-                : isStaticWorkspacePreview
-                  ? "HTML/CSS preview"
-                  : "Single-file preview"}
-          </div>
+          <div className="flex-1" />
 
           {/* Refresh button */}
           <button
