@@ -121,8 +121,13 @@ const TerminalPanel = memo(function TerminalPanel() {
     registerRuntimeStateApplier,
     registerRuntimeStateGetter,
   } = useNextEditorActions();
-  const { rerunRunner, runCommand, updateRunnerConfig } =
-    useWebContainerRuntimeActions();
+  const {
+    rerunRunner,
+    resizeTerminal,
+    sendTerminalInput,
+    startTerminalSession,
+    updateRunnerConfig,
+  } = useWebContainerRuntimeActions();
   const {
     status,
     lastOutput,
@@ -133,6 +138,7 @@ const TerminalPanel = memo(function TerminalPanel() {
     openPorts,
     previewUrl,
     runnerConfig,
+    terminalOutput,
     workspaceRoot,
   } = useWebContainerRuntimeMetadata();
   const { currentRecording, isRecording } = useNextEditorMetadata();
@@ -148,6 +154,7 @@ const TerminalPanel = memo(function TerminalPanel() {
     activeCommand || recordedRuntimeSnapshot?.activeCommand || null;
   const effectiveErrorMessage =
     errorMessage || recordedRuntimeSnapshot?.errorMessage || null;
+  const recordableTerminalOutput = terminalOutput || lastOutput;
   const isPlaybackSnapshotActive = Boolean(
     currentRecording && playbackRuntimeSnapshot,
   );
@@ -159,6 +166,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const previousPreviewMessageIdRef = useRef<number | null>(null);
   const previousRuntimeEventKeyRef = useRef<string | null>(null);
   const previousOutputRef = useRef<string | null>(null);
+  const terminalViewportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     registerRuntimeStateGetter(() => ({
@@ -337,13 +345,13 @@ const TerminalPanel = memo(function TerminalPanel() {
 
   useEffect(() => {
     if (!isRecording || isPlaybackSnapshotActive) {
-      previousOutputRef.current = lastOutput;
+      previousOutputRef.current = recordableTerminalOutput;
       return;
     }
 
     const timer = window.setTimeout(() => {
-      if (previousOutputRef.current !== lastOutput) {
-        previousOutputRef.current = lastOutput;
+      if (previousOutputRef.current !== recordableTerminalOutput) {
+        previousOutputRef.current = recordableTerminalOutput;
         handleRuntimeEvent();
       }
     }, 200);
@@ -351,7 +359,49 @@ const TerminalPanel = memo(function TerminalPanel() {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [handleRuntimeEvent, isPlaybackSnapshotActive, isRecording, lastOutput]);
+  }, [
+    handleRuntimeEvent,
+    isPlaybackSnapshotActive,
+    isRecording,
+    recordableTerminalOutput,
+  ]);
+
+  useEffect(() => {
+    if (activeTab !== "terminal" || isPlaybackSnapshotActive) {
+      return;
+    }
+
+    void startTerminalSession();
+  }, [activeTab, isPlaybackSnapshotActive, startTerminalSession]);
+
+  useEffect(() => {
+    if (activeTab !== "terminal" || isCollapsed || isPlaybackSnapshotActive) {
+      return;
+    }
+
+    const viewport = terminalViewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const updateSize = () => {
+      const { height, width } = viewport.getBoundingClientRect();
+
+      resizeTerminal({
+        cols: Math.max(40, Math.floor((width - 24) / 8)),
+        rows: Math.max(12, Math.floor((height - 64) / 22)),
+      });
+    };
+
+    updateSize();
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(viewport);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [activeTab, isCollapsed, isPlaybackSnapshotActive, resizeTerminal]);
 
   const isBusy =
     runtimeStatus === "booting" ||
@@ -362,14 +412,12 @@ const TerminalPanel = memo(function TerminalPanel() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const nextCommand = command.trim();
-    if (!nextCommand) {
-      return;
-    }
+    const nextInput = command;
 
     setCommand("");
     setActiveTab("terminal");
-    await runCommand(nextCommand);
+
+    await sendTerminalInput(nextInput.length > 0 ? `${nextInput}\n` : "\n");
   };
 
   const rawContent = effectiveErrorMessage
@@ -382,6 +430,11 @@ const TerminalPanel = memo(function TerminalPanel() {
           ? "Starting the workspace dev server..."
           : "Waiting for runtime output...");
   const content = formatTerminalContent(rawContent);
+  const terminalContent = formatTerminalContent(
+    terminalOutput ||
+      recordedOutput ||
+      "Open the terminal to start a shell session.",
+  );
   const statusLabel = getStatusLabel(runtimeStatus);
   const consoleContent = useMemo(() => {
     if (consoleLines.length === 0) {
@@ -495,10 +548,15 @@ const TerminalPanel = memo(function TerminalPanel() {
             )}
 
             {activeTab === "terminal" && (
-              <div className="flex h-72 flex-col bg-[#1d1f29] px-5 py-6">
+              <div
+                ref={terminalViewportRef}
+                className="flex h-72 flex-col bg-[#1d1f29] px-5 py-6"
+              >
                 <div className="min-h-0 flex-1 overflow-auto font-mono text-[13px] leading-7 text-slate-200">
-                  {content && content !== "Waiting for runtime output..." ? (
-                    <pre className="mb-5 whitespace-pre-wrap">{content}</pre>
+                  {terminalContent ? (
+                    <pre className="mb-5 whitespace-pre-wrap">
+                      {terminalContent}
+                    </pre>
                   ) : null}
                   <p className="text-[14px] font-semibold text-[#5ca3ff]">
                     {workspaceRoot}
@@ -514,9 +572,17 @@ const TerminalPanel = memo(function TerminalPanel() {
                       value={command}
                       onChange={(event) => setCommand(event.target.value)}
                       placeholder=""
-                      disabled={Boolean(effectiveActiveCommand)}
                       className="h-8 min-w-0 flex-1 bg-transparent text-[13px] text-slate-100 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed"
                     />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void sendTerminalInput("\u0003");
+                      }}
+                      className="rounded-md border border-slate-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-slate-500 hover:text-white"
+                    >
+                      Ctrl+C
+                    </button>
                   </form>
                 </div>
               </div>

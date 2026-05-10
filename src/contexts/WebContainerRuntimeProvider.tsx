@@ -33,6 +33,11 @@ const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   initCommand: "npm install",
   runCommand: "npm run dev",
 };
+const TERMINAL_SHELL_CANDIDATES = [
+  { command: "jsh" },
+  { command: "bash", args: ["-i"] },
+  { command: "sh", args: ["-i"] },
+] as const;
 const RUNTIME_ENVIRONMENT_STORAGE_KEY = "next-editor-runtime-environment";
 
 const sharedWebContainerState: {
@@ -341,6 +346,10 @@ export const WebContainerRuntimeProvider: React.FC<
   const { lessonType, projectName, syncVersion } = useWorkspaceMetadata();
   const instanceRef = useRef<WebContainer | null>(null);
   const runnerProcessRef = useRef<WebContainerProcess | null>(null);
+  const terminalProcessRef = useRef<WebContainerProcess | null>(null);
+  const terminalInputWriterRef =
+    useRef<WritableStreamDefaultWriter<string> | null>(null);
+  const terminalSizeRef = useRef({ cols: 96, rows: 18 });
   const devServerListenerCleanupRef = useRef<(() => void) | null>(null);
   const portListenerCleanupRef = useRef<(() => void) | null>(null);
   const runtimeErrorListenerCleanupRef = useRef<(() => void) | null>(null);
@@ -361,6 +370,7 @@ export const WebContainerRuntimeProvider: React.FC<
   const [latestLifecycleEvent, setLatestLifecycleEvent] =
     useState<RuntimeLifecycleEvent | null>(null);
   const [lastOutput, setLastOutput] = useState<string | null>(null);
+  const [terminalOutput, setTerminalOutput] = useState<string | null>(null);
   const [activeCommand, setActiveCommand] = useState<string | null>(null);
   const [environmentVariables, setEnvironmentVariables] =
     useState<EnvironmentVariables>(loadStoredEnvironmentVariables);
@@ -387,6 +397,19 @@ export const WebContainerRuntimeProvider: React.FC<
     });
   }, []);
 
+  const appendTerminalOutput = useCallback((chunk: string) => {
+    const sanitizedChunk = sanitizeTerminalChunk(chunk);
+
+    if (!sanitizedChunk) {
+      return;
+    }
+
+    setTerminalOutput((current) => {
+      const next = `${current ?? ""}${sanitizedChunk}`;
+      return next.slice(-6000);
+    });
+  }, []);
+
   const pushLifecycleEvent = useCallback(
     (event: Omit<RuntimeLifecycleEvent, "id">) => {
       setLatestLifecycleEvent({
@@ -408,8 +431,23 @@ export const WebContainerRuntimeProvider: React.FC<
     process.kill();
   }, []);
 
+  const stopTerminalProcess = useCallback(() => {
+    terminalInputWriterRef.current?.releaseLock();
+    terminalInputWriterRef.current = null;
+
+    const process = terminalProcessRef.current;
+
+    if (!process) {
+      return;
+    }
+
+    terminalProcessRef.current = null;
+    process.kill();
+  }, []);
+
   const resetRuntime = useCallback(() => {
     stopRunnerProcess();
+    stopTerminalProcess();
     devServerListenerCleanupRef.current?.();
     devServerListenerCleanupRef.current = null;
     portListenerCleanupRef.current?.();
@@ -437,8 +475,9 @@ export const WebContainerRuntimeProvider: React.FC<
     setOpenPorts([]);
     setLatestLifecycleEvent(null);
     setLastOutput(null);
+    setTerminalOutput(null);
     setActiveCommand(null);
-  }, [stopRunnerProcess]);
+  }, [stopRunnerProcess, stopTerminalProcess]);
 
   const bootInstance = useCallback(async () => {
     if (instanceRef.current) {
@@ -684,6 +723,72 @@ export const WebContainerRuntimeProvider: React.FC<
     [appendOutput, environmentVariables, stopRunnerProcess],
   );
 
+  const ensureTerminalSession = useCallback(
+    async (instance: WebContainer) => {
+      if (terminalProcessRef.current) {
+        return;
+      }
+
+      let lastError: unknown = null;
+
+      for (const candidate of TERMINAL_SHELL_CANDIDATES) {
+        try {
+          const process = candidate.args
+            ? await instance.spawn(candidate.command, [...candidate.args], {
+                env: environmentVariables,
+                terminal: terminalSizeRef.current,
+              })
+            : await instance.spawn(candidate.command, {
+                env: environmentVariables,
+                terminal: terminalSizeRef.current,
+              });
+
+          terminalProcessRef.current = process;
+          terminalInputWriterRef.current = process.input.getWriter();
+
+          process.output
+            .pipeTo(
+              new WritableStream({
+                write(chunk) {
+                  appendTerminalOutput(chunk);
+                },
+              }),
+            )
+            .catch(() => {});
+
+          void process.exit
+            .then((exitCode) => {
+              if (terminalProcessRef.current !== process) {
+                return;
+              }
+
+              terminalInputWriterRef.current?.releaseLock();
+              terminalInputWriterRef.current = null;
+              terminalProcessRef.current = null;
+              appendTerminalOutput(`\nTerminal exited with code ${exitCode}\n`);
+            })
+            .catch((error) => {
+              if (terminalProcessRef.current !== process) {
+                return;
+              }
+
+              terminalInputWriterRef.current?.releaseLock();
+              terminalInputWriterRef.current = null;
+              terminalProcessRef.current = null;
+              appendTerminalOutput(`\n${getRuntimeErrorMessage(error)}\n`);
+            });
+
+          return;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw lastError ?? new Error("Unable to start the workspace shell.");
+    },
+    [appendTerminalOutput, environmentVariables],
+  );
+
   const startRuntime = useCallback(async () => {
     if (lessonType !== "spa") {
       resetRuntime();
@@ -760,15 +865,22 @@ export const WebContainerRuntimeProvider: React.FC<
     startRunnerProcess,
   ]);
 
-  const runCommand = useCallback(
-    async (commandLine: string) => {
+  const startTerminalSession = useCallback(async () => {
+    if (lessonType !== "spa") {
+      return;
+    }
+
+    const instance = await prepareRuntime();
+    if (!instance) {
+      return;
+    }
+
+    await ensureTerminalSession(instance);
+  }, [ensureTerminalSession, lessonType, prepareRuntime]);
+
+  const sendTerminalInput = useCallback(
+    async (input: string) => {
       if (lessonType !== "spa") {
-        return;
-      }
-
-      const parsedCommand = parseCommand(commandLine);
-
-      if (!parsedCommand) {
         return;
       }
 
@@ -777,11 +889,22 @@ export const WebContainerRuntimeProvider: React.FC<
         return;
       }
 
-      await runForegroundCommand(instance, commandLine, {
-        trackAsActiveCommand: true,
-      });
+      await ensureTerminalSession(instance);
+      await terminalInputWriterRef.current?.write(input);
     },
-    [lessonType, prepareRuntime, runForegroundCommand],
+    [ensureTerminalSession, lessonType, prepareRuntime],
+  );
+
+  const resizeTerminal = useCallback((size: { cols: number; rows: number }) => {
+    terminalSizeRef.current = size;
+    terminalProcessRef.current?.resize(size);
+  }, []);
+
+  const runCommand = useCallback(
+    async (commandLine: string) => {
+      await sendTerminalInput(`${commandLine}\n`);
+    },
+    [sendTerminalInput],
   );
 
   const saveWorkspace = useCallback(async () => {
@@ -916,15 +1039,21 @@ export const WebContainerRuntimeProvider: React.FC<
       resetRuntime,
       rerunRunner,
       runCommand,
+      startTerminalSession,
+      sendTerminalInput,
+      resizeTerminal,
       saveWorkspace,
       updateEnvironmentVariables,
       updateRunnerConfig,
     }),
     [
       resetRuntime,
+      resizeTerminal,
       rerunRunner,
       runCommand,
       saveWorkspace,
+      sendTerminalInput,
+      startTerminalSession,
       startRuntime,
       updateEnvironmentVariables,
       updateRunnerConfig,
@@ -941,6 +1070,7 @@ export const WebContainerRuntimeProvider: React.FC<
       openPorts,
       latestLifecycleEvent,
       lastOutput,
+      terminalOutput,
       activeCommand,
       environmentVariables,
       runnerConfig,
@@ -958,6 +1088,7 @@ export const WebContainerRuntimeProvider: React.FC<
       previewUrl,
       runnerConfig,
       status,
+      terminalOutput,
       workspaceRoot,
     ],
   );

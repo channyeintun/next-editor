@@ -55,6 +55,9 @@ export interface WebContainerRuntimeActions {
   resetRuntime: () => void;
   rerunRunner: () => Promise<void>;
   runCommand: (commandLine: string) => Promise<void>;
+  startTerminalSession: () => Promise<void>;
+  sendTerminalInput: (input: string) => Promise<void>;
+  resizeTerminal: (size: { cols: number; rows: number }) => void;
   saveWorkspace: () => Promise<void>;
   updateEnvironmentVariables: (variables: EnvironmentVariables) => void;
   updateRunnerConfig: (config: Partial<RunnerConfig>) => void;
@@ -69,6 +72,7 @@ export interface WebContainerRuntimeMetadata {
   openPorts: RuntimePort[];
   latestLifecycleEvent: RuntimeLifecycleEvent | null;
   lastOutput: string | null;
+  terminalOutput: string | null;
   activeCommand: string | null;
   environmentVariables: EnvironmentVariables;
   runnerConfig: RunnerConfig;

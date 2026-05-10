@@ -35,6 +35,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     previewUrl: runtimeMetadata.previewUrl,
     status: runtimeMetadata.status,
     lastOutput: runtimeMetadata.lastOutput,
+    terminalOutput: runtimeMetadata.terminalOutput,
     activeCommand: runtimeMetadata.activeCommand,
     errorMessage: runtimeMetadata.errorMessage,
   });
@@ -71,6 +72,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     previewUrl: runtimeMetadata.previewUrl,
     status: runtimeMetadata.status,
     lastOutput: runtimeMetadata.lastOutput,
+    terminalOutput: runtimeMetadata.terminalOutput,
     activeCommand: runtimeMetadata.activeCommand,
     errorMessage: runtimeMetadata.errorMessage,
   };
@@ -112,7 +114,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
         mode: snapshot.previewUrl ? "webcontainer" : "single-file",
         status: snapshot.status,
         previewUrl: snapshot.previewUrl,
-        terminalOutput: snapshot.lastOutput,
+        terminalOutput: snapshot.terminalOutput || snapshot.lastOutput,
         activeCommand: snapshot.activeCommand,
         errorMessage: snapshot.errorMessage,
         ...getRuntimeStateRef.current?.(),
