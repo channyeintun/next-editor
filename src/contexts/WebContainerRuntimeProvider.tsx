@@ -34,7 +34,7 @@ const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   runCommand: "npm run dev",
 };
 const TERMINAL_SHELL_CANDIDATES = [
-  { command: "jsh" },
+  { command: "jsh", args: [] },
   { command: "bash", args: ["-i"] },
   { command: "sh", args: ["-i"] },
 ] as const;
@@ -733,15 +733,14 @@ export const WebContainerRuntimeProvider: React.FC<
 
       for (const candidate of TERMINAL_SHELL_CANDIDATES) {
         try {
-          const process = candidate.args
-            ? await instance.spawn(candidate.command, [...candidate.args], {
-                env: environmentVariables,
-                terminal: terminalSizeRef.current,
-              })
-            : await instance.spawn(candidate.command, {
-                env: environmentVariables,
-                terminal: terminalSizeRef.current,
-              });
+          const process = await instance.spawn(
+            candidate.command,
+            [...candidate.args],
+            {
+              env: environmentVariables,
+              terminal: terminalSizeRef.current,
+            },
+          );
 
           terminalProcessRef.current = process;
           terminalInputWriterRef.current = process.input.getWriter();
