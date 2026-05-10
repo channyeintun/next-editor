@@ -458,6 +458,7 @@ const Preview = memo(function Preview() {
   const sizeRef = useRef<PreviewSize>(size);
   sizeRef.current = size;
   const previousSaveVersionRef = useRef<number | null>(null);
+  const previousIsRecordingRef = useRef(isRecording);
 
   // Emit preview event
   const emitPreviewEvent = useCallback(
@@ -1194,6 +1195,17 @@ const Preview = memo(function Preview() {
     staticWorkspacePreview,
     updateIframeContent,
   ]);
+
+  useEffect(() => {
+    const wasRecording = previousIsRecordingRef.current;
+    previousIsRecordingRef.current = isRecording;
+
+    if (isPlaying || !isRecording || wasRecording) {
+      return;
+    }
+
+    handleRefresh();
+  }, [handleRefresh, isPlaying, isRecording]);
 
   const [isResizing, setIsResizing] = useState(false);
 

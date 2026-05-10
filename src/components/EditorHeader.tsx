@@ -49,7 +49,7 @@ function isAppleUserAgent(): boolean {
 }
 
 function getSaveShortcutLabel(): string {
-  return isAppleUserAgent() ? "CMD+S to checkpoint" : "CTRL+S to checkpoint";
+  return isAppleUserAgent() ? "CMD + S to refresh" : "CTRL + S to refresh";
 }
 
 function stringifyEnvironmentVariables(
