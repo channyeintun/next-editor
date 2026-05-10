@@ -405,7 +405,7 @@ const Preview = memo(function Preview() {
     runnerConfig,
   } = useWebContainerRuntimeMetadata();
 
-  const { isRecording } = useNextEditorMetadata();
+  const { isPlaying, isRecording } = useNextEditorMetadata();
   const isStaticWorkspacePreview = lessonType === "html-css";
   const isRuntimePreviewActive =
     lessonType === "spa" &&
@@ -944,6 +944,10 @@ const Preview = memo(function Preview() {
   }, [isRecording, emitPreviewEvent, isRuntimePreviewActive, size]);
 
   useEffect(() => {
+    if (isPlaying) {
+      return;
+    }
+
     const iframe = iframeRef.current;
     if (!iframe) return;
 
@@ -977,6 +981,7 @@ const Preview = memo(function Preview() {
     }
   }, [
     editorRef,
+    isPlaying,
     isStaticWorkspacePreview,
     isRuntimeManagedPreview,
     lessonType,
@@ -988,6 +993,7 @@ const Preview = memo(function Preview() {
 
   useEffect(() => {
     if (
+      isPlaying ||
       runtimePreviewUrl ||
       isRuntimeManagedPreview ||
       isStaticWorkspacePreview
@@ -1011,6 +1017,7 @@ const Preview = memo(function Preview() {
     checkForEditor();
   }, [
     editorRef,
+    isPlaying,
     isRuntimeManagedPreview,
     isStaticWorkspacePreview,
     runtimePreviewUrl,
@@ -1020,6 +1027,7 @@ const Preview = memo(function Preview() {
   // Also ensure iframe loads properly
   useEffect(() => {
     if (
+      isPlaying ||
       runtimePreviewUrl ||
       isRuntimeManagedPreview ||
       isStaticWorkspacePreview
@@ -1045,6 +1053,7 @@ const Preview = memo(function Preview() {
     };
   }, [
     editorRef,
+    isPlaying,
     isStaticWorkspacePreview,
     isRuntimeManagedPreview,
     runtimePreviewUrl,
