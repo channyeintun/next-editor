@@ -391,7 +391,6 @@ const Preview = memo(function Preview() {
 
   const {
     editorRef,
-    pause,
     handlePreviewEvent,
     registerPreviewStateGetter,
     registerPreviewStateApplier,
@@ -406,14 +405,13 @@ const Preview = memo(function Preview() {
     runnerConfig,
   } = useWebContainerRuntimeMetadata();
 
-  const { isPlaying, isRecording } = useNextEditorMetadata();
+  const { isRecording } = useNextEditorMetadata();
   const isStaticWorkspacePreview = lessonType === "html-css";
   const isRuntimePreviewActive =
     lessonType === "spa" &&
     runtimeStatus === "ready" &&
     Boolean(runtimePreviewUrl);
   const isRuntimeManagedPreview = lessonType === "spa" && runnerConfig.enabled;
-  const isRuntimeReplayLocked = isRuntimePreviewActive && isPlaying;
   const runtimePreviewState = useMemo(
     () =>
       getRuntimePreviewState(
@@ -1086,10 +1084,6 @@ const Preview = memo(function Preview() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = useCallback(() => {
-    if (isRuntimeReplayLocked) {
-      return;
-    }
-
     const iframe = iframeRef.current;
 
     if (isRuntimePreviewActive && iframe && runtimePreviewUrl) {
@@ -1141,17 +1135,7 @@ const Preview = memo(function Preview() {
     runtimePreviewUrl,
     staticWorkspacePreview,
     updateIframeContent,
-    isRuntimeReplayLocked,
   ]);
-
-  const handleRuntimeReplayUnlock = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      pause();
-    },
-    [pause],
-  );
 
   const [isResizing, setIsResizing] = useState(false);
 
@@ -1343,15 +1327,13 @@ const Preview = memo(function Preview() {
           </div>
 
           <div className="flex-1 px-3 text-center text-[11px] font-medium text-gray-500 truncate">
-            {isRuntimeReplayLocked
-              ? "Replay preview locked"
-              : isRuntimePreviewActive
-                ? runtimePreviewUrl
-                : isRuntimeManagedPreview
-                  ? runtimePreviewState.label
-                  : isStaticWorkspacePreview
-                    ? "HTML/CSS preview"
-                    : "Single-file preview"}
+            {isRuntimePreviewActive
+              ? runtimePreviewUrl
+              : isRuntimeManagedPreview
+                ? runtimePreviewState.label
+                : isStaticWorkspacePreview
+                  ? "HTML/CSS preview"
+                  : "Single-file preview"}
           </div>
 
           {/* Refresh button */}
@@ -1360,12 +1342,7 @@ const Preview = memo(function Preview() {
               e.stopPropagation();
               handleRefresh();
             }}
-            disabled={isRuntimeReplayLocked}
-            className={`p-1 rounded-md transition-all ${
-              isRuntimeReplayLocked
-                ? "cursor-not-allowed text-gray-300"
-                : "text-gray-400 hover:text-gray-600 hover:bg-gray-100 active:scale-95"
-            }`}
+            className="p-1 rounded-md text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-600 active:scale-95"
             title="Refresh Preview"
           >
             <svg
@@ -1391,20 +1368,10 @@ const Preview = memo(function Preview() {
         <div className="relative flex-1">
           <iframe
             ref={iframeRef}
-            className={`absolute inset-0 w-full h-full block border-0 bg-transparent align-middle ${isTransitioning || isResizing || isRuntimeReplayLocked ? "pointer-events-none" : ""}`}
+            className={`absolute inset-0 w-full h-full block border-0 bg-transparent align-middle ${isTransitioning || isResizing ? "pointer-events-none" : ""}`}
             title="Code Preview"
             sandbox="allow-scripts allow-same-origin"
           />
-
-          {isRuntimeReplayLocked && (
-            <button
-              type="button"
-              onClick={handleRuntimeReplayUnlock}
-              className="absolute inset-0 z-40 bg-transparent"
-              aria-label="Pause playback and interact with the live preview"
-              title="Pause playback and interact with the live preview"
-            />
-          )}
 
           {/* Resize handle */}
           <div
