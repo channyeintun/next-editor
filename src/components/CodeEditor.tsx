@@ -152,6 +152,14 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     handleEditorChange();
   });
 
+  const syncEditorContentToWorkspace = useEffectEvent((content: string) => {
+    if (isPlaying) {
+      return;
+    }
+
+    updateActiveFileContent(content);
+  });
+
   useEffect(() => {
     const nextWorkspaceState = {
       activeFilePath: activeFile.path,
@@ -209,12 +217,12 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     disposeEditorListeners();
     editorRef.current = editor;
     syncEditorRef(editor);
-    updateActiveFileContent(editor.getValue());
+    syncEditorContentToWorkspace(editor.getValue());
     editor.focus();
 
     editorDisposablesRef.current = [
       editor.onDidChangeModelContent(() => {
-        updateActiveFileContent(editor.getValue());
+        syncEditorContentToWorkspace(editor.getValue());
         onEditorChange();
       }),
       editor.onDidChangeCursorPosition(() => {

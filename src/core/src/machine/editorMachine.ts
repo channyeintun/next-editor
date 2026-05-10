@@ -764,25 +764,26 @@ export const editorMachine = setup({
       }
 
       if (frame.state.previewState && context.applyPreviewState) {
-        const nextState = frame.state.previewState;
+        const nextState = {
+          ...frame.state.previewState,
+          currentInteraction: undefined,
+        };
         const currentState = context.lastAppliedPreviewState;
 
-        if (!recording.previewEvents?.length) {
-          if (
-            !currentState ||
-            JSON.stringify(nextState.size) !==
-              JSON.stringify(currentState.size) ||
-            nextState.content !== currentState.content ||
-            Math.abs(
-              (nextState.scrollTop || 0) - (currentState.scrollTop || 0),
-            ) > 1 ||
-            Math.abs(
-              (nextState.scrollLeft || 0) - (currentState.scrollLeft || 0),
-            ) > 1
-          ) {
-            context.applyPreviewState(nextState);
-            updates.lastAppliedPreviewState = nextState;
-          }
+        if (
+          !currentState ||
+          JSON.stringify(nextState.size) !==
+            JSON.stringify(currentState.size) ||
+          nextState.content !== currentState.content ||
+          Math.abs(
+            (nextState.scrollTop || 0) - (currentState.scrollTop || 0),
+          ) > 1 ||
+          Math.abs(
+            (nextState.scrollLeft || 0) - (currentState.scrollLeft || 0),
+          ) > 1
+        ) {
+          context.applyPreviewState(nextState);
+          updates.lastAppliedPreviewState = nextState;
         }
       }
 
@@ -980,46 +981,44 @@ export const editorMachine = setup({
           : event.type === "SEEK"
             ? event.time
             : context.timeline.currentTime;
-      let newLastIndex = lastAppliedPreviewEventIndex;
-      let nextAppliedPreviewState = context.lastAppliedPreviewState;
+      const isSeeking = event.type === "SEEK";
+      let newLastIndex = isSeeking ? -1 : lastAppliedPreviewEventIndex;
+      let nextAppliedPreviewState = isSeeking
+        ? undefined
+        : context.lastAppliedPreviewState;
 
       // If we've jumped backwards, reset the index to re-scan from the beginning
       if (newLastIndex >= 0 && newLastIndex < previewEvents.length) {
         if (previewEvents[newLastIndex].timestamp > currentTime) {
           newLastIndex = -1;
+          nextAppliedPreviewState = undefined;
         }
       }
 
-      // Find and apply all events that should have happened by now
-      let latestStateEvent: PreviewEvent | null = null;
-      let latestContent: string | undefined = undefined;
-      const isSeeking = event.type === "SEEK";
-
+      // Preview events are partial patches, not complete snapshots.
+      // Merge them onto the last applied preview state so file switches
+      // and other workspace events do not fall back to the live active file.
       for (let i = newLastIndex + 1; i < previewEvents.length; i++) {
         const previewEvent = previewEvents[i];
         if (previewEvent.timestamp <= currentTime) {
-          if (isSeeking) {
-            // When seeking, just keep track of the last state-defining event
-            // and skip interaction events (clicks, etc.)
-            if (previewEvent.type !== "preview_interaction") {
-              latestStateEvent = previewEvent;
-              if (previewEvent.content) {
-                latestContent = previewEvent.content;
-              }
-            }
-          } else {
-            // Normal playback: apply events sequentially for interactions
-            const nextState = {
-              size: previewEvent.size || "small",
-              content: previewEvent.content,
-              scrollTop: previewEvent.scrollTop,
-              scrollLeft: previewEvent.scrollLeft,
-              currentInteraction: previewEvent.interaction,
-            };
+          const nextState = {
+            size: previewEvent.size ?? nextAppliedPreviewState?.size ?? "small",
+            content: previewEvent.content ?? nextAppliedPreviewState?.content,
+            scrollTop:
+              previewEvent.scrollTop ?? nextAppliedPreviewState?.scrollTop,
+            scrollLeft:
+              previewEvent.scrollLeft ?? nextAppliedPreviewState?.scrollLeft,
+            currentInteraction: isSeeking ? undefined : previewEvent.interaction,
+          };
 
+          if (!isSeeking) {
             applyPreviewState(nextState);
-            nextAppliedPreviewState = nextState;
           }
+
+          nextAppliedPreviewState = {
+            ...nextState,
+            currentInteraction: undefined,
+          };
           newLastIndex = i;
         } else {
           // Events are sorted by timestamp, so stop here
@@ -1027,30 +1026,9 @@ export const editorMachine = setup({
         }
       }
 
-      // If we were seeking, apply only the final combined state once
-      if (isSeeking) {
-        // If we didn't find content in the current scanned range,
-        // we might need to look back for the latest content BEFORE newLastIndex
-        if (latestStateEvent && !latestContent) {
-          for (let j = newLastIndex; j >= 0; j--) {
-            if (previewEvents[j].content) {
-              latestContent = previewEvents[j].content;
-              break;
-            }
-          }
-        }
-
-        if (latestStateEvent) {
-          const finalState = {
-            size: latestStateEvent.size || "small",
-            content: latestContent,
-            scrollTop: latestStateEvent.scrollTop,
-            scrollLeft: latestStateEvent.scrollLeft,
-            // Note: interactions are skipped during seek
-          };
-          applyPreviewState(finalState);
-          nextAppliedPreviewState = finalState;
-        }
+      // If we were seeking, apply only the final merged state once.
+      if (isSeeking && nextAppliedPreviewState) {
+        applyPreviewState(nextAppliedPreviewState);
       }
 
       if (

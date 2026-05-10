@@ -277,6 +277,7 @@ function previewStateChanged(
     if (!prev && !next) return false;
     if (!prev || !next) return true;
     return prev.size !== next.size ||
+        prev.content !== next.content ||
         prev.scrollTop !== next.scrollTop ||
         prev.scrollLeft !== next.scrollLeft;
 }
