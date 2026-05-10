@@ -628,8 +628,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       setActiveFilePathState(resolvedActiveFilePath);
       bumpProjectVersion();
       bumpSyncVersion();
+      bumpSaveVersion();
     },
-    [bumpProjectVersion, bumpSyncVersion],
+    [bumpProjectVersion, bumpSaveVersion, bumpSyncVersion],
   );
 
   const createNewEditor = useCallback(() => {
