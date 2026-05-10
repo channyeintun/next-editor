@@ -23,11 +23,110 @@ interface CodeEditorProps {
   showImportExport?: boolean;
 }
 
+const MONACO_REACT_EXTRA_LIBS = [
+  {
+    filePath: "file:///node_modules/@types/react/index.d.ts",
+    content: `declare module "react" {
+  export type ReactNode = unknown;
+
+  export interface FunctionComponent<P = {}> {
+    (props: P): ReactNode;
+  }
+
+  export type FC<P = {}> = FunctionComponent<P>;
+
+  export interface StrictModeProps {
+    children?: ReactNode;
+  }
+
+  export const StrictMode: FC<StrictModeProps>;
+
+  export function useState<S>(
+    initialState: S | (() => S),
+  ): [S, (value: S | ((currentState: S) => S)) => void];
+}`,
+  },
+  {
+    filePath: "file:///node_modules/@types/react-dom/client.d.ts",
+    content: `declare module "react-dom/client" {
+  export interface Root {
+    render(children: unknown): void;
+    unmount(): void;
+  }
+
+  export function createRoot(container: Element | DocumentFragment): Root;
+}`,
+  },
+  {
+    filePath: "file:///node_modules/@types/react/jsx-runtime.d.ts",
+    content: `declare module "react/jsx-runtime" {
+  export namespace JSX {
+    type Element = unknown;
+
+    interface IntrinsicElements {
+      [elementName: string]: any;
+    }
+  }
+
+  export const Fragment: unknown;
+
+  export function jsx(type: unknown, props: unknown, key?: unknown): unknown;
+  export function jsxs(type: unknown, props: unknown, key?: unknown): unknown;
+}`,
+  },
+  {
+    filePath: "file:///src/vite-env.d.ts",
+    content: `declare module "*.css";
+declare module "*.svg" {
+  const source: string;
+  export default source;
+}`,
+  },
+] as const;
+
+let hasConfiguredMonacoTypeScript = false;
+
+function configureMonacoTypeScript(monaco: Monaco) {
+  if (hasConfiguredMonacoTypeScript) {
+    return;
+  }
+
+  const compilerOptions = {
+    allowImportingTsExtensions: true,
+    allowJs: true,
+    allowNonTsExtensions: true,
+    allowSyntheticDefaultImports: true,
+    esModuleInterop: true,
+    jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
+    module: monaco.languages.typescript.ModuleKind.ESNext,
+    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+    noEmit: true,
+    target: monaco.languages.typescript.ScriptTarget.ESNext,
+  };
+
+  const defaults = [
+    monaco.languages.typescript.typescriptDefaults,
+    monaco.languages.typescript.javascriptDefaults,
+  ];
+
+  defaults.forEach((currentDefaults) => {
+    currentDefaults.setEagerModelSync(true);
+    currentDefaults.setCompilerOptions(compilerOptions);
+
+    MONACO_REACT_EXTRA_LIBS.forEach(({ content, filePath }) => {
+      currentDefaults.addExtraLib(content, filePath);
+    });
+  });
+
+  hasConfiguredMonacoTypeScript = true;
+}
+
 /**
  * CodeEditor Component - Monaco Editor wrapper with recording and replay capabilities
  */
 
 const CodeEditorComponent: React.FC<CodeEditorProps> = ({
+  language,
   theme = "next-editor-dark",
   defaultContent = DEFAULT_WORKSPACE_FILE_CONTENT,
   showImportExport = false,
@@ -37,7 +136,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const { updateActiveFileContent } = useWorkspaceActions();
   const { activeFile, projectVersion } = useWorkspaceMetadata();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
-  const selectedLanguage = activeFile.language || "html";
+  const selectedLanguage = activeFile.language || language || "html";
 
   // Only subscribe to the flags we actually need for rendering decisions
   const { isPlaying, isRecording } = useNextEditorMetadata();
@@ -135,6 +234,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
    * Defines the custom theme so it's available when the editor initializes
    */
   const handleEditorBeforeMount: BeforeMount = (monaco: Monaco) => {
+    configureMonacoTypeScript(monaco);
+
     // Define dark theme based on yCe configuration
     monaco.editor.defineTheme("next-editor-dark", {
       base: "vs-dark",
