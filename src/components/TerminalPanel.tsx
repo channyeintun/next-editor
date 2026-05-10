@@ -128,7 +128,9 @@ const TerminalPanel = memo(function TerminalPanel() {
     lastOutput,
     errorMessage,
     activeCommand,
+    latestLifecycleEvent,
     latestPreviewMessage,
+    openPorts,
     previewUrl,
     runnerConfig,
     workspaceRoot,
@@ -153,6 +155,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const previousPreviewUrlRef = useRef<string | null>(null);
   const previousCommandRef = useRef<string | null>(null);
   const previousErrorRef = useRef<string | null>(null);
+  const previousLifecycleEventIdRef = useRef<number | null>(null);
   const previousPreviewMessageIdRef = useRef<number | null>(null);
   const previousRuntimeEventKeyRef = useRef<string | null>(null);
   const previousOutputRef = useRef<string | null>(null);
@@ -251,6 +254,32 @@ const TerminalPanel = memo(function TerminalPanel() {
       previousErrorRef.current = null;
     }
   }, [errorMessage, isPlaybackSnapshotActive]);
+
+  useEffect(() => {
+    if (isPlaybackSnapshotActive || !latestLifecycleEvent) {
+      return;
+    }
+
+    if (previousLifecycleEventIdRef.current === latestLifecycleEvent.id) {
+      return;
+    }
+
+    previousLifecycleEventIdRef.current = latestLifecycleEvent.id;
+
+    const details = latestLifecycleEvent.url
+      ? ` ${latestLifecycleEvent.url}`
+      : latestLifecycleEvent.port !== null
+        ? ` ${latestLifecycleEvent.port}`
+        : "";
+
+    appendConsoleLine(
+      `[runtime:${latestLifecycleEvent.kind}]${details} ${latestLifecycleEvent.text}`.trim(),
+    );
+
+    if (latestLifecycleEvent.kind === "internal-error") {
+      setActiveTab("console");
+    }
+  }, [isPlaybackSnapshotActive, latestLifecycleEvent]);
 
   useEffect(() => {
     if (isPlaybackSnapshotActive || !latestPreviewMessage) {
@@ -364,6 +393,10 @@ const TerminalPanel = memo(function TerminalPanel() {
 
   const runnerCommand = runnerConfig.runCommand.trim() || "Runner disabled";
   const runnerOutput = content || "Waiting for runner output...";
+  const openPortSummary =
+    openPorts.length > 0
+      ? openPorts.map(({ port, url }) => `${port} ${url}`).join("\n")
+      : "No open ports";
 
   return (
     <>
@@ -423,6 +456,9 @@ const TerminalPanel = memo(function TerminalPanel() {
                     <p className="truncate font-mono text-[13px] text-slate-300">
                       {runnerConfig.enabled ? runnerCommand : "Runner disabled"}
                     </p>
+                    <pre className="mt-2 whitespace-pre-wrap font-mono text-[11px] leading-5 text-slate-500">
+                      {openPortSummary}
+                    </pre>
                   </div>
                   <div className="ml-4 flex items-center gap-4">
                     <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">

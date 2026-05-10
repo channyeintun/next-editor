@@ -32,6 +32,24 @@ export interface RuntimePreviewMessage {
   pathname: string;
 }
 
+export interface RuntimePort {
+  port: number;
+  url: string;
+}
+
+export type RuntimeLifecycleEventKind =
+  | "port-open"
+  | "port-close"
+  | "internal-error";
+
+export interface RuntimeLifecycleEvent {
+  id: number;
+  kind: RuntimeLifecycleEventKind;
+  text: string;
+  port: number | null;
+  url: string | null;
+}
+
 export interface WebContainerRuntimeActions {
   startRuntime: () => Promise<void>;
   resetRuntime: () => void;
@@ -48,6 +66,8 @@ export interface WebContainerRuntimeMetadata {
   isSupported: boolean;
   errorMessage: string | null;
   latestPreviewMessage: RuntimePreviewMessage | null;
+  openPorts: RuntimePort[];
+  latestLifecycleEvent: RuntimeLifecycleEvent | null;
   lastOutput: string | null;
   activeCommand: string | null;
   environmentVariables: EnvironmentVariables;

@@ -8,6 +8,8 @@ import {
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
   type EnvironmentVariables,
+  type RuntimeLifecycleEvent,
+  type RuntimePort,
   type RunnerConfig,
   type RuntimePreviewMessage,
   type WebContainerRuntimeActions,
@@ -340,7 +342,10 @@ export const WebContainerRuntimeProvider: React.FC<
   const instanceRef = useRef<WebContainer | null>(null);
   const runnerProcessRef = useRef<WebContainerProcess | null>(null);
   const devServerListenerCleanupRef = useRef<(() => void) | null>(null);
+  const portListenerCleanupRef = useRef<(() => void) | null>(null);
+  const runtimeErrorListenerCleanupRef = useRef<(() => void) | null>(null);
   const previewMessageListenerCleanupRef = useRef<(() => void) | null>(null);
+  const lifecycleEventIdRef = useRef(0);
   const previewMessageIdRef = useRef(0);
   const hasMountedProjectRef = useRef(false);
   const hasRunInitCommandRef = useRef(false);
@@ -352,6 +357,9 @@ export const WebContainerRuntimeProvider: React.FC<
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [latestPreviewMessage, setLatestPreviewMessage] =
     useState<RuntimePreviewMessage | null>(null);
+  const [openPorts, setOpenPorts] = useState<RuntimePort[]>([]);
+  const [latestLifecycleEvent, setLatestLifecycleEvent] =
+    useState<RuntimeLifecycleEvent | null>(null);
   const [lastOutput, setLastOutput] = useState<string | null>(null);
   const [activeCommand, setActiveCommand] = useState<string | null>(null);
   const [environmentVariables, setEnvironmentVariables] =
@@ -379,6 +387,16 @@ export const WebContainerRuntimeProvider: React.FC<
     });
   }, []);
 
+  const pushLifecycleEvent = useCallback(
+    (event: Omit<RuntimeLifecycleEvent, "id">) => {
+      setLatestLifecycleEvent({
+        id: ++lifecycleEventIdRef.current,
+        ...event,
+      });
+    },
+    [],
+  );
+
   const stopRunnerProcess = useCallback(() => {
     const process = runnerProcessRef.current;
 
@@ -394,6 +412,10 @@ export const WebContainerRuntimeProvider: React.FC<
     stopRunnerProcess();
     devServerListenerCleanupRef.current?.();
     devServerListenerCleanupRef.current = null;
+    portListenerCleanupRef.current?.();
+    portListenerCleanupRef.current = null;
+    runtimeErrorListenerCleanupRef.current?.();
+    runtimeErrorListenerCleanupRef.current = null;
     previewMessageListenerCleanupRef.current?.();
     previewMessageListenerCleanupRef.current = null;
     if (
@@ -412,6 +434,8 @@ export const WebContainerRuntimeProvider: React.FC<
     setPreviewUrl(null);
     setErrorMessage(null);
     setLatestPreviewMessage(null);
+    setOpenPorts([]);
+    setLatestLifecycleEvent(null);
     setLastOutput(null);
     setActiveCommand(null);
   }, [stopRunnerProcess]);
@@ -436,6 +460,45 @@ export const WebContainerRuntimeProvider: React.FC<
       },
     );
 
+    portListenerCleanupRef.current?.();
+    portListenerCleanupRef.current = instance.on("port", (port, type, url) => {
+      setOpenPorts((current) => {
+        if (type === "open") {
+          return [
+            ...current.filter((entry) => entry.port !== port),
+            { port, url },
+          ].sort((left, right) => left.port - right.port);
+        }
+
+        return current.filter((entry) => entry.port !== port);
+      });
+
+      if (type === "close") {
+        setPreviewUrl((current) => (current === url ? null : current));
+      }
+
+      pushLifecycleEvent({
+        kind: type === "open" ? "port-open" : "port-close",
+        text: type === "open" ? `Port ${port} opened` : `Port ${port} closed`,
+        port,
+        url,
+      });
+    });
+
+    runtimeErrorListenerCleanupRef.current?.();
+    runtimeErrorListenerCleanupRef.current = instance.on("error", (error) => {
+      const message = getRuntimeErrorMessage(error);
+
+      setErrorMessage(message);
+      setStatus("error");
+      pushLifecycleEvent({
+        kind: "internal-error",
+        text: message,
+        port: null,
+        url: null,
+      });
+    });
+
     previewMessageListenerCleanupRef.current?.();
     previewMessageListenerCleanupRef.current = instance.on(
       "preview-message",
@@ -450,7 +513,7 @@ export const WebContainerRuntimeProvider: React.FC<
     instanceRef.current = instance;
 
     return instance;
-  }, []);
+  }, [pushLifecycleEvent]);
 
   const runForegroundCommand = useCallback(
     async (
@@ -875,6 +938,8 @@ export const WebContainerRuntimeProvider: React.FC<
       isSupported,
       errorMessage,
       latestPreviewMessage,
+      openPorts,
+      latestLifecycleEvent,
       lastOutput,
       activeCommand,
       environmentVariables,
@@ -887,7 +952,9 @@ export const WebContainerRuntimeProvider: React.FC<
       errorMessage,
       isSupported,
       lastOutput,
+      latestLifecycleEvent,
       latestPreviewMessage,
+      openPorts,
       previewUrl,
       runnerConfig,
       status,
