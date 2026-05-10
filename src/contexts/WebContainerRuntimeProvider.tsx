@@ -343,7 +343,7 @@ export const WebContainerRuntimeProvider: React.FC<
   WebContainerRuntimeProviderProps
 > = ({ children }) => {
   const { getProject } = useWorkspaceActions();
-  const { lessonType, projectName, syncVersion } = useWorkspaceMetadata();
+  const { lessonType, projectName, saveVersion } = useWorkspaceMetadata();
   const instanceRef = useRef<WebContainer | null>(null);
   const runnerProcessRef = useRef<WebContainerProcess | null>(null);
   const terminalProcessRef = useRef<WebContainerProcess | null>(null);
@@ -561,7 +561,6 @@ export const WebContainerRuntimeProvider: React.FC<
       options: { clearOutput?: boolean; trackAsActiveCommand?: boolean } = {},
     ) => {
       const parsedCommand = parseCommand(commandLine);
-
       if (!parsedCommand) {
         return 0;
       }
@@ -1024,7 +1023,7 @@ export const WebContainerRuntimeProvider: React.FC<
       .catch((error) => {
         setErrorMessage(getRuntimeErrorMessage(error));
       });
-  }, [getProject, status, syncVersion]);
+  }, [getProject, saveVersion, status]);
 
   useEffect(() => {
     return () => {

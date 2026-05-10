@@ -16,3 +16,4 @@
 - Task 3 completed: the terminal dock now reuses a persistent shell session, forwards live input, and resizes the terminal with the dock.
 - Task 4 completed: runtime preview refresh now uses the WebContainers reload API with a safe URL fallback.
 - Post-plan follow-up: workspace recording now keys off `syncVersion`, so replay includes real file-content changes instead of only structural workspace changes.
+- Post-plan follow-up: `CMD+S` / `CTRL+S` now creates explicit save checkpoints, and preview/runtime updates plus replayed preview changes follow those checkpoints instead of every edit.

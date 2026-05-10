@@ -409,7 +409,7 @@ const Preview = memo(function Preview() {
     registerPreviewStateApplier,
   } = useNextEditorActions();
   const { getProject } = useWorkspaceActions();
-  const { lessonType } = useWorkspaceMetadata();
+  const { lessonType, saveVersion } = useWorkspaceMetadata();
   const {
     previewUrl: runtimePreviewUrl,
     status: runtimeStatus,
@@ -457,6 +457,7 @@ const Preview = memo(function Preview() {
 
   const sizeRef = useRef<PreviewSize>(size);
   sizeRef.current = size;
+  const previousSaveVersionRef = useRef<number | null>(null);
 
   // Emit preview event
   const emitPreviewEvent = useCallback(
@@ -963,43 +964,75 @@ const Preview = memo(function Preview() {
 
     const iframe = iframeRef.current;
     if (!iframe) return;
+    const previousSaveVersion = previousSaveVersionRef.current;
+    previousSaveVersionRef.current = saveVersion;
+    const shouldEmitRefresh =
+      previousSaveVersion !== null && previousSaveVersion !== saveVersion;
 
     if (lessonType === "spa" && runtimePreviewUrl) {
       lastContentRef.current = "";
       iframe.removeAttribute("srcdoc");
       iframe.src = runtimePreviewUrl;
+
+      if (shouldEmitRefresh) {
+        emitPreviewEvent("preview_refresh");
+      }
+
       return;
     }
 
     if (isRuntimeManagedPreview) {
       if (lastContentRef.current === runtimePreviewPlaceholder) {
+        if (shouldEmitRefresh) {
+          emitPreviewEvent("preview_refresh");
+        }
+
         return;
       }
 
       lastContentRef.current = runtimePreviewPlaceholder;
       iframe.removeAttribute("src");
       iframe.srcdoc = runtimePreviewPlaceholder;
+
+      if (shouldEmitRefresh) {
+        emitPreviewEvent("preview_refresh");
+      }
+
       return;
     }
 
     if (isStaticWorkspacePreview) {
       updateIframeContent(staticWorkspacePreview);
+
+      if (shouldEmitRefresh) {
+        emitPreviewEvent("preview_refresh", {
+          content: staticWorkspacePreview,
+        });
+      }
+
       return;
     }
 
     const editor = editorRef.current;
     if (editor) {
       lastContentRef.current = "";
-      updateIframeContent(editor.getValue());
+      const content = editor.getValue();
+      updateIframeContent(content);
+
+      if (shouldEmitRefresh) {
+        emitPreviewEvent("preview_refresh", { content });
+      }
     }
   }, [
     editorRef,
+    emitPreviewEvent,
     isPlaying,
     isStaticWorkspacePreview,
     isRuntimeManagedPreview,
     lessonType,
     runtimePreviewPlaceholder,
     runtimePreviewUrl,
+    saveVersion,
     staticWorkspacePreview,
     updateIframeContent,
   ]);

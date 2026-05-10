@@ -12,6 +12,7 @@ import {
   useWorkspaceActions,
   useWorkspaceMetadata,
 } from "../hooks/useWorkspace";
+import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import { DEFAULT_WORKSPACE_FILE_CONTENT } from "../types/workspace";
@@ -133,16 +134,18 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 }) => {
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
-  const { updateActiveFileContent } = useWorkspaceActions();
-  const { activeFile, projectVersion, syncVersion } = useWorkspaceMetadata();
+  const { saveProject, updateActiveFileContent } = useWorkspaceActions();
+  const { saveWorkspace } = useWebContainerRuntimeActions();
+  const { activeFile, projectVersion, saveVersion } = useWorkspaceMetadata();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
+  const monacoRef = useRef<Monaco | null>(null);
   const selectedLanguage = activeFile.language || language || "html";
 
   // Only subscribe to the flags we actually need for rendering decisions
   const { isPlaying, isRecording } = useNextEditorMetadata();
   const previousWorkspaceRef = useRef<{
     activeFilePath: string;
-    syncVersion: number;
+    saveVersion: number;
   } | null>(null);
 
   // useEffectEvent provides a stable function reference that always reads
@@ -160,10 +163,49 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     updateActiveFileContent(content);
   });
 
+  const runSaveAction = useEffectEvent(async () => {
+    if (isPlaying) {
+      return;
+    }
+
+    const editor = editorRef.current;
+
+    if (editor) {
+      syncEditorContentToWorkspace(editor.getValue());
+    }
+
+    saveProject();
+    await saveWorkspace();
+  });
+
+  const onSaveShortcut = useEffectEvent((event: KeyboardEvent) => {
+    const isSaveShortcut =
+      (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s";
+
+    if (!isSaveShortcut) {
+      return;
+    }
+
+    event.preventDefault();
+    void runSaveAction();
+  });
+
+  useEffect(() => {
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      onSaveShortcut(event);
+    };
+
+    window.addEventListener("keydown", handleWindowKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown, true);
+    };
+  }, []);
+
   useEffect(() => {
     const nextWorkspaceState = {
       activeFilePath: activeFile.path,
-      syncVersion,
+      saveVersion,
     };
 
     if (!isRecording) {
@@ -181,11 +223,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     if (
       previousWorkspaceState.activeFilePath !==
         nextWorkspaceState.activeFilePath ||
-      previousWorkspaceState.syncVersion !== nextWorkspaceState.syncVersion
+      previousWorkspaceState.saveVersion !== nextWorkspaceState.saveVersion
     ) {
       handleWorkspaceEvent();
     }
-  }, [activeFile.path, handleWorkspaceEvent, isRecording, syncVersion]);
+  }, [activeFile.path, handleWorkspaceEvent, isRecording, saveVersion]);
 
   const disposeEditorListeners = () => {
     editorDisposablesRef.current.forEach((disposable) => {
@@ -217,6 +259,16 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     editorRef.current = editor;
     syncEditorRef(editor);
     syncEditorContentToWorkspace(editor.getValue());
+
+    if (monacoRef.current) {
+      editor.addCommand(
+        monacoRef.current.KeyMod.CtrlCmd | monacoRef.current.KeyCode.KeyS,
+        () => {
+          void runSaveAction();
+        },
+      );
+    }
+
     editor.focus();
 
     editorDisposablesRef.current = [
@@ -241,6 +293,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
    * Defines the custom theme so it's available when the editor initializes
    */
   const handleEditorBeforeMount: BeforeMount = (monaco: Monaco) => {
+    monacoRef.current = monaco;
     configureMonacoTypeScript(monaco);
 
     // Define dark theme based on yCe configuration

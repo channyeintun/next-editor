@@ -39,6 +39,7 @@ export interface WorkspaceMetadata {
   previewFilePath: string;
   projectVersion: number;
   syncVersion: number;
+  saveVersion: number;
 }
 
 export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(

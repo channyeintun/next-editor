@@ -25,7 +25,7 @@ Next Editor is a browser-based coding lesson editor and recording engine. It com
 - Runtime-backed Node app preview: run package-based apps, including server-style apps, in-browser through WebContainers.
 - Static lesson preview: preview HTML/CSS lessons without the runtime dock.
 - Recording and replay: capture cursor movement, content changes, file switches, preview interactions, and runtime state changes.
-- Local persistence: save the current workspace with `CMD+S` or `CTRL+S` and continue where you left off.
+- Save checkpoints: use `CMD+S` or `CTRL+S` to persist the current workspace and push a deliberate preview update point into the lesson timeline.
 - Portable lesson files: export recordings as `.ne` files for sharing and import them back later.
 - Integrated slides: combine code playback and slide transitions in one lesson flow.
 

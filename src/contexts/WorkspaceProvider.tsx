@@ -205,6 +205,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   );
   const [projectVersion, setProjectVersion] = useState(0);
   const [syncVersion, setSyncVersion] = useState(0);
+  const [saveVersion, setSaveVersion] = useState(0);
 
   const bumpProjectVersion = useCallback(() => {
     setProjectVersion((version) => version + 1);
@@ -212,6 +213,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
 
   const bumpSyncVersion = useCallback(() => {
     setSyncVersion((version) => version + 1);
+  }, []);
+
+  const bumpSaveVersion = useCallback(() => {
+    setSaveVersion((version) => version + 1);
   }, []);
 
   const setActiveFilePath = useCallback((path: string) => {
@@ -599,11 +604,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         activeFilePath: activeFilePathRef.current,
         project: structuredClone(projectRef.current),
       };
-      bumpProjectVersion();
+      bumpSaveVersion();
     } catch (error) {
       console.warn("Failed to save workspace snapshot:", error);
     }
-  }, [bumpProjectVersion]);
+  }, [bumpSaveVersion]);
 
   const loadProject = useCallback(
     (project: WorkspaceProject, nextActiveFilePath?: string) => {
@@ -728,8 +733,16 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       previewFilePath: projectRef.current.entryFilePath,
       projectVersion,
       syncVersion,
+      saveVersion,
     }),
-    [activeFile, activeFilePath, dirtyFilePaths, projectVersion, syncVersion],
+    [
+      activeFile,
+      activeFilePath,
+      dirtyFilePaths,
+      projectVersion,
+      saveVersion,
+      syncVersion,
+    ],
   );
 
   return (
