@@ -96,6 +96,12 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     };
   }, [editorRef, syncEditorRef]);
 
+  useEffect(() => {
+    if (isPlaying && editorRef.current) {
+      editorRef.current.focus();
+    }
+  }, [editorRef, isPlaying]);
+
   /**
    * Handle Monaco Editor mount event
    * Sets up the editor reference for use in recording and replay
@@ -105,6 +111,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     editorRef.current = editor;
     syncEditorRef(editor);
     updateActiveFileContent(editor.getValue());
+    editor.focus();
 
     editorDisposablesRef.current = [
       editor.onDidChangeModelContent(() => {
