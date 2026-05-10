@@ -369,6 +369,43 @@ function createStaticWorkspacePreview(project: WorkspaceProject): string {
   }
 }
 
+function createReplayableRuntimePreview(
+  iframe: HTMLIFrameElement,
+  baseUrl: string,
+): string | null {
+  try {
+    const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
+
+    if (!iframeDocument?.documentElement) {
+      return null;
+    }
+
+    const html = iframeDocument.documentElement.cloneNode(true);
+
+    if (!(html instanceof HTMLElement)) {
+      return null;
+    }
+
+    html.querySelectorAll("script").forEach((script) => {
+      script.remove();
+    });
+
+    const head = html.querySelector("head");
+
+    if (head) {
+      head.querySelector("base")?.remove();
+
+      const base = head.ownerDocument.createElement("base");
+      base.setAttribute("href", baseUrl);
+      head.prepend(base);
+    }
+
+    return `<!doctype html>\n${html.outerHTML}`;
+  } catch {
+    return null;
+  }
+}
+
 const Preview = memo(function Preview() {
   const [size, setSize] = useState<PreviewSize>("small");
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -459,6 +496,26 @@ const Preview = memo(function Preview() {
   sizeRef.current = size;
   const previousSaveVersionRef = useRef<number | null>(null);
   const previousIsRecordingRef = useRef(isRecording);
+
+  const captureRuntimePreviewSnapshot = useCallback(() => {
+    if (!runtimePreviewUrl) {
+      return null;
+    }
+
+    const iframe = iframeRef.current;
+
+    if (!iframe) {
+      return null;
+    }
+
+    const snapshot = createReplayableRuntimePreview(iframe, runtimePreviewUrl);
+
+    if (snapshot) {
+      lastContentRef.current = snapshot;
+    }
+
+    return snapshot;
+  }, [runtimePreviewUrl]);
 
   // Emit preview event
   const emitPreviewEvent = useCallback(
@@ -569,21 +626,24 @@ const Preview = memo(function Preview() {
       registerPreviewStateGetter((): PreviewState => {
         const interaction = pendingInteractionRef.current;
         pendingInteractionRef.current = null; // Consume the interaction
+        const content = isRuntimePreviewActive
+          ? captureRuntimePreviewSnapshot() ?? lastContentRef.current
+          : lastContentRef.current;
 
         return {
           size: sizeRef.current,
-          content: lastContentRef.current,
+          content,
           scrollTop: scrollPositionRef.current.scrollTop,
           scrollLeft: scrollPositionRef.current.scrollLeft,
           currentInteraction: interaction || undefined,
         };
       });
     }
-  }, [registerPreviewStateGetter]); // size is used via sizeRef
+  }, [captureRuntimePreviewSnapshot, isRuntimePreviewActive, registerPreviewStateGetter]); // size is used via sizeRef
 
   const updateIframeContent = useCallback(
     (content: string) => {
-      if (!iframeRef.current || isRuntimePreviewActive) return;
+      if (!iframeRef.current || (isRuntimePreviewActive && !isPlaying)) return;
 
       // Skip update if content hasn't changed
       if (lastContentRef.current === content) return;
@@ -599,8 +659,31 @@ const Preview = memo(function Preview() {
         console.error("Error updating iframe srcdoc:", error);
       }
     },
-    [isRuntimePreviewActive],
+    [isPlaying, isRuntimePreviewActive],
   );
+
+  useEffect(() => {
+    if (isPlaying || !isRuntimePreviewActive) {
+      return;
+    }
+
+    const iframe = iframeRef.current;
+
+    if (!iframe) {
+      return;
+    }
+
+    const syncSnapshot = () => {
+      captureRuntimePreviewSnapshot();
+    };
+
+    iframe.addEventListener("load", syncSnapshot);
+    syncSnapshot();
+
+    return () => {
+      iframe.removeEventListener("load", syncSnapshot);
+    };
+  }, [captureRuntimePreviewSnapshot, isPlaying, isRuntimePreviewActive]);
 
   // Register preview state applier (handles playback)
   useEffect(() => {
@@ -971,7 +1054,7 @@ const Preview = memo(function Preview() {
       previousSaveVersion !== null && previousSaveVersion !== saveVersion;
 
     if (lessonType === "spa" && runtimePreviewUrl) {
-      lastContentRef.current = "";
+      captureRuntimePreviewSnapshot();
       iframe.removeAttribute("srcdoc");
       iframe.src = runtimePreviewUrl;
 
@@ -1036,6 +1119,7 @@ const Preview = memo(function Preview() {
     saveVersion,
     staticWorkspacePreview,
     updateIframeContent,
+    captureRuntimePreviewSnapshot,
   ]);
 
   useEffect(() => {
