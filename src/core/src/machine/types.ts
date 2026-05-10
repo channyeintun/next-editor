@@ -289,6 +289,7 @@ export type StopEventSignal = { type: "STOP" };
 /** Update editor reference */
 export type SetEditorRefEvent = {
   type: "SET_EDITOR_REF";
+  editor: monaco.editor.IStandaloneCodeEditor | null;
 };
 
 /** Slide event occurred */

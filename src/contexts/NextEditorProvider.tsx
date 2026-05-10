@@ -134,6 +134,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     setPlaybackSpeed,
     setVolume,
     loadRecording,
+    syncEditorRef,
     handleEditorChange,
     handleSlideEvent,
     handlePreviewEvent,
@@ -266,6 +267,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   const actionsValue = useMemo(
     () => ({
       editorRef,
+      syncEditorRef,
       startRecording,
       stopRecording,
       play,
@@ -300,6 +302,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       navigateSlidesDirect,
     }),
     [
+      syncEditorRef,
       startRecording,
       stopRecording,
       play,

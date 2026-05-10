@@ -32,7 +32,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   defaultContent = DEFAULT_WORKSPACE_FILE_CONTENT,
   showImportExport = false,
 }) => {
-  const { handleEditorChange, handleWorkspaceEvent, editorRef } =
+  const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
   const { updateActiveFileContent } = useWorkspaceActions();
   const { activeFile, projectVersion } = useWorkspaceMetadata();
@@ -91,8 +91,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   useEffect(() => {
     return () => {
       disposeEditorListeners();
+      editorRef.current = null;
+      syncEditorRef(null);
     };
-  }, []);
+  }, [editorRef, syncEditorRef]);
 
   /**
    * Handle Monaco Editor mount event
@@ -101,6 +103,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const handleEditorDidMount: OnMount = (editor) => {
     disposeEditorListeners();
     editorRef.current = editor;
+    syncEditorRef(editor);
     updateActiveFileContent(editor.getValue());
 
     editorDisposablesRef.current = [

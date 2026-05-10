@@ -18,6 +18,9 @@ export type { TimelineActorRef, EditorActorRef };
 // 1. Actions Context: Stable functions, refs, and storage methods
 export interface NextEditorActions {
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
+  syncEditorRef: (
+    editor: monaco.editor.IStandaloneCodeEditor | null,
+  ) => void;
   startRecording: () => void;
   stopRecording: () => void;
   play: () => void;

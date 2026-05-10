@@ -181,6 +181,31 @@ const createFrame = (
   };
 };
 
+const getLoadedRecordingPayload = (
+  context: EditorMachineContext,
+  event: EditorMachineEvent | { output?: unknown },
+): { recording: Recording; duration: number } | null => {
+  if (
+    "output" in event &&
+    event.output &&
+    typeof event.output === "object" &&
+    "recording" in event.output &&
+    "duration" in event.output
+  ) {
+    const output = event.output as { recording: Recording; duration: number };
+    return output;
+  }
+
+  if (context.recording) {
+    return {
+      recording: context.recording,
+      duration: Math.max(context.recording.duration, 1),
+    };
+  }
+
+  return null;
+};
+
 /**
  * Find the appropriate frame for a given timestamp (optimized)
  */
@@ -594,49 +619,54 @@ export const editorMachine = setup({
 
     // Playback actions
     setRecording: assign(({ context, event }) => {
-      if (event.type !== "RECORDING_LOADED") return {};
+      const loaded = getLoadedRecordingPayload(context, event);
+      if (!loaded) return {};
 
-      const initialWorkspaceEvent = event.recording.workspaceEvents?.[0];
-      const initialRuntimeEvent = event.recording.runtimeEvents?.[0];
+      const { recording, duration } = loaded;
 
-      if (event.recording.slides && context.applySlides) {
-        context.applySlides(event.recording.slides);
+      const initialWorkspaceEvent = recording.workspaceEvents?.[0];
+      const initialRuntimeEvent = recording.runtimeEvents?.[0];
+
+      if (recording.slides && context.applySlides) {
+        context.applySlides(recording.slides);
       }
 
       if (initialWorkspaceEvent && context.applyWorkspaceSnapshot) {
         context.applyWorkspaceSnapshot(initialWorkspaceEvent.snapshot);
       } else if (
-        event.recording.workspaceSnapshot &&
+        recording.workspaceSnapshot &&
         context.applyWorkspaceSnapshot
       ) {
-        context.applyWorkspaceSnapshot(event.recording.workspaceSnapshot);
+        context.applyWorkspaceSnapshot(recording.workspaceSnapshot);
       }
 
       if (initialRuntimeEvent && context.applyRuntimeSnapshot) {
         context.applyRuntimeSnapshot(initialRuntimeEvent.snapshot);
       } else if (
-        event.recording.runtimeSnapshot &&
+        recording.runtimeSnapshot &&
         context.applyRuntimeSnapshot
       ) {
-        context.applyRuntimeSnapshot(event.recording.runtimeSnapshot);
+        context.applyRuntimeSnapshot(recording.runtimeSnapshot);
       }
 
       return {
-        recording: event.recording,
+        recording,
         timeline: {
           currentTime: 0,
-          duration: event.duration,
+          duration,
           speed: 1,
           volume: 1,
           startedAt: 0,
           pausedDuration: 0,
           pausedAt: 0,
         },
+        currentFrame: null,
         lastAppliedFrameIndex: -1,
         lastAppliedPreviewEventIndex: -1,
         lastAppliedSlideEventIndex: -1,
         lastAppliedWorkspaceEventIndex: initialWorkspaceEvent ? 0 : -1,
         lastAppliedRuntimeEventIndex: initialRuntimeEvent ? 0 : -1,
+        lastAppliedPreviewState: undefined,
       };
     }),
 
@@ -872,6 +902,14 @@ export const editorMachine = setup({
       lastAppliedPreviewState: undefined,
     })),
 
+    invalidateRenderedPlaybackState: assign(() => ({
+      currentFrame: null,
+      lastAppliedFrameIndex: -1,
+      lastAppliedPreviewEventIndex: -1,
+      lastAppliedSlideEventIndex: -1,
+      lastAppliedPreviewState: undefined,
+    })),
+
     clearRecording: assign({
       recording: null,
       currentFrame: null,
@@ -914,7 +952,7 @@ export const editorMachine = setup({
         return {};
       }
 
-      const editor = context.getEditorInstance();
+      const editor = event.editor;
       if (editor === context.editorRefs.editor) {
         return {};
       }
@@ -1071,7 +1109,14 @@ export const editorMachine = setup({
         newLastIndex !== lastAppliedWorkspaceEventIndex
       ) {
         applyWorkspaceSnapshot(latestWorkspaceEvent.snapshot);
-        return { lastAppliedWorkspaceEventIndex: newLastIndex };
+        return {
+          lastAppliedWorkspaceEventIndex: newLastIndex,
+          currentFrame: null,
+          lastAppliedFrameIndex: -1,
+          lastAppliedPreviewEventIndex: -1,
+          lastAppliedSlideEventIndex: -1,
+          lastAppliedPreviewState: undefined,
+        };
       }
 
       if (newLastIndex !== lastAppliedWorkspaceEventIndex) {
@@ -1280,9 +1325,12 @@ export const editorMachine = setup({
     SET_EDITOR_REF: {
       actions: [
         "setEditorRef",
-        "applyFrameAtTime",
+        "invalidateRenderedPlaybackState",
+        "applyWorkspaceEventsAtTime",
+        "applyRuntimeEventsAtTime",
         "applyPreviewEventsAtTime",
         "applySlideEventsAtTime",
+        "applyFrameAtTime",
       ],
     },
   },
@@ -1524,30 +1572,7 @@ export const editorMachine = setup({
         },
         onDone: {
           target: "playback.ready",
-          actions: [
-            assign({
-              recording: ({ event }) => event.output.recording,
-              timeline: ({ context, event }) => ({
-                ...context.timeline,
-                currentTime: 0,
-                duration: Math.max(event.output.duration, 1),
-                speed: 1,
-                volume: 1,
-                startedAt: 0,
-                pausedDuration: 0,
-                pausedAt: 0,
-              }),
-              currentFrame: null,
-              lastAppliedFrameIndex: -1,
-              lastAppliedPreviewEventIndex: -1,
-              lastAppliedSlideEventIndex: -1,
-            }),
-            ({ context, event }) => {
-              if (event.output.recording.slides && context.applySlides) {
-                context.applySlides(event.output.recording.slides);
-              }
-            },
-          ],
+          actions: ["setRecording"],
         },
         onError: {
           target: "idle",

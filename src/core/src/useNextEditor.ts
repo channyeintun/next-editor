@@ -116,7 +116,7 @@ export const useNextEditor = (
   useEffect(() => {
     const currentEditor = config.editorRef.current;
     if (currentEditor && currentEditor !== editor) {
-      actorRef.send({ type: "SET_EDITOR_REF" });
+      actorRef.send({ type: "SET_EDITOR_REF", editor: currentEditor });
     }
   }); // No dependencies - run on every render to catch ref changes
 
@@ -173,6 +173,13 @@ export const useNextEditor = (
   const clearRecording = useCallback(() => {
     actorRef.send({ type: "UNLOAD" });
   }, [actorRef]);
+
+  const syncEditorRef = useCallback(
+    (nextEditor: monaco.editor.IStandaloneCodeEditor | null) => {
+      actorRef.send({ type: "SET_EDITOR_REF", editor: nextEditor });
+    },
+    [actorRef],
+  );
 
   // Event Handlers for UI
   const handleEditorChange = useCallback(() => {
@@ -337,6 +344,7 @@ export const useNextEditor = (
     clearRecording,
 
     // Integration
+    syncEditorRef,
     handleEditorChange,
     handleSlideEvent,
     handlePreviewEvent,

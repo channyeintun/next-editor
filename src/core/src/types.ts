@@ -195,6 +195,9 @@ export interface UseNextEditorReturn {
   clearRecording: () => void;
 
   // Monaco Editor Integration
+  syncEditorRef: (
+    editor: monaco.editor.IStandaloneCodeEditor | null,
+  ) => void;
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
