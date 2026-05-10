@@ -12,7 +12,6 @@ import {
   useWorkspaceActions,
   useWorkspaceMetadata,
 } from "../hooks/useWorkspace";
-import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import { DEFAULT_WORKSPACE_FILE_CONTENT } from "../types/workspace";
@@ -35,10 +34,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 }) => {
   const { handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
-  const { saveProject, updateActiveFileContent } = useWorkspaceActions();
-  const { saveWorkspace } = useWebContainerRuntimeActions();
+  const { updateActiveFileContent } = useWorkspaceActions();
   const { activeFile, projectVersion } = useWorkspaceMetadata();
-  const monacoRef = useRef<Monaco | null>(null);
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const selectedLanguage = activeFile.language || "html";
 
@@ -55,41 +52,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     if (isPlaying) return; // Skip during playback
     handleEditorChange();
   });
-
-  const runSaveAction = useEffectEvent(async () => {
-    const editor = editorRef.current;
-
-    if (editor) {
-      updateActiveFileContent(editor.getValue());
-    }
-
-    saveProject();
-    await saveWorkspace();
-  });
-
-  const onSaveShortcut = useEffectEvent((event: KeyboardEvent) => {
-    const isSaveShortcut =
-      (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s";
-
-    if (!isSaveShortcut) {
-      return;
-    }
-
-    event.preventDefault();
-    void runSaveAction();
-  });
-
-  useEffect(() => {
-    const handleWindowKeyDown = (event: KeyboardEvent) => {
-      onSaveShortcut(event);
-    };
-
-    window.addEventListener("keydown", handleWindowKeyDown, true);
-
-    return () => {
-      window.removeEventListener("keydown", handleWindowKeyDown, true);
-    };
-  }, []);
 
   useEffect(() => {
     const nextWorkspaceState = {
@@ -140,14 +102,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     disposeEditorListeners();
     editorRef.current = editor;
     updateActiveFileContent(editor.getValue());
-    if (monacoRef.current) {
-      editor.addCommand(
-        monacoRef.current.KeyMod.CtrlCmd | monacoRef.current.KeyCode.KeyS,
-        () => {
-          void runSaveAction();
-        },
-      );
-    }
 
     editorDisposablesRef.current = [
       editor.onDidChangeModelContent(() => {
@@ -171,8 +125,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
    * Defines the custom theme so it's available when the editor initializes
    */
   const handleEditorBeforeMount: BeforeMount = (monaco: Monaco) => {
-    monacoRef.current = monaco;
-
     // Define dark theme based on yCe configuration
     monaco.editor.defineTheme("next-editor-dark", {
       base: "vs-dark",
