@@ -12,7 +12,9 @@ export interface WorkspaceActions {
   createFile: (path: string, content?: string) => void;
   createFolder: (path: string) => void;
   renameFile: (currentPath: string, nextPath: string) => void;
+  renameFolder: (currentPath: string, nextPath: string) => void;
   deleteFile: (path: string) => void;
+  deleteFolder: (path: string) => void;
   updateFileContent: (path: string, content: string) => void;
   updateActiveFileContent: (content: string) => void;
   saveProject: () => void;

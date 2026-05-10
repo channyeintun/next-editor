@@ -38,15 +38,17 @@ type WorkspaceTreeNode =
       children: WorkspaceTreeNode[];
     };
 
+type SidebarEntryKind = "file" | "folder";
+
 type SidebarEditState =
   | {
       mode: "create";
-      kind: "file" | "folder";
+      kind: SidebarEntryKind;
       parentPath: string;
     }
   | {
       mode: "rename";
-      kind: "file";
+      kind: SidebarEntryKind;
       path: string;
       parentPath: string;
     }
@@ -55,6 +57,7 @@ type SidebarEditState =
 interface SidebarContextMenuState {
   x: number;
   y: number;
+  kind: SidebarEntryKind;
   path: string;
   parentPath: string;
 }
@@ -220,7 +223,9 @@ const FileSidebar = memo(function FileSidebar() {
     createFile,
     createFolder,
     deleteFile,
+    deleteFolder,
     renameFile,
+    renameFolder,
     saveProject,
     setActiveFilePath,
     setPreviewFilePath,
@@ -248,7 +253,7 @@ const FileSidebar = memo(function FileSidebar() {
     };
   }, [contextMenu]);
   const contextMenuFile = useMemo(() => {
-    if (!contextMenu) {
+    if (!contextMenu || contextMenu.kind !== "file") {
       return null;
     }
 
@@ -257,6 +262,10 @@ const FileSidebar = memo(function FileSidebar() {
   const canOpenContextFileInPreview =
     lessonType !== "spa" && contextMenuFile?.language === "html";
   const isContextFileInPreview = contextMenu?.path === previewFilePath;
+  const contextMenuCreateParentPath =
+    contextMenu?.kind === "folder"
+      ? contextMenu.path
+      : contextMenu?.parentPath ?? "";
 
   useEffect(() => {
     if (!editState || !editInputRef.current) {
@@ -301,7 +310,7 @@ const FileSidebar = memo(function FileSidebar() {
     setDraftName("");
   };
 
-  const openCreateInput = (kind: "file" | "folder", parentPath: string) => {
+  const openCreateInput = (kind: SidebarEntryKind, parentPath: string) => {
     setContextMenu(null);
     setEditState({
       mode: "create",
@@ -319,11 +328,11 @@ const FileSidebar = memo(function FileSidebar() {
     openCreateInput("folder", activeParentPath);
   };
 
-  const startRenameFile = (path: string) => {
+  const startRenameEntry = (kind: SidebarEntryKind, path: string) => {
     setContextMenu(null);
     setEditState({
       mode: "rename",
-      kind: "file",
+      kind,
       path,
       parentPath: getParentWorkspacePath(path),
     });
@@ -355,18 +364,31 @@ const FileSidebar = memo(function FileSidebar() {
     }
 
     if (nextPath !== editState.path) {
-      renameFile(editState.path, nextPath);
+      if (editState.kind === "file") {
+        renameFile(editState.path, nextPath);
+      } else {
+        renameFolder(editState.path, nextPath);
+      }
     }
 
     clearInlineEdit();
   };
 
-  const handleDeleteFile = (path: string) => {
+  const handleDeleteEntry = (kind: SidebarEntryKind, path: string) => {
     setContextMenu(null);
 
-    const confirmed = window.confirm(`Delete ${path}?`);
+    const confirmed = window.confirm(
+      kind === "folder"
+        ? `Delete folder ${path} and its contents?`
+        : `Delete ${path}?`,
+    );
 
     if (!confirmed) {
+      return;
+    }
+
+    if (kind === "folder") {
+      deleteFolder(path);
       return;
     }
 
@@ -393,14 +415,20 @@ const FileSidebar = memo(function FileSidebar() {
   };
 
   const handleRowContextMenu = (
-    event: React.MouseEvent<HTMLButtonElement>,
+    event: React.MouseEvent<HTMLElement>,
+    kind: SidebarEntryKind,
     path: string,
   ) => {
     event.preventDefault();
-    setActiveFilePath(path);
+
+    if (kind === "file") {
+      setActiveFilePath(path);
+    }
+
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
+      kind,
       path,
       parentPath: getParentWorkspacePath(path),
     });
@@ -441,25 +469,35 @@ const FileSidebar = memo(function FileSidebar() {
     depth: number,
   ): React.ReactNode => {
     if (node.kind === "folder") {
+      const isEditing =
+        editState?.mode === "rename" && editState.path === node.path;
+
       return (
         <div key={node.path} className="space-y-1">
-          <div className="px-2">
-            <div
-              className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm ${
-                node.hasActiveFile ? "text-slate-200" : "text-slate-400"
-              }`}
-              style={{ paddingLeft: `${depth * 16 + 12}px` }}
-            >
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                {node.hasActiveFile ? (
-                  <FolderOpen size={14} className="text-sky-300" />
-                ) : (
-                  <Folder size={14} className="text-slate-500" />
-                )}
-              </span>
-              <span className="truncate font-medium">{node.name}</span>
+          {isEditing ? (
+            renderInlineInput("folder", depth)
+          ) : (
+            <div className="px-2">
+              <div
+                onContextMenu={(event) =>
+                  handleRowContextMenu(event, "folder", node.path)
+                }
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-900 ${
+                  node.hasActiveFile ? "text-slate-200" : "text-slate-400"
+                }`}
+                style={{ paddingLeft: `${depth * 16 + 12}px` }}
+              >
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                  {node.hasActiveFile ? (
+                    <FolderOpen size={14} className="text-sky-300" />
+                  ) : (
+                    <Folder size={14} className="text-slate-500" />
+                  )}
+                </span>
+                <span className="truncate font-medium">{node.name}</span>
+              </div>
             </div>
-          </div>
+          )}
 
           {editState?.mode === "create" && editState.parentPath === node.path
             ? renderInlineInput(editState.kind, depth + 1)
@@ -483,7 +521,7 @@ const FileSidebar = memo(function FileSidebar() {
         <button
           type="button"
           onClick={() => setActiveFilePath(node.path)}
-          onContextMenu={(event) => handleRowContextMenu(event, node.path)}
+          onContextMenu={(event) => handleRowContextMenu(event, "file", node.path)}
           className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors ${
             isActive
               ? "bg-slate-800 text-white"
@@ -546,14 +584,16 @@ const FileSidebar = memo(function FileSidebar() {
           >
             <button
               type="button"
-              onClick={() => openCreateInput("file", contextMenu.parentPath)}
+              onClick={() => openCreateInput("file", contextMenuCreateParentPath)}
               className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
             >
               New File
             </button>
             <button
               type="button"
-              onClick={() => openCreateInput("folder", contextMenu.parentPath)}
+              onClick={() =>
+                openCreateInput("folder", contextMenuCreateParentPath)
+              }
               className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
             >
               New Folder
@@ -595,17 +635,21 @@ const FileSidebar = memo(function FileSidebar() {
             <div className="my-2 border-t border-slate-700" />
             <button
               type="button"
-              onClick={() => startRenameFile(contextMenu.path)}
+              onClick={() =>
+                startRenameEntry(contextMenu.kind, contextMenu.path)
+              }
               className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
             >
               Rename
             </button>
             <button
               type="button"
-              onClick={() => handleDeleteFile(contextMenu.path)}
+              onClick={() =>
+                handleDeleteEntry(contextMenu.kind, contextMenu.path)
+              }
               className="flex w-full items-center px-4 py-2 text-sm text-rose-200 transition-colors hover:bg-rose-500/10"
             >
-              Delete File
+              {contextMenu.kind === "folder" ? "Delete Folder" : "Delete File"}
             </button>
           </div>
         )}

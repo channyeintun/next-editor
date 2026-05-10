@@ -88,6 +88,22 @@ function createWorkspaceFile(path: string, content: string): WorkspaceFile {
   };
 }
 
+function isPathWithinFolder(path: string, folderPath: string): boolean {
+  return path === folderPath || path.startsWith(`${folderPath}/`);
+}
+
+function replacePathPrefix(
+  path: string,
+  currentPrefix: string,
+  nextPrefix: string,
+): string {
+  if (path === currentPrefix) {
+    return nextPrefix;
+  }
+
+  return `${nextPrefix}${path.slice(currentPrefix.length)}`;
+}
+
 function inferWorkspaceLessonType(
   project: Pick<WorkspaceProject, "files"> & {
     lessonType?: WorkspaceLessonType;
@@ -346,6 +362,98 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     [bumpProjectVersion, bumpSyncVersion],
   );
 
+  const renameFolder = useCallback(
+    (currentPath: string, nextPath: string) => {
+      const normalizedCurrentPath = normalizeWorkspaceFolderPath(currentPath);
+      const normalizedNextPath = normalizeWorkspaceFolderPath(nextPath);
+
+      if (
+        !normalizedCurrentPath ||
+        !normalizedNextPath ||
+        normalizedCurrentPath === normalizedNextPath ||
+        !projectRef.current.folders.includes(normalizedCurrentPath) ||
+        projectRef.current.files[normalizedNextPath] ||
+        projectRef.current.folders.includes(normalizedNextPath) ||
+        isPathWithinFolder(normalizedNextPath, normalizedCurrentPath)
+      ) {
+        return;
+      }
+
+      const nextFiles: Record<string, WorkspaceFile> = {};
+
+      for (const file of Object.values(projectRef.current.files)) {
+        const nextFilePath = isPathWithinFolder(
+          file.path,
+          normalizedCurrentPath,
+        )
+          ? replacePathPrefix(
+              file.path,
+              normalizedCurrentPath,
+              normalizedNextPath,
+            )
+          : file.path;
+
+        if (nextFiles[nextFilePath]) {
+          return;
+        }
+
+        nextFiles[nextFilePath] =
+          nextFilePath === file.path
+            ? file
+            : createWorkspaceFile(nextFilePath, file.content);
+      }
+
+      const nextFolders = collectWorkspaceFolders(
+        Object.keys(nextFiles),
+        projectRef.current.folders.map((folderPath) =>
+          isPathWithinFolder(folderPath, normalizedCurrentPath)
+            ? replacePathPrefix(
+                folderPath,
+                normalizedCurrentPath,
+                normalizedNextPath,
+              )
+            : folderPath,
+        ),
+      );
+      const nextEntryFilePath = isPathWithinFolder(
+        projectRef.current.entryFilePath,
+        normalizedCurrentPath,
+      )
+        ? replacePathPrefix(
+            projectRef.current.entryFilePath,
+            normalizedCurrentPath,
+            normalizedNextPath,
+          )
+        : projectRef.current.entryFilePath;
+      const nextActiveFilePath = isPathWithinFolder(
+        activeFilePathRef.current,
+        normalizedCurrentPath,
+      )
+        ? replacePathPrefix(
+            activeFilePathRef.current,
+            normalizedCurrentPath,
+            normalizedNextPath,
+          )
+        : activeFilePathRef.current;
+
+      projectRef.current = {
+        ...projectRef.current,
+        folders: nextFolders,
+        files: nextFiles,
+        entryFilePath: nextEntryFilePath,
+      };
+
+      if (nextActiveFilePath !== activeFilePathRef.current) {
+        activeFilePathRef.current = nextActiveFilePath;
+        setActiveFilePathState(nextActiveFilePath);
+      }
+
+      bumpProjectVersion();
+      bumpSyncVersion();
+    },
+    [bumpProjectVersion, bumpSyncVersion],
+  );
+
   const deleteFile = useCallback(
     (path: string) => {
       const normalizedPath = normalizeWorkspacePath(path);
@@ -379,6 +487,61 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
           const fallbackPath = projectRef.current.entryFilePath;
           activeFilePathRef.current = fallbackPath;
           setActiveFilePathState(fallbackPath);
+        }
+      }
+
+      bumpProjectVersion();
+      bumpSyncVersion();
+    },
+    [bumpProjectVersion, bumpSyncVersion],
+  );
+
+  const deleteFolder = useCallback(
+    (path: string) => {
+      const normalizedPath = normalizeWorkspaceFolderPath(path);
+
+      if (!projectRef.current.folders.includes(normalizedPath)) {
+        return;
+      }
+
+      const nextFiles = Object.fromEntries(
+        Object.values(projectRef.current.files)
+          .filter((file) => !isPathWithinFolder(file.path, normalizedPath))
+          .map((file) => [file.path, file]),
+      ) as Record<string, WorkspaceFile>;
+
+      if (Object.keys(nextFiles).length === 0) {
+        const fallbackProject = createSingleFileWorkspace();
+        projectRef.current = fallbackProject;
+        activeFilePathRef.current = fallbackProject.entryFilePath;
+        setActiveFilePathState(fallbackProject.entryFilePath);
+      } else {
+        const remainingFolders = projectRef.current.folders.filter(
+          (folderPath) => !isPathWithinFolder(folderPath, normalizedPath),
+        );
+        const nextEntryFilePath = isPathWithinFolder(
+          projectRef.current.entryFilePath,
+          normalizedPath,
+        )
+          ? Object.keys(nextFiles)[0]
+          : projectRef.current.entryFilePath;
+
+        projectRef.current = {
+          ...projectRef.current,
+          folders: collectWorkspaceFolders(
+            Object.keys(nextFiles),
+            remainingFolders,
+          ),
+          files: nextFiles,
+          entryFilePath: nextEntryFilePath,
+        };
+
+        if (
+          isPathWithinFolder(activeFilePathRef.current, normalizedPath) ||
+          !nextFiles[activeFilePathRef.current]
+        ) {
+          activeFilePathRef.current = nextEntryFilePath;
+          setActiveFilePathState(nextEntryFilePath);
         }
       }
 
@@ -506,7 +669,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       createNewEditor,
       createFile,
       createFolder,
+      deleteFolder,
       renameFile,
+      renameFolder,
       deleteFile,
       updateFileContent,
       updateActiveFileContent,
@@ -522,12 +687,14 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       createNewEditor,
       createFile,
       createFolder,
+      deleteFolder,
       deleteFile,
       getFile,
       getProject,
       listFiles,
       loadProject,
       renameFile,
+      renameFolder,
       resetProject,
       saveProject,
       setActiveFilePath,
