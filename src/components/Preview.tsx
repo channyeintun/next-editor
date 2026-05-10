@@ -55,6 +55,19 @@ function escapePreviewHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
+async function refreshRuntimePreview(
+  iframe: HTMLIFrameElement,
+  fallbackUrl: string,
+): Promise<void> {
+  try {
+    const { reloadPreview } = await import("@webcontainer/api");
+    reloadPreview(iframe);
+  } catch {
+    iframe.removeAttribute("srcdoc");
+    iframe.src = fallbackUrl;
+  }
+}
+
 function getRuntimePreviewState(
   status: WebContainerRuntimeStatus,
   errorMessage: string | null,
@@ -1097,9 +1110,12 @@ const Preview = memo(function Preview() {
 
     if (isRuntimePreviewActive && iframe && runtimePreviewUrl) {
       setIsRefreshing(true);
-      iframe.src = runtimePreviewUrl;
       emitPreviewEvent("preview_refresh");
-      setTimeout(() => setIsRefreshing(false), 600);
+
+      void refreshRuntimePreview(iframe, runtimePreviewUrl).finally(() => {
+        setTimeout(() => setIsRefreshing(false), 600);
+      });
+
       return;
     }
 
