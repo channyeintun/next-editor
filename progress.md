@@ -15,3 +15,4 @@
 - Task 2 completed: runtime port open/close events and internal runtime errors now update metadata and appear in the dock UI.
 - Task 3 completed: the terminal dock now reuses a persistent shell session, forwards live input, and resizes the terminal with the dock.
 - Task 4 completed: runtime preview refresh now uses the WebContainers reload API with a safe URL fallback.
+- Post-plan follow-up: workspace recording now keys off `syncVersion`, so replay includes real file-content changes instead of only structural workspace changes.

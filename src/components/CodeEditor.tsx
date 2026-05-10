@@ -134,7 +134,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
   const { updateActiveFileContent } = useWorkspaceActions();
-  const { activeFile, projectVersion } = useWorkspaceMetadata();
+  const { activeFile, projectVersion, syncVersion } = useWorkspaceMetadata();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const selectedLanguage = activeFile.language || language || "html";
 
@@ -142,7 +142,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const { isPlaying, isRecording } = useNextEditorMetadata();
   const previousWorkspaceRef = useRef<{
     activeFilePath: string;
-    projectVersion: number;
+    syncVersion: number;
   } | null>(null);
 
   // useEffectEvent provides a stable function reference that always reads
@@ -163,7 +163,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   useEffect(() => {
     const nextWorkspaceState = {
       activeFilePath: activeFile.path,
-      projectVersion,
+      syncVersion,
     };
 
     if (!isRecording) {
@@ -181,12 +181,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     if (
       previousWorkspaceState.activeFilePath !==
         nextWorkspaceState.activeFilePath ||
-      previousWorkspaceState.projectVersion !==
-        nextWorkspaceState.projectVersion
+      previousWorkspaceState.syncVersion !== nextWorkspaceState.syncVersion
     ) {
       handleWorkspaceEvent();
     }
-  }, [activeFile.path, handleWorkspaceEvent, isRecording, projectVersion]);
+  }, [activeFile.path, handleWorkspaceEvent, isRecording, syncVersion]);
 
   const disposeEditorListeners = () => {
     editorDisposablesRef.current.forEach((disposable) => {
