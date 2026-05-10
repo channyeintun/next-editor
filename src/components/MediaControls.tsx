@@ -171,7 +171,7 @@ const MediaControls: React.FC<MediaControlsProps> = memo(({
   }
 
   return (
-    <div className={`${positioning} bottom-0 left-0 w-full px-4 py-3 z-20 pointer-events-none`}>
+    <div className={`${positioning} bottom-0 left-0 z-45 w-full px-4 py-3 pointer-events-none`}>
       <div className="flex items-center gap-3 w-full h-6">
         {recordMode && (
           <button
@@ -225,7 +225,7 @@ const MediaControls: React.FC<MediaControlsProps> = memo(({
               </button>
 
               {showSettings && (
-                <div className="absolute bottom-full right-0 mb-2 bg-white rounded-lg shadow-lg p-4 min-w-50 z-21">
+                <div className="absolute bottom-full right-0 z-46 mb-2 min-w-50 rounded-lg bg-white p-4 shadow-lg">
                   <div className="text-gray-800">
                     <div className="mb-3">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Speed</label>
