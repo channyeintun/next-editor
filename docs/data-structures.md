@@ -9,15 +9,19 @@ This document describes the core data structures used in the Next Editor applica
 ```mermaid
 classDiagram
     class Recording {
-        +version: 2
+        +version: 2|3
         +id: string
         +name: string
         +frames: DeltaFrame[]
         +keyframeInterval: number
         +slideEvents?: SlideEvent[]
         +previewEvents?: PreviewEvent[]
+        +workspaceEvents?: WorkspaceRecordingEvent[]
+        +runtimeEvents?: RuntimeRecordingEvent[]
         +slides?: Slide[]
         +audioBlob?: Blob | AudioPlaceholder
+        +workspaceSnapshot?: WorkspaceRecordingSnapshot
+        +runtimeSnapshot?: RuntimeRecordingSnapshot
         +duration: number
         +createdAt: number
     }
@@ -79,19 +83,33 @@ The main data structure for storing a recorded session.
 
 ```typescript
 interface Recording {
-  version: 2;                          // Format version
+  version: 2 | 3;                      // Format version (v3 supports multi-file)
   id: string;                          // Unique identifier
   name: string;                        // Display name
   frames: DeltaFrame[];                // Delta-compressed frames
   keyframeInterval: number;            // Keyframe interval (default: 120)
+  
+  // Single-file support (v2 & v3)
   slideEvents?: SlideEvent[];          // Slide-related events
   previewEvents?: PreviewEvent[];      // Preview panel events
   slides?: Slide[];                    // Slide content data
   audioBlob?: Blob | AudioPlaceholder; // Audio recording
+  
+  // Multi-file support (v3 only)
+  workspaceEvents?: WorkspaceRecordingEvent[];     // File/folder changes
+  runtimeEvents?: RuntimeRecordingEvent[];         // Runtime/terminal events
+  workspaceSnapshot?: WorkspaceRecordingSnapshot;  // Workspace state snapshot
+  runtimeSnapshot?: RuntimeRecordingSnapshot;      // Runtime state snapshot
+  
+  // Metadata
   duration: number;                    // Total duration in ms
   createdAt: number;                   // Creation timestamp
 }
 ```
+
+**Version Differences:**
+- **v2**: Single editor file recording; ideal for tutorials and code demonstrations
+- **v3**: Multi-file workspace recording; captures file changes, workspace state, and runtime/terminal output for full environment replay
 
 ### EditorFrame
 

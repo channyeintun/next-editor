@@ -53,20 +53,11 @@ flowchart TB
 // Main Hook
 export { useNextEditor } from './useNextEditor';
 
-// Components
-export { CodeEditor, MediaControls, Preview, CursorComponent, SlidePanel };
-
-// Contexts & Providers
-export { NextEditorProvider, SlidesProvider };
-export { NextEditorActionsContext, NextEditorMetadataContext, NextEditorPlaybackContext };
-
-// Hooks
-export { useNextEditorActions, useNextEditorMetadata, useNextEditorPlayback, useSlides };
-
 // Types
-export type { Recording, EditorFrame, EditorState, MouseCursorPosition };
+export type { Recording, EditorFrame, EditorState, MouseCursorPosition, AudioPlaceholder, EditorSelection, EditorPosition };
 export type { Slide, SlideEvent, SlidePreviewState, PreviewState, PreviewEvent };
 export type { EditorMachineStatus, EditorMachineContext, EditorMachineEvent };
+export type { UseNextEditorConfig };
 
 // Advanced
 export { editorMachine } from './machine/editorMachine';
@@ -74,24 +65,30 @@ export { useAudioRecording } from './hooks/useAudioRecording';
 export { initWasm } from './utils/wasm';
 ```
 
+**Note:** Component exports (CodeEditor, MediaControls, Preview, etc.) are provided by the application layer, not the core module.
+
 ---
 
 ## Data Structures
 
-### Recording Format (v2)
+### Recording Format (v2 & v3)
 
 ```mermaid
 classDiagram
     class Recording {
-        +version: 2
+        +version: 2|3
         +id: string
         +name: string
         +frames: DeltaFrame[]
         +keyframeInterval: number
         +slideEvents?: SlideEvent[]
         +previewEvents?: PreviewEvent[]
+        +workspaceEvents?: WorkspaceRecordingEvent[]
+        +runtimeEvents?: RuntimeRecordingEvent[]
         +slides?: Slide[]
-        +audioBlob?: Blob
+        +audioBlob?: Blob|AudioPlaceholder
+        +workspaceSnapshot?: WorkspaceRecordingSnapshot
+        +runtimeSnapshot?: RuntimeRecordingSnapshot
         +duration: number
         +createdAt: number
     }
@@ -120,6 +117,11 @@ classDiagram
     DeltaFrame <|-- Keyframe
     DeltaFrame <|-- FrameDelta
 ```
+
+**Version Notes:**
+- **v2**: Single-file editor recording with slides/preview/audio support
+- **v3**: Multi-file workspace recording with workspace/runtime snapshots for full environment capture
+- v2 recordings remain supported on import for backward compatibility
 
 ### Delta Compression
 
