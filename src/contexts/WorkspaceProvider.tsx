@@ -6,6 +6,7 @@ import {
   WorkspaceEditorStateContext,
   WorkspaceFileCountContext,
   WorkspaceLessonTypeContext,
+  WorkspacePreviewVersionContext,
   WorkspaceProjectNameContext,
   WorkspaceSaveVersionContext,
   WorkspaceSidebarStateContext,
@@ -292,6 +293,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   );
   const activeFilePathRef = useRef(initialSnapshotRef.current.activeFilePath);
   const projectVersionRef = useRef(0);
+  const previewVersionRef = useRef(0);
   const saveVersionRef = useRef(0);
   const syncVersionRef = useRef(0);
   const activeFilePathListenersRef = useRef(new Set<() => void>());
@@ -300,6 +302,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   const lessonTypeListenersRef = useRef(new Set<() => void>());
   const projectNameListenersRef = useRef(new Set<() => void>());
   const fileCountListenersRef = useRef(new Set<() => void>());
+  const previewVersionListenersRef = useRef(new Set<() => void>());
   const saveVersionListenersRef = useRef(new Set<() => void>());
   const syncVersionListenersRef = useRef(new Set<() => void>());
   const dirtyStateListenersRef = useRef(new Set<() => void>());
@@ -460,6 +463,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     updateDirtyStateStore();
   }, [notifyListeners, updateDirtyStateStore]);
 
+  const bumpPreviewVersion = useCallback(() => {
+    previewVersionRef.current += 1;
+    notifyListeners(previewVersionListenersRef.current);
+  }, [notifyListeners]);
+
   const bumpSaveVersion = useCallback(() => {
     saveVersionRef.current += 1;
     notifyListeners(saveVersionListenersRef.current);
@@ -535,6 +543,19 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
 
   const getFileCountSnapshot = useCallback(() => fileCountStateRef.current, []);
 
+  const subscribePreviewVersion = useCallback((listener: () => void) => {
+    previewVersionListenersRef.current.add(listener);
+
+    return () => {
+      previewVersionListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const getPreviewVersionSnapshot = useCallback(
+    () => previewVersionRef.current,
+    [],
+  );
+
   const subscribeSaveVersion = useCallback((listener: () => void) => {
     saveVersionListenersRef.current.add(listener);
 
@@ -599,9 +620,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       };
 
       refreshWorkspaceStores();
+      bumpPreviewVersion();
       bumpSyncVersion();
     },
-    [bumpSyncVersion, refreshWorkspaceStores],
+    [bumpPreviewVersion, bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const createFile = useCallback(
@@ -633,9 +655,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
 
       activeFilePathRef.current = normalizedPath;
       refreshWorkspaceStores();
+      bumpPreviewVersion();
       bumpSyncVersion();
     },
-    [bumpSyncVersion, refreshWorkspaceStores],
+    [bumpPreviewVersion, bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const createFolder = useCallback(
@@ -659,9 +682,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       };
 
       refreshWorkspaceStores();
+      bumpPreviewVersion();
       bumpSyncVersion();
     },
-    [bumpSyncVersion, refreshWorkspaceStores],
+    [bumpPreviewVersion, bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const renameFile = useCallback(
@@ -709,9 +733,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       }
 
       refreshWorkspaceStores();
+      bumpPreviewVersion();
       bumpSyncVersion();
     },
-    [bumpSyncVersion, refreshWorkspaceStores],
+    [bumpPreviewVersion, bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const renameFolder = useCallback(
@@ -797,9 +822,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       activeFilePathRef.current = nextActiveFilePath;
 
       refreshWorkspaceStores();
+      bumpPreviewVersion();
       bumpSyncVersion();
     },
-    [bumpSyncVersion, refreshWorkspaceStores],
+    [bumpPreviewVersion, bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const deleteFile = useCallback(
@@ -836,9 +862,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       }
 
       refreshWorkspaceStores();
+      bumpPreviewVersion();
       bumpSyncVersion();
     },
-    [bumpSyncVersion, refreshWorkspaceStores],
+    [bumpPreviewVersion, bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const deleteFolder = useCallback(
@@ -889,9 +916,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       }
 
       refreshWorkspaceStores();
+      bumpPreviewVersion();
       bumpSyncVersion();
     },
-    [bumpSyncVersion, refreshWorkspaceStores],
+    [bumpPreviewVersion, bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const updateFileContent = useCallback(
@@ -968,10 +996,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       };
       bumpProjectVersion();
       refreshWorkspaceStores();
+      bumpPreviewVersion();
       bumpSyncVersion();
       bumpSaveVersion();
     },
     [
+      bumpPreviewVersion,
       bumpProjectVersion,
       bumpSaveVersion,
       bumpSyncVersion,
@@ -999,9 +1029,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       };
 
       refreshWorkspaceStores();
+      bumpPreviewVersion();
       bumpSyncVersion();
     },
-    [bumpSyncVersion, refreshWorkspaceStores],
+    [bumpPreviewVersion, bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const getProject = useCallback(() => projectRef.current, []);
@@ -1105,6 +1136,14 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     [getFileCountSnapshot, subscribeFileCount],
   );
 
+  const previewVersionStore = useMemo<WorkspaceStore<number>>(
+    () => ({
+      subscribe: subscribePreviewVersion,
+      getSnapshot: getPreviewVersionSnapshot,
+    }),
+    [getPreviewVersionSnapshot, subscribePreviewVersion],
+  );
+
   const dirtyStateStore = useMemo<WorkspaceStore<WorkspaceDirtyState>>(
     () => ({
       subscribe: subscribeDirtyState,
@@ -1137,13 +1176,15 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
             <WorkspaceLessonTypeContext value={lessonTypeStore}>
               <WorkspaceProjectNameContext value={projectNameStore}>
                 <WorkspaceFileCountContext value={fileCountStore}>
-                  <WorkspaceDirtyStateContext value={dirtyStateStore}>
-                    <WorkspaceSaveVersionContext value={saveVersionStore}>
-                      <WorkspaceSyncVersionContext value={syncVersionStore}>
-                        {children}
-                      </WorkspaceSyncVersionContext>
-                    </WorkspaceSaveVersionContext>
-                  </WorkspaceDirtyStateContext>
+                  <WorkspacePreviewVersionContext value={previewVersionStore}>
+                    <WorkspaceDirtyStateContext value={dirtyStateStore}>
+                      <WorkspaceSaveVersionContext value={saveVersionStore}>
+                        <WorkspaceSyncVersionContext value={syncVersionStore}>
+                          {children}
+                        </WorkspaceSyncVersionContext>
+                      </WorkspaceSaveVersionContext>
+                    </WorkspaceDirtyStateContext>
+                  </WorkspacePreviewVersionContext>
                 </WorkspaceFileCountContext>
               </WorkspaceProjectNameContext>
             </WorkspaceLessonTypeContext>

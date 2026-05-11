@@ -6,7 +6,10 @@ import {
   NextEditorMetadataContext,
   NextEditorPlaybackContext,
 } from "./NextEditorContext";
-import { useWebContainerRuntimeSnapshotGetter } from "../hooks/useWebContainerRuntime";
+import {
+  useWebContainerRuntimeSaveWorkspace,
+  useWebContainerRuntimeSnapshotGetter,
+} from "../hooks/useWebContainerRuntime";
 import {
   useWorkspaceActions,
   useWorkspaceActiveFilePath,
@@ -28,6 +31,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
   const { getProject, loadProject, resetProject } = useWorkspaceActions();
+  const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
   const activeFilePath = useWorkspaceActiveFilePath();
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
   const activeFilePathRef = useRef(activeFilePath);
@@ -92,6 +96,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     }),
     applyWorkspaceSnapshot: (snapshot) => {
       loadProject(snapshot.project, snapshot.activeFilePath);
+      void saveRuntimeWorkspace();
     },
     getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
       const snapshot = runtimeSnapshotRef.current;

@@ -6,6 +6,7 @@ import {
   WorkspaceEditorStateContext,
   WorkspaceFileCountContext,
   WorkspaceLessonTypeContext,
+  WorkspacePreviewVersionContext,
   WorkspaceProjectNameContext,
   WorkspaceSaveVersionContext,
   WorkspaceSidebarStateContext,
@@ -86,6 +87,13 @@ export const useWorkspaceFileCount = (): number => {
   return useWorkspaceStore(
     WorkspaceFileCountContext,
     "useWorkspaceFileCount",
+  );
+};
+
+export const useWorkspacePreviewVersion = (): number => {
+  return useWorkspaceStore(
+    WorkspacePreviewVersionContext,
+    "useWorkspacePreviewVersion",
   );
 };
 

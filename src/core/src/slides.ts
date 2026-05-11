@@ -84,6 +84,7 @@ export interface PreviewState {
   content?: string;
   scrollTop?: number;
   scrollLeft?: number;
+  refreshKey?: number;
   currentInteraction?: IframeInteractionEvent;
 }
 

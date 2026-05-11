@@ -89,6 +89,7 @@ export interface PreviewState {
   content?: string;
   scrollTop?: number;
   scrollLeft?: number;
+  refreshKey?: number;
   // Current interaction being replayed (for visualization)
   currentInteraction?: IframeInteractionEvent;
 }

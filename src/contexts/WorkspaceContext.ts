@@ -64,6 +64,8 @@ export const WorkspaceProjectNameContext =
   createContext<WorkspaceStore<string> | null>(null);
 export const WorkspaceFileCountContext =
   createContext<WorkspaceStore<number> | null>(null);
+export const WorkspacePreviewVersionContext =
+  createContext<WorkspaceStore<number> | null>(null);
 export const WorkspaceDirtyStateContext =
   createContext<WorkspaceStore<WorkspaceDirtyState> | null>(null);
 export const WorkspaceSaveVersionContext =

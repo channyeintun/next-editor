@@ -575,6 +575,41 @@ export const editorMachine = setup({
       };
     }),
 
+    capturePreviewRefreshFrame: assign(({ context, event }) => {
+      if (event.type !== "PREVIEW_EVENT" || event.event.type !== "preview_refresh") {
+        return {};
+      }
+
+      const editor = context.editorRefs.editor;
+      if (!editor || !context.session) {
+        return {};
+      }
+
+      const timestamp = Date.now() - context.session.startedAt;
+      const frame = createFrame(
+        editor,
+        timestamp,
+        context.session.lastMousePosition,
+        context.getSlideState,
+        context.getPreviewState,
+      );
+
+      if (frame.state.previewState) {
+        frame.state.previewState = {
+          ...frame.state.previewState,
+          content: event.event.content ?? frame.state.previewState.content,
+        };
+      }
+
+      return {
+        session: {
+          ...context.session,
+          frames: [...context.session.frames, frame],
+        },
+        currentFrame: frame,
+      };
+    }),
+
     finalizeRecording: assign(({ context }) => {
       if (!context.session) return { recording: null };
 
@@ -797,6 +832,7 @@ export const editorMachine = setup({
       if (frame.state.previewState && context.applyPreviewState) {
         const nextState = {
           ...frame.state.previewState,
+          refreshKey: undefined,
           currentInteraction: undefined,
         };
         const currentState = context.lastAppliedPreviewState;
@@ -1039,6 +1075,10 @@ export const editorMachine = setup({
               previewEvent.scrollTop ?? nextAppliedPreviewState?.scrollTop,
             scrollLeft:
               previewEvent.scrollLeft ?? nextAppliedPreviewState?.scrollLeft,
+            refreshKey:
+              previewEvent.type === "preview_refresh"
+                ? previewEvent.timestamp
+                : nextAppliedPreviewState?.refreshKey,
             currentInteraction: isSeeking ? undefined : previewEvent.interaction,
           };
 
@@ -1351,9 +1391,9 @@ export const editorMachine = setup({
         "invalidateRenderedPlaybackState",
         "applyWorkspaceEventsAtTime",
         "applyRuntimeEventsAtTime",
+        "applyFrameAtTime",
         "applyPreviewEventsAtTime",
         "applySlideEventsAtTime",
-        "applyFrameAtTime",
       ],
     },
   },
@@ -1480,6 +1520,7 @@ export const editorMachine = setup({
                 },
               };
             }),
+            "capturePreviewRefreshFrame",
           ],
         },
         WORKSPACE_EVENT: {
@@ -1657,9 +1698,9 @@ export const editorMachine = setup({
             }),
             "applyWorkspaceEventsAtTime",
             "applyRuntimeEventsAtTime",
+            "applyFrameAtTime",
             "applyPreviewEventsAtTime",
             "applySlideEventsAtTime",
-            "applyFrameAtTime",
             enqueueActions(({ context, event, enqueue }) => {
               // Sync audio to timeline every 250ms or on seek
               const lastSync = context.lastSyncTime || 0;
@@ -1679,9 +1720,9 @@ export const editorMachine = setup({
             "seekToTime",
             "applyWorkspaceEventsAtTime",
             "applyRuntimeEventsAtTime",
+            "applyFrameAtTime",
             "applyPreviewEventsAtTime",
             "applySlideEventsAtTime",
-            "applyFrameAtTime",
             enqueueActions(({ event, enqueue }) => {
               const time = event.type === "SEEK" ? event.time : 0;
               enqueue.sendTo("timelineActor", { type: "SEEK", time });
@@ -1724,9 +1765,9 @@ export const editorMachine = setup({
             "resetPlayback",
             "applyWorkspaceEventsAtTime",
             "applyRuntimeEventsAtTime",
+            "applyFrameAtTime",
             "applyPreviewEventsAtTime",
             "applySlideEventsAtTime",
-            "applyFrameAtTime",
             enqueueActions(({ enqueue }) => {
               enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
               enqueue.sendTo("audioPlayer", { type: "SEEK", time: 0 });
@@ -1753,9 +1794,9 @@ export const editorMachine = setup({
             "invalidateAppliedPlaybackState",
             "applyWorkspaceEventsAtTime",
             "applyRuntimeEventsAtTime",
+            "applyFrameAtTime",
             "applyPreviewEventsAtTime",
             "applySlideEventsAtTime",
-            "applyFrameAtTime",
             enqueueActions(({ context, enqueue }) => {
               enqueue.sendTo("timelineActor", { type: "START" });
               enqueue.sendTo("audioPlayer", { type: "PLAY" });
@@ -1801,9 +1842,9 @@ export const editorMachine = setup({
               actions: [
                 "applyWorkspaceEventsAtTime",
                 "applyRuntimeEventsAtTime",
+                "applyFrameAtTime",
                 "applyPreviewEventsAtTime",
                 "applySlideEventsAtTime",
-                "applyFrameAtTime",
                 "storeRecordedFrameAtPause",
               ],
             },
@@ -1812,9 +1853,9 @@ export const editorMachine = setup({
                 "seekToTime",
                 "applyWorkspaceEventsAtTime",
                 "applyRuntimeEventsAtTime",
+                "applyFrameAtTime",
                 "applyPreviewEventsAtTime",
                 "applySlideEventsAtTime",
-                "applyFrameAtTime",
                 "storeRecordedFrameAtPause",
                 enqueueActions(({ event, enqueue }) => {
                   const time = event.type === "SEEK" ? event.time : 0;
@@ -1845,9 +1886,9 @@ export const editorMachine = setup({
                   "resetPlayback",
                   "applyWorkspaceEventsAtTime",
                   "applyRuntimeEventsAtTime",
+                  "applyFrameAtTime",
                   "applyPreviewEventsAtTime",
                   "applySlideEventsAtTime",
-                  "applyFrameAtTime",
                   enqueueActions(({ enqueue }) => {
                     enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
                     enqueue.sendTo("audioPlayer", { type: "SEEK", time: 0 });

@@ -8,8 +8,8 @@ import {
 import {
   useWorkspaceActions,
   useWorkspaceLessonType,
+  useWorkspacePreviewVersion,
   useWorkspaceSaveVersion,
-  useWorkspaceSyncVersion,
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeMetadata } from "../hooks/useWebContainerRuntime";
 import type { WebContainerRuntimeStatus } from "../contexts/WebContainerRuntimeContext";
@@ -26,6 +26,8 @@ import type {
   PreviewEvent,
   IframeInteractionEvent,
 } from "../types/slides";
+
+const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
 
 // ============================================================================
 // XPath Utility
@@ -383,6 +385,27 @@ function createReplayableRuntimePreview(
       return null;
     }
 
+    return createReplayableRuntimePreviewFromHtml(
+      iframeDocument.documentElement.outerHTML,
+      baseUrl,
+    );
+  } catch {
+    return null;
+  }
+}
+
+function createReplayableRuntimePreviewFromHtml(
+  htmlContent: string,
+  baseUrl: string,
+): string | null {
+  try {
+    const parser = new DOMParser();
+    const iframeDocument = parser.parseFromString(htmlContent, "text/html");
+
+    if (!iframeDocument?.documentElement) {
+      return null;
+    }
+
     const html = iframeDocument.documentElement.cloneNode(true);
 
     if (!(html instanceof HTMLElement)) {
@@ -417,6 +440,7 @@ const Preview = memo(function Preview() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const lastContentRef = useRef<string>("");
+  const lastRuntimeSnapshotRef = useRef<string>("");
   const scrollPositionRef = useRef<{ scrollTop: number; scrollLeft: number }>({
     scrollTop: 0,
     scrollLeft: 0,
@@ -450,8 +474,8 @@ const Preview = memo(function Preview() {
   } = useNextEditorActions();
   const { getProject } = useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
+  const previewVersion = useWorkspacePreviewVersion();
   const saveVersion = useWorkspaceSaveVersion();
-  const syncVersion = useWorkspaceSyncVersion();
   const {
     previewUrl: runtimePreviewUrl,
     status: runtimeStatus,
@@ -460,22 +484,39 @@ const Preview = memo(function Preview() {
     runnerConfig,
   } = useWebContainerRuntimeMetadata();
 
-  const { isPlaying, isRecording } = useNextEditorMetadata();
+  const { currentRecording, isPlaying, isRecording } = useNextEditorMetadata();
+  const recordedRuntimeSnapshot =
+    isPlaying && !isRecording ? currentRecording?.runtimeSnapshot ?? null : null;
+  const recordedRuntimeStatus = recordedRuntimeSnapshot?.status as
+    | WebContainerRuntimeStatus
+    | undefined;
+  const effectiveRuntimeStatus =
+    runtimeStatus === "idle"
+      ? recordedRuntimeStatus ?? runtimeStatus
+      : runtimeStatus;
+  const effectiveRuntimePreviewUrl =
+    runtimePreviewUrl || recordedRuntimeSnapshot?.previewUrl || null;
+  const effectiveRuntimeErrorMessage =
+    runtimeErrorMessage || recordedRuntimeSnapshot?.errorMessage || null;
   const isStaticWorkspacePreview = lessonType === "html-css";
   const isRuntimePreviewActive =
     lessonType === "node.js" &&
-    runtimeStatus === "ready" &&
-    Boolean(runtimePreviewUrl);
+    effectiveRuntimeStatus === "ready" &&
+    Boolean(effectiveRuntimePreviewUrl);
   const isRuntimeManagedPreview =
     lessonType === "node.js" && runnerConfig.enabled;
   const runtimePreviewState = useMemo(
     () =>
       getRuntimePreviewState(
-        runtimeStatus,
-        runtimeErrorMessage,
+        effectiveRuntimeStatus,
+        effectiveRuntimeErrorMessage,
         isRuntimeSupported,
       ),
-    [isRuntimeSupported, runtimeErrorMessage, runtimeStatus],
+    [
+      effectiveRuntimeErrorMessage,
+      effectiveRuntimeStatus,
+      isRuntimeSupported,
+    ],
   );
   const runtimePreviewPlaceholder = useMemo(
     () =>
@@ -502,9 +543,10 @@ const Preview = memo(function Preview() {
   sizeRef.current = size;
   const previousSaveVersionRef = useRef<number | null>(null);
   const previousIsRecordingRef = useRef(isRecording);
+  const lastRefreshKeyRef = useRef<number | undefined>(undefined);
 
   const captureRuntimePreviewSnapshot = useCallback(() => {
-    if (!runtimePreviewUrl) {
+    if (!effectiveRuntimePreviewUrl) {
       return null;
     }
 
@@ -514,14 +556,26 @@ const Preview = memo(function Preview() {
       return null;
     }
 
-    const snapshot = createReplayableRuntimePreview(iframe, runtimePreviewUrl);
+    const snapshot = createReplayableRuntimePreview(
+      iframe,
+      effectiveRuntimePreviewUrl,
+    );
 
     if (snapshot) {
+      lastRuntimeSnapshotRef.current = snapshot;
       lastContentRef.current = snapshot;
     }
 
     return snapshot;
-  }, [runtimePreviewUrl]);
+  }, [effectiveRuntimePreviewUrl]);
+
+  useEffect(() => {
+    if (isRuntimePreviewActive) {
+      return;
+    }
+
+    lastRuntimeSnapshotRef.current = "";
+  }, [effectiveRuntimePreviewUrl, isRuntimePreviewActive]);
 
   // Emit preview event
   const emitPreviewEvent = useCallback(
@@ -560,6 +614,26 @@ const Preview = memo(function Preview() {
       if (event.source !== iframeRef.current?.contentWindow) return;
 
       const { type, payload } = event.data || {};
+      if (type === RUNTIME_SNAPSHOT_MESSAGE_TYPE) {
+        if (
+          typeof payload?.html !== "string" ||
+          !effectiveRuntimePreviewUrl
+        ) {
+          return;
+        }
+
+        const snapshot = createReplayableRuntimePreviewFromHtml(
+          payload.html,
+          effectiveRuntimePreviewUrl,
+        );
+
+        if (snapshot) {
+          lastRuntimeSnapshotRef.current = snapshot;
+        }
+
+        return;
+      }
+
       if (type === "IFRAME_INTERACTION") {
         // Update scroll position if it's a scroll event on the main document
         const isMainDocumentScroll =
@@ -621,7 +695,7 @@ const Preview = memo(function Preview() {
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, []); // size is used via sizeRef
+  }, [effectiveRuntimePreviewUrl]); // size is used via sizeRef
 
   // Register preview state getter
   useEffect(() => {
@@ -633,7 +707,9 @@ const Preview = memo(function Preview() {
         const interaction = pendingInteractionRef.current;
         pendingInteractionRef.current = null; // Consume the interaction
         const content = isRuntimePreviewActive
-          ? captureRuntimePreviewSnapshot() ?? lastContentRef.current
+          ? captureRuntimePreviewSnapshot() ||
+            lastRuntimeSnapshotRef.current ||
+            undefined
           : lastContentRef.current;
 
         return {
@@ -671,6 +747,186 @@ const Preview = memo(function Preview() {
       }
     },
     [isRuntimePreviewActive],
+  );
+
+  const forceRefreshPreview = useCallback(
+    (options?: {
+      content?: string;
+      emitEvent?: boolean;
+      showSpinner?: boolean;
+    }) => {
+      const iframe = iframeRef.current;
+
+      if (!iframe) {
+        return;
+      }
+
+      if (options?.showSpinner) {
+        setIsRefreshing(true);
+      }
+
+      const finishRefresh = () => {
+        if (!options?.showSpinner) {
+          return;
+        }
+
+        setTimeout(() => setIsRefreshing(false), 600);
+      };
+
+      if (options?.content !== undefined) {
+        lastContentRef.current = "";
+        updateIframeContent(options.content, { force: true });
+
+        if (options.emitEvent) {
+          emitPreviewEvent("preview_refresh", { content: options.content });
+        }
+
+        finishRefresh();
+        return;
+      }
+
+      if (isRuntimePreviewActive && effectiveRuntimePreviewUrl) {
+        if (!options?.emitEvent) {
+          void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).finally(
+            finishRefresh,
+          );
+          return;
+        }
+
+        let didFinalize = false;
+        let runtimeSnapshotPollTimeout: number | null = null;
+        const initialRuntimeSnapshot =
+          captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || "";
+
+        const cleanupRuntimeRefresh = () => {
+          iframe.removeEventListener("load", handleRuntimeRefreshLoad);
+          if (runtimeSnapshotPollTimeout !== null) {
+            window.clearTimeout(runtimeSnapshotPollTimeout);
+          }
+        };
+
+        const finalizeRuntimeRefresh = (content?: string) => {
+          if (didFinalize) {
+            return;
+          }
+
+          didFinalize = true;
+          cleanupRuntimeRefresh();
+
+          // Always try to include content for replay.
+          // Fall back to static workspace preview if DOM snapshot is unavailable.
+          const resolvedContent =
+            content || createStaticWorkspacePreview(getProject()) || undefined;
+
+          emitPreviewEvent(
+            "preview_refresh",
+            resolvedContent ? { content: resolvedContent } : undefined,
+          );
+          finishRefresh();
+        };
+
+        const pollRuntimeSnapshot = () => {
+          const content =
+            captureRuntimePreviewSnapshot() ||
+            lastRuntimeSnapshotRef.current ||
+            undefined;
+
+          if (
+            content !== undefined &&
+            content !== initialRuntimeSnapshot
+          ) {
+            finalizeRuntimeRefresh(content);
+            return;
+          }
+
+          const hasTimedOut = performance.now() - refreshStartedAt >= 1500;
+
+          if (hasTimedOut) {
+            finalizeRuntimeRefresh(content);
+            return;
+          }
+
+          runtimeSnapshotPollTimeout = window.setTimeout(
+            pollRuntimeSnapshot,
+            100,
+          );
+        };
+
+        const handleRuntimeRefreshLoad = () => {
+          runtimeSnapshotPollTimeout = window.setTimeout(
+            pollRuntimeSnapshot,
+            0,
+          );
+        };
+
+        const refreshStartedAt = performance.now();
+
+        iframe.addEventListener("load", handleRuntimeRefreshLoad, {
+          once: true,
+        });
+
+        void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).catch(
+          () => finalizeRuntimeRefresh(initialRuntimeSnapshot || undefined),
+        );
+        return;
+      }
+
+      if (isRuntimeManagedPreview) {
+        lastContentRef.current = "";
+        iframe.removeAttribute("src");
+        iframe.srcdoc = runtimePreviewPlaceholder;
+
+        if (options?.emitEvent) {
+          emitPreviewEvent("preview_refresh");
+        }
+
+        finishRefresh();
+        return;
+      }
+
+      if (isStaticWorkspacePreview) {
+        lastContentRef.current = "";
+        updateIframeContent(staticWorkspacePreview, { force: true });
+
+        if (options?.emitEvent) {
+          emitPreviewEvent("preview_refresh", {
+            content: staticWorkspacePreview,
+          });
+        }
+
+        finishRefresh();
+        return;
+      }
+
+      const editor = editorRef.current;
+
+      if (!editor) {
+        finishRefresh();
+        return;
+      }
+
+      const content = editor.getValue();
+      lastContentRef.current = "";
+      updateIframeContent(content, { force: true });
+
+      if (options?.emitEvent) {
+        emitPreviewEvent("preview_refresh", { content });
+      }
+
+      finishRefresh();
+    },
+    [
+      editorRef,
+      captureRuntimePreviewSnapshot,
+      emitPreviewEvent,
+      isRuntimeManagedPreview,
+      isRuntimePreviewActive,
+      isStaticWorkspacePreview,
+      effectiveRuntimePreviewUrl,
+      runtimePreviewPlaceholder,
+      staticWorkspacePreview,
+      updateIframeContent,
+    ],
   );
 
   useEffect(() => {
@@ -717,7 +973,34 @@ const Preview = memo(function Preview() {
           setSize(sizeToApply);
         }
 
-        if (
+        const didRefreshKeyChange =
+          previewState.refreshKey !== undefined &&
+          previewState.refreshKey !== lastRefreshKeyRef.current;
+
+        lastRefreshKeyRef.current = previewState.refreshKey;
+
+        if (didRefreshKeyChange) {
+          if (previewState.content !== undefined) {
+            forceRefreshPreview({
+              content: previewState.content,
+              emitEvent: false,
+            });
+          } else if (effectiveRuntimePreviewUrl) {
+            // Runtime preview: generate static preview from workspace as fallback
+            const project = getProject();
+            const staticFallback = createStaticWorkspacePreview(project);
+
+            if (staticFallback) {
+              forceRefreshPreview({
+                content: staticFallback,
+                emitEvent: false,
+              });
+            }
+            // If no static fallback available (e.g. React/JSX app), skip manual reload.
+            // The workspace snapshot application will trigger WebContainer file sync
+            // which will naturally cause the dev server to HMR/reload.
+          }
+        } else if (
           previewState.content !== undefined &&
           previewState.content !== lastContentRef.current
         ) {
@@ -886,6 +1169,9 @@ const Preview = memo(function Preview() {
       });
     }
   }, [
+    effectiveRuntimePreviewUrl,
+    forceRefreshPreview,
+    getProject,
     isRuntimePreviewActive,
     registerPreviewStateApplier,
     updateIframeContent,
@@ -1059,18 +1345,15 @@ const Preview = memo(function Preview() {
 
     const iframe = iframeRef.current;
     if (!iframe) return;
-    const previousSaveVersion = previousSaveVersionRef.current;
-    previousSaveVersionRef.current = saveVersion;
-    const shouldEmitRefresh =
-      previousSaveVersion !== null && previousSaveVersion !== saveVersion;
 
     if (lessonType === "node.js" && runtimePreviewUrl) {
       captureRuntimePreviewSnapshot();
-      iframe.removeAttribute("srcdoc");
-      iframe.src = runtimePreviewUrl;
-
-      if (shouldEmitRefresh) {
-        emitPreviewEvent("preview_refresh");
+      if (
+        iframe.getAttribute("srcdoc") !== null ||
+        iframe.src !== runtimePreviewUrl
+      ) {
+        iframe.removeAttribute("srcdoc");
+        iframe.src = runtimePreviewUrl;
       }
 
       return;
@@ -1078,10 +1361,6 @@ const Preview = memo(function Preview() {
 
     if (isRuntimeManagedPreview) {
       if (lastContentRef.current === runtimePreviewPlaceholder) {
-        if (shouldEmitRefresh) {
-          emitPreviewEvent("preview_refresh");
-        }
-
         return;
       }
 
@@ -1089,50 +1368,49 @@ const Preview = memo(function Preview() {
       iframe.removeAttribute("src");
       iframe.srcdoc = runtimePreviewPlaceholder;
 
-      if (shouldEmitRefresh) {
-        emitPreviewEvent("preview_refresh");
-      }
-
       return;
     }
 
     if (isStaticWorkspacePreview) {
       updateIframeContent(staticWorkspacePreview);
 
-      if (shouldEmitRefresh) {
-        emitPreviewEvent("preview_refresh", {
-          content: staticWorkspacePreview,
-        });
-      }
-
       return;
     }
 
     const editor = editorRef.current;
     if (editor) {
-      lastContentRef.current = "";
-      const content = editor.getValue();
-      updateIframeContent(content);
-
-      if (shouldEmitRefresh) {
-        emitPreviewEvent("preview_refresh", { content });
+      if (!lastContentRef.current) {
+        updateIframeContent(editor.getValue());
       }
     }
   }, [
     editorRef,
-    emitPreviewEvent,
     isPlaying,
     isStaticWorkspacePreview,
     isRuntimeManagedPreview,
     lessonType,
+    previewVersion,
     runtimePreviewPlaceholder,
     runtimePreviewUrl,
-    saveVersion,
-    syncVersion,
     staticWorkspacePreview,
     updateIframeContent,
     captureRuntimePreviewSnapshot,
   ]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      return;
+    }
+
+    const previousSaveVersion = previousSaveVersionRef.current;
+    previousSaveVersionRef.current = saveVersion;
+
+    if (previousSaveVersion === null || previousSaveVersion === saveVersion) {
+      return;
+    }
+
+    forceRefreshPreview({ emitEvent: true });
+  }, [forceRefreshPreview, isPlaying, saveVersion]);
 
   useEffect(() => {
     if (
@@ -1236,61 +1514,8 @@ const Preview = memo(function Preview() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = useCallback(() => {
-    const iframe = iframeRef.current;
-
-    if (isRuntimePreviewActive && iframe && runtimePreviewUrl) {
-      setIsRefreshing(true);
-      emitPreviewEvent("preview_refresh");
-
-      void refreshRuntimePreview(iframe, runtimePreviewUrl).finally(() => {
-        setTimeout(() => setIsRefreshing(false), 600);
-      });
-
-      return;
-    }
-
-    if (isRuntimeManagedPreview && iframe) {
-      setIsRefreshing(true);
-      lastContentRef.current = runtimePreviewPlaceholder;
-      iframe.removeAttribute("src");
-      iframe.srcdoc = runtimePreviewPlaceholder;
-      emitPreviewEvent("preview_refresh");
-      setTimeout(() => setIsRefreshing(false), 600);
-      return;
-    }
-
-    if (isStaticWorkspacePreview) {
-      setIsRefreshing(true);
-      lastContentRef.current = "";
-      updateIframeContent(staticWorkspacePreview);
-      emitPreviewEvent("preview_refresh", { content: staticWorkspacePreview });
-      setTimeout(() => setIsRefreshing(false), 600);
-      return;
-    }
-
-    const editor = editorRef.current;
-    if (editor) {
-      setIsRefreshing(true);
-      const content = editor.getValue();
-      // Force refresh by clearing lastContentRef and manually calling update
-      lastContentRef.current = "";
-      updateIframeContent(content);
-      emitPreviewEvent("preview_refresh", { content });
-
-      // Stop spinning after a delay to show it happen
-      setTimeout(() => setIsRefreshing(false), 600);
-    }
-  }, [
-    editorRef,
-    emitPreviewEvent,
-    isRuntimePreviewActive,
-    isRuntimeManagedPreview,
-    isStaticWorkspacePreview,
-    runtimePreviewPlaceholder,
-    runtimePreviewUrl,
-    staticWorkspacePreview,
-    updateIframeContent,
-  ]);
+    forceRefreshPreview({ emitEvent: true, showSpinner: true });
+  }, [forceRefreshPreview]);
 
   useEffect(() => {
     const wasRecording = previousIsRecordingRef.current;

@@ -229,8 +229,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       syncEditorContentToWorkspace(editor.getValue());
     }
 
-    saveProject();
-    await saveWorkspace();
+    try {
+      await saveWorkspace();
+    } finally {
+      saveProject();
+    }
   });
 
   const onSaveShortcut = useEffectEvent((event: KeyboardEvent) => {

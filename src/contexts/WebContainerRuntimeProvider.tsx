@@ -44,6 +44,8 @@ const TERMINAL_SHELL_CANDIDATES = [
   { command: "sh", args: ["-i"] },
 ] as const;
 const RUNTIME_ENVIRONMENT_STORAGE_KEY = "next-editor-runtime-environment";
+const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
+const RUNTIME_SNAPSHOT_SCRIPT_MARKER = "__NEXT_EDITOR_RUNTIME_SNAPSHOT__";
 
 const sharedWebContainerState: {
   instance: WebContainer | null;
@@ -132,6 +134,40 @@ function sanitizeTerminalChunk(chunk: string): string {
   return normalized;
 }
 
+function injectRuntimeSnapshotScript(
+  project: WorkspaceProject,
+  filePath: string,
+  content: string,
+): string {
+  const isRuntimeHtmlBootstrap =
+    filePath.toLowerCase().endsWith(".html") &&
+    (filePath === "index.html" || filePath === project.entryFilePath);
+
+  if (
+    project.lessonType !== "node.js" ||
+    !isRuntimeHtmlBootstrap ||
+    content.includes(RUNTIME_SNAPSHOT_SCRIPT_MARKER)
+  ) {
+    return content;
+  }
+
+  const snapshotScript = `<script data-next-editor-runtime-snapshot>(function(){const marker=${JSON.stringify(
+    RUNTIME_SNAPSHOT_SCRIPT_MARKER,
+  )};if(window[marker])return;window[marker]=true;const messageType=${JSON.stringify(
+    RUNTIME_SNAPSHOT_MESSAGE_TYPE,
+  )};const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();</script>`;
+
+  if (content.includes("</head>")) {
+    return content.replace("</head>", `${snapshotScript}\n</head>`);
+  }
+
+  if (content.includes("</body>")) {
+    return content.replace("</body>", `${snapshotScript}\n</body>`);
+  }
+
+  return `${content}\n${snapshotScript}`;
+}
+
 function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
   const tree: FileSystemTree = {};
 
@@ -185,7 +221,7 @@ function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
 
     currentDirectory[fileName] = {
       file: {
-        contents: file.content,
+        contents: injectRuntimeSnapshotScript(project, file.path, file.content),
       },
     };
   }
@@ -255,7 +291,10 @@ async function syncWorkspaceProject(
     }
 
     await ensureDirectory(instance, getFileDirectory(path));
-    await instance.fs.writeFile(path, file.content);
+    await instance.fs.writeFile(
+      path,
+      injectRuntimeSnapshotScript(nextProject, path, file.content),
+    );
   }
 }
 
@@ -932,14 +971,32 @@ export const WebContainerRuntimeProvider: React.FC<
   );
 
   const saveWorkspace = useCallback(async () => {
+    if (lessonTypeRef.current !== "node.js") {
+      return;
+    }
+
+    const instance = instanceRef.current;
+
+    if (instance && hasMountedProjectRef.current) {
+      const project = getProject();
+
+      try {
+        await syncWorkspaceProject(
+          instance,
+          lastSyncedProjectRef.current,
+          project,
+        );
+        lastSyncedProjectRef.current = structuredClone(project);
+      } catch (error) {
+        setErrorMessage(getRuntimeErrorMessage(error));
+        throw error;
+      }
+    }
+
     const currentRunnerConfig = runnerConfigRef.current;
     const currentStatus = statusRef.current;
 
-    if (
-      lessonTypeRef.current !== "node.js" ||
-      !currentRunnerConfig.enabled ||
-      !currentRunnerConfig.runOnFileSave
-    ) {
+    if (!currentRunnerConfig.enabled || !currentRunnerConfig.runOnFileSave) {
       return;
     }
 
@@ -954,7 +1011,7 @@ export const WebContainerRuntimeProvider: React.FC<
     }
 
     await rerunRunnerRef.current();
-  }, []);
+  }, [getProject]);
 
   const getRecordingSnapshot =
     useCallback<() => WebContainerRuntimeRecordingSnapshot>(() => {
