@@ -1,0 +1,21 @@
+# 1. Force language detection for TS/TSX files
+*.ts  linguist-language=TypeScript
+*.tsx linguist-language=TypeScript
+
+# 2. Mark specific folders as 'vendored' (ignored by language stats)
+# This prevents compiled code or dependencies from being counted
+node_modules/*  linguist-vendored
+dist/*          linguist-vendored
+build/*         linguist-vendored
+out/*           linguist-vendored
+
+# 3. Handle generated files
+# If you have files like 'parser.js' that GitHub thinks is Nearley
+path/to/generated/files/*  linguist-generated=true
+
+# 4. Standardize Line Endings (Optional but recommended)
+# This ensures consistency across different OS environments
+* text=auto
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
