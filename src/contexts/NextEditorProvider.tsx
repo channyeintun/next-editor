@@ -6,10 +6,10 @@ import {
   NextEditorMetadataContext,
   NextEditorPlaybackContext,
 } from "./NextEditorContext";
-import { useWebContainerRuntimeMetadata } from "../hooks/useWebContainerRuntime";
+import { useWebContainerRuntimeSnapshotGetter } from "../hooks/useWebContainerRuntime";
 import {
   useWorkspaceActions,
-  useWorkspaceMetadata,
+  useWorkspaceActiveFilePath,
 } from "../hooks/useWorkspace";
 import { createJsonStorage } from "../storage/JsonStorage";
 import type { SlidePreviewState, PreviewState, Slide } from "../types/slides";
@@ -28,17 +28,10 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
   const { getProject, loadProject, resetProject } = useWorkspaceActions();
-  const { activeFilePath } = useWorkspaceMetadata();
-  const runtimeMetadata = useWebContainerRuntimeMetadata();
+  const activeFilePath = useWorkspaceActiveFilePath();
+  const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
   const activeFilePathRef = useRef(activeFilePath);
-  const runtimeSnapshotRef = useRef({
-    previewUrl: runtimeMetadata.previewUrl,
-    status: runtimeMetadata.status,
-    lastOutput: runtimeMetadata.lastOutput,
-    terminalOutput: runtimeMetadata.terminalOutput,
-    activeCommand: runtimeMetadata.activeCommand,
-    errorMessage: runtimeMetadata.errorMessage,
-  });
+  const runtimeSnapshotRef = useRef(getRuntimeRecordingSnapshot());
   const getSlideStateRef = useRef<
     | (() => {
         previewState: SlidePreviewState;
@@ -68,14 +61,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   >(null);
 
   activeFilePathRef.current = activeFilePath;
-  runtimeSnapshotRef.current = {
-    previewUrl: runtimeMetadata.previewUrl,
-    status: runtimeMetadata.status,
-    lastOutput: runtimeMetadata.lastOutput,
-    terminalOutput: runtimeMetadata.terminalOutput,
-    activeCommand: runtimeMetadata.activeCommand,
-    errorMessage: runtimeMetadata.errorMessage,
-  };
+  runtimeSnapshotRef.current = getRuntimeRecordingSnapshot();
 
   const originalHook = useNextEditor({
     editorRef,

@@ -1,9 +1,20 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import {
   WorkspaceActionsContext,
-  WorkspaceMetadataContext,
+  WorkspaceActiveFilePathContext,
+  WorkspaceDirtyStateContext,
+  WorkspaceEditorStateContext,
+  WorkspaceFileCountContext,
+  WorkspaceLessonTypeContext,
+  WorkspaceProjectNameContext,
+  WorkspaceSaveVersionContext,
+  WorkspaceSidebarStateContext,
+  WorkspaceSyncVersionContext,
   type WorkspaceActions,
-  type WorkspaceMetadata,
+  type WorkspaceDirtyState,
+  type WorkspaceEditorState,
+  type WorkspaceSidebarState,
+  type WorkspaceStore,
 } from "./WorkspaceContext";
 import {
   collectWorkspaceFolders,
@@ -187,6 +198,86 @@ function createInitialWorkspaceSnapshot(): StoredWorkspaceSnapshot {
   };
 }
 
+function createEditorState(
+  project: WorkspaceProject,
+  activeFilePath: string,
+  projectVersion: number,
+): WorkspaceEditorState {
+  return {
+    activeFile: getDefaultFile({
+      ...project,
+      entryFilePath: activeFilePath,
+    }),
+    projectVersion,
+  };
+}
+
+function createSidebarState(
+  project: WorkspaceProject,
+  activeFilePath: string,
+): WorkspaceSidebarState {
+  return {
+    activeFilePath,
+    files: listProjectFiles(project),
+    folders: project.folders,
+    lessonType: project.lessonType,
+    previewFilePath: project.entryFilePath,
+  };
+}
+
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
+function areSidebarFilesEqual(
+  left: WorkspaceFile[],
+  right: WorkspaceFile[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((file, index) => {
+    const nextFile = right[index];
+
+    return (
+      file.path === nextFile.path &&
+      file.name === nextFile.name &&
+      file.language === nextFile.language
+    );
+  });
+}
+
+function areEditorStatesEqual(
+  left: WorkspaceEditorState,
+  right: WorkspaceEditorState,
+): boolean {
+  return (
+    left.projectVersion === right.projectVersion &&
+    left.activeFile.path === right.activeFile.path &&
+    left.activeFile.name === right.activeFile.name &&
+    left.activeFile.language === right.activeFile.language &&
+    left.activeFile.content === right.activeFile.content
+  );
+}
+
+function areSidebarStatesEqual(
+  left: WorkspaceSidebarState,
+  right: WorkspaceSidebarState,
+): boolean {
+  return (
+    left.activeFilePath === right.activeFilePath &&
+    left.lessonType === right.lessonType &&
+    left.previewFilePath === right.previewFilePath &&
+    areStringArraysEqual(left.folders, right.folders) &&
+    areSidebarFilesEqual(left.files, right.files)
+  );
+}
+
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   children,
 }) => {
@@ -200,38 +291,296 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     initialSnapshotRef.current.project,
   );
   const activeFilePathRef = useRef(initialSnapshotRef.current.activeFilePath);
-  const [activeFilePath, setActiveFilePathState] = useState(
-    activeFilePathRef.current,
+  const projectVersionRef = useRef(0);
+  const saveVersionRef = useRef(0);
+  const syncVersionRef = useRef(0);
+  const activeFilePathListenersRef = useRef(new Set<() => void>());
+  const editorStateListenersRef = useRef(new Set<() => void>());
+  const sidebarStateListenersRef = useRef(new Set<() => void>());
+  const lessonTypeListenersRef = useRef(new Set<() => void>());
+  const projectNameListenersRef = useRef(new Set<() => void>());
+  const fileCountListenersRef = useRef(new Set<() => void>());
+  const saveVersionListenersRef = useRef(new Set<() => void>());
+  const syncVersionListenersRef = useRef(new Set<() => void>());
+  const dirtyStateListenersRef = useRef(new Set<() => void>());
+  const activeFilePathStateRef = useRef(activeFilePathRef.current);
+  const editorStateRef = useRef<WorkspaceEditorState>(
+    createEditorState(
+      projectRef.current,
+      activeFilePathRef.current,
+      projectVersionRef.current,
+    ),
   );
-  const [projectVersion, setProjectVersion] = useState(0);
-  const [syncVersion, setSyncVersion] = useState(0);
-  const [saveVersion, setSaveVersion] = useState(0);
+  const sidebarStateRef = useRef<WorkspaceSidebarState>(
+    createSidebarState(projectRef.current, activeFilePathRef.current),
+  );
+  const lessonTypeStateRef = useRef(projectRef.current.lessonType);
+  const projectNameStateRef = useRef(projectRef.current.name);
+  const fileCountStateRef = useRef(
+    Object.keys(projectRef.current.files).length,
+  );
+  const initialDirtyFilePaths = getDirtyFilePaths(
+    projectRef.current,
+    savedSnapshotRef.current.project,
+  );
+  const dirtyStateRef = useRef<WorkspaceDirtyState>({
+    dirtyFilePaths: initialDirtyFilePaths,
+    hasUnsavedChanges: initialDirtyFilePaths.length > 0,
+  });
 
-  const bumpProjectVersion = useCallback(() => {
-    setProjectVersion((version) => version + 1);
+  const notifyListeners = useCallback((listeners: Set<() => void>) => {
+    listeners.forEach((listener) => {
+      listener();
+    });
   }, []);
 
-  const bumpSyncVersion = useCallback(() => {
-    setSyncVersion((version) => version + 1);
-  }, []);
-
-  const bumpSaveVersion = useCallback(() => {
-    setSaveVersion((version) => version + 1);
-  }, []);
-
-  const setActiveFilePath = useCallback((path: string) => {
-    const normalizedPath = normalizeWorkspacePath(path);
+  const updateDirtyStateStore = useCallback(() => {
+    const dirtyFilePaths = getDirtyFilePaths(
+      projectRef.current,
+      savedSnapshotRef.current.project,
+    );
+    const nextDirtyState = {
+      dirtyFilePaths,
+      hasUnsavedChanges: dirtyFilePaths.length > 0,
+    } satisfies WorkspaceDirtyState;
+    const previousDirtyState = dirtyStateRef.current;
+    const didDirtyPathsChange =
+      previousDirtyState.dirtyFilePaths.length !== dirtyFilePaths.length ||
+      previousDirtyState.dirtyFilePaths.some(
+        (path, index) => path !== dirtyFilePaths[index],
+      );
 
     if (
-      !projectRef.current.files[normalizedPath] ||
-      activeFilePathRef.current === normalizedPath
+      !didDirtyPathsChange &&
+      previousDirtyState.hasUnsavedChanges === nextDirtyState.hasUnsavedChanges
     ) {
       return;
     }
 
-    activeFilePathRef.current = normalizedPath;
-    setActiveFilePathState(normalizedPath);
+    dirtyStateRef.current = nextDirtyState;
+    notifyListeners(dirtyStateListenersRef.current);
+  }, [notifyListeners]);
+
+  const updateActiveFilePathStore = useCallback(() => {
+    const nextActiveFilePath = activeFilePathRef.current;
+
+    if (activeFilePathStateRef.current === nextActiveFilePath) {
+      return;
+    }
+
+    activeFilePathStateRef.current = nextActiveFilePath;
+    notifyListeners(activeFilePathListenersRef.current);
+  }, [notifyListeners]);
+
+  const updateEditorStateStore = useCallback(() => {
+    const nextEditorState = createEditorState(
+      projectRef.current,
+      activeFilePathRef.current,
+      projectVersionRef.current,
+    );
+
+    if (areEditorStatesEqual(editorStateRef.current, nextEditorState)) {
+      return;
+    }
+
+    editorStateRef.current = nextEditorState;
+    notifyListeners(editorStateListenersRef.current);
+  }, [notifyListeners]);
+
+  const updateSidebarStateStore = useCallback(() => {
+    const nextSidebarState = createSidebarState(
+      projectRef.current,
+      activeFilePathRef.current,
+    );
+
+    if (areSidebarStatesEqual(sidebarStateRef.current, nextSidebarState)) {
+      return;
+    }
+
+    sidebarStateRef.current = nextSidebarState;
+    notifyListeners(sidebarStateListenersRef.current);
+  }, [notifyListeners]);
+
+  const updateLessonTypeStore = useCallback(() => {
+    const nextLessonType = projectRef.current.lessonType;
+
+    if (lessonTypeStateRef.current === nextLessonType) {
+      return;
+    }
+
+    lessonTypeStateRef.current = nextLessonType;
+    notifyListeners(lessonTypeListenersRef.current);
+  }, [notifyListeners]);
+
+  const updateProjectNameStore = useCallback(() => {
+    const nextProjectName = projectRef.current.name;
+
+    if (projectNameStateRef.current === nextProjectName) {
+      return;
+    }
+
+    projectNameStateRef.current = nextProjectName;
+    notifyListeners(projectNameListenersRef.current);
+  }, [notifyListeners]);
+
+  const updateFileCountStore = useCallback(() => {
+    const nextFileCount = Object.keys(projectRef.current.files).length;
+
+    if (fileCountStateRef.current === nextFileCount) {
+      return;
+    }
+
+    fileCountStateRef.current = nextFileCount;
+    notifyListeners(fileCountListenersRef.current);
+  }, [notifyListeners]);
+
+  const refreshWorkspaceStores = useCallback(() => {
+    updateActiveFilePathStore();
+    updateEditorStateStore();
+    updateSidebarStateStore();
+    updateLessonTypeStore();
+    updateProjectNameStore();
+    updateFileCountStore();
+  }, [
+    updateActiveFilePathStore,
+    updateEditorStateStore,
+    updateFileCountStore,
+    updateLessonTypeStore,
+    updateProjectNameStore,
+    updateSidebarStateStore,
+  ]);
+
+  const bumpProjectVersion = useCallback(() => {
+    projectVersionRef.current += 1;
   }, []);
+
+  const bumpSyncVersion = useCallback(() => {
+    syncVersionRef.current += 1;
+    notifyListeners(syncVersionListenersRef.current);
+    updateDirtyStateStore();
+  }, [notifyListeners, updateDirtyStateStore]);
+
+  const bumpSaveVersion = useCallback(() => {
+    saveVersionRef.current += 1;
+    notifyListeners(saveVersionListenersRef.current);
+    updateDirtyStateStore();
+  }, [notifyListeners, updateDirtyStateStore]);
+
+  const subscribeActiveFilePath = useCallback((listener: () => void) => {
+    activeFilePathListenersRef.current.add(listener);
+
+    return () => {
+      activeFilePathListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const getActiveFilePathSnapshot = useCallback(
+    () => activeFilePathStateRef.current,
+    [],
+  );
+
+  const subscribeEditorState = useCallback((listener: () => void) => {
+    editorStateListenersRef.current.add(listener);
+
+    return () => {
+      editorStateListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const getEditorStateSnapshot = useCallback(() => editorStateRef.current, []);
+
+  const subscribeSidebarState = useCallback((listener: () => void) => {
+    sidebarStateListenersRef.current.add(listener);
+
+    return () => {
+      sidebarStateListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const getSidebarStateSnapshot = useCallback(
+    () => sidebarStateRef.current,
+    [],
+  );
+
+  const subscribeLessonType = useCallback((listener: () => void) => {
+    lessonTypeListenersRef.current.add(listener);
+
+    return () => {
+      lessonTypeListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const getLessonTypeSnapshot = useCallback(() => lessonTypeStateRef.current, []);
+
+  const subscribeProjectName = useCallback((listener: () => void) => {
+    projectNameListenersRef.current.add(listener);
+
+    return () => {
+      projectNameListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const getProjectNameSnapshot = useCallback(
+    () => projectNameStateRef.current,
+    [],
+  );
+
+  const subscribeFileCount = useCallback((listener: () => void) => {
+    fileCountListenersRef.current.add(listener);
+
+    return () => {
+      fileCountListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const getFileCountSnapshot = useCallback(() => fileCountStateRef.current, []);
+
+  const subscribeSaveVersion = useCallback((listener: () => void) => {
+    saveVersionListenersRef.current.add(listener);
+
+    return () => {
+      saveVersionListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const getSaveVersionSnapshot = useCallback(() => saveVersionRef.current, []);
+
+  const subscribeSyncVersion = useCallback((listener: () => void) => {
+    syncVersionListenersRef.current.add(listener);
+
+    return () => {
+      syncVersionListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const getSyncVersionSnapshot = useCallback(() => syncVersionRef.current, []);
+
+  const subscribeDirtyState = useCallback((listener: () => void) => {
+    dirtyStateListenersRef.current.add(listener);
+
+    return () => {
+      dirtyStateListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const getDirtyStateSnapshot = useCallback(() => dirtyStateRef.current, []);
+
+  const setActiveFilePath = useCallback(
+    (path: string) => {
+      const normalizedPath = normalizeWorkspacePath(path);
+
+      if (
+        !projectRef.current.files[normalizedPath] ||
+        activeFilePathRef.current === normalizedPath
+      ) {
+        return;
+      }
+
+      activeFilePathRef.current = normalizedPath;
+      refreshWorkspaceStores();
+    },
+    [refreshWorkspaceStores],
+  );
 
   const setPreviewFilePath = useCallback(
     (path: string) => {
@@ -249,10 +598,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         entryFilePath: normalizedPath,
       };
 
-      bumpProjectVersion();
+      refreshWorkspaceStores();
       bumpSyncVersion();
     },
-    [bumpProjectVersion, bumpSyncVersion],
+    [bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const createFile = useCallback(
@@ -283,11 +632,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       };
 
       activeFilePathRef.current = normalizedPath;
-      setActiveFilePathState(normalizedPath);
-      bumpProjectVersion();
+      refreshWorkspaceStores();
       bumpSyncVersion();
     },
-    [bumpProjectVersion, bumpSyncVersion],
+    [bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const createFolder = useCallback(
@@ -310,10 +658,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         ),
       };
 
-      bumpProjectVersion();
+      refreshWorkspaceStores();
       bumpSyncVersion();
     },
-    [bumpProjectVersion, bumpSyncVersion],
+    [bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const renameFile = useCallback(
@@ -351,7 +699,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
 
       if (activeFilePathRef.current === normalizedCurrentPath) {
         activeFilePathRef.current = normalizedNextPath;
-        setActiveFilePathState(normalizedNextPath);
       }
 
       if (projectRef.current.entryFilePath === normalizedCurrentPath) {
@@ -361,10 +708,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         };
       }
 
-      bumpProjectVersion();
+      refreshWorkspaceStores();
       bumpSyncVersion();
     },
-    [bumpProjectVersion, bumpSyncVersion],
+    [bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const renameFolder = useCallback(
@@ -447,16 +794,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         files: nextFiles,
         entryFilePath: nextEntryFilePath,
       };
+      activeFilePathRef.current = nextActiveFilePath;
 
-      if (nextActiveFilePath !== activeFilePathRef.current) {
-        activeFilePathRef.current = nextActiveFilePath;
-        setActiveFilePathState(nextActiveFilePath);
-      }
-
-      bumpProjectVersion();
+      refreshWorkspaceStores();
       bumpSyncVersion();
     },
-    [bumpProjectVersion, bumpSyncVersion],
+    [bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const deleteFile = useCallback(
@@ -474,7 +817,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         const fallbackProject = createSingleFileWorkspace();
         projectRef.current = fallbackProject;
         activeFilePathRef.current = fallbackProject.entryFilePath;
-        setActiveFilePathState(fallbackProject.entryFilePath);
       } else {
         projectRef.current = {
           ...projectRef.current,
@@ -489,16 +831,14 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         };
 
         if (!nextFiles[activeFilePathRef.current]) {
-          const fallbackPath = projectRef.current.entryFilePath;
-          activeFilePathRef.current = fallbackPath;
-          setActiveFilePathState(fallbackPath);
+          activeFilePathRef.current = projectRef.current.entryFilePath;
         }
       }
 
-      bumpProjectVersion();
+      refreshWorkspaceStores();
       bumpSyncVersion();
     },
-    [bumpProjectVersion, bumpSyncVersion],
+    [bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const deleteFolder = useCallback(
@@ -519,7 +859,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         const fallbackProject = createSingleFileWorkspace();
         projectRef.current = fallbackProject;
         activeFilePathRef.current = fallbackProject.entryFilePath;
-        setActiveFilePathState(fallbackProject.entryFilePath);
       } else {
         const remainingFolders = projectRef.current.folders.filter(
           (folderPath) => !isPathWithinFolder(folderPath, normalizedPath),
@@ -546,14 +885,13 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
           !nextFiles[activeFilePathRef.current]
         ) {
           activeFilePathRef.current = nextEntryFilePath;
-          setActiveFilePathState(nextEntryFilePath);
         }
       }
 
-      bumpProjectVersion();
+      refreshWorkspaceStores();
       bumpSyncVersion();
     },
-    [bumpProjectVersion, bumpSyncVersion],
+    [bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const updateFileContent = useCallback(
@@ -613,10 +951,13 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   const loadProject = useCallback(
     (project: WorkspaceProject, nextActiveFilePath?: string) => {
       const normalizedProject = normalizeProject(project);
+      const normalizedNextActiveFilePath = normalizeWorkspacePath(
+        nextActiveFilePath ?? "",
+      );
       const resolvedActiveFilePath = normalizedProject.files[
-        normalizeWorkspacePath(nextActiveFilePath ?? "")
+        normalizedNextActiveFilePath
       ]
-        ? normalizeWorkspacePath(nextActiveFilePath ?? "")
+        ? normalizedNextActiveFilePath
         : normalizedProject.entryFilePath;
 
       projectRef.current = normalizedProject;
@@ -625,12 +966,17 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         activeFilePath: resolvedActiveFilePath,
         project: structuredClone(normalizedProject),
       };
-      setActiveFilePathState(resolvedActiveFilePath);
       bumpProjectVersion();
+      refreshWorkspaceStores();
       bumpSyncVersion();
       bumpSaveVersion();
     },
-    [bumpProjectVersion, bumpSaveVersion, bumpSyncVersion],
+    [
+      bumpProjectVersion,
+      bumpSaveVersion,
+      bumpSyncVersion,
+      refreshWorkspaceStores,
+    ],
   );
 
   const createNewEditor = useCallback(() => {
@@ -652,10 +998,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         lessonType,
       };
 
-      bumpProjectVersion();
+      refreshWorkspaceStores();
       bumpSyncVersion();
     },
-    [bumpProjectVersion, bumpSyncVersion],
+    [bumpSyncVersion, refreshWorkspaceStores],
   );
 
   const getProject = useCallback(() => projectRef.current, []);
@@ -711,46 +1057,99 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     ],
   );
 
-  const activeFile = getDefaultFile({
-    ...projectRef.current,
-    entryFilePath: activeFilePath,
-  });
-  const dirtyFilePaths = getDirtyFilePaths(
-    projectRef.current,
-    savedSnapshotRef.current.project,
+  const activeFilePathStore = useMemo<WorkspaceStore<string>>(
+    () => ({
+      subscribe: subscribeActiveFilePath,
+      getSnapshot: getActiveFilePathSnapshot,
+    }),
+    [getActiveFilePathSnapshot, subscribeActiveFilePath],
   );
 
-  const metadataValue = useMemo<WorkspaceMetadata>(
+  const editorStateStore = useMemo<WorkspaceStore<WorkspaceEditorState>>(
     () => ({
-      activeFilePath,
-      activeFile,
-      files: listProjectFiles(projectRef.current),
-      dirtyFilePaths,
-      folders: projectRef.current.folders,
-      fileCount: Object.keys(projectRef.current.files).length,
-      hasUnsavedChanges: dirtyFilePaths.length > 0,
-      projectName: projectRef.current.name,
-      lessonType: projectRef.current.lessonType,
-      previewFilePath: projectRef.current.entryFilePath,
-      projectVersion,
-      syncVersion,
-      saveVersion,
+      subscribe: subscribeEditorState,
+      getSnapshot: getEditorStateSnapshot,
     }),
-    [
-      activeFile,
-      activeFilePath,
-      dirtyFilePaths,
-      projectVersion,
-      saveVersion,
-      syncVersion,
-    ],
+    [getEditorStateSnapshot, subscribeEditorState],
+  );
+
+  const sidebarStateStore = useMemo<WorkspaceStore<WorkspaceSidebarState>>(
+    () => ({
+      subscribe: subscribeSidebarState,
+      getSnapshot: getSidebarStateSnapshot,
+    }),
+    [getSidebarStateSnapshot, subscribeSidebarState],
+  );
+
+  const lessonTypeStore = useMemo<WorkspaceStore<WorkspaceLessonType>>(
+    () => ({
+      subscribe: subscribeLessonType,
+      getSnapshot: getLessonTypeSnapshot,
+    }),
+    [getLessonTypeSnapshot, subscribeLessonType],
+  );
+
+  const projectNameStore = useMemo<WorkspaceStore<string>>(
+    () => ({
+      subscribe: subscribeProjectName,
+      getSnapshot: getProjectNameSnapshot,
+    }),
+    [getProjectNameSnapshot, subscribeProjectName],
+  );
+
+  const fileCountStore = useMemo<WorkspaceStore<number>>(
+    () => ({
+      subscribe: subscribeFileCount,
+      getSnapshot: getFileCountSnapshot,
+    }),
+    [getFileCountSnapshot, subscribeFileCount],
+  );
+
+  const dirtyStateStore = useMemo<WorkspaceStore<WorkspaceDirtyState>>(
+    () => ({
+      subscribe: subscribeDirtyState,
+      getSnapshot: getDirtyStateSnapshot,
+    }),
+    [getDirtyStateSnapshot, subscribeDirtyState],
+  );
+
+  const saveVersionStore = useMemo<WorkspaceStore<number>>(
+    () => ({
+      subscribe: subscribeSaveVersion,
+      getSnapshot: getSaveVersionSnapshot,
+    }),
+    [getSaveVersionSnapshot, subscribeSaveVersion],
+  );
+
+  const syncVersionStore = useMemo<WorkspaceStore<number>>(
+    () => ({
+      subscribe: subscribeSyncVersion,
+      getSnapshot: getSyncVersionSnapshot,
+    }),
+    [getSyncVersionSnapshot, subscribeSyncVersion],
   );
 
   return (
     <WorkspaceActionsContext value={actionsValue}>
-      <WorkspaceMetadataContext value={metadataValue}>
-        {children}
-      </WorkspaceMetadataContext>
+      <WorkspaceEditorStateContext value={editorStateStore}>
+        <WorkspaceSidebarStateContext value={sidebarStateStore}>
+          <WorkspaceActiveFilePathContext value={activeFilePathStore}>
+            <WorkspaceLessonTypeContext value={lessonTypeStore}>
+              <WorkspaceProjectNameContext value={projectNameStore}>
+                <WorkspaceFileCountContext value={fileCountStore}>
+                  <WorkspaceDirtyStateContext value={dirtyStateStore}>
+                    <WorkspaceSaveVersionContext value={saveVersionStore}>
+                      <WorkspaceSyncVersionContext value={syncVersionStore}>
+                        {children}
+                      </WorkspaceSyncVersionContext>
+                    </WorkspaceSaveVersionContext>
+                  </WorkspaceDirtyStateContext>
+                </WorkspaceFileCountContext>
+              </WorkspaceProjectNameContext>
+            </WorkspaceLessonTypeContext>
+          </WorkspaceActiveFilePathContext>
+        </WorkspaceSidebarStateContext>
+      </WorkspaceEditorStateContext>
     </WorkspaceActionsContext>
   );
 };

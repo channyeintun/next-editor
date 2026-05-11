@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef } from "react";
+import { memo, useEffect, useEffectEvent, useRef } from "react";
 import Editor, {
   type OnMount,
   type BeforeMount,
@@ -10,9 +10,10 @@ import {
 } from "../hooks/useNextEditorContext";
 import {
   useWorkspaceActions,
-  useWorkspaceMetadata,
+  useWorkspaceEditorState,
+  useWorkspaceSaveVersion,
 } from "../hooks/useWorkspace";
-import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
+import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import {
@@ -25,6 +26,52 @@ interface CodeEditorProps {
   theme?: string;
   defaultContent?: string;
   showImportExport?: boolean;
+}
+
+interface WorkspaceEventRecorderProps {
+  activeFilePath: string;
+  handleWorkspaceEvent: () => void;
+  isRecording: boolean;
+}
+
+function WorkspaceEventRecorder({
+  activeFilePath,
+  handleWorkspaceEvent,
+  isRecording,
+}: WorkspaceEventRecorderProps) {
+  const saveVersion = useWorkspaceSaveVersion();
+  const previousWorkspaceRef = useRef<{
+    activeFilePath: string;
+    saveVersion: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const nextWorkspaceState = {
+      activeFilePath,
+      saveVersion,
+    };
+
+    if (!isRecording) {
+      previousWorkspaceRef.current = nextWorkspaceState;
+      return;
+    }
+
+    const previousWorkspaceState = previousWorkspaceRef.current;
+    previousWorkspaceRef.current = nextWorkspaceState;
+
+    if (!previousWorkspaceState) {
+      return;
+    }
+
+    if (
+      previousWorkspaceState.activeFilePath !== nextWorkspaceState.activeFilePath ||
+      previousWorkspaceState.saveVersion !== nextWorkspaceState.saveVersion
+    ) {
+      handleWorkspaceEvent();
+    }
+  }, [activeFilePath, handleWorkspaceEvent, isRecording, saveVersion]);
+
+  return null;
 }
 
 const MONACO_REACT_EXTRA_LIBS = [
@@ -146,8 +193,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
   const { saveProject, updateActiveFileContent } = useWorkspaceActions();
-  const { saveWorkspace } = useWebContainerRuntimeActions();
-  const { activeFile, projectVersion, saveVersion } = useWorkspaceMetadata();
+  const saveWorkspace = useWebContainerRuntimeSaveWorkspace();
+  const { activeFile, projectVersion } = useWorkspaceEditorState();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
   const editorModelPath = toMonacoModelPath(activeFile.path);
@@ -155,10 +202,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
   // Only subscribe to the flags we actually need for rendering decisions
   const { isPlaying, isRecording } = useNextEditorMetadata();
-  const previousWorkspaceRef = useRef<{
-    activeFilePath: string;
-    saveVersion: number;
-  } | null>(null);
 
   // useEffectEvent provides a stable function reference that always reads
   // the latest isPlaying value without causing dependency issues
@@ -214,33 +257,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     };
   }, []);
 
-  useEffect(() => {
-    const nextWorkspaceState = {
-      activeFilePath: activeFile.path,
-      saveVersion,
-    };
-
-    if (!isRecording) {
-      previousWorkspaceRef.current = nextWorkspaceState;
-      return;
-    }
-
-    const previousWorkspaceState = previousWorkspaceRef.current;
-    previousWorkspaceRef.current = nextWorkspaceState;
-
-    if (!previousWorkspaceState) {
-      return;
-    }
-
-    if (
-      previousWorkspaceState.activeFilePath !==
-        nextWorkspaceState.activeFilePath ||
-      previousWorkspaceState.saveVersion !== nextWorkspaceState.saveVersion
-    ) {
-      handleWorkspaceEvent();
-    }
-  }, [activeFile.path, handleWorkspaceEvent, isRecording, saveVersion]);
-
   const disposeEditorListeners = () => {
     editorDisposablesRef.current.forEach((disposable) => {
       disposable.dispose();
@@ -271,15 +287,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     editorRef.current = editor;
     syncEditorRef(editor);
     syncEditorContentToWorkspace(editor.getValue());
-
-    if (monacoRef.current) {
-      editor.addCommand(
-        monacoRef.current.KeyMod.CtrlCmd | monacoRef.current.KeyCode.KeyS,
-        () => {
-          void runSaveAction();
-        },
-      );
-    }
 
     editor.focus();
 
@@ -446,11 +453,21 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
   return (
     <div className="h-full flex flex-col">
+      <WorkspaceEventRecorder
+        activeFilePath={activeFile.path}
+        handleWorkspaceEvent={handleWorkspaceEvent}
+        isRecording={isRecording}
+      />
       <EditorHeader showImportExport={showImportExport} />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <FileSidebar />
         {/* Monaco Editor */}
-        <div className={"min-w-0 flex-1" + (isPlaying ? " playback-mode" : "")}>
+        <div
+          className={
+            "editor-paint-layer min-w-0 flex-1" +
+            (isPlaying ? " playback-mode" : "")
+          }
+        >
           <Editor
             key={`${activeFile.path}:${projectVersion}`}
             height="100%"
@@ -523,4 +540,4 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   );
 };
 
-export default CodeEditorComponent;
+export default memo(CodeEditorComponent);

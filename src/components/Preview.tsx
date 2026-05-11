@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence, type Transition } from "motion/react";
 import {
   useNextEditorActions,
@@ -6,7 +7,9 @@ import {
 } from "../hooks/useNextEditorContext";
 import {
   useWorkspaceActions,
-  useWorkspaceMetadata,
+  useWorkspaceLessonType,
+  useWorkspaceSaveVersion,
+  useWorkspaceSyncVersion,
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeMetadata } from "../hooks/useWebContainerRuntime";
 import type { WebContainerRuntimeStatus } from "../contexts/WebContainerRuntimeContext";
@@ -446,7 +449,9 @@ const Preview = memo(function Preview() {
     registerPreviewStateApplier,
   } = useNextEditorActions();
   const { getProject } = useWorkspaceActions();
-  const { lessonType, saveVersion } = useWorkspaceMetadata();
+  const lessonType = useWorkspaceLessonType();
+  const saveVersion = useWorkspaceSaveVersion();
+  const syncVersion = useWorkspaceSyncVersion();
   const {
     previewUrl: runtimePreviewUrl,
     status: runtimeStatus,
@@ -1123,6 +1128,7 @@ const Preview = memo(function Preview() {
     runtimePreviewPlaceholder,
     runtimePreviewUrl,
     saveVersion,
+    syncVersion,
     staticWorkspacePreview,
     updateIframeContent,
     captureRuntimePreviewSnapshot,
@@ -1429,7 +1435,7 @@ const Preview = memo(function Preview() {
   const variants = getPreviewVariants();
   const animateState = typeof size === "object" ? "custom" : size;
 
-  return (
+  const previewContent = (
     <>
       {/* Overlay for click-outside-to-minimize - only for large size */}
       <AnimatePresence>
@@ -1551,6 +1557,12 @@ const Preview = memo(function Preview() {
       </motion.div>
     </>
   );
+
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(previewContent, document.body);
 });
 
 export default Preview;

@@ -11,7 +11,9 @@ import {
 import { downloadWorkspaceProjectAsZip } from "../utils/workspaceZip";
 import {
   useWorkspaceActions,
-  useWorkspaceMetadata,
+  useWorkspaceDirtyState,
+  useWorkspaceFileCount,
+  useWorkspaceLessonType,
 } from "../hooks/useWorkspace";
 import type { WorkspaceLessonType } from "../types/workspace";
 import SettingIcon from "./icon/Setting";
@@ -107,7 +109,7 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
   const { rerunRunner } = useWebContainerRuntimeActions();
   const { isSupported, runnerConfig, status } =
     useWebContainerRuntimeMetadata();
-  const { lessonType } = useWorkspaceMetadata();
+  const lessonType = useWorkspaceLessonType();
   const saveShortcutLabel = useMemo(() => getSaveShortcutLabel(), []);
   const isBusy =
     status === "booting" ||
@@ -200,7 +202,9 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
     useWebContainerRuntimeMetadata();
   const { createNewEditor, getProject, resetProject, saveProject } =
     useWorkspaceActions();
-  const { fileCount, hasUnsavedChanges, lessonType } = useWorkspaceMetadata();
+  const fileCount = useWorkspaceFileCount();
+  const lessonType = useWorkspaceLessonType();
+  const { hasUnsavedChanges } = useWorkspaceDirtyState();
 
   const isBusy =
     status === "booting" ||

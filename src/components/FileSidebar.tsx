@@ -20,7 +20,7 @@ import {
 } from "../types/workspace";
 import {
   useWorkspaceActions,
-  useWorkspaceMetadata,
+  useWorkspaceSidebarState,
 } from "../hooks/useWorkspace";
 
 type WorkspaceTreeNode =
@@ -252,7 +252,7 @@ const FileSidebar = memo(function FileSidebar() {
     folders,
     lessonType,
     previewFilePath,
-  } = useWorkspaceMetadata();
+  } = useWorkspaceSidebarState();
   const tree = useMemo(
     () => buildWorkspaceTree(files, folders, activeFilePath),
     [activeFilePath, files, folders],

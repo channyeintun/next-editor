@@ -79,8 +79,21 @@ export interface WebContainerRuntimeMetadata {
   workspaceRoot: string;
 }
 
+export interface WebContainerRuntimeRecordingSnapshot {
+  status: WebContainerRuntimeStatus;
+  previewUrl: string | null;
+  lastOutput: string | null;
+  terminalOutput: string | null;
+  activeCommand: string | null;
+  errorMessage: string | null;
+}
+
 export const WebContainerRuntimeActionsContext =
   createContext<WebContainerRuntimeActions | null>(null);
+export const WebContainerRuntimeSaveWorkspaceContext =
+  createContext<(() => Promise<void>) | null>(null);
+export const WebContainerRuntimeSnapshotGetterContext =
+  createContext<(() => WebContainerRuntimeRecordingSnapshot) | null>(null);
 
 export const WebContainerRuntimeMetadataContext =
   createContext<WebContainerRuntimeMetadata | null>(null);

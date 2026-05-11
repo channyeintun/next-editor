@@ -17,7 +17,10 @@ import type {
 import { createInitialContext } from "./types";
 import type { EditorFrame, Recording } from "../types";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
-import type { WorkspaceRecordingEvent } from "../../../types/workspace";
+import {
+  areWorkspaceSnapshotsEqual,
+  type WorkspaceRecordingEvent,
+} from "../../../types/workspace";
 import {
   compressFrames,
   reconstructFrameAtIndex,
@@ -631,11 +634,26 @@ export const editorMachine = setup({
         context.applySlides(recording.slides);
       }
 
-      if (initialWorkspaceEvent && context.applyWorkspaceSnapshot) {
+      const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
+
+      if (
+        initialWorkspaceEvent &&
+        context.applyWorkspaceSnapshot &&
+        (!currentWorkspaceSnapshot ||
+          !areWorkspaceSnapshotsEqual(
+            currentWorkspaceSnapshot,
+            initialWorkspaceEvent.snapshot,
+          ))
+      ) {
         context.applyWorkspaceSnapshot(initialWorkspaceEvent.snapshot);
       } else if (
         recording.workspaceSnapshot &&
-        context.applyWorkspaceSnapshot
+        context.applyWorkspaceSnapshot &&
+        (!currentWorkspaceSnapshot ||
+          !areWorkspaceSnapshotsEqual(
+            currentWorkspaceSnapshot,
+            recording.workspaceSnapshot,
+          ))
       ) {
         context.applyWorkspaceSnapshot(recording.workspaceSnapshot);
       }
@@ -1099,6 +1117,20 @@ export const editorMachine = setup({
         latestWorkspaceEvent &&
         newLastIndex !== lastAppliedWorkspaceEventIndex
       ) {
+        const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
+
+        if (
+          currentWorkspaceSnapshot &&
+          areWorkspaceSnapshotsEqual(
+            currentWorkspaceSnapshot,
+            latestWorkspaceEvent.snapshot,
+          )
+        ) {
+          return {
+            lastAppliedWorkspaceEventIndex: newLastIndex,
+          };
+        }
+
         applyWorkspaceSnapshot(latestWorkspaceEvent.snapshot);
         return {
           lastAppliedWorkspaceEventIndex: newLastIndex,
@@ -1462,8 +1494,7 @@ export const editorMachine = setup({
                 ];
               if (
                 previousEvent &&
-                JSON.stringify(previousEvent.snapshot) ===
-                  JSON.stringify(snapshot)
+                areWorkspaceSnapshotsEqual(previousEvent.snapshot, snapshot)
               ) {
                 return {};
               }

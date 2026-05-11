@@ -43,6 +43,19 @@
   animation: nb-cursor-blink 1s step-end infinite !important;
 }
 
+.editor-paint-layer {
+  contain: paint;
+  isolation: isolate;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.editor-paint-layer .monaco-editor,
+.editor-paint-layer .monaco-editor .overflow-guard {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
 @keyframes nb-cursor-blink {
   0% {
     opacity: 1;

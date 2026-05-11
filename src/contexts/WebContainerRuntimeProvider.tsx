@@ -7,7 +7,10 @@ import type {
 import {
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
+  WebContainerRuntimeSnapshotGetterContext,
+  WebContainerRuntimeSaveWorkspaceContext,
   type EnvironmentVariables,
+  type WebContainerRuntimeRecordingSnapshot,
   type RuntimeLifecycleEvent,
   type RuntimePort,
   type RunnerConfig,
@@ -18,7 +21,9 @@ import {
 } from "./WebContainerRuntimeContext";
 import {
   useWorkspaceActions,
-  useWorkspaceMetadata,
+  useWorkspaceLessonType,
+  useWorkspaceProjectName,
+  useWorkspaceSaveVersion,
 } from "../hooks/useWorkspace";
 import type { WorkspaceProject } from "../types/workspace";
 
@@ -343,7 +348,9 @@ export const WebContainerRuntimeProvider: React.FC<
   WebContainerRuntimeProviderProps
 > = ({ children }) => {
   const { getProject } = useWorkspaceActions();
-  const { lessonType, projectName, saveVersion } = useWorkspaceMetadata();
+  const lessonType = useWorkspaceLessonType();
+  const projectName = useWorkspaceProjectName();
+  const saveVersion = useWorkspaceSaveVersion();
   const instanceRef = useRef<WebContainer | null>(null);
   const runnerProcessRef = useRef<WebContainerProcess | null>(null);
   const terminalProcessRef = useRef<WebContainerProcess | null>(null);
@@ -361,6 +368,14 @@ export const WebContainerRuntimeProvider: React.FC<
   const lastSyncedProjectRef = useRef<WorkspaceProject | null>(null);
   const hasAutoStartedRef = useRef(false);
   const isMountedRef = useRef(true);
+  const lessonTypeRef = useRef(lessonType);
+  const previewUrlRef = useRef<string | null>(null);
+  const errorMessageRef = useRef<string | null>(null);
+  const lastOutputRef = useRef<string | null>(null);
+  const terminalOutputRef = useRef<string | null>(null);
+  const activeCommandRef = useRef<string | null>(null);
+  const runnerConfigRef = useRef<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
+  const statusRef = useRef<WebContainerRuntimeStatus>("idle");
   const [status, setStatus] = useState<WebContainerRuntimeStatus>("idle");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -377,6 +392,15 @@ export const WebContainerRuntimeProvider: React.FC<
   const [runnerConfig, setRunnerConfig] = useState<RunnerConfig>(
     DEFAULT_RUNNER_CONFIG,
   );
+
+  lessonTypeRef.current = lessonType;
+  previewUrlRef.current = previewUrl;
+  errorMessageRef.current = errorMessage;
+  lastOutputRef.current = lastOutput;
+  terminalOutputRef.current = terminalOutput;
+  activeCommandRef.current = activeCommand;
+  runnerConfigRef.current = runnerConfig;
+  statusRef.current = status;
 
   const isSupported = window.crossOriginIsolated;
   const workspaceRoot = useMemo(
@@ -862,6 +886,8 @@ export const WebContainerRuntimeProvider: React.FC<
     runnerConfig.runCommand,
     startRunnerProcess,
   ]);
+  const rerunRunnerRef = useRef(rerunRunner);
+  rerunRunnerRef.current = rerunRunner;
 
   const startTerminalSession = useCallback(async () => {
     if (lessonType !== "node.js") {
@@ -906,32 +932,41 @@ export const WebContainerRuntimeProvider: React.FC<
   );
 
   const saveWorkspace = useCallback(async () => {
+    const currentRunnerConfig = runnerConfigRef.current;
+    const currentStatus = statusRef.current;
+
     if (
-      lessonType !== "node.js" ||
-      !runnerConfig.enabled ||
-      !runnerConfig.runOnFileSave
+      lessonTypeRef.current !== "node.js" ||
+      !currentRunnerConfig.enabled ||
+      !currentRunnerConfig.runOnFileSave
     ) {
       return;
     }
 
     if (
       runnerProcessRef.current ||
-      status === "booting" ||
-      status === "mounting" ||
-      status === "installing" ||
-      status === "starting"
+      currentStatus === "booting" ||
+      currentStatus === "mounting" ||
+      currentStatus === "installing" ||
+      currentStatus === "starting"
     ) {
       return;
     }
 
-    await rerunRunner();
-  }, [
-    lessonType,
-    rerunRunner,
-    runnerConfig.enabled,
-    runnerConfig.runOnFileSave,
-    status,
-  ]);
+    await rerunRunnerRef.current();
+  }, []);
+
+  const getRecordingSnapshot =
+    useCallback<() => WebContainerRuntimeRecordingSnapshot>(() => {
+      return {
+        status: statusRef.current,
+        previewUrl: previewUrlRef.current,
+        lastOutput: lastOutputRef.current,
+        terminalOutput: terminalOutputRef.current,
+        activeCommand: activeCommandRef.current,
+        errorMessage: errorMessageRef.current,
+      };
+    }, []);
 
   const updateRunnerConfig = useCallback((config: Partial<RunnerConfig>) => {
     setRunnerConfig((current) => ({
@@ -1092,10 +1127,14 @@ export const WebContainerRuntimeProvider: React.FC<
   );
 
   return (
-    <WebContainerRuntimeActionsContext value={actionsValue}>
-      <WebContainerRuntimeMetadataContext value={metadataValue}>
-        {children}
-      </WebContainerRuntimeMetadataContext>
-    </WebContainerRuntimeActionsContext>
+    <WebContainerRuntimeSnapshotGetterContext value={getRecordingSnapshot}>
+      <WebContainerRuntimeSaveWorkspaceContext value={saveWorkspace}>
+        <WebContainerRuntimeActionsContext value={actionsValue}>
+          <WebContainerRuntimeMetadataContext value={metadataValue}>
+            {children}
+          </WebContainerRuntimeMetadataContext>
+        </WebContainerRuntimeActionsContext>
+      </WebContainerRuntimeSaveWorkspaceContext>
+    </WebContainerRuntimeSnapshotGetterContext>
   );
 };

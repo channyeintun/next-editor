@@ -26,6 +26,66 @@ export interface WorkspaceRecordingEvent {
   snapshot: WorkspaceRecordingSnapshot;
 }
 
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
+function areWorkspaceFilesEqual(
+  left: Record<string, WorkspaceFile>,
+  right: Record<string, WorkspaceFile>,
+): boolean {
+  const leftPaths = Object.keys(left).sort((firstPath, secondPath) =>
+    firstPath.localeCompare(secondPath),
+  );
+  const rightPaths = Object.keys(right).sort((firstPath, secondPath) =>
+    firstPath.localeCompare(secondPath),
+  );
+
+  if (!areStringArraysEqual(leftPaths, rightPaths)) {
+    return false;
+  }
+
+  return leftPaths.every((path) => {
+    const leftFile = left[path];
+    const rightFile = right[path];
+
+    return (
+      leftFile.path === rightFile.path &&
+      leftFile.name === rightFile.name &&
+      leftFile.language === rightFile.language &&
+      leftFile.content === rightFile.content
+    );
+  });
+}
+
+export function areWorkspaceProjectsEqual(
+  left: WorkspaceProject,
+  right: WorkspaceProject,
+): boolean {
+  return (
+    left.id === right.id &&
+    left.name === right.name &&
+    left.lessonType === right.lessonType &&
+    left.entryFilePath === right.entryFilePath &&
+    areStringArraysEqual(left.folders, right.folders) &&
+    areWorkspaceFilesEqual(left.files, right.files)
+  );
+}
+
+export function areWorkspaceSnapshotsEqual(
+  left: WorkspaceRecordingSnapshot,
+  right: WorkspaceRecordingSnapshot,
+): boolean {
+  return (
+    left.activeFilePath === right.activeFilePath &&
+    areWorkspaceProjectsEqual(left.project, right.project)
+  );
+}
+
 export const DEFAULT_WORKSPACE_ENTRY_PATH = "index.html";
 export const DEFAULT_WORKSPACE_APP_PATH = "src/App.tsx";
 

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import CodeEditor from "./CodeEditor";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
@@ -10,14 +11,14 @@ import { SlidesProvider } from "../contexts/SlidesContext";
 import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
-import { useWorkspaceMetadata } from "../hooks/useWorkspace";
+import { useWorkspaceLessonType } from "../hooks/useWorkspace";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import CursorComponent from "./Cursor.tsx";
 
-export function EditorLayout() {
+export const EditorLayout = memo(function EditorLayout() {
   const { isDragging, isLoading: dragLoading } = useDragAndDropUrl();
   const { isLoading: urlLoading } = useUrlQuery();
-  const { lessonType } = useWorkspaceMetadata();
+  const lessonType = useWorkspaceLessonType();
 
   const isLoading = dragLoading || urlLoading;
 
@@ -42,7 +43,7 @@ export function EditorLayout() {
       <FloatingPlayButton />
     </div>
   );
-}
+});
 
 export default function Editor() {
   return (
