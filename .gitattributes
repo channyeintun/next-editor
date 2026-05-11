@@ -19,3 +19,6 @@ path/to/generated/files/*  linguist-generated=true
 *.ts text eol=lf
 *.tsx text eol=lf
 *.json text eol=lf
+
+# Ignore Nearley grammar/recording extension from GitHub language stats
+*.ne linguist-vendored=true
