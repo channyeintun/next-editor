@@ -108,7 +108,19 @@ sequenceDiagram
         opt Preview Event
             UI->>Context: handlePreviewEvent()
             Context->>Machine: PREVIEW_EVENT
-            Machine->>Machine: Record preview event
+            Machine->>Machine: Record preview state + event
+        end
+        
+        opt Workspace Changes (v3)
+            Runtime-->>Machine: File/folder change
+            Context->>Machine: WORKSPACE_EVENT
+            Machine->>Machine: Record workspace event
+        end
+        
+        opt Runtime Events (v3)
+            Runtime-->>Machine: Terminal/process output
+            Context->>Machine: RUNTIME_EVENT
+            Machine->>Machine: Record runtime event
         end
     end
 
@@ -169,9 +181,15 @@ sequenceDiagram
         Machine->>Editor: Apply decorations
         Machine->>Machine: applyPreviewEventsAtTime
         Machine->>Machine: applySlideEventsAtTime
+        Machine->>Machine: applyWorkspaceEventsAtTime (v3)
+        Machine->>Machine: applyRuntimeEventsAtTime (v3)
         
         opt Audio Sync (every 250ms)
             Machine->>Audio: SYNC event
+        end
+        
+        opt Preview State Update
+            Machine->>Machine: Restore preview state at checkpoint
         end
     end
 

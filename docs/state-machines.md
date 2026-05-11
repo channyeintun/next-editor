@@ -67,15 +67,18 @@ Waiting for audio recording to initialize.
 
 ### recording
 
-Actively capturing editor frames.
+Actively capturing editor frames and ancillary state.
 
 **Entry Actions:**
 - Spawn `mouseTracking` actor for cursor position
+- Capture initial preview state (v3)
 
 **Events Handled:**
 - `CAPTURE_FRAME` - Captures current editor state
 - `SLIDE_EVENT` - Records slide interaction
-- `PREVIEW_EVENT` - Records preview interaction
+- `PREVIEW_EVENT` - Records preview panel interaction and state
+- `WORKSPACE_EVENT` - Records file/folder changes (v3)
+- `RUNTIME_EVENT` - Records runtime/terminal output (v3)
 - `STOP_RECORDING` → `stoppingRecording` or `loading`
 
 ### stoppingRecording
@@ -97,6 +100,7 @@ Processing and loading a recording for playback.
 **Invokes:** `loadRecording` promise actor
 - Calculates exact audio duration from blob
 - Normalizes recording data
+- Validates recording format (v2 or v3)
 
 **Transitions:**
 - `onDone` → `playback.ready`
@@ -109,6 +113,7 @@ Playback mode with nested states for playing, paused, and ended.
 **Entry Actions:**
 - Spawn `timeline` actor
 - Spawn `audioPlayback` actor (if audio exists)
+- Restore initial preview state and workspace/runtime snapshots (v3)
 
 **Exit Actions:**
 - Stop all child actors
@@ -258,6 +263,8 @@ type EditorMachineEvent =
   // Content
   | { type: 'SLIDE_EVENT'; event: SlideEvent }
   | { type: 'PREVIEW_EVENT'; event: PreviewEvent }
+  | { type: 'WORKSPACE_EVENT'; event: WorkspaceRecordingEvent } // v3
+  | { type: 'RUNTIME_EVENT'; event: RuntimeRecordingEvent }     // v3
   
   // Audio
   | { type: 'STARTED'; mediaRecorder: MediaRecorder; mimeType: string }
