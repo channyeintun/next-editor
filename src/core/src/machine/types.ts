@@ -180,6 +180,10 @@ export interface EditorMachineContext {
   lastSyncTime?: number;
   /** Recorded frame state at the moment of pause - used to restore on resume */
   recordedFrameAtPause?: EditorFrame | null;
+  /** Whether manual workspace changes should suppress recorded workspace replay */
+  hasManualWorkspaceOverride: boolean;
+  /** Whether the next editor mount should resync playback state */
+  pendingPlaybackEditorSync: boolean;
 }
 
 // ============================================================================
@@ -440,6 +444,8 @@ export const createInitialContext = (
   pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
   animationFrameId: null,
   error: null,
+  hasManualWorkspaceOverride: false,
+  pendingPlaybackEditorSync: false,
   lastAppliedFrameIndex: -1,
   lastAppliedPreviewEventIndex: -1,
   lastAppliedSlideEventIndex: -1,

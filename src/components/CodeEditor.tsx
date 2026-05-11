@@ -31,19 +31,20 @@ interface CodeEditorProps {
 interface WorkspaceEventRecorderProps {
   activeFilePath: string;
   handleWorkspaceEvent: () => void;
-  isRecording: boolean;
+  shouldTrackWorkspaceChanges: boolean;
 }
 
 function WorkspaceEventRecorder({
   activeFilePath,
   handleWorkspaceEvent,
-  isRecording,
+  shouldTrackWorkspaceChanges,
 }: WorkspaceEventRecorderProps) {
   const saveVersion = useWorkspaceSaveVersion();
   const previousWorkspaceRef = useRef<{
     activeFilePath: string;
     saveVersion: number;
   } | null>(null);
+  const wasTrackingRef = useRef(false);
 
   useEffect(() => {
     const nextWorkspaceState = {
@@ -51,8 +52,15 @@ function WorkspaceEventRecorder({
       saveVersion,
     };
 
-    if (!isRecording) {
+    if (!shouldTrackWorkspaceChanges) {
       previousWorkspaceRef.current = nextWorkspaceState;
+      wasTrackingRef.current = false;
+      return;
+    }
+
+    if (!wasTrackingRef.current) {
+      previousWorkspaceRef.current = nextWorkspaceState;
+      wasTrackingRef.current = true;
       return;
     }
 
@@ -69,7 +77,12 @@ function WorkspaceEventRecorder({
     ) {
       handleWorkspaceEvent();
     }
-  }, [activeFilePath, handleWorkspaceEvent, isRecording, saveVersion]);
+  }, [
+    activeFilePath,
+    handleWorkspaceEvent,
+    saveVersion,
+    shouldTrackWorkspaceChanges,
+  ]);
 
   return null;
 }
@@ -201,7 +214,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const selectedLanguage = activeFile.language || language || "html";
 
   // Only subscribe to the flags we actually need for rendering decisions
-  const { isPlaying, isRecording } = useNextEditorMetadata();
+  const { currentRecording, isPlaying, isRecording } = useNextEditorMetadata();
 
   // useEffectEvent provides a stable function reference that always reads
   // the latest isPlaying value without causing dependency issues
@@ -459,7 +472,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       <WorkspaceEventRecorder
         activeFilePath={activeFile.path}
         handleWorkspaceEvent={handleWorkspaceEvent}
-        isRecording={isRecording}
+        shouldTrackWorkspaceChanges={isRecording || Boolean(currentRecording)}
       />
       <EditorHeader showImportExport={showImportExport} />
       <div className="flex min-h-0 flex-1 overflow-hidden">

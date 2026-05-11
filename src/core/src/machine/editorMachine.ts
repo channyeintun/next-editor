@@ -426,6 +426,10 @@ export const editorMachine = setup({
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
     hasAudio: ({ context }) => context.recording?.audioBlob !== undefined,
     shouldPauseOnInteraction: ({ context }) => context.pauseOnUserInteraction,
+    shouldSyncPlaybackEditorRef: ({ context, event }) =>
+      event.type === "SET_EDITOR_REF" &&
+      event.editor !== null &&
+      context.pendingPlaybackEditorSync,
     isValidSeekTime: ({ context, event }) => {
       if (event.type !== "SEEK") return false;
       return event.time >= 0 && event.time <= context.timeline.duration;
@@ -704,6 +708,8 @@ export const editorMachine = setup({
 
       return {
         recording,
+        hasManualWorkspaceOverride: false,
+        pendingPlaybackEditorSync: false,
         timeline: {
           currentTime: 0,
           duration,
@@ -916,8 +922,10 @@ export const editorMachine = setup({
     }),
 
     restoreRecordedFrameFromPause: ({ context }) => {
-      const { editorRefs, recordedFrameAtPause } = context;
+      const { editorRefs, hasManualWorkspaceOverride, recordedFrameAtPause } =
+        context;
       if (
+        hasManualWorkspaceOverride ||
         !editorRefs.editor ||
         !recordedFrameAtPause ||
         !recordedFrameAtPause.state
@@ -944,6 +952,8 @@ export const editorMachine = setup({
     },
 
     resetPlayback: assign(({ context }) => ({
+      hasManualWorkspaceOverride: false,
+      pendingPlaybackEditorSync: false,
       timeline: {
         ...context.timeline,
         currentTime: 0,
@@ -970,6 +980,27 @@ export const editorMachine = setup({
       lastAppliedPreviewState: undefined,
     })),
 
+    detachPlaybackWorkspace: assign(() => ({
+      hasManualWorkspaceOverride: true,
+      pendingPlaybackEditorSync: false,
+      currentFrame: null,
+      lastAppliedFrameIndex: -1,
+      lastAppliedPreviewEventIndex: -1,
+      lastAppliedSlideEventIndex: -1,
+      lastAppliedWorkspaceEventIndex: -1,
+      lastAppliedRuntimeEventIndex: -1,
+      lastAppliedPreviewState: undefined,
+    })),
+
+    reattachPlaybackWorkspace: assign(({ context }) => ({
+      hasManualWorkspaceOverride: false,
+      pendingPlaybackEditorSync: context.hasManualWorkspaceOverride,
+    })),
+
+    clearPendingPlaybackEditorSync: assign(() => ({
+      pendingPlaybackEditorSync: false,
+    })),
+
     invalidateRenderedPlaybackState: assign(() => ({
       currentFrame: null,
       lastAppliedFrameIndex: -1,
@@ -979,6 +1010,8 @@ export const editorMachine = setup({
     })),
 
     clearRecording: assign({
+      hasManualWorkspaceOverride: false,
+      pendingPlaybackEditorSync: false,
       recording: null,
       currentFrame: null,
       lastAppliedFrameIndex: -1,
@@ -1116,10 +1149,15 @@ export const editorMachine = setup({
     }),
     applyWorkspaceEventsAtTime: assign(({ context, event }) => {
       const {
+        hasManualWorkspaceOverride,
         recording,
         applyWorkspaceSnapshot,
         lastAppliedWorkspaceEventIndex,
       } = context;
+
+      if (hasManualWorkspaceOverride) {
+        return {};
+      }
 
       if (!recording?.workspaceEvents?.length || !applyWorkspaceSnapshot) {
         return {};
@@ -1385,17 +1423,24 @@ export const editorMachine = setup({
 
   initial: "idle",
   on: {
-    SET_EDITOR_REF: {
-      actions: [
-        "setEditorRef",
-        "invalidateRenderedPlaybackState",
-        "applyWorkspaceEventsAtTime",
-        "applyRuntimeEventsAtTime",
-        "applyFrameAtTime",
-        "applyPreviewEventsAtTime",
-        "applySlideEventsAtTime",
-      ],
-    },
+    SET_EDITOR_REF: [
+      {
+        guard: "shouldSyncPlaybackEditorRef",
+        actions: [
+          "setEditorRef",
+          "clearPendingPlaybackEditorSync",
+          "invalidateRenderedPlaybackState",
+          "applyWorkspaceEventsAtTime",
+          "applyRuntimeEventsAtTime",
+          "applyFrameAtTime",
+          "applyPreviewEventsAtTime",
+          "applySlideEventsAtTime",
+        ],
+      },
+      {
+        actions: ["setEditorRef", "invalidateRenderedPlaybackState"],
+      },
+    ],
   },
   states: {
     idle: {
@@ -1683,6 +1728,9 @@ export const editorMachine = setup({
         "clearCursorDecorations",
       ],
       on: {
+        WORKSPACE_EVENT: {
+          actions: ["detachPlaybackWorkspace"],
+        },
         TICK: {
           actions: [
             assign(({ context, event }) => {
@@ -1717,6 +1765,7 @@ export const editorMachine = setup({
         },
         SEEK: {
           actions: [
+            "reattachPlaybackWorkspace",
             "seekToTime",
             "applyWorkspaceEventsAtTime",
             "applyRuntimeEventsAtTime",
@@ -1763,6 +1812,7 @@ export const editorMachine = setup({
           target: ".ready",
           actions: [
             "resetPlayback",
+            "reattachPlaybackWorkspace",
             "applyWorkspaceEventsAtTime",
             "applyRuntimeEventsAtTime",
             "applyFrameAtTime",
@@ -1785,6 +1835,7 @@ export const editorMachine = setup({
             PLAY: {
               target: "playing",
               guard: "canPlay",
+              actions: ["reattachPlaybackWorkspace"],
             },
           },
         },
@@ -1818,6 +1869,10 @@ export const editorMachine = setup({
           on: {
             PAUSE: {
               target: "paused",
+            },
+            WORKSPACE_EVENT: {
+              target: "paused",
+              actions: ["detachPlaybackWorkspace"],
             },
             USER_INTERACTION: {
               target: "paused",
@@ -1869,7 +1924,10 @@ export const editorMachine = setup({
             },
             PLAY: {
               target: "playing",
-              actions: "restoreRecordedFrameFromPause",
+              actions: [
+                "restoreRecordedFrameFromPause",
+                "reattachPlaybackWorkspace",
+              ],
             },
           },
         },
@@ -1883,6 +1941,7 @@ export const editorMachine = setup({
                   context.timeline.currentTime >=
                   context.timeline.duration - 100, // Fuzzy end check
                 actions: [
+                  "reattachPlaybackWorkspace",
                   "resetPlayback",
                   "applyWorkspaceEventsAtTime",
                   "applyRuntimeEventsAtTime",
@@ -1897,6 +1956,7 @@ export const editorMachine = setup({
               },
               {
                 target: "playing",
+                actions: ["reattachPlaybackWorkspace"],
               },
             ],
           },

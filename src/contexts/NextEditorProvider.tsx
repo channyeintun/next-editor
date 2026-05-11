@@ -1,4 +1,4 @@
-import { useRef, useMemo, useCallback } from "react";
+import { useRef, useMemo, useCallback, useEffect } from "react";
 import type * as monaco from "monaco-editor";
 import { useNextEditor, type Recording } from "../core/src";
 import {
@@ -36,6 +36,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
   const activeFilePathRef = useRef(activeFilePath);
   const runtimeSnapshotRef = useRef(getRuntimeRecordingSnapshot());
+  const suppressWorkspaceEventsRef = useRef(false);
+  const clearWorkspaceEventSuppressionTimeoutRef = useRef<number | null>(null);
   const getSlideStateRef = useRef<
     | (() => {
         previewState: SlidePreviewState;
@@ -67,6 +69,27 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   activeFilePathRef.current = activeFilePath;
   runtimeSnapshotRef.current = getRuntimeRecordingSnapshot();
 
+  useEffect(() => {
+    return () => {
+      if (clearWorkspaceEventSuppressionTimeoutRef.current !== null) {
+        window.clearTimeout(clearWorkspaceEventSuppressionTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const suppressWorkspaceEvents = useCallback(() => {
+    suppressWorkspaceEventsRef.current = true;
+
+    if (clearWorkspaceEventSuppressionTimeoutRef.current !== null) {
+      window.clearTimeout(clearWorkspaceEventSuppressionTimeoutRef.current);
+    }
+
+    clearWorkspaceEventSuppressionTimeoutRef.current = window.setTimeout(() => {
+      suppressWorkspaceEventsRef.current = false;
+      clearWorkspaceEventSuppressionTimeoutRef.current = null;
+    }, 0);
+  }, []);
+
   const originalHook = useNextEditor({
     editorRef,
     enableAudioRecording: true, // Enable built-in synchronized audio recording
@@ -95,6 +118,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       activeFilePath: activeFilePathRef.current,
     }),
     applyWorkspaceSnapshot: (snapshot) => {
+      suppressWorkspaceEvents();
       loadProject(snapshot.project, snapshot.activeFilePath);
       void saveRuntimeWorkspace();
     },
@@ -131,7 +155,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     handleEditorChange,
     handleSlideEvent,
     handlePreviewEvent,
-    handleWorkspaceEvent,
+    handleWorkspaceEvent: handleWorkspaceEventBase,
     handleRuntimeEvent,
     isRecording,
     isRecordingAudio,
@@ -181,6 +205,14 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     clearRecordingBase();
     resetProject();
   }, [clearRecordingBase, resetProject]);
+
+  const handleWorkspaceEvent = useCallback(() => {
+    if (suppressWorkspaceEventsRef.current) {
+      return;
+    }
+
+    handleWorkspaceEventBase();
+  }, [handleWorkspaceEventBase]);
 
   const registerSlideStateGetter = useCallback(
     (
