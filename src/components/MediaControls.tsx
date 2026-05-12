@@ -3,6 +3,7 @@ import { Circle, Square, Plus } from 'lucide-react';
 import { useNextEditorActions, useNextEditorMetadata, useNextEditorPlayback, useLiveTime } from '../hooks/useNextEditorContext';
 import { getAudioContext, unlockAudioContext } from '../core/src/utils/audioContext';
 import ReplayIcon from './icon/Replay';
+import IdleRecordButton from './IdleRecordButton';
 import PlayIcon from './icon/Play';
 import PauseIcon from './icon/Pause';
 import SettingIcon from './icon/Setting';
@@ -200,7 +201,7 @@ const MediaControls: React.FC<MediaControlsProps> = memo(({
                 </div>
               </div>
             ) : (
-              <Circle size={14} className="fill-red-500 text-red-500" />
+              <IdleRecordButton />
             )}
           </button>
         )}
