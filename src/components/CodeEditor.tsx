@@ -516,7 +516,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               readOnly: false, // Keep editor writable to allow cursor blinking
               cursorStyle: "line",
               cursorBlinking: isPlaying ? "solid" : "smooth",
-              renderValidationDecorations: "on",
+              renderValidationDecorations: "off",
               automaticLayout: true,
               // Disable code suggestions and IntelliSense
               quickSuggestions: false,
