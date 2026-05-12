@@ -17,14 +17,12 @@ import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRun
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import {
-  DEFAULT_WORKSPACE_FILE_CONTENT,
   normalizeWorkspacePath,
 } from "../types/workspace";
 
 interface CodeEditorProps {
   language?: string;
   theme?: string;
-  defaultContent?: string;
   showImportExport?: boolean;
 }
 
@@ -200,7 +198,6 @@ function configureMonacoTypeScript(monaco: Monaco) {
 const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   language,
   theme = "next-editor-dark",
-  defaultContent = DEFAULT_WORKSPACE_FILE_CONTENT,
   showImportExport = false,
 }) => {
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
@@ -489,7 +486,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             path={editorModelPath}
             language={selectedLanguage}
             theme={theme}
-            defaultValue={activeFile.content || defaultContent}
+            value={activeFile.content}
+            saveViewState={!isPlaying}
             onMount={handleEditorDidMount}
             beforeMount={handleEditorBeforeMount}
             options={{
