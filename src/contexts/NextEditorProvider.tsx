@@ -28,6 +28,7 @@ interface NextEditorProviderContentProps {
   config: UseNextEditorConfig;
   jsonStorage: { current: ReturnType<typeof createJsonStorage> };
   resetProject: () => void;
+  skipRuntimeWorkspaceSyncRef: { current: boolean };
   suppressWorkspaceEventsRef: { current: boolean };
   getSlideStateRef: {
     current:
@@ -64,6 +65,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   config,
   jsonStorage,
   resetProject,
+  skipRuntimeWorkspaceSyncRef,
   suppressWorkspaceEventsRef,
   getSlideStateRef,
   applySlideStateRef,
@@ -95,7 +97,14 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handlePreviewEvent,
     handleWorkspaceEvent: handleWorkspaceEventBase,
     handleRuntimeEvent,
+    isPlaying,
+    isPaused,
+    hasEnded,
   } = originalHook;
+
+  useEffect(() => {
+    skipRuntimeWorkspaceSyncRef.current = isPlaying || isPaused || hasEnded;
+  }, [hasEnded, isPaused, isPlaying, skipRuntimeWorkspaceSyncRef]);
 
   // Stabilize storage and registration methods
   const exportAsFile = useCallback(
@@ -319,6 +328,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
   const activeFilePathRef = useRef(activeFilePath);
   const runtimeSnapshotRef = useRef(getRuntimeRecordingSnapshot());
+  const skipRuntimeWorkspaceSyncRef = useRef(false);
   const suppressWorkspaceEventsRef = useRef(false);
   const clearWorkspaceEventSuppressionTimeoutRef = useRef<number | null>(null);
   const getSlideStateRef = useRef<
@@ -395,7 +405,10 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       applyWorkspaceSnapshot: (snapshot) => {
         suppressWorkspaceEvents();
         loadProject(snapshot.project, snapshot.activeFilePath);
-        void saveRuntimeWorkspace();
+
+        if (!skipRuntimeWorkspaceSyncRef.current) {
+          void saveRuntimeWorkspace();
+        }
       },
       getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
         const snapshot = runtimeSnapshotRef.current;
@@ -423,6 +436,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
         config={config}
         jsonStorage={jsonStorage}
         resetProject={resetProject}
+        skipRuntimeWorkspaceSyncRef={skipRuntimeWorkspaceSyncRef}
         suppressWorkspaceEventsRef={suppressWorkspaceEventsRef}
         getSlideStateRef={getSlideStateRef}
         applySlideStateRef={applySlideStateRef}

@@ -39,6 +39,11 @@ Replace the custom `NextEditor` state contexts with `@xstate/react` actor contex
 - Run `bun run build`.
 - Update `progress.md` and commit each completed task with git CLI.
 
+### Task 5: Prevent Replay Preview Flash
+- Stop replayed workspace snapshots from syncing the live WebContainer preview during playback.
+- Keep recorded workspace/file switches visible in the editor without triggering runtime refreshes.
+- Validate with `bun run typecheck` and `bun run build`.
+
 ## Validation Strategy
 
 - Primary check after code changes: `bun run typecheck`
