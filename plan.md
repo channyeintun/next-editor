@@ -48,6 +48,11 @@ Replace the custom `NextEditor` state contexts with `@xstate/react` actor contex
 - Resolve the existing `Preview.tsx` React hook dependency warning.
 - Validate with `bun run lint`, `bun run typecheck`, and `bun run build`.
 
+### Task 7: Stop Preview Reload On Replay File Switch
+- Prevent workspace snapshot playback from rewinding preview replay state.
+- Keep file-switch playback updating preview content in place instead of replaying old refresh events.
+- Validate with `bun run lint`, `bun run typecheck`, and `bun run build`.
+
 ## Validation Strategy
 
 - Primary check after code changes: `bun run typecheck`

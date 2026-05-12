@@ -1214,9 +1214,7 @@ export const editorMachine = setup({
           lastAppliedWorkspaceEventIndex: newLastIndex,
           currentFrame: null,
           lastAppliedFrameIndex: -1,
-          lastAppliedPreviewEventIndex: -1,
           lastAppliedSlideEventIndex: -1,
-          lastAppliedPreviewState: undefined,
         };
       }
 

@@ -8,6 +8,7 @@
 - Task 4: Completed
 - Task 5: Completed
 - Task 6: Completed
+- Task 7: Completed
 
 ## Notes
 
@@ -28,3 +29,6 @@
 - Task 5 validation passed with `bun run typecheck` and `bun run build`.
 - Fixed the existing `Preview.tsx` hook dependency warning so lint passes cleanly again.
 - Task 6 validation passed with `bun run lint`, `bun run typecheck`, and `bun run build`.
+- Investigating preview content reloads triggered by replayed file-switch workspace events.
+- Preserved preview replay state when applying workspace snapshots so file switches do not replay older preview refresh events.
+- Task 7 validation passed with `bun run lint`, `bun run typecheck`, and `bun run build`.
