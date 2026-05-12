@@ -919,6 +919,7 @@ const Preview = memo(function Preview() {
       editorRef,
       captureRuntimePreviewSnapshot,
       emitPreviewEvent,
+      getProject,
       isRuntimeManagedPreview,
       isRuntimePreviewActive,
       isStaticWorkspacePreview,

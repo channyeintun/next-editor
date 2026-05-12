@@ -44,6 +44,10 @@ Replace the custom `NextEditor` state contexts with `@xstate/react` actor contex
 - Read the active file path through a workspace getter when recording snapshots.
 - Validate with `bun run typecheck` and `bun run build`.
 
+### Task 6: Fix Preview Lint Warning
+- Resolve the existing `Preview.tsx` React hook dependency warning.
+- Validate with `bun run lint`, `bun run typecheck`, and `bun run build`.
+
 ## Validation Strategy
 
 - Primary check after code changes: `bun run typecheck`

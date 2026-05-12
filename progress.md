@@ -7,6 +7,7 @@
 - Task 3: Completed
 - Task 4: Completed
 - Task 5: Completed
+- Task 6: Completed
 
 ## Notes
 
@@ -25,3 +26,5 @@
 - Removed the `NextEditorProvider` active-file subscription in favor of a workspace getter.
 - Stopped Monaco from remounting on replayed file switches by keying the editor to project resets only.
 - Task 5 validation passed with `bun run typecheck` and `bun run build`.
+- Fixed the existing `Preview.tsx` hook dependency warning so lint passes cleanly again.
+- Task 6 validation passed with `bun run lint`, `bun run typecheck`, and `bun run build`.
