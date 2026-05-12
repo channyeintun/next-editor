@@ -1,5 +1,7 @@
 import { createContext, type RefObject } from "react";
-import type { Recording, TimelineActorRef, EditorActorRef } from "../core/src";
+import type { Recording } from "../core/src/types";
+import type { TimelineActorRef } from "../core/src/machine/timelineMachine";
+import type { EditorActorRef } from "../core/src/useNextEditor";
 import type {
   SlidePreviewState,
   PreviewState,
@@ -18,9 +20,7 @@ export type { TimelineActorRef, EditorActorRef };
 // 1. Actions Context: Stable functions, refs, and storage methods
 export interface NextEditorActions {
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
-  syncEditorRef: (
-    editor: monaco.editor.IStandaloneCodeEditor | null,
-  ) => void;
+  syncEditorRef: (editor: monaco.editor.IStandaloneCodeEditor | null) => void;
   startRecording: () => void;
   stopRecording: () => void;
   play: () => void;
@@ -85,9 +85,6 @@ export interface NextEditorMetadata {
   recordingStartTime: number | null;
 }
 
-export const NextEditorMetadataContext =
-  createContext<NextEditorMetadata | null>(null);
-
 // 3. Playback Context: High-frequency state (ticks)
 export interface NextEditorPlayback {
   timelineActor: TimelineActorRef | undefined;
@@ -96,6 +93,3 @@ export interface NextEditorPlayback {
   volume: number;
   duration: number; // actualDuration
 }
-
-export const NextEditorPlaybackContext =
-  createContext<NextEditorPlayback | null>(null);

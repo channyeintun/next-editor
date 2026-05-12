@@ -2,11 +2,7 @@ import { useRef, useMemo, useCallback, useEffect } from "react";
 import type * as monaco from "monaco-editor";
 import type { Recording, UseNextEditorConfig } from "../core/src";
 import { useNextEditorActorBindings } from "../core/src/useNextEditor";
-import {
-  NextEditorActionsContext,
-  NextEditorMetadataContext,
-  NextEditorPlaybackContext,
-} from "./NextEditorContext";
+import { NextEditorActionsContext } from "./NextEditorContext";
 import { NextEditorActorContext } from "./NextEditorActorContext";
 import {
   useWebContainerRuntimeSaveWorkspace,
@@ -99,18 +95,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handlePreviewEvent,
     handleWorkspaceEvent: handleWorkspaceEventBase,
     handleRuntimeEvent,
-    isRecording,
-    isRecordingAudio,
-    isPlaying,
-    isPaused,
-    hasEnded,
-    currentRecording,
-    recordingStartTime,
-    timelineActor,
-    editorActor,
-    playbackSpeed,
-    volume,
-    actualDuration,
   } = originalHook;
 
   // Stabilize storage and registration methods
@@ -317,45 +301,9 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     ],
   );
 
-  const metadataValue = useMemo(
-    () => ({
-      isRecording,
-      isRecordingAudio,
-      isPlaying,
-      isPaused,
-      hasEnded,
-      currentRecording,
-      recordingStartTime,
-    }),
-    [
-      isRecording,
-      isRecordingAudio,
-      isPlaying,
-      isPaused,
-      hasEnded,
-      currentRecording,
-      recordingStartTime,
-    ],
-  );
-
-  const playbackValue = useMemo(
-    () => ({
-      timelineActor,
-      editorActor,
-      playbackSpeed,
-      volume,
-      duration: actualDuration,
-    }),
-    [timelineActor, editorActor, playbackSpeed, volume, actualDuration],
-  );
-
   return (
     <NextEditorActionsContext value={actionsValue}>
-      <NextEditorMetadataContext value={metadataValue}>
-        <NextEditorPlaybackContext value={playbackValue}>
-          {children}
-        </NextEditorPlaybackContext>
-      </NextEditorMetadataContext>
+      {children}
     </NextEditorActionsContext>
   );
 };

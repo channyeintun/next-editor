@@ -1,18 +1,27 @@
-import { useContext } from 'react';
-import { useSelector, shallowEqual } from '@xstate/react';
-import { type SnapshotFrom } from 'xstate';
-import { timelineMachine } from '../core/src/machine/timelineMachine';
-import { editorMachine } from '../core/src/machine/editorMachine';
+import { useContext, useMemo } from "react";
+import { shallowEqual } from "@xstate/react";
+import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import {
   NextEditorActionsContext,
-  NextEditorMetadataContext,
-  NextEditorPlaybackContext,
   type NextEditorActions,
   type NextEditorMetadata,
   type NextEditorPlayback,
-  type TimelineActorRef,
-  type EditorActorRef
-} from '../contexts/NextEditorContext';
+} from "../contexts/NextEditorContext";
+import {
+  selectDuration,
+  selectHasEnded,
+  selectIsPaused,
+  selectIsPlaying,
+  selectIsRecording,
+  selectIsRecordingAudio,
+  selectLiveCursor,
+  selectLiveTime,
+  selectPlaybackSpeed,
+  selectRecording,
+  selectRecordingStartTime,
+  selectTimelineActor,
+  selectVolume,
+} from "../core/src/useNextEditor";
 
 /**
  * Hook to access stable actions, refs, and storage methods.
@@ -21,7 +30,9 @@ import {
 export const useNextEditorActions = (): NextEditorActions => {
   const context = useContext(NextEditorActionsContext);
   if (!context) {
-    throw new Error('useNextEditorActions must be used within a NextEditorProvider');
+    throw new Error(
+      "useNextEditorActions must be used within a NextEditorProvider",
+    );
   }
   return context;
 };
@@ -31,11 +42,41 @@ export const useNextEditorActions = (): NextEditorActions => {
  * Component using this will re-render when recording/playback state transitions.
  */
 export const useNextEditorMetadata = (): NextEditorMetadata => {
-  const context = useContext(NextEditorMetadataContext);
-  if (!context) {
-    throw new Error('useNextEditorMetadata must be used within a NextEditorProvider');
-  }
-  return context;
+  const isRecording = NextEditorActorContext.useSelector(selectIsRecording);
+  const isRecordingAudio = NextEditorActorContext.useSelector(
+    selectIsRecordingAudio,
+  );
+  const isPlaying = NextEditorActorContext.useSelector(selectIsPlaying);
+  const isPaused = NextEditorActorContext.useSelector(selectIsPaused);
+  const hasEnded = NextEditorActorContext.useSelector(selectHasEnded);
+  const currentRecording = NextEditorActorContext.useSelector(
+    selectRecording,
+    shallowEqual,
+  );
+  const recordingStartTime = NextEditorActorContext.useSelector(
+    selectRecordingStartTime,
+  );
+
+  return useMemo(
+    () => ({
+      isRecording,
+      isRecordingAudio,
+      isPlaying,
+      isPaused,
+      hasEnded,
+      currentRecording,
+      recordingStartTime,
+    }),
+    [
+      isRecording,
+      isRecordingAudio,
+      isPlaying,
+      isPaused,
+      hasEnded,
+      currentRecording,
+      recordingStartTime,
+    ],
+  );
 };
 
 /**
@@ -43,11 +84,22 @@ export const useNextEditorMetadata = (): NextEditorMetadata => {
  * Component using this will NOT re-render on machine ticks.
  */
 export const useNextEditorPlayback = (): NextEditorPlayback => {
-  const context = useContext(NextEditorPlaybackContext);
-  if (!context) {
-    throw new Error('useNextEditorPlayback must be used within a NextEditorProvider');
-  }
-  return context;
+  const actorRef = NextEditorActorContext.useActorRef();
+  const timelineActor = NextEditorActorContext.useSelector(selectTimelineActor);
+  const playbackSpeed = NextEditorActorContext.useSelector(selectPlaybackSpeed);
+  const volume = NextEditorActorContext.useSelector(selectVolume);
+  const duration = NextEditorActorContext.useSelector(selectDuration);
+
+  return useMemo(
+    () => ({
+      timelineActor,
+      editorActor: actorRef,
+      playbackSpeed,
+      volume,
+      duration: duration / 1000,
+    }),
+    [timelineActor, actorRef, playbackSpeed, volume, duration],
+  );
 };
 
 /**
@@ -55,9 +107,7 @@ export const useNextEditorPlayback = (): NextEditorPlayback => {
  * Only the component using this hook will re-render on every tick.
  */
 export const useLiveTime = () => {
-  const playback = useNextEditorPlayback();
-  const timelineActor = playback.timelineActor;
-  return useSelector(timelineActor as TimelineActorRef, (state: SnapshotFrom<typeof timelineMachine> | undefined) => state?.context?.currentTime) ?? 0;
+  return NextEditorActorContext.useSelector(selectLiveTime);
 };
 
 /**
@@ -65,7 +115,5 @@ export const useLiveTime = () => {
  * Only the component using this hook will re-render on cursor movement.
  */
 export const useLiveCursor = () => {
-  const playback = useNextEditorPlayback();
-  const editorActor = playback.editorActor;
-  return useSelector(editorActor as EditorActorRef, (state: SnapshotFrom<typeof editorMachine> | undefined) => state?.context?.currentFrame?.state?.mouseCursor || null, shallowEqual);
+  return NextEditorActorContext.useSelector(selectLiveCursor, shallowEqual);
 };
