@@ -22,7 +22,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@types/pako": "^2.0.4",
     "@webcontainer/api": "^1.6.4",
-    "@xstate/react": "^6.0.0",
+    "@xstate/react": "^6.1.0",
     "animejs": "^4.3.5",
     "jszip": "^3.10.1",
     "lottie-react": "^2.4.1",
@@ -34,7 +34,7 @@
     "react-router-dom": "^7.12.0",
     "reveal.js": "^5.2.1",
     "superjson": "^2.2.6",
-    "xstate": "^5.25.1"
+    "xstate": "^5.31.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",
