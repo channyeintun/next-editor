@@ -1,6 +1,5 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import checker from "vite-plugin-checker";
+import { defineConfig, lazyPlugins } from "vite-plus";
+import type { PluginOption } from "@voidzero-dev/vite-plus-core";
 
 const crossOriginHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -9,12 +8,32 @@ const crossOriginHeaders = {
 
 // https://viteplus.dev/ alignment
 export default defineConfig({
-  plugins: [
-    react(),
-    checker({
-      typescript: true,
-    }),
-  ],
+  plugins: lazyPlugins(async () => {
+    const [{ default: react }, { default: checker }] = await Promise.all([
+      import("@vitejs/plugin-react"),
+      import("vite-plugin-checker"),
+    ]);
+
+    return [
+      ...react(),
+      checker({
+        typescript: true,
+      }),
+    ] as unknown as PluginOption[];
+  }),
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: ["./vitest.setup.ts"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+  },
+  lint: {
+    plugins: ["eslint", "typescript", "unicorn", "oxc", "react", "vitest"],
+    ignorePatterns: ["dist/**", "public/**"],
+    options: {
+      denyWarnings: true,
+    },
+  },
   build: {
     minify: "oxc",
     rolldownOptions: {

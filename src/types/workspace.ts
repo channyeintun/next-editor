@@ -112,7 +112,7 @@ export function createStarterWorkspacePackageJson(projectName: string): string {
       type: "module",
       scripts: {
         dev: "vite --host 0.0.0.0 --port 4173",
-        build: "tsc --noEmit && vite build",
+        build: "tsgo -p tsconfig.json --noEmit && vite build",
         preview: "vite preview --host 0.0.0.0 --port 4173",
       },
       dependencies: {
@@ -120,6 +120,7 @@ export function createStarterWorkspacePackageJson(projectName: string): string {
         "react-dom": "^19.2.5",
       },
       devDependencies: {
+        "@typescript/native-preview": "7.0.0-dev.20260512.1",
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^6.0.1",

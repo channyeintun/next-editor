@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vite-plus/test';
 import { compressFrames, reconstructFrameAtIndex } from '../frameDelta';
 import { isKeyframe, isDelta } from '../deltaTypes';
 import type { EditorFrame } from '../../types';

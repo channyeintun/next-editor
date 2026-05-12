@@ -4,18 +4,19 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "start": "vite",
-    "build": "npm run asbuild && tsc -b && vite build",
+    "dev": "vp dev",
+    "start": "vp dev",
+    "build": "vp run asbuild && tsgo -b tsconfig.json && vp build",
     "asbuild:debug": "asc src/core/assembly/index.ts --target debug",
     "asbuild:release": "asc src/core/assembly/index.ts --target release",
     "asbuild": "npm run asbuild:release",
     "clean:core": "rimraf src/core/dist",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "lint": "oxlint . --react-plugin --vitest-plugin --ignore-pattern dist --ignore-pattern public --deny-warnings",
-    "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "check": "vp check",
+    "test": "vp test",
+    "test:watch": "vp test watch",
+    "lint": "vp lint",
+    "typecheck": "tsgo -b tsconfig.json",
+    "preview": "vp preview"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -39,12 +40,12 @@
     "@tailwindcss/postcss": "^4.1.18",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
+    "@typescript/native-preview": "7.0.0-dev.20260512.1",
     "@types/node": "^25.0.9",
     "@types/react": "^19.2.9",
     "@types/react-dom": "^19.2.3",
     "@types/reveal.js": "^5.2.2",
     "@vitejs/plugin-react": "^6.0.1",
-    "@vitest/browser": "^4.0.18",
     "asbuild": "^0.2.0",
     "assemblyscript": "^0.28.9",
     "autoprefixer": "^10.4.23",
@@ -58,7 +59,9 @@
     "tslib": "^2.8.1",
     "typescript": "~5.8.3",
     "vite": "^8.0.11",
+    "vite-plus": "^0.1.20",
     "vite-plugin-checker": "^0.12.0",
     "vitest": "^4.0.18"
-  }
+  },
+  "packageManager": "bun@1.3.13"
 }
