@@ -7,7 +7,6 @@
 - Task 3: Completed
 - Task 4: Completed
 - Task 5: Completed
-- Task 6: Completed
 
 ## Notes
 
@@ -23,8 +22,6 @@
 - Switched `NextEditor` hooks to actor selectors and removed the redundant metadata/playback provider layers.
 - Final validation passed with `bun run typecheck` and `bun run build`.
 - Investigating preview flashing during replayed file-switch workspace events.
-- Prevented replayed workspace snapshots from syncing the live WebContainer during playback states.
-- Bugfix validation passed with `bun run typecheck` and `bun run build`.
 - Removed the `NextEditorProvider` active-file subscription in favor of a workspace getter.
 - Stopped Monaco from remounting on replayed file switches by keying the editor to project resets only.
-- Task 6 validation passed with `bun run typecheck` and `bun run build`.
+- Task 5 validation passed with `bun run typecheck` and `bun run build`.
