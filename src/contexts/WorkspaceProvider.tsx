@@ -1037,6 +1037,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
 
   const getProject = useCallback(() => projectRef.current, []);
 
+  const getActiveFilePath = useCallback(() => activeFilePathRef.current, []);
+
   const getFile = useCallback((path: string) => {
     return projectRef.current.files[normalizeWorkspacePath(path)] ?? null;
   }, []);
@@ -1063,6 +1065,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       resetProject,
       updateLessonType,
       getProject,
+      getActiveFilePath,
       getFile,
       listFiles,
     }),
@@ -1072,6 +1075,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       createFolder,
       deleteFolder,
       deleteFile,
+      getActiveFilePath,
       getFile,
       getProject,
       listFiles,

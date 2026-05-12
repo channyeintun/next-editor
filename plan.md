@@ -44,6 +44,11 @@ Replace the custom `NextEditor` state contexts with `@xstate/react` actor contex
 - Keep recorded workspace/file switches visible in the editor without triggering runtime refreshes.
 - Validate with `bun run typecheck` and `bun run build`.
 
+### Task 6: Stop Replay Provider Rerenders
+- Remove the `NextEditorProvider` subscription to active-file changes during playback.
+- Read the active file path through a workspace getter when recording snapshots.
+- Validate with `bun run typecheck` and `bun run build`.
+
 ## Validation Strategy
 
 - Primary check after code changes: `bun run typecheck`

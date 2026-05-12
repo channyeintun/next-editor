@@ -22,6 +22,7 @@ export interface WorkspaceActions {
   resetProject: () => void;
   updateLessonType: (lessonType: WorkspaceLessonType) => void;
   getProject: () => WorkspaceProject;
+  getActiveFilePath: () => string;
   getFile: (path: string) => WorkspaceFile | null;
   listFiles: () => WorkspaceFile[];
 }

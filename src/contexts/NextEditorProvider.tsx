@@ -10,7 +10,6 @@ import {
 } from "../hooks/useWebContainerRuntime";
 import {
   useWorkspaceActions,
-  useWorkspaceActiveFilePath,
 } from "../hooks/useWorkspace";
 import { createJsonStorage } from "../storage/JsonStorage";
 import type { SlidePreviewState, PreviewState, Slide } from "../types/slides";
@@ -322,11 +321,10 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
 }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
-  const { getProject, loadProject, resetProject } = useWorkspaceActions();
+  const { getProject, getActiveFilePath, loadProject, resetProject } =
+    useWorkspaceActions();
   const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
-  const activeFilePath = useWorkspaceActiveFilePath();
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
-  const activeFilePathRef = useRef(activeFilePath);
   const runtimeSnapshotRef = useRef(getRuntimeRecordingSnapshot());
   const skipRuntimeWorkspaceSyncRef = useRef(false);
   const suppressWorkspaceEventsRef = useRef(false);
@@ -359,7 +357,6 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     ((indexh: number, indexv: number) => void) | null
   >(null);
 
-  activeFilePathRef.current = activeFilePath;
   runtimeSnapshotRef.current = getRuntimeRecordingSnapshot();
 
   useEffect(() => {
@@ -400,7 +397,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       applySlides: (slides) => applySlidesRef.current?.(slides),
       getWorkspaceSnapshot: () => ({
         project: structuredClone(getProject()),
-        activeFilePath: activeFilePathRef.current,
+        activeFilePath: getActiveFilePath(),
       }),
       applyWorkspaceSnapshot: (snapshot) => {
         suppressWorkspaceEvents();
@@ -427,7 +424,13 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
         applyRuntimeStateRef.current?.(snapshot);
       },
     }),
-    [getProject, loadProject, saveRuntimeWorkspace, suppressWorkspaceEvents],
+    [
+      getActiveFilePath,
+      getProject,
+      loadProject,
+      saveRuntimeWorkspace,
+      suppressWorkspaceEvents,
+    ],
   );
 
   return (

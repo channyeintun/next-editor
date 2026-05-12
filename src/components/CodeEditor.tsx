@@ -485,7 +485,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           }
         >
           <Editor
-            key={`${activeFile.path}:${projectVersion}`}
+            key={projectVersion}
             height="100%"
             path={editorModelPath}
             language={selectedLanguage}
