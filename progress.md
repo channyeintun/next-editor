@@ -5,7 +5,7 @@
 - Task 1: Completed
 - Task 2: Completed
 - Task 3: Completed
-- Task 4: In progress
+- Task 4: Completed
 
 ## Notes
 
@@ -19,3 +19,4 @@
 - Completed planning and locked scope to the `NextEditor` migration.
 - Added `NextEditorActorContext` and moved provider wiring onto a single shared editor actor.
 - Switched `NextEditor` hooks to actor selectors and removed the redundant metadata/playback provider layers.
+- Final validation passed with `bun run typecheck` and `bun run build`.
