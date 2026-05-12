@@ -3,8 +3,8 @@
 ## Status
 
 - Task 1: Completed
-- Task 2: In progress
-- Task 3: Not started
+- Task 2: Completed
+- Task 3: In progress
 - Task 4: Not started
 
 ## Notes
@@ -17,3 +17,4 @@
 
 - Created initial execution scaffold for the `NextEditor` actor-context migration.
 - Completed planning and locked scope to the `NextEditor` migration.
+- Added `NextEditorActorContext` and moved provider wiring onto a single shared editor actor.

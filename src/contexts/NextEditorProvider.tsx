@@ -1,11 +1,13 @@
 import { useRef, useMemo, useCallback, useEffect } from "react";
 import type * as monaco from "monaco-editor";
-import { useNextEditor, type Recording } from "../core/src";
+import type { Recording, UseNextEditorConfig } from "../core/src";
+import { useNextEditorActorBindings } from "../core/src/useNextEditor";
 import {
   NextEditorActionsContext,
   NextEditorMetadataContext,
   NextEditorPlaybackContext,
 } from "./NextEditorContext";
+import { NextEditorActorContext } from "./NextEditorActorContext";
 import {
   useWebContainerRuntimeSaveWorkspace,
   useWebContainerRuntimeSnapshotGetter,
@@ -24,6 +26,339 @@ import type {
 interface NextEditorProviderProps {
   children: React.ReactNode;
 }
+
+interface NextEditorProviderContentProps {
+  children: React.ReactNode;
+  config: UseNextEditorConfig;
+  jsonStorage: { current: ReturnType<typeof createJsonStorage> };
+  resetProject: () => void;
+  suppressWorkspaceEventsRef: { current: boolean };
+  getSlideStateRef: {
+    current:
+      | (() => {
+          previewState: SlidePreviewState;
+          currentSlideIndex: number;
+        } | null)
+      | null;
+  };
+  applySlideStateRef: {
+    current:
+      | ((slideState: SlidePreviewState, currentSlideIndex: number) => void)
+      | null;
+  };
+  getPreviewStateRef: { current: (() => PreviewState | null) | null };
+  applyPreviewStateRef: {
+    current: ((previewState: PreviewState) => void) | null;
+  };
+  getRuntimeStateRef: {
+    current: (() => RuntimePanelRecordingState | null) | null;
+  };
+  applyRuntimeStateRef: {
+    current: ((snapshot: RuntimeRecordingSnapshot) => void) | null;
+  };
+  getSlidesRef: { current: (() => Slide[]) | null };
+  applySlidesRef: { current: ((slides: Slide[]) => void) | null };
+  navigateSlidesDirectRef: {
+    current: ((indexh: number, indexv: number) => void) | null;
+  };
+}
+
+const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
+  children,
+  config,
+  jsonStorage,
+  resetProject,
+  suppressWorkspaceEventsRef,
+  getSlideStateRef,
+  applySlideStateRef,
+  getPreviewStateRef,
+  applyPreviewStateRef,
+  getRuntimeStateRef,
+  applyRuntimeStateRef,
+  getSlidesRef,
+  applySlidesRef,
+  navigateSlidesDirectRef,
+}) => {
+  const actorRef = NextEditorActorContext.useActorRef();
+  const originalHook = useNextEditorActorBindings(actorRef, config);
+
+  const {
+    clearRecording: clearRecordingBase,
+    startRecording,
+    stopRecording,
+    play,
+    pause,
+    stop,
+    seekTo,
+    setPlaybackSpeed,
+    setVolume,
+    loadRecording,
+    syncEditorRef,
+    handleEditorChange,
+    handleSlideEvent,
+    handlePreviewEvent,
+    handleWorkspaceEvent: handleWorkspaceEventBase,
+    handleRuntimeEvent,
+    isRecording,
+    isRecordingAudio,
+    isPlaying,
+    isPaused,
+    hasEnded,
+    currentRecording,
+    recordingStartTime,
+    timelineActor,
+    editorActor,
+    playbackSpeed,
+    volume,
+    actualDuration,
+  } = originalHook;
+
+  // Stabilize storage and registration methods
+  const exportAsFile = useCallback(
+    (recording: Recording, filename?: string) =>
+      jsonStorage.current.exportAsFile(recording, filename),
+    [jsonStorage],
+  );
+  const exportAllAsFile = useCallback(
+    (filename?: string) => jsonStorage.current.exportAllAsFile(filename),
+    [jsonStorage],
+  );
+  const importFromFile = useCallback(
+    () => jsonStorage.current.importFromFile(),
+    [jsonStorage],
+  );
+  const clearStorage = useCallback(
+    () => jsonStorage.current.clear(),
+    [jsonStorage],
+  );
+  const getStorageStats = useCallback(
+    () => jsonStorage.current.getStats(),
+    [jsonStorage],
+  );
+  const deleteFromStorage = useCallback(
+    (id: string) => jsonStorage.current.delete(id),
+    [jsonStorage],
+  );
+
+  const loadRecordingsFromStorage = useCallback(async () => {
+    try {
+      return await jsonStorage.current.load();
+    } catch (error) {
+      console.warn("Failed to load recordings from storage:", error);
+      return [];
+    }
+  }, [jsonStorage]);
+
+  const clearRecording = useCallback(() => {
+    clearRecordingBase();
+    resetProject();
+  }, [clearRecordingBase, resetProject]);
+
+  const handleWorkspaceEvent = useCallback(() => {
+    if (suppressWorkspaceEventsRef.current) {
+      return;
+    }
+
+    handleWorkspaceEventBase();
+  }, [handleWorkspaceEventBase, suppressWorkspaceEventsRef]);
+
+  const registerSlideStateGetter = useCallback(
+    (
+      getter: () => {
+        previewState: SlidePreviewState;
+        currentSlideIndex: number;
+      } | null,
+    ) => {
+      getSlideStateRef.current = getter;
+    },
+    [getSlideStateRef],
+  );
+
+  const registerSlideStateApplier = useCallback(
+    (
+      applier: (
+        slideState: SlidePreviewState,
+        currentSlideIndex: number,
+      ) => void,
+    ) => {
+      applySlideStateRef.current = applier;
+    },
+    [applySlideStateRef],
+  );
+
+  const registerSlidesGetter = useCallback(
+    (getter: () => Slide[]) => {
+      getSlidesRef.current = getter;
+    },
+    [getSlidesRef],
+  );
+
+  const registerSlidesApplier = useCallback(
+    (applier: (slides: Slide[]) => void) => {
+      applySlidesRef.current = applier;
+    },
+    [applySlidesRef],
+  );
+
+  const registerPreviewStateGetter = useCallback(
+    (getter: () => PreviewState | null) => {
+      getPreviewStateRef.current = getter;
+    },
+    [getPreviewStateRef],
+  );
+
+  const registerPreviewStateApplier = useCallback(
+    (applier: (previewState: PreviewState) => void) => {
+      applyPreviewStateRef.current = applier;
+    },
+    [applyPreviewStateRef],
+  );
+
+  const registerRuntimeStateGetter = useCallback(
+    (getter: () => RuntimePanelRecordingState | null) => {
+      getRuntimeStateRef.current = getter;
+    },
+    [getRuntimeStateRef],
+  );
+
+  const registerRuntimeStateApplier = useCallback(
+    (applier: (snapshot: RuntimeRecordingSnapshot) => void) => {
+      applyRuntimeStateRef.current = applier;
+    },
+    [applyRuntimeStateRef],
+  );
+
+  const registerSlideNavigator = useCallback(
+    (navigator: (indexh: number, indexv: number) => void) => {
+      navigateSlidesDirectRef.current = navigator;
+    },
+    [navigateSlidesDirectRef],
+  );
+
+  const navigateSlidesDirect = useCallback(
+    (indexh: number, indexv: number) => {
+      navigateSlidesDirectRef.current?.(indexh, indexv);
+    },
+    [navigateSlidesDirectRef],
+  );
+
+  const actionsValue = useMemo(
+    () => ({
+      editorRef: config.editorRef,
+      syncEditorRef,
+      startRecording,
+      stopRecording,
+      play,
+      pause,
+      stop,
+      seekTo,
+      setPlaybackSpeed,
+      setVolume,
+      loadRecording,
+      handleEditorChange,
+      handleSlideEvent,
+      handlePreviewEvent,
+      handleWorkspaceEvent,
+      handleRuntimeEvent,
+      clearRecording,
+      exportAsFile,
+      exportAllAsFile,
+      importFromFile,
+      clearStorage,
+      getStorageStats,
+      loadRecordingsFromStorage,
+      deleteFromStorage,
+      registerSlideStateGetter,
+      registerSlideStateApplier,
+      registerSlidesGetter,
+      registerSlidesApplier,
+      registerPreviewStateGetter,
+      registerPreviewStateApplier,
+      registerRuntimeStateGetter,
+      registerRuntimeStateApplier,
+      registerSlideNavigator,
+      navigateSlidesDirect,
+    }),
+    [
+      config.editorRef,
+      syncEditorRef,
+      startRecording,
+      stopRecording,
+      play,
+      pause,
+      stop,
+      seekTo,
+      setPlaybackSpeed,
+      setVolume,
+      loadRecording,
+      handleEditorChange,
+      handleSlideEvent,
+      handlePreviewEvent,
+      handleWorkspaceEvent,
+      handleRuntimeEvent,
+      clearRecording,
+      exportAsFile,
+      exportAllAsFile,
+      importFromFile,
+      clearStorage,
+      getStorageStats,
+      loadRecordingsFromStorage,
+      deleteFromStorage,
+      registerSlideStateGetter,
+      registerSlideStateApplier,
+      registerSlidesGetter,
+      registerSlidesApplier,
+      registerPreviewStateGetter,
+      registerPreviewStateApplier,
+      registerRuntimeStateGetter,
+      registerRuntimeStateApplier,
+      registerSlideNavigator,
+      navigateSlidesDirect,
+    ],
+  );
+
+  const metadataValue = useMemo(
+    () => ({
+      isRecording,
+      isRecordingAudio,
+      isPlaying,
+      isPaused,
+      hasEnded,
+      currentRecording,
+      recordingStartTime,
+    }),
+    [
+      isRecording,
+      isRecordingAudio,
+      isPlaying,
+      isPaused,
+      hasEnded,
+      currentRecording,
+      recordingStartTime,
+    ],
+  );
+
+  const playbackValue = useMemo(
+    () => ({
+      timelineActor,
+      editorActor,
+      playbackSpeed,
+      volume,
+      duration: actualDuration,
+    }),
+    [timelineActor, editorActor, playbackSpeed, volume, actualDuration],
+  );
+
+  return (
+    <NextEditorActionsContext value={actionsValue}>
+      <NextEditorMetadataContext value={metadataValue}>
+        <NextEditorPlaybackContext value={playbackValue}>
+          {children}
+        </NextEditorPlaybackContext>
+      </NextEditorMetadataContext>
+    </NextEditorActionsContext>
+  );
+};
 
 export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   children,
@@ -90,320 +425,69 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     }, 0);
   }, []);
 
-  const originalHook = useNextEditor({
-    editorRef,
-    enableAudioRecording: true, // Enable built-in synchronized audio recording
-    onRecordingStart: () => {},
-    onRecordingStop: (recording) => {
-      originalHook.loadRecording(recording);
-    },
-    onPlaybackStart: () => {},
-    onPlaybackPause: () => {},
-    onError: (error: Error) => {
-      console.error("🚨 error:", error);
-    },
-    pauseOnUserInteraction: true,
-    getSlideState: () => getSlideStateRef.current?.() || null,
-    applySlideState: (slideState, currentSlideIndex) =>
-      applySlideStateRef.current?.(slideState, currentSlideIndex),
-
-    getPreviewState: () => getPreviewStateRef.current?.() || null,
-    applyPreviewState: (previewState) =>
-      applyPreviewStateRef.current?.(previewState),
-
-    getSlides: () => getSlidesRef.current?.() || [],
-    applySlides: (slides) => applySlidesRef.current?.(slides),
-    getWorkspaceSnapshot: () => ({
-      project: structuredClone(getProject()),
-      activeFilePath: activeFilePathRef.current,
-    }),
-    applyWorkspaceSnapshot: (snapshot) => {
-      suppressWorkspaceEvents();
-      loadProject(snapshot.project, snapshot.activeFilePath);
-      void saveRuntimeWorkspace();
-    },
-    getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
-      const snapshot = runtimeSnapshotRef.current;
-
-      return {
-        mode: snapshot.previewUrl ? "webcontainer" : "single-file",
-        status: snapshot.status,
-        previewUrl: snapshot.previewUrl,
-        terminalOutput: snapshot.terminalOutput || snapshot.lastOutput,
-        activeCommand: snapshot.activeCommand,
-        errorMessage: snapshot.errorMessage,
-        ...getRuntimeStateRef.current?.(),
-      };
-    },
-    applyRuntimeSnapshot: (snapshot) => {
-      applyRuntimeStateRef.current?.(snapshot);
-    },
-  });
-
-  const {
-    clearRecording: clearRecordingBase,
-    startRecording,
-    stopRecording,
-    play,
-    pause,
-    stop,
-    seekTo,
-    setPlaybackSpeed,
-    setVolume,
-    loadRecording,
-    syncEditorRef,
-    handleEditorChange,
-    handleSlideEvent,
-    handlePreviewEvent,
-    handleWorkspaceEvent: handleWorkspaceEventBase,
-    handleRuntimeEvent,
-    isRecording,
-    isRecordingAudio,
-    isPlaying,
-    isPaused,
-    hasEnded,
-    currentRecording,
-    recordingStartTime,
-    timelineActor,
-    editorActor,
-    playbackSpeed,
-    volume,
-    actualDuration,
-  } = originalHook;
-
-  // Stabilize storage and registration methods
-  const exportAsFile = useCallback(
-    (recording: Recording, filename?: string) =>
-      jsonStorage.current.exportAsFile(recording, filename),
-    [],
-  );
-  const exportAllAsFile = useCallback(
-    (filename?: string) => jsonStorage.current.exportAllAsFile(filename),
-    [],
-  );
-  const importFromFile = useCallback(
-    () => jsonStorage.current.importFromFile(),
-    [],
-  );
-  const clearStorage = useCallback(() => jsonStorage.current.clear(), []);
-  const getStorageStats = useCallback(() => jsonStorage.current.getStats(), []);
-  const deleteFromStorage = useCallback(
-    (id: string) => jsonStorage.current.delete(id),
-    [],
-  );
-
-  const loadRecordingsFromStorage = useCallback(async () => {
-    try {
-      return await jsonStorage.current.load();
-    } catch (error) {
-      console.warn("Failed to load recordings from storage:", error);
-      return [];
-    }
-  }, []);
-
-  const clearRecording = useCallback(() => {
-    clearRecordingBase();
-    resetProject();
-  }, [clearRecordingBase, resetProject]);
-
-  const handleWorkspaceEvent = useCallback(() => {
-    if (suppressWorkspaceEventsRef.current) {
-      return;
-    }
-
-    handleWorkspaceEventBase();
-  }, [handleWorkspaceEventBase]);
-
-  const registerSlideStateGetter = useCallback(
-    (
-      getter: () => {
-        previewState: SlidePreviewState;
-        currentSlideIndex: number;
-      } | null,
-    ) => {
-      getSlideStateRef.current = getter;
-    },
-    [],
-  );
-
-  const registerSlideStateApplier = useCallback(
-    (
-      applier: (
-        slideState: SlidePreviewState,
-        currentSlideIndex: number,
-      ) => void,
-    ) => {
-      applySlideStateRef.current = applier;
-    },
-    [],
-  );
-
-  const registerSlidesGetter = useCallback((getter: () => Slide[]) => {
-    getSlidesRef.current = getter;
-  }, []);
-
-  const registerSlidesApplier = useCallback(
-    (applier: (slides: Slide[]) => void) => {
-      applySlidesRef.current = applier;
-    },
-    [],
-  );
-
-  const registerPreviewStateGetter = useCallback(
-    (getter: () => PreviewState | null) => {
-      getPreviewStateRef.current = getter;
-    },
-    [],
-  );
-
-  const registerPreviewStateApplier = useCallback(
-    (applier: (previewState: PreviewState) => void) => {
-      applyPreviewStateRef.current = applier;
-    },
-    [],
-  );
-
-  const registerRuntimeStateGetter = useCallback(
-    (getter: () => RuntimePanelRecordingState | null) => {
-      getRuntimeStateRef.current = getter;
-    },
-    [],
-  );
-
-  const registerRuntimeStateApplier = useCallback(
-    (applier: (snapshot: RuntimeRecordingSnapshot) => void) => {
-      applyRuntimeStateRef.current = applier;
-    },
-    [],
-  );
-
-  const registerSlideNavigator = useCallback(
-    (navigator: (indexh: number, indexv: number) => void) => {
-      navigateSlidesDirectRef.current = navigator;
-    },
-    [],
-  );
-
-  const navigateSlidesDirect = useCallback((indexh: number, indexv: number) => {
-    navigateSlidesDirectRef.current?.(indexh, indexv);
-  }, []);
-
-  // 1. Memoize Stable Actions
-  const actionsValue = useMemo(
+  const config = useMemo<UseNextEditorConfig>(
     () => ({
       editorRef,
-      syncEditorRef,
-      startRecording,
-      stopRecording,
-      play,
-      pause,
-      stop,
-      seekTo,
-      setPlaybackSpeed,
-      setVolume,
-      loadRecording,
-      handleEditorChange,
-      handleSlideEvent,
-      handlePreviewEvent,
-      handleWorkspaceEvent,
-      handleRuntimeEvent,
-      clearRecording,
-      exportAsFile,
-      exportAllAsFile,
-      importFromFile,
-      clearStorage,
-      getStorageStats,
-      loadRecordingsFromStorage,
-      deleteFromStorage,
-      registerSlideStateGetter,
-      registerSlideStateApplier,
-      registerSlidesGetter,
-      registerSlidesApplier,
-      registerPreviewStateGetter,
-      registerPreviewStateApplier,
-      registerRuntimeStateGetter,
-      registerRuntimeStateApplier,
-      registerSlideNavigator,
-      navigateSlidesDirect,
-    }),
-    [
-      syncEditorRef,
-      startRecording,
-      stopRecording,
-      play,
-      pause,
-      stop,
-      seekTo,
-      setPlaybackSpeed,
-      setVolume,
-      loadRecording,
-      handleEditorChange,
-      handleSlideEvent,
-      handlePreviewEvent,
-      handleWorkspaceEvent,
-      handleRuntimeEvent,
-      navigateSlidesDirect,
-      clearRecording,
-      exportAsFile,
-      exportAllAsFile,
-      importFromFile,
-      clearStorage,
-      getStorageStats,
-      loadRecordingsFromStorage,
-      deleteFromStorage,
-      registerSlideStateGetter,
-      registerSlideStateApplier,
-      registerSlidesGetter,
-      registerSlidesApplier,
-      registerPreviewStateGetter,
-      registerPreviewStateApplier,
-      registerRuntimeStateGetter,
-      registerRuntimeStateApplier,
-      registerSlideNavigator,
-    ],
-  );
+      enableAudioRecording: true, // Enable built-in synchronized audio recording
+      pauseOnUserInteraction: true,
+      getSlideState: () => getSlideStateRef.current?.() || null,
+      applySlideState: (slideState, currentSlideIndex) =>
+        applySlideStateRef.current?.(slideState, currentSlideIndex),
 
-  // 2. Memoize Metadata (flags)
-  const metadataValue = useMemo(
-    () => ({
-      isRecording,
-      isRecordingAudio,
-      isPlaying,
-      isPaused,
-      hasEnded,
-      currentRecording,
-      recordingStartTime,
-    }),
-    [
-      isRecording,
-      isRecordingAudio,
-      isPlaying,
-      isPaused,
-      hasEnded,
-      currentRecording,
-      recordingStartTime,
-    ],
-  );
+      getPreviewState: () => getPreviewStateRef.current?.() || null,
+      applyPreviewState: (previewState) =>
+        applyPreviewStateRef.current?.(previewState),
 
-  // 3. Playback (Directly from hook to allow reactivity where needed)
-  const playbackValue = useMemo(
-    () => ({
-      timelineActor,
-      editorActor,
-      playbackSpeed,
-      volume,
-      duration: actualDuration,
+      getSlides: () => getSlidesRef.current?.() || [],
+      applySlides: (slides) => applySlidesRef.current?.(slides),
+      getWorkspaceSnapshot: () => ({
+        project: structuredClone(getProject()),
+        activeFilePath: activeFilePathRef.current,
+      }),
+      applyWorkspaceSnapshot: (snapshot) => {
+        suppressWorkspaceEvents();
+        loadProject(snapshot.project, snapshot.activeFilePath);
+        void saveRuntimeWorkspace();
+      },
+      getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
+        const snapshot = runtimeSnapshotRef.current;
+
+        return {
+          mode: snapshot.previewUrl ? "webcontainer" : "single-file",
+          status: snapshot.status,
+          previewUrl: snapshot.previewUrl,
+          terminalOutput: snapshot.terminalOutput || snapshot.lastOutput,
+          activeCommand: snapshot.activeCommand,
+          errorMessage: snapshot.errorMessage,
+          ...getRuntimeStateRef.current?.(),
+        };
+      },
+      applyRuntimeSnapshot: (snapshot) => {
+        applyRuntimeStateRef.current?.(snapshot);
+      },
     }),
-    [timelineActor, editorActor, playbackSpeed, volume, actualDuration],
+    [getProject, loadProject, saveRuntimeWorkspace, suppressWorkspaceEvents],
   );
 
   return (
-    <NextEditorActionsContext value={actionsValue}>
-      <NextEditorMetadataContext value={metadataValue}>
-        <NextEditorPlaybackContext value={playbackValue}>
-          {children}
-        </NextEditorPlaybackContext>
-      </NextEditorMetadataContext>
-    </NextEditorActionsContext>
+    <NextEditorActorContext.Provider options={{ input: config }}>
+      <NextEditorProviderContent
+        config={config}
+        jsonStorage={jsonStorage}
+        resetProject={resetProject}
+        suppressWorkspaceEventsRef={suppressWorkspaceEventsRef}
+        getSlideStateRef={getSlideStateRef}
+        applySlideStateRef={applySlideStateRef}
+        getPreviewStateRef={getPreviewStateRef}
+        applyPreviewStateRef={applyPreviewStateRef}
+        getRuntimeStateRef={getRuntimeStateRef}
+        applyRuntimeStateRef={applyRuntimeStateRef}
+        getSlidesRef={getSlidesRef}
+        applySlidesRef={applySlidesRef}
+        navigateSlidesDirectRef={navigateSlidesDirectRef}
+      >
+        {children}
+      </NextEditorProviderContent>
+    </NextEditorActorContext.Provider>
   );
 };

@@ -21,7 +21,7 @@ import type { SnapshotFrom } from "xstate";
 // ============================================================================
 // Type for machine snapshot
 // ============================================================================
-type EditorMachineSnapshot = SnapshotFrom<typeof editorMachine>;
+export type EditorMachineSnapshot = SnapshotFrom<typeof editorMachine>;
 export type EditorActorRef = ActorRefFrom<typeof editorMachine>;
 
 // ============================================================================
@@ -44,53 +44,48 @@ const getPlaybackState = (state: EditorMachineSnapshot): string | null => {
 };
 
 // Recording state selectors
-const selectIsRecording = (state: EditorMachineSnapshot) =>
+export const selectIsRecording = (state: EditorMachineSnapshot) =>
   state.value === "recording";
-const selectIsRecordingAudio = (state: EditorMachineSnapshot) =>
+export const selectIsRecordingAudio = (state: EditorMachineSnapshot) =>
   state.context.audio.isRecording;
-const selectRecordingStartTime = (state: EditorMachineSnapshot) =>
+export const selectRecordingStartTime = (state: EditorMachineSnapshot) =>
   state.context.session?.startedAt || null;
 
 // Playback state selectors
-const selectIsPlaying = (state: EditorMachineSnapshot) =>
+export const selectIsPlaying = (state: EditorMachineSnapshot) =>
   getPlaybackState(state) === "playing";
-const selectIsPaused = (state: EditorMachineSnapshot) =>
+export const selectIsPaused = (state: EditorMachineSnapshot) =>
   getPlaybackState(state) === "paused" ||
   (getPlaybackState(state) === "ended" &&
     state.context.timeline.currentTime < state.context.timeline.duration - 100);
-const selectHasEnded = (state: EditorMachineSnapshot) =>
+export const selectHasEnded = (state: EditorMachineSnapshot) =>
   getPlaybackState(state) === "ended" &&
   state.context.timeline.currentTime >= state.context.timeline.duration - 100;
 
 // Timeline selectors (high-frequency updates)
-const selectPlaybackSpeed = (state: EditorMachineSnapshot) =>
+export const selectPlaybackSpeed = (state: EditorMachineSnapshot) =>
   state.context.timeline.speed;
-const selectVolume = (state: EditorMachineSnapshot) =>
+export const selectVolume = (state: EditorMachineSnapshot) =>
   state.context.timeline.volume;
-const selectDuration = (state: EditorMachineSnapshot) =>
+export const selectDuration = (state: EditorMachineSnapshot) =>
   state.context.timeline.duration;
+export const selectLiveTime = (state: EditorMachineSnapshot) =>
+  state.context.timeline.currentTime;
 
 // Data selectors
-const selectRecording = (state: EditorMachineSnapshot) =>
+export const selectRecording = (state: EditorMachineSnapshot) =>
   state.context.recording;
-const selectEditor = (state: EditorMachineSnapshot) =>
+export const selectEditor = (state: EditorMachineSnapshot) =>
   state.context.editorRefs.editor;
-const selectTimelineActor = (state: EditorMachineSnapshot) =>
+export const selectTimelineActor = (state: EditorMachineSnapshot) =>
   state.children.timelineActor as TimelineActorRef | undefined;
+export const selectLiveCursor = (state: EditorMachineSnapshot) =>
+  state.context.currentFrame?.state?.mouseCursor || null;
 
-/**
- * Main useNextEditor hook refactored with XState v5
- * Uses useActorRef + useSelector for optimized re-renders.
- * Components using specific selectors only re-render when those values change.
- */
-export const useNextEditor = (
+export const useNextEditorActorBindings = (
+  actorRef: EditorActorRef,
   config: UseNextEditorConfig,
 ): UseNextEditorReturn => {
-  // Initialize the actor ref (stable reference, doesn't cause re-renders)
-  const actorRef = useActorRef(editorMachine, {
-    input: config,
-  });
-
   // Subscribe to specific state slices using selectors
   // Recording state
   const isRecording = useSelector(actorRef, selectIsRecording);
@@ -355,4 +350,20 @@ export const useNextEditor = (
     getEditorState,
     getFrame,
   };
+};
+
+/**
+ * Main useNextEditor hook refactored with XState v5
+ * Uses useActorRef + useSelector for optimized re-renders.
+ * Components using specific selectors only re-render when those values change.
+ */
+export const useNextEditor = (
+  config: UseNextEditorConfig,
+): UseNextEditorReturn => {
+  // Initialize the actor ref (stable reference, doesn't cause re-renders)
+  const actorRef = useActorRef(editorMachine, {
+    input: config,
+  });
+
+  return useNextEditorActorBindings(actorRef, config);
 };
