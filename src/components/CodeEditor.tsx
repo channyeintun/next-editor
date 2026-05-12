@@ -148,6 +148,7 @@ declare module "*.svg" {
 
 let hasConfiguredMonacoTypeScript = false;
 const MONACO_BUNDLER_MODULE_RESOLUTION = 100;
+const PLAYBACK_MODEL_PATH = "file:///__next-editor__/playback-active-file";
 
 function toMonacoModelPath(workspacePath: string) {
   return `file:///${encodeURI(normalizeWorkspacePath(workspacePath))}`;
@@ -207,11 +208,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const { activeFile } = useWorkspaceEditorState();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
-  const editorModelPath = toMonacoModelPath(activeFile.path);
-  const selectedLanguage = activeFile.language || language || "html";
 
   // Only subscribe to the flags we actually need for rendering decisions
   const { currentRecording, isPlaying, isRecording } = useNextEditorMetadata();
+  const editorModelPath = isPlaying
+    ? PLAYBACK_MODEL_PATH
+    : toMonacoModelPath(activeFile.path);
+  const selectedLanguage = activeFile.language || language || "html";
 
   // useEffectEvent provides a stable function reference that always reads
   // the latest isPlaying value without causing dependency issues
@@ -258,6 +261,20 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     void runSaveAction();
   });
 
+  const focusEditorIfNeeded = useEffectEvent((editor: Parameters<OnMount>[0] | null) => {
+    if (!editor) {
+      return;
+    }
+
+    const domNode = editor.getDomNode();
+
+    if (domNode?.contains(domNode.ownerDocument.activeElement)) {
+      return;
+    }
+
+    editor.focus();
+  });
+
   useEffect(() => {
     const handleWindowKeyDown = (event: KeyboardEvent) => {
       onSaveShortcut(event);
@@ -286,10 +303,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   }, [editorRef, syncEditorRef]);
 
   useEffect(() => {
-    if (isPlaying && editorRef.current) {
-      editorRef.current.focus();
+    if (isPlaying) {
+      focusEditorIfNeeded(editorRef.current);
     }
-  }, [editorRef, isPlaying]);
+  }, [editorRef, focusEditorIfNeeded, isPlaying]);
 
   /**
    * Handle Monaco Editor mount event
@@ -301,7 +318,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     syncEditorRef(editor);
     syncEditorContentToWorkspace(editor.getValue());
 
-    editor.focus();
+    focusEditorIfNeeded(editor);
 
     editorDisposablesRef.current = [
       editor.onDidChangeModelContent(() => {
