@@ -207,7 +207,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     useNextEditorActions();
   const { saveProject, updateActiveFileContent } = useWorkspaceActions();
   const saveWorkspace = useWebContainerRuntimeSaveWorkspace();
-  const { activeFile, projectVersion } = useWorkspaceEditorState();
+  const { activeFile } = useWorkspaceEditorState();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
   const editorModelPath = toMonacoModelPath(activeFile.path);
@@ -485,7 +485,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           }
         >
           <Editor
-            key={projectVersion}
             height="100%"
             path={editorModelPath}
             language={selectedLanguage}
