@@ -106,4 +106,4 @@ bun run build
 
 ## License
 
-Private / Confidential
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
