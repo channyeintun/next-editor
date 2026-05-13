@@ -16,9 +16,7 @@ import {
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
-import {
-  normalizeWorkspacePath,
-} from "../types/workspace";
+import { normalizeWorkspacePath } from "../types/workspace";
 
 interface CodeEditorProps {
   language?: string;
@@ -70,7 +68,8 @@ function WorkspaceEventRecorder({
     }
 
     if (
-      previousWorkspaceState.activeFilePath !== nextWorkspaceState.activeFilePath ||
+      previousWorkspaceState.activeFilePath !==
+        nextWorkspaceState.activeFilePath ||
       previousWorkspaceState.saveVersion !== nextWorkspaceState.saveVersion
     ) {
       handleWorkspaceEvent();
@@ -203,7 +202,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 }) => {
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
-  const { saveProject, updateActiveFileContent } = useWorkspaceActions();
+  const { saveProject, updateFileContent } = useWorkspaceActions();
   const saveWorkspace = useWebContainerRuntimeSaveWorkspace();
   const { activeFile } = useWorkspaceEditorState();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
@@ -223,13 +222,24 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     handleEditorChange();
   });
 
-  const syncEditorContentToWorkspace = useEffectEvent((content: string) => {
-    if (isPlaying) {
-      return;
-    }
+  const syncEditorContentToWorkspace = useEffectEvent(
+    (editor: Parameters<OnMount>[0] | null, content: string) => {
+      if (isPlaying || !editor) {
+        return;
+      }
 
-    updateActiveFileContent(content);
-  });
+      const model = editor.getModel();
+      const modelPath = model
+        ? normalizeWorkspacePath(decodeURI(model.uri.path))
+        : "";
+
+      if (!modelPath || modelPath !== activeFile.path) {
+        return;
+      }
+
+      updateFileContent(modelPath, content);
+    },
+  );
 
   const runSaveAction = useEffectEvent(async () => {
     if (isPlaying) {
@@ -239,7 +249,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     const editor = editorRef.current;
 
     if (editor) {
-      syncEditorContentToWorkspace(editor.getValue());
+      syncEditorContentToWorkspace(editor, editor.getValue());
     }
 
     try {
@@ -261,19 +271,21 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     void runSaveAction();
   });
 
-  const focusEditorIfNeeded = useEffectEvent((editor: Parameters<OnMount>[0] | null) => {
-    if (!editor) {
-      return;
-    }
+  const focusEditorIfNeeded = useEffectEvent(
+    (editor: Parameters<OnMount>[0] | null) => {
+      if (!editor) {
+        return;
+      }
 
-    const domNode = editor.getDomNode();
+      const domNode = editor.getDomNode();
 
-    if (domNode?.contains(domNode.ownerDocument.activeElement)) {
-      return;
-    }
+      if (domNode?.contains(domNode.ownerDocument.activeElement)) {
+        return;
+      }
 
-    editor.focus();
-  });
+      editor.focus();
+    },
+  );
 
   useEffect(() => {
     const handleWindowKeyDown = (event: KeyboardEvent) => {
@@ -316,13 +328,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     disposeEditorListeners();
     editorRef.current = editor;
     syncEditorRef(editor);
-    syncEditorContentToWorkspace(editor.getValue());
+    syncEditorContentToWorkspace(editor, editor.getValue());
 
     focusEditorIfNeeded(editor);
 
     editorDisposablesRef.current = [
       editor.onDidChangeModelContent(() => {
-        syncEditorContentToWorkspace(editor.getValue());
+        syncEditorContentToWorkspace(editor, editor.getValue());
         onEditorChange();
       }),
       editor.onDidChangeCursorPosition(() => {
