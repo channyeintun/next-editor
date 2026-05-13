@@ -202,7 +202,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 }) => {
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
-  const { saveProject, updateFileContent } = useWorkspaceActions();
+  const { saveProject, updateActiveFileContent } = useWorkspaceActions();
   const saveWorkspace = useWebContainerRuntimeSaveWorkspace();
   const { activeFile } = useWorkspaceEditorState();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
@@ -222,24 +222,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     handleEditorChange();
   });
 
-  const syncEditorContentToWorkspace = useEffectEvent(
-    (editor: Parameters<OnMount>[0] | null, content: string) => {
-      if (isPlaying || !editor) {
-        return;
-      }
+  const syncEditorContentToWorkspace = useEffectEvent((content: string) => {
+    if (isPlaying) {
+      return;
+    }
 
-      const model = editor.getModel();
-      const modelPath = model
-        ? normalizeWorkspacePath(decodeURI(model.uri.path))
-        : "";
-
-      if (!modelPath || modelPath !== activeFile.path) {
-        return;
-      }
-
-      updateFileContent(modelPath, content);
-    },
-  );
+    updateActiveFileContent(content);
+  });
 
   const runSaveAction = useEffectEvent(async () => {
     if (isPlaying) {
@@ -249,7 +238,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     const editor = editorRef.current;
 
     if (editor) {
-      syncEditorContentToWorkspace(editor, editor.getValue());
+      syncEditorContentToWorkspace(editor.getValue());
     }
 
     try {
@@ -328,13 +317,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     disposeEditorListeners();
     editorRef.current = editor;
     syncEditorRef(editor);
-    syncEditorContentToWorkspace(editor, editor.getValue());
+    syncEditorContentToWorkspace(editor.getValue());
 
     focusEditorIfNeeded(editor);
 
     editorDisposablesRef.current = [
       editor.onDidChangeModelContent(() => {
-        syncEditorContentToWorkspace(editor, editor.getValue());
+        syncEditorContentToWorkspace(editor.getValue());
         onEditorChange();
       }),
       editor.onDidChangeCursorPosition(() => {

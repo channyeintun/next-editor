@@ -24,3 +24,5 @@
 - Comparison result: `src/components/CodeEditor.tsx` was unchanged across the migration; the behavior change came from the workspace migration changing the authority used by editor-to-workspace content sync during playback handoffs.
 - Playback pause fix: `CodeEditor` now writes content back to the workspace file Monaco is actually attached to, instead of relying on an inferred active-file target during pause/playback transitions.
 - Playback pause fix validation: formatted `src/components/CodeEditor.tsx`, `bun run typecheck` passed, and `bun run lint` still only reports the existing `useEffectEvent` dependency warning in `src/components/CodeEditor.tsx`.
+- Reverted the `CodeEditor.tsx` playback pause fix on request after it introduced a separate seek-time regression.
+- Current direction: keep the investigation in the workspace/context migration layer rather than in `CodeEditor.tsx`.
