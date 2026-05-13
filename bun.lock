@@ -9,6 +9,7 @@
         "@types/pako": "^2.0.4",
         "@webcontainer/api": "^1.6.4",
         "@xstate/react": "^6.1.0",
+        "@xstate/store-react": "^1.0.1",
         "animejs": "^4.3.5",
         "jszip": "^3.10.1",
         "lottie-react": "^2.4.1",
@@ -507,6 +508,10 @@
     "@webcontainer/api": ["@webcontainer/api@1.6.4", "", {}, "sha512-r9sHCXg1FcC1AMgppGwAc0vYWaQhqvg282cnsuPbJEzYnWifAdCVvg+8ngJUEHyHcomhJJp+/zuytite4ITHLw=="],
 
     "@xstate/react": ["@xstate/react@6.1.0", "", { "dependencies": { "use-isomorphic-layout-effect": "^1.1.2", "use-sync-external-store": "^1.2.0" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "xstate": "^5.28.0" }, "optionalPeers": ["xstate"] }, "sha512-ep9F0jGTI63B/jE8GHdMpUqtuz7yRebNaKv8EMUaiSi29NOglywc2X2YSOV/ygbIK+LtmgZ0q9anoEA2iBSEOw=="],
+
+    "@xstate/store": ["@xstate/store@3.17.5", "", { "peerDependencies": { "react": "^18.2.0 || ^19.0.0", "solid-js": "^1.7.6" }, "optionalPeers": ["react", "solid-js"] }, "sha512-ITajQVRAMa1pgmgM0OdRFYQ6OQ8GK4ynh391p13GKtZnELXn9Hgs9pr4mqO1Z95HH9INcmczmWi5xk3O18GBWg=="],
+
+    "@xstate/store-react": ["@xstate/store-react@1.0.1", "", { "dependencies": { "@xstate/store": "^3.15.0" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0" } }, "sha512-J/pShjtAXYNZDLVGdx1W0OSH8kon1/pFjaQYpXEJpqsG4jAdptO0YjguqAIHK+3UvMSBf5HYlO+gMS0rRhkz8A=="],
 
     "acorn": ["acorn@8.15.0", "", { "bin": { "acorn": "bin/acorn" } }, "sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg=="],
 
