@@ -19,7 +19,7 @@ import {
   selectWorkspaceSaveVersion,
   selectWorkspaceSidebarState,
   selectWorkspaceSyncVersion,
-} from "../contexts/workspaceStore";
+} from "../stores/workspaceStore";
 import type { WorkspaceLessonType } from "../types/workspace";
 
 function useWorkspaceStore(hookName: string) {

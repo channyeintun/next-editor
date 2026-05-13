@@ -18,3 +18,5 @@
 - Validation result: `bun run typecheck` passed.
 - Validation note: `bun run lint` is still blocked by an existing `react-hooks(exhaustive-deps)` warning in `src/components/CodeEditor.tsx:309`; no new lint errors were introduced by this migration.
 - Closed the remaining review findings without code migration: defer `SlidesContext`, keep `WebContainerRuntimeProvider` as-is for now, and keep `NextEditor` actor-based.
+- Follow-up cleanup: moved the workspace store module out of `src/contexts` into `src/stores` so the folder structure matches the module responsibility.
+- Follow-up cleanup validation: `bun run typecheck` passed after relocating the workspace store module.

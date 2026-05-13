@@ -11,7 +11,7 @@ import {
   createWorkspaceStore,
   normalizeProject,
   type StoredWorkspaceSnapshot,
-} from "./workspaceStore";
+} from "../stores/workspaceStore";
 import {
   createSingleFileWorkspace,
   createStarterWorkspaceProject,

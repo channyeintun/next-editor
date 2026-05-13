@@ -4,7 +4,7 @@ import type {
   WorkspaceDirtyState,
   WorkspaceEditorState,
   WorkspaceSidebarState,
-} from "./WorkspaceContext";
+} from "../contexts/WorkspaceContext";
 import {
   collectWorkspaceFolders,
   createSingleFileWorkspace,
