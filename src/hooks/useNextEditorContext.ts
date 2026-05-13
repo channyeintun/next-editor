@@ -20,6 +20,7 @@ import {
   selectRecording,
   selectRecordingStartTime,
   selectTimelineActor,
+  selectUsesPlaybackModel,
   selectVolume,
 } from "../core/src/useNextEditor";
 
@@ -49,6 +50,9 @@ export const useNextEditorMetadata = (): NextEditorMetadata => {
   const isPlaying = NextEditorActorContext.useSelector(selectIsPlaying);
   const isPaused = NextEditorActorContext.useSelector(selectIsPaused);
   const hasEnded = NextEditorActorContext.useSelector(selectHasEnded);
+  const usesPlaybackModel = NextEditorActorContext.useSelector(
+    selectUsesPlaybackModel,
+  );
   const currentRecording = NextEditorActorContext.useSelector(
     selectRecording,
     shallowEqual,
@@ -64,6 +68,7 @@ export const useNextEditorMetadata = (): NextEditorMetadata => {
       isPlaying,
       isPaused,
       hasEnded,
+      usesPlaybackModel,
       currentRecording,
       recordingStartTime,
     }),
@@ -73,6 +78,7 @@ export const useNextEditorMetadata = (): NextEditorMetadata => {
       isPlaying,
       isPaused,
       hasEnded,
+      usesPlaybackModel,
       currentRecording,
       recordingStartTime,
     ],

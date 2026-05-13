@@ -81,6 +81,7 @@ export interface NextEditorMetadata {
   isPlaying: boolean;
   isPaused: boolean;
   hasEnded: boolean;
+  usesPlaybackModel: boolean;
   currentRecording: Recording | null;
   recordingStartTime: number | null;
 }

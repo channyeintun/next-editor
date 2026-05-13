@@ -32,3 +32,5 @@
 - Seek-time follow-up validation: `bun run typecheck` passed after the hook subscription change.
 - Store-react correction: replaced the temporary whole-store `useSyncExternalStore` wrapper with derived atoms from `store.select(...)` plus `useAtom(...)`, so the workspace hooks stay on the native `@xstate/store-react` subscription path while still updating the replayed slices correctly.
 - Store-react correction validation: `bun run typecheck` passed after switching the workspace selectors to `WorkspaceState` and the hooks to `store.select(...)`.
+- Playback end fix: kept `CodeEditor` attached to the playback Monaco model for paused and ended playback states, and only switch back to workspace-backed models after stop or a manual workspace override.
+- Playback end fix validation: `bun run typecheck` passed after adding the playback-model selector and updating the NextEditor metadata consumers.

@@ -209,21 +209,22 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const monacoRef = useRef<Monaco | null>(null);
 
   // Only subscribe to the flags we actually need for rendering decisions
-  const { currentRecording, isPlaying, isRecording } = useNextEditorMetadata();
-  const editorModelPath = isPlaying
+  const { currentRecording, isPlaying, isRecording, usesPlaybackModel } =
+    useNextEditorMetadata();
+  const editorModelPath = usesPlaybackModel
     ? PLAYBACK_MODEL_PATH
     : toMonacoModelPath(activeFile.path);
   const selectedLanguage = activeFile.language || language || "html";
 
   // useEffectEvent provides a stable function reference that always reads
-  // the latest isPlaying value without causing dependency issues
+  // the latest playback attachment value without causing dependency issues
   const onEditorChange = useEffectEvent(() => {
-    if (isPlaying) return; // Skip during playback
+    if (usesPlaybackModel) return; // Skip while playback owns the editor model
     handleEditorChange();
   });
 
   const syncEditorContentToWorkspace = useEffectEvent((content: string) => {
-    if (isPlaying) {
+    if (usesPlaybackModel) {
       return;
     }
 
@@ -231,7 +232,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   });
 
   const runSaveAction = useEffectEvent(async () => {
-    if (isPlaying) {
+    if (usesPlaybackModel) {
       return;
     }
 
@@ -496,7 +497,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         <div
           className={
             "editor-paint-layer min-w-0 flex-1" +
-            (isPlaying ? " playback-mode" : "")
+            (usesPlaybackModel ? " playback-mode" : "")
           }
         >
           <Editor
@@ -505,7 +506,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             language={selectedLanguage}
             theme={theme}
             value={activeFile.content}
-            saveViewState={!isPlaying}
+            saveViewState={!usesPlaybackModel}
             onMount={handleEditorDidMount}
             beforeMount={handleEditorBeforeMount}
             options={{

@@ -61,6 +61,16 @@ export const selectIsPaused = (state: EditorMachineSnapshot) =>
 export const selectHasEnded = (state: EditorMachineSnapshot) =>
   getPlaybackState(state) === "ended" &&
   state.context.timeline.currentTime >= state.context.timeline.duration - 100;
+export const selectUsesPlaybackModel = (state: EditorMachineSnapshot) => {
+  const playbackState = getPlaybackState(state);
+
+  return (
+    !state.context.hasManualWorkspaceOverride &&
+    (playbackState === "playing" ||
+      playbackState === "paused" ||
+      playbackState === "ended")
+  );
+};
 
 // Timeline selectors (high-frequency updates)
 export const selectPlaybackSpeed = (state: EditorMachineSnapshot) =>
