@@ -1,4 +1,5 @@
-import { useContext, useSyncExternalStore } from "react";
+import { useContext, useMemo } from "react";
+import { useAtom } from "@xstate/store-react";
 import {
   WorkspaceActionsContext,
   type WorkspaceActions,
@@ -8,7 +9,7 @@ import {
 } from "../contexts/WorkspaceContext";
 import {
   WorkspaceStoreContext,
-  type WorkspaceStoreSnapshot,
+  type WorkspaceState,
   selectWorkspaceActiveFilePath,
   selectWorkspaceDirtyState,
   selectWorkspaceEditorState,
@@ -34,25 +35,14 @@ function useWorkspaceStore(hookName: string) {
 
 function useWorkspaceSelector<T>(
   hookName: string,
-  selector: (snapshot: WorkspaceStoreSnapshot) => T,
+  selector: (context: WorkspaceState) => T,
 ): T {
   const store = useWorkspaceStore(hookName);
+  const selectedAtom = useMemo(() => store.select(selector), [store, selector]);
 
-  // Replay seeks apply workspace snapshots through one store emission; subscribe
-  // at that boundary so active-file, sidebar, and version selectors stay aligned.
-  return useSyncExternalStore(
-    (onStoreChange) => {
-      const subscription = store.subscribe(() => {
-        onStoreChange();
-      });
-
-      return () => {
-        subscription.unsubscribe();
-      };
-    },
-    () => selector(store.getSnapshot()),
-    () => selector(store.getSnapshot()),
-  );
+  // Derive one atom per slice so replay snapshot loads notify the exact
+  // workspace field that changed instead of re-subscribing to the full store.
+  return useAtom(selectedAtom);
 }
 
 export const useWorkspaceActions = (): WorkspaceActions => {

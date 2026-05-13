@@ -30,3 +30,5 @@
 - Current direction: keep the investigation in the workspace/context migration layer rather than in `CodeEditor.tsx`.
 - Seek-time migration follow-up: switched the `useWorkspace*` hooks from `@xstate/store-react`'s `useSelector` helper to direct `useSyncExternalStore` subscriptions over the shared workspace store so editor/sidebar/save-version updates use the same external-store notification model as before the migration.
 - Seek-time follow-up validation: `bun run typecheck` passed after the hook subscription change.
+- Store-react correction: replaced the temporary whole-store `useSyncExternalStore` wrapper with derived atoms from `store.select(...)` plus `useAtom(...)`, so the workspace hooks stay on the native `@xstate/store-react` subscription path while still updating the replayed slices correctly.
+- Store-react correction validation: `bun run typecheck` passed after switching the workspace selectors to `WorkspaceState` and the hooks to `store.select(...)`.

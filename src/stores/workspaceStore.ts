@@ -826,41 +826,37 @@ export const WorkspaceStoreContext =
   createContext<WorkspaceStoreInstance | null>(null);
 
 export const selectWorkspaceEditorState = (
-  snapshot: WorkspaceStoreSnapshot,
-): WorkspaceEditorState => snapshot.context.editorState;
+  context: WorkspaceState,
+): WorkspaceEditorState => context.editorState;
 
 export const selectWorkspaceSidebarState = (
-  snapshot: WorkspaceStoreSnapshot,
-): WorkspaceSidebarState => snapshot.context.sidebarState;
+  context: WorkspaceState,
+): WorkspaceSidebarState => context.sidebarState;
 
 export const selectWorkspaceActiveFilePath = (
-  snapshot: WorkspaceStoreSnapshot,
-): string => snapshot.context.activeFilePath;
+  context: WorkspaceState,
+): string => context.activeFilePath;
 
 export const selectWorkspaceLessonType = (
-  snapshot: WorkspaceStoreSnapshot,
-): WorkspaceLessonType => snapshot.context.lessonType;
+  context: WorkspaceState,
+): WorkspaceLessonType => context.lessonType;
 
-export const selectWorkspaceProjectName = (
-  snapshot: WorkspaceStoreSnapshot,
-): string => snapshot.context.projectName;
+export const selectWorkspaceProjectName = (context: WorkspaceState): string =>
+  context.projectName;
 
-export const selectWorkspaceFileCount = (
-  snapshot: WorkspaceStoreSnapshot,
-): number => snapshot.context.fileCount;
+export const selectWorkspaceFileCount = (context: WorkspaceState): number =>
+  context.fileCount;
 
 export const selectWorkspacePreviewVersion = (
-  snapshot: WorkspaceStoreSnapshot,
-): number => snapshot.context.previewVersion;
+  context: WorkspaceState,
+): number => context.previewVersion;
 
 export const selectWorkspaceDirtyState = (
-  snapshot: WorkspaceStoreSnapshot,
-): WorkspaceDirtyState => snapshot.context.dirtyState;
+  context: WorkspaceState,
+): WorkspaceDirtyState => context.dirtyState;
 
-export const selectWorkspaceSaveVersion = (
-  snapshot: WorkspaceStoreSnapshot,
-): number => snapshot.context.saveVersion;
+export const selectWorkspaceSaveVersion = (context: WorkspaceState): number =>
+  context.saveVersion;
 
-export const selectWorkspaceSyncVersion = (
-  snapshot: WorkspaceStoreSnapshot,
-): number => snapshot.context.syncVersion;
+export const selectWorkspaceSyncVersion = (context: WorkspaceState): number =>
+  context.syncVersion;
