@@ -1,12 +1,14 @@
 # Progress
 
 ## Task Status
+
 - [completed] Task 1. Record the review outcomes
 - [completed] Task 2. Migrate workspace state to `@xstate/store-react`
 - [completed] Task 3. Validate and document the result
 - [completed] Task 4. Close the remaining findings without code migration
 
 ## Log
+
 - Created the execution scaffold for the `@xstate/store` review findings.
 - Scope set for immediate implementation: workspace state only.
 - Scope set for explicit non-migration decisions: Slides, WebContainer runtime, and NextEditor.
@@ -26,3 +28,5 @@
 - Playback pause fix validation: formatted `src/components/CodeEditor.tsx`, `bun run typecheck` passed, and `bun run lint` still only reports the existing `useEffectEvent` dependency warning in `src/components/CodeEditor.tsx`.
 - Reverted the `CodeEditor.tsx` playback pause fix on request after it introduced a separate seek-time regression.
 - Current direction: keep the investigation in the workspace/context migration layer rather than in `CodeEditor.tsx`.
+- Seek-time migration follow-up: switched the `useWorkspace*` hooks from `@xstate/store-react`'s `useSelector` helper to direct `useSyncExternalStore` subscriptions over the shared workspace store so editor/sidebar/save-version updates use the same external-store notification model as before the migration.
+- Seek-time follow-up validation: `bun run typecheck` passed after the hook subscription change.

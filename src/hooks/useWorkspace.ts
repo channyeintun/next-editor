@@ -1,5 +1,4 @@
-import { useContext } from "react";
-import { useSelector } from "@xstate/store-react";
+import { useContext, useSyncExternalStore } from "react";
 import {
   WorkspaceActionsContext,
   type WorkspaceActions,
@@ -9,6 +8,7 @@ import {
 } from "../contexts/WorkspaceContext";
 import {
   WorkspaceStoreContext,
+  type WorkspaceStoreSnapshot,
   selectWorkspaceActiveFilePath,
   selectWorkspaceDirtyState,
   selectWorkspaceEditorState,
@@ -32,6 +32,29 @@ function useWorkspaceStore(hookName: string) {
   return store;
 }
 
+function useWorkspaceSelector<T>(
+  hookName: string,
+  selector: (snapshot: WorkspaceStoreSnapshot) => T,
+): T {
+  const store = useWorkspaceStore(hookName);
+
+  // Replay seeks apply workspace snapshots through one store emission; subscribe
+  // at that boundary so active-file, sidebar, and version selectors stay aligned.
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const subscription = store.subscribe(() => {
+        onStoreChange();
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    },
+    () => selector(store.getSnapshot()),
+    () => selector(store.getSnapshot()),
+  );
+}
+
 export const useWorkspaceActions = (): WorkspaceActions => {
   const context = useContext(WorkspaceActionsContext);
 
@@ -45,61 +68,71 @@ export const useWorkspaceActions = (): WorkspaceActions => {
 };
 
 export const useWorkspaceEditorState = (): WorkspaceEditorState => {
-  const store = useWorkspaceStore("useWorkspaceEditorState");
-
-  return useSelector(store, selectWorkspaceEditorState);
+  return useWorkspaceSelector(
+    "useWorkspaceEditorState",
+    selectWorkspaceEditorState,
+  );
 };
 
 export const useWorkspaceSidebarState = (): WorkspaceSidebarState => {
-  const store = useWorkspaceStore("useWorkspaceSidebarState");
-
-  return useSelector(store, selectWorkspaceSidebarState);
+  return useWorkspaceSelector(
+    "useWorkspaceSidebarState",
+    selectWorkspaceSidebarState,
+  );
 };
 
 export const useWorkspaceActiveFilePath = (): string => {
-  const store = useWorkspaceStore("useWorkspaceActiveFilePath");
-
-  return useSelector(store, selectWorkspaceActiveFilePath);
+  return useWorkspaceSelector(
+    "useWorkspaceActiveFilePath",
+    selectWorkspaceActiveFilePath,
+  );
 };
 
 export const useWorkspaceLessonType = (): WorkspaceLessonType => {
-  const store = useWorkspaceStore("useWorkspaceLessonType");
-
-  return useSelector(store, selectWorkspaceLessonType);
+  return useWorkspaceSelector(
+    "useWorkspaceLessonType",
+    selectWorkspaceLessonType,
+  );
 };
 
 export const useWorkspaceProjectName = (): string => {
-  const store = useWorkspaceStore("useWorkspaceProjectName");
-
-  return useSelector(store, selectWorkspaceProjectName);
+  return useWorkspaceSelector(
+    "useWorkspaceProjectName",
+    selectWorkspaceProjectName,
+  );
 };
 
 export const useWorkspaceFileCount = (): number => {
-  const store = useWorkspaceStore("useWorkspaceFileCount");
-
-  return useSelector(store, selectWorkspaceFileCount);
+  return useWorkspaceSelector(
+    "useWorkspaceFileCount",
+    selectWorkspaceFileCount,
+  );
 };
 
 export const useWorkspacePreviewVersion = (): number => {
-  const store = useWorkspaceStore("useWorkspacePreviewVersion");
-
-  return useSelector(store, selectWorkspacePreviewVersion);
+  return useWorkspaceSelector(
+    "useWorkspacePreviewVersion",
+    selectWorkspacePreviewVersion,
+  );
 };
 
 export const useWorkspaceDirtyState = (): WorkspaceDirtyState => {
-  const store = useWorkspaceStore("useWorkspaceDirtyState");
-
-  return useSelector(store, selectWorkspaceDirtyState);
+  return useWorkspaceSelector(
+    "useWorkspaceDirtyState",
+    selectWorkspaceDirtyState,
+  );
 };
 
 export const useWorkspaceSaveVersion = (): number => {
-  const store = useWorkspaceStore("useWorkspaceSaveVersion");
-
-  return useSelector(store, selectWorkspaceSaveVersion);
+  return useWorkspaceSelector(
+    "useWorkspaceSaveVersion",
+    selectWorkspaceSaveVersion,
+  );
 };
 
 export const useWorkspaceSyncVersion = (): number => {
-  const store = useWorkspaceStore("useWorkspaceSyncVersion");
-
-  return useSelector(store, selectWorkspaceSyncVersion);
+  return useWorkspaceSelector(
+    "useWorkspaceSyncVersion",
+    selectWorkspaceSyncVersion,
+  );
 };
