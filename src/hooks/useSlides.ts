@@ -68,11 +68,18 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
   const currentSlideIndex = slides.findIndex(slide => slide.id === previewState.currentSlideId);
   const slideEventsRef = useRef<SlideEvent[]>([]);
   const lastVerticalIndicesRef = useRef<Record<string, number>>({});
+  const lastViewedSlideIdRef = useRef<string | null>(null);
 
   // Persist slides to localStorage whenever they change
   useEffect(() => {
     saveSlidesToStorage(slides);
   }, [slides]);
+
+  useEffect(() => {
+    if (previewState.currentSlideId) {
+      lastViewedSlideIdRef.current = previewState.currentSlideId;
+    }
+  }, [previewState.currentSlideId]);
 
   const addSlide = useCallback((content: string, contentType: SlideContentType) => {
     const newSlide: Slide = {
@@ -124,14 +131,25 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     switch (event.type) {
       case 'slide_open':
         setPreviewState(prev => {
-          if (prev.isOpen && prev.currentSlideId === (event.slideId || prev.currentSlideId)) {
+          const nextSlideId = event.slideId || prev.currentSlideId;
+          const nextIndexv = event.indexv ?? 0;
+          const nextIsMaximized = event.isMaximized ?? true;
+
+          if (
+            prev.isOpen &&
+            prev.currentSlideId === nextSlideId &&
+            prev.indexv === nextIndexv &&
+            prev.isMaximized === nextIsMaximized
+          ) {
             return prev;
           }
+
           return {
             ...prev,
             isOpen: true,
-            currentSlideId: event.slideId || prev.currentSlideId,
-            indexv: event.indexv ?? 0
+            isMaximized: nextIsMaximized,
+            currentSlideId: nextSlideId,
+            indexv: nextIndexv
           };
         });
         break;
@@ -197,12 +215,39 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     }
   }, []);
 
+  const openPresentation = useCallback(() => {
+    if (slides.length === 0) return;
+
+    const rememberedSlide = lastViewedSlideIdRef.current
+      ? slides.find(slide => slide.id === lastViewedSlideIdRef.current)
+      : undefined;
+    const targetSlide = rememberedSlide ?? slides[Math.max(currentSlideIndex, 0)] ?? slides[0];
+    if (!targetSlide) return;
+
+    const targetIndexv = lastVerticalIndicesRef.current[targetSlide.id] ?? 0;
+
+    setPreviewState({
+      isOpen: true,
+      isMaximized: true,
+      currentSlideId: targetSlide.id,
+      indexv: targetIndexv
+    });
+
+    handleSlideEvent({
+      type: 'slide_open',
+      timestamp: performance.now(),
+      slideId: targetSlide.id,
+      isMaximized: true,
+      indexv: targetIndexv
+    });
+  }, [slides, currentSlideIndex, handleSlideEvent]);
+
   const startPresentation = useCallback(() => {
     if (slides.length === 0) return;
 
     setPreviewState({
       isOpen: true,
-      isMaximized: false,
+      isMaximized: true,
       currentSlideId: slides[0].id,
       indexv: 0
     });
@@ -211,7 +256,9 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     handleSlideEvent({
       type: 'slide_open',
       timestamp: performance.now(),
-      slideId: slides[0].id
+      slideId: slides[0].id,
+      isMaximized: true,
+      indexv: 0
     });
   }, [slides, handleSlideEvent]);
 
@@ -266,6 +313,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     reorderSlides,
     setSlides,
     setPreviewState,
+    openPresentation,
     startPresentation,
     closePresentation,
     goToSlide,
@@ -282,6 +330,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     removeSlide,
     reorderSlides,
     startPresentation,
+    openPresentation,
     closePresentation,
     goToSlide,
     handleSlideEvent,

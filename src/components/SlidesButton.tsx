@@ -1,32 +1,75 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Presentation, Circle } from 'lucide-react';
-import { useNextEditorMetadata } from '../hooks/useNextEditorContext';
+import { useNextEditorActions, useNextEditorMetadata } from '../hooks/useNextEditorContext';
 import { useSlidesContext } from '../contexts/SlidesContext';
 import SlidesManager from './SlidesManager';
 
 export default function SlidesButton() {
-  const { isRecording } = useNextEditorMetadata();
+  const { pause } = useNextEditorActions();
+  const { isRecording, isPlaying, usesPlaybackModel } = useNextEditorMetadata();
   const [showManager, setShowManager] = useState(false);
 
   const {
     slides,
+    previewState,
     setSlides,
+    openPresentation,
     startPresentation,
+    closePresentation,
   } = useSlidesContext();
+
+  const hasSlides = slides.length > 0;
+  const showPresentationToggle = hasSlides && (usesPlaybackModel || isRecording || previewState.isOpen);
+  const isPresentationVisible = previewState.isOpen && previewState.isMaximized === true;
+
+  useEffect(() => {
+    if (showPresentationToggle) {
+      setShowManager(false);
+    }
+  }, [showPresentationToggle]);
+
+  const handlePresentationToggle = () => {
+    if (!hasSlides) {
+      return;
+    }
+
+    if (isPlaying) {
+      pause();
+    }
+
+    if (isPresentationVisible) {
+      closePresentation();
+      return;
+    }
+
+    openPresentation();
+  };
 
   return (
     <div className="relative">
       <button
-        onClick={() => setShowManager(!showManager)}
-        className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 border shadow-sm ${showManager
+        onClick={() => {
+          if (showPresentationToggle) {
+            handlePresentationToggle();
+            return;
+          }
+
+          setShowManager(!showManager);
+        }}
+        disabled={showPresentationToggle && !hasSlides}
+        aria-pressed={showPresentationToggle ? isPresentationVisible : showManager}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 border shadow-sm ${showPresentationToggle
+          ? isPresentationVisible
+            ? 'bg-indigo-600 border-indigo-500 text-white shadow-md'
+            : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600'
+          : showManager
           ? 'bg-indigo-600 border-indigo-500 text-white shadow-md'
           : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600'
-          }`}
-        title="Manage presentation slides"
+          } ${showPresentationToggle && !hasSlides ? 'cursor-not-allowed opacity-50' : ''}`}
+        title={showPresentationToggle ? (isPresentationVisible ? 'Hide slides' : 'Show slides') : 'Manage presentation slides'}
       >
-        <Presentation className={`w-4 h-4 transition-transform duration-300 ${showManager ? 'scale-110' : ''}`} />
-        <span className="tracking-tight">Slides</span>
-        {slides.length > 0 && (
+        <Presentation className={`w-4 h-4 transition-transform duration-300 ${(showManager || isPresentationVisible) ? 'scale-110' : ''}`} />
+        {hasSlides && (
           <span className={`flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md text-[10px] font-black ${showManager ? 'bg-white text-indigo-600' : 'bg-slate-700 text-slate-300'
             }`}>
             {slides.length}
@@ -42,7 +85,7 @@ export default function SlidesButton() {
       )}
 
       {/* Slides Manager Dropdown */}
-      {showManager && (
+      {showManager && !showPresentationToggle && (
         <>
           {/* Backdrop for mobile/click away */}
           <div
