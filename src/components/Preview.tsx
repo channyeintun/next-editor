@@ -26,6 +26,7 @@ import type {
   PreviewEvent,
   IframeInteractionEvent,
 } from "../types/slides";
+import { arePreviewSizesEqual } from "../utils/equality";
 
 const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
 
@@ -970,7 +971,7 @@ const Preview = memo(function Preview() {
           };
         }
 
-        if (JSON.stringify(sizeToApply) !== JSON.stringify(sizeRef.current)) {
+        if (!arePreviewSizesEqual(sizeToApply, sizeRef.current)) {
           setSize(sizeToApply);
         }
 

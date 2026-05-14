@@ -18,6 +18,7 @@ import type {
   RuntimeDockTab,
   RuntimeRecordingSnapshot,
 } from "../types/runtime";
+import { areStructuredDataEqual } from "../utils/equality";
 
 function formatTerminalContent(content: string): string {
   return content.replace(/\n{3,}/g, "\n\n").trim();
@@ -46,6 +47,17 @@ interface RuntimeDockTabConfig {
   id: RuntimeDockTab;
   label: string;
   icon: React.ReactNode;
+}
+
+interface RuntimeEventState {
+  activeTab: RuntimeDockTab;
+  isCollapsed: boolean;
+  isSettingsOpen: boolean;
+  status: string;
+  previewUrl: string | null;
+  activeCommand: string | null;
+  errorMessage: string | null;
+  consoleLines: string[];
 }
 
 const DOCK_TABS: RuntimeDockTabConfig[] = [
@@ -164,7 +176,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const previousErrorRef = useRef<string | null>(null);
   const previousLifecycleEventIdRef = useRef<number | null>(null);
   const previousPreviewMessageIdRef = useRef<number | null>(null);
-  const previousRuntimeEventKeyRef = useRef<string | null>(null);
+  const previousRuntimeEventStateRef = useRef<RuntimeEventState | null>(null);
   const previousOutputRef = useRef<string | null>(null);
   const terminalViewportRef = useRef<HTMLDivElement | null>(null);
 
@@ -310,37 +322,54 @@ const TerminalPanel = memo(function TerminalPanel() {
     setActiveTab("console");
   }, [isPlaybackSnapshotActive, latestPreviewMessage]);
 
-  const runtimeEventKey = JSON.stringify({
-    activeTab,
-    isCollapsed,
-    isSettingsOpen,
-    status: runtimeStatus,
-    previewUrl: effectivePreviewUrl,
-    activeCommand: effectiveActiveCommand,
-    errorMessage: effectiveErrorMessage,
-    consoleLines,
-  });
+  const runtimeEventState = useMemo<RuntimeEventState>(
+    () => ({
+      activeTab,
+      isCollapsed,
+      isSettingsOpen,
+      status: runtimeStatus,
+      previewUrl: effectivePreviewUrl ?? null,
+      activeCommand: effectiveActiveCommand,
+      errorMessage: effectiveErrorMessage,
+      consoleLines,
+    }),
+    [
+      activeTab,
+      consoleLines,
+      effectiveActiveCommand,
+      effectiveErrorMessage,
+      effectivePreviewUrl,
+      isCollapsed,
+      isSettingsOpen,
+      runtimeStatus,
+    ],
+  );
 
   useEffect(() => {
     if (!isRecording || isPlaybackSnapshotActive) {
-      previousRuntimeEventKeyRef.current = runtimeEventKey;
+      previousRuntimeEventStateRef.current = runtimeEventState;
       return;
     }
 
-    if (previousRuntimeEventKeyRef.current === null) {
-      previousRuntimeEventKeyRef.current = runtimeEventKey;
+    if (previousRuntimeEventStateRef.current === null) {
+      previousRuntimeEventStateRef.current = runtimeEventState;
       return;
     }
 
-    if (previousRuntimeEventKeyRef.current !== runtimeEventKey) {
-      previousRuntimeEventKeyRef.current = runtimeEventKey;
+    if (
+      !areStructuredDataEqual(
+        previousRuntimeEventStateRef.current,
+        runtimeEventState,
+      )
+    ) {
+      previousRuntimeEventStateRef.current = runtimeEventState;
       handleRuntimeEvent();
     }
   }, [
     handleRuntimeEvent,
     isPlaybackSnapshotActive,
     isRecording,
-    runtimeEventKey,
+    runtimeEventState,
   ]);
 
   useEffect(() => {

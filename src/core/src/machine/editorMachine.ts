@@ -38,6 +38,11 @@ import {
 } from "../utils/editorDiff";
 import { isValidFrameState, isEditorReady } from "../utils/validation";
 import { calculateDurationFromFileReader } from "../utils/audioDuration";
+import {
+  arePreviewSizesEqual,
+  areRuntimeRecordingSnapshotsEqual,
+  areStructuredDataEqual,
+} from "../../../utils/equality";
 
 // ============================================================================
 // Helper Functions
@@ -76,8 +81,10 @@ const applyFrameState = (
     const viewStateChanged =
       !!frame.state.viewState &&
       (!previousFrame ||
-        JSON.stringify(frame.state.viewState) !==
-          JSON.stringify(previousFrame.state.viewState));
+        !areStructuredDataEqual(
+          frame.state.viewState,
+          previousFrame.state.viewState,
+        ));
 
     // Restore view state before syncing the playback cursor decoration so the
     // custom cursor matches Monaco's final caret position for this frame.
@@ -851,8 +858,7 @@ export const editorMachine = setup({
 
         if (
           !currentState ||
-          JSON.stringify(nextState.size) !==
-            JSON.stringify(currentState.size) ||
+          !arePreviewSizesEqual(nextState.size, currentState.size) ||
           nextState.content !== currentState.content ||
           Math.abs(
             (nextState.scrollTop || 0) - (currentState.scrollTop || 0),
@@ -1616,8 +1622,10 @@ export const editorMachine = setup({
                 ];
               if (
                 previousEvent &&
-                JSON.stringify(previousEvent.snapshot) ===
-                  JSON.stringify(snapshot)
+                areRuntimeRecordingSnapshotsEqual(
+                  previousEvent.snapshot,
+                  snapshot,
+                )
               ) {
                 return {};
               }

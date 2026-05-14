@@ -11,6 +11,7 @@ import type {
 import { DELTA_CONFIG, isKeyframe, isDelta } from './deltaTypes';
 export { isKeyframe, isDelta };
 import { getWasmExports } from './wasm';
+import { arePreviewSizesEqual, areStructuredDataEqual } from '../../../utils/equality';
 
 // ============================================================================
 // Text Encoding Utilities
@@ -276,7 +277,7 @@ function previewStateChanged(
 ): boolean {
     if (!prev && !next) return false;
     if (!prev || !next) return true;
-    return prev.size !== next.size ||
+    return !arePreviewSizesEqual(prev.size, next.size) ||
         prev.content !== next.content ||
         prev.scrollTop !== next.scrollTop ||
         prev.scrollLeft !== next.scrollLeft;
@@ -323,8 +324,10 @@ export function createFrameDelta(
         delta.previewState = next.state.previewState;
     }
 
-    // ViewState is complex - include if exists and differs (simple reference check)
-    if (next.state.viewState && next.state.viewState !== prev.state.viewState) {
+    if (
+        next.state.viewState &&
+        !areStructuredDataEqual(next.state.viewState, prev.state.viewState)
+    ) {
         delta.viewState = next.state.viewState;
     }
 
