@@ -43,6 +43,14 @@ import {
   areRuntimeRecordingSnapshotsEqual,
   areStructuredDataEqual,
 } from "../../../utils/equality";
+import {
+  getPreviewReplayResult,
+  getRuntimeReplayResult,
+  getSlideReplayResult,
+  getWorkspaceReplayResult,
+  isSeekReplayEvent,
+  resolveReplayTime,
+} from "./replayState";
 
 // ============================================================================
 // Helper Functions
@@ -593,7 +601,10 @@ export const editorMachine = setup({
     }),
 
     capturePreviewRefreshFrame: assign(({ context, event }) => {
-      if (event.type !== "PREVIEW_EVENT" || event.event.type !== "preview_refresh") {
+      if (
+        event.type !== "PREVIEW_EVENT" ||
+        event.event.type !== "preview_refresh"
+      ) {
         return {};
       }
 
@@ -712,10 +723,7 @@ export const editorMachine = setup({
 
       if (initialRuntimeEvent && context.applyRuntimeSnapshot) {
         context.applyRuntimeSnapshot(initialRuntimeEvent.snapshot);
-      } else if (
-        recording.runtimeSnapshot &&
-        context.applyRuntimeSnapshot
-      ) {
+      } else if (recording.runtimeSnapshot && context.applyRuntimeSnapshot) {
         context.applyRuntimeSnapshot(recording.runtimeSnapshot);
       }
 
@@ -860,9 +868,8 @@ export const editorMachine = setup({
           !currentState ||
           !arePreviewSizesEqual(nextState.size, currentState.size) ||
           nextState.content !== currentState.content ||
-          Math.abs(
-            (nextState.scrollTop || 0) - (currentState.scrollTop || 0),
-          ) > 1 ||
+          Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) >
+            1 ||
           Math.abs(
             (nextState.scrollLeft || 0) - (currentState.scrollLeft || 0),
           ) > 1
@@ -1086,74 +1093,25 @@ export const editorMachine = setup({
         return {};
       }
 
-      const previewEvents = recording.previewEvents;
-      const currentTime =
-        event.type === "TICK"
-          ? event.currentTime
-          : event.type === "SEEK"
-            ? event.time
-            : context.timeline.currentTime;
-      const isSeeking = event.type === "SEEK";
-      let newLastIndex = isSeeking ? -1 : lastAppliedPreviewEventIndex;
-      let nextAppliedPreviewState = isSeeking
-        ? undefined
-        : context.lastAppliedPreviewState;
+      const replayResult = getPreviewReplayResult({
+        previewEvents: recording.previewEvents,
+        currentTime: resolveReplayTime(event, context.timeline.currentTime),
+        lastAppliedIndex: lastAppliedPreviewEventIndex,
+        lastAppliedState: context.lastAppliedPreviewState,
+        isSeeking: isSeekReplayEvent(event),
+      });
 
-      // If we've jumped backwards, reset the index to re-scan from the beginning
-      if (newLastIndex >= 0 && newLastIndex < previewEvents.length) {
-        if (previewEvents[newLastIndex].timestamp > currentTime) {
-          newLastIndex = -1;
-          nextAppliedPreviewState = undefined;
-        }
-      }
-
-      // Preview events are partial patches, not complete snapshots.
-      // Merge them onto the last applied preview state so file switches
-      // and other workspace events do not fall back to the live active file.
-      for (let i = newLastIndex + 1; i < previewEvents.length; i++) {
-        const previewEvent = previewEvents[i];
-        if (previewEvent.timestamp <= currentTime) {
-          const nextState = {
-            size: previewEvent.size ?? nextAppliedPreviewState?.size ?? "small",
-            content: previewEvent.content ?? nextAppliedPreviewState?.content,
-            scrollTop:
-              previewEvent.scrollTop ?? nextAppliedPreviewState?.scrollTop,
-            scrollLeft:
-              previewEvent.scrollLeft ?? nextAppliedPreviewState?.scrollLeft,
-            refreshKey:
-              previewEvent.type === "preview_refresh"
-                ? previewEvent.timestamp
-                : nextAppliedPreviewState?.refreshKey,
-            currentInteraction: isSeeking ? undefined : previewEvent.interaction,
-          };
-
-          if (!isSeeking) {
-            applyPreviewState(nextState);
-          }
-
-          nextAppliedPreviewState = {
-            ...nextState,
-            currentInteraction: undefined,
-          };
-          newLastIndex = i;
-        } else {
-          // Events are sorted by timestamp, so stop here
-          break;
-        }
-      }
-
-      // If we were seeking, apply only the final merged state once.
-      if (isSeeking && nextAppliedPreviewState) {
-        applyPreviewState(nextAppliedPreviewState);
-      }
+      replayResult.appliedStates.forEach((previewState) => {
+        applyPreviewState(previewState);
+      });
 
       if (
-        newLastIndex !== lastAppliedPreviewEventIndex ||
-        nextAppliedPreviewState !== context.lastAppliedPreviewState
+        replayResult.nextIndex !== lastAppliedPreviewEventIndex ||
+        replayResult.retainedState !== context.lastAppliedPreviewState
       ) {
         return {
-          lastAppliedPreviewEventIndex: newLastIndex,
-          lastAppliedPreviewState: nextAppliedPreviewState,
+          lastAppliedPreviewEventIndex: replayResult.nextIndex,
+          lastAppliedPreviewState: replayResult.retainedState,
         };
       }
 
@@ -1175,63 +1133,25 @@ export const editorMachine = setup({
         return {};
       }
 
-      const workspaceEvents = recording.workspaceEvents;
-      const currentTime =
-        event.type === "TICK"
-          ? event.currentTime
-          : event.type === "SEEK"
-            ? event.time
-            : context.timeline.currentTime;
-      let newLastIndex = lastAppliedWorkspaceEventIndex;
+      const replayResult = getWorkspaceReplayResult({
+        workspaceEvents: recording.workspaceEvents,
+        currentTime: resolveReplayTime(event, context.timeline.currentTime),
+        currentSnapshot: context.getWorkspaceSnapshot?.() ?? null,
+        lastAppliedIndex: lastAppliedWorkspaceEventIndex,
+      });
 
-      if (newLastIndex >= 0 && newLastIndex < workspaceEvents.length) {
-        if (workspaceEvents[newLastIndex].timestamp > currentTime) {
-          newLastIndex = -1;
-        }
-      }
-
-      let latestWorkspaceEvent =
-        newLastIndex >= 0 ? workspaceEvents[newLastIndex] : null;
-
-      for (let i = newLastIndex + 1; i < workspaceEvents.length; i++) {
-        const workspaceEvent = workspaceEvents[i];
-        if (workspaceEvent.timestamp <= currentTime) {
-          latestWorkspaceEvent = workspaceEvent;
-          newLastIndex = i;
-        } else {
-          break;
-        }
-      }
-
-      if (
-        latestWorkspaceEvent &&
-        newLastIndex !== lastAppliedWorkspaceEventIndex
-      ) {
-        const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
-
-        if (
-          currentWorkspaceSnapshot &&
-          areWorkspaceSnapshotsEqual(
-            currentWorkspaceSnapshot,
-            latestWorkspaceEvent.snapshot,
-          )
-        ) {
-          return {
-            lastAppliedWorkspaceEventIndex: newLastIndex,
-          };
-        }
-
-        applyWorkspaceSnapshot(latestWorkspaceEvent.snapshot);
+      if (replayResult.snapshotToApply) {
+        applyWorkspaceSnapshot(replayResult.snapshotToApply);
         return {
-          lastAppliedWorkspaceEventIndex: newLastIndex,
+          lastAppliedWorkspaceEventIndex: replayResult.nextIndex,
           currentFrame: null,
           lastAppliedFrameIndex: -1,
           lastAppliedSlideEventIndex: -1,
         };
       }
 
-      if (newLastIndex !== lastAppliedWorkspaceEventIndex) {
-        return { lastAppliedWorkspaceEventIndex: newLastIndex };
+      if (replayResult.nextIndex !== lastAppliedWorkspaceEventIndex) {
+        return { lastAppliedWorkspaceEventIndex: replayResult.nextIndex };
       }
 
       return {};
@@ -1244,41 +1164,19 @@ export const editorMachine = setup({
         return {};
       }
 
-      const runtimeEvents = recording.runtimeEvents;
-      const currentTime =
-        event.type === "TICK"
-          ? event.currentTime
-          : event.type === "SEEK"
-            ? event.time
-            : context.timeline.currentTime;
-      let newLastIndex = lastAppliedRuntimeEventIndex;
+      const replayResult = getRuntimeReplayResult({
+        runtimeEvents: recording.runtimeEvents,
+        currentTime: resolveReplayTime(event, context.timeline.currentTime),
+        lastAppliedIndex: lastAppliedRuntimeEventIndex,
+      });
 
-      if (newLastIndex >= 0 && newLastIndex < runtimeEvents.length) {
-        if (runtimeEvents[newLastIndex].timestamp > currentTime) {
-          newLastIndex = -1;
-        }
+      if (replayResult.snapshotToApply) {
+        applyRuntimeSnapshot(replayResult.snapshotToApply);
+        return { lastAppliedRuntimeEventIndex: replayResult.nextIndex };
       }
 
-      let latestRuntimeEvent =
-        newLastIndex >= 0 ? runtimeEvents[newLastIndex] : null;
-
-      for (let i = newLastIndex + 1; i < runtimeEvents.length; i++) {
-        const runtimeEvent = runtimeEvents[i];
-        if (runtimeEvent.timestamp <= currentTime) {
-          latestRuntimeEvent = runtimeEvent;
-          newLastIndex = i;
-        } else {
-          break;
-        }
-      }
-
-      if (latestRuntimeEvent && newLastIndex !== lastAppliedRuntimeEventIndex) {
-        applyRuntimeSnapshot(latestRuntimeEvent.snapshot);
-        return { lastAppliedRuntimeEventIndex: newLastIndex };
-      }
-
-      if (newLastIndex !== lastAppliedRuntimeEventIndex) {
-        return { lastAppliedRuntimeEventIndex: newLastIndex };
+      if (replayResult.nextIndex !== lastAppliedRuntimeEventIndex) {
+        return { lastAppliedRuntimeEventIndex: replayResult.nextIndex };
       }
 
       return {};
@@ -1291,136 +1189,21 @@ export const editorMachine = setup({
         return {};
       }
 
-      const slideEvents = recording.slideEvents;
-      const currentTime =
-        event.type === "TICK"
-          ? event.currentTime
-          : event.type === "SEEK"
-            ? event.time
-            : context.timeline.currentTime;
-      let newLastIndex = lastAppliedSlideEventIndex;
-      const isSeeking = event.type === "SEEK";
+      const replayResult = getSlideReplayResult({
+        slideEvents: recording.slideEvents,
+        slides: recording.slides,
+        currentTime: resolveReplayTime(event, context.timeline.currentTime),
+        lastAppliedIndex: lastAppliedSlideEventIndex,
+        isSeeking: isSeekReplayEvent(event),
+      });
 
-      // If we've jumped backwards, reset the index to re-scan from the beginning
-      if (newLastIndex >= 0 && newLastIndex < slideEvents.length) {
-        if (slideEvents[newLastIndex].timestamp > currentTime) {
-          newLastIndex = -1;
-        }
-      }
+      replayResult.applications.forEach((application) => {
+        applySlideState(application.slideState, application.slideIndex);
+      });
 
-      let lastSlideEvent = null;
-
-      // Find and apply all events that should have happened by now
-      for (let i = newLastIndex + 1; i < slideEvents.length; i++) {
-        const slideEvent = slideEvents[i];
-        if (slideEvent.timestamp <= currentTime) {
-          if (isSeeking) {
-            // When seeking, just keep track of the last event to apply once at the end
-            lastSlideEvent = slideEvent;
-          } else {
-            // Normal playback: apply events sequentially
-            const slideIndex =
-              recording.slides?.findIndex((s) => s.id === slideEvent.slideId) ??
-              -1;
-            if (slideIndex !== -1 || slideEvent.type === "slide_close") {
-              let slideState;
-
-              if (slideEvent.type === "slide_close") {
-                slideState = {
-                  isOpen: false,
-                  currentSlideId: null,
-                  indexv: 0,
-                  currentInteraction: undefined,
-                };
-              } else {
-                // Full derivation for all other events (open, change, interaction, maximize, minimize)
-                const relevantEvents = slideEvents.slice(0, i + 1).reverse();
-
-                // Find the most recent navigation event that defines the current location
-                const lastNav = relevantEvents.find((e) =>
-                  ["slide_open", "slide_change", "slide_close"].includes(
-                    e.type,
-                  ),
-                );
-
-                // Find the most recent state-defining event to preserve structural state (maximize, etc.)
-                const lastStructural = relevantEvents.find((e) =>
-                  ["slide_maximize", "slide_minimize"].includes(e.type),
-                );
-
-                // Most important: always look for the LAST KNOWN indexv for THIS slide
-                // if the current event doesn't have it (e.g. structural change or back-navigation without indexv)
-                const targetSlideId = slideEvent.slideId || lastNav?.slideId;
-                const lastWithIndexv = relevantEvents.find(
-                  (e) =>
-                    (targetSlideId ? e.slideId === targetSlideId : true) &&
-                    e.indexv !== undefined &&
-                    e.indexv !== null,
-                );
-
-                slideState = {
-                  isOpen: (lastNav?.type || slideEvent.type) !== "slide_close",
-                  isMaximized: lastStructural
-                    ? lastStructural.type === "slide_maximize"
-                    : (slideEvent.isMaximized ?? lastNav?.isMaximized ?? false),
-                  currentSlideId:
-                    slideEvent.slideId || lastNav?.slideId || null,
-                  indexv:
-                    slideEvent.indexv ??
-                    lastWithIndexv?.indexv ??
-                    lastNav?.indexv,
-                  currentInteraction: slideEvent.interaction,
-                };
-              }
-              applySlideState(slideState, slideIndex);
-            }
-          }
-          newLastIndex = i;
-        } else {
-          break;
-        }
-      }
-
-      // If we were seeking, apply only the final state once
-      if (isSeeking && lastSlideEvent) {
-        const slideIndex =
-          recording.slides?.findIndex((s) => s.id === lastSlideEvent.slideId) ??
-          -1;
-        // Find the most recent navigation event for this slide to ensure we seek to the correct state
-        const relevantEvents = slideEvents.slice(0, newLastIndex + 1).reverse();
-
-        const lastNav = relevantEvents.find((e) =>
-          ["slide_open", "slide_change", "slide_close"].includes(e.type),
-        );
-
-        const lastStructural = relevantEvents.find((e) =>
-          ["slide_maximize", "slide_minimize"].includes(e.type),
-        );
-
-        const targetSearchSlideId = lastSlideEvent.slideId || lastNav?.slideId;
-        const lastWithIndexv = relevantEvents.find(
-          (e) =>
-            (targetSearchSlideId ? e.slideId === targetSearchSlideId : true) &&
-            e.indexv !== undefined &&
-            e.indexv !== null,
-        );
-
-        const slideState = {
-          isOpen: (lastNav?.type || lastSlideEvent.type) !== "slide_close",
-          isMaximized: lastStructural
-            ? lastStructural.type === "slide_maximize"
-            : (lastSlideEvent.isMaximized ?? lastNav?.isMaximized ?? false),
-          currentSlideId: lastSlideEvent.slideId || lastNav?.slideId || null,
-          indexv:
-            lastSlideEvent.indexv ?? lastWithIndexv?.indexv ?? lastNav?.indexv,
-          currentInteraction: lastSlideEvent.interaction,
-        };
-        applySlideState(slideState, slideIndex);
-      }
-
-      if (newLastIndex !== lastAppliedSlideEventIndex) {
+      if (replayResult.nextIndex !== lastAppliedSlideEventIndex) {
         return {
-          lastAppliedSlideEventIndex: newLastIndex,
+          lastAppliedSlideEventIndex: replayResult.nextIndex,
         };
       }
 
