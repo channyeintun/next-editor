@@ -7,6 +7,7 @@ import SlidePanel from "./SlidePanel";
 import TerminalPanel from "./TerminalPanel";
 import FloatingPlayButton from "./FloatingPlayButton";
 import { NextEditorProvider } from "../contexts/NextEditorProvider.tsx";
+import { NextEditorDomainAdaptersProvider } from "../contexts/NextEditorDomainAdaptersContext";
 import { SlidesProvider } from "../contexts/SlidesContext";
 import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
@@ -49,11 +50,13 @@ export default function Editor() {
   return (
     <WorkspaceProvider>
       <WebContainerRuntimeProvider>
-        <NextEditorProvider>
-          <SlidesProvider>
-            <EditorLayout />
-          </SlidesProvider>
-        </NextEditorProvider>
+        <NextEditorDomainAdaptersProvider>
+          <NextEditorProvider>
+            <SlidesProvider>
+              <EditorLayout />
+            </SlidesProvider>
+          </NextEditorProvider>
+        </NextEditorDomainAdaptersProvider>
       </WebContainerRuntimeProvider>
     </WorkspaceProvider>
   );
