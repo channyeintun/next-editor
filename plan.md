@@ -1,11 +1,11 @@
 # Plan
 
-Scope: Enhancement 2 plus approved workspace follow-up fixes.
+Scope: Enhancement 3 preview decomposition and static preview caching.
 
 Out of scope:
-- Enhancements 3-6 from `enhancements.md`
+- Enhancements 4-6 from `enhancements.md`
 - New tests
-- Behavior changes unrelated to workspace snapshot capture, workspace sidebar state, replay loading, or runtime workspace sync
+- Behavior changes unrelated to preview rendering, preview replay, or preview iframe wiring
 
 Execution rules:
 - Follow this file and `progress.md`.
@@ -13,62 +13,60 @@ Execution rules:
 - Do not start any later enhancement phase without explicit user approval.
 
 Goal:
-- Keep the phase-2 clone removals intact.
-- Fix default workspace creation so toolbar-based file and folder creation starts at the project root instead of the active file's parent folder.
-- Record and replay workspace folder collapse and expand state as part of workspace snapshots.
+- Remove static workspace preview compilation from ordinary `Preview` renders.
+- Split preview orchestration from preview presentation.
+- Isolate iframe messaging, playback registration, and interaction capture into narrower preview hooks.
 
 Definition of done:
-- Toolbar-based file creation defaults to the project root.
-- Workspace collapse state is stored outside `FileSidebar` local component state.
-- Workspace recording snapshots capture collapsed folders and replay applies them.
-- Collapsed folders are normalized against the current folder tree without forcing active-file ancestor folders open.
-- Workspace event recording reacts to sidebar state changes that matter for playback, including collapse and expand actions.
+- Static workspace preview output is cached by `previewVersion` and not rebuilt on unrelated rerenders.
+- `src/components/Preview.tsx` is reduced to composition around extracted preview modules.
+- Separate static and runtime preview renderers exist.
+- Iframe event wiring and replay state application are moved into isolated hooks or modules with narrow responsibilities.
 - Typecheck passes.
 - No tests are added.
 
-## Task 1. Reopen phase-2 planning for workspace follow-up fixes
+## Task 1. Reopen planning for enhancement 3
 
 Deliverables:
-- Update `plan.md` for the approved phase-2 workspace follow-up scope.
-- Update `progress.md` so the new phase-2 tasks are active.
+- Update `plan.md` for the approved enhancement-3 scope.
+- Update `progress.md` so enhancement 3 is the active phase.
 
 Exit criteria:
-- The planning files describe only the currently approved phase-2 scope.
+- The tracking files describe only enhancement 3 work.
 
-## Task 2. Fix default workspace creation target
+## Task 2. Cache compiled static preview output
 
 Deliverables:
-- Update `src/components/FileSidebar.tsx` so toolbar-based create actions default to the project root instead of the active file's parent folder.
+- Extract static preview compilation from `src/components/Preview.tsx` into a dedicated preview module.
+- Cache compiled static preview output by `previewVersion` so ordinary preview rerenders do not rebuild the document.
 
 Exit criteria:
-- Clicking the top-level create file action no longer defaults to `src/` when the active file is under `src/`.
+- Static preview generation no longer runs inline from render-time branching.
 
-## Task 3. Store and replay folder collapse state in workspace snapshots
+## Task 3. Extract preview controller and renderers
 
 Deliverables:
-- Move folder collapse state into the workspace store.
-- Extend workspace snapshot capture and replay application to include collapsed folders.
-- Ensure workspace state transitions normalize collapsed folders against the current folder tree without forcing active-file ancestor folders open.
+- Move preview orchestration into a dedicated controller hook.
+- Add separate static and runtime preview renderer components while preserving existing preview chrome and sizing behavior.
 
 Exit criteria:
-- Collapse/expand state survives workspace snapshot capture and replay, including top-level folders such as `src` when the active file lives inside them.
-- `FileSidebar` no longer owns collapse state as local component state.
+- `Preview.tsx` becomes a thin composition layer over extracted preview logic and renderers.
 
-## Task 4. Record workspace sidebar changes needed for playback
+## Task 4. Isolate iframe messaging and playback wiring
 
 Deliverables:
-- Update workspace event recording so it reacts to sidebar-state changes relevant to playback, including folder collapse and expand.
-- Keep file content edits out of this recording trigger path.
+- Move iframe message handling, preview state getter/applier registration, and interaction capture into isolated preview hooks.
+- Keep preview replay behavior and refresh flows consistent with the current implementation.
 
 Exit criteria:
-- Collapse/expand actions produce workspace recording events without turning file typing into workspace event spam.
+- The remaining preview side effects live in focused hooks instead of one monolithic component.
 
-## Task 5. Validate and finish the phase-2 workspace follow-up
+## Task 5. Validate and finish enhancement 3
 
 Deliverables:
 - Run typecheck.
-- Update `progress.md` with final status and remaining risks for this approved phase-2 scope only.
+- Update `progress.md` with final status and remaining risks for enhancement 3 only.
 
 Exit criteria:
-- All approved phase-2 follow-up tasks are marked complete.
-- The final commit for this follow-up contains only the requested workspace changes.
+- All approved enhancement-3 tasks are marked complete.
+- The final commit for this phase contains only the requested preview changes.
