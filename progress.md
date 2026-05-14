@@ -11,8 +11,8 @@ Rules in force:
 1. Task 1. Reopen planning for enhancement 6: Completed
 2. Task 2. Extract shared runtime support utilities: Completed
 3. Task 3. Introduce a queued workspace sync controller: Completed
-4. Task 4. Extract runtime session control: In progress
-5. Task 5. Validate and finish enhancement 6: Not started
+4. Task 4. Extract runtime session control: Completed
+5. Task 5. Validate and finish enhancement 6: In progress
 
 Enhancement 6 status: In progress
 
@@ -24,6 +24,7 @@ Enhancement 6 status: In progress
 - Completed Task 1 by rewriting `plan.md` and `progress.md` for the approved enhancement-6 scope.
 - Completed Task 2 by moving shared runtime helpers into `src/contexts/webContainerRuntimeSupport.ts`, keeping the provider behavior intact while shrinking its inline utility surface, then validating with `bun run typecheck`.
 - Completed Task 3 by extracting workspace mount/sync state into `src/contexts/useWebContainerWorkspaceSync.ts`, routing provider saves and save-version syncs through an explicit serialized queue, and validating with `bun run typecheck`.
+- Completed Task 4 by moving WebContainer session state, event wiring, runner control, and terminal lifecycle into `src/contexts/useWebContainerRuntimeSession.ts`, leaving `src/contexts/WebContainerRuntimeProvider.tsx` focused on runtime orchestration and context composition, then validating with `bun run typecheck`.
 
 ## Risks
 
