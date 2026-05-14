@@ -10,57 +10,15 @@ import type {
 } from './deltaTypes';
 import { DELTA_CONFIG, isKeyframe, isDelta } from './deltaTypes';
 export { isKeyframe, isDelta };
-import { getWasmExports } from './wasm';
+import { findCommonPrefixLengthWasm, findCommonSuffixLengthWasm } from './wasm';
 import { arePreviewSizesEqual, areStructuredDataEqual } from '../../../utils/equality';
-
-// ============================================================================
-// Text Encoding Utilities
-// ============================================================================
-
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
 
 /**
  * Finds the length of the common prefix between two strings using WebAssembly.
  * Includes safety checks to ensure we don't cut in the middle of a multi-byte UTF-8 character.
  */
 export function findCommonPrefixLength(str1: string, str2: string): number {
-    const exports = getWasmExports();
-    if (!exports) return findCommonPrefixJS(str1, str2);
-
-    const memory = exports.memory;
-    const baseOffset = (exports.__heap_base?.value as number) || 65536;
-
-    const bytes1 = textEncoder.encode(str1);
-    const bytes2 = textEncoder.encode(str2);
-
-    const totalSizeNeeded = baseOffset + bytes1.length + bytes2.length;
-    if (memory.buffer.byteLength < totalSizeNeeded) {
-        const pagesNeeded = Math.ceil((totalSizeNeeded - memory.buffer.byteLength) / 65536);
-        if (pagesNeeded > 0) memory.grow(pagesNeeded);
-    }
-
-    const ptr1 = baseOffset;
-    const ptr2 = baseOffset + bytes1.length;
-
-    new Uint8Array(memory.buffer, ptr1, bytes1.length).set(bytes1);
-    new Uint8Array(memory.buffer, ptr2, bytes2.length).set(bytes2);
-
-    let prefixBytes = exports.findCommonPrefix(ptr1, bytes1.length, ptr2, bytes2.length);
-
-    if (prefixBytes <= 0) return 0;
-    if (prefixBytes === bytes1.length) return str1.length;
-    if (prefixBytes === bytes2.length) return str2.length;
-
-    // UTF-8 safety: if we are in the middle of a multi-byte character,
-    // move back until we find the start of the character (or 0).
-    const wasmBytes = new Uint8Array(memory.buffer, ptr1, bytes1.length);
-    while (prefixBytes > 0 && (wasmBytes[prefixBytes] & 0xC0) === 0x80) {
-        prefixBytes--;
-    }
-
-    const prefixSlice = new Uint8Array(memory.buffer, ptr1, prefixBytes);
-    return textDecoder.decode(prefixSlice).length;
+    return findCommonPrefixLengthWasm(str1, str2) ?? findCommonPrefixJS(str1, str2);
 }
 
 /**
@@ -68,43 +26,7 @@ export function findCommonPrefixLength(str1: string, str2: string): number {
  * Includes safety checks to ensure we don't cut in the middle of a multi-byte UTF-8 character.
  */
 export function findCommonSuffixLength(str1: string, str2: string): number {
-    const exports = getWasmExports();
-    if (!exports) return findCommonSuffixJS(str1, str2);
-
-    const memory = exports.memory;
-    const baseOffset = (exports.__heap_base?.value as number) || 65536;
-
-    const bytes1 = textEncoder.encode(str1);
-    const bytes2 = textEncoder.encode(str2);
-
-    const totalSizeNeeded = baseOffset + bytes1.length + bytes2.length;
-    if (memory.buffer.byteLength < totalSizeNeeded) {
-        const pagesNeeded = Math.ceil((totalSizeNeeded - memory.buffer.byteLength) / 65536);
-        if (pagesNeeded > 0) memory.grow(pagesNeeded);
-    }
-
-    const ptr1 = baseOffset;
-    const ptr2 = baseOffset + bytes1.length;
-
-    new Uint8Array(memory.buffer, ptr1, bytes1.length).set(bytes1);
-    new Uint8Array(memory.buffer, ptr2, bytes2.length).set(bytes2);
-
-    let suffixBytes = exports.findCommonSuffix(ptr1, bytes1.length, ptr2, bytes2.length);
-
-    if (suffixBytes <= 0) return 0;
-    if (suffixBytes === bytes1.length) return str1.length;
-    if (suffixBytes === bytes2.length) return str2.length;
-
-    // UTF-8 safety: ensure we aren't starting the suffix in the middle of a multi-byte character.
-    // We check the first byte of the suffix (bytes1.length - suffixBytes).
-    const suffixStart = bytes1.length - suffixBytes;
-    const wasmBytes = new Uint8Array(memory.buffer, ptr1, bytes1.length);
-    while (suffixBytes > 0 && (wasmBytes[suffixStart] & 0xC0) === 0x80) {
-        suffixBytes--;
-    }
-
-    const suffixSlice = new Uint8Array(memory.buffer, ptr1 + bytes1.length - suffixBytes, suffixBytes);
-    return textDecoder.decode(suffixSlice).length;
+    return findCommonSuffixLengthWasm(str1, str2) ?? findCommonSuffixJS(str1, str2);
 }
 
 // Fallback JS implementations

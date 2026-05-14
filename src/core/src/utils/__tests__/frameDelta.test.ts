@@ -1,9 +1,41 @@
-import { describe, it, expect } from 'vite-plus/test';
-import { compressFrames, reconstructFrameAtIndex } from '../frameDelta';
+import { readFile } from 'node:fs/promises';
+import { beforeAll, describe, expect, it } from 'vite-plus/test';
+import {
+    applyContentDelta,
+    compressFrames,
+    createContentDelta,
+    findCommonPrefixLength,
+    findCommonSuffixLength,
+    reconstructFrameAtIndex,
+} from '../frameDelta';
 import { isKeyframe, isDelta } from '../deltaTypes';
+import { initWasm, isWasmInitialized } from '../wasm';
 import type { EditorFrame } from '../../types';
 
 describe('Delta Compression Optimization', () => {
+    beforeAll(async () => {
+        if (isWasmInitialized()) return;
+
+        const wasmBytes = await readFile(
+            `${process.cwd()}/public/next-editor.wasm`,
+        );
+        const originalFetch = globalThis.fetch;
+
+        globalThis.fetch = (async () => {
+            return new Response(wasmBytes, {
+                headers: {
+                    'Content-Type': 'application/wasm',
+                },
+            });
+        }) as typeof fetch;
+
+        try {
+            expect(await initWasm('/next-editor.wasm')).toBe(true);
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
     const createMockFrame = (content: string, timestamp: number): EditorFrame => ({
         timestamp,
         state: {
@@ -100,5 +132,29 @@ describe('Delta Compression Optimization', () => {
 
         const reconstructed400 = reconstructFrameAtIndex(compressed, 2);
         expect(reconstructed400?.state.content).toBe('abc');
+    });
+
+    it('should not treat a shared UTF-8 lead byte as a shared character prefix', () => {
+        expect(findCommonPrefixLength('éx', 'èy')).toBe(0);
+
+        const delta = createContentDelta('éx', 'èy');
+        expect(delta).toEqual({
+            prefixLen: 0,
+            suffixLen: 0,
+            insert: 'èy',
+        });
+        expect(applyContentDelta('éx', delta!)).toBe('èy');
+    });
+
+    it('should preserve suffix characters when the differing character is multi-byte', () => {
+        expect(findCommonSuffixLength('éa', 'ĩa')).toBe(1);
+
+        const delta = createContentDelta('éa', 'ĩa');
+        expect(delta).toEqual({
+            prefixLen: 0,
+            suffixLen: 1,
+            insert: 'ĩ',
+        });
+        expect(applyContentDelta('éa', delta!)).toBe('ĩa');
     });
 });

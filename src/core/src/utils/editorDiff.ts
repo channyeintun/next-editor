@@ -1,5 +1,8 @@
 import * as monaco from 'monaco-editor';
-import { getWasmExports } from './wasm';
+import {
+  findCommonPrefixLengthWasm,
+  findCommonSuffixLengthWasm,
+} from './wasm';
 import type { EditorPosition, EditorSelection } from '../types';
 
 /**
@@ -179,92 +182,32 @@ export const applyContentDiff = (
   }
 };
 
-// Cached encoder/decoder for string↔bytes conversion
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
-
 /**
  * Finds the length of the common prefix between two strings using WebAssembly.
- * Requires Wasm to be initialized via initWasm().
+ * Falls back to a JS scan when Wasm is not available.
  */
 function findCommonPrefix(str1: string, str2: string): number {
-  const exports = getWasmExports();
-  if (!exports) {
-    throw new Error('Wasm not initialized. Call initWasm() first.');
-  }
-
-  const memory = exports.memory;
-
-  // Encode strings to UTF-8
-  const bytes1 = textEncoder.encode(str1);
-  const bytes2 = textEncoder.encode(str2);
-
-  // Ensure enough memory
-  const totalSize = bytes1.length + bytes2.length;
-  if (memory.buffer.byteLength < totalSize) {
-    const pagesNeeded = Math.ceil((totalSize - memory.buffer.byteLength) / 65536);
-    if (pagesNeeded > 0) memory.grow(pagesNeeded);
-  }
-
-  // Copy to Wasm memory
-  const ptr1 = 0;
-  const ptr2 = bytes1.length;
-
-  new Uint8Array(memory.buffer, ptr1, bytes1.length).set(bytes1);
-  new Uint8Array(memory.buffer, ptr2, bytes2.length).set(bytes2);
-
-  // Call Wasm function
-  const prefixBytes = exports.findCommonPrefix(ptr1, bytes1.length, ptr2, bytes2.length);
-
-  // Convert byte count back to character count
-  if (prefixBytes === 0) return 0;
-  if (prefixBytes === bytes1.length) return str1.length;
-  if (prefixBytes === bytes2.length) return str2.length;
-
-  // Decode the prefix portion to get character count
-  const prefixSlice = new Uint8Array(memory.buffer, ptr1, prefixBytes);
-  return textDecoder.decode(prefixSlice).length;
+  return findCommonPrefixLengthWasm(str1, str2) ?? findCommonPrefixJS(str1, str2);
 }
 
 /**
  * Finds the length of the common suffix between two strings using WebAssembly.
- * Requires Wasm to be initialized via initWasm().
+ * Falls back to a JS scan when Wasm is not available.
  */
 function findCommonSuffix(str1: string, str2: string): number {
-  const exports = getWasmExports();
-  if (!exports) {
-    throw new Error('Wasm not initialized. Call initWasm() first.');
-  }
+  return findCommonSuffixLengthWasm(str1, str2) ?? findCommonSuffixJS(str1, str2);
+}
 
-  const memory = exports.memory;
+function findCommonPrefixJS(str1: string, str2: string): number {
+  const minLen = Math.min(str1.length, str2.length);
+  let i = 0;
+  while (i < minLen && str1[i] === str2[i]) i++;
+  return i;
+}
 
-  // Encode strings to UTF-8
-  const bytes1 = textEncoder.encode(str1);
-  const bytes2 = textEncoder.encode(str2);
-
-  // Ensure enough memory
-  const totalSize = bytes1.length + bytes2.length;
-  if (memory.buffer.byteLength < totalSize) {
-    const pagesNeeded = Math.ceil((totalSize - memory.buffer.byteLength) / 65536);
-    if (pagesNeeded > 0) memory.grow(pagesNeeded);
-  }
-
-  // Copy to Wasm memory
-  const ptr1 = 0;
-  const ptr2 = bytes1.length;
-
-  new Uint8Array(memory.buffer, ptr1, bytes1.length).set(bytes1);
-  new Uint8Array(memory.buffer, ptr2, bytes2.length).set(bytes2);
-
-  // Call Wasm function
-  const suffixBytes = exports.findCommonSuffix(ptr1, bytes1.length, ptr2, bytes2.length);
-
-  // Convert byte count back to character count
-  if (suffixBytes === 0) return 0;
-  if (suffixBytes === bytes1.length) return str1.length;
-  if (suffixBytes === bytes2.length) return str2.length;
-
-  // Decode the suffix portion to get character count
-  const suffixSlice = new Uint8Array(memory.buffer, ptr1 + bytes1.length - suffixBytes, suffixBytes);
-  return textDecoder.decode(suffixSlice).length;
+function findCommonSuffixJS(str1: string, str2: string): number {
+  const minLen = Math.min(str1.length, str2.length);
+  let i = 0;
+  while (i < minLen && str1[str1.length - 1 - i] === str2[str2.length - 1 - i]) i++;
+  return i;
 }

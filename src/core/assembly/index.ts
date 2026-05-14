@@ -1,5 +1,7 @@
 // The entry file of your WebAssembly module.
 // Contains string diff functions.
+// These exports compare UTF-8 bytes and return byte counts only.
+// Callers converting results back to JS string offsets must clamp to code point boundaries.
 
 // ============================================================
 // STRING DIFF FUNCTIONS
