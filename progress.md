@@ -26,6 +26,7 @@ Enhancement 6 status: Completed
 - Completed Task 3 by extracting workspace mount/sync state into `src/contexts/useWebContainerWorkspaceSync.ts`, routing provider saves and save-version syncs through an explicit serialized queue, and validating with `bun run typecheck`.
 - Completed Task 4 by moving WebContainer session state, event wiring, runner control, and terminal lifecycle into `src/contexts/useWebContainerRuntimeSession.ts`, leaving `src/contexts/WebContainerRuntimeProvider.tsx` focused on runtime orchestration and context composition, then validating with `bun run typecheck`.
 - Completed Task 5 with a final `bun run typecheck` pass, and enhancement 6 now ends with shared runtime helpers, a queued workspace sync controller, and a dedicated runtime session controller behind `src/contexts/WebContainerRuntimeProvider.tsx`.
+- Post-phase fix: normalized runtime workspace paths inside `src/contexts/webContainerRuntimeSupport.ts` after a live preview regression report, kept the accepted fix in place, and revalidated with `bun run typecheck` plus a browser reproduction pass.
 
 ## Risks
 

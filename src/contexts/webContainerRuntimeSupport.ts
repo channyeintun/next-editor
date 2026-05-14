@@ -4,7 +4,12 @@ import type {
   RunnerConfig,
   RuntimePreviewMessage,
 } from "./WebContainerRuntimeContext";
-import type { WorkspaceProject } from "../types/workspace";
+import {
+  normalizeWorkspaceFolderPath,
+  normalizeWorkspacePath,
+  type WorkspaceFile,
+  type WorkspaceProject,
+} from "../types/workspace";
 
 export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   enabled: true,
@@ -116,9 +121,12 @@ function injectRuntimeSnapshotScript(
   filePath: string,
   content: string,
 ): string {
+  const normalizedFilePath = normalizeWorkspacePath(filePath);
+  const normalizedEntryFilePath = normalizeWorkspacePath(project.entryFilePath);
   const isRuntimeHtmlBootstrap =
-    filePath.toLowerCase().endsWith(".html") &&
-    (filePath === "index.html" || filePath === project.entryFilePath);
+    normalizedFilePath.toLowerCase().endsWith(".html") &&
+    (normalizedFilePath === "index.html" ||
+      normalizedFilePath === normalizedEntryFilePath);
 
   if (
     project.lessonType !== "node.js" ||
@@ -145,17 +153,34 @@ function injectRuntimeSnapshotScript(
   return `${content}\n${snapshotScript}`;
 }
 
+function getNormalizedProjectFiles(
+  project: WorkspaceProject | null,
+): Map<string, WorkspaceFile> {
+  if (!project) {
+    return new Map();
+  }
+
+  return new Map(
+    Object.entries(project.files).map(([path, file]) => [
+      normalizeWorkspacePath(path || file.path),
+      file,
+    ]),
+  );
+}
+
 export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
   const tree: FileSystemTree = {};
 
   const ensureTreeDirectory = (directoryPath: string) => {
-    if (!directoryPath) {
+    const normalizedDirectoryPath = normalizeWorkspaceFolderPath(directoryPath);
+
+    if (!normalizedDirectoryPath) {
       return;
     }
 
     let currentDirectory = tree;
 
-    for (const segment of directoryPath.split("/")) {
+    for (const segment of normalizedDirectoryPath.split("/")) {
       const existingEntry = currentDirectory[segment];
 
       if (!existingEntry || !("directory" in existingEntry)) {
@@ -177,7 +202,12 @@ export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
   }
 
   for (const file of Object.values(project.files)) {
-    const segments = file.path.split("/");
+    const normalizedPath = normalizeWorkspacePath(file.path);
+    if (!normalizedPath) {
+      continue;
+    }
+
+    const segments = normalizedPath.split("/");
     const fileName = segments.pop();
 
     if (!fileName) {
@@ -198,7 +228,11 @@ export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
 
     currentDirectory[fileName] = {
       file: {
-        contents: injectRuntimeSnapshotScript(project, file.path, file.content),
+        contents: injectRuntimeSnapshotScript(
+          project,
+          normalizedPath,
+          file.content,
+        ),
       },
     };
   }
@@ -238,20 +272,26 @@ export async function syncWorkspaceProject(
     return;
   }
 
-  const previousFiles = previousProject?.files ?? {};
-  const nextFiles = nextProject.files;
-  const previousFolders = new Set(previousProject?.folders ?? []);
+  const previousFiles = getNormalizedProjectFiles(previousProject);
+  const nextFiles = getNormalizedProjectFiles(nextProject);
+  const previousFolders = new Set(
+    (previousProject?.folders ?? [])
+      .map((folderPath) => normalizeWorkspaceFolderPath(folderPath))
+      .filter(Boolean),
+  );
 
   for (const folderPath of nextProject.folders) {
-    if (previousFolders.has(folderPath)) {
+    const normalizedFolderPath = normalizeWorkspaceFolderPath(folderPath);
+
+    if (!normalizedFolderPath || previousFolders.has(normalizedFolderPath)) {
       continue;
     }
 
-    await ensureDirectory(instance, folderPath);
+    await ensureDirectory(instance, normalizedFolderPath);
   }
 
-  const deletedPaths = Object.keys(previousFiles).filter(
-    (path) => !nextFiles[path],
+  const deletedPaths = Array.from(previousFiles.keys()).filter(
+    (path) => !nextFiles.has(path),
   );
 
   for (const path of deletedPaths.sort(
@@ -264,8 +304,8 @@ export async function syncWorkspaceProject(
     }
   }
 
-  for (const [path, file] of Object.entries(nextFiles)) {
-    const previousFile = previousFiles[path];
+  for (const [path, file] of nextFiles) {
+    const previousFile = previousFiles.get(path);
 
     if (previousFile && previousFile.content === file.content) {
       continue;
