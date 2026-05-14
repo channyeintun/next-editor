@@ -1,11 +1,11 @@
 # Plan
 
-Scope: Enhancement 1 only: break up the editor state machine.
+Scope: Enhancement 2 only: stop cloning full workspace snapshots on hot paths.
 
 Out of scope:
-- Enhancements 2-6 from `enhancements.md`
+- Enhancements 3-6 from `enhancements.md`
 - New tests
-- Behavior changes unrelated to editor recording/playback orchestration
+- Behavior changes unrelated to workspace snapshot capture, replay loading, or runtime workspace sync
 
 Execution rules:
 - Follow this file and `progress.md`.
@@ -13,61 +13,49 @@ Execution rules:
 - Do not start any later enhancement phase without explicit user approval.
 
 Goal:
-- Reduce the size and coupling of `src/core/src/machine/editorMachine.ts` while preserving current recording/playback behavior.
-- Move repeated replay and recording logic into smaller, typed, pure modules so the top-level machine mostly orchestrates states and actor interactions.
+- Remove deep project cloning from the recording/replay/runtime-sync hot paths.
+- Preserve current replay and runtime behavior by relying on the workspace store's immutable project replacement semantics instead of copying whole project trees.
 
 Definition of done:
-- `editorMachine.ts` delegates replay state derivation and recording event accumulation to extracted modules.
-- Repeated playback action fan-out is consolidated into shared action lists or orchestration helpers.
+- Recording workspace snapshots no longer deep-clone the workspace project on capture.
+- Replay loading and runtime sync stop deep-cloning the current project on their hot paths.
+- No-op runtime sync work is skipped when the exact same project object is already synced.
 - Typecheck passes.
 - No tests are added.
 
-## Task 1. Establish planning and tracking artifacts
+## Task 1. Reframe planning and tracking for phase 2
 
 Deliverables:
-- Create `plan.md`.
-- Create `progress.md`.
-- Record that enhancement 1 is the only active phase.
+- Update `plan.md` for enhancement 2 only.
+- Update `progress.md` so enhancement 2 is the active phase.
 
 Exit criteria:
-- Both files exist and reflect the execution rules above.
+- The planning files describe only phase-2 work and keep the user's execution rules in force.
 
-## Task 2. Extract replay state reducers and shared timed-event utilities
+## Task 2. Remove deep cloning from workspace recording and replay loading
 
 Deliverables:
-- Add a dedicated machine helper module for replay-time state derivation.
-- Move preview, workspace, runtime, and slide replay scanning/derivation logic out of `editorMachine.ts` into pure typed functions.
-- Introduce one shared utility for resolving current playback time and advancing event indexes.
+- Update `src/contexts/NextEditorProvider.tsx` so workspace snapshot capture stops using `structuredClone(getProject())` on the recording hot path.
+- Update `src/contexts/WorkspaceProvider.tsx` so replay `loadProject()` does not create a deep-cloned saved snapshot for every applied workspace event.
 
 Exit criteria:
-- `editorMachine.ts` stops owning the detailed scanning logic for the four non-frame replay channels.
-- Playback behavior still typechecks through the existing machine wiring.
+- Recording and replay loading keep the same behavior while avoiding full-project cloning on these paths.
 
-## Task 3. Consolidate repeated playback orchestration inside the machine
+## Task 3. Remove deep cloning from runtime workspace sync and skip no-op syncs
 
 Deliverables:
-- Replace repeated action sequences such as workspace/runtime/frame/preview/slide application with shared action arrays/constants.
-- Keep state transitions readable by making the orchestration intent explicit.
+- Update `src/contexts/WebContainerRuntimeProvider.tsx` so mounted/synced workspace references are stored without deep cloning.
+- Add an identity-based short-circuit so sync work is skipped when the same immutable project object is already current.
 
 Exit criteria:
-- Playback entry, tick, seek, stop, pause, and editor-ref sync paths reuse shared orchestration blocks instead of duplicating the same action list.
+- Runtime mount/save/start flows stop cloning whole projects and avoid redundant sync passes when the project reference is unchanged.
 
-## Task 4. Extract recording event appenders from the machine
-
-Deliverables:
-- Move slide/preview/workspace/runtime recording accumulation into a dedicated helper module.
-- Keep deduplication logic with the extracted recording helpers rather than inline in XState action bodies.
-
-Exit criteria:
-- `editorMachine.ts` no longer contains the inline session array append logic for those event types.
-- Recording still typechecks with the existing context and event model.
-
-## Task 5. Validate and finish enhancement 1
+## Task 4. Validate and finish enhancement 2
 
 Deliverables:
 - Run typecheck.
-- Update `progress.md` with final status and any remaining risks for enhancement 1 only.
+- Update `progress.md` with final status and remaining phase-2 risks only.
 
 Exit criteria:
-- Enhancement 1 tasks are marked complete.
-- The final commit for this phase contains only phase-1 changes.
+- Enhancement 2 tasks are marked complete.
+- The final commit for this phase contains only phase-2 changes.
