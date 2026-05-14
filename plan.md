@@ -21,6 +21,7 @@ Definition of done:
 - Toolbar-based file creation defaults to the project root.
 - Workspace collapse state is stored outside `FileSidebar` local component state.
 - Workspace recording snapshots capture collapsed folders and replay applies them.
+- Collapsed folders are normalized against the current folder tree without forcing active-file ancestor folders open.
 - Workspace event recording reacts to sidebar state changes that matter for playback, including collapse and expand actions.
 - Typecheck passes.
 - No tests are added.
@@ -47,10 +48,10 @@ Exit criteria:
 Deliverables:
 - Move folder collapse state into the workspace store.
 - Extend workspace snapshot capture and replay application to include collapsed folders.
-- Ensure workspace state transitions normalize collapsed folders against the current folder tree and keep active-file ancestors expanded.
+- Ensure workspace state transitions normalize collapsed folders against the current folder tree without forcing active-file ancestor folders open.
 
 Exit criteria:
-- Collapse/expand state survives workspace snapshot capture and replay.
+- Collapse/expand state survives workspace snapshot capture and replay, including top-level folders such as `src` when the active file lives inside them.
 - `FileSidebar` no longer owns collapse state as local component state.
 
 ## Task 4. Record workspace sidebar changes needed for playback

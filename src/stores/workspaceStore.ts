@@ -11,7 +11,6 @@ import {
   createStarterWorkspaceProject,
   DEFAULT_WORKSPACE_ENTRY_PATH,
   DEFAULT_WORKSPACE_FILE_CONTENT,
-  getParentWorkspacePath,
   getWorkspaceBaseName,
   inferLanguageFromPath,
   normalizeWorkspaceFolderPath,
@@ -229,7 +228,6 @@ function createEditorState(
 
 function normalizeCollapsedFolders(
   folders: string[],
-  activeFilePath: string,
   collapsedFolders: string[],
 ): string[] {
   const validFolders = new Set(
@@ -243,13 +241,6 @@ function normalizeCollapsedFolders(
     if (normalizedPath && validFolders.has(normalizedPath)) {
       nextCollapsedFolders.add(normalizedPath);
     }
-  }
-
-  let parentPath = getParentWorkspacePath(activeFilePath);
-
-  while (parentPath) {
-    nextCollapsedFolders.delete(parentPath);
-    parentPath = getParentWorkspacePath(parentPath);
   }
 
   return Array.from(nextCollapsedFolders).sort((left, right) =>
@@ -339,7 +330,6 @@ function areDirtyStatesEqual(
 function withRefreshedWorkspaceSlices(state: WorkspaceState): WorkspaceState {
   const nextCollapsedFolders = normalizeCollapsedFolders(
     state.project.folders,
-    state.activeFilePath,
     state.collapsedFolders,
   );
   const nextEditorState = createEditorState(
@@ -395,11 +385,7 @@ function createWorkspaceState(
   const savedSnapshot = cloneWorkspaceSnapshot(initialSnapshot);
   const project = initialSnapshot.project;
   const activeFilePath = initialSnapshot.activeFilePath;
-  const collapsedFolders = normalizeCollapsedFolders(
-    project.folders,
-    activeFilePath,
-    [],
-  );
+  const collapsedFolders = normalizeCollapsedFolders(project.folders, []);
 
   return {
     project,

@@ -25,6 +25,7 @@ Enhancement 2 workspace follow-up status: Completed
 - Completed Task 1 and confirmed the reopened phase-2 planning docs have a clean diff.
 - Completed Task 2 by changing the sidebar toolbar create actions to default to the project root and validating with `bun run typecheck`.
 - Completed Task 3 by moving folder collapse state into the workspace store, extending workspace snapshots to carry collapsed folders, and validating with `bun run typecheck`.
+- Corrected Task 3 by removing the forced-expansion rule for active-file ancestor folders in `src/stores/workspaceStore.ts`, so folders like `src` can stay collapsed, and revalidated with `bun run typecheck`.
 - Completed Task 4 by switching workspace event recording to sidebar-state changes so collapse and expand actions are recorded without file-edit event spam, and validating with `bun run typecheck`.
 - Completed Task 5 with a final `bun run typecheck` pass, a clean git worktree check, and a targeted search confirming the workspace recorder no longer depends on `useWorkspaceSaveVersion`.
 
