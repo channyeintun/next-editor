@@ -12,7 +12,7 @@ const Navbar = () => {
 
       <div className="flex items-center gap-4">
         <a
-          href="https://github.com/channyeintun"
+          href="https://github.com/channyeintun/next-editor"
           target="_blank"
           rel="noopener noreferrer"
           className="p-2 rounded-full border border-white/10 bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all flex items-center justify-center"
