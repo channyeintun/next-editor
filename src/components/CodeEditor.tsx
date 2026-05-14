@@ -11,7 +11,7 @@ import {
 import {
   useWorkspaceActions,
   useWorkspaceEditorState,
-  useWorkspaceSaveVersion,
+  useWorkspaceSidebarState,
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import EditorHeader from "./EditorHeader";
@@ -25,61 +25,36 @@ interface CodeEditorProps {
 }
 
 interface WorkspaceEventRecorderProps {
-  activeFilePath: string;
   handleWorkspaceEvent: () => void;
   shouldTrackWorkspaceChanges: boolean;
 }
 
 function WorkspaceEventRecorder({
-  activeFilePath,
   handleWorkspaceEvent,
   shouldTrackWorkspaceChanges,
 }: WorkspaceEventRecorderProps) {
-  const saveVersion = useWorkspaceSaveVersion();
-  const previousWorkspaceRef = useRef<{
-    activeFilePath: string;
-    saveVersion: number;
-  } | null>(null);
+  const sidebarState = useWorkspaceSidebarState();
+  const previousSidebarStateRef = useRef(sidebarState);
   const wasTrackingRef = useRef(false);
 
   useEffect(() => {
-    const nextWorkspaceState = {
-      activeFilePath,
-      saveVersion,
-    };
-
     if (!shouldTrackWorkspaceChanges) {
-      previousWorkspaceRef.current = nextWorkspaceState;
+      previousSidebarStateRef.current = sidebarState;
       wasTrackingRef.current = false;
       return;
     }
 
     if (!wasTrackingRef.current) {
-      previousWorkspaceRef.current = nextWorkspaceState;
+      previousSidebarStateRef.current = sidebarState;
       wasTrackingRef.current = true;
       return;
     }
 
-    const previousWorkspaceState = previousWorkspaceRef.current;
-    previousWorkspaceRef.current = nextWorkspaceState;
-
-    if (!previousWorkspaceState) {
-      return;
-    }
-
-    if (
-      previousWorkspaceState.activeFilePath !==
-        nextWorkspaceState.activeFilePath ||
-      previousWorkspaceState.saveVersion !== nextWorkspaceState.saveVersion
-    ) {
+    if (previousSidebarStateRef.current !== sidebarState) {
+      previousSidebarStateRef.current = sidebarState;
       handleWorkspaceEvent();
     }
-  }, [
-    activeFilePath,
-    handleWorkspaceEvent,
-    saveVersion,
-    shouldTrackWorkspaceChanges,
-  ]);
+  }, [handleWorkspaceEvent, shouldTrackWorkspaceChanges, sidebarState]);
 
   return null;
 }
@@ -486,7 +461,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   return (
     <div className="h-full flex flex-col">
       <WorkspaceEventRecorder
-        activeFilePath={activeFile.path}
         handleWorkspaceEvent={handleWorkspaceEvent}
         shouldTrackWorkspaceChanges={isRecording || Boolean(currentRecording)}
       />
