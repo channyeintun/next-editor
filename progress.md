@@ -34,3 +34,5 @@
 - Store-react correction validation: `bun run typecheck` passed after switching the workspace selectors to `WorkspaceState` and the hooks to `store.select(...)`.
 - Playback end fix: kept `CodeEditor` attached to the playback Monaco model for paused and ended playback states, and only switch back to workspace-backed models after stop or a manual workspace override.
 - Playback end fix validation: `bun run typecheck` passed after adding the playback-model selector and updating the NextEditor metadata consumers.
+- Floating play button layering fix: raised the `/code` page floating play button above the terminal dock and other page overlays by increasing its fixed z-index.
+- Floating play button layering validation: `bun run typecheck` passed after the CSS stacking change.
