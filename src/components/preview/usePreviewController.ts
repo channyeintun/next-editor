@@ -460,6 +460,7 @@ export function usePreviewController(): PreviewController {
       content?: string;
       emitEvent?: boolean;
       showSpinner?: boolean;
+      reloadRuntime?: boolean;
     }) => {
       const iframe = iframeRef.current;
 
@@ -492,7 +493,9 @@ export function usePreviewController(): PreviewController {
       }
 
       if (isRuntimePreviewActive && effectiveRuntimePreviewUrl) {
-        if (!options?.emitEvent) {
+        const shouldReloadRuntime = options?.reloadRuntime ?? !options?.emitEvent;
+
+        if (!options?.emitEvent && shouldReloadRuntime) {
           void refreshRuntimePreview(
             iframe,
             effectiveRuntimePreviewUrl,
@@ -564,6 +567,11 @@ export function usePreviewController(): PreviewController {
         };
 
         const refreshStartedAt = performance.now();
+
+        if (!shouldReloadRuntime) {
+          pollRuntimeSnapshot();
+          return;
+        }
 
         iframe.addEventListener("load", handleRuntimeRefreshLoad, {
           once: true,
@@ -760,8 +768,21 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
-    forceRefreshPreview({ emitEvent: true });
-  }, [forceRefreshPreview, isPlaybackPreviewActive, saveVersion]);
+    if (isRuntimePreviewActive && !isRecording) {
+      return;
+    }
+
+    forceRefreshPreview({
+      emitEvent: true,
+      reloadRuntime: false,
+    });
+  }, [
+    forceRefreshPreview,
+    isPlaybackPreviewActive,
+    isRecording,
+    isRuntimePreviewActive,
+    saveVersion,
+  ]);
 
   useEffect(() => {
     if (
