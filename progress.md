@@ -11,8 +11,8 @@ Rules in force:
 1. Task 1. Reopen planning for enhancement 3: Completed
 2. Task 2. Cache compiled static preview output: Completed
 3. Task 3. Extract preview controller and renderers: Completed
-4. Task 4. Isolate iframe messaging and playback wiring: In progress
-5. Task 5. Validate and finish enhancement 3: Not started
+4. Task 4. Isolate iframe messaging and playback wiring: Completed
+5. Task 5. Validate and finish enhancement 3: In progress
 
 Enhancement 3 status: In progress
 
@@ -24,6 +24,7 @@ Enhancement 3 status: In progress
 - Completed Task 1 by rewriting `plan.md` and `progress.md` for the approved enhancement-3 scope.
 - Completed Task 2 by extracting static preview compilation into `src/components/preview/staticWorkspacePreview.ts`, memoizing it by `previewVersion`, and validating with `bun run typecheck`.
 - Completed Task 3 by moving preview orchestration into `src/components/preview/usePreviewController.ts`, extracting preview chrome plus static and runtime renderer components, and validating with `bun run typecheck`.
+- Completed Task 4 by moving iframe message handling, preview getter/applier registration, and interaction capture into dedicated preview hooks and validating with `bun run typecheck`.
 
 ## Risks
 

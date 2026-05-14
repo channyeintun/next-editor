@@ -23,27 +23,15 @@ import type {
   IframeInteractionEvent,
   PreviewEvent,
   PreviewSize,
-  PreviewState,
 } from "../../types/slides";
-import { arePreviewSizesEqual } from "../../utils/equality";
 import { useCompiledStaticWorkspacePreview } from "./useCompiledStaticWorkspacePreview";
-
-const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
-
-function getElementByXPath(doc: Document, xpath: string): Element | null {
-  try {
-    const result = doc.evaluate(
-      xpath,
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null,
-    );
-    return result.singleNodeValue as Element | null;
-  } catch {
-    return null;
-  }
-}
+import {
+  createReplayableRuntimePreview,
+  type PreviewScrollPosition,
+} from "./previewIframeUtils";
+import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
+import { usePreviewMessageBridge } from "./usePreviewMessageBridge";
+import { usePreviewPlaybackRegistration } from "./usePreviewPlaybackRegistration";
 
 function escapePreviewHtml(value: string): string {
   return value
@@ -255,65 +243,6 @@ function createRuntimePreviewPlaceholder(
 </html>`;
 }
 
-function createReplayableRuntimePreview(
-  iframe: HTMLIFrameElement,
-  baseUrl: string,
-): string | null {
-  try {
-    const iframeDocument =
-      iframe.contentDocument || iframe.contentWindow?.document;
-
-    if (!iframeDocument?.documentElement) {
-      return null;
-    }
-
-    return createReplayableRuntimePreviewFromHtml(
-      iframeDocument.documentElement.outerHTML,
-      baseUrl,
-    );
-  } catch {
-    return null;
-  }
-}
-
-function createReplayableRuntimePreviewFromHtml(
-  htmlContent: string,
-  baseUrl: string,
-): string | null {
-  try {
-    const parser = new DOMParser();
-    const iframeDocument = parser.parseFromString(htmlContent, "text/html");
-
-    if (!iframeDocument?.documentElement) {
-      return null;
-    }
-
-    const html = iframeDocument.documentElement.cloneNode(true);
-
-    if (!(html instanceof HTMLElement)) {
-      return null;
-    }
-
-    html.querySelectorAll("script").forEach((script) => {
-      script.remove();
-    });
-
-    const head = html.querySelector("head");
-
-    if (head) {
-      head.querySelector("base")?.remove();
-
-      const base = head.ownerDocument.createElement("base");
-      base.setAttribute("href", baseUrl);
-      head.prepend(base);
-    }
-
-    return `<!doctype html>\n${html.outerHTML}`;
-  } catch {
-    return null;
-  }
-}
-
 export interface PreviewController {
   containerRef: RefObject<HTMLDivElement | null>;
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -343,16 +272,13 @@ export function usePreviewController(): PreviewController {
 
   const lastContentRef = useRef("");
   const lastRuntimeSnapshotRef = useRef("");
-  const scrollPositionRef = useRef({
+  const scrollPositionRef = useRef<PreviewScrollPosition>({
     scrollTop: 0,
     scrollLeft: 0,
   });
   const pendingInteractionRef = useRef<IframeInteractionEvent | null>(null);
 
-  const targetScrollRef = useRef<{
-    scrollTop: number;
-    scrollLeft: number;
-  } | null>(null);
+  const targetScrollRef = useRef<PreviewScrollPosition | null>(null);
   const rafRef = useRef<number | null>(null);
   const isUserScrollingRef = useRef(false);
   const userScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -494,129 +420,19 @@ export function usePreviewController(): PreviewController {
     [],
   );
 
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) {
-        return;
-      }
-
-      const { type, payload } = event.data || {};
-      if (type === RUNTIME_SNAPSHOT_MESSAGE_TYPE) {
-        if (typeof payload?.html !== "string" || !effectiveRuntimePreviewUrl) {
-          return;
-        }
-
-        const snapshot = createReplayableRuntimePreviewFromHtml(
-          payload.html,
-          effectiveRuntimePreviewUrl,
-        );
-
-        if (snapshot) {
-          lastRuntimeSnapshotRef.current = snapshot;
-        }
-
-        return;
-      }
-
-      if (type !== "IFRAME_INTERACTION") {
-        return;
-      }
-
-      const isMainDocumentScroll =
-        payload.type === "scroll" &&
-        payload.data &&
-        (payload.data.isDocument ||
-          payload.targetTag === "BODY" ||
-          payload.targetTag === "HTML");
-
-      if (isMainDocumentScroll) {
-        scrollPositionRef.current = {
-          scrollTop: payload.data.scrollTop,
-          scrollLeft: payload.data.scrollLeft,
-        };
-
-        if (isRecordingRef.current && handlePreviewEventRef.current) {
-          isUserScrollingRef.current = true;
-          if (userScrollTimeoutRef.current) {
-            clearTimeout(userScrollTimeoutRef.current);
-          }
-          userScrollTimeoutRef.current = setTimeout(() => {
-            isUserScrollingRef.current = false;
-          }, 100);
-
-          targetScrollRef.current = {
-            scrollTop: payload.data.scrollTop,
-            scrollLeft: payload.data.scrollLeft,
-          };
-
-          handlePreviewEventRef.current({
-            type: "preview_scroll",
-            timestamp: Date.now(),
-            size: sizeRef.current,
-            scrollTop: payload.data.scrollTop,
-            scrollLeft: payload.data.scrollLeft,
-          });
-        }
-
-        return;
-      }
-
-      if (!isRecordingRef.current || !handlePreviewEventRef.current) {
-        return;
-      }
-
-      const interaction: IframeInteractionEvent = {
-        type: payload.type,
-        timestamp: performance.now(),
-        target: payload.target,
-        data: payload.data,
-      };
-
-      pendingInteractionRef.current = interaction;
-      handlePreviewEventRef.current({
-        type: "preview_interaction",
-        timestamp: Date.now(),
-        size: sizeRef.current,
-        scrollTop: scrollPositionRef.current.scrollTop,
-        scrollLeft: scrollPositionRef.current.scrollLeft,
-        interaction,
-      });
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [effectiveRuntimePreviewUrl]);
-
-  useEffect(() => {
-    if (
-      !registerPreviewStateGetter ||
-      typeof registerPreviewStateGetter !== "function"
-    ) {
-      return;
-    }
-
-    registerPreviewStateGetter((): PreviewState => {
-      const interaction = pendingInteractionRef.current;
-      pendingInteractionRef.current = null;
-      const content = isRuntimePreviewActive
-        ? captureRuntimePreviewSnapshot() ||
-          lastRuntimeSnapshotRef.current ||
-          undefined
-        : lastContentRef.current;
-
-      return {
-        size: sizeRef.current,
-        content,
-        scrollTop: scrollPositionRef.current.scrollTop,
-        scrollLeft: scrollPositionRef.current.scrollLeft,
-        currentInteraction: interaction || undefined,
-      };
-    });
-  }, [
-    captureRuntimePreviewSnapshot,
-    isRuntimePreviewActive,
-    registerPreviewStateGetter,
-  ]);
+  usePreviewMessageBridge({
+    iframeRef,
+    effectiveRuntimePreviewUrl,
+    isRecordingRef,
+    handlePreviewEventRef,
+    lastRuntimeSnapshotRef,
+    scrollPositionRef,
+    userScrollTimeoutRef,
+    isUserScrollingRef,
+    targetScrollRef,
+    pendingInteractionRef,
+    sizeRef,
+  });
 
   const updateIframeContent = useCallback(
     (content: string, options?: { force?: boolean }) => {
@@ -819,6 +635,36 @@ export function usePreviewController(): PreviewController {
     ],
   );
 
+  usePreviewPlaybackRegistration({
+    registerPreviewStateGetter,
+    registerPreviewStateApplier,
+    captureRuntimePreviewSnapshot,
+    isRuntimePreviewActive,
+    pendingInteractionRef,
+    lastRuntimeSnapshotRef,
+    lastContentRef,
+    scrollPositionRef,
+    sizeRef,
+    effectiveRuntimePreviewUrl,
+    staticWorkspacePreview,
+    forceRefreshPreview,
+    updateIframeContent,
+    iframeRef,
+    setSize,
+    lastRefreshKeyRef,
+    isRecordingRef,
+    isUserScrollingRef,
+    targetScrollRef,
+    rafRef,
+  });
+
+  usePreviewInteractionCapture({
+    iframeRef,
+    isRecording,
+    isRuntimePreviewActive,
+    size,
+  });
+
   useEffect(() => {
     if (isPlaying || !isRuntimePreviewActive) {
       return;
@@ -841,383 +687,6 @@ export function usePreviewController(): PreviewController {
       iframe.removeEventListener("load", syncSnapshot);
     };
   }, [captureRuntimePreviewSnapshot, isPlaying, isRuntimePreviewActive]);
-
-  useEffect(() => {
-    if (
-      !registerPreviewStateApplier ||
-      typeof registerPreviewStateApplier !== "function"
-    ) {
-      return;
-    }
-
-    registerPreviewStateApplier((previewState: PreviewState) => {
-      let sizeToApply = previewState.size;
-
-      if (typeof sizeToApply === "object") {
-        sizeToApply = {
-          width: Math.min(sizeToApply.width, window.innerWidth - 32),
-          height: Math.min(sizeToApply.height, window.innerHeight - 96),
-        };
-      }
-
-      if (!arePreviewSizesEqual(sizeToApply, sizeRef.current)) {
-        setSize(sizeToApply);
-      }
-
-      const didRefreshKeyChange =
-        previewState.refreshKey !== undefined &&
-        previewState.refreshKey !== lastRefreshKeyRef.current;
-
-      lastRefreshKeyRef.current = previewState.refreshKey;
-
-      if (didRefreshKeyChange) {
-        if (previewState.content !== undefined) {
-          forceRefreshPreview({
-            content: previewState.content,
-            emitEvent: false,
-          });
-        } else if (effectiveRuntimePreviewUrl) {
-          const staticFallback = staticWorkspacePreview;
-
-          if (staticFallback) {
-            forceRefreshPreview({
-              content: staticFallback,
-              emitEvent: false,
-            });
-          }
-        }
-      } else if (
-        previewState.content !== undefined &&
-        previewState.content !== lastContentRef.current
-      ) {
-        updateIframeContent(previewState.content, { force: true });
-      }
-
-      const iframe = iframeRef.current;
-      if (!iframe || isRuntimePreviewActive) {
-        return;
-      }
-
-      const iframeDoc =
-        iframe.contentDocument || iframe.contentWindow?.document;
-      const iframeWindow = iframe.contentWindow;
-      if (!iframeDoc || !iframeWindow) {
-        return;
-      }
-
-      if (
-        previewState.scrollTop !== undefined ||
-        previewState.scrollLeft !== undefined
-      ) {
-        const targetTop = previewState.scrollTop ?? 0;
-        const targetLeft = previewState.scrollLeft ?? 0;
-
-        if (isRecordingRef.current && isUserScrollingRef.current) {
-          return;
-        }
-
-        targetScrollRef.current = {
-          scrollTop: targetTop,
-          scrollLeft: targetLeft,
-        };
-
-        if (!rafRef.current) {
-          rafRef.current = requestAnimationFrame(() => {
-            rafRef.current = null;
-
-            const target = targetScrollRef.current;
-            if (!target || !iframeRef.current) {
-              return;
-            }
-
-            const iframe = iframeRef.current;
-            const iframeDoc =
-              iframe.contentDocument || iframe.contentWindow?.document;
-            const iframeWindow = iframe.contentWindow;
-
-            if (!iframeDoc || !iframeWindow) {
-              return;
-            }
-
-            let scrollTarget: Element | Window = iframeWindow;
-
-            if (
-              previewState.currentInteraction?.type === "scroll" &&
-              previewState.currentInteraction.data &&
-              !previewState.currentInteraction.data.isDocument
-            ) {
-              const element = getElementByXPath(
-                iframeDoc,
-                previewState.currentInteraction.target.xpath,
-              );
-              if (element instanceof Element) {
-                scrollTarget = element;
-              }
-            }
-
-            let currentTop = 0;
-            let currentLeft = 0;
-            try {
-              if (scrollTarget === iframeWindow) {
-                currentTop =
-                  iframeWindow.scrollY || iframeDoc.documentElement.scrollTop;
-                currentLeft =
-                  iframeWindow.scrollX || iframeDoc.documentElement.scrollLeft;
-              } else if (scrollTarget instanceof Element) {
-                currentTop = scrollTarget.scrollTop;
-                currentLeft = scrollTarget.scrollLeft;
-              }
-            } catch (error: unknown) {
-              console.warn("Failed to read scroll position:", error);
-            }
-
-            if (
-              Math.abs(currentTop - target.scrollTop) > 0.1 ||
-              Math.abs(currentLeft - target.scrollLeft) > 0.1
-            ) {
-              try {
-                if (scrollTarget === iframeWindow) {
-                  iframeWindow.scrollTo({
-                    top: target.scrollTop,
-                    left: target.scrollLeft,
-                    behavior: "instant",
-                  });
-                } else if (scrollTarget instanceof Element) {
-                  scrollTarget.scrollTo({
-                    top: target.scrollTop,
-                    left: target.scrollLeft,
-                    behavior: "instant",
-                  });
-                }
-              } catch (error: unknown) {
-                console.warn("Failed to update scroll position:", error);
-              }
-            }
-          });
-        }
-      }
-
-      if (!previewState.currentInteraction) {
-        return;
-      }
-
-      const interaction = previewState.currentInteraction;
-      const element = getElementByXPath(
-        iframeDoc,
-        interaction.target.xpath,
-      ) as HTMLElement | null;
-
-      if (!element) {
-        return;
-      }
-
-      const elementWithStyle = element as HTMLElement & { value?: string };
-      const isElementWithStyle = !!elementWithStyle.style;
-      const tagName = element.tagName.toLowerCase();
-
-      if (!isElementWithStyle) {
-        return;
-      }
-
-      switch (interaction.type) {
-        case "click":
-          elementWithStyle.style.setProperty(
-            "--ring-color",
-            "rgba(59, 130, 246, 0.5)",
-          );
-          elementWithStyle.style.boxShadow =
-            "0 0 0 4px rgba(59, 130, 246, 0.5)";
-          setTimeout(() => {
-            elementWithStyle.style.removeProperty("--ring-color");
-            elementWithStyle.style.boxShadow = "";
-          }, 300);
-          break;
-        case "focus":
-          elementWithStyle.focus();
-          break;
-        case "scroll":
-          if (interaction.data?.scrollTop !== undefined) {
-            elementWithStyle.scrollTop = interaction.data.scrollTop;
-          }
-          if (interaction.data?.scrollLeft !== undefined) {
-            elementWithStyle.scrollLeft = interaction.data.scrollLeft;
-          }
-          break;
-        case "input": {
-          const isInput =
-            tagName === "input" ||
-            tagName === "textarea" ||
-            elementWithStyle.isContentEditable;
-          if (isInput && interaction.data?.value !== undefined) {
-            elementWithStyle.value = interaction.data.value;
-          }
-          break;
-        }
-      }
-    });
-  }, [
-    effectiveRuntimePreviewUrl,
-    forceRefreshPreview,
-    isRuntimePreviewActive,
-    registerPreviewStateApplier,
-    staticWorkspacePreview,
-    updateIframeContent,
-  ]);
-
-  useEffect(() => {
-    if (!isRecording || isRuntimePreviewActive) {
-      return;
-    }
-
-    const iframe = iframeRef.current;
-    if (!iframe) {
-      return;
-    }
-
-    const setupInteractionListeners = () => {
-      try {
-        const iframeDoc =
-          iframe.contentDocument || iframe.contentWindow?.document;
-        if (!iframeDoc) {
-          return;
-        }
-
-        const captureScript = `
-          (function() {
-            if (window.__INTERACTION_CAPTURE_SETUP__) return;
-            window.__INTERACTION_CAPTURE_SETUP__ = true;
-            
-            function getXPath(element) {
-              if (element.id) return '//*[@id="' + element.id + '"]';
-              if (element === document.body) return '/html/body';
-              const parent = element.parentElement;
-              if (!parent) return '/' + element.tagName.toLowerCase();
-              const siblings = Array.from(parent.children).filter(s => s.tagName === element.tagName);
-              const index = siblings.indexOf(element) + 1;
-              return getXPath(parent) + '/' + element.tagName.toLowerCase() + (siblings.length > 1 ? '[' + index + ']' : '');
-            }
-
-            function getTargetInfo(element) {
-              return {
-                tagName: element.tagName.toLowerCase(),
-                id: element.id || undefined,
-                className: element.className || undefined,
-                xpath: getXPath(element)
-              };
-            }
-
-            function emit(type, target, data) {
-              window.parent.postMessage({
-                type: 'IFRAME_INTERACTION',
-                payload: {
-                  type: type,
-                  target: getTargetInfo(target),
-                  targetTag: target.tagName,
-                  data: data
-                }
-              }, '*');
-            }
-
-            document.addEventListener('click', (e) => {
-              emit('click', e.target, { clientX: e.clientX, clientY: e.clientY, button: e.button });
-            }, true);
-
-            document.addEventListener('mouseenter', (e) => {
-              if (e.target !== document.body && e.target instanceof Element) {
-                emit('hover_start', e.target, { clientX: e.clientX, clientY: e.clientY });
-              }
-            }, true);
-
-            document.addEventListener('mouseleave', (e) => {
-              if (e.target !== document.body && e.target instanceof Element) {
-                emit('hover_end', e.target);
-              }
-            }, true);
-
-            document.addEventListener('focus', (e) => {
-              if (e.target instanceof Element) emit('focus', e.target);
-            }, true);
-
-            document.addEventListener('blur', (e) => {
-              if (e.target instanceof Element) emit('blur', e.target);
-            }, true);
-
-            document.addEventListener('keydown', (e) => {
-              if (e.target instanceof Element) emit('keydown', e.target, { key: e.key, code: e.code });
-            }, true);
-
-            document.addEventListener('keyup', (e) => {
-              if (e.target instanceof Element) emit('keyup', e.target, { key: e.key, code: e.code });
-            }, true);
-
-            document.addEventListener('input', (e) => {
-              const tag = e.target.tagName.toLowerCase();
-              if (tag === 'input' || tag === 'textarea') {
-                emit('input', e.target, { value: e.target.value });
-              }
-            }, true);
-
-            let scrollTicking = false;
-            document.addEventListener('scroll', (e) => {
-              if (scrollTicking) return;
-              
-              const target = e.target;
-              scrollTicking = true;
-              
-              requestAnimationFrame(() => {
-                if (target === document || target === window || target === document.body || target === document.documentElement) {
-                  const doc = document.scrollingElement || document.documentElement;
-                  emit('scroll', document.body, { 
-                    scrollTop: doc.scrollTop, 
-                    scrollLeft: doc.scrollLeft,
-                    isDocument: true
-                  });
-                } else if (target instanceof Element) {
-                  emit('scroll', target, { 
-                    scrollTop: target.scrollTop, 
-                    scrollLeft: target.scrollLeft,
-                    isDocument: false
-                  });
-                }
-                scrollTicking = false;
-              });
-            }, true);
-          })();
-        `;
-
-        const scriptElement = iframeDoc.createElement("script");
-        scriptElement.textContent = captureScript;
-        if (iframeDoc.head) {
-          iframeDoc.head.appendChild(scriptElement);
-        } else {
-          iframeDoc.documentElement.appendChild(scriptElement);
-        }
-
-        return () => undefined;
-      } catch (error) {
-        console.warn(
-          "Cannot track interactions in iframe (likely cross-origin):",
-          error,
-        );
-        return undefined;
-      }
-    };
-
-    let cleanup: (() => void) | undefined;
-
-    const handleIframeLoad = () => {
-      cleanup?.();
-      cleanup = setupInteractionListeners();
-    };
-
-    iframe.addEventListener("load", handleIframeLoad);
-    cleanup = setupInteractionListeners();
-
-    return () => {
-      iframe.removeEventListener("load", handleIframeLoad);
-      cleanup?.();
-    };
-  }, [isRecording, isRuntimePreviewActive, size]);
 
   useEffect(() => {
     if (isPlaying) {
