@@ -16,7 +16,6 @@ import {
   type WebContainerRuntimeStatus,
 } from "./WebContainerRuntimeContext";
 import {
-  createWorkspaceTree,
   DEFAULT_RUNNER_CONFIG,
   formatCommandError,
   formatPreviewMessage,
@@ -28,7 +27,6 @@ import {
   parseCommand,
   persistEnvironmentVariables,
   sanitizeTerminalChunk,
-  syncWorkspaceProject,
   teardownSharedWebContainer,
   TERMINAL_SHELL_CANDIDATES,
 } from "./webContainerRuntimeSupport";
@@ -38,7 +36,7 @@ import {
   useWorkspaceProjectName,
   useWorkspaceSaveVersion,
 } from "../hooks/useWorkspace";
-import type { WorkspaceProject } from "../types/workspace";
+import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";
 
 interface WebContainerRuntimeProviderProps {
   children: React.ReactNode;
@@ -63,9 +61,7 @@ export const WebContainerRuntimeProvider: React.FC<
   const previewMessageListenerCleanupRef = useRef<(() => void) | null>(null);
   const lifecycleEventIdRef = useRef(0);
   const previewMessageIdRef = useRef(0);
-  const hasMountedProjectRef = useRef(false);
   const hasRunInitCommandRef = useRef(false);
-  const lastSyncedProjectRef = useRef<WorkspaceProject | null>(null);
   const hasAutoStartedRef = useRef(false);
   const isMountedRef = useRef(true);
   const lessonTypeRef = useRef(lessonType);
@@ -92,6 +88,12 @@ export const WebContainerRuntimeProvider: React.FC<
   const [runnerConfig, setRunnerConfig] = useState<RunnerConfig>(
     DEFAULT_RUNNER_CONFIG,
   );
+  const {
+    hasMountedProjectRef,
+    ensureProjectMounted,
+    queueProjectSync,
+    resetWorkspaceSync,
+  } = useWebContainerWorkspaceSync();
 
   lessonTypeRef.current = lessonType;
   previewUrlRef.current = previewUrl;
@@ -182,9 +184,8 @@ export const WebContainerRuntimeProvider: React.FC<
     previewMessageListenerCleanupRef.current = null;
     teardownSharedWebContainer(instanceRef.current);
     instanceRef.current = null;
-    hasMountedProjectRef.current = false;
     hasRunInitCommandRef.current = false;
-    lastSyncedProjectRef.current = null;
+    resetWorkspaceSync();
     setStatus("idle");
     setPreviewUrl(null);
     setErrorMessage(null);
@@ -343,12 +344,11 @@ export const WebContainerRuntimeProvider: React.FC<
 
     const project = getProject();
 
-    if (!hasMountedProjectRef.current) {
-      setStatus("mounting");
-      await instance.mount(createWorkspaceTree(project));
-      lastSyncedProjectRef.current = project;
-      hasMountedProjectRef.current = true;
-    }
+    await ensureProjectMounted({
+      instance,
+      project,
+      onMountStart: () => setStatus("mounting"),
+    });
 
     const initCommand = runnerConfig.initCommand.trim();
     if (!initCommand || hasRunInitCommandRef.current) {
@@ -631,16 +631,11 @@ export const WebContainerRuntimeProvider: React.FC<
 
     const instance = instanceRef.current;
 
-    if (instance && hasMountedProjectRef.current) {
+    if (instance) {
       const project = getProject();
 
       try {
-        await syncWorkspaceProject(
-          instance,
-          lastSyncedProjectRef.current,
-          project,
-        );
-        lastSyncedProjectRef.current = project;
+        await queueProjectSync({ instance, project });
       } catch (error) {
         setErrorMessage(getRuntimeErrorMessage(error));
         throw error;
@@ -665,7 +660,7 @@ export const WebContainerRuntimeProvider: React.FC<
     }
 
     await rerunRunnerRef.current();
-  }, [getProject]);
+  }, [getProject, queueProjectSync]);
 
   const getRecordingSnapshot = useCallback<
     () => WebContainerRuntimeRecordingSnapshot
@@ -746,14 +741,10 @@ export const WebContainerRuntimeProvider: React.FC<
 
     const project = getProject();
 
-    void syncWorkspaceProject(instance, lastSyncedProjectRef.current, project)
-      .then(() => {
-        lastSyncedProjectRef.current = project;
-      })
-      .catch((error) => {
-        setErrorMessage(getRuntimeErrorMessage(error));
-      });
-  }, [getProject, saveVersion, status]);
+    void queueProjectSync({ instance, project }).catch((error) => {
+      setErrorMessage(getRuntimeErrorMessage(error));
+    });
+  }, [getProject, hasMountedProjectRef, queueProjectSync, saveVersion]);
 
   useEffect(() => {
     return () => {
