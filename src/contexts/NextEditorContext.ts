@@ -2,13 +2,7 @@ import { createContext, type RefObject } from "react";
 import type { Recording } from "../core/src/types";
 import type { TimelineActorRef } from "../core/src/machine/timelineMachine";
 import type { EditorActorRef } from "../core/src/useNextEditor";
-import type {
-  SlidePreviewState,
-  PreviewState,
-  Slide,
-  SlideEvent,
-  PreviewEvent,
-} from "../types/slides";
+import type { SlideEvent, PreviewEvent } from "../types/slides";
 import type {
   RuntimePanelRecordingState,
   RuntimeRecordingSnapshot,
@@ -43,31 +37,12 @@ export interface NextEditorActions {
   getStorageStats: () => Promise<{ count: number; totalSize: string }>;
   loadRecordingsFromStorage: () => Promise<Recording[]>;
   deleteFromStorage: (id: string) => Promise<void>;
-  registerSlideStateGetter: (
-    getter: () => {
-      previewState: SlidePreviewState;
-      currentSlideIndex: number;
-    } | null,
-  ) => void;
-  registerSlideStateApplier: (
-    applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void,
-  ) => void;
-  registerSlidesGetter: (getter: () => Slide[]) => void;
-  registerSlidesApplier: (applier: (slides: Slide[]) => void) => void;
-  registerPreviewStateGetter: (getter: () => PreviewState | null) => void;
-  registerPreviewStateApplier: (
-    applier: (previewState: PreviewState) => void,
-  ) => void;
   registerRuntimeStateGetter: (
     getter: () => RuntimePanelRecordingState | null,
   ) => void;
   registerRuntimeStateApplier: (
     applier: (snapshot: RuntimeRecordingSnapshot) => void,
   ) => void;
-  registerSlideNavigator: (
-    navigator: (indexh: number, indexv: number) => void,
-  ) => void;
-  navigateSlidesDirect?: (indexh: number, indexv: number) => void;
 }
 
 export const NextEditorActionsContext = createContext<NextEditorActions | null>(

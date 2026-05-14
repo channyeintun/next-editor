@@ -11,7 +11,6 @@ import {
 } from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
 import { createJsonStorage } from "../storage/JsonStorage";
-import type { SlidePreviewState, PreviewState, Slide } from "../types/slides";
 import type {
   RuntimePanelRecordingState,
   RuntimeRecordingSnapshot,
@@ -38,7 +37,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   suppressWorkspaceEventsRef,
 }) => {
   const actorRef = NextEditorActorContext.useActorRef();
-  const { slides, preview, runtimePanel } = useNextEditorDomainAdapters();
+  const { runtimePanel } = useNextEditorDomainAdapters();
   const originalHook = useNextEditorActorBindings(actorRef, config);
 
   const {
@@ -109,58 +108,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handleWorkspaceEventBase();
   }, [handleWorkspaceEventBase, suppressWorkspaceEventsRef]);
 
-  const registerSlideStateGetter = useCallback(
-    (
-      getter: () => {
-        previewState: SlidePreviewState;
-        currentSlideIndex: number;
-      } | null,
-    ) => {
-      slides.setSnapshotGetter(getter);
-    },
-    [slides],
-  );
-
-  const registerSlideStateApplier = useCallback(
-    (
-      applier: (
-        slideState: SlidePreviewState,
-        currentSlideIndex: number,
-      ) => void,
-    ) => {
-      slides.setSnapshotApplier(applier);
-    },
-    [slides],
-  );
-
-  const registerSlidesGetter = useCallback(
-    (getter: () => Slide[]) => {
-      slides.setSlidesGetter(getter);
-    },
-    [slides],
-  );
-
-  const registerSlidesApplier = useCallback(
-    (applier: (slides: Slide[]) => void) => {
-      slides.setSlidesApplier(applier);
-    },
-    [slides],
-  );
-
-  const registerPreviewStateGetter = useCallback(
-    (getter: () => PreviewState | null) => {
-      preview.setSnapshotGetter(getter);
-    },
-    [preview],
-  );
-
-  const registerPreviewStateApplier = useCallback(
-    (applier: (previewState: PreviewState) => void) => {
-      preview.setSnapshotApplier(applier);
-    },
-    [preview],
-  );
-
   const registerRuntimeStateGetter = useCallback(
     (getter: () => RuntimePanelRecordingState | null) => {
       runtimePanel.setSnapshotGetter(getter);
@@ -173,20 +120,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       runtimePanel.setSnapshotApplier(applier);
     },
     [runtimePanel],
-  );
-
-  const registerSlideNavigator = useCallback(
-    (navigator: (indexh: number, indexv: number) => void) => {
-      slides.setNavigator(navigator);
-    },
-    [slides],
-  );
-
-  const navigateSlidesDirect = useCallback(
-    (indexh: number, indexv: number) => {
-      slides.navigate(indexh, indexv);
-    },
-    [slides],
   );
 
   const actionsValue = useMemo(
@@ -215,16 +148,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       getStorageStats,
       loadRecordingsFromStorage,
       deleteFromStorage,
-      registerSlideStateGetter,
-      registerSlideStateApplier,
-      registerSlidesGetter,
-      registerSlidesApplier,
-      registerPreviewStateGetter,
-      registerPreviewStateApplier,
       registerRuntimeStateGetter,
       registerRuntimeStateApplier,
-      registerSlideNavigator,
-      navigateSlidesDirect,
     }),
     [
       config.editorRef,
@@ -251,16 +176,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       getStorageStats,
       loadRecordingsFromStorage,
       deleteFromStorage,
-      registerSlideStateGetter,
-      registerSlideStateApplier,
-      registerSlidesGetter,
-      registerSlidesApplier,
-      registerPreviewStateGetter,
-      registerPreviewStateApplier,
       registerRuntimeStateGetter,
       registerRuntimeStateApplier,
-      registerSlideNavigator,
-      navigateSlidesDirect,
     ],
   );
 

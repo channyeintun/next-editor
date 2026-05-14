@@ -207,26 +207,4 @@ export interface UseNextEditorReturn {
   // Helper functions
   getEditorState: () => EditorState | null;
   getFrame: (timestamp?: number) => EditorFrame | null;
-
-  // Registration helpers
-  registerSlideNavigator?: (
-    navigator: (indexh: number, indexv: number) => void,
-  ) => void;
-  navigateSlidesDirect?: (indexh: number, indexv: number) => void;
-
-  registerSlideStateGetter?: (
-    getter: () => {
-      previewState: SlidePreviewState;
-      currentSlideIndex: number;
-    } | null,
-  ) => void;
-  registerSlideStateApplier?: (
-    applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void,
-  ) => void;
-  registerSlidesGetter?: (getter: () => Slide[]) => void;
-  registerSlidesApplier?: (applier: (slides: Slide[]) => void) => void;
-  registerPreviewStateGetter?: (getter: () => PreviewState | null) => void;
-  registerPreviewStateApplier?: (
-    applier: (previewState: PreviewState) => void,
-  ) => void;
 }

@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useNextEditorDomainAdapters } from '../contexts/NextEditorDomainAdaptersContext';
 import { useSlidesContext } from '../contexts/SlidesContext';
 import { useNextEditorActions } from '../hooks/useNextEditorContext';
 import SlidePreview from './SlidePreview';
@@ -11,8 +12,9 @@ export default memo(function SlidePanel() {
     goToSlide,
     handleSlideEvent: onSlideEvent,
   } = useSlidesContext();
+  const { slides: slidesAdapter } = useNextEditorDomainAdapters();
 
-  const { registerSlideNavigator, pause } = useNextEditorActions();
+  const { pause } = useNextEditorActions();
 
   return (
     <>
@@ -27,7 +29,7 @@ export default memo(function SlidePanel() {
         isMaximized={previewState.isMaximized}
         verticalIndex={previewState.indexv}
         currentInteraction={previewState.currentInteraction}
-        registerSlideNavigator={registerSlideNavigator}
+        setSlideNavigator={slidesAdapter.setNavigator}
         positioning="fixed"
       />
     </>

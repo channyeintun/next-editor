@@ -12,7 +12,7 @@ interface RevealSlideRendererProps {
   onSlideChange?: (indexh: number, indexv?: number) => void;
   isNavigationEnabled?: boolean;
   currentInteraction?: import('../types/slides').IframeInteractionEvent;
-  registerSlideNavigator?: (navigator: (indexh: number, indexv: number) => void) => void;
+  setSlideNavigator?: (navigator: (indexh: number, indexv: number) => void) => void;
 }
 
 // Generate the complete HTML for the reveal.js presentation
@@ -193,7 +193,7 @@ const RevealSlideRenderer = memo(function RevealSlideRenderer({
   onSlideChange,
   isNavigationEnabled = true,
   currentInteraction,
-  registerSlideNavigator
+  setSlideNavigator
 }: RevealSlideRendererProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isReady, setIsReady] = useState(false);
@@ -260,18 +260,24 @@ const RevealSlideRenderer = memo(function RevealSlideRenderer({
 
   // Register direct navigation channel
   useEffect(() => {
-    if (registerSlideNavigator) {
-      registerSlideNavigator((indexh, indexv) => {
-        if (iframeRef.current && iframeRef.current.contentWindow) {
-          iframeRef.current.contentWindow.postMessage({
-            type: 'reveal-goto',
-            indexh,
-            indexv
-          }, '*');
-        }
-      });
+    if (!setSlideNavigator) {
+      return;
     }
-  }, [registerSlideNavigator]);
+
+    setSlideNavigator((indexh, indexv) => {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({
+          type: 'reveal-goto',
+          indexh,
+          indexv
+        }, '*');
+      }
+    });
+
+    return () => {
+      setSlideNavigator((_indexh, _indexv) => undefined);
+    };
+  }, [setSlideNavigator]);
 
   // Sync slide index when it changes externally
   useEffect(() => {

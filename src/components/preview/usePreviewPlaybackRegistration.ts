@@ -4,6 +4,7 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
+import type { PreviewDomainAdapter } from "../../contexts/NextEditorDomainAdaptersContext";
 import type {
   IframeInteractionEvent,
   PreviewSize,
@@ -22,10 +23,7 @@ interface PreviewRefreshOptions {
 }
 
 interface UsePreviewPlaybackRegistrationOptions {
-  registerPreviewStateGetter?: ((getter: () => PreviewState) => void) | null;
-  registerPreviewStateApplier?:
-    | ((applier: (state: PreviewState) => void) => void)
-    | null;
+  previewAdapter: PreviewDomainAdapter;
   captureRuntimePreviewSnapshot: () => string | null;
   isRuntimePreviewActive: boolean;
   pendingInteractionRef: RefObject<IframeInteractionEvent | null>;
@@ -47,8 +45,7 @@ interface UsePreviewPlaybackRegistrationOptions {
 }
 
 export function usePreviewPlaybackRegistration({
-  registerPreviewStateGetter,
-  registerPreviewStateApplier,
+  previewAdapter,
   captureRuntimePreviewSnapshot,
   isRuntimePreviewActive,
   pendingInteractionRef,
@@ -69,14 +66,7 @@ export function usePreviewPlaybackRegistration({
   rafRef,
 }: UsePreviewPlaybackRegistrationOptions) {
   useEffect(() => {
-    if (
-      !registerPreviewStateGetter ||
-      typeof registerPreviewStateGetter !== "function"
-    ) {
-      return;
-    }
-
-    registerPreviewStateGetter((): PreviewState => {
+    previewAdapter.setSnapshotGetter((): PreviewState => {
       const interaction = pendingInteractionRef.current;
       pendingInteractionRef.current = null;
       const content = isRuntimePreviewActive
@@ -93,26 +83,23 @@ export function usePreviewPlaybackRegistration({
         currentInteraction: interaction || undefined,
       };
     });
+
+    return () => {
+      previewAdapter.setSnapshotGetter(() => null);
+    };
   }, [
     captureRuntimePreviewSnapshot,
     isRuntimePreviewActive,
     lastContentRef,
     lastRuntimeSnapshotRef,
     pendingInteractionRef,
-    registerPreviewStateGetter,
+    previewAdapter,
     scrollPositionRef,
     sizeRef,
   ]);
 
   useEffect(() => {
-    if (
-      !registerPreviewStateApplier ||
-      typeof registerPreviewStateApplier !== "function"
-    ) {
-      return;
-    }
-
-    registerPreviewStateApplier((previewState: PreviewState) => {
+    previewAdapter.setSnapshotApplier((previewState: PreviewState) => {
       let sizeToApply = previewState.size;
 
       if (typeof sizeToApply === "object") {
@@ -123,6 +110,10 @@ export function usePreviewPlaybackRegistration({
       }
 
       if (!arePreviewSizesEqual(sizeToApply, sizeRef.current)) {
+
+    return () => {
+      previewAdapter.setSnapshotApplier((_previewState) => undefined);
+    };
         setSize(sizeToApply);
       }
 
@@ -318,7 +309,7 @@ export function usePreviewPlaybackRegistration({
     lastContentRef,
     lastRefreshKeyRef,
     rafRef,
-    registerPreviewStateApplier,
+    previewAdapter,
     setSize,
     sizeRef,
     staticWorkspacePreview,

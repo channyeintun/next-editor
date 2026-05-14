@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
+import { useNextEditorDomainAdapters } from "./NextEditorDomainAdaptersContext";
 import { useSlides } from "../hooks/useSlides";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import type { SlidePreviewState } from "../types/slides";
@@ -15,20 +16,13 @@ interface SlidesProviderProps {
 }
 
 export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
-  const {
-    handleSlideEvent,
-    registerSlideStateGetter,
-    registerSlideStateApplier,
-    registerSlidesGetter,
-    registerSlidesApplier,
-    navigateSlidesDirect,
-  } = useNextEditorActions();
+  const { handleSlideEvent } = useNextEditorActions();
+  const { slides } = useNextEditorDomainAdapters();
 
   const slidesData = useSlides({
     onSlideEvent: handleSlideEvent,
   });
 
-  // Register slide state getter and applier with NextEditorProvider
   const slideStateGetter = useCallback(
     () => ({
       previewState: slidesData.previewState,
@@ -38,25 +32,25 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
   );
 
   useEffect(() => {
-    if (
-      registerSlideStateGetter &&
-      typeof registerSlideStateGetter === "function"
-    ) {
-      registerSlideStateGetter(slideStateGetter);
-    }
-  }, [registerSlideStateGetter, slideStateGetter]);
+    slides.setSnapshotGetter(slideStateGetter);
 
-  // Register slides data getter with NextEditorProvider
+    return () => {
+      slides.setSnapshotGetter(() => null);
+    };
+  }, [slideStateGetter, slides]);
+
   const slidesGetter = useCallback(
     () => slidesData.slides,
     [slidesData.slides],
   );
 
   useEffect(() => {
-    if (registerSlidesGetter && typeof registerSlidesGetter === "function") {
-      registerSlidesGetter(slidesGetter);
-    }
-  }, [registerSlidesGetter, slidesGetter]);
+    slides.setSlidesGetter(slidesGetter);
+
+    return () => {
+      slides.setSlidesGetter(() => []);
+    };
+  }, [slides, slidesGetter]);
 
   const slideStateApplier = useCallback(
     (slideState: SlidePreviewState, currentSlideIndex: number) => {
@@ -102,25 +96,22 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
           currentSlideIndex !== slidesData.currentSlideIndex ||
           (slideState.indexv !== undefined && nextIndexv !== prevIndexv)
         ) {
-          // ALWAYS use direct navigation for playback events to ensure sequential processing
-          // even if React batches the state updates below.
-          if (navigateSlidesDirect) {
-            navigateSlidesDirect(currentSlideIndex, nextIndexv);
-          }
+          slides.navigate(currentSlideIndex, nextIndexv);
         }
       }
     },
-    [slidesData, navigateSlidesDirect],
-  ); // Added navigateSlidesDirect to dependencies
+    [slides, slidesData],
+  );
 
   useEffect(() => {
-    if (
-      registerSlideStateApplier &&
-      typeof registerSlideStateApplier === "function"
-    ) {
-      registerSlideStateApplier(slideStateApplier);
-    }
-  }, [registerSlideStateApplier, slideStateApplier]);
+    slides.setSnapshotApplier(slideStateApplier);
+
+    return () => {
+      slides.setSnapshotApplier(
+        (_nextSlideState, _nextSlideIndex) => undefined,
+      );
+    };
+  }, [slideStateApplier, slides]);
 
   const slidesApplier = useCallback(
     (
@@ -138,10 +129,12 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
   );
 
   useEffect(() => {
-    if (registerSlidesApplier && typeof registerSlidesApplier === "function") {
-      registerSlidesApplier(slidesApplier);
-    }
-  }, [registerSlidesApplier, slidesApplier]);
+    slides.setSlidesApplier(slidesApplier);
+
+    return () => {
+      slides.setSlidesApplier((_nextSlides) => undefined);
+    };
+  }, [slides, slidesApplier]);
 
   return (
     <SlidesContext.Provider value={slidesData}>

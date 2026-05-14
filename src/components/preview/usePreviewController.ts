@@ -12,6 +12,7 @@ import {
   useNextEditorActions,
   useNextEditorMetadata,
 } from "../../hooks/useNextEditorContext";
+import { useNextEditorDomainAdapters } from "../../contexts/NextEditorDomainAdaptersContext";
 import {
   useWorkspaceLessonType,
   useWorkspacePreviewVersion,
@@ -288,12 +289,8 @@ export function usePreviewController(): PreviewController {
     null,
   );
 
-  const {
-    editorRef,
-    handlePreviewEvent,
-    registerPreviewStateGetter,
-    registerPreviewStateApplier,
-  } = useNextEditorActions();
+  const { editorRef, handlePreviewEvent } = useNextEditorActions();
+  const { preview } = useNextEditorDomainAdapters();
   const lessonType = useWorkspaceLessonType();
   const previewVersion = useWorkspacePreviewVersion();
   const saveVersion = useWorkspaceSaveVersion();
@@ -637,8 +634,7 @@ export function usePreviewController(): PreviewController {
   );
 
   usePreviewPlaybackRegistration({
-    registerPreviewStateGetter,
-    registerPreviewStateApplier,
+    previewAdapter: preview,
     captureRuntimePreviewSnapshot,
     isRuntimePreviewActive,
     pendingInteractionRef,
