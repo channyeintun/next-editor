@@ -18,10 +18,9 @@ interface StorageStats {
 
 /**
  * JSON Storage Interface for use-next-editor
- * Provides export/import functionality for recordings as JSON files with compression
+ * Provides IndexedDB persistence plus export/import support for recordings.
  */
 export class JsonStorage {
-  private legacyLocalStorageKey = "next-editor-recordings";
   private indexedDBStore = createIndexedDBRecordingStore();
 
   /**
@@ -248,20 +247,6 @@ export class JsonStorage {
     return `${size.toFixed(1)} ${units[unitIndex]}`;
   }
 
-  private hasLegacyArchive(): boolean {
-    return localStorage.getItem(this.legacyLocalStorageKey) !== null;
-  }
-
-  private async loadLegacyRecordings(): Promise<Recording[]> {
-    const stored = localStorage.getItem(this.legacyLocalStorageKey);
-    if (!stored) {
-      return [];
-    }
-
-    const binaryData = this.base64ToBinary(stored);
-    return this.decompressBinaryToRecordings(binaryData);
-  }
-
   private hasAudioPayload(recording: Recording): boolean {
     const audioBlob = recording.audioBlob;
 
@@ -332,32 +317,11 @@ export class JsonStorage {
     return Promise.all(entries.map((entry) => this.decodeStoredEntry(entry)));
   }
 
-  private async warmIndexedDBFromLegacyArchive(): Promise<void> {
-    if (await this.indexedDBStore.hasEntries()) {
-      return;
-    }
-
-    if (!this.hasLegacyArchive()) {
-      return;
-    }
-
-    const legacyRecordings = await this.loadLegacyRecordings();
-    if (legacyRecordings.length === 0) {
-      return;
-    }
-
-    const entries = await Promise.all(
-      legacyRecordings.map((recording) => this.createStoredEntry(recording)),
-    );
-    await this.indexedDBStore.putMany(entries);
-  }
-
   /**
    * Save a recording as an individual IndexedDB entry.
    */
   async save(recording: Recording): Promise<void> {
     try {
-      await this.warmIndexedDBFromLegacyArchive();
       const entry = await this.createStoredEntry(recording);
       await this.indexedDBStore.put(entry);
     } catch (error) {
@@ -369,17 +333,17 @@ export class JsonStorage {
   }
 
   /**
-   * Load all recordings from IndexedDB, or fall back to the legacy localStorage archive.
+   * Load all recordings from IndexedDB.
    */
   async load(): Promise<Recording[]> {
     try {
-      if (await this.indexedDBStore.hasEntries()) {
-        return await this.loadIndexedDBRecordings();
+      if (!(await this.indexedDBStore.hasEntries())) {
+        return [];
       }
 
-      return await this.loadLegacyRecordings();
+      return await this.loadIndexedDBRecordings();
     } catch (error) {
-      console.error("Failed to load recordings from storage:", error);
+      console.error("Failed to load recordings from IndexedDB:", error);
       return [];
     }
   }
@@ -389,28 +353,7 @@ export class JsonStorage {
    */
   async delete(id: string): Promise<void> {
     try {
-      await this.warmIndexedDBFromLegacyArchive();
-
-      if (await this.indexedDBStore.hasEntries()) {
-        await this.indexedDBStore.delete(id);
-        return;
-      }
-
-      const recordings = await this.loadLegacyRecordings();
-      const filtered = recordings.filter((recording) => recording.id !== id);
-
-      if (filtered.length === recordings.length) {
-        return;
-      }
-
-      if (filtered.length === 0) {
-        localStorage.removeItem(this.legacyLocalStorageKey);
-        return;
-      }
-
-      const binaryData = await this.compressRecordingsToBinary(filtered);
-      const base64Data = this.binaryToBase64(binaryData);
-      localStorage.setItem(this.legacyLocalStorageKey, base64Data);
+      await this.indexedDBStore.delete(id);
     } catch (error) {
       throw new Error(
         `Failed to delete recording: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -552,20 +495,28 @@ export class JsonStorage {
   }
 
   /**
-   * Clear all recordings from IndexedDB and the legacy archive.
+   * Clear all recordings from IndexedDB.
    */
   async clear(): Promise<void> {
     await this.indexedDBStore.clear();
-    localStorage.removeItem(this.legacyLocalStorageKey);
   }
 
   /**
-   * Get storage statistics, preferring IndexedDB metadata over full payload reads.
+   * Get storage statistics from IndexedDB metadata.
    */
   async getStats(): Promise<StorageStats> {
-    const storedMetadata = await this.indexedDBStore.listMetadata();
+    try {
+      const storedMetadata = await this.indexedDBStore.listMetadata();
 
-    if (storedMetadata.length > 0) {
+      if (storedMetadata.length === 0) {
+        return {
+          count: 0,
+          totalSize: "0 B",
+          compressedSize: "0 B",
+          compressionRatio: "0%",
+        };
+      }
+
       const totalCompressedSize = storedMetadata.reduce(
         (total, metadata) => total + metadata.payloadSize,
         0,
@@ -577,11 +528,8 @@ export class JsonStorage {
         compressedSize: this.formatSize(totalCompressedSize),
         compressionRatio: "N/A",
       };
-    }
-
-    const legacyRecordings = await this.loadLegacyRecordings();
-
-    if (legacyRecordings.length === 0) {
+    } catch (error) {
+      console.error("Failed to read recording stats from IndexedDB:", error);
       return {
         count: 0,
         totalSize: "0 B",
@@ -589,17 +537,6 @@ export class JsonStorage {
         compressionRatio: "0%",
       };
     }
-
-    const stored = localStorage.getItem(this.legacyLocalStorageKey);
-    const actualCompressedSize = stored ? new Blob([stored]).size : 0;
-    const compressedSize = this.formatSize(actualCompressedSize);
-
-    return {
-      count: legacyRecordings.length,
-      totalSize: compressedSize,
-      compressedSize,
-      compressionRatio: "Legacy localStorage",
-    };
   }
 }
 

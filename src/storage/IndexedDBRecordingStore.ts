@@ -4,16 +4,10 @@ const RECORDING_DATABASE_NAME = "next-editor-recordings-db";
 const RECORDING_DATABASE_VERSION = 1;
 const RECORDING_METADATA_STORE = "recording-metadata";
 const RECORDING_PAYLOAD_STORE = "recording-payload";
-const RECORDING_SYSTEM_STORE = "recording-system";
 
 interface StoredRecordingPayload {
   id: string;
   binaryData: ArrayBuffer;
-}
-
-interface StoredSystemValue {
-  key: string;
-  value: unknown;
 }
 
 export interface StoredRecordingMetadata {
@@ -70,12 +64,6 @@ export class IndexedDBRecordingStore {
         if (!database.objectStoreNames.contains(RECORDING_PAYLOAD_STORE)) {
           database.createObjectStore(RECORDING_PAYLOAD_STORE, {
             keyPath: "id",
-          });
-        }
-
-        if (!database.objectStoreNames.contains(RECORDING_SYSTEM_STORE)) {
-          database.createObjectStore(RECORDING_SYSTEM_STORE, {
-            keyPath: "key",
           });
         }
       };
@@ -276,16 +264,11 @@ export class IndexedDBRecordingStore {
   async clear(): Promise<void> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [
-        RECORDING_METADATA_STORE,
-        RECORDING_PAYLOAD_STORE,
-        RECORDING_SYSTEM_STORE,
-      ],
+      [RECORDING_METADATA_STORE, RECORDING_PAYLOAD_STORE],
       "readwrite",
     );
     transaction.objectStore(RECORDING_METADATA_STORE).clear();
     transaction.objectStore(RECORDING_PAYLOAD_STORE).clear();
-    transaction.objectStore(RECORDING_SYSTEM_STORE).clear();
     await this.transactionToPromise(transaction);
   }
 
@@ -299,39 +282,6 @@ export class IndexedDBRecordingStore {
     const payload = await this.requestToPromise(store.get(id));
     await this.transactionToPromise(transaction);
     return this.fromStoredPayload(payload);
-  }
-
-  async getSystemValue<T>(key: string): Promise<T | null> {
-    const database = await this.getDatabase();
-    const transaction = database.transaction(
-      RECORDING_SYSTEM_STORE,
-      "readonly",
-    );
-    const store = transaction.objectStore(RECORDING_SYSTEM_STORE);
-    const record = await this.requestToPromise(store.get(key));
-    await this.transactionToPromise(transaction);
-    return (record?.value as T | undefined) ?? null;
-  }
-
-  async setSystemValue(key: string, value: unknown): Promise<void> {
-    const database = await this.getDatabase();
-    const transaction = database.transaction(
-      RECORDING_SYSTEM_STORE,
-      "readwrite",
-    );
-    const store = transaction.objectStore(RECORDING_SYSTEM_STORE);
-    store.put({ key, value } satisfies StoredSystemValue);
-    await this.transactionToPromise(transaction);
-  }
-
-  async deleteSystemValue(key: string): Promise<void> {
-    const database = await this.getDatabase();
-    const transaction = database.transaction(
-      RECORDING_SYSTEM_STORE,
-      "readwrite",
-    );
-    transaction.objectStore(RECORDING_SYSTEM_STORE).delete(key);
-    await this.transactionToPromise(transaction);
   }
 }
 
