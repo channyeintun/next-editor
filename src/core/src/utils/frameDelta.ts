@@ -10,57 +10,21 @@ import type {
 } from './deltaTypes';
 import { DELTA_CONFIG, isKeyframe, isDelta } from './deltaTypes';
 export { isKeyframe, isDelta };
-import { getWasmExports } from './wasm';
+import { findCommonPrefixLengthWasm, findCommonSuffixLengthWasm } from './wasm';
 import { arePreviewSizesEqual, areStructuredDataEqual } from '../../../utils/equality';
-
-// ============================================================================
-// Text Encoding Utilities
-// ============================================================================
-
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
+import {
+    normalizeEditorFrame,
+    normalizeEditorPosition,
+    normalizeEditorSelection,
+    normalizeEditorViewState,
+} from './editorState';
 
 /**
  * Finds the length of the common prefix between two strings using WebAssembly.
  * Includes safety checks to ensure we don't cut in the middle of a multi-byte UTF-8 character.
  */
 export function findCommonPrefixLength(str1: string, str2: string): number {
-    const exports = getWasmExports();
-    if (!exports) return findCommonPrefixJS(str1, str2);
-
-    const memory = exports.memory;
-    const baseOffset = (exports.__heap_base?.value as number) || 65536;
-
-    const bytes1 = textEncoder.encode(str1);
-    const bytes2 = textEncoder.encode(str2);
-
-    const totalSizeNeeded = baseOffset + bytes1.length + bytes2.length;
-    if (memory.buffer.byteLength < totalSizeNeeded) {
-        const pagesNeeded = Math.ceil((totalSizeNeeded - memory.buffer.byteLength) / 65536);
-        if (pagesNeeded > 0) memory.grow(pagesNeeded);
-    }
-
-    const ptr1 = baseOffset;
-    const ptr2 = baseOffset + bytes1.length;
-
-    new Uint8Array(memory.buffer, ptr1, bytes1.length).set(bytes1);
-    new Uint8Array(memory.buffer, ptr2, bytes2.length).set(bytes2);
-
-    let prefixBytes = exports.findCommonPrefix(ptr1, bytes1.length, ptr2, bytes2.length);
-
-    if (prefixBytes <= 0) return 0;
-    if (prefixBytes === bytes1.length) return str1.length;
-    if (prefixBytes === bytes2.length) return str2.length;
-
-    // UTF-8 safety: if we are in the middle of a multi-byte character,
-    // move back until we find the start of the character (or 0).
-    const wasmBytes = new Uint8Array(memory.buffer, ptr1, bytes1.length);
-    while (prefixBytes > 0 && (wasmBytes[prefixBytes] & 0xC0) === 0x80) {
-        prefixBytes--;
-    }
-
-    const prefixSlice = new Uint8Array(memory.buffer, ptr1, prefixBytes);
-    return textDecoder.decode(prefixSlice).length;
+    return findCommonPrefixLengthWasm(str1, str2) ?? findCommonPrefixJS(str1, str2);
 }
 
 /**
@@ -68,43 +32,7 @@ export function findCommonPrefixLength(str1: string, str2: string): number {
  * Includes safety checks to ensure we don't cut in the middle of a multi-byte UTF-8 character.
  */
 export function findCommonSuffixLength(str1: string, str2: string): number {
-    const exports = getWasmExports();
-    if (!exports) return findCommonSuffixJS(str1, str2);
-
-    const memory = exports.memory;
-    const baseOffset = (exports.__heap_base?.value as number) || 65536;
-
-    const bytes1 = textEncoder.encode(str1);
-    const bytes2 = textEncoder.encode(str2);
-
-    const totalSizeNeeded = baseOffset + bytes1.length + bytes2.length;
-    if (memory.buffer.byteLength < totalSizeNeeded) {
-        const pagesNeeded = Math.ceil((totalSizeNeeded - memory.buffer.byteLength) / 65536);
-        if (pagesNeeded > 0) memory.grow(pagesNeeded);
-    }
-
-    const ptr1 = baseOffset;
-    const ptr2 = baseOffset + bytes1.length;
-
-    new Uint8Array(memory.buffer, ptr1, bytes1.length).set(bytes1);
-    new Uint8Array(memory.buffer, ptr2, bytes2.length).set(bytes2);
-
-    let suffixBytes = exports.findCommonSuffix(ptr1, bytes1.length, ptr2, bytes2.length);
-
-    if (suffixBytes <= 0) return 0;
-    if (suffixBytes === bytes1.length) return str1.length;
-    if (suffixBytes === bytes2.length) return str2.length;
-
-    // UTF-8 safety: ensure we aren't starting the suffix in the middle of a multi-byte character.
-    // We check the first byte of the suffix (bytes1.length - suffixBytes).
-    const suffixStart = bytes1.length - suffixBytes;
-    const wasmBytes = new Uint8Array(memory.buffer, ptr1, bytes1.length);
-    while (suffixBytes > 0 && (wasmBytes[suffixStart] & 0xC0) === 0x80) {
-        suffixBytes--;
-    }
-
-    const suffixSlice = new Uint8Array(memory.buffer, ptr1 + bytes1.length - suffixBytes, suffixBytes);
-    return textDecoder.decode(suffixSlice).length;
+    return findCommonSuffixLengthWasm(str1, str2) ?? findCommonSuffixJS(str1, str2);
 }
 
 // Fallback JS implementations
@@ -196,13 +124,31 @@ export function createSelectionDelta(
     const startColumnDelta = next.startColumn - prev.startColumn;
     const endLineDelta = next.endLineNumber - prev.endLineNumber;
     const endColumnDelta = next.endColumn - prev.endColumn;
+    const selectionStartLineDelta = next.selectionStartLineNumber - prev.selectionStartLineNumber;
+    const selectionStartColumnDelta = next.selectionStartColumn - prev.selectionStartColumn;
+    const positionLineDelta = next.positionLineNumber - prev.positionLineNumber;
+    const positionColumnDelta = next.positionColumn - prev.positionColumn;
 
-    if (startLineDelta === 0 && startColumnDelta === 0 &&
-        endLineDelta === 0 && endColumnDelta === 0) {
+    const delta: SelectionDelta = {};
+
+    if (startLineDelta !== 0) delta.startLineDelta = startLineDelta;
+    if (startColumnDelta !== 0) delta.startColumnDelta = startColumnDelta;
+    if (endLineDelta !== 0) delta.endLineDelta = endLineDelta;
+    if (endColumnDelta !== 0) delta.endColumnDelta = endColumnDelta;
+    if (selectionStartLineDelta !== 0) {
+        delta.selectionStartLineDelta = selectionStartLineDelta;
+    }
+    if (selectionStartColumnDelta !== 0) {
+        delta.selectionStartColumnDelta = selectionStartColumnDelta;
+    }
+    if (positionLineDelta !== 0) delta.positionLineDelta = positionLineDelta;
+    if (positionColumnDelta !== 0) delta.positionColumnDelta = positionColumnDelta;
+
+    if (Object.keys(delta).length === 0) {
         return null;
     }
 
-    return { startLineDelta, startColumnDelta, endLineDelta, endColumnDelta };
+    return delta;
 }
 
 /**
@@ -212,15 +158,20 @@ export function applySelectionDelta(
     base: EditorSelection,
     delta: SelectionDelta
 ): EditorSelection {
+    const selectionStartLineDelta = delta.selectionStartLineDelta ?? delta.startLineDelta ?? 0;
+    const selectionStartColumnDelta = delta.selectionStartColumnDelta ?? delta.startColumnDelta ?? 0;
+    const positionLineDelta = delta.positionLineDelta ?? delta.endLineDelta ?? 0;
+    const positionColumnDelta = delta.positionColumnDelta ?? delta.endColumnDelta ?? 0;
+
     return {
         startLineNumber: base.startLineNumber + (delta.startLineDelta || 0),
         startColumn: base.startColumn + (delta.startColumnDelta || 0),
         endLineNumber: base.endLineNumber + (delta.endLineDelta || 0),
         endColumn: base.endColumn + (delta.endColumnDelta || 0),
-        selectionStartLineNumber: base.selectionStartLineNumber + (delta.startLineDelta || 0),
-        selectionStartColumn: base.selectionStartColumn + (delta.startColumnDelta || 0),
-        positionLineNumber: base.positionLineNumber + (delta.endLineDelta || 0),
-        positionColumn: base.positionColumn + (delta.endColumnDelta || 0),
+        selectionStartLineNumber: base.selectionStartLineNumber + selectionStartLineDelta,
+        selectionStartColumn: base.selectionStartColumn + selectionStartColumnDelta,
+        positionLineNumber: base.positionLineNumber + positionLineDelta,
+        positionColumn: base.positionColumn + positionColumnDelta,
     };
 }
 
@@ -232,7 +183,7 @@ export function applySelectionDelta(
  * Creates a keyframe from a full frame.
  */
 export function createKeyframe(frame: EditorFrame): Keyframe {
-    return { ...frame, isKeyframe: true };
+    return { ...normalizeEditorFrame(frame), isKeyframe: true };
 }
 
 /**
@@ -358,31 +309,43 @@ export function applyFrameDelta(
     base: EditorFrame,
     delta: FrameDelta
 ): EditorFrame {
+    const normalizedBase = normalizeEditorFrame(base);
     const newContent = delta.contentDelta
-        ? applyContentDelta(base.state.content, delta.contentDelta)
-        : base.state.content;
+        ? applyContentDelta(normalizedBase.state.content, delta.contentDelta)
+        : normalizedBase.state.content;
 
     const newPosition = delta.positionDelta
-        ? applyPositionDelta(base.state.position, delta.positionDelta)
-        : base.state.position;
+        ? applyPositionDelta(normalizedBase.state.position, delta.positionDelta)
+        : normalizedBase.state.position;
 
     const newSelection = delta.selectionDelta
-        ? applySelectionDelta(base.state.selection, delta.selectionDelta)
-        : base.state.selection;
+        ? applySelectionDelta(normalizedBase.state.selection, delta.selectionDelta)
+        : normalizedBase.state.selection;
 
-    return {
+    const normalizedPosition = normalizeEditorPosition(newPosition);
+    const normalizedSelection = normalizeEditorSelection(
+        newSelection,
+        normalizedBase.state.selection,
+        normalizedPosition,
+    );
+
+    return normalizeEditorFrame({
         timestamp: delta.timestamp,
         state: {
             content: newContent,
-            position: newPosition,
-            selection: newSelection,
-            viewState: delta.viewState !== undefined ? delta.viewState : base.state.viewState,
-            mouseCursor: delta.mouseCursor !== undefined ? delta.mouseCursor : base.state.mouseCursor,
-            slideState: delta.slideState !== undefined ? delta.slideState : base.state.slideState,
-            currentSlideIndex: delta.currentSlideIndex !== undefined ? delta.currentSlideIndex : base.state.currentSlideIndex,
-            previewState: delta.previewState !== undefined ? delta.previewState : base.state.previewState,
+            position: normalizedPosition,
+            selection: normalizedSelection,
+            viewState: normalizeEditorViewState(
+                delta.viewState !== undefined ? delta.viewState : normalizedBase.state.viewState,
+                normalizedSelection,
+                normalizedPosition,
+            ),
+            mouseCursor: delta.mouseCursor !== undefined ? delta.mouseCursor : normalizedBase.state.mouseCursor,
+            slideState: delta.slideState !== undefined ? delta.slideState : normalizedBase.state.slideState,
+            currentSlideIndex: delta.currentSlideIndex !== undefined ? delta.currentSlideIndex : normalizedBase.state.currentSlideIndex,
+            previewState: delta.previewState !== undefined ? delta.previewState : normalizedBase.state.previewState,
         },
-    };
+    });
 }
 
 // ============================================================================

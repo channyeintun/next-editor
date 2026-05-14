@@ -3,6 +3,12 @@ import { superjson } from "./SuperJsonConfig";
 import { deflate, inflate } from "pako";
 import { type AudioPlaceholder } from "../core/src/types";
 import { encodeBase64, decodeBase64 } from "../core/src/utils/base64";
+import { normalizeRecordingData } from "../core/src/utils/editorState";
+import {
+  createIndexedDBRecordingStore,
+  type StoredRecordingEntry,
+  type StoredRecordingMetadata,
+} from "./IndexedDBRecordingStore";
 
 interface StorageStats {
   count: number;
@@ -13,17 +19,17 @@ interface StorageStats {
 
 /**
  * JSON Storage Interface for use-next-editor
- * Provides export/import functionality for recordings as JSON files with compression
+ * Provides IndexedDB persistence plus export/import support for recordings.
  */
 export class JsonStorage {
-  private localStorageKey = "next-editor-recordings";
+  private indexedDBStore = createIndexedDBRecordingStore();
 
   /**
    * Normalize supported recording versions while preserving legacy version 2 files.
    */
   private normalizeRecording(recording: Recording): Recording {
     if (recording.version === 2 || recording.version === 3) {
-      return recording;
+      return normalizeRecordingData(recording);
     }
 
     throw new Error(
@@ -32,27 +38,9 @@ export class JsonStorage {
   }
 
   /**
-   * Extract audio data from all recordings (helper for stats)
-   */
-  private async extractAllAudioData(
-    recordings: Recording[],
-  ): Promise<{ recordingsWithPlaceholders: Recording[] }> {
-    const recordingsWithPlaceholders = await Promise.all(
-      recordings.map(async (recording) => {
-        const { recordingWithPlaceholders } =
-          await this.extractAudioData(recording);
-        return recordingWithPlaceholders;
-      }),
-    );
-    return { recordingsWithPlaceholders };
-  }
-
-  /**
    * Extract audio blobs from recording and replace with placeholders
    */
-  private async extractAudioData(
-    recording: Recording,
-  ): Promise<{
+  private async extractAudioData(recording: Recording): Promise<{
     recordingWithPlaceholders: Recording;
     audioData: Uint8Array | null;
   }> {
@@ -247,22 +235,96 @@ export class JsonStorage {
     return decodeBase64(base64Data);
   }
 
+  private formatSize(bytes: number): string {
+    const units = ["B", "KB", "MB", "GB"];
+    let size = bytes;
+    let unitIndex = 0;
+
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+
+    return `${size.toFixed(1)} ${units[unitIndex]}`;
+  }
+
+  private hasAudioPayload(recording: Recording): boolean {
+    const audioBlob = recording.audioBlob;
+
+    if (audioBlob instanceof Blob) {
+      return audioBlob.size > 0;
+    }
+
+    return (
+      !!audioBlob &&
+      typeof audioBlob === "object" &&
+      "__audio_size" in audioBlob &&
+      typeof audioBlob.__audio_size === "number" &&
+      audioBlob.__audio_size > 0
+    );
+  }
+
+  private createStoredMetadata(
+    recording: Recording,
+    payloadSize: number,
+  ): StoredRecordingMetadata {
+    return {
+      id: recording.id,
+      name: recording.name,
+      version: recording.version,
+      duration: recording.duration,
+      createdAt: recording.createdAt,
+      updatedAt: Date.now(),
+      hasAudio: this.hasAudioPayload(recording),
+      payloadSize,
+    };
+  }
+
+  private async createStoredEntry(
+    recording: Recording,
+  ): Promise<StoredRecordingEntry> {
+    const normalizedRecording = this.normalizeRecording(recording);
+    const binaryData = await this.compressRecordingsToBinary([
+      normalizedRecording,
+    ]);
+
+    return {
+      metadata: this.createStoredMetadata(
+        normalizedRecording,
+        binaryData.byteLength,
+      ),
+      binaryData,
+    };
+  }
+
+  private async decodeStoredEntry(
+    entry: StoredRecordingEntry,
+  ): Promise<Recording> {
+    const recordings = await this.decompressBinaryToRecordings(
+      entry.binaryData,
+    );
+
+    if (recordings.length !== 1) {
+      throw new Error(
+        `Expected one recording payload for ${entry.metadata.id}, received ${recordings.length}`,
+      );
+    }
+
+    return this.normalizeRecording(recordings[0]);
+  }
+
+  private async loadIndexedDBRecordings(): Promise<Recording[]> {
+    const entries = await this.indexedDBStore.getAllEntries();
+    return Promise.all(entries.map((entry) => this.decodeStoredEntry(entry)));
+  }
+
   /**
-   * Save recording to localStorage using new binary format (JSON + audio concatenation)
+   * Save a recording as an individual IndexedDB entry.
    */
   async save(recording: Recording): Promise<void> {
     try {
-      const existingRecordings = await this.load();
-      const updatedRecordings = [
-        ...existingRecordings.filter((r) => r.id !== recording.id),
-        recording,
-      ];
-
-      // Use new binary format that separates JSON and audio data
-      const binaryData =
-        await this.compressRecordingsToBinary(updatedRecordings);
-      const base64Data = this.binaryToBase64(binaryData);
-      localStorage.setItem(this.localStorageKey, base64Data);
+      const entry = await this.createStoredEntry(recording);
+      await this.indexedDBStore.put(entry);
     } catch (error) {
       console.error("JsonStorage: Failed to save recording:", error);
       throw new Error(
@@ -272,33 +334,27 @@ export class JsonStorage {
   }
 
   /**
-   * Load all recordings from localStorage using SuperJSON with decompression
+   * Load all recordings from IndexedDB.
    */
   async load(): Promise<Recording[]> {
     try {
-      const stored = localStorage.getItem(this.localStorageKey);
-      if (!stored) return [];
+      if (!(await this.indexedDBStore.hasEntries())) {
+        return [];
+      }
 
-      const binaryData = this.base64ToBinary(stored);
-      return await this.decompressBinaryToRecordings(binaryData);
+      return await this.loadIndexedDBRecordings();
     } catch (error) {
-      console.error("Failed to load recordings from localStorage:", error);
+      console.error("Failed to load recordings from IndexedDB:", error);
       return [];
     }
   }
 
   /**
-   * Delete recording from localStorage using SuperJSON with compression
+   * Delete one recording without rebuilding the entire archive.
    */
   async delete(id: string): Promise<void> {
     try {
-      const recordings = await this.load();
-      const filtered = recordings.filter((r) => r.id !== id);
-
-      // Save using new binary format
-      const binaryData = await this.compressRecordingsToBinary(filtered);
-      const base64Data = this.binaryToBase64(binaryData);
-      localStorage.setItem(this.localStorageKey, base64Data);
+      await this.indexedDBStore.delete(id);
     } catch (error) {
       throw new Error(
         `Failed to delete recording: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -440,19 +496,41 @@ export class JsonStorage {
   }
 
   /**
-   * Clear all recordings from localStorage
+   * Clear all recordings from IndexedDB.
    */
   async clear(): Promise<void> {
-    localStorage.removeItem(this.localStorageKey);
+    await this.indexedDBStore.clear();
   }
 
   /**
-   * Get storage statistics using SuperJSON with compression info
+   * Get storage statistics from IndexedDB metadata.
    */
   async getStats(): Promise<StorageStats> {
-    const recordings = await this.load();
+    try {
+      const storedMetadata = await this.indexedDBStore.listMetadata();
 
-    if (recordings.length === 0) {
+      if (storedMetadata.length === 0) {
+        return {
+          count: 0,
+          totalSize: "0 B",
+          compressedSize: "0 B",
+          compressionRatio: "0%",
+        };
+      }
+
+      const totalCompressedSize = storedMetadata.reduce(
+        (total, metadata) => total + metadata.payloadSize,
+        0,
+      );
+
+      return {
+        count: storedMetadata.length,
+        totalSize: this.formatSize(totalCompressedSize),
+        compressedSize: this.formatSize(totalCompressedSize),
+        compressionRatio: "N/A",
+      };
+    } catch (error) {
+      console.error("Failed to read recording stats from IndexedDB:", error);
       return {
         count: 0,
         totalSize: "0 B",
@@ -460,53 +538,6 @@ export class JsonStorage {
         compressionRatio: "0%",
       };
     }
-
-    // Get actual compressed size from localStorage
-    const stored = localStorage.getItem(this.localStorageKey);
-    const actualCompressedSize = stored ? new Blob([stored]).size : 0;
-
-    // Calculate what the size would be without compression
-    // (simulate old base64 + JSON format for fair comparison)
-    const { recordingsWithPlaceholders } =
-      await this.extractAllAudioData(recordings);
-    const jsonString = superjson.stringify(recordingsWithPlaceholders);
-    const jsonSize = new Blob([jsonString]).size;
-    const audioSize = recordings.reduce((total, recording) => {
-      const blob = recording.audioBlob;
-      return total + (blob instanceof Blob ? blob.size : 0);
-    }, 0);
-
-    // Simulate old format: JSON + base64 audio (33% overhead) + base64 storage (33% overhead)
-    const simulatedOldFormatSize = Math.round(
-      (jsonSize + audioSize * 1.33) * 1.33,
-    );
-
-    // Convert to human-readable format
-    const formatSize = (bytes: number): string => {
-      const units = ["B", "KB", "MB", "GB"];
-      let size = bytes;
-      let unitIndex = 0;
-
-      while (size >= 1024 && unitIndex < units.length - 1) {
-        size /= 1024;
-        unitIndex++;
-      }
-
-      return `${size.toFixed(1)} ${units[unitIndex]}`;
-    };
-
-    const compressedSize = formatSize(actualCompressedSize);
-    const compressionRatio =
-      simulatedOldFormatSize > 0
-        ? `${((1 - actualCompressedSize / simulatedOldFormatSize) * 100).toFixed(1)}%`
-        : "0%";
-
-    return {
-      count: recordings.length,
-      totalSize: compressedSize, // Show compressed size as the main size
-      compressedSize,
-      compressionRatio,
-    };
   }
 }
 

@@ -36,6 +36,10 @@ export interface SelectionDelta {
   startColumnDelta?: number;
   endLineDelta?: number;
   endColumnDelta?: number;
+  selectionStartLineDelta?: number;
+  selectionStartColumnDelta?: number;
+  positionLineDelta?: number;
+  positionColumnDelta?: number;
 }
 
 /**

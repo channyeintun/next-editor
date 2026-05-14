@@ -42,6 +42,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     workspaceStoreRef.current.trigger.setPreviewFilePath({ path });
   }, []);
 
+  const setCollapsedFolders = useCallback((paths: string[]) => {
+    workspaceStoreRef.current.trigger.setCollapsedFolders({ paths });
+  }, []);
+
   const createFile = useCallback((path: string, content = "") => {
     workspaceStoreRef.current.trigger.createFile({ path, content });
   }, []);
@@ -114,7 +118,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   }, []);
 
   const loadProject = useCallback(
-    (project: WorkspaceProject, nextActiveFilePath?: string) => {
+    (
+      project: WorkspaceProject,
+      nextActiveFilePath?: string,
+      collapsedFolders?: string[],
+    ) => {
       const normalizedProject = normalizeProject(project);
       const normalizedNextActiveFilePath = normalizeWorkspacePath(
         nextActiveFilePath ?? "",
@@ -125,13 +133,16 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         ? normalizedNextActiveFilePath
         : normalizedProject.entryFilePath;
 
+      const savedSnapshot = cloneWorkspaceSnapshot({
+        activeFilePath: resolvedActiveFilePath,
+        project: normalizedProject,
+      });
+
       workspaceStoreRef.current.trigger.loadProject({
         project: normalizedProject,
         activeFilePath: resolvedActiveFilePath,
-        savedSnapshot: {
-          activeFilePath: resolvedActiveFilePath,
-          project: structuredClone(normalizedProject),
-        },
+        collapsedFolders,
+        savedSnapshot,
       });
     },
     [],
@@ -157,6 +168,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     return workspaceStoreRef.current.getSnapshot().context.activeFilePath;
   }, []);
 
+  const getCollapsedFolders = useCallback(() => {
+    return workspaceStoreRef.current.getSnapshot().context.collapsedFolders;
+  }, []);
+
   const getFile = useCallback((path: string) => {
     return (
       workspaceStoreRef.current.getSnapshot().context.project.files[
@@ -173,6 +188,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     () => ({
       setActiveFilePath,
       setPreviewFilePath,
+      setCollapsedFolders,
       createNewEditor,
       createFile,
       createFolder,
@@ -188,6 +204,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       updateLessonType,
       getProject,
       getActiveFilePath,
+      getCollapsedFolders,
       getFile,
       listFiles,
     }),
@@ -198,6 +215,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       deleteFolder,
       deleteFile,
       getActiveFilePath,
+      getCollapsedFolders,
       getFile,
       getProject,
       listFiles,
@@ -207,6 +225,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       resetProject,
       saveProject,
       setActiveFilePath,
+      setCollapsedFolders,
       setPreviewFilePath,
       updateLessonType,
       updateActiveFileContent,

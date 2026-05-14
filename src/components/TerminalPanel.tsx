@@ -8,6 +8,7 @@ import {
   SquareTerminal,
   TerminalSquare,
 } from "lucide-react";
+import { useNextEditorDomainAdapters } from "../contexts/NextEditorDomainAdaptersContext";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
   useWebContainerRuntimeActions,
@@ -128,11 +129,8 @@ const TerminalPanel = memo(function TerminalPanel() {
   const [consoleLines, setConsoleLines] = useState<string[]>([
     "[runner] Runtime dock is ready.",
   ]);
-  const {
-    handleRuntimeEvent,
-    registerRuntimeStateApplier,
-    registerRuntimeStateGetter,
-  } = useNextEditorActions();
+  const { handleRuntimeEvent } = useNextEditorActions();
+  const { runtimePanel } = useNextEditorDomainAdapters();
   const {
     rerunRunner,
     resizeTerminal,
@@ -181,22 +179,26 @@ const TerminalPanel = memo(function TerminalPanel() {
   const terminalViewportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    registerRuntimeStateGetter(() => ({
+    runtimePanel.setSnapshotGetter(() => ({
       activeTab,
       isCollapsed,
       isSettingsOpen,
       consoleLines,
     }));
+
+    return () => {
+      runtimePanel.setSnapshotGetter(() => null);
+    };
   }, [
     activeTab,
     consoleLines,
     isCollapsed,
     isSettingsOpen,
-    registerRuntimeStateGetter,
+    runtimePanel,
   ]);
 
   useEffect(() => {
-    registerRuntimeStateApplier((snapshot) => {
+    runtimePanel.setSnapshotApplier((snapshot) => {
       setPlaybackRuntimeSnapshot(snapshot);
       setActiveTab(snapshot.activeTab ?? "runner");
       setIsCollapsed(snapshot.isCollapsed ?? false);
@@ -207,7 +209,11 @@ const TerminalPanel = memo(function TerminalPanel() {
           : ["[runner] Runtime dock is ready."],
       );
     });
-  }, [registerRuntimeStateApplier]);
+
+    return () => {
+      runtimePanel.setSnapshotApplier((_snapshot) => undefined);
+    };
+  }, [runtimePanel]);
 
   useEffect(() => {
     if (!currentRecording) {

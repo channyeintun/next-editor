@@ -23,7 +23,7 @@ interface SlidePreviewProps {
   isMaximized?: boolean;
   verticalIndex?: number;
   currentInteraction?: import('../types/slides').IframeInteractionEvent;
-  registerSlideNavigator?: (navigator: (indexh: number, indexv: number) => void) => void;
+  setSlideNavigator?: (navigator: (indexh: number, indexv: number) => void) => void;
   positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
 }
 
@@ -37,7 +37,7 @@ const SlidePreview = memo(function SlidePreview({
   isMaximized = false,
   verticalIndex = 0,
   currentInteraction,
-  registerSlideNavigator,
+  setSlideNavigator,
   positioning = 'fixed'
 }: SlidePreviewProps) {
   const { isPlaying } = useNextEditorMetadata();
@@ -308,7 +308,7 @@ const SlidePreview = memo(function SlidePreview({
             currentInteraction={currentInteraction}
             onSlideChange={handleSlideChangeFromReveal}
             isNavigationEnabled={size !== 'small' && !isPlaying}
-            registerSlideNavigator={registerSlideNavigator}
+            setSlideNavigator={setSlideNavigator}
           />
 
           {/* Keyboard navigation hint */}

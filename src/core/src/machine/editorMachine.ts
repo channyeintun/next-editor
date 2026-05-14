@@ -36,13 +36,33 @@ import {
   applySelectionDiff,
   areSelectionsEqual,
 } from "../utils/editorDiff";
+import {
+  normalizeEditorFrame,
+  normalizeEditorPosition,
+  normalizeEditorSelection,
+  normalizeEditorViewState,
+  normalizeRecordingData,
+} from "../utils/editorState";
 import { isValidFrameState, isEditorReady } from "../utils/validation";
 import { calculateDurationFromFileReader } from "../utils/audioDuration";
 import {
   arePreviewSizesEqual,
-  areRuntimeRecordingSnapshotsEqual,
   areStructuredDataEqual,
 } from "../../../utils/equality";
+import {
+  getPreviewReplayResult,
+  getRuntimeReplayResult,
+  getSlideReplayResult,
+  getWorkspaceReplayResult,
+  isSeekReplayEvent,
+  resolveReplayTime,
+} from "./replayState";
+import {
+  appendPreviewRecordingEvent,
+  appendRuntimeRecordingEvent,
+  appendSlideRecordingEvent,
+  appendWorkspaceRecordingEvent,
+} from "./recordingSession";
 
 // ============================================================================
 // Helper Functions
@@ -61,40 +81,44 @@ const applyFrameState = (
   if (!frame.state || !isEditorReady(editor)) return decorationsCollection;
 
   let collection = decorationsCollection;
+  const normalizedFrame = normalizeEditorFrame(frame);
 
   try {
     // Apply content changes
-    applyContentDiff(editor, frame.state.content, previousFrame?.state.content);
-
-    // Apply position and selection
-    applyPositionDiff(
+    applyContentDiff(
       editor,
-      frame.state.position,
-      previousFrame?.state.position,
-    );
-    applySelectionDiff(
-      editor,
-      frame.state.selection,
-      previousFrame?.state.selection,
+      normalizedFrame.state.content,
+      previousFrame?.state.content,
     );
 
     const viewStateChanged =
-      !!frame.state.viewState &&
+      !!normalizedFrame.state.viewState &&
       (!previousFrame ||
         !areStructuredDataEqual(
-          frame.state.viewState,
+          normalizedFrame.state.viewState,
           previousFrame.state.viewState,
         ));
 
-    // Restore view state before syncing the playback cursor decoration so the
-    // custom cursor matches Monaco's final caret position for this frame.
+    // Restore scroll/layout first, then explicitly reapply selection so
+    // Monaco cursorState inside viewState cannot override the recorded caret.
     if (viewStateChanged) {
       try {
-        editor.restoreViewState(frame.state.viewState);
+        editor.restoreViewState(normalizedFrame.state.viewState);
       } catch (err) {
         console.error("Failed to restore view state:", err);
       }
     }
+
+    applyPositionDiff(
+      editor,
+      normalizedFrame.state.position,
+      editor.getPosition(),
+    );
+    applySelectionDiff(
+      editor,
+      normalizedFrame.state.selection,
+      editor.getSelection(),
+    );
 
     // Add cursor decorations during playback only when Monaco's own caret is
     // not visible. This avoids duplicate carets and preserves native
@@ -167,9 +191,17 @@ const createFrame = (
   getPreviewState?: EditorMachineInput["getPreviewState"],
 ): EditorFrame => {
   const content = editor.getValue();
-  const selection = editor.getSelection();
-  const position = editor.getPosition();
-  const viewState = editor.saveViewState();
+  const position = normalizeEditorPosition(editor.getPosition());
+  const selection = normalizeEditorSelection(
+    editor.getSelection(),
+    undefined,
+    position,
+  );
+  const viewState = normalizeEditorViewState(
+    editor.saveViewState(),
+    selection,
+    position,
+  );
   const slideState = getSlideState?.();
   const previewState = getPreviewState?.();
 
@@ -177,17 +209,8 @@ const createFrame = (
     timestamp,
     state: {
       content,
-      selection: selection || {
-        startLineNumber: 1,
-        startColumn: 1,
-        endLineNumber: 1,
-        endColumn: 1,
-        selectionStartLineNumber: 1,
-        selectionStartColumn: 1,
-        positionLineNumber: 1,
-        positionColumn: 1,
-      },
-      position: position || { lineNumber: 1, column: 1 },
+      selection,
+      position,
       viewState,
       mouseCursor,
       slideState: slideState?.previewState,
@@ -221,6 +244,41 @@ const getLoadedRecordingPayload = (
 
   return null;
 };
+
+const APPLY_REPLAY_STATE_ACTIONS = [
+  "applyWorkspaceEventsAtTime",
+  "applyRuntimeEventsAtTime",
+  "applyFrameAtTime",
+  "applyPreviewEventsAtTime",
+  "applySlideEventsAtTime",
+] as const;
+
+const APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS = [
+  ...APPLY_REPLAY_STATE_ACTIONS,
+  "storeRecordedFrameAtPause",
+] as const;
+
+const APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS = [
+  "setEditorRef",
+  "clearPendingPlaybackEditorSync",
+  "invalidateRenderedPlaybackState",
+  ...APPLY_REPLAY_STATE_ACTIONS,
+] as const;
+
+const SET_EDITOR_REF_ACTIONS = [
+  "setEditorRef",
+  "invalidateRenderedPlaybackState",
+] as const;
+
+const REATTACH_AND_APPLY_REPLAY_STATE_ACTIONS = [
+  "reattachPlaybackWorkspace",
+  ...APPLY_REPLAY_STATE_ACTIONS,
+] as const;
+
+const RESET_AND_REATTACH_REPLAY_STATE_ACTIONS = [
+  "resetPlayback",
+  ...REATTACH_AND_APPLY_REPLAY_STATE_ACTIONS,
+] as const;
 
 /**
  * Find the appropriate frame for a given timestamp (optimized)
@@ -442,7 +500,10 @@ export const editorMachine = setup({
     shouldSyncPlaybackEditorRef: ({ context, event }) =>
       event.type === "SET_EDITOR_REF" &&
       event.editor !== null &&
-      context.pendingPlaybackEditorSync,
+      !context.hasManualWorkspaceOverride &&
+      (context.pendingPlaybackEditorSync ||
+        context.currentFrame !== null ||
+        context.lastAppliedFrameIndex >= 0),
     isValidSeekTime: ({ context, event }) => {
       if (event.type !== "SEEK") return false;
       return event.time >= 0 && event.time <= context.timeline.duration;
@@ -593,7 +654,10 @@ export const editorMachine = setup({
     }),
 
     capturePreviewRefreshFrame: assign(({ context, event }) => {
-      if (event.type !== "PREVIEW_EVENT" || event.event.type !== "preview_refresh") {
+      if (
+        event.type !== "PREVIEW_EVENT" ||
+        event.event.type !== "preview_refresh"
+      ) {
         return {};
       }
 
@@ -677,7 +741,8 @@ export const editorMachine = setup({
       const loaded = getLoadedRecordingPayload(context, event);
       if (!loaded) return {};
 
-      const { recording, duration } = loaded;
+      const recording = normalizeRecordingData(loaded.recording);
+      const { duration } = loaded;
 
       const initialWorkspaceEvent = recording.workspaceEvents?.[0];
       const initialRuntimeEvent = recording.runtimeEvents?.[0];
@@ -712,10 +777,7 @@ export const editorMachine = setup({
 
       if (initialRuntimeEvent && context.applyRuntimeSnapshot) {
         context.applyRuntimeSnapshot(initialRuntimeEvent.snapshot);
-      } else if (
-        recording.runtimeSnapshot &&
-        context.applyRuntimeSnapshot
-      ) {
+      } else if (recording.runtimeSnapshot && context.applyRuntimeSnapshot) {
         context.applyRuntimeSnapshot(recording.runtimeSnapshot);
       }
 
@@ -860,9 +922,8 @@ export const editorMachine = setup({
           !currentState ||
           !arePreviewSizesEqual(nextState.size, currentState.size) ||
           nextState.content !== currentState.content ||
-          Math.abs(
-            (nextState.scrollTop || 0) - (currentState.scrollTop || 0),
-          ) > 1 ||
+          Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) >
+            1 ||
           Math.abs(
             (nextState.scrollLeft || 0) - (currentState.scrollLeft || 0),
           ) > 1
@@ -947,17 +1008,18 @@ export const editorMachine = setup({
 
       // Force restore the exact recorded frame by setting all state directly
       try {
+        const normalizedFrame = normalizeEditorFrame(recordedFrameAtPause);
         const model = editorRefs.editor.getModel();
         if (model) {
-          model.setValue(recordedFrameAtPause.state.content);
+          model.setValue(normalizedFrame.state.content);
         }
-        editorRefs.editor.setPosition(recordedFrameAtPause.state.position);
-        editorRefs.editor.setSelection(recordedFrameAtPause.state.selection);
-        if (recordedFrameAtPause.state.viewState) {
+        if (normalizedFrame.state.viewState) {
           editorRefs.editor.restoreViewState(
-            recordedFrameAtPause.state.viewState,
+            normalizedFrame.state.viewState,
           );
         }
+        editorRefs.editor.setPosition(normalizedFrame.state.position);
+        editorRefs.editor.setSelection(normalizedFrame.state.selection);
       } catch (error) {
         console.error("Error restoring recorded frame from pause:", error);
       }
@@ -1086,74 +1148,25 @@ export const editorMachine = setup({
         return {};
       }
 
-      const previewEvents = recording.previewEvents;
-      const currentTime =
-        event.type === "TICK"
-          ? event.currentTime
-          : event.type === "SEEK"
-            ? event.time
-            : context.timeline.currentTime;
-      const isSeeking = event.type === "SEEK";
-      let newLastIndex = isSeeking ? -1 : lastAppliedPreviewEventIndex;
-      let nextAppliedPreviewState = isSeeking
-        ? undefined
-        : context.lastAppliedPreviewState;
+      const replayResult = getPreviewReplayResult({
+        previewEvents: recording.previewEvents,
+        currentTime: resolveReplayTime(event, context.timeline.currentTime),
+        lastAppliedIndex: lastAppliedPreviewEventIndex,
+        lastAppliedState: context.lastAppliedPreviewState,
+        isSeeking: isSeekReplayEvent(event),
+      });
 
-      // If we've jumped backwards, reset the index to re-scan from the beginning
-      if (newLastIndex >= 0 && newLastIndex < previewEvents.length) {
-        if (previewEvents[newLastIndex].timestamp > currentTime) {
-          newLastIndex = -1;
-          nextAppliedPreviewState = undefined;
-        }
-      }
-
-      // Preview events are partial patches, not complete snapshots.
-      // Merge them onto the last applied preview state so file switches
-      // and other workspace events do not fall back to the live active file.
-      for (let i = newLastIndex + 1; i < previewEvents.length; i++) {
-        const previewEvent = previewEvents[i];
-        if (previewEvent.timestamp <= currentTime) {
-          const nextState = {
-            size: previewEvent.size ?? nextAppliedPreviewState?.size ?? "small",
-            content: previewEvent.content ?? nextAppliedPreviewState?.content,
-            scrollTop:
-              previewEvent.scrollTop ?? nextAppliedPreviewState?.scrollTop,
-            scrollLeft:
-              previewEvent.scrollLeft ?? nextAppliedPreviewState?.scrollLeft,
-            refreshKey:
-              previewEvent.type === "preview_refresh"
-                ? previewEvent.timestamp
-                : nextAppliedPreviewState?.refreshKey,
-            currentInteraction: isSeeking ? undefined : previewEvent.interaction,
-          };
-
-          if (!isSeeking) {
-            applyPreviewState(nextState);
-          }
-
-          nextAppliedPreviewState = {
-            ...nextState,
-            currentInteraction: undefined,
-          };
-          newLastIndex = i;
-        } else {
-          // Events are sorted by timestamp, so stop here
-          break;
-        }
-      }
-
-      // If we were seeking, apply only the final merged state once.
-      if (isSeeking && nextAppliedPreviewState) {
-        applyPreviewState(nextAppliedPreviewState);
-      }
+      replayResult.appliedStates.forEach((previewState) => {
+        applyPreviewState(previewState);
+      });
 
       if (
-        newLastIndex !== lastAppliedPreviewEventIndex ||
-        nextAppliedPreviewState !== context.lastAppliedPreviewState
+        replayResult.nextIndex !== lastAppliedPreviewEventIndex ||
+        replayResult.retainedState !== context.lastAppliedPreviewState
       ) {
         return {
-          lastAppliedPreviewEventIndex: newLastIndex,
-          lastAppliedPreviewState: nextAppliedPreviewState,
+          lastAppliedPreviewEventIndex: replayResult.nextIndex,
+          lastAppliedPreviewState: replayResult.retainedState,
         };
       }
 
@@ -1175,63 +1188,25 @@ export const editorMachine = setup({
         return {};
       }
 
-      const workspaceEvents = recording.workspaceEvents;
-      const currentTime =
-        event.type === "TICK"
-          ? event.currentTime
-          : event.type === "SEEK"
-            ? event.time
-            : context.timeline.currentTime;
-      let newLastIndex = lastAppliedWorkspaceEventIndex;
+      const replayResult = getWorkspaceReplayResult({
+        workspaceEvents: recording.workspaceEvents,
+        currentTime: resolveReplayTime(event, context.timeline.currentTime),
+        currentSnapshot: context.getWorkspaceSnapshot?.() ?? null,
+        lastAppliedIndex: lastAppliedWorkspaceEventIndex,
+      });
 
-      if (newLastIndex >= 0 && newLastIndex < workspaceEvents.length) {
-        if (workspaceEvents[newLastIndex].timestamp > currentTime) {
-          newLastIndex = -1;
-        }
-      }
-
-      let latestWorkspaceEvent =
-        newLastIndex >= 0 ? workspaceEvents[newLastIndex] : null;
-
-      for (let i = newLastIndex + 1; i < workspaceEvents.length; i++) {
-        const workspaceEvent = workspaceEvents[i];
-        if (workspaceEvent.timestamp <= currentTime) {
-          latestWorkspaceEvent = workspaceEvent;
-          newLastIndex = i;
-        } else {
-          break;
-        }
-      }
-
-      if (
-        latestWorkspaceEvent &&
-        newLastIndex !== lastAppliedWorkspaceEventIndex
-      ) {
-        const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
-
-        if (
-          currentWorkspaceSnapshot &&
-          areWorkspaceSnapshotsEqual(
-            currentWorkspaceSnapshot,
-            latestWorkspaceEvent.snapshot,
-          )
-        ) {
-          return {
-            lastAppliedWorkspaceEventIndex: newLastIndex,
-          };
-        }
-
-        applyWorkspaceSnapshot(latestWorkspaceEvent.snapshot);
+      if (replayResult.snapshotToApply) {
+        applyWorkspaceSnapshot(replayResult.snapshotToApply);
         return {
-          lastAppliedWorkspaceEventIndex: newLastIndex,
+          lastAppliedWorkspaceEventIndex: replayResult.nextIndex,
           currentFrame: null,
           lastAppliedFrameIndex: -1,
           lastAppliedSlideEventIndex: -1,
         };
       }
 
-      if (newLastIndex !== lastAppliedWorkspaceEventIndex) {
-        return { lastAppliedWorkspaceEventIndex: newLastIndex };
+      if (replayResult.nextIndex !== lastAppliedWorkspaceEventIndex) {
+        return { lastAppliedWorkspaceEventIndex: replayResult.nextIndex };
       }
 
       return {};
@@ -1244,41 +1219,19 @@ export const editorMachine = setup({
         return {};
       }
 
-      const runtimeEvents = recording.runtimeEvents;
-      const currentTime =
-        event.type === "TICK"
-          ? event.currentTime
-          : event.type === "SEEK"
-            ? event.time
-            : context.timeline.currentTime;
-      let newLastIndex = lastAppliedRuntimeEventIndex;
+      const replayResult = getRuntimeReplayResult({
+        runtimeEvents: recording.runtimeEvents,
+        currentTime: resolveReplayTime(event, context.timeline.currentTime),
+        lastAppliedIndex: lastAppliedRuntimeEventIndex,
+      });
 
-      if (newLastIndex >= 0 && newLastIndex < runtimeEvents.length) {
-        if (runtimeEvents[newLastIndex].timestamp > currentTime) {
-          newLastIndex = -1;
-        }
+      if (replayResult.snapshotToApply) {
+        applyRuntimeSnapshot(replayResult.snapshotToApply);
+        return { lastAppliedRuntimeEventIndex: replayResult.nextIndex };
       }
 
-      let latestRuntimeEvent =
-        newLastIndex >= 0 ? runtimeEvents[newLastIndex] : null;
-
-      for (let i = newLastIndex + 1; i < runtimeEvents.length; i++) {
-        const runtimeEvent = runtimeEvents[i];
-        if (runtimeEvent.timestamp <= currentTime) {
-          latestRuntimeEvent = runtimeEvent;
-          newLastIndex = i;
-        } else {
-          break;
-        }
-      }
-
-      if (latestRuntimeEvent && newLastIndex !== lastAppliedRuntimeEventIndex) {
-        applyRuntimeSnapshot(latestRuntimeEvent.snapshot);
-        return { lastAppliedRuntimeEventIndex: newLastIndex };
-      }
-
-      if (newLastIndex !== lastAppliedRuntimeEventIndex) {
-        return { lastAppliedRuntimeEventIndex: newLastIndex };
+      if (replayResult.nextIndex !== lastAppliedRuntimeEventIndex) {
+        return { lastAppliedRuntimeEventIndex: replayResult.nextIndex };
       }
 
       return {};
@@ -1291,136 +1244,21 @@ export const editorMachine = setup({
         return {};
       }
 
-      const slideEvents = recording.slideEvents;
-      const currentTime =
-        event.type === "TICK"
-          ? event.currentTime
-          : event.type === "SEEK"
-            ? event.time
-            : context.timeline.currentTime;
-      let newLastIndex = lastAppliedSlideEventIndex;
-      const isSeeking = event.type === "SEEK";
+      const replayResult = getSlideReplayResult({
+        slideEvents: recording.slideEvents,
+        slides: recording.slides,
+        currentTime: resolveReplayTime(event, context.timeline.currentTime),
+        lastAppliedIndex: lastAppliedSlideEventIndex,
+        isSeeking: isSeekReplayEvent(event),
+      });
 
-      // If we've jumped backwards, reset the index to re-scan from the beginning
-      if (newLastIndex >= 0 && newLastIndex < slideEvents.length) {
-        if (slideEvents[newLastIndex].timestamp > currentTime) {
-          newLastIndex = -1;
-        }
-      }
+      replayResult.applications.forEach((application) => {
+        applySlideState(application.slideState, application.slideIndex);
+      });
 
-      let lastSlideEvent = null;
-
-      // Find and apply all events that should have happened by now
-      for (let i = newLastIndex + 1; i < slideEvents.length; i++) {
-        const slideEvent = slideEvents[i];
-        if (slideEvent.timestamp <= currentTime) {
-          if (isSeeking) {
-            // When seeking, just keep track of the last event to apply once at the end
-            lastSlideEvent = slideEvent;
-          } else {
-            // Normal playback: apply events sequentially
-            const slideIndex =
-              recording.slides?.findIndex((s) => s.id === slideEvent.slideId) ??
-              -1;
-            if (slideIndex !== -1 || slideEvent.type === "slide_close") {
-              let slideState;
-
-              if (slideEvent.type === "slide_close") {
-                slideState = {
-                  isOpen: false,
-                  currentSlideId: null,
-                  indexv: 0,
-                  currentInteraction: undefined,
-                };
-              } else {
-                // Full derivation for all other events (open, change, interaction, maximize, minimize)
-                const relevantEvents = slideEvents.slice(0, i + 1).reverse();
-
-                // Find the most recent navigation event that defines the current location
-                const lastNav = relevantEvents.find((e) =>
-                  ["slide_open", "slide_change", "slide_close"].includes(
-                    e.type,
-                  ),
-                );
-
-                // Find the most recent state-defining event to preserve structural state (maximize, etc.)
-                const lastStructural = relevantEvents.find((e) =>
-                  ["slide_maximize", "slide_minimize"].includes(e.type),
-                );
-
-                // Most important: always look for the LAST KNOWN indexv for THIS slide
-                // if the current event doesn't have it (e.g. structural change or back-navigation without indexv)
-                const targetSlideId = slideEvent.slideId || lastNav?.slideId;
-                const lastWithIndexv = relevantEvents.find(
-                  (e) =>
-                    (targetSlideId ? e.slideId === targetSlideId : true) &&
-                    e.indexv !== undefined &&
-                    e.indexv !== null,
-                );
-
-                slideState = {
-                  isOpen: (lastNav?.type || slideEvent.type) !== "slide_close",
-                  isMaximized: lastStructural
-                    ? lastStructural.type === "slide_maximize"
-                    : (slideEvent.isMaximized ?? lastNav?.isMaximized ?? false),
-                  currentSlideId:
-                    slideEvent.slideId || lastNav?.slideId || null,
-                  indexv:
-                    slideEvent.indexv ??
-                    lastWithIndexv?.indexv ??
-                    lastNav?.indexv,
-                  currentInteraction: slideEvent.interaction,
-                };
-              }
-              applySlideState(slideState, slideIndex);
-            }
-          }
-          newLastIndex = i;
-        } else {
-          break;
-        }
-      }
-
-      // If we were seeking, apply only the final state once
-      if (isSeeking && lastSlideEvent) {
-        const slideIndex =
-          recording.slides?.findIndex((s) => s.id === lastSlideEvent.slideId) ??
-          -1;
-        // Find the most recent navigation event for this slide to ensure we seek to the correct state
-        const relevantEvents = slideEvents.slice(0, newLastIndex + 1).reverse();
-
-        const lastNav = relevantEvents.find((e) =>
-          ["slide_open", "slide_change", "slide_close"].includes(e.type),
-        );
-
-        const lastStructural = relevantEvents.find((e) =>
-          ["slide_maximize", "slide_minimize"].includes(e.type),
-        );
-
-        const targetSearchSlideId = lastSlideEvent.slideId || lastNav?.slideId;
-        const lastWithIndexv = relevantEvents.find(
-          (e) =>
-            (targetSearchSlideId ? e.slideId === targetSearchSlideId : true) &&
-            e.indexv !== undefined &&
-            e.indexv !== null,
-        );
-
-        const slideState = {
-          isOpen: (lastNav?.type || lastSlideEvent.type) !== "slide_close",
-          isMaximized: lastStructural
-            ? lastStructural.type === "slide_maximize"
-            : (lastSlideEvent.isMaximized ?? lastNav?.isMaximized ?? false),
-          currentSlideId: lastSlideEvent.slideId || lastNav?.slideId || null,
-          indexv:
-            lastSlideEvent.indexv ?? lastWithIndexv?.indexv ?? lastNav?.indexv,
-          currentInteraction: lastSlideEvent.interaction,
-        };
-        applySlideState(slideState, slideIndex);
-      }
-
-      if (newLastIndex !== lastAppliedSlideEventIndex) {
+      if (replayResult.nextIndex !== lastAppliedSlideEventIndex) {
         return {
-          lastAppliedSlideEventIndex: newLastIndex,
+          lastAppliedSlideEventIndex: replayResult.nextIndex,
         };
       }
 
@@ -1436,19 +1274,10 @@ export const editorMachine = setup({
     SET_EDITOR_REF: [
       {
         guard: "shouldSyncPlaybackEditorRef",
-        actions: [
-          "setEditorRef",
-          "clearPendingPlaybackEditorSync",
-          "invalidateRenderedPlaybackState",
-          "applyWorkspaceEventsAtTime",
-          "applyRuntimeEventsAtTime",
-          "applyFrameAtTime",
-          "applyPreviewEventsAtTime",
-          "applySlideEventsAtTime",
-        ],
+        actions: [...APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS],
       },
       {
-        actions: ["setEditorRef", "invalidateRenderedPlaybackState"],
+        actions: [...SET_EDITOR_REF_ACTIONS],
       },
     ],
   },
@@ -1542,17 +1371,12 @@ export const editorMachine = setup({
           actions: [
             assign(({ context, event }) => {
               if (!context.session) return {};
+
               return {
-                session: {
-                  ...context.session,
-                  slideEvents: [
-                    ...context.session.slideEvents,
-                    {
-                      ...event.event,
-                      timestamp: Date.now() - context.session.startedAt,
-                    },
-                  ],
-                },
+                session: appendSlideRecordingEvent(
+                  context.session,
+                  event.event,
+                ),
               };
             }),
             "captureFrame",
@@ -1562,17 +1386,12 @@ export const editorMachine = setup({
           actions: [
             assign(({ context, event }) => {
               if (!context.session) return {};
+
               return {
-                session: {
-                  ...context.session,
-                  previewEvents: [
-                    ...context.session.previewEvents,
-                    {
-                      ...event.event,
-                      timestamp: Date.now() - context.session.startedAt,
-                    },
-                  ],
-                },
+                session: appendPreviewRecordingEvent(
+                  context.session,
+                  event.event,
+                ),
               };
             }),
             "capturePreviewRefreshFrame",
@@ -1584,28 +1403,17 @@ export const editorMachine = setup({
               const snapshot = context.getWorkspaceSnapshot?.();
               if (!context.session || !snapshot) return {};
 
-              const previousEvent =
-                context.session.workspaceEvents[
-                  context.session.workspaceEvents.length - 1
-                ];
-              if (
-                previousEvent &&
-                areWorkspaceSnapshotsEqual(previousEvent.snapshot, snapshot)
-              ) {
+              const nextSession = appendWorkspaceRecordingEvent(
+                context.session,
+                snapshot,
+              );
+
+              if (nextSession === context.session) {
                 return {};
               }
 
               return {
-                session: {
-                  ...context.session,
-                  workspaceEvents: [
-                    ...context.session.workspaceEvents,
-                    {
-                      timestamp: Date.now() - context.session.startedAt,
-                      snapshot,
-                    },
-                  ],
-                },
+                session: nextSession,
               };
             }),
           ],
@@ -1616,31 +1424,17 @@ export const editorMachine = setup({
               const snapshot = context.getRuntimeSnapshot?.();
               if (!context.session || !snapshot) return {};
 
-              const previousEvent =
-                context.session.runtimeEvents[
-                  context.session.runtimeEvents.length - 1
-                ];
-              if (
-                previousEvent &&
-                areRuntimeRecordingSnapshotsEqual(
-                  previousEvent.snapshot,
-                  snapshot,
-                )
-              ) {
+              const nextSession = appendRuntimeRecordingEvent(
+                context.session,
+                snapshot,
+              );
+
+              if (nextSession === context.session) {
                 return {};
               }
 
               return {
-                session: {
-                  ...context.session,
-                  runtimeEvents: [
-                    ...context.session.runtimeEvents,
-                    {
-                      timestamp: Date.now() - context.session.startedAt,
-                      snapshot,
-                    },
-                  ],
-                },
+                session: nextSession,
               };
             }),
           ],
@@ -1756,11 +1550,7 @@ export const editorMachine = setup({
               }
               return {};
             }),
-            "applyWorkspaceEventsAtTime",
-            "applyRuntimeEventsAtTime",
-            "applyFrameAtTime",
-            "applyPreviewEventsAtTime",
-            "applySlideEventsAtTime",
+            ...APPLY_REPLAY_STATE_ACTIONS,
             enqueueActions(({ context, event, enqueue }) => {
               // Sync audio to timeline every 250ms or on seek
               const lastSync = context.lastSyncTime || 0;
@@ -1779,11 +1569,7 @@ export const editorMachine = setup({
           actions: [
             "reattachPlaybackWorkspace",
             "seekToTime",
-            "applyWorkspaceEventsAtTime",
-            "applyRuntimeEventsAtTime",
-            "applyFrameAtTime",
-            "applyPreviewEventsAtTime",
-            "applySlideEventsAtTime",
+            ...APPLY_REPLAY_STATE_ACTIONS,
             enqueueActions(({ event, enqueue }) => {
               const time = event.type === "SEEK" ? event.time : 0;
               enqueue.sendTo("timelineActor", { type: "SEEK", time });
@@ -1823,13 +1609,7 @@ export const editorMachine = setup({
         STOP: {
           target: ".ready",
           actions: [
-            "resetPlayback",
-            "reattachPlaybackWorkspace",
-            "applyWorkspaceEventsAtTime",
-            "applyRuntimeEventsAtTime",
-            "applyFrameAtTime",
-            "applyPreviewEventsAtTime",
-            "applySlideEventsAtTime",
+            ...RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
             enqueueActions(({ enqueue }) => {
               enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
               enqueue.sendTo("audioPlayer", { type: "SEEK", time: 0 });
@@ -1855,11 +1635,7 @@ export const editorMachine = setup({
         playing: {
           entry: [
             "invalidateAppliedPlaybackState",
-            "applyWorkspaceEventsAtTime",
-            "applyRuntimeEventsAtTime",
-            "applyFrameAtTime",
-            "applyPreviewEventsAtTime",
-            "applySlideEventsAtTime",
+            ...APPLY_REPLAY_STATE_ACTIONS,
             enqueueActions(({ context, enqueue }) => {
               enqueue.sendTo("timelineActor", { type: "START" });
               enqueue.sendTo("audioPlayer", { type: "PLAY" });
@@ -1906,24 +1682,12 @@ export const editorMachine = setup({
           entry: ["storeRecordedFrameAtPause"],
           on: {
             TICK: {
-              actions: [
-                "applyWorkspaceEventsAtTime",
-                "applyRuntimeEventsAtTime",
-                "applyFrameAtTime",
-                "applyPreviewEventsAtTime",
-                "applySlideEventsAtTime",
-                "storeRecordedFrameAtPause",
-              ],
+              actions: [...APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS],
             },
             SEEK: {
               actions: [
                 "seekToTime",
-                "applyWorkspaceEventsAtTime",
-                "applyRuntimeEventsAtTime",
-                "applyFrameAtTime",
-                "applyPreviewEventsAtTime",
-                "applySlideEventsAtTime",
-                "storeRecordedFrameAtPause",
+                ...APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS,
                 enqueueActions(({ event, enqueue }) => {
                   const time = event.type === "SEEK" ? event.time : 0;
                   enqueue.sendTo("timelineActor", { type: "SEEK", time });
@@ -1955,11 +1719,7 @@ export const editorMachine = setup({
                 actions: [
                   "reattachPlaybackWorkspace",
                   "resetPlayback",
-                  "applyWorkspaceEventsAtTime",
-                  "applyRuntimeEventsAtTime",
-                  "applyFrameAtTime",
-                  "applyPreviewEventsAtTime",
-                  "applySlideEventsAtTime",
+                  ...APPLY_REPLAY_STATE_ACTIONS,
                   enqueueActions(({ enqueue }) => {
                     enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
                     enqueue.sendTo("audioPlayer", { type: "SEEK", time: 0 });

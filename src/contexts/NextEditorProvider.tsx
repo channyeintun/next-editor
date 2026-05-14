@@ -4,19 +4,15 @@ import type { Recording, UseNextEditorConfig } from "../core/src";
 import { useNextEditorActorBindings } from "../core/src/useNextEditor";
 import { NextEditorActionsContext } from "./NextEditorContext";
 import { NextEditorActorContext } from "./NextEditorActorContext";
+import { useNextEditorDomainAdapters } from "./NextEditorDomainAdaptersContext";
 import {
   useWebContainerRuntimeSaveWorkspace,
   useWebContainerRuntimeSnapshotGetter,
 } from "../hooks/useWebContainerRuntime";
-import {
-  useWorkspaceActions,
-} from "../hooks/useWorkspace";
+import { useWorkspaceActions } from "../hooks/useWorkspace";
 import { createJsonStorage } from "../storage/JsonStorage";
-import type { SlidePreviewState, PreviewState, Slide } from "../types/slides";
-import type {
-  RuntimePanelRecordingState,
-  RuntimeRecordingSnapshot,
-} from "../types/runtime";
+import type { RuntimeRecordingSnapshot } from "../types/runtime";
+import type { WorkspaceRecordingSnapshot } from "../types/workspace";
 
 interface NextEditorProviderProps {
   children: React.ReactNode;
@@ -28,34 +24,6 @@ interface NextEditorProviderContentProps {
   jsonStorage: { current: ReturnType<typeof createJsonStorage> };
   resetProject: () => void;
   suppressWorkspaceEventsRef: { current: boolean };
-  getSlideStateRef: {
-    current:
-      | (() => {
-          previewState: SlidePreviewState;
-          currentSlideIndex: number;
-        } | null)
-      | null;
-  };
-  applySlideStateRef: {
-    current:
-      | ((slideState: SlidePreviewState, currentSlideIndex: number) => void)
-      | null;
-  };
-  getPreviewStateRef: { current: (() => PreviewState | null) | null };
-  applyPreviewStateRef: {
-    current: ((previewState: PreviewState) => void) | null;
-  };
-  getRuntimeStateRef: {
-    current: (() => RuntimePanelRecordingState | null) | null;
-  };
-  applyRuntimeStateRef: {
-    current: ((snapshot: RuntimeRecordingSnapshot) => void) | null;
-  };
-  getSlidesRef: { current: (() => Slide[]) | null };
-  applySlidesRef: { current: ((slides: Slide[]) => void) | null };
-  navigateSlidesDirectRef: {
-    current: ((indexh: number, indexv: number) => void) | null;
-  };
 }
 
 const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
@@ -64,15 +32,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   jsonStorage,
   resetProject,
   suppressWorkspaceEventsRef,
-  getSlideStateRef,
-  applySlideStateRef,
-  getPreviewStateRef,
-  applyPreviewStateRef,
-  getRuntimeStateRef,
-  applyRuntimeStateRef,
-  getSlidesRef,
-  applySlidesRef,
-  navigateSlidesDirectRef,
 }) => {
   const actorRef = NextEditorActorContext.useActorRef();
   const originalHook = useNextEditorActorBindings(actorRef, config);
@@ -145,86 +104,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handleWorkspaceEventBase();
   }, [handleWorkspaceEventBase, suppressWorkspaceEventsRef]);
 
-  const registerSlideStateGetter = useCallback(
-    (
-      getter: () => {
-        previewState: SlidePreviewState;
-        currentSlideIndex: number;
-      } | null,
-    ) => {
-      getSlideStateRef.current = getter;
-    },
-    [getSlideStateRef],
-  );
-
-  const registerSlideStateApplier = useCallback(
-    (
-      applier: (
-        slideState: SlidePreviewState,
-        currentSlideIndex: number,
-      ) => void,
-    ) => {
-      applySlideStateRef.current = applier;
-    },
-    [applySlideStateRef],
-  );
-
-  const registerSlidesGetter = useCallback(
-    (getter: () => Slide[]) => {
-      getSlidesRef.current = getter;
-    },
-    [getSlidesRef],
-  );
-
-  const registerSlidesApplier = useCallback(
-    (applier: (slides: Slide[]) => void) => {
-      applySlidesRef.current = applier;
-    },
-    [applySlidesRef],
-  );
-
-  const registerPreviewStateGetter = useCallback(
-    (getter: () => PreviewState | null) => {
-      getPreviewStateRef.current = getter;
-    },
-    [getPreviewStateRef],
-  );
-
-  const registerPreviewStateApplier = useCallback(
-    (applier: (previewState: PreviewState) => void) => {
-      applyPreviewStateRef.current = applier;
-    },
-    [applyPreviewStateRef],
-  );
-
-  const registerRuntimeStateGetter = useCallback(
-    (getter: () => RuntimePanelRecordingState | null) => {
-      getRuntimeStateRef.current = getter;
-    },
-    [getRuntimeStateRef],
-  );
-
-  const registerRuntimeStateApplier = useCallback(
-    (applier: (snapshot: RuntimeRecordingSnapshot) => void) => {
-      applyRuntimeStateRef.current = applier;
-    },
-    [applyRuntimeStateRef],
-  );
-
-  const registerSlideNavigator = useCallback(
-    (navigator: (indexh: number, indexv: number) => void) => {
-      navigateSlidesDirectRef.current = navigator;
-    },
-    [navigateSlidesDirectRef],
-  );
-
-  const navigateSlidesDirect = useCallback(
-    (indexh: number, indexv: number) => {
-      navigateSlidesDirectRef.current?.(indexh, indexv);
-    },
-    [navigateSlidesDirectRef],
-  );
-
   const actionsValue = useMemo(
     () => ({
       editorRef: config.editorRef,
@@ -251,16 +130,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       getStorageStats,
       loadRecordingsFromStorage,
       deleteFromStorage,
-      registerSlideStateGetter,
-      registerSlideStateApplier,
-      registerSlidesGetter,
-      registerSlidesApplier,
-      registerPreviewStateGetter,
-      registerPreviewStateApplier,
-      registerRuntimeStateGetter,
-      registerRuntimeStateApplier,
-      registerSlideNavigator,
-      navigateSlidesDirect,
     }),
     [
       config.editorRef,
@@ -287,16 +156,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       getStorageStats,
       loadRecordingsFromStorage,
       deleteFromStorage,
-      registerSlideStateGetter,
-      registerSlideStateApplier,
-      registerSlidesGetter,
-      registerSlidesApplier,
-      registerPreviewStateGetter,
-      registerPreviewStateApplier,
-      registerRuntimeStateGetter,
-      registerRuntimeStateApplier,
-      registerSlideNavigator,
-      navigateSlidesDirect,
     ],
   );
 
@@ -312,40 +171,20 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
 }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
-  const { getProject, getActiveFilePath, loadProject, resetProject } =
-    useWorkspaceActions();
+  const { slides, preview, runtimePanel } = useNextEditorDomainAdapters();
+  const {
+    getProject,
+    getActiveFilePath,
+    getCollapsedFolders,
+    loadProject,
+    resetProject,
+  } = useWorkspaceActions();
   const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
   const runtimeSnapshotRef = useRef(getRuntimeRecordingSnapshot());
+  const workspaceSnapshotRef = useRef<WorkspaceRecordingSnapshot | null>(null);
   const suppressWorkspaceEventsRef = useRef(false);
   const clearWorkspaceEventSuppressionTimeoutRef = useRef<number | null>(null);
-  const getSlideStateRef = useRef<
-    | (() => {
-        previewState: SlidePreviewState;
-        currentSlideIndex: number;
-      } | null)
-    | null
-  >(null);
-  const applySlideStateRef = useRef<
-    ((slideState: SlidePreviewState, currentSlideIndex: number) => void) | null
-  >(null);
-
-  const getPreviewStateRef = useRef<(() => PreviewState | null) | null>(null);
-  const applyPreviewStateRef = useRef<
-    ((previewState: PreviewState) => void) | null
-  >(null);
-  const getRuntimeStateRef = useRef<
-    (() => RuntimePanelRecordingState | null) | null
-  >(null);
-  const applyRuntimeStateRef = useRef<
-    ((snapshot: RuntimeRecordingSnapshot) => void) | null
-  >(null);
-
-  const getSlidesRef = useRef<(() => Slide[]) | null>(null);
-  const applySlidesRef = useRef<((slides: Slide[]) => void) | null>(null);
-  const navigateSlidesDirectRef = useRef<
-    ((indexh: number, indexv: number) => void) | null
-  >(null);
 
   runtimeSnapshotRef.current = getRuntimeRecordingSnapshot();
 
@@ -375,23 +214,46 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       editorRef,
       enableAudioRecording: true, // Enable built-in synchronized audio recording
       pauseOnUserInteraction: true,
-      getSlideState: () => getSlideStateRef.current?.() || null,
+      getSlideState: () => slides.getSnapshot(),
       applySlideState: (slideState, currentSlideIndex) =>
-        applySlideStateRef.current?.(slideState, currentSlideIndex),
+        slides.applySnapshot(slideState, currentSlideIndex),
 
-      getPreviewState: () => getPreviewStateRef.current?.() || null,
-      applyPreviewState: (previewState) =>
-        applyPreviewStateRef.current?.(previewState),
+      getPreviewState: () => preview.getSnapshot(),
+      applyPreviewState: (previewState) => preview.applySnapshot(previewState),
 
-      getSlides: () => getSlidesRef.current?.() || [],
-      applySlides: (slides) => applySlidesRef.current?.(slides),
-      getWorkspaceSnapshot: () => ({
-        project: structuredClone(getProject()),
-        activeFilePath: getActiveFilePath(),
-      }),
+      getSlides: () => slides.getSlides(),
+      applySlides: (nextSlides) => slides.applySlides(nextSlides),
+      getWorkspaceSnapshot: () => {
+        const project = getProject();
+        const activeFilePath = getActiveFilePath();
+        const collapsedFolders = getCollapsedFolders();
+        const cachedSnapshot = workspaceSnapshotRef.current;
+
+        if (
+          cachedSnapshot &&
+          cachedSnapshot.project === project &&
+          cachedSnapshot.activeFilePath === activeFilePath &&
+          cachedSnapshot.collapsedFolders === collapsedFolders
+        ) {
+          return cachedSnapshot;
+        }
+
+        const nextSnapshot = {
+          project,
+          activeFilePath,
+          collapsedFolders,
+        } satisfies WorkspaceRecordingSnapshot;
+
+        workspaceSnapshotRef.current = nextSnapshot;
+        return nextSnapshot;
+      },
       applyWorkspaceSnapshot: (snapshot) => {
         suppressWorkspaceEvents();
-        loadProject(snapshot.project, snapshot.activeFilePath);
+        loadProject(
+          snapshot.project,
+          snapshot.activeFilePath,
+          snapshot.collapsedFolders ?? [],
+        );
         void saveRuntimeWorkspace();
       },
       getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
@@ -404,18 +266,22 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
           terminalOutput: snapshot.terminalOutput || snapshot.lastOutput,
           activeCommand: snapshot.activeCommand,
           errorMessage: snapshot.errorMessage,
-          ...getRuntimeStateRef.current?.(),
+          ...runtimePanel.getSnapshot(),
         };
       },
       applyRuntimeSnapshot: (snapshot) => {
-        applyRuntimeStateRef.current?.(snapshot);
+        runtimePanel.applySnapshot(snapshot);
       },
     }),
     [
       getActiveFilePath,
+      getCollapsedFolders,
       getProject,
       loadProject,
+      preview,
+      runtimePanel,
       saveRuntimeWorkspace,
+      slides,
       suppressWorkspaceEvents,
     ],
   );
@@ -427,15 +293,6 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
         jsonStorage={jsonStorage}
         resetProject={resetProject}
         suppressWorkspaceEventsRef={suppressWorkspaceEventsRef}
-        getSlideStateRef={getSlideStateRef}
-        applySlideStateRef={applySlideStateRef}
-        getPreviewStateRef={getPreviewStateRef}
-        applyPreviewStateRef={applyPreviewStateRef}
-        getRuntimeStateRef={getRuntimeStateRef}
-        applyRuntimeStateRef={applyRuntimeStateRef}
-        getSlidesRef={getSlidesRef}
-        applySlidesRef={applySlidesRef}
-        navigateSlidesDirectRef={navigateSlidesDirectRef}
       >
         {children}
       </NextEditorProviderContent>

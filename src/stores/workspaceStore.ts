@@ -28,6 +28,7 @@ export interface StoredWorkspaceSnapshot {
 export interface WorkspaceState {
   project: WorkspaceProject;
   activeFilePath: string;
+  collapsedFolders: string[];
   savedSnapshot: StoredWorkspaceSnapshot;
   projectVersion: number;
   previewVersion: number;
@@ -48,7 +49,7 @@ export function cloneWorkspaceSnapshot(
 ): StoredWorkspaceSnapshot {
   return {
     activeFilePath: snapshot.activeFilePath,
-    project: structuredClone(snapshot.project),
+    project: snapshot.project,
   };
 }
 
@@ -225,14 +226,38 @@ function createEditorState(
   };
 }
 
+function normalizeCollapsedFolders(
+  folders: string[],
+  collapsedFolders: string[],
+): string[] {
+  const validFolders = new Set(
+    folders.map((folderPath) => normalizeWorkspaceFolderPath(folderPath)),
+  );
+  const nextCollapsedFolders = new Set<string>();
+
+  for (const folderPath of collapsedFolders) {
+    const normalizedPath = normalizeWorkspaceFolderPath(folderPath);
+
+    if (normalizedPath && validFolders.has(normalizedPath)) {
+      nextCollapsedFolders.add(normalizedPath);
+    }
+  }
+
+  return Array.from(nextCollapsedFolders).sort((left, right) =>
+    left.localeCompare(right),
+  );
+}
+
 function createSidebarState(
   project: WorkspaceProject,
   activeFilePath: string,
+  collapsedFolders: string[],
 ): WorkspaceSidebarState {
   return {
     activeFilePath,
     files: listProjectFiles(project),
     folders: project.folders,
+    collapsedFolders,
     lessonType: project.lessonType,
     previewFilePath: project.entryFilePath,
   };
@@ -286,6 +311,7 @@ function areSidebarStatesEqual(
     left.activeFilePath === right.activeFilePath &&
     left.lessonType === right.lessonType &&
     left.previewFilePath === right.previewFilePath &&
+    areStringArraysEqual(left.collapsedFolders, right.collapsedFolders) &&
     areStringArraysEqual(left.folders, right.folders) &&
     areSidebarFilesEqual(left.files, right.files)
   );
@@ -302,6 +328,10 @@ function areDirtyStatesEqual(
 }
 
 function withRefreshedWorkspaceSlices(state: WorkspaceState): WorkspaceState {
+  const nextCollapsedFolders = normalizeCollapsedFolders(
+    state.project.folders,
+    state.collapsedFolders,
+  );
   const nextEditorState = createEditorState(
     state.project,
     state.activeFilePath,
@@ -310,10 +340,17 @@ function withRefreshedWorkspaceSlices(state: WorkspaceState): WorkspaceState {
   const nextSidebarState = createSidebarState(
     state.project,
     state.activeFilePath,
+    nextCollapsedFolders,
   );
 
   return {
     ...state,
+    collapsedFolders: areStringArraysEqual(
+      state.collapsedFolders,
+      nextCollapsedFolders,
+    )
+      ? state.collapsedFolders
+      : nextCollapsedFolders,
     editorState: areEditorStatesEqual(state.editorState, nextEditorState)
       ? state.editorState
       : nextEditorState,
@@ -348,17 +385,19 @@ function createWorkspaceState(
   const savedSnapshot = cloneWorkspaceSnapshot(initialSnapshot);
   const project = initialSnapshot.project;
   const activeFilePath = initialSnapshot.activeFilePath;
+  const collapsedFolders = normalizeCollapsedFolders(project.folders, []);
 
   return {
     project,
     activeFilePath,
+    collapsedFolders,
     savedSnapshot,
     projectVersion: 0,
     previewVersion: 0,
     saveVersion: 0,
     syncVersion: 0,
     editorState: createEditorState(project, activeFilePath, 0),
-    sidebarState: createSidebarState(project, activeFilePath),
+    sidebarState: createSidebarState(project, activeFilePath, collapsedFolders),
     lessonType: project.lessonType,
     projectName: project.name,
     fileCount: Object.keys(project.files).length,
@@ -406,6 +445,12 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
             syncVersion: context.syncVersion + 1,
           }),
         );
+      },
+      setCollapsedFolders: (context, event: { paths: string[] }) => {
+        return withRefreshedWorkspaceSlices({
+          ...context,
+          collapsedFolders: event.paths,
+        });
       },
       createFile: (
         context,
@@ -786,6 +831,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           project: WorkspaceProject;
           activeFilePath: string;
           savedSnapshot: StoredWorkspaceSnapshot;
+          collapsedFolders?: string[];
         },
       ) => {
         return withDirtyState(
@@ -793,6 +839,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
             ...context,
             project: event.project,
             activeFilePath: event.activeFilePath,
+            collapsedFolders: event.collapsedFolders ?? [],
             savedSnapshot: event.savedSnapshot,
             projectVersion: context.projectVersion + 1,
             previewVersion: context.previewVersion + 1,
