@@ -3,10 +3,6 @@ import type { Recording } from "../core/src/types";
 import type { TimelineActorRef } from "../core/src/machine/timelineMachine";
 import type { EditorActorRef } from "../core/src/useNextEditor";
 import type { SlideEvent, PreviewEvent } from "../types/slides";
-import type {
-  RuntimePanelRecordingState,
-  RuntimeRecordingSnapshot,
-} from "../types/runtime";
 import type * as monaco from "monaco-editor";
 
 export type { TimelineActorRef, EditorActorRef };
@@ -37,12 +33,6 @@ export interface NextEditorActions {
   getStorageStats: () => Promise<{ count: number; totalSize: string }>;
   loadRecordingsFromStorage: () => Promise<Recording[]>;
   deleteFromStorage: (id: string) => Promise<void>;
-  registerRuntimeStateGetter: (
-    getter: () => RuntimePanelRecordingState | null,
-  ) => void;
-  registerRuntimeStateApplier: (
-    applier: (snapshot: RuntimeRecordingSnapshot) => void,
-  ) => void;
 }
 
 export const NextEditorActionsContext = createContext<NextEditorActions | null>(

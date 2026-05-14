@@ -11,10 +11,7 @@ import {
 } from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
 import { createJsonStorage } from "../storage/JsonStorage";
-import type {
-  RuntimePanelRecordingState,
-  RuntimeRecordingSnapshot,
-} from "../types/runtime";
+import type { RuntimeRecordingSnapshot } from "../types/runtime";
 import type { WorkspaceRecordingSnapshot } from "../types/workspace";
 
 interface NextEditorProviderProps {
@@ -37,7 +34,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   suppressWorkspaceEventsRef,
 }) => {
   const actorRef = NextEditorActorContext.useActorRef();
-  const { runtimePanel } = useNextEditorDomainAdapters();
   const originalHook = useNextEditorActorBindings(actorRef, config);
 
   const {
@@ -108,20 +104,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handleWorkspaceEventBase();
   }, [handleWorkspaceEventBase, suppressWorkspaceEventsRef]);
 
-  const registerRuntimeStateGetter = useCallback(
-    (getter: () => RuntimePanelRecordingState | null) => {
-      runtimePanel.setSnapshotGetter(getter);
-    },
-    [runtimePanel],
-  );
-
-  const registerRuntimeStateApplier = useCallback(
-    (applier: (snapshot: RuntimeRecordingSnapshot) => void) => {
-      runtimePanel.setSnapshotApplier(applier);
-    },
-    [runtimePanel],
-  );
-
   const actionsValue = useMemo(
     () => ({
       editorRef: config.editorRef,
@@ -148,8 +130,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       getStorageStats,
       loadRecordingsFromStorage,
       deleteFromStorage,
-      registerRuntimeStateGetter,
-      registerRuntimeStateApplier,
     }),
     [
       config.editorRef,
@@ -176,8 +156,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       getStorageStats,
       loadRecordingsFromStorage,
       deleteFromStorage,
-      registerRuntimeStateGetter,
-      registerRuntimeStateApplier,
     ],
   );
 
