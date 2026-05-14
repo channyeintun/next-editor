@@ -40,7 +40,6 @@ import { isValidFrameState, isEditorReady } from "../utils/validation";
 import { calculateDurationFromFileReader } from "../utils/audioDuration";
 import {
   arePreviewSizesEqual,
-  areRuntimeRecordingSnapshotsEqual,
   areStructuredDataEqual,
 } from "../../../utils/equality";
 import {
@@ -51,6 +50,12 @@ import {
   isSeekReplayEvent,
   resolveReplayTime,
 } from "./replayState";
+import {
+  appendPreviewRecordingEvent,
+  appendRuntimeRecordingEvent,
+  appendSlideRecordingEvent,
+  appendWorkspaceRecordingEvent,
+} from "./recordingSession";
 
 // ============================================================================
 // Helper Functions
@@ -1351,17 +1356,12 @@ export const editorMachine = setup({
           actions: [
             assign(({ context, event }) => {
               if (!context.session) return {};
+
               return {
-                session: {
-                  ...context.session,
-                  slideEvents: [
-                    ...context.session.slideEvents,
-                    {
-                      ...event.event,
-                      timestamp: Date.now() - context.session.startedAt,
-                    },
-                  ],
-                },
+                session: appendSlideRecordingEvent(
+                  context.session,
+                  event.event,
+                ),
               };
             }),
             "captureFrame",
@@ -1371,17 +1371,12 @@ export const editorMachine = setup({
           actions: [
             assign(({ context, event }) => {
               if (!context.session) return {};
+
               return {
-                session: {
-                  ...context.session,
-                  previewEvents: [
-                    ...context.session.previewEvents,
-                    {
-                      ...event.event,
-                      timestamp: Date.now() - context.session.startedAt,
-                    },
-                  ],
-                },
+                session: appendPreviewRecordingEvent(
+                  context.session,
+                  event.event,
+                ),
               };
             }),
             "capturePreviewRefreshFrame",
@@ -1393,28 +1388,17 @@ export const editorMachine = setup({
               const snapshot = context.getWorkspaceSnapshot?.();
               if (!context.session || !snapshot) return {};
 
-              const previousEvent =
-                context.session.workspaceEvents[
-                  context.session.workspaceEvents.length - 1
-                ];
-              if (
-                previousEvent &&
-                areWorkspaceSnapshotsEqual(previousEvent.snapshot, snapshot)
-              ) {
+              const nextSession = appendWorkspaceRecordingEvent(
+                context.session,
+                snapshot,
+              );
+
+              if (nextSession === context.session) {
                 return {};
               }
 
               return {
-                session: {
-                  ...context.session,
-                  workspaceEvents: [
-                    ...context.session.workspaceEvents,
-                    {
-                      timestamp: Date.now() - context.session.startedAt,
-                      snapshot,
-                    },
-                  ],
-                },
+                session: nextSession,
               };
             }),
           ],
@@ -1425,31 +1409,17 @@ export const editorMachine = setup({
               const snapshot = context.getRuntimeSnapshot?.();
               if (!context.session || !snapshot) return {};
 
-              const previousEvent =
-                context.session.runtimeEvents[
-                  context.session.runtimeEvents.length - 1
-                ];
-              if (
-                previousEvent &&
-                areRuntimeRecordingSnapshotsEqual(
-                  previousEvent.snapshot,
-                  snapshot,
-                )
-              ) {
+              const nextSession = appendRuntimeRecordingEvent(
+                context.session,
+                snapshot,
+              );
+
+              if (nextSession === context.session) {
                 return {};
               }
 
               return {
-                session: {
-                  ...context.session,
-                  runtimeEvents: [
-                    ...context.session.runtimeEvents,
-                    {
-                      timestamp: Date.now() - context.session.startedAt,
-                      snapshot,
-                    },
-                  ],
-                },
+                session: nextSession,
               };
             }),
           ],
