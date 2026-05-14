@@ -230,6 +230,41 @@ const getLoadedRecordingPayload = (
   return null;
 };
 
+const APPLY_REPLAY_STATE_ACTIONS = [
+  "applyWorkspaceEventsAtTime",
+  "applyRuntimeEventsAtTime",
+  "applyFrameAtTime",
+  "applyPreviewEventsAtTime",
+  "applySlideEventsAtTime",
+] as const;
+
+const APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS = [
+  ...APPLY_REPLAY_STATE_ACTIONS,
+  "storeRecordedFrameAtPause",
+] as const;
+
+const APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS = [
+  "setEditorRef",
+  "clearPendingPlaybackEditorSync",
+  "invalidateRenderedPlaybackState",
+  ...APPLY_REPLAY_STATE_ACTIONS,
+] as const;
+
+const SET_EDITOR_REF_ACTIONS = [
+  "setEditorRef",
+  "invalidateRenderedPlaybackState",
+] as const;
+
+const REATTACH_AND_APPLY_REPLAY_STATE_ACTIONS = [
+  "reattachPlaybackWorkspace",
+  ...APPLY_REPLAY_STATE_ACTIONS,
+] as const;
+
+const RESET_AND_REATTACH_REPLAY_STATE_ACTIONS = [
+  "resetPlayback",
+  ...REATTACH_AND_APPLY_REPLAY_STATE_ACTIONS,
+] as const;
+
 /**
  * Find the appropriate frame for a given timestamp (optimized)
  */
@@ -1219,19 +1254,10 @@ export const editorMachine = setup({
     SET_EDITOR_REF: [
       {
         guard: "shouldSyncPlaybackEditorRef",
-        actions: [
-          "setEditorRef",
-          "clearPendingPlaybackEditorSync",
-          "invalidateRenderedPlaybackState",
-          "applyWorkspaceEventsAtTime",
-          "applyRuntimeEventsAtTime",
-          "applyFrameAtTime",
-          "applyPreviewEventsAtTime",
-          "applySlideEventsAtTime",
-        ],
+        actions: [...APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS],
       },
       {
-        actions: ["setEditorRef", "invalidateRenderedPlaybackState"],
+        actions: [...SET_EDITOR_REF_ACTIONS],
       },
     ],
   },
@@ -1539,11 +1565,7 @@ export const editorMachine = setup({
               }
               return {};
             }),
-            "applyWorkspaceEventsAtTime",
-            "applyRuntimeEventsAtTime",
-            "applyFrameAtTime",
-            "applyPreviewEventsAtTime",
-            "applySlideEventsAtTime",
+            ...APPLY_REPLAY_STATE_ACTIONS,
             enqueueActions(({ context, event, enqueue }) => {
               // Sync audio to timeline every 250ms or on seek
               const lastSync = context.lastSyncTime || 0;
@@ -1562,11 +1584,7 @@ export const editorMachine = setup({
           actions: [
             "reattachPlaybackWorkspace",
             "seekToTime",
-            "applyWorkspaceEventsAtTime",
-            "applyRuntimeEventsAtTime",
-            "applyFrameAtTime",
-            "applyPreviewEventsAtTime",
-            "applySlideEventsAtTime",
+            ...APPLY_REPLAY_STATE_ACTIONS,
             enqueueActions(({ event, enqueue }) => {
               const time = event.type === "SEEK" ? event.time : 0;
               enqueue.sendTo("timelineActor", { type: "SEEK", time });
@@ -1606,13 +1624,7 @@ export const editorMachine = setup({
         STOP: {
           target: ".ready",
           actions: [
-            "resetPlayback",
-            "reattachPlaybackWorkspace",
-            "applyWorkspaceEventsAtTime",
-            "applyRuntimeEventsAtTime",
-            "applyFrameAtTime",
-            "applyPreviewEventsAtTime",
-            "applySlideEventsAtTime",
+            ...RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
             enqueueActions(({ enqueue }) => {
               enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
               enqueue.sendTo("audioPlayer", { type: "SEEK", time: 0 });
@@ -1638,11 +1650,7 @@ export const editorMachine = setup({
         playing: {
           entry: [
             "invalidateAppliedPlaybackState",
-            "applyWorkspaceEventsAtTime",
-            "applyRuntimeEventsAtTime",
-            "applyFrameAtTime",
-            "applyPreviewEventsAtTime",
-            "applySlideEventsAtTime",
+            ...APPLY_REPLAY_STATE_ACTIONS,
             enqueueActions(({ context, enqueue }) => {
               enqueue.sendTo("timelineActor", { type: "START" });
               enqueue.sendTo("audioPlayer", { type: "PLAY" });
@@ -1689,24 +1697,12 @@ export const editorMachine = setup({
           entry: ["storeRecordedFrameAtPause"],
           on: {
             TICK: {
-              actions: [
-                "applyWorkspaceEventsAtTime",
-                "applyRuntimeEventsAtTime",
-                "applyFrameAtTime",
-                "applyPreviewEventsAtTime",
-                "applySlideEventsAtTime",
-                "storeRecordedFrameAtPause",
-              ],
+              actions: [...APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS],
             },
             SEEK: {
               actions: [
                 "seekToTime",
-                "applyWorkspaceEventsAtTime",
-                "applyRuntimeEventsAtTime",
-                "applyFrameAtTime",
-                "applyPreviewEventsAtTime",
-                "applySlideEventsAtTime",
-                "storeRecordedFrameAtPause",
+                ...APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS,
                 enqueueActions(({ event, enqueue }) => {
                   const time = event.type === "SEEK" ? event.time : 0;
                   enqueue.sendTo("timelineActor", { type: "SEEK", time });
@@ -1738,11 +1734,7 @@ export const editorMachine = setup({
                 actions: [
                   "reattachPlaybackWorkspace",
                   "resetPlayback",
-                  "applyWorkspaceEventsAtTime",
-                  "applyRuntimeEventsAtTime",
-                  "applyFrameAtTime",
-                  "applyPreviewEventsAtTime",
-                  "applySlideEventsAtTime",
+                  ...APPLY_REPLAY_STATE_ACTIONS,
                   enqueueActions(({ enqueue }) => {
                     enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
                     enqueue.sendTo("audioPlayer", { type: "SEEK", time: 0 });
