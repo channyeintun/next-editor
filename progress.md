@@ -1,6 +1,6 @@
 # Progress
 
-Active phase: Enhancement 2 only
+Active phase: Enhancement 2 workspace follow-up
 
 Rules in force:
 - No tests will be added.
@@ -8,25 +8,16 @@ Rules in force:
 
 ## Status
 
-1. Task 1. Reframe planning and tracking for phase 2: Completed
-2. Task 2. Remove deep cloning from workspace recording and replay loading: Completed
-3. Task 3. Remove deep cloning from runtime workspace sync and skip no-op syncs: Completed
-4. Task 4. Validate and finish enhancement 2: Completed
-
-Enhancement 2 status: Completed
+1. Task 1. Reopen phase-2 planning for workspace follow-up fixes: Completed
+2. Task 2. Fix default workspace creation target: Not started
+3. Task 3. Store and replay folder collapse state in workspace snapshots: Not started
+4. Task 4. Record workspace sidebar changes needed for playback: Not started
+5. Task 5. Validate and finish the phase-2 workspace follow-up: Not started
 
 ## Log
 
-- Enhancement 1 is already complete.
-- Began phase 2 by confirming the current clone hot paths in `NextEditorProvider.tsx`, `WorkspaceProvider.tsx`, and `WebContainerRuntimeProvider.tsx`.
-- Confirmed the workspace store updates projects immutably, which makes reference-based snapshots and sync baselines viable for this phase.
-- Completed Task 1 and confirmed the phase-2 planning docs have a clean diff.
-- Completed Task 2 by removing deep clones from workspace recording and replay-loading paths, adding identity short-circuits for workspace snapshot equality, and validating with `bun run typecheck`.
-- Completed Task 3 by removing runtime sync deep clones, adding an identity-based no-op sync short-circuit, and validating with `bun run typecheck`.
-- Completed Task 4 with a final `bun run typecheck` pass, a clean git worktree check, and a verification pass showing no remaining `structuredClone` calls under `src`.
-
-## Risks
-
-- Validation for this phase is limited to typechecking because tests must not be added.
-- This phase removed hot-path deep clones but did not redesign recording data structures or move to incremental workspace events; that remains later work.
-- No enhancement beyond phase 2 has been started.
+- Enhancement 1 and the original phase-2 clone-removal work are already complete.
+- Confirmed that toolbar-based create actions currently default to the active file's parent folder through `FileSidebar.tsx`.
+- Confirmed that folder collapse state currently lives only in `FileSidebar` local state and is absent from workspace snapshots.
+- Confirmed that workspace event recording currently watches active-file and save transitions, so collapse and expand actions are not recorded.
+- Completed Task 1 and confirmed the reopened phase-2 planning docs have a clean diff.
