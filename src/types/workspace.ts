@@ -19,6 +19,7 @@ export interface WorkspaceProject {
 export interface WorkspaceRecordingSnapshot {
   project: WorkspaceProject;
   activeFilePath: string;
+  collapsedFolders?: string[];
 }
 
 export interface WorkspaceRecordingEvent {
@@ -90,6 +91,10 @@ export function areWorkspaceSnapshotsEqual(
 
   return (
     left.activeFilePath === right.activeFilePath &&
+    areStringArraysEqual(
+      left.collapsedFolders ?? [],
+      right.collapsedFolders ?? [],
+    ) &&
     areWorkspaceProjectsEqual(left.project, right.project)
   );
 }

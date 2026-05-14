@@ -226,9 +226,6 @@ function buildWorkspaceTree(
 }
 
 const FileSidebar = memo(function FileSidebar() {
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
-    () => new Set(),
-  );
   const [draftName, setDraftName] = useState("");
   const [editState, setEditState] = useState<SidebarEditState>(null);
   const [contextMenu, setContextMenu] =
@@ -244,10 +241,21 @@ const FileSidebar = memo(function FileSidebar() {
     renameFolder,
     saveProject,
     setActiveFilePath,
+    setCollapsedFolders,
     setPreviewFilePath,
   } = useWorkspaceActions();
-  const { activeFilePath, files, folders, lessonType, previewFilePath } =
-    useWorkspaceSidebarState();
+  const {
+    activeFilePath,
+    collapsedFolders: collapsedFolderPaths,
+    files,
+    folders,
+    lessonType,
+    previewFilePath,
+  } = useWorkspaceSidebarState();
+  const collapsedFolders = useMemo(
+    () => new Set(collapsedFolderPaths),
+    [collapsedFolderPaths],
+  );
   const tree = useMemo(
     () => buildWorkspaceTree(files, folders, activeFilePath),
     [activeFilePath, files, folders],
@@ -315,48 +323,20 @@ const FileSidebar = memo(function FileSidebar() {
     };
   }, [contextMenu]);
 
-  useEffect(() => {
-    const validFolders = new Set(folders);
+  const commitCollapsedFolders = (next: Set<string>) => {
+    const nextPaths = Array.from(next).sort((left, right) =>
+      left.localeCompare(right),
+    );
 
-    setCollapsedFolders((current) => {
-      let changed = false;
-      const next = new Set<string>();
-
-      for (const folderPath of current) {
-        if (validFolders.has(folderPath)) {
-          next.add(folderPath);
-          continue;
-        }
-
-        changed = true;
-      }
-
-      return changed ? next : current;
-    });
-  }, [folders]);
-
-  useEffect(() => {
-    let folderPath = getParentWorkspacePath(activeFilePath);
-
-    if (!folderPath) {
+    if (
+      nextPaths.length === collapsedFolderPaths.length &&
+      nextPaths.every((path, index) => path === collapsedFolderPaths[index])
+    ) {
       return;
     }
 
-    setCollapsedFolders((current) => {
-      let next = current;
-
-      while (folderPath) {
-        const updated = removeFolderFromCollapsedState(next, folderPath);
-        if (updated !== next) {
-          next = updated;
-        }
-
-        folderPath = getParentWorkspacePath(folderPath);
-      }
-
-      return next;
-    });
-  }, [activeFilePath]);
+    setCollapsedFolders(nextPaths);
+  };
 
   const clearInlineEdit = () => {
     setEditState(null);
@@ -365,8 +345,8 @@ const FileSidebar = memo(function FileSidebar() {
 
   const openCreateInput = (kind: SidebarEntryKind, parentPath: string) => {
     setContextMenu(null);
-    setCollapsedFolders((current) =>
-      removeFolderFromCollapsedState(current, parentPath),
+    commitCollapsedFolders(
+      removeFolderFromCollapsedState(collapsedFolders, parentPath),
     );
     setEditState({
       mode: "create",
@@ -491,17 +471,15 @@ const FileSidebar = memo(function FileSidebar() {
   };
 
   const toggleFolder = (path: string) => {
-    setCollapsedFolders((current) => {
-      const next = new Set(current);
+    const next = new Set(collapsedFolders);
 
-      if (next.has(path)) {
-        next.delete(path);
-      } else {
-        next.add(path);
-      }
+    if (next.has(path)) {
+      next.delete(path);
+    } else {
+      next.add(path);
+    }
 
-      return next;
-    });
+    commitCollapsedFolders(next);
   };
 
   const renderInlineInput = (kind: "file" | "folder", depth: number) => {

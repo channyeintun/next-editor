@@ -8,6 +8,7 @@ import type {
 export interface WorkspaceActions {
   setActiveFilePath: (path: string) => void;
   setPreviewFilePath: (path: string) => void;
+  setCollapsedFolders: (paths: string[]) => void;
   createNewEditor: () => void;
   createFile: (path: string, content?: string) => void;
   createFolder: (path: string) => void;
@@ -18,11 +19,16 @@ export interface WorkspaceActions {
   updateFileContent: (path: string, content: string) => void;
   updateActiveFileContent: (content: string) => void;
   saveProject: () => void;
-  loadProject: (project: WorkspaceProject, activeFilePath?: string) => void;
+  loadProject: (
+    project: WorkspaceProject,
+    activeFilePath?: string,
+    collapsedFolders?: string[],
+  ) => void;
   resetProject: () => void;
   updateLessonType: (lessonType: WorkspaceLessonType) => void;
   getProject: () => WorkspaceProject;
   getActiveFilePath: () => string;
+  getCollapsedFolders: () => string[];
   getFile: (path: string) => WorkspaceFile | null;
   listFiles: () => WorkspaceFile[];
 }
@@ -36,6 +42,7 @@ export interface WorkspaceSidebarState {
   activeFilePath: string;
   files: WorkspaceFile[];
   folders: string[];
+  collapsedFolders: string[];
   lessonType: WorkspaceLessonType;
   previewFilePath: string;
 }

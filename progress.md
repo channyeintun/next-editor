@@ -10,7 +10,7 @@ Rules in force:
 
 1. Task 1. Reopen phase-2 planning for workspace follow-up fixes: Completed
 2. Task 2. Fix default workspace creation target: Completed
-3. Task 3. Store and replay folder collapse state in workspace snapshots: Not started
+3. Task 3. Store and replay folder collapse state in workspace snapshots: Completed
 4. Task 4. Record workspace sidebar changes needed for playback: Not started
 5. Task 5. Validate and finish the phase-2 workspace follow-up: Not started
 
@@ -22,3 +22,4 @@ Rules in force:
 - Confirmed that workspace event recording currently watches active-file and save transitions, so collapse and expand actions are not recorded.
 - Completed Task 1 and confirmed the reopened phase-2 planning docs have a clean diff.
 - Completed Task 2 by changing the sidebar toolbar create actions to default to the project root and validating with `bun run typecheck`.
+- Completed Task 3 by moving folder collapse state into the workspace store, extending workspace snapshots to carry collapsed folders, and validating with `bun run typecheck`.

@@ -311,8 +311,13 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
 }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
-  const { getProject, getActiveFilePath, loadProject, resetProject } =
-    useWorkspaceActions();
+  const {
+    getProject,
+    getActiveFilePath,
+    getCollapsedFolders,
+    loadProject,
+    resetProject,
+  } = useWorkspaceActions();
   const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
   const runtimeSnapshotRef = useRef(getRuntimeRecordingSnapshot());
@@ -388,12 +393,14 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       getWorkspaceSnapshot: () => {
         const project = getProject();
         const activeFilePath = getActiveFilePath();
+        const collapsedFolders = getCollapsedFolders();
         const cachedSnapshot = workspaceSnapshotRef.current;
 
         if (
           cachedSnapshot &&
           cachedSnapshot.project === project &&
-          cachedSnapshot.activeFilePath === activeFilePath
+          cachedSnapshot.activeFilePath === activeFilePath &&
+          cachedSnapshot.collapsedFolders === collapsedFolders
         ) {
           return cachedSnapshot;
         }
@@ -401,6 +408,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
         const nextSnapshot = {
           project,
           activeFilePath,
+          collapsedFolders,
         } satisfies WorkspaceRecordingSnapshot;
 
         workspaceSnapshotRef.current = nextSnapshot;
@@ -408,7 +416,11 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       },
       applyWorkspaceSnapshot: (snapshot) => {
         suppressWorkspaceEvents();
-        loadProject(snapshot.project, snapshot.activeFilePath);
+        loadProject(
+          snapshot.project,
+          snapshot.activeFilePath,
+          snapshot.collapsedFolders ?? [],
+        );
         void saveRuntimeWorkspace();
       },
       getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
@@ -430,6 +442,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     }),
     [
       getActiveFilePath,
+      getCollapsedFolders,
       getProject,
       loadProject,
       saveRuntimeWorkspace,
