@@ -39,7 +39,8 @@
   width: 2px !important;
 }
 
-.playback-mode .monaco-editor .cursor {
+.playback-mode .monaco-editor .cursor,
+.playback-mode .monaco-editor .cursors-layer .cursor {
   animation: nb-cursor-blink 1s step-end infinite !important;
 }
 

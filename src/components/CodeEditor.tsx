@@ -497,7 +497,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         <div
           className={
             "editor-paint-layer min-w-0 flex-1" +
-            (usesPlaybackModel ? " playback-mode" : "")
+            (isPlaying ? " playback-mode" : "")
           }
         >
           <Editor

@@ -73,8 +73,26 @@ const applyFrameState = (
       previousFrame?.state.selection,
     );
 
-    // Add cursor decorations during playback
-    if (isPlaying) {
+    const viewStateChanged =
+      !!frame.state.viewState &&
+      (!previousFrame ||
+        JSON.stringify(frame.state.viewState) !==
+          JSON.stringify(previousFrame.state.viewState));
+
+    // Restore view state before syncing the playback cursor decoration so the
+    // custom cursor matches Monaco's final caret position for this frame.
+    if (viewStateChanged) {
+      try {
+        editor.restoreViewState(frame.state.viewState);
+      } catch (err) {
+        console.error("Failed to restore view state:", err);
+      }
+    }
+
+    // Add cursor decorations during playback only when Monaco's own caret is
+    // not visible. This avoids duplicate carets and preserves native
+    // multi-cursor behavior while the editor has text focus.
+    if (isPlaying && !editor.hasTextFocus()) {
       // Only update decorations if selection changed or collection is missing
       const selectionChanged =
         !previousFrame ||
@@ -83,7 +101,7 @@ const applyFrameState = (
           frame.state.selection,
         );
 
-      if (selectionChanged || !collection) {
+      if (selectionChanged || viewStateChanged || !collection) {
         const newDecorations: monaco.editor.IModelDeltaDecoration[] = [];
         const currentSelections = editor.getSelections() || [
           frame.state.selection,
@@ -121,20 +139,8 @@ const applyFrameState = (
           collection.set(newDecorations);
         }
       }
-    }
-
-    // Restore view state (scrolling, etc.)
-    if (
-      frame.state.viewState &&
-      (!previousFrame ||
-        JSON.stringify(frame.state.viewState) !==
-          JSON.stringify(previousFrame.state.viewState))
-    ) {
-      try {
-        editor.restoreViewState(frame.state.viewState);
-      } catch (err) {
-        console.error("Failed to restore view state:", err);
-      }
+    } else if (collection) {
+      collection.clear();
     }
   } catch (error) {
     console.error("Error applying editor state:", error);
