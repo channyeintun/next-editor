@@ -257,6 +257,10 @@ async function syncWorkspaceProject(
   previousProject: WorkspaceProject | null,
   nextProject: WorkspaceProject,
 ): Promise<void> {
+  if (previousProject === nextProject) {
+    return;
+  }
+
   const previousFiles = previousProject?.files ?? {};
   const nextFiles = nextProject.files;
   const previousFolders = new Set(previousProject?.folders ?? []);
@@ -692,7 +696,7 @@ export const WebContainerRuntimeProvider: React.FC<
     if (!hasMountedProjectRef.current) {
       setStatus("mounting");
       await instance.mount(createWorkspaceTree(project));
-      lastSyncedProjectRef.current = structuredClone(project);
+      lastSyncedProjectRef.current = project;
       hasMountedProjectRef.current = true;
     }
 
@@ -986,7 +990,7 @@ export const WebContainerRuntimeProvider: React.FC<
           lastSyncedProjectRef.current,
           project,
         );
-        lastSyncedProjectRef.current = structuredClone(project);
+        lastSyncedProjectRef.current = project;
       } catch (error) {
         setErrorMessage(getRuntimeErrorMessage(error));
         throw error;
@@ -1013,17 +1017,18 @@ export const WebContainerRuntimeProvider: React.FC<
     await rerunRunnerRef.current();
   }, [getProject]);
 
-  const getRecordingSnapshot =
-    useCallback<() => WebContainerRuntimeRecordingSnapshot>(() => {
-      return {
-        status: statusRef.current,
-        previewUrl: previewUrlRef.current,
-        lastOutput: lastOutputRef.current,
-        terminalOutput: terminalOutputRef.current,
-        activeCommand: activeCommandRef.current,
-        errorMessage: errorMessageRef.current,
-      };
-    }, []);
+  const getRecordingSnapshot = useCallback<
+    () => WebContainerRuntimeRecordingSnapshot
+  >(() => {
+    return {
+      status: statusRef.current,
+      previewUrl: previewUrlRef.current,
+      lastOutput: lastOutputRef.current,
+      terminalOutput: terminalOutputRef.current,
+      activeCommand: activeCommandRef.current,
+      errorMessage: errorMessageRef.current,
+    };
+  }, []);
 
   const updateRunnerConfig = useCallback((config: Partial<RunnerConfig>) => {
     setRunnerConfig((current) => ({
@@ -1110,7 +1115,7 @@ export const WebContainerRuntimeProvider: React.FC<
 
     void syncWorkspaceProject(instance, lastSyncedProjectRef.current, project)
       .then(() => {
-        lastSyncedProjectRef.current = structuredClone(project);
+        lastSyncedProjectRef.current = project;
       })
       .catch((error) => {
         setErrorMessage(getRuntimeErrorMessage(error));
