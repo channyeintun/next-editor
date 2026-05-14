@@ -110,10 +110,6 @@ export function usePreviewPlaybackRegistration({
       }
 
       if (!arePreviewSizesEqual(sizeToApply, sizeRef.current)) {
-
-    return () => {
-      previewAdapter.setSnapshotApplier((_previewState) => undefined);
-    };
         setSize(sizeToApply);
       }
 
@@ -299,6 +295,10 @@ export function usePreviewPlaybackRegistration({
         }
       }
     });
+
+    return () => {
+      previewAdapter.setSnapshotApplier((_previewState) => undefined);
+    };
   }, [
     effectiveRuntimePreviewUrl,
     forceRefreshPreview,
