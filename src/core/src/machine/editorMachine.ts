@@ -36,6 +36,13 @@ import {
   applySelectionDiff,
   areSelectionsEqual,
 } from "../utils/editorDiff";
+import {
+  normalizeEditorFrame,
+  normalizeEditorPosition,
+  normalizeEditorSelection,
+  normalizeEditorViewState,
+  normalizeRecordingData,
+} from "../utils/editorState";
 import { isValidFrameState, isEditorReady } from "../utils/validation";
 import { calculateDurationFromFileReader } from "../utils/audioDuration";
 import {
@@ -74,40 +81,44 @@ const applyFrameState = (
   if (!frame.state || !isEditorReady(editor)) return decorationsCollection;
 
   let collection = decorationsCollection;
+  const normalizedFrame = normalizeEditorFrame(frame);
 
   try {
     // Apply content changes
-    applyContentDiff(editor, frame.state.content, previousFrame?.state.content);
-
-    // Apply position and selection
-    applyPositionDiff(
+    applyContentDiff(
       editor,
-      frame.state.position,
-      previousFrame?.state.position,
-    );
-    applySelectionDiff(
-      editor,
-      frame.state.selection,
-      previousFrame?.state.selection,
+      normalizedFrame.state.content,
+      previousFrame?.state.content,
     );
 
     const viewStateChanged =
-      !!frame.state.viewState &&
+      !!normalizedFrame.state.viewState &&
       (!previousFrame ||
         !areStructuredDataEqual(
-          frame.state.viewState,
+          normalizedFrame.state.viewState,
           previousFrame.state.viewState,
         ));
 
-    // Restore view state before syncing the playback cursor decoration so the
-    // custom cursor matches Monaco's final caret position for this frame.
+    // Restore scroll/layout first, then explicitly reapply selection so
+    // Monaco cursorState inside viewState cannot override the recorded caret.
     if (viewStateChanged) {
       try {
-        editor.restoreViewState(frame.state.viewState);
+        editor.restoreViewState(normalizedFrame.state.viewState);
       } catch (err) {
         console.error("Failed to restore view state:", err);
       }
     }
+
+    applyPositionDiff(
+      editor,
+      normalizedFrame.state.position,
+      editor.getPosition(),
+    );
+    applySelectionDiff(
+      editor,
+      normalizedFrame.state.selection,
+      editor.getSelection(),
+    );
 
     // Add cursor decorations during playback only when Monaco's own caret is
     // not visible. This avoids duplicate carets and preserves native
@@ -180,9 +191,17 @@ const createFrame = (
   getPreviewState?: EditorMachineInput["getPreviewState"],
 ): EditorFrame => {
   const content = editor.getValue();
-  const selection = editor.getSelection();
-  const position = editor.getPosition();
-  const viewState = editor.saveViewState();
+  const position = normalizeEditorPosition(editor.getPosition());
+  const selection = normalizeEditorSelection(
+    editor.getSelection(),
+    undefined,
+    position,
+  );
+  const viewState = normalizeEditorViewState(
+    editor.saveViewState(),
+    selection,
+    position,
+  );
   const slideState = getSlideState?.();
   const previewState = getPreviewState?.();
 
@@ -190,17 +209,8 @@ const createFrame = (
     timestamp,
     state: {
       content,
-      selection: selection || {
-        startLineNumber: 1,
-        startColumn: 1,
-        endLineNumber: 1,
-        endColumn: 1,
-        selectionStartLineNumber: 1,
-        selectionStartColumn: 1,
-        positionLineNumber: 1,
-        positionColumn: 1,
-      },
-      position: position || { lineNumber: 1, column: 1 },
+      selection,
+      position,
       viewState,
       mouseCursor,
       slideState: slideState?.previewState,
@@ -490,7 +500,10 @@ export const editorMachine = setup({
     shouldSyncPlaybackEditorRef: ({ context, event }) =>
       event.type === "SET_EDITOR_REF" &&
       event.editor !== null &&
-      context.pendingPlaybackEditorSync,
+      !context.hasManualWorkspaceOverride &&
+      (context.pendingPlaybackEditorSync ||
+        context.currentFrame !== null ||
+        context.lastAppliedFrameIndex >= 0),
     isValidSeekTime: ({ context, event }) => {
       if (event.type !== "SEEK") return false;
       return event.time >= 0 && event.time <= context.timeline.duration;
@@ -728,7 +741,8 @@ export const editorMachine = setup({
       const loaded = getLoadedRecordingPayload(context, event);
       if (!loaded) return {};
 
-      const { recording, duration } = loaded;
+      const recording = normalizeRecordingData(loaded.recording);
+      const { duration } = loaded;
 
       const initialWorkspaceEvent = recording.workspaceEvents?.[0];
       const initialRuntimeEvent = recording.runtimeEvents?.[0];
@@ -994,17 +1008,18 @@ export const editorMachine = setup({
 
       // Force restore the exact recorded frame by setting all state directly
       try {
+        const normalizedFrame = normalizeEditorFrame(recordedFrameAtPause);
         const model = editorRefs.editor.getModel();
         if (model) {
-          model.setValue(recordedFrameAtPause.state.content);
+          model.setValue(normalizedFrame.state.content);
         }
-        editorRefs.editor.setPosition(recordedFrameAtPause.state.position);
-        editorRefs.editor.setSelection(recordedFrameAtPause.state.selection);
-        if (recordedFrameAtPause.state.viewState) {
+        if (normalizedFrame.state.viewState) {
           editorRefs.editor.restoreViewState(
-            recordedFrameAtPause.state.viewState,
+            normalizedFrame.state.viewState,
           );
         }
+        editorRefs.editor.setPosition(normalizedFrame.state.position);
+        editorRefs.editor.setSelection(normalizedFrame.state.selection);
       } catch (error) {
         console.error("Error restoring recorded frame from pause:", error);
       }

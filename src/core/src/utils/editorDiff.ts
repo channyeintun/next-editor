@@ -38,7 +38,10 @@ export const applyPositionDiff = (
   targetPosition: EditorPosition,
   knownCurrentPosition?: EditorPosition | null
 ): boolean => {
-  const currentPosition = knownCurrentPosition !== undefined ? knownCurrentPosition : editor.getPosition();
+  const actualCurrentPosition = editor.getPosition();
+  const currentPosition = knownCurrentPosition !== undefined && arePositionsEqual(actualCurrentPosition, knownCurrentPosition)
+    ? knownCurrentPosition
+    : actualCurrentPosition;
 
   if (arePositionsEqual(currentPosition, targetPosition)) {
     return true; // No change needed
@@ -74,7 +77,10 @@ export const applySelectionDiff = (
   targetSelection: EditorSelection,
   knownCurrentSelection?: EditorSelection | null
 ): boolean => {
-  const currentSelection = knownCurrentSelection !== undefined ? knownCurrentSelection : editor.getSelection();
+  const actualCurrentSelection = editor.getSelection();
+  const currentSelection = knownCurrentSelection !== undefined && areSelectionsEqual(actualCurrentSelection, knownCurrentSelection)
+    ? knownCurrentSelection
+    : actualCurrentSelection;
 
   if (areSelectionsEqual(currentSelection, targetSelection)) {
     return true; // No change needed
@@ -127,9 +133,10 @@ export const applyContentDiff = (
   const model = editor.getModel();
   if (!model) return false;
 
-  const currentContent = knownCurrentContent !== undefined && knownCurrentContent !== null
+  const actualCurrentContent = model.getValue();
+  const currentContent = knownCurrentContent !== undefined && knownCurrentContent !== null && actualCurrentContent === knownCurrentContent
     ? knownCurrentContent
-    : model.getValue();
+    : actualCurrentContent;
 
   // If content is identical, no need to apply any operations
   if (currentContent === targetContent) {

@@ -3,6 +3,7 @@ import { superjson } from "./SuperJsonConfig";
 import { deflate, inflate } from "pako";
 import { type AudioPlaceholder } from "../core/src/types";
 import { encodeBase64, decodeBase64 } from "../core/src/utils/base64";
+import { normalizeRecordingData } from "../core/src/utils/editorState";
 import {
   createIndexedDBRecordingStore,
   type StoredRecordingEntry,
@@ -28,7 +29,7 @@ export class JsonStorage {
    */
   private normalizeRecording(recording: Recording): Recording {
     if (recording.version === 2 || recording.version === 3) {
-      return recording;
+      return normalizeRecordingData(recording);
     }
 
     throw new Error(

@@ -280,6 +280,16 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   }, [editorRef, syncEditorRef]);
 
   useEffect(() => {
+    const editor = editorRef.current;
+
+    if (!editor) {
+      return;
+    }
+
+    syncEditorRef(editor);
+  }, [editorModelPath, editorRef, syncEditorRef]);
+
+  useEffect(() => {
     if (isPlaying) {
       focusEditorIfNeeded(editorRef.current);
     }
@@ -479,7 +489,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             path={editorModelPath}
             language={selectedLanguage}
             theme={theme}
-            value={activeFile.content}
+            value={usesPlaybackModel ? undefined : activeFile.content}
             saveViewState={!usesPlaybackModel}
             onMount={handleEditorDidMount}
             beforeMount={handleEditorBeforeMount}
