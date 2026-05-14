@@ -125,13 +125,15 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
         ? normalizedNextActiveFilePath
         : normalizedProject.entryFilePath;
 
+      const savedSnapshot = cloneWorkspaceSnapshot({
+        activeFilePath: resolvedActiveFilePath,
+        project: normalizedProject,
+      });
+
       workspaceStoreRef.current.trigger.loadProject({
         project: normalizedProject,
         activeFilePath: resolvedActiveFilePath,
-        savedSnapshot: {
-          activeFilePath: resolvedActiveFilePath,
-          project: structuredClone(normalizedProject),
-        },
+        savedSnapshot,
       });
     },
     [],

@@ -66,6 +66,10 @@ export function areWorkspaceProjectsEqual(
   left: WorkspaceProject,
   right: WorkspaceProject,
 ): boolean {
+  if (left === right) {
+    return true;
+  }
+
   return (
     left.id === right.id &&
     left.name === right.name &&
@@ -80,6 +84,10 @@ export function areWorkspaceSnapshotsEqual(
   left: WorkspaceRecordingSnapshot,
   right: WorkspaceRecordingSnapshot,
 ): boolean {
+  if (left === right) {
+    return true;
+  }
+
   return (
     left.activeFilePath === right.activeFilePath &&
     areWorkspaceProjectsEqual(left.project, right.project)

@@ -8,15 +8,14 @@ import {
   useWebContainerRuntimeSaveWorkspace,
   useWebContainerRuntimeSnapshotGetter,
 } from "../hooks/useWebContainerRuntime";
-import {
-  useWorkspaceActions,
-} from "../hooks/useWorkspace";
+import { useWorkspaceActions } from "../hooks/useWorkspace";
 import { createJsonStorage } from "../storage/JsonStorage";
 import type { SlidePreviewState, PreviewState, Slide } from "../types/slides";
 import type {
   RuntimePanelRecordingState,
   RuntimeRecordingSnapshot,
 } from "../types/runtime";
+import type { WorkspaceRecordingSnapshot } from "../types/workspace";
 
 interface NextEditorProviderProps {
   children: React.ReactNode;
@@ -317,6 +316,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
   const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
   const runtimeSnapshotRef = useRef(getRuntimeRecordingSnapshot());
+  const workspaceSnapshotRef = useRef<WorkspaceRecordingSnapshot | null>(null);
   const suppressWorkspaceEventsRef = useRef(false);
   const clearWorkspaceEventSuppressionTimeoutRef = useRef<number | null>(null);
   const getSlideStateRef = useRef<
@@ -385,10 +385,27 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
 
       getSlides: () => getSlidesRef.current?.() || [],
       applySlides: (slides) => applySlidesRef.current?.(slides),
-      getWorkspaceSnapshot: () => ({
-        project: structuredClone(getProject()),
-        activeFilePath: getActiveFilePath(),
-      }),
+      getWorkspaceSnapshot: () => {
+        const project = getProject();
+        const activeFilePath = getActiveFilePath();
+        const cachedSnapshot = workspaceSnapshotRef.current;
+
+        if (
+          cachedSnapshot &&
+          cachedSnapshot.project === project &&
+          cachedSnapshot.activeFilePath === activeFilePath
+        ) {
+          return cachedSnapshot;
+        }
+
+        const nextSnapshot = {
+          project,
+          activeFilePath,
+        } satisfies WorkspaceRecordingSnapshot;
+
+        workspaceSnapshotRef.current = nextSnapshot;
+        return nextSnapshot;
+      },
       applyWorkspaceSnapshot: (snapshot) => {
         suppressWorkspaceEvents();
         loadProject(snapshot.project, snapshot.activeFilePath);

@@ -48,7 +48,7 @@ export function cloneWorkspaceSnapshot(
 ): StoredWorkspaceSnapshot {
   return {
     activeFilePath: snapshot.activeFilePath,
-    project: structuredClone(snapshot.project),
+    project: snapshot.project,
   };
 }
 
