@@ -10,7 +10,7 @@ Rules in force:
 
 1. Task 1. Reopen planning for enhancement 4: Completed
 2. Task 2. Add an IndexedDB recording store: Completed
-3. Task 3. Route recording persistence through metadata and payload operations: Not started
+3. Task 3. Route recording persistence through metadata and payload operations: Completed
 4. Task 4. Migrate legacy localStorage archives: Not started
 5. Task 5. Validate and finish enhancement 4: Not started
 
@@ -24,6 +24,7 @@ Enhancement 4 status: In progress
 - Confirmed that there is no existing IndexedDB recording persistence helper in `src/` to reuse for enhancement 4.
 - Completed Task 1 by rewriting `plan.md` and `progress.md` for the approved enhancement-4 scope.
 - Completed Task 2 by adding `src/storage/IndexedDBRecordingStore.ts` with separate metadata, payload, and system stores for per-recording persistence, and validated with `bun run typecheck`.
+- Completed Task 3 by routing `src/storage/JsonStorage.ts` through the IndexedDB store for save/load/delete/clear, keeping `.ne` export/import intact, and switching stats to IndexedDB metadata with `bun run typecheck` validation.
 
 ## Risks
 
