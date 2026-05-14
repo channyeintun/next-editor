@@ -246,18 +246,12 @@ const FileSidebar = memo(function FileSidebar() {
     setActiveFilePath,
     setPreviewFilePath,
   } = useWorkspaceActions();
-  const {
-    activeFilePath,
-    files,
-    folders,
-    lessonType,
-    previewFilePath,
-  } = useWorkspaceSidebarState();
+  const { activeFilePath, files, folders, lessonType, previewFilePath } =
+    useWorkspaceSidebarState();
   const tree = useMemo(
     () => buildWorkspaceTree(files, folders, activeFilePath),
     [activeFilePath, files, folders],
   );
-  const activeParentPath = getParentWorkspacePath(activeFilePath);
   const menuStyle = useMemo(() => {
     if (!contextMenu) {
       return undefined;
@@ -281,7 +275,7 @@ const FileSidebar = memo(function FileSidebar() {
   const contextMenuCreateParentPath =
     contextMenu?.kind === "folder"
       ? contextMenu.path
-      : contextMenu?.parentPath ?? "";
+      : (contextMenu?.parentPath ?? "");
 
   useEffect(() => {
     if (!editState || !editInputRef.current) {
@@ -383,11 +377,11 @@ const FileSidebar = memo(function FileSidebar() {
   };
 
   const handleCreateFile = () => {
-    openCreateInput("file", activeParentPath);
+    openCreateInput("file", "");
   };
 
   const handleCreateFolder = () => {
-    openCreateInput("folder", activeParentPath);
+    openCreateInput("folder", "");
   };
 
   const startRenameEntry = (kind: SidebarEntryKind, path: string) => {
@@ -604,7 +598,9 @@ const FileSidebar = memo(function FileSidebar() {
         <button
           type="button"
           onClick={() => setActiveFilePath(node.path)}
-          onContextMenu={(event) => handleRowContextMenu(event, "file", node.path)}
+          onContextMenu={(event) =>
+            handleRowContextMenu(event, "file", node.path)
+          }
           className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors ${
             isActive
               ? "bg-slate-800 text-white"
@@ -667,7 +663,9 @@ const FileSidebar = memo(function FileSidebar() {
           >
             <button
               type="button"
-              onClick={() => openCreateInput("file", contextMenuCreateParentPath)}
+              onClick={() =>
+                openCreateInput("file", contextMenuCreateParentPath)
+              }
               className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
             >
               New File
