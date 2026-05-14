@@ -10,11 +10,13 @@ export default memo(function SlidePanel() {
     previewState,
     currentSlideIndex,
     goToSlide,
+    closePresentation,
     handleSlideEvent: onSlideEvent,
   } = useSlidesContext();
   const { slides: slidesAdapter } = useNextEditorDomainAdapters();
 
   const { pause } = useNextEditorActions();
+  const isPresentationVisible = previewState.isOpen && previewState.isMaximized === true;
 
   return (
     <>
@@ -25,7 +27,8 @@ export default memo(function SlidePanel() {
         onSlideChange={goToSlide}
         onSlideEvent={onSlideEvent}
         onStopPlayback={pause}
-        isOpen={previewState.isOpen}
+        onClose={closePresentation}
+        isOpen={isPresentationVisible}
         isMaximized={previewState.isMaximized}
         verticalIndex={previewState.indexv}
         currentInteraction={previewState.currentInteraction}

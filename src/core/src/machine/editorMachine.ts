@@ -994,6 +994,44 @@ export const editorMachine = setup({
       };
     }),
 
+    adoptPlaybackWorkspaceAtPause: ({ context }) => {
+      const currentSnapshot = context.getWorkspaceSnapshot?.();
+      const activeFilePath = currentSnapshot?.activeFilePath;
+      const currentFile = activeFilePath
+        ? currentSnapshot?.project.files[activeFilePath]
+        : undefined;
+      const pausedContent = context.currentFrame?.state?.content;
+
+      if (
+        !currentSnapshot ||
+        !context.applyWorkspaceSnapshot ||
+        !activeFilePath ||
+        !currentFile ||
+        pausedContent === undefined
+      ) {
+        return;
+      }
+
+      if (currentFile.content === pausedContent) {
+        context.applyWorkspaceSnapshot(currentSnapshot);
+        return;
+      }
+
+      context.applyWorkspaceSnapshot({
+        ...currentSnapshot,
+        project: {
+          ...currentSnapshot.project,
+          files: {
+            ...currentSnapshot.project.files,
+            [activeFilePath]: {
+              ...currentFile,
+              content: pausedContent,
+            },
+          },
+        },
+      });
+    },
+
     restoreRecordedFrameFromPause: ({ context }) => {
       const { editorRefs, hasManualWorkspaceOverride, recordedFrameAtPause } =
         context;
@@ -1679,13 +1717,18 @@ export const editorMachine = setup({
         },
 
         paused: {
-          entry: ["storeRecordedFrameAtPause"],
+          entry: [
+            "storeRecordedFrameAtPause",
+            "adoptPlaybackWorkspaceAtPause",
+            "detachPlaybackWorkspace",
+          ],
           on: {
             TICK: {
               actions: [...APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS],
             },
             SEEK: {
               actions: [
+                "reattachPlaybackWorkspace",
                 "seekToTime",
                 ...APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS,
                 enqueueActions(({ event, enqueue }) => {
