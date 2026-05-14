@@ -12,9 +12,9 @@ Rules in force:
 2. Task 2. Cache compiled static preview output: Completed
 3. Task 3. Extract preview controller and renderers: Completed
 4. Task 4. Isolate iframe messaging and playback wiring: Completed
-5. Task 5. Validate and finish enhancement 3: In progress
+5. Task 5. Validate and finish enhancement 3: Completed
 
-Enhancement 3 status: In progress
+Enhancement 3 status: Completed
 
 ## Log
 
@@ -25,9 +25,10 @@ Enhancement 3 status: In progress
 - Completed Task 2 by extracting static preview compilation into `src/components/preview/staticWorkspacePreview.ts`, memoizing it by `previewVersion`, and validating with `bun run typecheck`.
 - Completed Task 3 by moving preview orchestration into `src/components/preview/usePreviewController.ts`, extracting preview chrome plus static and runtime renderer components, and validating with `bun run typecheck`.
 - Completed Task 4 by moving iframe message handling, preview getter/applier registration, and interaction capture into dedicated preview hooks and validating with `bun run typecheck`.
+- Completed Task 5 with a final `bun run typecheck` pass after formatting, and no enhancement beyond the approved phase-3 scope was started.
 
 ## Risks
 
-- Validation for enhancement 3 will be limited to formatting and typechecking because tests must not be added.
-- Preview refactoring touches recording and replay paths, so regressions are most likely around refresh, paused playback, and iframe interaction capture.
+- Validation for enhancement 3 is limited to formatting and typechecking because tests must not be added.
+- Manual browser validation was not run, so the main residual risk is interactive preview behavior during refresh, paused playback, and iframe interaction capture.
 - No enhancement beyond the approved enhancement-3 scope has been started.
