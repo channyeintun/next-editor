@@ -1,11 +1,12 @@
 # Plan
 
-Scope: Enhancement 3 preview decomposition and static preview caching.
+Scope: Enhancement 4 recording persistence migration to incremental IndexedDB storage.
 
 Out of scope:
-- Enhancements 4-6 from `enhancements.md`
+- Enhancements 5-6 from `enhancements.md`
 - New tests
-- Behavior changes unrelated to preview rendering, preview replay, or preview iframe wiring
+- Changes to the `.ne` import/export file format beyond what is needed to keep it working
+- Preview, runtime, or editor-machine refactors unrelated to recording persistence
 
 Execution rules:
 - Follow this file and `progress.md`.
@@ -13,60 +14,62 @@ Execution rules:
 - Do not start any later enhancement phase without explicit user approval.
 
 Goal:
-- Remove static workspace preview compilation from ordinary `Preview` renders.
-- Split preview orchestration from preview presentation.
-- Isolate iframe messaging, playback registration, and interaction capture into narrower preview hooks.
+- Replace the in-app localStorage recording archive with per-recording IndexedDB persistence.
+- Separate lightweight recording metadata from larger recording payloads.
+- Preserve the existing `.ne` import/export behavior while decoupling it from app persistence.
+- Migrate legacy localStorage archives forward so existing recordings remain available.
 
 Definition of done:
-- Static workspace preview output is cached by `previewVersion` and not rebuilt on unrelated rerenders.
-- `src/components/Preview.tsx` is reduced to composition around extracted preview modules.
-- Separate static and runtime preview renderers exist.
-- Iframe event wiring and replay state application are moved into isolated hooks or modules with narrow responsibilities.
+- Saving or deleting one recording no longer reloads and rewrites the entire in-app archive.
+- Recordings are persisted individually in IndexedDB.
+- Metadata operations do not require decompressing every stored recording payload.
+- Existing localStorage archives are migrated into IndexedDB automatically.
 - Typecheck passes.
 - No tests are added.
 
-## Task 1. Reopen planning for enhancement 3
+## Task 1. Reopen planning for enhancement 4
 
 Deliverables:
-- Update `plan.md` for the approved enhancement-3 scope.
-- Update `progress.md` so enhancement 3 is the active phase.
+- Update `plan.md` for the approved enhancement-4 scope.
+- Update `progress.md` so enhancement 4 is the active phase.
 
 Exit criteria:
-- The tracking files describe only enhancement 3 work.
+- The tracking files describe only enhancement 4 work.
 
-## Task 2. Cache compiled static preview output
+## Task 2. Add an IndexedDB recording store
 
 Deliverables:
-- Extract static preview compilation from `src/components/Preview.tsx` into a dedicated preview module.
-- Cache compiled static preview output by `previewVersion` so ordinary preview rerenders do not rebuild the document.
+- Introduce an IndexedDB-backed recording store for per-recording persistence.
+- Store lightweight metadata separately from larger payload data.
 
 Exit criteria:
-- Static preview generation no longer runs inline from render-time branching.
+- The storage layer can save, load, delete, and clear recordings without rebuilding a combined archive.
 
-## Task 3. Extract preview controller and renderers
+## Task 3. Route recording persistence through metadata and payload operations
 
 Deliverables:
-- Move preview orchestration into a dedicated controller hook.
-- Add separate static and runtime preview renderer components while preserving existing preview chrome and sizing behavior.
+- Update the existing storage API to use IndexedDB for in-app persistence.
+- Keep `.ne` export and import behavior working through the storage layer.
+- Make stats and listing-style operations use metadata instead of full archive decompression.
 
 Exit criteria:
-- `Preview.tsx` becomes a thin composition layer over extracted preview logic and renderers.
+- In-app persistence is decoupled from the export/import format.
 
-## Task 4. Isolate iframe messaging and playback wiring
+## Task 4. Migrate legacy localStorage archives
 
 Deliverables:
-- Move iframe message handling, preview state getter/applier registration, and interaction capture into isolated preview hooks.
-- Keep preview replay behavior and refresh flows consistent with the current implementation.
+- Detect the existing localStorage recording archive and migrate its recordings into IndexedDB.
+- Prevent repeat migrations once the archive has been imported.
 
 Exit criteria:
-- The remaining preview side effects live in focused hooks instead of one monolithic component.
+- Existing localStorage-backed recordings remain available after the storage migration.
 
-## Task 5. Validate and finish enhancement 3
+## Task 5. Validate and finish enhancement 4
 
 Deliverables:
 - Run typecheck.
-- Update `progress.md` with final status and remaining risks for enhancement 3 only.
+- Update `progress.md` with final status and remaining risks for enhancement 4 only.
 
 Exit criteria:
-- All approved enhancement-3 tasks are marked complete.
-- The final commit for this phase contains only the requested preview changes.
+- All approved enhancement-4 tasks are marked complete.
+- The final commit for this phase contains only the requested storage changes.

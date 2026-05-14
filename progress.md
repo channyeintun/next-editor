@@ -1,36 +1,31 @@
 # Progress
 
-Active phase: Enhancement 3 preview decomposition and static preview caching
+Active phase: Enhancement 4 recording persistence migration to incremental IndexedDB storage
 
 Rules in force:
 - No tests will be added.
-- No work will start on enhancements 4-6 until the user approves explicitly.
+- No work will start on enhancement 5 or enhancement 6 until the user approves explicitly.
 
 ## Status
 
-1. Task 1. Reopen planning for enhancement 3: Completed
-2. Task 2. Cache compiled static preview output: Completed
-3. Task 3. Extract preview controller and renderers: Completed
-4. Task 4. Isolate iframe messaging and playback wiring: Completed
-5. Task 5. Validate and finish enhancement 3: Completed
+1. Task 1. Reopen planning for enhancement 4: Completed
+2. Task 2. Add an IndexedDB recording store: Not started
+3. Task 3. Route recording persistence through metadata and payload operations: Not started
+4. Task 4. Migrate legacy localStorage archives: Not started
+5. Task 5. Validate and finish enhancement 4: Not started
 
-Enhancement 3 status: Completed
+Enhancement 4 status: In progress
 
 ## Log
 
-- Enhancement 1 and enhancement 2 are already complete.
-- Confirmed that `src/components/Preview.tsx` still compiles static workspace preview output inline during render through `createStaticWorkspacePreview(getProject())`.
-- Confirmed that `Preview.tsx` currently mixes runtime preview state, iframe message handling, preview replay registration, interaction capture, and preview UI composition in one component.
-- Completed Task 1 by rewriting `plan.md` and `progress.md` for the approved enhancement-3 scope.
-- Completed Task 2 by extracting static preview compilation into `src/components/preview/staticWorkspacePreview.ts`, memoizing it by `previewVersion`, and validating with `bun run typecheck`.
-- Completed Task 3 by moving preview orchestration into `src/components/preview/usePreviewController.ts`, extracting preview chrome plus static and runtime renderer components, and validating with `bun run typecheck`.
-- Completed Task 4 by moving iframe message handling, preview getter/applier registration, and interaction capture into dedicated preview hooks and validating with `bun run typecheck`.
-- Completed Task 5 with a final `bun run typecheck` pass after formatting, and no enhancement beyond the approved phase-3 scope was started.
-- Post-phase fix: kept Preview on the playback model through the `ended` state by switching its live-preview gates from `isPlaying` to `usesPlaybackModel`, and validated with `bun run typecheck`.
+- Enhancement 1, enhancement 2, and enhancement 3 are already complete.
+- Confirmed that `src/storage/JsonStorage.ts` still stores all recordings as one base64-encoded compressed archive in localStorage.
+- Confirmed that `save()` and `delete()` currently call `load()` and then rewrite the full archive, so their cost scales with the whole recording set.
+- Confirmed that there is no existing IndexedDB recording persistence helper in `src/` to reuse for enhancement 4.
+- Completed Task 1 by rewriting `plan.md` and `progress.md` for the approved enhancement-4 scope.
 
 ## Risks
 
-- Validation for enhancement 3 is limited to formatting and typechecking because tests must not be added.
-- Manual browser validation was not run, so the main residual risk is interactive preview behavior during refresh, paused playback, and iframe interaction capture.
-- Playback-end preview fallback should now stay on the recorded end content, but this remains typecheck-only validated until manual playback is exercised.
-- No enhancement beyond the approved enhancement-3 scope has been started.
+- Existing recordings currently depend on the legacy localStorage archive, so enhancement 4 must include migration rather than a hard storage cutover.
+- Validation remains constrained to formatting and typechecking because tests must not be added.
+- No enhancement beyond the approved enhancement-4 scope has been started.
