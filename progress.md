@@ -9,8 +9,8 @@ Rules in force:
 ## Status
 
 1. Task 1. Reopen planning for enhancement 3: Completed
-2. Task 2. Cache compiled static preview output: In progress
-3. Task 3. Extract preview controller and renderers: Not started
+2. Task 2. Cache compiled static preview output: Completed
+3. Task 3. Extract preview controller and renderers: In progress
 4. Task 4. Isolate iframe messaging and playback wiring: Not started
 5. Task 5. Validate and finish enhancement 3: Not started
 
@@ -22,6 +22,7 @@ Enhancement 3 status: In progress
 - Confirmed that `src/components/Preview.tsx` still compiles static workspace preview output inline during render through `createStaticWorkspacePreview(getProject())`.
 - Confirmed that `Preview.tsx` currently mixes runtime preview state, iframe message handling, preview replay registration, interaction capture, and preview UI composition in one component.
 - Completed Task 1 by rewriting `plan.md` and `progress.md` for the approved enhancement-3 scope.
+- Completed Task 2 by extracting static preview compilation into `src/components/preview/staticWorkspacePreview.ts`, memoizing it by `previewVersion`, and validating with `bun run typecheck`.
 
 ## Risks
 

@@ -6,20 +6,12 @@ import {
   useNextEditorMetadata,
 } from "../hooks/useNextEditorContext";
 import {
-  useWorkspaceActions,
   useWorkspaceLessonType,
   useWorkspacePreviewVersion,
   useWorkspaceSaveVersion,
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeMetadata } from "../hooks/useWebContainerRuntime";
 import type { WebContainerRuntimeStatus } from "../contexts/WebContainerRuntimeContext";
-import {
-  DEFAULT_WORKSPACE_ENTRY_PATH,
-  getParentWorkspacePath,
-  joinWorkspacePath,
-  normalizeWorkspacePath,
-  type WorkspaceProject,
-} from "../types/workspace";
 import type {
   PreviewSize,
   PreviewState,
@@ -27,6 +19,7 @@ import type {
   IframeInteractionEvent,
 } from "../types/slides";
 import { arePreviewSizesEqual } from "../utils/equality";
+import { useCompiledStaticWorkspacePreview } from "./preview/useCompiledStaticWorkspacePreview";
 
 const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
 
@@ -262,125 +255,13 @@ function createRuntimePreviewPlaceholder(
 </html>`;
 }
 
-function isLocalWorkspaceAssetPath(path: string): boolean {
-  return !/^(?:[a-z]+:|\/\/|#|data:|blob:)/i.test(path);
-}
-
-function resolveWorkspaceAssetPath(
-  sourcePath: string,
-  assetPath: string,
-): string {
-  if (assetPath.startsWith("/")) {
-    return normalizeWorkspacePath(assetPath);
-  }
-
-  return joinWorkspacePath(getParentWorkspacePath(sourcePath), assetPath);
-}
-
-function getStaticPreviewEntry(project: WorkspaceProject) {
-  const configuredEntry = project.files[project.entryFilePath];
-
-  if (configuredEntry?.language === "html") {
-    return configuredEntry;
-  }
-
-  return (
-    project.files[DEFAULT_WORKSPACE_ENTRY_PATH] ??
-    Object.values(project.files).find((file) => file.language === "html") ??
-    null
-  );
-}
-
-function supportsStaticWorkspaceScript(
-  assetPath: string,
-  content: string,
-): boolean {
-  if (/\.(?:jsx|tsx)$/i.test(assetPath)) {
-    return false;
-  }
-
-  return !/\b(?:import|export)\b/.test(content);
-}
-
-function createStaticWorkspacePreview(project: WorkspaceProject): string {
-  const entryFile = getStaticPreviewEntry(project);
-
-  if (!entryFile) {
-    return "";
-  }
-
-  try {
-    const parser = new DOMParser();
-    const document = parser.parseFromString(entryFile.content, "text/html");
-
-    for (const link of Array.from(
-      document.querySelectorAll('link[rel="stylesheet"][href]'),
-    )) {
-      const href = link.getAttribute("href");
-
-      if (!href || !isLocalWorkspaceAssetPath(href)) {
-        continue;
-      }
-
-      const assetPath = resolveWorkspaceAssetPath(entryFile.path, href);
-      const assetFile = project.files[assetPath];
-
-      if (!assetFile) {
-        continue;
-      }
-
-      const style = document.createElement("style");
-      style.setAttribute("data-source", assetFile.path);
-      style.textContent = assetFile.content;
-      link.replaceWith(style);
-    }
-
-    for (const script of Array.from(document.querySelectorAll("script[src]"))) {
-      const src = script.getAttribute("src");
-
-      if (!src || !isLocalWorkspaceAssetPath(src)) {
-        continue;
-      }
-
-      const assetPath = resolveWorkspaceAssetPath(entryFile.path, src);
-      const assetFile = project.files[assetPath];
-
-      if (!assetFile) {
-        continue;
-      }
-
-      if (!supportsStaticWorkspaceScript(assetFile.path, assetFile.content)) {
-        return "";
-      }
-
-      const inlineScript = document.createElement("script");
-
-      for (const attribute of Array.from(script.attributes)) {
-        if (attribute.name === "src") {
-          continue;
-        }
-
-        inlineScript.setAttribute(attribute.name, attribute.value);
-      }
-
-      inlineScript.textContent = assetFile.content;
-      script.replaceWith(inlineScript);
-    }
-
-    return `<!doctype html>\n${document.documentElement.outerHTML}`;
-  } catch (error) {
-    console.warn("Failed to create static workspace preview:", error);
-
-    return "";
-  }
-}
-
 function createReplayableRuntimePreview(
   iframe: HTMLIFrameElement,
   baseUrl: string,
 ): string | null {
   try {
-    const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
+    const iframeDocument =
+      iframe.contentDocument || iframe.contentWindow?.document;
 
     if (!iframeDocument?.documentElement) {
       return null;
@@ -473,7 +354,6 @@ const Preview = memo(function Preview() {
     registerPreviewStateGetter,
     registerPreviewStateApplier,
   } = useNextEditorActions();
-  const { getProject } = useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
   const previewVersion = useWorkspacePreviewVersion();
   const saveVersion = useWorkspaceSaveVersion();
@@ -487,13 +367,15 @@ const Preview = memo(function Preview() {
 
   const { currentRecording, isPlaying, isRecording } = useNextEditorMetadata();
   const recordedRuntimeSnapshot =
-    isPlaying && !isRecording ? currentRecording?.runtimeSnapshot ?? null : null;
+    isPlaying && !isRecording
+      ? (currentRecording?.runtimeSnapshot ?? null)
+      : null;
   const recordedRuntimeStatus = recordedRuntimeSnapshot?.status as
     | WebContainerRuntimeStatus
     | undefined;
   const effectiveRuntimeStatus =
     runtimeStatus === "idle"
-      ? recordedRuntimeStatus ?? runtimeStatus
+      ? (recordedRuntimeStatus ?? runtimeStatus)
       : runtimeStatus;
   const effectiveRuntimePreviewUrl =
     runtimePreviewUrl || recordedRuntimeSnapshot?.previewUrl || null;
@@ -513,11 +395,7 @@ const Preview = memo(function Preview() {
         effectiveRuntimeErrorMessage,
         isRuntimeSupported,
       ),
-    [
-      effectiveRuntimeErrorMessage,
-      effectiveRuntimeStatus,
-      isRuntimeSupported,
-    ],
+    [effectiveRuntimeErrorMessage, effectiveRuntimeStatus, isRuntimeSupported],
   );
   const runtimePreviewPlaceholder = useMemo(
     () =>
@@ -532,9 +410,7 @@ const Preview = memo(function Preview() {
       runtimePreviewState.title,
     ],
   );
-  const staticWorkspacePreview = isStaticWorkspacePreview
-    ? createStaticWorkspacePreview(getProject())
-    : "";
+  const staticWorkspacePreview = useCompiledStaticWorkspacePreview();
 
   // Keep refs updated synchronously
   isRecordingRef.current = isRecording;
@@ -616,10 +492,7 @@ const Preview = memo(function Preview() {
 
       const { type, payload } = event.data || {};
       if (type === RUNTIME_SNAPSHOT_MESSAGE_TYPE) {
-        if (
-          typeof payload?.html !== "string" ||
-          !effectiveRuntimePreviewUrl
-        ) {
+        if (typeof payload?.html !== "string" || !effectiveRuntimePreviewUrl) {
           return;
         }
 
@@ -722,14 +595,15 @@ const Preview = memo(function Preview() {
         };
       });
     }
-  }, [captureRuntimePreviewSnapshot, isRuntimePreviewActive, registerPreviewStateGetter]); // size is used via sizeRef
+  }, [
+    captureRuntimePreviewSnapshot,
+    isRuntimePreviewActive,
+    registerPreviewStateGetter,
+  ]); // size is used via sizeRef
 
   const updateIframeContent = useCallback(
     (content: string, options?: { force?: boolean }) => {
-      if (
-        !iframeRef.current ||
-        (isRuntimePreviewActive && !options?.force)
-      ) {
+      if (!iframeRef.current || (isRuntimePreviewActive && !options?.force)) {
         return;
       }
 
@@ -788,16 +662,19 @@ const Preview = memo(function Preview() {
 
       if (isRuntimePreviewActive && effectiveRuntimePreviewUrl) {
         if (!options?.emitEvent) {
-          void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).finally(
-            finishRefresh,
-          );
+          void refreshRuntimePreview(
+            iframe,
+            effectiveRuntimePreviewUrl,
+          ).finally(finishRefresh);
           return;
         }
 
         let didFinalize = false;
         let runtimeSnapshotPollTimeout: number | null = null;
         const initialRuntimeSnapshot =
-          captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || "";
+          captureRuntimePreviewSnapshot() ||
+          lastRuntimeSnapshotRef.current ||
+          "";
 
         const cleanupRuntimeRefresh = () => {
           iframe.removeEventListener("load", handleRuntimeRefreshLoad);
@@ -817,7 +694,7 @@ const Preview = memo(function Preview() {
           // Always try to include content for replay.
           // Fall back to static workspace preview if DOM snapshot is unavailable.
           const resolvedContent =
-            content || createStaticWorkspacePreview(getProject()) || undefined;
+            content || staticWorkspacePreview || undefined;
 
           emitPreviewEvent(
             "preview_refresh",
@@ -832,10 +709,7 @@ const Preview = memo(function Preview() {
             lastRuntimeSnapshotRef.current ||
             undefined;
 
-          if (
-            content !== undefined &&
-            content !== initialRuntimeSnapshot
-          ) {
+          if (content !== undefined && content !== initialRuntimeSnapshot) {
             finalizeRuntimeRefresh(content);
             return;
           }
@@ -920,7 +794,6 @@ const Preview = memo(function Preview() {
       editorRef,
       captureRuntimePreviewSnapshot,
       emitPreviewEvent,
-      getProject,
       isRuntimeManagedPreview,
       isRuntimePreviewActive,
       isStaticWorkspacePreview,
@@ -988,9 +861,7 @@ const Preview = memo(function Preview() {
               emitEvent: false,
             });
           } else if (effectiveRuntimePreviewUrl) {
-            // Runtime preview: generate static preview from workspace as fallback
-            const project = getProject();
-            const staticFallback = createStaticWorkspacePreview(project);
+            const staticFallback = staticWorkspacePreview;
 
             if (staticFallback) {
               forceRefreshPreview({
@@ -1173,9 +1044,9 @@ const Preview = memo(function Preview() {
   }, [
     effectiveRuntimePreviewUrl,
     forceRefreshPreview,
-    getProject,
     isRuntimePreviewActive,
     registerPreviewStateApplier,
+    staticWorkspacePreview,
     updateIframeContent,
   ]);
 
