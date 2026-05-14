@@ -305,12 +305,13 @@ export function usePreviewController(): PreviewController {
     runnerConfig,
   } = useWebContainerRuntimeMetadata();
 
-  const { currentRecording, isPlaying, isRecording } = useNextEditorMetadata();
+  const { currentRecording, isPlaying, isRecording, usesPlaybackModel } =
+    useNextEditorMetadata();
   const staticWorkspacePreview = useCompiledStaticWorkspacePreview();
-  const recordedRuntimeSnapshot =
-    isPlaying && !isRecording
-      ? (currentRecording?.runtimeSnapshot ?? null)
-      : null;
+  const isPlaybackPreviewActive = usesPlaybackModel && !isRecording;
+  const recordedRuntimeSnapshot = isPlaybackPreviewActive
+    ? (currentRecording?.runtimeSnapshot ?? null)
+    : null;
   const recordedRuntimeStatus = recordedRuntimeSnapshot?.status as
     | WebContainerRuntimeStatus
     | undefined;
@@ -666,7 +667,7 @@ export function usePreviewController(): PreviewController {
   });
 
   useEffect(() => {
-    if (isPlaying || !isRuntimePreviewActive) {
+    if (isPlaybackPreviewActive || !isRuntimePreviewActive) {
       return;
     }
 
@@ -686,10 +687,14 @@ export function usePreviewController(): PreviewController {
     return () => {
       iframe.removeEventListener("load", syncSnapshot);
     };
-  }, [captureRuntimePreviewSnapshot, isPlaying, isRuntimePreviewActive]);
+  }, [
+    captureRuntimePreviewSnapshot,
+    isPlaybackPreviewActive,
+    isRuntimePreviewActive,
+  ]);
 
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaybackPreviewActive) {
       return;
     }
 
@@ -735,7 +740,7 @@ export function usePreviewController(): PreviewController {
     }
   }, [
     editorRef,
-    isPlaying,
+    isPlaybackPreviewActive,
     isStaticWorkspacePreview,
     isRuntimeManagedPreview,
     lessonType,
@@ -748,7 +753,7 @@ export function usePreviewController(): PreviewController {
   ]);
 
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaybackPreviewActive) {
       return;
     }
 
@@ -760,11 +765,11 @@ export function usePreviewController(): PreviewController {
     }
 
     forceRefreshPreview({ emitEvent: true });
-  }, [forceRefreshPreview, isPlaying, saveVersion]);
+  }, [forceRefreshPreview, isPlaybackPreviewActive, saveVersion]);
 
   useEffect(() => {
     if (
-      isPlaying ||
+      isPlaybackPreviewActive ||
       runtimePreviewUrl ||
       isRuntimeManagedPreview ||
       isStaticWorkspacePreview
@@ -787,7 +792,7 @@ export function usePreviewController(): PreviewController {
     checkForEditor();
   }, [
     editorRef,
-    isPlaying,
+    isPlaybackPreviewActive,
     isRuntimeManagedPreview,
     isStaticWorkspacePreview,
     runtimePreviewUrl,
@@ -796,7 +801,7 @@ export function usePreviewController(): PreviewController {
 
   useEffect(() => {
     if (
-      isPlaying ||
+      isPlaybackPreviewActive ||
       runtimePreviewUrl ||
       isRuntimeManagedPreview ||
       isStaticWorkspacePreview
@@ -823,7 +828,7 @@ export function usePreviewController(): PreviewController {
     };
   }, [
     editorRef,
-    isPlaying,
+    isPlaybackPreviewActive,
     isStaticWorkspacePreview,
     isRuntimeManagedPreview,
     runtimePreviewUrl,

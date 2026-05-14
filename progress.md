@@ -26,9 +26,11 @@ Enhancement 3 status: Completed
 - Completed Task 3 by moving preview orchestration into `src/components/preview/usePreviewController.ts`, extracting preview chrome plus static and runtime renderer components, and validating with `bun run typecheck`.
 - Completed Task 4 by moving iframe message handling, preview getter/applier registration, and interaction capture into dedicated preview hooks and validating with `bun run typecheck`.
 - Completed Task 5 with a final `bun run typecheck` pass after formatting, and no enhancement beyond the approved phase-3 scope was started.
+- Post-phase fix: kept Preview on the playback model through the `ended` state by switching its live-preview gates from `isPlaying` to `usesPlaybackModel`, and validated with `bun run typecheck`.
 
 ## Risks
 
 - Validation for enhancement 3 is limited to formatting and typechecking because tests must not be added.
 - Manual browser validation was not run, so the main residual risk is interactive preview behavior during refresh, paused playback, and iframe interaction capture.
+- Playback-end preview fallback should now stay on the recorded end content, but this remains typecheck-only validated until manual playback is exercised.
 - No enhancement beyond the approved enhancement-3 scope has been started.
