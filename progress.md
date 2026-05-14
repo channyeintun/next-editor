@@ -12,9 +12,9 @@ Rules in force:
 2. Task 2. Extract shared runtime support utilities: Completed
 3. Task 3. Introduce a queued workspace sync controller: Completed
 4. Task 4. Extract runtime session control: Completed
-5. Task 5. Validate and finish enhancement 6: In progress
+5. Task 5. Validate and finish enhancement 6: Completed
 
-Enhancement 6 status: In progress
+Enhancement 6 status: Completed
 
 ## Log
 
@@ -25,8 +25,9 @@ Enhancement 6 status: In progress
 - Completed Task 2 by moving shared runtime helpers into `src/contexts/webContainerRuntimeSupport.ts`, keeping the provider behavior intact while shrinking its inline utility surface, then validating with `bun run typecheck`.
 - Completed Task 3 by extracting workspace mount/sync state into `src/contexts/useWebContainerWorkspaceSync.ts`, routing provider saves and save-version syncs through an explicit serialized queue, and validating with `bun run typecheck`.
 - Completed Task 4 by moving WebContainer session state, event wiring, runner control, and terminal lifecycle into `src/contexts/useWebContainerRuntimeSession.ts`, leaving `src/contexts/WebContainerRuntimeProvider.tsx` focused on runtime orchestration and context composition, then validating with `bun run typecheck`.
+- Completed Task 5 with a final `bun run typecheck` pass, and enhancement 6 now ends with shared runtime helpers, a queued workspace sync controller, and a dedicated runtime session controller behind `src/contexts/WebContainerRuntimeProvider.tsx`.
 
 ## Risks
 
-- Validation for this phase is expected to remain limited to formatting plus `bun run typecheck`; tests must not be added.
+- Validation for this phase remained limited to formatting plus `bun run typecheck`; tests must not be added.
 - Runtime behavior is sensitive to lifecycle timing, so the refactor should preserve the existing public runtime context surface while responsibilities move behind smaller modules.
