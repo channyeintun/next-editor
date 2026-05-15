@@ -96,7 +96,7 @@ const LandingPage = () => {
                                     </h1>
 
                                     <p className="text-xl md:text-2xl text-slate-600 font-telegraf max-w-xl leading-relaxed mb-10">
-                                        The robust HTML, CSS, and JavaScript playground with{' '}
+                                        The live coding studio for HTML, CSS, JavaScript, TypeScript, and Node.js with{' '}
                                         <span className="relative inline-block whitespace-nowrap group-hover:text-slate-950 transition-colors">
                                             built-in recording
                                             <svg className="absolute -bottom-3 left-0 w-[105%] h-5 text-pinata-cyan overflow-visible px-1" viewBox="0 0 200 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -119,7 +119,7 @@ const LandingPage = () => {
                                                 />
                                             </svg>
                                         </span>.
-                                        Turn your coding sessions into interactive, shareable presentations.
+                                        Build, run, explain, and publish interactive coding sessions as shareable presentations.
                                     </p>
 
                                     <div className="flex flex-wrap gap-4">
@@ -222,7 +222,7 @@ const LandingPage = () => {
                         className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl mt-12"
                     >
                         {[
-                            { title: "Live Playground", desc: "A high-fidelity, live version of CodePen. Prototype and experiment with HTML, CSS, and JS in a distraction-free environment.", color: "#6D57FF", textColor: "white" },
+                            { title: "Live Coding Studio", desc: "Edit, run, and preview HTML, CSS, JavaScript, TypeScript, and Node.js projects in one live workspace built for prototyping, teaching, and presenting.", color: "#6D57FF", textColor: "white" },
                             {
                                 title: "Interactive Slides",
                                 desc: (
