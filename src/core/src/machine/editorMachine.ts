@@ -258,6 +258,12 @@ const APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS = [
   "storeRecordedFrameAtPause",
 ] as const;
 
+const SYNC_PAUSED_WORKSPACE_ACTIONS = [
+  "storeRecordedFrameAtPause",
+  "adoptPlaybackWorkspaceAtPause",
+  "detachPlaybackWorkspace",
+] as const;
+
 const APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS = [
   "setEditorRef",
   "clearPendingPlaybackEditorSync",
@@ -1717,11 +1723,7 @@ export const editorMachine = setup({
         },
 
         paused: {
-          entry: [
-            "storeRecordedFrameAtPause",
-            "adoptPlaybackWorkspaceAtPause",
-            "detachPlaybackWorkspace",
-          ],
+          entry: [...SYNC_PAUSED_WORKSPACE_ACTIONS],
           on: {
             TICK: {
               actions: [...APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS],
@@ -1730,7 +1732,8 @@ export const editorMachine = setup({
               actions: [
                 "reattachPlaybackWorkspace",
                 "seekToTime",
-                ...APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS,
+                ...APPLY_REPLAY_STATE_ACTIONS,
+                ...SYNC_PAUSED_WORKSPACE_ACTIONS,
                 enqueueActions(({ event, enqueue }) => {
                   const time = event.type === "SEEK" ? event.time : 0;
                   enqueue.sendTo("timelineActor", { type: "SEEK", time });
