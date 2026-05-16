@@ -141,6 +141,7 @@ function injectRuntimeSnapshotScript(
 
   const interactionCaptureScript = createIframeInteractionCaptureScript(
     RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER,
+    { includeMouseMove: true },
   );
 
   const snapshotScript = `<script data-next-editor-runtime-snapshot>(function(){const marker=${JSON.stringify(

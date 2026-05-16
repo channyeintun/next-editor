@@ -12,6 +12,7 @@ Task status:
 - 6. Final verification and wrap-up: completed
 - 7. Fix paused runtime preview ownership regression: completed
 - 8. Restore paused live runtime handoff and guard cross-origin preview access: completed
+- 9. Replay preview cursor during playback: completed
 
 Completed work:
 
@@ -23,6 +24,7 @@ Completed work:
 - Ran a final repository verification pass and captured the task commit history.
 - Restored paused node.js preview ownership to the recorded runtime snapshot so paused interaction testing no longer falls back to the live runtime iframe.
 - Restored paused live runtime preview handoff to follow actual playback ownership and guarded preview DOM reads against cross-origin iframe access.
+- Added cross-origin runtime preview mousemove capture and routed it into the existing playback cursor system without changing same-origin preview replay behavior.
 
 Verification log:
 
@@ -34,6 +36,7 @@ Verification log:
 - Task 6: `bun run typecheck`; workspace diagnostics still report unrelated Tailwind class simplification warnings in `src/components/SlidePreview.tsx`.
 - Task 7: `bun run typecheck`
 - Task 8: `bun run typecheck`
+- Task 9: `bun run typecheck`
 
 Commit log:
 
@@ -45,3 +48,4 @@ Commit log:
 - Task 6: finalized in this commit
 - Task 7: finalized in the next commit
 - Task 8: finalized in the next commit
+- Task 9: finalized in the next commit

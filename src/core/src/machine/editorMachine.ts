@@ -63,6 +63,7 @@ import {
   appendSlideRecordingEvent,
   appendWorkspaceRecordingEvent,
 } from "./recordingSession";
+import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../../../utils/iframeInteractionCapture";
 
 // ============================================================================
 // Helper Functions
@@ -314,8 +315,33 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(
       { move: (e: MouseEvent) => void; leave: () => void }
     >();
     const iframeLoadHandlers = new Map<HTMLIFrameElement, () => void>();
+    const iframeWindowMap = new Map<Window, HTMLIFrameElement>();
+    const directlyTrackedIframes = new Set<HTMLIFrameElement>();
+
+    const rememberIframeWindow = (iframe: HTMLIFrameElement) => {
+      const iframeWindow = iframe.contentWindow;
+
+      if (iframeWindow) {
+        iframeWindowMap.set(iframeWindow, iframe);
+      }
+    };
+
+    const forgetIframeWindow = (iframe: HTMLIFrameElement) => {
+      const iframeWindow = iframe.contentWindow;
+
+      if (!iframeWindow) {
+        return;
+      }
+
+      const currentIframe = iframeWindowMap.get(iframeWindow);
+      if (currentIframe === iframe) {
+        iframeWindowMap.delete(iframeWindow);
+      }
+    };
 
     const setupIframeListeners = (iframe: HTMLIFrameElement) => {
+      rememberIframeWindow(iframe);
+
       const onIframeMouseMove = (e: MouseEvent) => {
         const rect = iframe.getBoundingClientRect();
         input.onMouseMove({
@@ -333,7 +359,10 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(
         try {
           const iframeDoc =
             iframe.contentDocument || iframe.contentWindow?.document;
-          if (!iframeDoc) return;
+          if (!iframeDoc) {
+            directlyTrackedIframes.delete(iframe);
+            return;
+          }
 
           // Clean up existing listeners if any
           const existing = iframeListeners.get(iframe);
@@ -344,6 +373,7 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(
 
           iframeDoc.addEventListener("mousemove", onIframeMouseMove, true);
           iframeDoc.addEventListener("mouseleave", onIframeMouseLeave, true);
+          directlyTrackedIframes.add(iframe);
 
           iframeListeners.set(iframe, {
             move: onIframeMouseMove,
@@ -351,6 +381,7 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(
           });
         } catch (err) {
           // Likely cross-origin
+          directlyTrackedIframes.delete(iframe);
           console.error("Cannot track mouse in iframe (cross-origin):", err);
         }
       };
@@ -365,6 +396,9 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(
     };
 
     const removeIframeListeners = (iframe: HTMLIFrameElement) => {
+      directlyTrackedIframes.delete(iframe);
+      forgetIframeWindow(iframe);
+
       const handlers = iframeListeners.get(iframe);
       const loadHandler = iframeLoadHandlers.get(iframe);
 
@@ -386,6 +420,41 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(
         }
         iframeListeners.delete(iframe);
       }
+    };
+
+    const handleIframeInteractionMessage = (event: MessageEvent) => {
+      const { type, payload } = event.data || {};
+      if (type !== IFRAME_INTERACTION_MESSAGE_TYPE) {
+        return;
+      }
+
+      if (payload?.type !== "mousemove") {
+        return;
+      }
+
+      if (
+        typeof payload?.data?.clientX !== "number" ||
+        typeof payload?.data?.clientY !== "number"
+      ) {
+        return;
+      }
+
+      const sourceWindow = event.source as Window | null;
+      if (!sourceWindow) {
+        return;
+      }
+
+      const iframe = iframeWindowMap.get(sourceWindow);
+      if (!iframe || directlyTrackedIframes.has(iframe)) {
+        return;
+      }
+
+      const rect = iframe.getBoundingClientRect();
+      input.onMouseMove({
+        x: rect.left + payload.data.clientX,
+        y: rect.top + payload.data.clientY,
+        visible: true,
+      });
     };
 
     // Listen for new iframes and content changes
@@ -431,17 +500,21 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(
     document.querySelectorAll("iframe").forEach(setupIframeListeners);
     document.addEventListener("mousemove", handleMouseMove, true);
     document.addEventListener("mouseleave", handleMouseLeave, true);
+    window.addEventListener("message", handleIframeInteractionMessage);
 
     return () => {
       observer.disconnect();
       document.removeEventListener("mousemove", handleMouseMove, true);
       document.removeEventListener("mouseleave", handleMouseLeave, true);
+      window.removeEventListener("message", handleIframeInteractionMessage);
 
       // Clean up load listeners
       iframeLoadHandlers.forEach((handler, iframe) => {
         iframe.removeEventListener("load", handler);
       });
       iframeLoadHandlers.clear();
+      iframeWindowMap.clear();
+      directlyTrackedIframes.clear();
 
       iframeListeners.forEach((handlers, iframe) => {
         try {
@@ -1058,9 +1131,7 @@ export const editorMachine = setup({
           model.setValue(normalizedFrame.state.content);
         }
         if (normalizedFrame.state.viewState) {
-          editorRefs.editor.restoreViewState(
-            normalizedFrame.state.viewState,
-          );
+          editorRefs.editor.restoreViewState(normalizedFrame.state.viewState);
         }
         editorRefs.editor.setPosition(normalizedFrame.state.position);
         editorRefs.editor.setSelection(normalizedFrame.state.selection);

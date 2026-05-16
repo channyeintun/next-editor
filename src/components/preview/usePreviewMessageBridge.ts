@@ -65,6 +65,10 @@ export function usePreviewMessageBridge({
         return;
       }
 
+      if (payload.type === "mousemove") {
+        return;
+      }
+
       const isMainDocumentScroll =
         payload.type === "scroll" &&
         payload.data &&

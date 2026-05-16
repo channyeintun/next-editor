@@ -46,3 +46,9 @@ Tasks:
    - Make paused node.js preview follow actual playback ownership instead of playback state labels.
    - Guard preview playback DOM reads so cross-origin runtime iframes cannot crash the route.
    - Validate with targeted type/error checks.
+
+9. Replay preview cursor during playback.
+   - Capture preview iframe mouse movement for runtime playback without regressing existing same-origin cursor tracking.
+   - Feed cross-origin preview cursor movement into the existing playback cursor system.
+   - Keep existing preview interaction replay behavior intact.
+   - Validate with targeted type/error checks.

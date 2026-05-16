@@ -1,8 +1,15 @@
 export const IFRAME_INTERACTION_MESSAGE_TYPE = "IFRAME_INTERACTION";
 
+interface IframeInteractionCaptureScriptOptions {
+  includeMouseMove?: boolean;
+}
+
 export function createIframeInteractionCaptureScript(
   setupMarker: string,
+  options?: IframeInteractionCaptureScriptOptions,
 ): string {
+  const includeMouseMove = options?.includeMouseMove ?? false;
+
   return `
     (function() {
       const marker = ${JSON.stringify(setupMarker)};
@@ -10,6 +17,7 @@ export function createIframeInteractionCaptureScript(
       window[marker] = true;
 
       const messageType = ${JSON.stringify(IFRAME_INTERACTION_MESSAGE_TYPE)};
+      const includeMouseMove = ${JSON.stringify(includeMouseMove)};
 
       function getXPath(element) {
         if (element.id) return '//*[@id="' + element.id + '"]';
@@ -67,6 +75,59 @@ export function createIframeInteractionCaptureScript(
         },
         true,
       );
+
+      if (includeMouseMove) {
+        let pendingMouseMove = null;
+        let mouseMoveFrame = 0;
+        let lastMouseMoveSignature = '';
+
+        const flushMouseMove = () => {
+          mouseMoveFrame = 0;
+
+          if (!pendingMouseMove) {
+            return;
+          }
+
+          const nextMouseMove = pendingMouseMove;
+          pendingMouseMove = null;
+
+          const signature = [
+            nextMouseMove.clientX,
+            nextMouseMove.clientY,
+            nextMouseMove.target.tagName,
+          ].join(':');
+
+          if (signature === lastMouseMoveSignature) {
+            return;
+          }
+
+          lastMouseMoveSignature = signature;
+          emit('mousemove', nextMouseMove.target, {
+            clientX: nextMouseMove.clientX,
+            clientY: nextMouseMove.clientY,
+          });
+        };
+
+        document.addEventListener(
+          'mousemove',
+          (event) => {
+            if (!(event.target instanceof Element)) {
+              return;
+            }
+
+            pendingMouseMove = {
+              target: event.target,
+              clientX: event.clientX,
+              clientY: event.clientY,
+            };
+
+            if (!mouseMoveFrame) {
+              mouseMoveFrame = window.requestAnimationFrame(flushMouseMove);
+            }
+          },
+          true,
+        );
+      }
 
       document.addEventListener(
         'mouseenter',
