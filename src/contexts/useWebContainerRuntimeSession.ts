@@ -100,16 +100,24 @@ export function useWebContainerRuntimeSession({
     [],
   );
 
-  const stopRunnerProcess = useCallback(() => {
-    const process = runnerProcessRef.current;
+  const stopRunnerProcess = useCallback(
+    async (options?: { waitForExit?: boolean }) => {
+      const process = runnerProcessRef.current;
 
-    if (!process) {
-      return;
-    }
+      if (!process) {
+        return;
+      }
 
-    runnerProcessRef.current = null;
-    process.kill();
-  }, []);
+      runnerProcessRef.current = null;
+      const exitPromise = process.exit.catch(() => undefined);
+      process.kill();
+
+      if (options?.waitForExit) {
+        await exitPromise;
+      }
+    },
+    [],
+  );
 
   const stopTerminalProcess = useCallback(() => {
     terminalInputWriterRef.current?.releaseLock();
@@ -164,6 +172,10 @@ export function useWebContainerRuntimeSession({
     devServerListenerCleanupRef.current = instance.on(
       "server-ready",
       (_port, url) => {
+        if (!runnerProcessRef.current) {
+          return;
+        }
+
         setPreviewUrl(url);
         setStatus("ready");
       },
@@ -181,10 +193,6 @@ export function useWebContainerRuntimeSession({
 
         return current.filter((entry) => entry.port !== port);
       });
-
-      if (type === "close") {
-        setPreviewUrl((current) => (current === url ? null : current));
-      }
 
       pushLifecycleEvent({
         kind: type === "open" ? "port-open" : "port-close",
@@ -286,7 +294,7 @@ export function useWebContainerRuntimeSession({
         return;
       }
 
-      stopRunnerProcess();
+      await stopRunnerProcess({ waitForExit: true });
       setPreviewUrl(null);
       setErrorMessage(null);
       setLastOutput(null);
@@ -318,6 +326,7 @@ export function useWebContainerRuntimeSession({
             }
 
             runnerProcessRef.current = null;
+            setPreviewUrl(null);
             appendOutput(`\nRunner exited with code ${exitCode}\n`);
 
             if (exitCode !== 0) {
@@ -331,6 +340,7 @@ export function useWebContainerRuntimeSession({
             }
 
             runnerProcessRef.current = null;
+            setPreviewUrl(null);
             setStatus("error");
             setErrorMessage(getRuntimeErrorMessage(error));
           });
