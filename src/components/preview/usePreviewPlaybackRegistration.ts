@@ -26,6 +26,7 @@ interface UsePreviewPlaybackRegistrationOptions {
   previewAdapter: PreviewDomainAdapter;
   captureRuntimePreviewSnapshot: () => string | null;
   isRuntimePreviewActive: boolean;
+  isLiveRuntimePreviewActive: boolean;
   pendingInteractionRef: RefObject<IframeInteractionEvent | null>;
   lastRuntimeSnapshotRef: RefObject<string>;
   lastContentRef: RefObject<string>;
@@ -48,6 +49,7 @@ export function usePreviewPlaybackRegistration({
   previewAdapter,
   captureRuntimePreviewSnapshot,
   isRuntimePreviewActive,
+  isLiveRuntimePreviewActive,
   pendingInteractionRef,
   lastRuntimeSnapshotRef,
   lastContentRef,
@@ -139,7 +141,7 @@ export function usePreviewPlaybackRegistration({
       }
 
       const iframe = iframeRef.current;
-      if (!iframe || isRuntimePreviewActive) {
+      if (!iframe || isLiveRuntimePreviewActive) {
         return;
       }
 
@@ -303,6 +305,7 @@ export function usePreviewPlaybackRegistration({
     effectiveRuntimePreviewUrl,
     forceRefreshPreview,
     iframeRef,
+    isLiveRuntimePreviewActive,
     isRecordingRef,
     isRuntimePreviewActive,
     isUserScrollingRef,

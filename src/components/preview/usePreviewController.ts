@@ -281,6 +281,7 @@ export function usePreviewController(): PreviewController {
 
   const targetScrollRef = useRef<PreviewScrollPosition | null>(null);
   const rafRef = useRef<number | null>(null);
+  const editorBootstrapPollTimeoutRef = useRef<number | null>(null);
   const isUserScrollingRef = useRef(false);
   const userScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -321,6 +322,10 @@ export function usePreviewController(): PreviewController {
   const effectiveRuntimeErrorMessage =
     runtimeErrorMessage || recordedRuntimeSnapshot?.errorMessage || null;
   const isStaticWorkspacePreview = lessonType === "html-css";
+  const isLiveRuntimePreviewActive =
+    lessonType === "node.js" &&
+    runtimeStatus === "ready" &&
+    Boolean(runtimePreviewUrl);
   const isRuntimePreviewActive =
     lessonType === "node.js" &&
     effectiveRuntimeStatus === "ready" &&
@@ -434,7 +439,10 @@ export function usePreviewController(): PreviewController {
 
   const updateIframeContent = useCallback(
     (content: string, options?: { force?: boolean }) => {
-      if (!iframeRef.current || (isRuntimePreviewActive && !options?.force)) {
+      if (
+        !iframeRef.current ||
+        (isLiveRuntimePreviewActive && !options?.force)
+      ) {
         return;
       }
 
@@ -452,7 +460,7 @@ export function usePreviewController(): PreviewController {
         console.error("Error updating iframe srcdoc:", error);
       }
     },
-    [isRuntimePreviewActive],
+    [isLiveRuntimePreviewActive],
   );
 
   const forceRefreshPreview = useCallback(
@@ -493,7 +501,8 @@ export function usePreviewController(): PreviewController {
       }
 
       if (isRuntimePreviewActive && effectiveRuntimePreviewUrl) {
-        const shouldReloadRuntime = options?.reloadRuntime ?? !options?.emitEvent;
+        const shouldReloadRuntime =
+          options?.reloadRuntime ?? !options?.emitEvent;
 
         if (!options?.emitEvent && shouldReloadRuntime) {
           void refreshRuntimePreview(
@@ -645,6 +654,7 @@ export function usePreviewController(): PreviewController {
     previewAdapter: preview,
     captureRuntimePreviewSnapshot,
     isRuntimePreviewActive,
+    isLiveRuntimePreviewActive,
     pendingInteractionRef,
     lastRuntimeSnapshotRef,
     lastContentRef,
@@ -666,7 +676,7 @@ export function usePreviewController(): PreviewController {
   usePreviewInteractionCapture({
     iframeRef,
     isRecording,
-    isRuntimePreviewActive,
+    isRuntimePreviewActive: isLiveRuntimePreviewActive,
     size,
   });
 
@@ -794,12 +804,23 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
+    let isCancelled = false;
+
     const checkForEditor = () => {
-      const editor = editorRef.current;
-      if (!editor) {
-        setTimeout(checkForEditor, 100);
+      if (isCancelled) {
         return;
       }
+
+      const editor = editorRef.current;
+      if (!editor) {
+        editorBootstrapPollTimeoutRef.current = window.setTimeout(
+          checkForEditor,
+          100,
+        );
+        return;
+      }
+
+      editorBootstrapPollTimeoutRef.current = null;
 
       if (!lastContentRef.current) {
         updateIframeContent(editor.getValue());
@@ -807,6 +828,15 @@ export function usePreviewController(): PreviewController {
     };
 
     checkForEditor();
+
+    return () => {
+      isCancelled = true;
+
+      if (editorBootstrapPollTimeoutRef.current !== null) {
+        window.clearTimeout(editorBootstrapPollTimeoutRef.current);
+        editorBootstrapPollTimeoutRef.current = null;
+      }
+    };
   }, [
     editorRef,
     isPlaybackPreviewActive,
