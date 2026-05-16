@@ -36,3 +36,8 @@ Tasks:
 6. Final verification and wrap-up.
    - Update `progress.md` with the completed state and commit references.
    - Run a final repository validation pass.
+
+7. Fix paused runtime preview ownership regression.
+   - Keep node.js runtime preview playback attached to the recorded runtime snapshot for paused and ended playback states.
+   - Preserve paused-state preview interaction/testing without falling back to the live runtime iframe.
+   - Validate with targeted type/error checks.

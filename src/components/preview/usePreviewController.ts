@@ -303,11 +303,25 @@ export function usePreviewController(): PreviewController {
     runnerConfig,
   } = useWebContainerRuntimeMetadata();
 
-  const { currentRecording, isPlaying, isRecording, usesPlaybackModel } =
-    useNextEditorMetadata();
+  const {
+    currentRecording,
+    isPlaying,
+    isPaused,
+    hasEnded,
+    isRecording,
+    usesPlaybackModel,
+  } = useNextEditorMetadata();
   const staticWorkspacePreview = useCompiledStaticWorkspacePreview();
-  const isPlaybackPreviewActive = usesPlaybackModel && !isRecording;
-  const recordedRuntimeSnapshot = isPlaybackPreviewActive
+  const isRuntimePlaybackPreviewActive =
+    lessonType === "node.js" &&
+    Boolean(currentRecording) &&
+    !isRecording &&
+    (isPlaying || isPaused || hasEnded);
+  const isPlaybackPreviewActive =
+    lessonType === "node.js"
+      ? isRuntimePlaybackPreviewActive
+      : usesPlaybackModel && !isRecording;
+  const recordedRuntimeSnapshot = isRuntimePlaybackPreviewActive
     ? (currentRecording?.runtimeSnapshot ?? null)
     : null;
   const recordedRuntimeStatus = recordedRuntimeSnapshot?.status as
@@ -324,6 +338,7 @@ export function usePreviewController(): PreviewController {
   const isStaticWorkspacePreview = lessonType === "html-css";
   const isLiveRuntimePreviewActive =
     lessonType === "node.js" &&
+    !isRuntimePlaybackPreviewActive &&
     runtimeStatus === "ready" &&
     Boolean(runtimePreviewUrl);
   const isRuntimePreviewActive =

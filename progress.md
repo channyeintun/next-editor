@@ -10,6 +10,7 @@ Task status:
 - 4. Scope runner lifecycle events to the active run: completed
 - 5. Replace the hardcoded URL proxy assumption: completed
 - 6. Final verification and wrap-up: completed
+- 7. Fix paused runtime preview ownership regression: completed
 
 Completed work:
 
@@ -19,6 +20,7 @@ Completed work:
 - Scoped runner restart handling to the active process by waiting for runner shutdown and clearing preview state from runner exit instead of generic port-close events.
 - Replaced the hardcoded external URL proxy host with a same-origin proxy attempt and direct-fetch fallback.
 - Ran a final repository verification pass and captured the task commit history.
+- Restored paused node.js preview ownership to the recorded runtime snapshot so paused interaction testing no longer falls back to the live runtime iframe.
 
 Verification log:
 
@@ -28,6 +30,7 @@ Verification log:
 - Task 4: `bun run typecheck`
 - Task 5: `bun run typecheck`
 - Task 6: `bun run typecheck`; workspace diagnostics still report unrelated Tailwind class simplification warnings in `src/components/SlidePreview.tsx`.
+- Task 7: `bun run typecheck`
 
 Commit log:
 
@@ -37,3 +40,4 @@ Commit log:
 - Task 4: `4798308` Scope runtime runner lifecycle events
 - Task 5: `6970fa6` Remove hardcoded URL proxy host
 - Task 6: finalized in this commit
+- Task 7: finalized in the next commit
