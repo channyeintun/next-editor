@@ -1,4 +1,9 @@
 import { useEffect, useRef, useCallback, useState, memo } from 'react';
+import revealMarkdownPluginUrl from '../../node_modules/reveal.js/dist/plugin/markdown.mjs?url';
+import revealScriptUrl from '../../node_modules/reveal.js/dist/reveal.mjs?url';
+import revealResetCssUrl from '../../node_modules/reveal.js/dist/reset.css?url';
+import revealCoreCssUrl from '../../node_modules/reveal.js/dist/reveal.css?url';
+import revealThemeCssUrl from '../../node_modules/reveal.js/dist/theme/black.css?url';
 import type { SlideContentType } from '../types/slides';
 
 interface RevealSlideRendererProps {
@@ -31,9 +36,9 @@ function generateRevealHtml(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reset.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/theme/black.css">
+  <link rel="stylesheet" href="${revealResetCssUrl}">
+  <link rel="stylesheet" href="${revealCoreCssUrl}">
+  <link rel="stylesheet" href="${revealThemeCssUrl}">
   <style>
     html, body {
       margin: 0;
@@ -54,45 +59,47 @@ function generateRevealHtml(
       ${slidesHtml}
     </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/markdown/markdown.js"></script>
-  <script>
-    {
-      let deck; // Declare deck outside to make it accessible
-      deck = Reveal.initialize({
-        embedded: true,
-        controls: true,
-        progress: true,
-        center: true,
-        hash: false,
-        transition: 'slide',
-        keyboard: true,
-        touch: true,
-        plugins: [RevealMarkdown]
-      });
+  <script type="module">
+    import Reveal from '${revealScriptUrl}';
+    import RevealMarkdown from '${revealMarkdownPluginUrl}';
 
-      deck.then(function() {
-        // Notify parent of initialization
-        window.parent.postMessage({ type: 'reveal-ready' }, '*');
+    let deck = new Reveal({
+      embedded: true,
+      controls: true,
+      progress: true,
+      center: true,
+      hash: false,
+      transition: 'slide',
+      keyboard: true,
+      touch: true,
+      plugins: [RevealMarkdown]
+    });
 
-        // Listen for slide changes and notify parent
-        Reveal.on('slidechanged', function(event) {
-          window.parent.postMessage({ 
-            type: 'reveal-slidechanged', 
-            indexh: event.indexh,
-            indexv: event.indexv
-          }, '*');
-        });
+    deck.initialize().then(function() {
+      // Notify parent of initialization
+      window.parent.postMessage({ type: 'reveal-ready' }, '*');
+
+      // Listen for slide changes and notify parent
+      deck.on('slidechanged', function(event) {
+        window.parent.postMessage({ 
+          type: 'reveal-slidechanged', 
+          indexh: event.indexh,
+          indexv: event.indexv
+        }, '*');
       });
-    }
+    });
 
     // Listen for commands from parent
     window.addEventListener('message', function(event) {
+      if (!deck) {
+        return;
+      }
+
       if (event.data && event.data.type === 'reveal-goto') {
-        Reveal.slide(event.data.indexh, event.data.indexv || 0);
+        deck.slide(event.data.indexh, event.data.indexv || 0);
       }
       if (event.data && event.data.type === 'reveal-configure') {
-        Reveal.configure({
+        deck.configure({
           controls: event.data.controls,
           keyboard: event.data.keyboard,
           touch: event.data.touch

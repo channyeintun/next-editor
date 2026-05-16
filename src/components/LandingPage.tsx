@@ -1,9 +1,8 @@
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import Navbar from './Navbar';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import EventRecordingAnimation from './EventRecordingAnimation';
-import { animate } from 'animejs';
 
 const TerminalMockup = () => {
     const codeSegments = [
@@ -18,23 +17,40 @@ const TerminalMockup = () => {
 
     const [visibleChars, setVisibleChars] = useState(0);
     const totalLength = codeSegments.reduce((acc, s) => acc + s.text.length, 0);
-    const animationRef = useRef<{ value: number }>({ value: 0 });
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            animate(animationRef.current, {
-                value: totalLength,
-                round: 1,
-                duration: totalLength * 50, // Match the previous ~50ms per character
-                easing: 'linear',
-                onRender: () => {
-                    setVisibleChars(animationRef.current.value);
+        let animationFrame: number | null = null;
+        const duration = totalLength * 50;
+
+        const startTyping = () => {
+            let startTime: number | null = null;
+
+            const step = (timestamp: number) => {
+                if (startTime === null) {
+                    startTime = timestamp;
                 }
-            });
-        }, 1000);
+
+                const elapsed = timestamp - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                setVisibleChars(Math.round(progress * totalLength));
+
+                if (progress < 1) {
+                    animationFrame = window.requestAnimationFrame(step);
+                }
+            };
+
+            animationFrame = window.requestAnimationFrame(step);
+        };
+
+        const timer = window.setTimeout(startTyping, 1000);
 
         return () => {
-            clearTimeout(timer);
+            window.clearTimeout(timer);
+
+            if (animationFrame !== null) {
+                window.cancelAnimationFrame(animationFrame);
+            }
         };
     }, [totalLength]);
 
