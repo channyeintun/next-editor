@@ -41,3 +41,8 @@ Tasks:
    - Keep node.js runtime preview playback attached to the recorded runtime snapshot for paused and ended playback states.
    - Preserve paused-state preview interaction/testing without falling back to the live runtime iframe.
    - Validate with targeted type/error checks.
+
+8. Restore paused live runtime handoff and guard cross-origin preview access.
+   - Make paused node.js preview follow actual playback ownership instead of playback state labels.
+   - Guard preview playback DOM reads so cross-origin runtime iframes cannot crash the route.
+   - Validate with targeted type/error checks.

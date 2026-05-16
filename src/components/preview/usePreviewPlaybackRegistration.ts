@@ -45,6 +45,27 @@ interface UsePreviewPlaybackRegistrationOptions {
   rafRef: RefObject<number | null>;
 }
 
+function getIframeDocumentAndWindow(iframe: HTMLIFrameElement): {
+  iframeDoc: Document;
+  iframeWindow: NonNullable<HTMLIFrameElement["contentWindow"]>;
+} | null {
+  try {
+    const iframeWindow = iframe.contentWindow;
+    const iframeDoc = iframe.contentDocument || iframeWindow?.document;
+
+    if (!iframeDoc || !iframeWindow) {
+      return null;
+    }
+
+    return {
+      iframeDoc,
+      iframeWindow,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function usePreviewPlaybackRegistration({
   previewAdapter,
   captureRuntimePreviewSnapshot,
@@ -145,12 +166,12 @@ export function usePreviewPlaybackRegistration({
         return;
       }
 
-      const iframeDoc =
-        iframe.contentDocument || iframe.contentWindow?.document;
-      const iframeWindow = iframe.contentWindow;
-      if (!iframeDoc || !iframeWindow) {
+      const iframeState = getIframeDocumentAndWindow(iframe);
+      if (!iframeState) {
         return;
       }
+
+      const { iframeDoc } = iframeState;
 
       if (
         previewState.scrollTop !== undefined ||
@@ -178,13 +199,13 @@ export function usePreviewPlaybackRegistration({
             }
 
             const iframe = iframeRef.current;
-            const iframeDoc =
-              iframe.contentDocument || iframe.contentWindow?.document;
-            const iframeWindow = iframe.contentWindow;
+            const iframeState = getIframeDocumentAndWindow(iframe);
 
-            if (!iframeDoc || !iframeWindow) {
+            if (!iframeState) {
               return;
             }
+
+            const { iframeDoc, iframeWindow } = iframeState;
 
             let scrollTarget: Element | Window = iframeWindow;
 
