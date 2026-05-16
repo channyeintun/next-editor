@@ -1,6 +1,6 @@
 # Progress
 
-Current task: 6. Final verification and wrap-up.
+Current task: All planned tasks completed.
 
 Task status:
 
@@ -9,7 +9,7 @@ Task status:
 - 3. Fix runtime preview playback reapplication: completed
 - 4. Scope runner lifecycle events to the active run: completed
 - 5. Replace the hardcoded URL proxy assumption: completed
-- 6. Final verification and wrap-up: pending
+- 6. Final verification and wrap-up: completed
 
 Completed work:
 
@@ -18,6 +18,7 @@ Completed work:
 - Split live runtime preview state from recorded runtime playback state and added cleanup for editor bootstrap polling so playback can reapply preview state safely.
 - Scoped runner restart handling to the active process by waiting for runner shutdown and clearing preview state from runner exit instead of generic port-close events.
 - Replaced the hardcoded external URL proxy host with a same-origin proxy attempt and direct-fetch fallback.
+- Ran a final repository verification pass and captured the task commit history.
 
 Verification log:
 
@@ -26,7 +27,13 @@ Verification log:
 - Task 3: `bun run typecheck`
 - Task 4: `bun run typecheck`
 - Task 5: `bun run typecheck`
+- Task 6: `bun run typecheck`; workspace diagnostics still report unrelated Tailwind class simplification warnings in `src/components/SlidePreview.tsx`.
 
 Commit log:
 
-- Pending.
+- Task 1: `1d83791` Add fix plan and progress tracker
+- Task 2: `8ee3a2d` Record runtime preview interactions
+- Task 3: `3b9ddfb` Fix runtime preview playback reapply
+- Task 4: `4798308` Scope runtime runner lifecycle events
+- Task 5: `6970fa6` Remove hardcoded URL proxy host
+- Task 6: finalized in this commit
