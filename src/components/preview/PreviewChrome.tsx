@@ -21,7 +21,7 @@ interface PreviewChromeProps {
 
 function getSizeClasses(size: PreviewSize): string {
   if (size === "large") {
-    return "shadow-2xl border border-black/10 transition-shadow z-[100]";
+    return "shadow-2xl border border-black/10 transition-shadow z-100";
   }
 
   if (size === "medium") {

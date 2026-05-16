@@ -81,7 +81,7 @@ const EventRecordingAnimation = ({ variant = 'full' }: { variant?: 'full' | 'com
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
                     {/* Visual Side */}
                     <div className="relative aspect-square group">
-                        <div className="absolute inset-0 bg-gradient-to-tr from-pinata-cyan/5 to-transparent rounded-3xl" />
+                        <div className="absolute inset-0 bg-linear-to-tr from-pinata-cyan/5 to-transparent rounded-3xl" />
                         <div className="w-full h-full scale-110">
                             {View}
                         </div>

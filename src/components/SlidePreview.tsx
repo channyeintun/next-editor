@@ -161,7 +161,7 @@ const SlidePreview = memo(function SlidePreview({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[90] bg-black/80"
+        className="fixed inset-0 z-90 bg-black/80"
         onClick={handleClose}
       />
 
@@ -172,7 +172,7 @@ const SlidePreview = memo(function SlidePreview({
           transformOrigin: 'bottom right',
           willChange: 'transform'
         }}
-        className={`${positioning} top-[10%] left-[10%] right-[10%] bottom-[10%] w-[80%] h-[80%] z-[100] bg-slate-900 rounded-2xl overflow-hidden border border-white/10 flex flex-col shadow-2xl transition-shadow`}
+        className={`${positioning} top-[10%] left-[10%] right-[10%] bottom-[10%] w-[80%] h-[80%] z-100 bg-slate-900 rounded-2xl overflow-hidden border border-white/10 flex flex-col shadow-2xl transition-shadow`}
         onClick={(e) => {
           e.stopPropagation();
         }}

@@ -111,7 +111,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
   return (
     <div className="flex flex-col bg-[#11141c] rounded-2xl border border-slate-700/50 w-full sm:w-[420px] max-h-[calc(100dvh-120px)] sm:max-h-[600px] overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-gradient-to-r from-[#11141c] via-[#11141c]/50 to-[#11141c]">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-linear-to-r from-[#11141c] via-[#11141c]/50 to-[#11141c]">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
             <Monitor className="w-4 h-4 text-indigo-400" />
@@ -234,7 +234,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                     <div className="flex items-center gap-4">
                       {/* Left: Thumbnail area */}
                       <div
-                        className="relative w-14 h-11 flex-shrink-0 bg-slate-900 rounded-lg border border-white/5 overflow-hidden group/thumb cursor-pointer hover:ring-2 hover:ring-indigo-500/50 transition-all"
+                        className="relative w-14 h-11 shrink-0 bg-slate-900 rounded-lg border border-white/5 overflow-hidden group/thumb cursor-pointer hover:ring-2 hover:ring-indigo-500/50 transition-all"
                         onClick={() => startEditing(slide)}
                       >
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -304,7 +304,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
         <button
           onClick={onStartPresentation}
           disabled={slides.length === 0}
-          className="group w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white rounded-2xl text-sm font-black flex items-center justify-center gap-3 transition-all duration-500 shadow-lg active:scale-[0.98]"
+          className="group w-full py-4 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white rounded-2xl text-sm font-black flex items-center justify-center gap-3 transition-all duration-500 shadow-lg active:scale-[0.98]"
         >
           <Play className="w-5 h-5 fill-current group-enabled:group-hover:translate-x-0.5 transition-transform" />
           START PRESENTATION
