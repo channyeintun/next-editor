@@ -6,6 +6,7 @@
       "name": "next-editor",
       "dependencies": {
         "@monaco-editor/react": "^4.7.0",
+        "@revealjs/react": "^0.2.1",
         "@types/pako": "^2.0.4",
         "@webcontainer/api": "^1.6.4",
         "@xstate/react": "^6.1.0",
@@ -287,6 +288,8 @@
     "@oxlint/plugins": ["@oxlint/plugins@1.65.0", "", {}, "sha512-xUg0v7/+xyDZHkjCie/OW9dqRW8ItEGt2xM90ry3lOc67Ehtj2swGz3d3vfYC+gxiV7n+1fI3jeciFAKuzuHvQ=="],
 
     "@polka/url": ["@polka/url@1.0.0-next.29", "", {}, "sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww=="],
+
+    "@revealjs/react": ["@revealjs/react@0.2.1", "", { "peerDependencies": { "react": ">=18", "react-dom": ">=18", "reveal.js": ">=5" } }, "sha512-bEivSQ1W0WpiSUPd4KNLkFGSkdywuno2jjzBHQCO+SN3ChFWP6Y3Z2OLRih3Qeel5k1bwKsSsmr5AMUMA5ZdyQ=="],
 
     "@rolldown/binding-android-arm64": ["@rolldown/binding-android-arm64@1.0.0", "", { "os": "android", "cpu": "arm64" }, "sha512-TWMZnRLMe63C2Lhyicviu7ZHaU4kxa6PS3rofvc9GmcvptzNN11BcfQ4Sl7MwTOsisQoa2keB/EBdNCAnUo8vA=="],
 
