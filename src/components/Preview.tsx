@@ -29,11 +29,9 @@ const Preview = memo(function Preview() {
     <PreviewChrome
       containerRef={controller.containerRef}
       size={controller.size}
-      isRefreshing={controller.isRefreshing}
       onClick={controller.handleClick}
       onMinimize={controller.handleMinimize}
       onMaximize={controller.handleMaximize}
-      onRefresh={controller.handleRefresh}
       onResizeStart={controller.handleResizeStart}
       onTransitionStart={controller.handleTransitionStart}
       onTransitionComplete={controller.handleTransitionComplete}

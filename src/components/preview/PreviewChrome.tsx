@@ -11,11 +11,9 @@ interface PreviewChromeProps {
   children: ReactNode;
   containerRef: RefObject<HTMLDivElement | null>;
   size: PreviewSize;
-  isRefreshing: boolean;
   onClick: () => void;
   onMinimize: () => void;
   onMaximize: () => void;
-  onRefresh: () => void;
   onResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
   onTransitionStart: () => void;
   onTransitionComplete: () => void;
@@ -89,11 +87,9 @@ export function PreviewChrome({
   children,
   containerRef,
   size,
-  isRefreshing,
   onClick,
   onMinimize,
   onMaximize,
-  onRefresh,
   onResizeStart,
   onTransitionStart,
   onTransitionComplete,
@@ -160,33 +156,6 @@ export function PreviewChrome({
           </div>
 
           <div className="flex-1" />
-
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              onRefresh();
-            }}
-            className="p-1 rounded-md text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-600 active:scale-95"
-            title="Refresh Preview"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={isRefreshing ? "animate-spin" : ""}
-            >
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-              <path d="M21 3v5h-5" />
-              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-              <path d="M3 21v-5h5" />
-            </svg>
-          </button>
         </div>
 
         <div className="relative flex-1">
