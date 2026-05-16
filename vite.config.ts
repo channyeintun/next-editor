@@ -28,7 +28,19 @@ export default defineConfig({
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
   },
   lint: {
+    jsPlugins: ["oxlint-tailwindcss"],
     plugins: ["eslint", "typescript", "unicorn", "oxc", "react", "vitest"],
+    settings: {
+      tailwindcss: {
+        entryPoint: "src/index.css",
+        rootFontSize: 16,
+      },
+    },
+    rules: {
+      "tailwindcss/enforce-canonical": "warn",
+      "tailwindcss/enforce-shorthand": "warn",
+      "tailwindcss/no-unnecessary-arbitrary-value": "warn",
+    },
     ignorePatterns: ["dist/**", "public/**"],
     options: {
       denyWarnings: true,

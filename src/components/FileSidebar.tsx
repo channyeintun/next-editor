@@ -496,7 +496,7 @@ const FileSidebar = memo(function FileSidebar() {
           className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-900 px-3 py-2"
           style={{ paddingLeft: `${depth * 16 + 12}px` }}
         >
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+          <span className="flex shrink-0 items-center justify-center size-5">
             {icon}
           </span>
           <input
@@ -540,7 +540,7 @@ const FileSidebar = memo(function FileSidebar() {
                 style={{ paddingLeft: `${depth * 16 + 12}px` }}
                 aria-expanded={isExpanded}
               >
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                <span className="flex shrink-0 items-center justify-center size-5">
                   {isExpanded || node.hasActiveFile ? (
                     <FolderOpen size={14} className="text-sky-300" />
                   ) : (
@@ -586,7 +586,7 @@ const FileSidebar = memo(function FileSidebar() {
           }`}
           style={{ paddingLeft: `${depth * 16 + 12}px` }}
         >
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+          <span className="flex shrink-0 items-center justify-center size-5">
             {getFileIcon(node.file)}
           </span>
           <span className="truncate text-sm font-medium">{node.name}</span>
@@ -606,7 +606,7 @@ const FileSidebar = memo(function FileSidebar() {
             <button
               type="button"
               onClick={handleCreateFile}
-              className="inline-flex h-6 w-6 items-center justify-center text-slate-400 transition-colors hover:text-white"
+              className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-white size-6"
               aria-label="Create file"
               title="Create file"
             >
@@ -615,7 +615,7 @@ const FileSidebar = memo(function FileSidebar() {
             <button
               type="button"
               onClick={handleCreateFolder}
-              className="inline-flex h-6 w-6 items-center justify-center text-slate-400 transition-colors hover:text-white"
+              className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-white size-6"
               aria-label="Create folder"
               title="Create folder"
             >

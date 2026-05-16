@@ -138,20 +138,20 @@ export function PreviewChrome({
                 event.stopPropagation();
                 onMinimize();
               }}
-              className="w-3 h-3 rounded-full bg-rose-400 hover:bg-rose-500 transition-colors flex items-center justify-center group"
+              className="rounded-full bg-rose-400 hover:bg-rose-500 transition-colors flex items-center justify-center group size-3"
               title="Minimize"
             >
-              <div className="w-1.5 h-1.5 rounded-full bg-rose-900/20 opacity-0 group-hover:opacity-100" />
+              <div className="rounded-full bg-rose-900/20 opacity-0 group-hover:opacity-100 size-1.5" />
             </button>
             <button
               onClick={(event) => {
                 event.stopPropagation();
                 onMaximize();
               }}
-              className="w-3 h-3 rounded-full bg-amber-400 hover:bg-amber-500 transition-colors flex items-center justify-center group"
+              className="rounded-full bg-amber-400 hover:bg-amber-500 transition-colors flex items-center justify-center group size-3"
               title={isLarge ? "Medium Size" : "Maximize"}
             >
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-900/20 opacity-0 group-hover:opacity-100" />
+              <div className="rounded-full bg-amber-900/20 opacity-0 group-hover:opacity-100 size-1.5" />
             </button>
           </div>
 
@@ -165,7 +165,7 @@ export function PreviewChrome({
             onMouseDown={onResizeStart}
             onTouchStart={onResizeStart}
             onDoubleClick={(event) => event.stopPropagation()}
-            className="absolute bottom-0 left-0 w-10 h-10 cursor-sw-resize flex items-end justify-start z-50 group transition-colors touch-none"
+            className="absolute bottom-0 left-0 cursor-sw-resize flex items-end justify-start z-50 group transition-colors touch-none size-10"
             title="Drag to resize"
           >
             <div className="mb-2 ml-2 flex flex-col items-start gap-0.5">
@@ -175,7 +175,7 @@ export function PreviewChrome({
             </div>
 
             <svg
-              className="absolute bottom-0 left-0 w-10 h-10 text-gray-200/50 group-hover:text-blue-500/20 transition-colors -z-10"
+              className="absolute bottom-0 left-0 text-gray-200/50 group-hover:text-blue-500/20 transition-colors -z-10 size-10"
               viewBox="0 0 40 40"
             >
               <path d="M0 40 L40 40 L0 0 Z" fill="currentColor" />

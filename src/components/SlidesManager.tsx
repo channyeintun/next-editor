@@ -109,12 +109,12 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
   };
 
   return (
-    <div className="flex flex-col bg-[#11141c] rounded-2xl border border-slate-700/50 w-full sm:w-[420px] max-h-[calc(100dvh-120px)] sm:max-h-[600px] overflow-hidden">
+    <div className="flex flex-col bg-[#11141c] rounded-2xl border border-slate-700/50 w-full sm:w-105 max-h-[calc(100dvh-120px)] sm:max-h-150 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-linear-to-r from-[#11141c] via-[#11141c]/50 to-[#11141c]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
-            <Monitor className="w-4 h-4 text-indigo-400" />
+          <div className="rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30 size-8">
+            <Monitor className="text-indigo-400 size-4" />
           </div>
           <div>
             <h3 className="text-sm font-bold text-slate-100 tracking-tight">Presentation Slides</h3>
@@ -129,7 +129,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
               className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-all duration-200"
               title="Close"
             >
-              <X className="w-4 h-4" />
+              <X className="size-4" />
             </button>
           )}
         </div>
@@ -146,7 +146,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                 : 'text-slate-400 hover:text-slate-200'
                 }`}
             >
-              <FileText className="w-3.5 h-3.5" />
+              <FileText className="size-3.5" />
               Markdown
             </button>
             <button
@@ -156,7 +156,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                 : 'text-slate-400 hover:text-slate-200'
                 }`}
             >
-              <Code className="w-3.5 h-3.5" />
+              <Code className="size-3.5" />
               HTML
             </button>
           </div>
@@ -176,7 +176,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
             onClick={addSlide}
             className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all duration-300 shadow-md active:scale-[0.98]"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="size-4" />
             Create Slide
           </button>
         </div>
@@ -192,8 +192,8 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
 
           {slides.length === 0 ? (
             <div className="bg-slate-800/30 border border-dashed border-slate-700/50 rounded-2xl py-10 px-6 text-center">
-              <div className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/5">
-                <Monitor className="w-6 h-6 text-slate-600" />
+              <div className="bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/5 size-12">
+                <Monitor className="text-slate-600 size-6" />
               </div>
               <p className="text-slate-400 text-xs font-medium leading-relaxed">
                 Your presentation deck is empty.<br />
@@ -219,14 +219,14 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                           onClick={saveEdit}
                           className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
                         >
-                          <Save className="w-3 h-3" />
+                          <Save className="size-3" />
                           Update
                         </button>
                         <button
                           onClick={cancelEdit}
                           className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-medium transition-all"
                         >
-                          <RotateCcw className="w-3 h-3" />
+                          <RotateCcw className="size-3" />
                         </button>
                       </div>
                     </div>
@@ -239,16 +239,16 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                       >
                         <div className="absolute inset-0 flex items-center justify-center">
                           {slide.contentType === 'html' ? (
-                            <Code className="w-4 h-4 text-indigo-400/40" />
+                            <Code className="text-indigo-400/40 size-4" />
                           ) : (
-                            <FileText className="w-4 h-4 text-emerald-400/40" />
+                            <FileText className="text-emerald-400/40 size-4" />
                           )}
                         </div>
                         <div className="absolute top-0 right-0 px-1 py-0.5 bg-indigo-500/10 text-[6px] font-bold text-indigo-300 uppercase leading-none border-b border-l border-white/5">
                           {slide.contentType}
                         </div>
                         <div className="absolute inset-0 bg-indigo-600/20 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity py-1">
-                          <Edit3 className="w-3 h-3 text-white" />
+                          <Edit3 className="text-white size-3" />
                         </div>
                       </div>
 
@@ -271,7 +271,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                           className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg disabled:opacity-0 transition-all"
                           title="Move Up"
                         >
-                          <ChevronUp className="w-3.5 h-3.5" />
+                          <ChevronUp className="size-3.5" />
                         </button>
                         <button
                           onClick={() => moveSlide(slide.id, 'down')}
@@ -279,7 +279,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                           className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg disabled:opacity-0 transition-all"
                           title="Move Down"
                         >
-                          <ChevronDown className="w-3.5 h-3.5" />
+                          <ChevronDown className="size-3.5" />
                         </button>
                         <div className="w-px h-4 bg-white/5 mx-1"></div>
                         <button
@@ -287,7 +287,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                           className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all"
                           title="Delete"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="size-3.5" />
                         </button>
                       </div>
                     </div>
@@ -306,7 +306,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
           disabled={slides.length === 0}
           className="group w-full py-4 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white rounded-2xl text-sm font-black flex items-center justify-center gap-3 transition-all duration-500 shadow-lg active:scale-[0.98]"
         >
-          <Play className="w-5 h-5 fill-current group-enabled:group-hover:translate-x-0.5 transition-transform" />
+          <Play className="fill-current group-enabled:group-hover:translate-x-0.5 transition-transform size-5" />
           START PRESENTATION
         </button>
       </div>

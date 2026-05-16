@@ -172,7 +172,7 @@ const SlidePreview = memo(function SlidePreview({
           transformOrigin: 'bottom right',
           willChange: 'transform'
         }}
-        className={`${positioning} top-[10%] left-[10%] right-[10%] bottom-[10%] w-[80%] h-[80%] z-100 bg-slate-900 rounded-2xl overflow-hidden border border-white/10 flex flex-col shadow-2xl transition-shadow`}
+        className={`${positioning} top-[10%] left-[10%] right-[10%] bottom-[10%] z-100 bg-slate-900 rounded-2xl overflow-hidden border border-white/10 flex flex-col shadow-2xl transition-shadow size-[80%]`}
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -185,16 +185,16 @@ const SlidePreview = memo(function SlidePreview({
                 e.stopPropagation();
                 handleClose();
               }}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+              className="inline-flex items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-white size-7"
               title="Close slides"
             >
-              <X className="w-4 h-4" />
+              <X className="size-4" />
             </button>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
-              <Monitor className="w-3 h-3 text-indigo-400" />
+            <div className="rounded bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 size-5">
+              <Monitor className="text-indigo-400 size-3" />
             </div>
             <span className="text-[11px] font-bold text-slate-300 tracking-tight uppercase">
               Slide {currentSlideIndex + 1} <span className="text-slate-500">of {slides.length}</span>
@@ -211,7 +211,7 @@ const SlidePreview = memo(function SlidePreview({
               className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg disabled:opacity-20 transition-all"
               title="Previous slide"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="size-4" />
             </button>
             <div className="w-px h-4 bg-white/5 mx-1"></div>
             <button
@@ -223,7 +223,7 @@ const SlidePreview = memo(function SlidePreview({
               className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg disabled:opacity-20 transition-all"
               title="Next slide"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="size-4" />
             </button>
           </div>
         </div>
@@ -247,7 +247,7 @@ const SlidePreview = memo(function SlidePreview({
           {recordMode && (
             <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-3 bg-slate-900 border border-white/10 px-4 py-2 rounded-2xl shadow-2xl opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none">
               <div className="p-1.5 rounded-lg bg-indigo-500/20 border border-indigo-500/20">
-                <Keyboard className="w-4 h-4 text-indigo-400" />
+                <Keyboard className="text-indigo-400 size-4" />
               </div>
               <span className="text-xs font-bold text-slate-200">Use Arrow Keys to Navigate</span>
             </div>

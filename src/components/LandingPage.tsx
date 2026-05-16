@@ -54,7 +54,7 @@ const TerminalMockup = () => {
     }
 
     return (
-        <div className="font-mono text-sm leading-relaxed min-h-[140px] text-left whitespace-pre">
+        <div className="font-mono text-sm leading-relaxed min-h-35 text-left whitespace-pre">
             {renderedSegments}
             <span className="terminal-caret text-pinata-cyan">▋</span>
         </div>
@@ -69,10 +69,10 @@ const LandingPage = () => {
             {/* Hero Section */}
             <main className="relative pt-32 pb-20 px-6 max-w-7xl mx-auto">
                 {/* Background Colorful Blobs */}
-                <div className="absolute top-0 left-0 w-full h-full -z-10 overflow-hidden pointer-events-none">
-                    <div className="absolute top-[-10%] right-[-5%] w-[350px] h-[350px] md:w-[700px] md:h-[700px] bg-[radial-gradient(circle,hsla(248,100%,67%,0.3)_0%,hsla(248,100%,67%,0)_70%)] rounded-full will-change-transform" />
-                    <div className="absolute bottom-[10%] left-[-10%] w-[300px] h-[300px] md:w-[600px] md:h-[600px] bg-[radial-gradient(circle,hsla(174,76%,60%,0.2)_0%,hsla(174,76%,60%,0)_70%)] rounded-full will-change-transform" />
-                    <div className="absolute top-[40%] left-[30%] w-[250px] h-[250px] md:w-[500px] md:h-[500px] bg-[radial-gradient(circle,hsla(45,100%,66%,0.1)_0%,hsla(45,100%,66%,0)_70%)] rounded-full will-change-transform" />
+                <div className="absolute top-0 left-0 -z-10 overflow-hidden pointer-events-none size-full">
+                    <div className="absolute top-[-10%] right-[-5%] size-87.5 md:size-175 bg-[radial-gradient(circle,hsla(248,100%,67%,0.3)_0%,hsla(248,100%,67%,0)_70%)] rounded-full will-change-transform" />
+                    <div className="absolute bottom-[10%] left-[-10%] size-75 md:size-150 bg-[radial-gradient(circle,hsla(174,76%,60%,0.2)_0%,hsla(174,76%,60%,0)_70%)] rounded-full will-change-transform" />
+                    <div className="absolute top-[40%] left-[30%] size-62.5 md:size-125 bg-[radial-gradient(circle,hsla(45,100%,66%,0.1)_0%,hsla(45,100%,66%,0)_70%)] rounded-full will-change-transform" />
                 </div>
 
                 <div className="flex flex-col items-center">
@@ -85,8 +85,8 @@ const LandingPage = () => {
                         {/* Main Hero Card */}
                         <div className="relative bg-white rounded-[40px] p-8 md:p-16 mb-12 overflow-hidden shadow-2xl">
                             {/* Decorative side shapes */}
-                            <div className="absolute -left-16 -top-16 w-32 h-32 bg-pinata-yellow rounded-full z-0 opacity-20" />
-                            <div className="absolute -right-20 bottom-10 w-40 h-40 bg-pinata-purple rounded-full z-0 opacity-20" />
+                            <div className="absolute -left-16 -top-16 bg-pinata-yellow rounded-full z-0 opacity-20 size-32" />
+                            <div className="absolute -right-20 bottom-10 bg-pinata-purple rounded-full z-0 opacity-20 size-40" />
 
                             <div className="relative z-10 flex flex-col md:flex-row items-center gap-12">
                                 <div className="flex-1 text-left order-2 md:order-1">
@@ -134,7 +134,7 @@ const LandingPage = () => {
                                             className="px-10 py-4 rounded-full bg-[#4de5a6] text-slate-950 text-lg font-semibold hover:bg-[#3cd495] transition-all flex items-center gap-2 shadow-xl"
                                         >
                                             <div className="relative">
-                                                <svg viewBox="0 0 256 256" className="w-5 h-5 overflow-visible">
+                                                <svg viewBox="0 0 256 256" className="overflow-visible size-5">
                                                     <path
                                                         d="M240,128a15.74,15.74,0,0,1-7.6,13.51L88.32,229.65a16,16,0,0,1-16.2.3A15.86,15.86,0,0,1,64,216.13V39.87a15.86,15.86,0,0,1,8.12-13.82,16,16,0,0,1,16.2.3L232.4,114.49A15.74,15.74,0,0,1,240,128Z"
                                                         className="fill-[#3b82f6]"
@@ -171,9 +171,9 @@ const LandingPage = () => {
                                 <div className="w-full lg:w-100 shrink-0 order-1 md:order-2">
                                     <div className="bg-[#181d24] rounded-3xl p-6 shadow-2xl border border-slate-800 rotate-2 will-change-transform">
                                         <div className="flex gap-1.5 mb-6">
-                                            <div className="w-3 h-3 rounded-full bg-[#FF5F56]" />
-                                            <div className="w-3 h-3 rounded-full bg-[#FFBD2E]" />
-                                            <div className="w-3 h-3 rounded-full bg-[#27C93F]" />
+                                            <div className="rounded-full bg-[#FF5F56] size-3" />
+                                            <div className="rounded-full bg-[#FFBD2E] size-3" />
+                                            <div className="rounded-full bg-[#27C93F] size-3" />
                                         </div>
 
                                         <TerminalMockup />
@@ -188,7 +188,7 @@ const LandingPage = () => {
                                                 <motion.div
                                                     animate={{ opacity: [1, 0.4, 1] }}
                                                     transition={{ duration: 2, repeat: Infinity }}
-                                                    className="w-2 h-2 rounded-full bg-red-500 will-change-opacity"
+                                                    className="rounded-full bg-red-500 will-change-opacity size-2"
                                                 />
                                             </div>
 
@@ -203,10 +203,10 @@ const LandingPage = () => {
                                         <motion.div
                                             animate={{ y: [0, -10, 0] }}
                                             transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                                            className="w-32 h-32 relative will-change-transform"
+                                            className="relative will-change-transform size-32"
                                         >
                                             <div className="absolute inset-0 bg-[radial-gradient(circle,hsla(248,100%,67%,0.15)_0%,hsla(248,100%,67%,0)_70%)] rounded-3xl" />
-                                            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain relative z-10" />
+                                            <img src="/logo.png" alt="Logo" className="object-contain relative z-10 size-full" />
                                         </motion.div>
                                     </div>
                                 </div>
@@ -271,10 +271,10 @@ const LandingPage = () => {
                                 textColor: "#020617"
                             }
                         ].map((feature, i) => (
-                            <div key={i} className="bg-[#181d24]/90 border border-slate-800 p-8 rounded-[32px] text-left hover:border-slate-700 transition-colors will-change-[border-color,background-color]">
+                            <div key={i} className="bg-[#181d24]/90 border border-slate-800 p-8 rounded-4xl text-left hover:border-slate-700 transition-colors will-change-[border-color,background-color]">
                                 <div
                                     style={{ backgroundColor: feature.color, color: feature.textColor }}
-                                    className="w-12 h-12 rounded-2xl mb-6 flex items-center justify-center font-bold text-xl"
+                                    className="rounded-2xl mb-6 flex items-center justify-center font-bold text-xl size-12"
                                 >
                                     {i + 1}
                                 </div>
@@ -293,7 +293,7 @@ const LandingPage = () => {
             <footer className="border-t border-slate-900 py-12 px-6">
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="flex items-center gap-2">
-                        <img src="/logo.png" alt="logo" className="w-6 h-6 object-contain" />
+                        <img src="/logo.png" alt="logo" className="object-contain size-6" />
                         <span className="font-machina tracking-tight">next-editor</span>
                     </div>
                     <div className="flex flex-col md:flex-row items-center gap-6">

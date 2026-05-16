@@ -30,7 +30,11 @@ describe('Delta Compression Optimization', () => {
         }) as typeof fetch;
 
         try {
-            expect(await initWasm('/next-editor.wasm')).toBe(true);
+            const initialized = await initWasm('/next-editor.wasm');
+
+            if (!initialized) {
+                throw new Error('Failed to initialize WASM for frame delta tests');
+            }
         } finally {
             globalThis.fetch = originalFetch;
         }

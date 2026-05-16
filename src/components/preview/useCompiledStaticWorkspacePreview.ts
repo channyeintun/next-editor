@@ -10,7 +10,10 @@ export function useCompiledStaticWorkspacePreview(): string {
   const previewVersion = useWorkspacePreviewVersion();
 
   return useMemo(
-    () => createStaticWorkspacePreview(getProject()),
+    () => {
+      void previewVersion;
+      return createStaticWorkspacePreview(getProject());
+    },
     [getProject, previewVersion],
   );
 }

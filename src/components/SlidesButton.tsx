@@ -68,9 +68,9 @@ export default function SlidesButton() {
           } ${showPresentationToggle && !hasSlides ? 'cursor-not-allowed opacity-50' : ''}`}
         title={showPresentationToggle ? (isPresentationVisible ? 'Hide slides' : 'Show slides') : 'Manage presentation slides'}
       >
-        <Presentation className={`w-4 h-4 transition-transform duration-300 ${(showManager || isPresentationVisible) ? 'scale-110' : ''}`} />
+        <Presentation className={`transition-transform duration-300 size-4 ${(showManager || isPresentationVisible) ? 'scale-110' : ''}`} />
         {hasSlides && (
-          <span className={`flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-md text-[10px] font-black ${showManager ? 'bg-white text-indigo-600' : 'bg-slate-700 text-slate-300'
+          <span className={`flex items-center justify-center min-w-4.5 h-4.5 px-1 rounded-md text-[10px] font-black ${showManager ? 'bg-white text-indigo-600' : 'bg-slate-700 text-slate-300'
             }`}>
             {slides.length}
           </span>
@@ -80,7 +80,7 @@ export default function SlidesButton() {
       {/* Recording indicator for slides */}
       {isRecording && slides.length > 0 && (
         <div className="absolute -top-1 -right-1 flex">
-          <Circle className="w-2.5 h-2.5 fill-rose-500 text-rose-500 animate-pulse" />
+          <Circle className="fill-rose-500 text-rose-500 animate-pulse size-2.5" />
         </div>
       )}
 

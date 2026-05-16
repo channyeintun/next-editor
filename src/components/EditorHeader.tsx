@@ -316,7 +316,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
           aria-expanded={isMenuOpen}
           aria-haspopup="menu"
           onClick={() => setIsMenuOpen((current) => !current)}
-          className="relative z-50 flex h-8 w-8 items-center justify-center rounded bg-slate-700 text-slate-300 transition-colors hover:bg-slate-600 hover:text-white"
+          className="relative z-50 flex items-center justify-center rounded bg-slate-700 text-slate-300 transition-colors hover:bg-slate-600 hover:text-white size-8"
         >
           <SettingIcon />
         </button>

@@ -139,6 +139,7 @@ export const WebContainerRuntimeProvider: React.FC<
     bootInstance,
     ensureProjectMounted,
     getProject,
+    isMountedRef,
     isSupported,
     runForegroundCommand,
     runnerConfig.initCommand,
@@ -185,6 +186,8 @@ export const WebContainerRuntimeProvider: React.FC<
     resetRuntime,
     runnerConfig.enabled,
     runnerConfig.runCommand,
+    setErrorMessage,
+    setStatus,
     startRunnerProcess,
     status,
   ]);
@@ -219,6 +222,8 @@ export const WebContainerRuntimeProvider: React.FC<
     resetRuntime,
     runnerConfig.enabled,
     runnerConfig.runCommand,
+    setErrorMessage,
+    setStatus,
     startRunnerProcess,
   ]);
   const rerunRunnerRef = useRef(rerunRunner);
@@ -299,6 +304,7 @@ export const WebContainerRuntimeProvider: React.FC<
   }, [
     getProject,
     hasActiveRunner,
+    instanceRef,
     queueProjectSync,
     setErrorMessage,
     statusRef,
@@ -368,6 +374,7 @@ export const WebContainerRuntimeProvider: React.FC<
   }, [
     getProject,
     hasMountedProjectRef,
+    instanceRef,
     queueProjectSync,
     saveVersion,
     setErrorMessage,

@@ -15,7 +15,7 @@ const DragDropOverlay: React.FC<DragDropOverlayProps> = ({ isDragging, isLoading
       <div className={`${showDropTarget ? 'bg-gray-800 rounded-lg border-2 border-dashed border-blue-400 p-8' : ''} text-center`}>
         {isLoading ? (
           <div className="text-blue-400">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto"></div>
+            <div className="animate-spin rounded-full border-b-2 border-blue-400 mx-auto size-12"></div>
           </div>
         ) : (
           <div className="text-blue-400">

@@ -110,7 +110,7 @@ const RunnerToggle = memo(function RunnerToggle({
         }`}
       >
         <span
-          className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
+          className={`absolute top-1 rounded-full bg-white transition-transform size-4 ${
             checked ? "translate-x-6" : "translate-x-1"
           }`}
         />
@@ -513,7 +513,7 @@ const TerminalPanel = memo(function TerminalPanel() {
           <button
             type="button"
             onClick={() => setIsSettingsOpen(true)}
-            className="inline-flex h-10 w-10 items-center justify-center text-slate-500 transition-colors hover:text-white"
+            className="inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10"
             aria-label="Open runner settings"
             title="Open runner settings"
           >
@@ -523,7 +523,7 @@ const TerminalPanel = memo(function TerminalPanel() {
           <button
             type="button"
             onClick={() => setIsCollapsed((current) => !current)}
-            className="ml-auto inline-flex h-10 w-10 items-center justify-center text-slate-500 transition-colors hover:text-white"
+            className="ml-auto inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10"
             aria-label={
               isCollapsed ? "Expand runtime dock" : "Collapse runtime dock"
             }

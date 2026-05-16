@@ -70,12 +70,12 @@ const IdleRecordButton = memo(function IdleRecordButton() {
   }, []);
 
   return (
-    <div className="relative flex h-6 w-6 items-center justify-center overflow-visible">
+    <div className="relative flex items-center justify-center overflow-visible size-6">
       <svg
         ref={corgiRef}
         aria-hidden="true"
         viewBox="0 0 34 32"
-        className="pointer-events-none absolute -left-2.5 -top-1 z-0 h-8 w-8 overflow-visible"
+        className="pointer-events-none absolute -left-2.5 -top-1 z-0 overflow-visible size-8"
       >
         <defs>
           <linearGradient id={furGradientId} x1="9" y1="7" x2="24" y2="28" gradientUnits="userSpaceOnUse">

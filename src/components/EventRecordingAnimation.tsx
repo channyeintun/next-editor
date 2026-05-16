@@ -25,8 +25,8 @@ const EventRecordingAnimation = ({ variant = 'full' }: { variant?: 'full' | 'com
                 <div className="absolute inset-0 bg-pinata-cyan/10 blur-[10px] rounded-full scale-110 -translate-x-2" />
 
                 {/* Lottie View - Tightly aligned to the left */}
-                <div className="h-16 w-16 -my-6 relative z-10 origin-left flex items-center justify-center -ml-4">
-                    <div className="w-full h-full scale-[1.5]">
+                <div className="-my-6 relative z-10 origin-left flex items-center justify-center -ml-4 size-16">
+                    <div className="scale-[1.5] size-full">
                         {View}
                     </div>
                 </div>
@@ -59,20 +59,20 @@ const EventRecordingAnimation = ({ variant = 'full' }: { variant?: 'full' | 'com
     return (
         <div className="relative w-full max-w-2xl mx-auto p-1">
             {/* Background Glows */}
-            <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-64 h-64 bg-pinata-cyan/10 blur-[100px] rounded-full" />
-            <div className="absolute top-1/2 right-1/4 -translate-y-1/2 w-64 h-64 bg-pinata-purple/10 blur-[100px] rounded-full" />
+            <div className="absolute top-1/2 left-1/4 -translate-y-1/2 bg-pinata-cyan/10 blur-[100px] rounded-full size-64" />
+            <div className="absolute top-1/2 right-1/4 -translate-y-1/2 bg-pinata-purple/10 blur-[100px] rounded-full size-64" />
 
             <div className="relative bg-[#0d1117]/60 backdrop-blur-xl rounded-[40px] border border-white/5 p-8 md:p-12 overflow-hidden shadow-2xl">
                 {/* Header/Status */}
                 <div className="flex items-center justify-between mb-12">
                     <div className="flex gap-2">
-                        <div className="w-3 h-3 rounded-full bg-[#FF5F56] shadow-[0_0_10px_rgba(255,95,86,0.5)]" />
-                        <div className="w-3 h-3 rounded-full bg-[#FFBD2E]" />
-                        <div className="w-3 h-3 rounded-full bg-[#27C93F]" />
+                        <div className="rounded-full bg-[#FF5F56] shadow-[0_0_10px_rgba(255,95,86,0.5)] size-3" />
+                        <div className="rounded-full bg-[#FFBD2E] size-3" />
+                        <div className="rounded-full bg-[#27C93F] size-3" />
                     </div>
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20 text-[10px] font-mono font-bold text-red-500 uppercase tracking-widest animate-pulse">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            <div className="rounded-full bg-red-500 size-1.5" />
                             Live Recording
                         </div>
                     </div>
@@ -82,7 +82,7 @@ const EventRecordingAnimation = ({ variant = 'full' }: { variant?: 'full' | 'com
                     {/* Visual Side */}
                     <div className="relative aspect-square group">
                         <div className="absolute inset-0 bg-linear-to-tr from-pinata-cyan/5 to-transparent rounded-3xl" />
-                        <div className="w-full h-full scale-110">
+                        <div className="scale-110 size-full">
                             {View}
                         </div>
 
@@ -119,8 +119,8 @@ const EventRecordingAnimation = ({ variant = 'full' }: { variant?: 'full' | 'com
                         <div className="space-y-4">
                             <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 group hover:bg-white/10 transition-colors">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-pinata-cyan/20 flex items-center justify-center text-pinata-cyan">
-                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <div className="rounded-xl bg-pinata-cyan/20 flex items-center justify-center text-pinata-cyan size-10">
+                                        <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                         </svg>
                                     </div>
@@ -134,8 +134,8 @@ const EventRecordingAnimation = ({ variant = 'full' }: { variant?: 'full' | 'com
 
                             <div className="flex items-center justify-between p-4 rounded-2xl bg-red-500/5 border border-red-500/10 opacity-50">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center text-red-500">
-                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <div className="rounded-xl bg-red-500/20 flex items-center justify-center text-red-500 size-10">
+                                        <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                         </svg>
                                     </div>

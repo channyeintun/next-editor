@@ -293,7 +293,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     if (isPlaying) {
       focusEditorIfNeeded(editorRef.current);
     }
-  }, [editorRef, focusEditorIfNeeded, isPlaying]);
+  }, [editorRef, isPlaying]);
 
   /**
    * Handle Monaco Editor mount event

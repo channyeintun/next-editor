@@ -12,7 +12,7 @@ export function StaticPreviewRenderer({
   return (
     <iframe
       ref={iframeRef}
-      className={`absolute inset-0 w-full h-full block border-0 bg-transparent align-middle ${disablePointerEvents ? "pointer-events-none" : ""}`}
+      className={`absolute inset-0 block border-0 bg-transparent align-middle size-full ${disablePointerEvents ? "pointer-events-none" : ""}`}
       title="Code Preview"
       sandbox="allow-scripts allow-same-origin"
     />

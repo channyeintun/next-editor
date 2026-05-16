@@ -311,7 +311,7 @@ const RevealSlideRenderer = memo(function RevealSlideRenderer({
 
   if (slides.length === 0) {
     return (
-      <div className="flex items-center justify-center w-full h-full bg-gray-900 text-gray-400">
+      <div className="flex items-center justify-center bg-gray-900 text-gray-400 size-full">
         <p>No slides to display</p>
       </div>
     );
@@ -321,7 +321,7 @@ const RevealSlideRenderer = memo(function RevealSlideRenderer({
     <iframe
       ref={iframeRef}
       title="Reveal.js Presentation"
-      className="block w-full h-full border-0 align-middle"
+      className="block border-0 align-middle size-full"
       sandbox="allow-scripts allow-same-origin"
     />
   );
