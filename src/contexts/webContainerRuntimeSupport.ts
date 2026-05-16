@@ -10,6 +10,7 @@ import {
   type WorkspaceFile,
   type WorkspaceProject,
 } from "../types/workspace";
+import { createIframeInteractionCaptureScript } from "../utils/iframeInteractionCapture";
 
 export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   enabled: true,
@@ -28,6 +29,8 @@ export const TERMINAL_SHELL_CANDIDATES = [
 const RUNTIME_ENVIRONMENT_STORAGE_KEY = "next-editor-runtime-environment";
 const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
 const RUNTIME_SNAPSHOT_SCRIPT_MARKER = "__NEXT_EDITOR_RUNTIME_SNAPSHOT__";
+const RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER =
+  "__NEXT_EDITOR_RUNTIME_INTERACTION_CAPTURE__";
 
 const sharedWebContainerState: {
   instance: WebContainer | null;
@@ -136,11 +139,15 @@ function injectRuntimeSnapshotScript(
     return content;
   }
 
+  const interactionCaptureScript = createIframeInteractionCaptureScript(
+    RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER,
+  );
+
   const snapshotScript = `<script data-next-editor-runtime-snapshot>(function(){const marker=${JSON.stringify(
     RUNTIME_SNAPSHOT_SCRIPT_MARKER,
   )};if(window[marker])return;window[marker]=true;const messageType=${JSON.stringify(
     RUNTIME_SNAPSHOT_MESSAGE_TYPE,
-  )};const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();</script>`;
+  )};${interactionCaptureScript}const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();</script>`;
 
   if (content.includes("</head>")) {
     return content.replace("</head>", `${snapshotScript}\n</head>`);
