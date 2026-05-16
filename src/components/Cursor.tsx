@@ -5,7 +5,6 @@ import IconCursor from './icon/IconCursor';
 
 /**
  * Fake cursor component for playback visualization
- * Based on the working example from test-simple.sh
  */
 interface FakeCursorProps {
   position: MouseCursorPosition & { hasParent?: boolean };
@@ -34,7 +33,6 @@ const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
 
 /**
  * CursorComponent - Displays a fake cursor overlay during playback
- * Implementation based on working example from test-simple.sh
  */
 const CursorComponent: React.FC<{
   hasParent?: boolean;
