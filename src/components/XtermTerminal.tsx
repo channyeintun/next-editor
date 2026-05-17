@@ -36,6 +36,12 @@ const TERMINAL_THEME = {
   brightWhite: "#f8fafc",
 } as const;
 
+const PASSIVE_TERMINAL_THEME = {
+  ...TERMINAL_THEME,
+  cursor: "transparent",
+  cursorAccent: "transparent",
+} as const;
+
 const XtermTerminal = memo(function XtermTerminal({
   output,
   sessionId,
@@ -68,6 +74,7 @@ const XtermTerminal = memo(function XtermTerminal({
     }
 
     const terminal = new Terminal({
+      convertEol: true,
       cursorBlink: interactive,
       disableStdin: !interactive,
       fontFamily:
@@ -75,7 +82,7 @@ const XtermTerminal = memo(function XtermTerminal({
       fontSize: 13,
       lineHeight: 1.5,
       scrollback: 2000,
-      theme: TERMINAL_THEME,
+      theme: interactive ? TERMINAL_THEME : PASSIVE_TERMINAL_THEME,
     });
     const fitAddon = new FitAddon();
     const updateSize = () => {
@@ -175,8 +182,12 @@ const XtermTerminal = memo(function XtermTerminal({
   return (
     <div
       ref={containerRef}
-      className="xterm-terminal size-full"
+      className={`xterm-terminal size-full ${interactive ? "" : "passive"}`.trim()}
       onMouseDown={(event) => {
+        if (!interactive) {
+          return;
+        }
+
         event.preventDefault();
         terminalRef.current?.focus();
       }}

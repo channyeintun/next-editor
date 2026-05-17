@@ -50,10 +50,6 @@ const OSC_PATTERN = new RegExp(
   `${ESCAPE_CHARACTER}\\][^${BELL_CHARACTER}]*(?:${BELL_CHARACTER}|${ESCAPE_CHARACTER}\\\\)`,
   "g",
 );
-const ANSI_PATTERN = new RegExp(
-  `${ESCAPE_CHARACTER}\\[[0-9;?]*[ -/]*[@-~]`,
-  "g",
-);
 
 export function getRuntimeErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -113,8 +109,7 @@ export function formatPreviewMessage(message: {
 
 export function sanitizeTerminalChunk(chunk: string): string {
   const withoutOsc = chunk.replace(OSC_PATTERN, "");
-  const withoutAnsi = withoutOsc.replace(ANSI_PATTERN, "");
-  const normalized = withoutAnsi.replace(/\r/g, "");
+  const normalized = withoutOsc.replace(/\r/g, "");
 
   if (/^[\\|/-]$/.test(normalized.trim())) {
     return "";

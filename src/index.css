@@ -64,6 +64,11 @@ body {
   overflow-y: auto !important;
 }
 
+.xterm-terminal.passive .xterm-cursor-layer,
+.xterm-terminal.passive .xterm-cursor {
+  display: none !important;
+}
+
 @keyframes terminal-blink {
 
   0%,

@@ -26,6 +26,42 @@ function formatTerminalContent(content: string): string {
   return content.replace(/\n{3,}/g, "\n\n").trim();
 }
 
+const ANSI_RESET = "\u001b[0m";
+const ANSI_COLORS: Record<string, string> = {
+  dim: "\u001b[90m",
+  blue: "\u001b[94m",
+  cyan: "\u001b[96m",
+  green: "\u001b[92m",
+  red: "\u001b[91m",
+  yellow: "\u001b[93m",
+};
+
+function decorateConsoleLine(line: string): string {
+  const prefixMatch = line.match(/^\[[^\]]+\]/);
+
+  if (!prefixMatch) {
+    return line;
+  }
+
+  const prefix = prefixMatch[0];
+  const suffix = line.slice(prefix.length);
+  const normalizedPrefix = prefix.toLowerCase();
+
+  let prefixColor = ANSI_COLORS.blue;
+
+  if (normalizedPrefix.includes("error")) {
+    prefixColor = ANSI_COLORS.red;
+  } else if (normalizedPrefix.startsWith("[runtime")) {
+    prefixColor = ANSI_COLORS.cyan;
+  } else if (normalizedPrefix.startsWith("[preview")) {
+    prefixColor = ANSI_COLORS.yellow;
+  } else if (normalizedPrefix.startsWith("[command")) {
+    prefixColor = ANSI_COLORS.green;
+  }
+
+  return `${prefixColor}${prefix}${ANSI_RESET}${ANSI_COLORS.dim}${suffix}${ANSI_RESET}`;
+}
+
 function getStatusLabel(status: string): string {
   switch (status) {
     case "booting":
@@ -418,7 +454,7 @@ const TerminalPanel = memo(function TerminalPanel() {
       return "No console events yet.";
     }
 
-    return consoleLines.join("\n");
+    return consoleLines.map(decorateConsoleLine).join("\n");
   }, [consoleLines]);
 
   const runnerCommand = runnerConfig.runCommand.trim() || "Runner disabled";
@@ -569,10 +605,14 @@ const TerminalPanel = memo(function TerminalPanel() {
                   </div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-auto px-5 py-6">
-                  <pre className="font-mono text-[13px] leading-7 text-slate-200 whitespace-pre-wrap">
-                    {runnerOutput}
-                  </pre>
+                <div className="min-h-0 flex-1 overflow-hidden px-5 py-6">
+                  <div className="size-full overflow-hidden rounded-lg border border-slate-800/80 bg-[#151821]">
+                    <XtermTerminal
+                      sessionId="runner"
+                      output={runnerOutput}
+                      interactive={false}
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -615,10 +655,14 @@ const TerminalPanel = memo(function TerminalPanel() {
             )}
 
             {activeTab === "console" && (
-              <div className="h-72 overflow-hidden bg-[#1d1f29]">
-                <pre className="h-full overflow-auto px-5 py-6 font-mono text-[12px] leading-6 text-slate-300 whitespace-pre-wrap">
-                  {consoleContent}
-                </pre>
+              <div className="h-72 overflow-hidden bg-[#1d1f29] px-5 py-6">
+                <div className="size-full overflow-hidden rounded-lg border border-slate-800/80 bg-[#151821]">
+                  <XtermTerminal
+                    sessionId="console"
+                    output={consoleContent}
+                    interactive={false}
+                  />
+                </div>
               </div>
             )}
           </>
