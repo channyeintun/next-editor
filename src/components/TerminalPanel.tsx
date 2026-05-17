@@ -19,8 +19,6 @@ import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import type {
   RuntimeDockTab,
   RuntimeRecordingSnapshot,
-  RuntimeTerminalEvent,
-  RuntimeTerminalSessionSnapshot,
 } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
@@ -47,88 +45,6 @@ function getStatusLabel(status: string): string {
   }
 }
 
-function getSnapshotTerminalSessions(
-  snapshot: RuntimeRecordingSnapshot | null,
-): RuntimeTerminalSessionSnapshot[] {
-  if (snapshot?.terminalSessions?.length) {
-    return snapshot.terminalSessions;
-  }
-
-  if (snapshot?.terminalOutput) {
-    return [
-      {
-        id: "terminal-1",
-        title: "Terminal 1",
-        output: snapshot.terminalOutput,
-      },
-    ];
-  }
-
-  return [];
-}
-
-function getSnapshotTerminalEvents(
-  snapshot: RuntimeRecordingSnapshot | null,
-): RuntimeTerminalEvent[] {
-  return snapshot?.terminalEvents ?? [];
-}
-
-function buildTerminalSessionsFromEvents(
-  events: RuntimeTerminalEvent[],
-): RuntimeTerminalSessionSnapshot[] {
-  const orderedEvents = [...events].sort(
-    (left, right) =>
-      (left.timestamp ?? left.id) - (right.timestamp ?? right.id) ||
-      left.id - right.id,
-  );
-  const orderedIds: string[] = [];
-  const sessions = new Map<string, RuntimeTerminalSessionSnapshot>();
-
-  for (const event of orderedEvents) {
-    if (event.type === "session-created") {
-      if (!sessions.has(event.sessionId)) {
-        orderedIds.push(event.sessionId);
-      }
-
-      sessions.set(event.sessionId, {
-        id: event.sessionId,
-        title: event.title || "Terminal",
-        output: sessions.get(event.sessionId)?.output ?? "",
-      });
-      continue;
-    }
-
-    if (event.type === "session-closed") {
-      sessions.delete(event.sessionId);
-      continue;
-    }
-
-    if (event.type === "output" && event.chunk) {
-      const currentSession =
-        sessions.get(event.sessionId) ?? {
-          id: event.sessionId,
-          title: "Terminal",
-          output: "",
-        };
-
-      if (!sessions.has(event.sessionId)) {
-        orderedIds.push(event.sessionId);
-      }
-
-      sessions.set(event.sessionId, {
-        ...currentSession,
-        output: `${currentSession.output}${event.chunk}`.slice(-50000),
-      });
-    }
-  }
-
-  return orderedIds
-    .map((sessionId) => sessions.get(sessionId) ?? null)
-    .filter((session): session is RuntimeTerminalSessionSnapshot =>
-      Boolean(session),
-    );
-}
-
 interface RuntimeDockTabConfig {
   id: RuntimeDockTab;
   label: string;
@@ -137,7 +53,6 @@ interface RuntimeDockTabConfig {
 
 interface RuntimeEventState {
   activeTab: RuntimeDockTab;
-  activeTerminalSessionId: string | null;
   isCollapsed: boolean;
   isSettingsOpen: boolean;
   status: string;
@@ -233,8 +148,6 @@ const TerminalPanel = memo(function TerminalPanel() {
     openPorts,
     previewUrl,
     runnerConfig,
-    terminalEvents,
-    terminalEventCount,
     terminalSessions,
   } = useWebContainerRuntimeMetadata();
   const { currentRecording, isRecording } = useNextEditorMetadata();
@@ -242,17 +155,10 @@ const TerminalPanel = memo(function TerminalPanel() {
     playbackRuntimeSnapshot ??
     (isRecording ? null : currentRecording?.runtimeSnapshot) ??
     null;
+  const recordableActiveTab = activeTab === "terminal" ? "runner" : activeTab;
   const runtimeStatus =
     status === "idle" ? (recordedRuntimeSnapshot?.status ?? status) : status;
-  const recordedOutput = recordedRuntimeSnapshot?.terminalOutput ?? null;
-  const recordedTerminalSessions = getSnapshotTerminalSessions(
-    recordedRuntimeSnapshot,
-  );
-  const recordedTerminalEvents = getSnapshotTerminalEvents(recordedRuntimeSnapshot);
-  const replayedTerminalSessions =
-    recordedTerminalEvents.length > 0
-      ? buildTerminalSessionsFromEvents(recordedTerminalEvents)
-      : recordedTerminalSessions;
+  const recordedOutput = recordedRuntimeSnapshot?.lastOutput ?? null;
   const effectivePreviewUrl = previewUrl || recordedRuntimeSnapshot?.previewUrl;
   const effectiveActiveCommand =
     activeCommand || recordedRuntimeSnapshot?.activeCommand || null;
@@ -261,31 +167,15 @@ const TerminalPanel = memo(function TerminalPanel() {
   const isPlaybackSnapshotActive = Boolean(
     currentRecording && playbackRuntimeSnapshot,
   );
-  const effectiveTerminalSessions =
-    isPlaybackSnapshotActive
-      ? replayedTerminalSessions
-      : terminalSessions.length > 0
-        ? terminalSessions
-        : recordedTerminalSessions;
-  const effectiveTerminalEvents =
-    isPlaybackSnapshotActive ? recordedTerminalEvents : terminalEvents;
+  const effectiveTerminalSessions = terminalSessions;
   const effectiveActiveTerminalSessionId =
     activeTerminalSessionId ||
-    recordedRuntimeSnapshot?.activeTerminalSessionId ||
     effectiveTerminalSessions[0]?.id ||
     null;
   const effectiveTerminalOutput =
     effectiveTerminalSessions.find(
       (session) => session.id === effectiveActiveTerminalSessionId,
-    )?.output ?? recordedOutput ?? null;
-  const recordableTerminalOutput =
-    effectiveTerminalSessions.length > 0
-      ? JSON.stringify(
-          effectiveTerminalSessions.map((session) => [session.id, session.output]),
-        )
-      : lastOutput;
-  const recordableTerminalEventCount =
-    recordedRuntimeSnapshot?.terminalEventCount ?? terminalEventCount;
+    )?.output ?? null;
   const previousStatusRef = useRef<string | null>(null);
   const previousPreviewUrlRef = useRef<string | null>(null);
   const previousCommandRef = useRef<string | null>(null);
@@ -293,12 +183,10 @@ const TerminalPanel = memo(function TerminalPanel() {
   const previousLifecycleEventIdRef = useRef<number | null>(null);
   const previousPreviewMessageIdRef = useRef<number | null>(null);
   const previousRuntimeEventStateRef = useRef<RuntimeEventState | null>(null);
-  const previousOutputRef = useRef<string | null>(null);
-  const previousTerminalEventCountRef = useRef(0);
 
   useEffect(() => {
     runtimePanel.setSnapshotGetter(() => ({
-      activeTab,
+      activeTab: recordableActiveTab,
       isCollapsed,
       isSettingsOpen,
       consoleLines,
@@ -308,17 +196,21 @@ const TerminalPanel = memo(function TerminalPanel() {
       runtimePanel.setSnapshotGetter(() => null);
     };
   }, [
-    activeTab,
     consoleLines,
     isCollapsed,
     isSettingsOpen,
+    recordableActiveTab,
     runtimePanel,
   ]);
 
   useEffect(() => {
     runtimePanel.setSnapshotApplier((snapshot) => {
       setPlaybackRuntimeSnapshot(snapshot);
-      setActiveTab(snapshot.activeTab ?? "runner");
+      setActiveTab(
+        snapshot.activeTab === "terminal"
+          ? "runner"
+          : snapshot.activeTab ?? "runner",
+      );
       setIsCollapsed(snapshot.isCollapsed ?? false);
       setIsSettingsOpen(snapshot.isSettingsOpen ?? false);
       setConsoleLines(
@@ -448,8 +340,7 @@ const TerminalPanel = memo(function TerminalPanel() {
 
   const runtimeEventState = useMemo<RuntimeEventState>(
     () => ({
-      activeTab,
-      activeTerminalSessionId: effectiveActiveTerminalSessionId,
+      activeTab: recordableActiveTab,
       isCollapsed,
       isSettingsOpen,
       status: runtimeStatus,
@@ -459,14 +350,13 @@ const TerminalPanel = memo(function TerminalPanel() {
       consoleLines,
     }),
     [
-      activeTab,
       consoleLines,
       effectiveActiveCommand,
-      effectiveActiveTerminalSessionId,
       effectiveErrorMessage,
       effectivePreviewUrl,
       isCollapsed,
       isSettingsOpen,
+      recordableActiveTab,
       runtimeStatus,
     ],
   );
@@ -499,42 +389,12 @@ const TerminalPanel = memo(function TerminalPanel() {
   ]);
 
   useEffect(() => {
-    if (!isRecording || isPlaybackSnapshotActive) {
-      previousOutputRef.current = recordableTerminalOutput;
-      previousTerminalEventCountRef.current = recordableTerminalEventCount;
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      const outputChanged = previousOutputRef.current !== recordableTerminalOutput;
-      const eventCountChanged =
-        previousTerminalEventCountRef.current !== recordableTerminalEventCount;
-
-      if (outputChanged || eventCountChanged) {
-        previousOutputRef.current = recordableTerminalOutput;
-        previousTerminalEventCountRef.current = recordableTerminalEventCount;
-        handleRuntimeEvent();
-      }
-    }, 200);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [
-    handleRuntimeEvent,
-    isPlaybackSnapshotActive,
-    isRecording,
-    recordableTerminalEventCount,
-    recordableTerminalOutput,
-  ]);
-
-  useEffect(() => {
-    if (activeTab !== "terminal" || isPlaybackSnapshotActive || isCreatingTerminal) {
+    if (activeTab !== "terminal" || isCreatingTerminal) {
       return;
     }
 
     void startTerminalSession();
-  }, [activeTab, isCreatingTerminal, isPlaybackSnapshotActive, startTerminalSession]);
+  }, [activeTab, isCreatingTerminal, startTerminalSession]);
 
   const isBusy =
     runtimeStatus === "booting" ||
@@ -610,10 +470,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                   type="button"
                   onClick={() => {
                     setActiveTab("terminal");
-
-                    if (!isPlaybackSnapshotActive) {
-                      setActiveTerminalSession(session.id);
-                    }
+                    setActiveTerminalSession(session.id);
                   }}
                   className="px-4 py-3"
                 >
@@ -623,10 +480,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-
-                    if (!isPlaybackSnapshotActive) {
-                      closeTerminalSession(session.id);
-                    }
+                    closeTerminalSession(session.id);
 
                     if (
                       activeTab === "terminal" &&
@@ -734,20 +588,13 @@ const TerminalPanel = memo(function TerminalPanel() {
                   <XtermTerminal
                     sessionId={effectiveActiveTerminalSessionId}
                     output={effectiveTerminalOutput || ""}
-                    interactive={!isPlaybackSnapshotActive}
-                    replayEvents={
-                      isPlaybackSnapshotActive
-                        ? effectiveTerminalEvents.filter(
-                            (event) => event.sessionId === effectiveActiveTerminalSessionId,
-                          )
-                        : undefined
-                    }
-                    shouldFocus={activeTab === "terminal" && !isPlaybackSnapshotActive}
+                    interactive
+                    shouldFocus={activeTab === "terminal"}
                     onData={(input) => {
                       void sendTerminalInput(input);
                     }}
                     onResize={(size) => {
-                      if (!isPlaybackSnapshotActive && !isCollapsed) {
+                      if (!isCollapsed) {
                         resizeTerminal(size);
                       }
                     }}

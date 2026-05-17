@@ -1,8 +1,5 @@
 import { createContext } from "react";
-import type {
-  RuntimeTerminalEvent,
-  RuntimeTerminalSessionSnapshot,
-} from "../types/runtime";
+import type { RuntimeTerminalSessionSnapshot } from "../types/runtime";
 
 export type WebContainerRuntimeStatus =
   | "idle"
@@ -79,10 +76,7 @@ export interface WebContainerRuntimeMetadata {
   openPorts: RuntimePort[];
   latestLifecycleEvent: RuntimeLifecycleEvent | null;
   lastOutput: string | null;
-  terminalOutput: string | null;
   terminalSessions: RuntimeTerminalSessionSnapshot[];
-  terminalEvents: RuntimeTerminalEvent[];
-  terminalEventCount: number;
   activeTerminalSessionId: string | null;
   activeCommand: string | null;
   environmentVariables: EnvironmentVariables;
@@ -94,11 +88,6 @@ export interface WebContainerRuntimeRecordingSnapshot {
   status: WebContainerRuntimeStatus;
   previewUrl: string | null;
   lastOutput: string | null;
-  terminalOutput: string | null;
-  terminalSessions: RuntimeTerminalSessionSnapshot[];
-  terminalEvents: RuntimeTerminalEvent[];
-  terminalEventCount: number;
-  activeTerminalSessionId: string | null;
   activeCommand: string | null;
   errorMessage: string | null;
 }
