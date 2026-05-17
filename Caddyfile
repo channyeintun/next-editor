@@ -1,0 +1,12 @@
+:8080 {
+  root * /srv
+  encode zstd gzip
+
+  header {
+    Cross-Origin-Embedder-Policy "require-corp"
+    Cross-Origin-Opener-Policy "same-origin"
+  }
+
+  try_files {path} /index.html
+  file_server
+}
