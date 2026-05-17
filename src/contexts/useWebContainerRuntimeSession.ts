@@ -24,6 +24,7 @@ import {
 
 interface UseWebContainerRuntimeSessionOptions {
   environmentVariables: EnvironmentVariables;
+  onTerminalOutput?: () => void;
 }
 
 const RUNNER_OUTPUT_LIMIT = 6000;
@@ -36,6 +37,7 @@ interface TerminalSessionHandle extends RuntimeTerminalSessionSnapshot {
 
 export function useWebContainerRuntimeSession({
   environmentVariables,
+  onTerminalOutput,
 }: UseWebContainerRuntimeSessionOptions) {
   const instanceRef = useRef<WebContainer | null>(null);
   const runnerProcessRef = useRef<WebContainerProcess | null>(null);
@@ -54,6 +56,7 @@ export function useWebContainerRuntimeSession({
   const lastOutputRef = useRef<string | null>(null);
   const activeTerminalSessionIdRef = useRef<string | null>(null);
   const activeCommandRef = useRef<string | null>(null);
+  const onTerminalOutputRef = useRef(onTerminalOutput);
   const statusRef = useRef<WebContainerRuntimeStatus>("idle");
   const [status, setStatus] = useState<WebContainerRuntimeStatus>("idle");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -77,6 +80,7 @@ export function useWebContainerRuntimeSession({
   lastOutputRef.current = lastOutput;
   activeTerminalSessionIdRef.current = activeTerminalSessionId;
   activeCommandRef.current = activeCommand;
+  onTerminalOutputRef.current = onTerminalOutput;
   statusRef.current = status;
 
   const appendOutput = useCallback((chunk: string) => {
@@ -135,6 +139,8 @@ export function useWebContainerRuntimeSession({
         };
       }),
     );
+
+    onTerminalOutputRef.current?.();
   }, []);
 
   const pushLifecycleEvent = useCallback(

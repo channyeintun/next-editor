@@ -5,6 +5,9 @@ import type {
   RuntimePreviewMessage,
 } from "./WebContainerRuntimeContext";
 import {
+  collectWorkspaceFolders,
+  getWorkspaceBaseName,
+  inferLanguageFromPath,
   normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
   type WorkspaceFile,
@@ -31,6 +34,7 @@ const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
 const RUNTIME_SNAPSHOT_SCRIPT_MARKER = "__NEXT_EDITOR_RUNTIME_SNAPSHOT__";
 const RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER =
   "__NEXT_EDITOR_RUNTIME_INTERACTION_CAPTURE__";
+const RUNTIME_IMPORT_IGNORED_ROOTS = new Set([".git", "node_modules"]);
 
 const sharedWebContainerState: {
   instance: WebContainer | null;
@@ -176,6 +180,87 @@ function getNormalizedProjectFiles(
   );
 }
 
+function stripRuntimeSnapshotScript(content: string): string {
+  return content.replace(
+    /\s*<script data-next-editor-runtime-snapshot>[\s\S]*?<\/script>\s*/g,
+    "\n",
+  );
+}
+
+function shouldIgnoreRuntimeImportPath(path: string): boolean {
+  const normalizedPath = normalizeWorkspacePath(path);
+  const rootSegment = normalizedPath.split("/")[0];
+
+  return rootSegment ? RUNTIME_IMPORT_IGNORED_ROOTS.has(rootSegment) : false;
+}
+
+async function readRuntimeDirectory(
+  instance: WebContainer,
+  runtimePath: string,
+  workspacePath: string,
+  files: Record<string, WorkspaceFile>,
+  folders: Set<string>,
+): Promise<void> {
+  const entries = await instance.fs.readdir(runtimePath, { withFileTypes: true });
+  const orderedEntries = [...entries].sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+
+  for (const entry of orderedEntries) {
+    const nextWorkspacePath = normalizeWorkspacePath(
+      workspacePath ? `${workspacePath}/${entry.name}` : entry.name,
+    );
+    const nextRuntimePath = runtimePath === "." ? entry.name : `${runtimePath}/${entry.name}`;
+
+    if (!nextWorkspacePath || shouldIgnoreRuntimeImportPath(nextWorkspacePath)) {
+      continue;
+    }
+
+    if (entry.isDirectory()) {
+      folders.add(nextWorkspacePath);
+      await readRuntimeDirectory(
+        instance,
+        nextRuntimePath,
+        nextWorkspacePath,
+        files,
+        folders,
+      );
+      continue;
+    }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const content = stripRuntimeSnapshotScript(
+      await instance.fs.readFile(nextRuntimePath, "utf-8"),
+    );
+
+    files[nextWorkspacePath] = {
+      path: nextWorkspacePath,
+      name: getWorkspaceBaseName(nextWorkspacePath),
+      language: inferLanguageFromPath(nextWorkspacePath),
+      content,
+    };
+  }
+}
+
+export async function readWorkspaceProject(
+  instance: WebContainer,
+  currentProject: WorkspaceProject,
+): Promise<WorkspaceProject> {
+  const files: Record<string, WorkspaceFile> = {};
+  const folders = new Set<string>();
+
+  await readRuntimeDirectory(instance, ".", "", files, folders);
+
+  return {
+    ...currentProject,
+    folders: collectWorkspaceFolders(Object.keys(files), Array.from(folders)),
+    files,
+  };
+}
+
 export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
   const tree: FileSystemTree = {};
 
@@ -287,6 +372,11 @@ export async function syncWorkspaceProject(
       .map((folderPath) => normalizeWorkspaceFolderPath(folderPath))
       .filter(Boolean),
   );
+  const nextFolders = new Set(
+    nextProject.folders
+      .map((folderPath) => normalizeWorkspaceFolderPath(folderPath))
+      .filter(Boolean),
+  );
 
   for (const folderPath of nextProject.folders) {
     const normalizedFolderPath = normalizeWorkspaceFolderPath(folderPath);
@@ -309,6 +399,20 @@ export async function syncWorkspaceProject(
       await instance.fs.rm(path);
     } catch {
       // Ignore files that are already absent.
+    }
+  }
+
+  const deletedFolders = Array.from(previousFolders).filter(
+    (folderPath) => !nextFolders.has(folderPath),
+  );
+
+  for (const folderPath of deletedFolders.sort(
+    (left, right) => right.length - left.length,
+  )) {
+    try {
+      await instance.fs.rm(folderPath, { recursive: true, force: true });
+    } catch {
+      // Ignore directories that are already absent.
     }
   }
 

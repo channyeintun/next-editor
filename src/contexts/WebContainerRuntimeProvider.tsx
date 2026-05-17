@@ -17,15 +17,17 @@ import {
   loadStoredEnvironmentVariables,
   normalizeEnvironmentVariables,
   persistEnvironmentVariables,
+  readWorkspaceProject,
 } from "./webContainerRuntimeSupport";
 import {
   useWorkspaceActions,
   useWorkspaceLessonType,
   useWorkspaceProjectName,
-  useWorkspaceSaveVersion,
+  useWorkspaceSyncVersion,
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
 import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";
+import { areWorkspaceProjectsEqual } from "../types/workspace";
 
 interface WebContainerRuntimeProviderProps {
   children: React.ReactNode;
@@ -34,12 +36,18 @@ interface WebContainerRuntimeProviderProps {
 export const WebContainerRuntimeProvider: React.FC<
   WebContainerRuntimeProviderProps
 > = ({ children }) => {
-  const { getProject } = useWorkspaceActions();
+  const {
+    getActiveFilePath,
+    getCollapsedFolders,
+    getProject,
+    loadProject,
+  } = useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
   const projectName = useWorkspaceProjectName();
-  const saveVersion = useWorkspaceSaveVersion();
+  const syncVersion = useWorkspaceSyncVersion();
   const hasRunInitCommandRef = useRef(false);
   const hasAutoStartedRef = useRef(false);
+  const reverseSyncTimeoutRef = useRef<number | null>(null);
   const lessonTypeRef = useRef(lessonType);
   const runnerConfigRef = useRef<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
   const [environmentVariables, setEnvironmentVariables] =
@@ -81,7 +89,49 @@ export const WebContainerRuntimeProvider: React.FC<
     statusRef,
     terminalSessions,
     writeTerminalInput,
-  } = useWebContainerRuntimeSession({ environmentVariables });
+  } = useWebContainerRuntimeSession({
+    environmentVariables,
+    onTerminalOutput: () => {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      if (reverseSyncTimeoutRef.current !== null) {
+        window.clearTimeout(reverseSyncTimeoutRef.current);
+      }
+
+      reverseSyncTimeoutRef.current = window.setTimeout(() => {
+        reverseSyncTimeoutRef.current = null;
+
+        void (async () => {
+          if (lessonTypeRef.current !== "node.js") {
+            return;
+          }
+
+          const instance = instanceRef.current;
+
+          if (!instance) {
+            return;
+          }
+
+          const currentProject = getProject();
+          const nextProject = await readWorkspaceProject(instance, currentProject);
+
+          if (areWorkspaceProjectsEqual(currentProject, nextProject)) {
+            return;
+          }
+
+          loadProject(
+            nextProject,
+            getActiveFilePath(),
+            getCollapsedFolders(),
+          );
+        })().catch((error) => {
+          setErrorMessage(getRuntimeErrorMessage(error));
+        });
+      }, 150);
+    },
+  });
 
   lessonTypeRef.current = lessonType;
   runnerConfigRef.current = runnerConfig;
@@ -94,6 +144,13 @@ export const WebContainerRuntimeProvider: React.FC<
 
   const resetRuntime = useCallback(() => {
     hasRunInitCommandRef.current = false;
+    if (
+      typeof window !== "undefined" &&
+      reverseSyncTimeoutRef.current !== null
+    ) {
+      window.clearTimeout(reverseSyncTimeoutRef.current);
+      reverseSyncTimeoutRef.current = null;
+    }
     resetWorkspaceSync();
     resetRuntimeSession();
   }, [resetRuntimeSession, resetWorkspaceSync]);
@@ -271,8 +328,47 @@ export const WebContainerRuntimeProvider: React.FC<
       }
 
       await writeTerminalInput(instance, input);
+
+      if (
+        typeof window !== "undefined" &&
+        (input.includes("\n") || input.includes("\u0003"))
+      ) {
+        if (reverseSyncTimeoutRef.current !== null) {
+          window.clearTimeout(reverseSyncTimeoutRef.current);
+        }
+
+        reverseSyncTimeoutRef.current = window.setTimeout(() => {
+          reverseSyncTimeoutRef.current = null;
+
+          void (async () => {
+            const currentProject = getProject();
+            const nextProject = await readWorkspaceProject(instance, currentProject);
+
+            if (areWorkspaceProjectsEqual(currentProject, nextProject)) {
+              return;
+            }
+
+            loadProject(
+              nextProject,
+              getActiveFilePath(),
+              getCollapsedFolders(),
+            );
+          })().catch((error) => {
+            setErrorMessage(getRuntimeErrorMessage(error));
+          });
+        }, 150);
+      }
     },
-    [lessonType, prepareRuntime, writeTerminalInput],
+    [
+      getActiveFilePath,
+      getCollapsedFolders,
+      getProject,
+      lessonType,
+      loadProject,
+      prepareRuntime,
+      setErrorMessage,
+      writeTerminalInput,
+    ],
   );
 
   const runCommand = useCallback(
@@ -393,9 +489,20 @@ export const WebContainerRuntimeProvider: React.FC<
     hasMountedProjectRef,
     instanceRef,
     queueProjectSync,
-    saveVersion,
     setErrorMessage,
+    syncVersion,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (
+        typeof window !== "undefined" &&
+        reverseSyncTimeoutRef.current !== null
+      ) {
+        window.clearTimeout(reverseSyncTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
