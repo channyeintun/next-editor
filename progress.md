@@ -22,4 +22,4 @@
 - 322c433 feat: integrate xterm for live terminal dock
 - fc66b84 feat: record terminal event streams in runtime snapshots
 - d794e91 feat: replay terminal sessions through xterm events
-- Task 5 commit pending
+- 18b3d9d docs: finalize xterm integration progress
