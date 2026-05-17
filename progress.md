@@ -5,7 +5,7 @@
 - [completed] Task 2: Integrate xterm for live WebContainer terminals
 - [completed] Task 3: Upgrade terminal recording model for replay
 - [completed] Task 4: Add xterm-based replay rendering
-- [pending] Task 5: Final validation and cleanup
+- [completed] Task 5: Final validation and cleanup
 
 ## Completed Work
 - Created planning documents for xterm live integration and replay architecture.
@@ -21,4 +21,5 @@
 - 84ef49b docs: add xterm integration plan
 - 322c433 feat: integrate xterm for live terminal dock
 - fc66b84 feat: record terminal event streams in runtime snapshots
-- Task 4 commit pending
+- d794e91 feat: replay terminal sessions through xterm events
+- Task 5 commit pending
