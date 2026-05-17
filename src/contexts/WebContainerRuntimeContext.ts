@@ -1,4 +1,8 @@
 import { createContext } from "react";
+import type {
+  RuntimeTerminalEvent,
+  RuntimeTerminalSessionSnapshot,
+} from "../types/runtime";
 
 export type WebContainerRuntimeStatus =
   | "idle"
@@ -56,6 +60,9 @@ export interface WebContainerRuntimeActions {
   rerunRunner: () => Promise<void>;
   runCommand: (commandLine: string) => Promise<void>;
   startTerminalSession: () => Promise<void>;
+  createTerminalSession: () => Promise<void>;
+  closeTerminalSession: (sessionId: string) => void;
+  setActiveTerminalSession: (sessionId: string) => void;
   sendTerminalInput: (input: string) => Promise<void>;
   resizeTerminal: (size: { cols: number; rows: number }) => void;
   saveWorkspace: () => Promise<void>;
@@ -73,6 +80,10 @@ export interface WebContainerRuntimeMetadata {
   latestLifecycleEvent: RuntimeLifecycleEvent | null;
   lastOutput: string | null;
   terminalOutput: string | null;
+  terminalSessions: RuntimeTerminalSessionSnapshot[];
+  terminalEvents: RuntimeTerminalEvent[];
+  terminalEventCount: number;
+  activeTerminalSessionId: string | null;
   activeCommand: string | null;
   environmentVariables: EnvironmentVariables;
   runnerConfig: RunnerConfig;
@@ -84,6 +95,10 @@ export interface WebContainerRuntimeRecordingSnapshot {
   previewUrl: string | null;
   lastOutput: string | null;
   terminalOutput: string | null;
+  terminalSessions: RuntimeTerminalSessionSnapshot[];
+  terminalEvents: RuntimeTerminalEvent[];
+  terminalEventCount: number;
+  activeTerminalSessionId: string | null;
   activeCommand: string | null;
   errorMessage: string | null;
 }

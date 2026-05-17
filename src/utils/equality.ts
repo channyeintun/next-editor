@@ -25,6 +25,50 @@ function areStringArraysEqual(
   return left.every((value, index) => value === right[index]);
 }
 
+function areTerminalSessionsEqual(
+  left?: RuntimeRecordingSnapshot["terminalSessions"],
+  right?: RuntimeRecordingSnapshot["terminalSessions"],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every(
+    (session, index) =>
+      session.id === right[index]?.id &&
+      session.title === right[index]?.title &&
+      session.output === right[index]?.output,
+  );
+}
+
+function areTerminalEventsEqual(
+  left?: RuntimeRecordingSnapshot["terminalEvents"],
+  right?: RuntimeRecordingSnapshot["terminalEvents"],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every(
+    (event, index) =>
+      event.id === right[index]?.id &&
+      event.type === right[index]?.type &&
+      event.sessionId === right[index]?.sessionId &&
+      event.chunk === right[index]?.chunk &&
+      event.cols === right[index]?.cols &&
+      event.rows === right[index]?.rows &&
+      event.title === right[index]?.title,
+  );
+}
+
 export function areStructuredDataEqual(
   left: unknown,
   right: unknown,
@@ -101,6 +145,10 @@ export function areRuntimeRecordingSnapshotsEqual(
     left.status === right.status &&
     left.previewUrl === right.previewUrl &&
     left.terminalOutput === right.terminalOutput &&
+    areTerminalSessionsEqual(left.terminalSessions, right.terminalSessions) &&
+    areTerminalEventsEqual(left.terminalEvents, right.terminalEvents) &&
+    left.terminalEventCount === right.terminalEventCount &&
+    left.activeTerminalSessionId === right.activeTerminalSessionId &&
     left.activeCommand === right.activeCommand &&
     left.errorMessage === right.errorMessage &&
     left.activeTab === right.activeTab &&

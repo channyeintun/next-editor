@@ -55,7 +55,10 @@ export const WebContainerRuntimeProvider: React.FC<
   } = useWebContainerWorkspaceSync();
   const {
     activeCommand,
+    activeTerminalSessionId,
     bootInstance,
+    closeTerminalSession,
+    createTerminalSession: createTerminalSessionInRuntime,
     ensureTerminalSession,
     errorMessage,
     getRecordingSnapshot,
@@ -71,11 +74,15 @@ export const WebContainerRuntimeProvider: React.FC<
     resizeTerminal,
     runForegroundCommand,
     setErrorMessage,
+    setActiveTerminalSession,
     setStatus,
     startRunnerProcess,
     status,
     statusRef,
     terminalOutput,
+    terminalEvents,
+    terminalEventCount,
+    terminalSessions,
     writeTerminalInput,
   } = useWebContainerRuntimeSession({ environmentVariables });
 
@@ -242,6 +249,19 @@ export const WebContainerRuntimeProvider: React.FC<
     await ensureTerminalSession(instance);
   }, [ensureTerminalSession, lessonType, prepareRuntime]);
 
+  const createTerminalSession = useCallback(async () => {
+    if (lessonType !== "node.js") {
+      return;
+    }
+
+    const instance = await prepareRuntime();
+    if (!instance) {
+      return;
+    }
+
+    await createTerminalSessionInRuntime(instance);
+  }, [createTerminalSessionInRuntime, lessonType, prepareRuntime]);
+
   const sendTerminalInput = useCallback(
     async (input: string) => {
       if (lessonType !== "node.js") {
@@ -388,10 +408,13 @@ export const WebContainerRuntimeProvider: React.FC<
 
   const actionsValue = useMemo<WebContainerRuntimeActions>(
     () => ({
+      createTerminalSession,
+      closeTerminalSession,
       startRuntime,
       resetRuntime,
       rerunRunner,
       runCommand,
+      setActiveTerminalSession,
       startTerminalSession,
       sendTerminalInput,
       resizeTerminal,
@@ -400,12 +423,15 @@ export const WebContainerRuntimeProvider: React.FC<
       updateRunnerConfig,
     }),
     [
+      createTerminalSession,
+      closeTerminalSession,
       resetRuntime,
       resizeTerminal,
       rerunRunner,
       runCommand,
       saveWorkspace,
       sendTerminalInput,
+      setActiveTerminalSession,
       startTerminalSession,
       startRuntime,
       updateEnvironmentVariables,
@@ -424,6 +450,10 @@ export const WebContainerRuntimeProvider: React.FC<
       latestLifecycleEvent,
       lastOutput,
       terminalOutput,
+      terminalSessions,
+      terminalEvents,
+      terminalEventCount,
+      activeTerminalSessionId,
       activeCommand,
       environmentVariables,
       runnerConfig,
@@ -431,6 +461,7 @@ export const WebContainerRuntimeProvider: React.FC<
     }),
     [
       activeCommand,
+      activeTerminalSessionId,
       environmentVariables,
       errorMessage,
       isSupported,
@@ -441,7 +472,10 @@ export const WebContainerRuntimeProvider: React.FC<
       previewUrl,
       runnerConfig,
       status,
+      terminalEventCount,
+      terminalEvents,
       terminalOutput,
+      terminalSessions,
       workspaceRoot,
     ],
   );
