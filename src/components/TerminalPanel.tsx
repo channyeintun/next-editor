@@ -76,10 +76,15 @@ function getSnapshotTerminalEvents(
 function buildTerminalSessionsFromEvents(
   events: RuntimeTerminalEvent[],
 ): RuntimeTerminalSessionSnapshot[] {
+  const orderedEvents = [...events].sort(
+    (left, right) =>
+      (left.timestamp ?? left.id) - (right.timestamp ?? right.id) ||
+      left.id - right.id,
+  );
   const orderedIds: string[] = [];
   const sessions = new Map<string, RuntimeTerminalSessionSnapshot>();
 
-  for (const event of events) {
+  for (const event of orderedEvents) {
     if (event.type === "session-created") {
       if (!sessions.has(event.sessionId)) {
         orderedIds.push(event.sessionId);

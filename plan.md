@@ -34,7 +34,7 @@ Replace the custom text-based terminal renderer with an xterm-powered terminal t
 - Keep non-playback live runtime behavior unchanged.
 
 ## Task 5: Final validation and cleanup
-- Run formatting for code changes.
+- Run `bun run format` for code changes.
 - Run typecheck after each code task.
 - Commit each completed task with git CLI before starting the next task.
 - Update `progress.md` after every completed task.

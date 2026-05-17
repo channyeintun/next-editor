@@ -9,6 +9,7 @@ export type RuntimeTerminalEventType =
 
 export interface RuntimeTerminalEvent {
   id: number;
+  timestamp: number;
   type: RuntimeTerminalEventType;
   sessionId: string;
   chunk?: string;

@@ -114,7 +114,7 @@ export function useWebContainerRuntimeSession({
 
   const appendTerminalEvent = useCallback(
     (
-      event: Omit<RuntimeTerminalEvent, "id">,
+      event: Omit<RuntimeTerminalEvent, "id" | "timestamp">,
       options?: { includeEmptyChunk?: boolean },
     ) => {
       if (
@@ -127,6 +127,7 @@ export function useWebContainerRuntimeSession({
 
       const nextEvent: RuntimeTerminalEvent = {
         id: ++terminalEventIdRef.current,
+        timestamp: Date.now(),
         ...event,
       };
       const nextEvents = [...terminalEventsRef.current, nextEvent].slice(

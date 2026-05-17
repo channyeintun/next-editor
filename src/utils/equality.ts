@@ -60,6 +60,7 @@ function areTerminalEventsEqual(
   return left.every(
     (event, index) =>
       event.id === right[index]?.id &&
+      event.timestamp === right[index]?.timestamp &&
       event.type === right[index]?.type &&
       event.sessionId === right[index]?.sessionId &&
       event.chunk === right[index]?.chunk &&
