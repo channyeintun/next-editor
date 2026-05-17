@@ -19,7 +19,8 @@ export default function SlidesButton() {
   } = useSlidesContext();
 
   const hasSlides = slides.length > 0;
-  const showPresentationToggle = hasSlides && (usesPlaybackModel || isRecording || previewState.isOpen);
+  // In recording/playback/presentation states, this button should only act as a slide visibility toggle.
+  const showPresentationToggle = usesPlaybackModel || isRecording || previewState.isOpen;
   const isPresentationVisible = previewState.isOpen && previewState.isMaximized === true;
 
   useEffect(() => {
