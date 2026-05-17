@@ -6,9 +6,10 @@ import {
   Plus,
   Settings2,
   SquareTerminal,
-  TerminalSquare,
+  X,
 } from "lucide-react";
 import { useNextEditorDomainAdapters } from "../contexts/NextEditorDomainAdaptersContext";
+import XtermTerminal from "./XtermTerminal";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
   useWebContainerRuntimeActions,
@@ -18,6 +19,7 @@ import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import type {
   RuntimeDockTab,
   RuntimeRecordingSnapshot,
+  RuntimeTerminalSessionSnapshot,
 } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
@@ -44,6 +46,26 @@ function getStatusLabel(status: string): string {
   }
 }
 
+function getSnapshotTerminalSessions(
+  snapshot: RuntimeRecordingSnapshot | null,
+): RuntimeTerminalSessionSnapshot[] {
+  if (snapshot?.terminalSessions?.length) {
+    return snapshot.terminalSessions;
+  }
+
+  if (snapshot?.terminalOutput) {
+    return [
+      {
+        id: "terminal-1",
+        title: "Terminal 1",
+        output: snapshot.terminalOutput,
+      },
+    ];
+  }
+
+  return [];
+}
+
 interface RuntimeDockTabConfig {
   id: RuntimeDockTab;
   label: string;
@@ -52,6 +74,7 @@ interface RuntimeDockTabConfig {
 
 interface RuntimeEventState {
   activeTab: RuntimeDockTab;
+  activeTerminalSessionId: string | null;
   isCollapsed: boolean;
   isSettingsOpen: boolean;
   status: string;
@@ -66,11 +89,6 @@ const DOCK_TABS: RuntimeDockTabConfig[] = [
     id: "runner",
     label: "Runner",
     icon: <Play size={13} />,
-  },
-  {
-    id: "terminal",
-    label: "Terminal",
-    icon: <TerminalSquare size={13} />,
   },
   {
     id: "console",
@@ -121,9 +139,9 @@ const RunnerToggle = memo(function RunnerToggle({
 
 const TerminalPanel = memo(function TerminalPanel() {
   const [activeTab, setActiveTab] = useState<RuntimeDockTab>("runner");
-  const [command, setCommand] = useState("");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isCreatingTerminal, setIsCreatingTerminal] = useState(false);
   const [playbackRuntimeSnapshot, setPlaybackRuntimeSnapshot] =
     useState<RuntimeRecordingSnapshot | null>(null);
   const [consoleLines, setConsoleLines] = useState<string[]>([
@@ -132,13 +150,17 @@ const TerminalPanel = memo(function TerminalPanel() {
   const { handleRuntimeEvent } = useNextEditorActions();
   const { runtimePanel } = useNextEditorDomainAdapters();
   const {
+    closeTerminalSession,
+    createTerminalSession,
     rerunRunner,
     resizeTerminal,
     sendTerminalInput,
+    setActiveTerminalSession,
     startTerminalSession,
     updateRunnerConfig,
   } = useWebContainerRuntimeActions();
   const {
+    activeTerminalSessionId,
     status,
     lastOutput,
     errorMessage,
@@ -148,8 +170,7 @@ const TerminalPanel = memo(function TerminalPanel() {
     openPorts,
     previewUrl,
     runnerConfig,
-    terminalOutput,
-    workspaceRoot,
+    terminalSessions,
   } = useWebContainerRuntimeMetadata();
   const { currentRecording, isRecording } = useNextEditorMetadata();
   const recordedRuntimeSnapshot =
@@ -159,12 +180,31 @@ const TerminalPanel = memo(function TerminalPanel() {
   const runtimeStatus =
     status === "idle" ? (recordedRuntimeSnapshot?.status ?? status) : status;
   const recordedOutput = recordedRuntimeSnapshot?.terminalOutput ?? null;
+  const recordedTerminalSessions = getSnapshotTerminalSessions(
+    recordedRuntimeSnapshot,
+  );
   const effectivePreviewUrl = previewUrl || recordedRuntimeSnapshot?.previewUrl;
   const effectiveActiveCommand =
     activeCommand || recordedRuntimeSnapshot?.activeCommand || null;
   const effectiveErrorMessage =
     errorMessage || recordedRuntimeSnapshot?.errorMessage || null;
-  const recordableTerminalOutput = terminalOutput || lastOutput;
+  const effectiveTerminalSessions =
+    terminalSessions.length > 0 ? terminalSessions : recordedTerminalSessions;
+  const effectiveActiveTerminalSessionId =
+    activeTerminalSessionId ||
+    recordedRuntimeSnapshot?.activeTerminalSessionId ||
+    effectiveTerminalSessions[0]?.id ||
+    null;
+  const effectiveTerminalOutput =
+    effectiveTerminalSessions.find(
+      (session) => session.id === effectiveActiveTerminalSessionId,
+    )?.output ?? recordedOutput ?? null;
+  const recordableTerminalOutput =
+    effectiveTerminalSessions.length > 0
+      ? JSON.stringify(
+          effectiveTerminalSessions.map((session) => [session.id, session.output]),
+        )
+      : lastOutput;
   const isPlaybackSnapshotActive = Boolean(
     currentRecording && playbackRuntimeSnapshot,
   );
@@ -176,7 +216,6 @@ const TerminalPanel = memo(function TerminalPanel() {
   const previousPreviewMessageIdRef = useRef<number | null>(null);
   const previousRuntimeEventStateRef = useRef<RuntimeEventState | null>(null);
   const previousOutputRef = useRef<string | null>(null);
-  const terminalViewportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     runtimePanel.setSnapshotGetter(() => ({
@@ -331,6 +370,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const runtimeEventState = useMemo<RuntimeEventState>(
     () => ({
       activeTab,
+      activeTerminalSessionId: effectiveActiveTerminalSessionId,
       isCollapsed,
       isSettingsOpen,
       status: runtimeStatus,
@@ -343,6 +383,7 @@ const TerminalPanel = memo(function TerminalPanel() {
       activeTab,
       consoleLines,
       effectiveActiveCommand,
+      effectiveActiveTerminalSessionId,
       effectiveErrorMessage,
       effectivePreviewUrl,
       isCollapsed,
@@ -402,58 +443,18 @@ const TerminalPanel = memo(function TerminalPanel() {
   ]);
 
   useEffect(() => {
-    if (activeTab !== "terminal" || isPlaybackSnapshotActive) {
+    if (activeTab !== "terminal" || isPlaybackSnapshotActive || isCreatingTerminal) {
       return;
     }
 
     void startTerminalSession();
-  }, [activeTab, isPlaybackSnapshotActive, startTerminalSession]);
-
-  useEffect(() => {
-    if (activeTab !== "terminal" || isCollapsed || isPlaybackSnapshotActive) {
-      return;
-    }
-
-    const viewport = terminalViewportRef.current;
-    if (!viewport) {
-      return;
-    }
-
-    const updateSize = () => {
-      const { height, width } = viewport.getBoundingClientRect();
-
-      resizeTerminal({
-        cols: Math.max(40, Math.floor((width - 24) / 8)),
-        rows: Math.max(12, Math.floor((height - 64) / 22)),
-      });
-    };
-
-    updateSize();
-
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(viewport);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [activeTab, isCollapsed, isPlaybackSnapshotActive, resizeTerminal]);
+  }, [activeTab, isCreatingTerminal, isPlaybackSnapshotActive, startTerminalSession]);
 
   const isBusy =
     runtimeStatus === "booting" ||
     runtimeStatus === "mounting" ||
     runtimeStatus === "installing" ||
     runtimeStatus === "starting";
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const nextInput = command;
-
-    setCommand("");
-    setActiveTab("terminal");
-
-    await sendTerminalInput(nextInput.length > 0 ? `${nextInput}\n` : "\n");
-  };
 
   const rawContent = effectiveErrorMessage
     ? `Runtime error\n${effectiveErrorMessage}`
@@ -465,11 +466,6 @@ const TerminalPanel = memo(function TerminalPanel() {
           ? "Starting the workspace dev server..."
           : "Waiting for runtime output...");
   const content = formatTerminalContent(rawContent);
-  const terminalContent = formatTerminalContent(
-    terminalOutput ||
-      recordedOutput ||
-      "Open the terminal to start a shell session.",
-  );
   const statusLabel = getStatusLabel(runtimeStatus);
   const consoleContent = useMemo(() => {
     if (consoleLines.length === 0) {
@@ -510,12 +506,71 @@ const TerminalPanel = memo(function TerminalPanel() {
             );
           })}
 
+          {effectiveTerminalSessions.map((session) => {
+            const isActiveSession =
+              activeTab === "terminal" &&
+              session.id === effectiveActiveTerminalSessionId;
+
+            return (
+              <div
+                key={session.id}
+                className={`inline-flex items-center border-r border-slate-800 text-xs font-medium transition-colors ${
+                  isActiveSession
+                    ? "border-b border-b-[#5da4ff] bg-[#1d1f29] text-white"
+                    : "text-slate-400 hover:bg-[#1d1f29] hover:text-white"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("terminal");
+
+                    if (!isPlaybackSnapshotActive) {
+                      setActiveTerminalSession(session.id);
+                    }
+                  }}
+                  className="px-4 py-3"
+                >
+                  {session.title}
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+
+                    if (!isPlaybackSnapshotActive) {
+                      closeTerminalSession(session.id);
+                    }
+
+                    if (
+                      activeTab === "terminal" &&
+                      effectiveTerminalSessions.length === 1
+                    ) {
+                      setActiveTab("runner");
+                    }
+                  }}
+                  className="pr-3 text-slate-500 transition-colors hover:text-white"
+                  aria-label="Close terminal"
+                  title="Close terminal"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            );
+          })}
+
           <button
             type="button"
-            onClick={() => setIsSettingsOpen(true)}
+            onClick={() => {
+              setIsCreatingTerminal(true);
+              setActiveTab("terminal");
+              void createTerminalSession().finally(() => {
+                setIsCreatingTerminal(false);
+              });
+            }}
             className="inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10"
-            aria-label="Open runner settings"
-            title="Open runner settings"
+            aria-label="New terminal"
+            title="New terminal"
           >
             <Plus size={15} />
           </button>
@@ -583,42 +638,38 @@ const TerminalPanel = memo(function TerminalPanel() {
             )}
 
             {activeTab === "terminal" && (
-              <div
-                ref={terminalViewportRef}
-                className="flex h-72 flex-col bg-[#1d1f29] px-5 py-6"
-              >
-                <div className="min-h-0 flex-1 overflow-auto font-mono text-[13px] leading-7 text-slate-200">
-                  {terminalContent ? (
-                    <pre className="mb-5 whitespace-pre-wrap">
-                      {terminalContent}
-                    </pre>
-                  ) : null}
-                  <p className="text-[14px] font-semibold text-[#5ca3ff]">
-                    {workspaceRoot}
-                  </p>
-                  <form
-                    onSubmit={handleSubmit}
-                    className="mt-2 flex items-center gap-3"
+              <div className="flex h-72 flex-col bg-[#1d1f29] px-5 py-6">
+                <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-800/80 bg-[#151821]">
+                  {!effectiveActiveTerminalSessionId && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center font-mono text-[13px] text-slate-500">
+                      Open the terminal to start a shell session.
+                    </div>
+                  )}
+                  <XtermTerminal
+                    sessionId={effectiveActiveTerminalSessionId}
+                    output={effectiveTerminalOutput || ""}
+                    interactive={!isPlaybackSnapshotActive}
+                    shouldFocus={activeTab === "terminal" && !isPlaybackSnapshotActive}
+                    onData={(input) => {
+                      void sendTerminalInput(input);
+                    }}
+                    onResize={(size) => {
+                      if (!isPlaybackSnapshotActive && !isCollapsed) {
+                        resizeTerminal(size);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void sendTerminalInput("\u0003");
+                    }}
+                    className="rounded-md border border-slate-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-slate-500 hover:text-white"
                   >
-                    <span className="text-[28px] leading-none text-[#b183f7]">
-                      ›
-                    </span>
-                    <input
-                      value={command}
-                      onChange={(event) => setCommand(event.target.value)}
-                      placeholder=""
-                      className="h-8 min-w-0 flex-1 bg-transparent text-[13px] text-slate-100 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void sendTerminalInput("\u0003");
-                      }}
-                      className="rounded-md border border-slate-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-slate-500 hover:text-white"
-                    >
-                      Ctrl+C
-                    </button>
-                  </form>
+                    Ctrl+C
+                  </button>
                 </div>
               </div>
             )}

@@ -50,6 +50,20 @@ body {
   color: white;
 }
 
+.xterm-terminal {
+  height: 100%;
+  width: 100%;
+}
+
+.xterm-terminal .xterm {
+  height: 100%;
+  padding: 12px 14px;
+}
+
+.xterm-terminal .xterm-viewport {
+  overflow-y: auto !important;
+}
+
 @keyframes terminal-blink {
 
   0%,

@@ -8,6 +8,7 @@ import type {
   WebContainerRuntimeRecordingSnapshot,
   WebContainerRuntimeStatus,
 } from "./WebContainerRuntimeContext";
+import type { RuntimeTerminalSessionSnapshot } from "../types/runtime";
 import {
   formatCommandError,
   formatPreviewMessage,
@@ -23,14 +24,21 @@ interface UseWebContainerRuntimeSessionOptions {
   environmentVariables: EnvironmentVariables;
 }
 
+const RUNNER_OUTPUT_LIMIT = 6000;
+const TERMINAL_OUTPUT_LIMIT = 50000;
+
+interface TerminalSessionHandle extends RuntimeTerminalSessionSnapshot {
+  inputWriter: WritableStreamDefaultWriter<string> | null;
+  process: WebContainerProcess | null;
+}
+
 export function useWebContainerRuntimeSession({
   environmentVariables,
 }: UseWebContainerRuntimeSessionOptions) {
   const instanceRef = useRef<WebContainer | null>(null);
   const runnerProcessRef = useRef<WebContainerProcess | null>(null);
-  const terminalProcessRef = useRef<WebContainerProcess | null>(null);
-  const terminalInputWriterRef =
-    useRef<WritableStreamDefaultWriter<string> | null>(null);
+  const terminalSessionsRef = useRef<TerminalSessionHandle[]>([]);
+  const terminalSessionCounterRef = useRef(0);
   const terminalSizeRef = useRef({ cols: 96, rows: 18 });
   const devServerListenerCleanupRef = useRef<(() => void) | null>(null);
   const portListenerCleanupRef = useRef<(() => void) | null>(null);
@@ -43,6 +51,7 @@ export function useWebContainerRuntimeSession({
   const errorMessageRef = useRef<string | null>(null);
   const lastOutputRef = useRef<string | null>(null);
   const terminalOutputRef = useRef<string | null>(null);
+  const activeTerminalSessionIdRef = useRef<string | null>(null);
   const activeCommandRef = useRef<string | null>(null);
   const statusRef = useRef<WebContainerRuntimeStatus>("idle");
   const [status, setStatus] = useState<WebContainerRuntimeStatus>("idle");
@@ -54,13 +63,21 @@ export function useWebContainerRuntimeSession({
   const [latestLifecycleEvent, setLatestLifecycleEvent] =
     useState<RuntimeLifecycleEvent | null>(null);
   const [lastOutput, setLastOutput] = useState<string | null>(null);
-  const [terminalOutput, setTerminalOutput] = useState<string | null>(null);
+  const [terminalSessions, setTerminalSessions] = useState<
+    RuntimeTerminalSessionSnapshot[]
+  >([]);
+  const [activeTerminalSessionId, setActiveTerminalSessionId] = useState<
+    string | null
+  >(null);
   const [activeCommand, setActiveCommand] = useState<string | null>(null);
 
   previewUrlRef.current = previewUrl;
   errorMessageRef.current = errorMessage;
   lastOutputRef.current = lastOutput;
-  terminalOutputRef.current = terminalOutput;
+  terminalOutputRef.current =
+    terminalSessions.find((session) => session.id === activeTerminalSessionId)
+      ?.output ?? null;
+  activeTerminalSessionIdRef.current = activeTerminalSessionId;
   activeCommandRef.current = activeCommand;
   statusRef.current = status;
 
@@ -73,21 +90,57 @@ export function useWebContainerRuntimeSession({
 
     setLastOutput((current) => {
       const next = `${current ?? ""}${sanitizedChunk}`;
-      return next.slice(-6000);
+      return next.slice(-RUNNER_OUTPUT_LIMIT);
     });
   }, []);
 
-  const appendTerminalOutput = useCallback((chunk: string) => {
-    const sanitizedChunk = sanitizeTerminalChunk(chunk);
+  const syncTerminalSessions = useCallback(() => {
+    setTerminalSessions(
+      terminalSessionsRef.current.map(({ id, output, title }) => ({
+        id,
+        output,
+        title,
+      })),
+    );
+  }, []);
 
-    if (!sanitizedChunk) {
+  const setActiveTerminalSession = useCallback((sessionId: string | null) => {
+    activeTerminalSessionIdRef.current = sessionId;
+    setActiveTerminalSessionId(sessionId);
+  }, []);
+
+  const appendTerminalOutput = useCallback((sessionId: string, chunk: string) => {
+    if (!chunk) {
       return;
     }
 
-    setTerminalOutput((current) => {
-      const next = `${current ?? ""}${sanitizedChunk}`;
-      return next.slice(-6000);
-    });
+    setTerminalSessions((current) =>
+      current.map((session) => {
+        if (session.id !== sessionId) {
+          return session;
+        }
+
+        const nextOutput = `${session.output}${chunk}`.slice(
+          -TERMINAL_OUTPUT_LIMIT,
+        );
+        const terminalSession = terminalSessionsRef.current.find(
+          (entry) => entry.id === sessionId,
+        );
+
+        if (terminalSession) {
+          terminalSession.output = nextOutput;
+        }
+
+        if (activeTerminalSessionIdRef.current === sessionId) {
+          terminalOutputRef.current = nextOutput;
+        }
+
+        return {
+          ...session,
+          output: nextOutput,
+        };
+      }),
+    );
   }, []);
 
   const pushLifecycleEvent = useCallback(
@@ -99,6 +152,18 @@ export function useWebContainerRuntimeSession({
     },
     [],
   );
+
+  const createTerminalSessionHandle = useCallback((): TerminalSessionHandle => {
+    terminalSessionCounterRef.current += 1;
+
+    return {
+      id: `terminal-${terminalSessionCounterRef.current}`,
+      title: "Terminal",
+      output: "",
+      inputWriter: null,
+      process: null,
+    };
+  }, []);
 
   const stopRunnerProcess = useCallback(
     async (options?: { waitForExit?: boolean }) => {
@@ -119,23 +184,29 @@ export function useWebContainerRuntimeSession({
     [],
   );
 
-  const stopTerminalProcess = useCallback(() => {
-    terminalInputWriterRef.current?.releaseLock();
-    terminalInputWriterRef.current = null;
+  const stopTerminalProcess = useCallback((sessionId?: string) => {
+    const sessions = sessionId
+      ? terminalSessionsRef.current.filter((session) => session.id === sessionId)
+      : terminalSessionsRef.current;
 
-    const process = terminalProcessRef.current;
+    for (const session of sessions) {
+      session.inputWriter?.releaseLock();
+      session.inputWriter = null;
 
-    if (!process) {
-      return;
+      if (!session.process) {
+        continue;
+      }
+
+      const process = session.process;
+      session.process = null;
+      process.kill();
     }
-
-    terminalProcessRef.current = null;
-    process.kill();
   }, []);
 
   const resetRuntimeSession = useCallback(() => {
     stopRunnerProcess();
     stopTerminalProcess();
+    terminalSessionsRef.current = [];
     devServerListenerCleanupRef.current?.();
     devServerListenerCleanupRef.current = null;
     portListenerCleanupRef.current?.();
@@ -146,6 +217,8 @@ export function useWebContainerRuntimeSession({
     previewMessageListenerCleanupRef.current = null;
     teardownSharedWebContainer(instanceRef.current);
     instanceRef.current = null;
+    activeTerminalSessionIdRef.current = null;
+    terminalOutputRef.current = null;
     setStatus("idle");
     setPreviewUrl(null);
     setErrorMessage(null);
@@ -153,7 +226,8 @@ export function useWebContainerRuntimeSession({
     setOpenPorts([]);
     setLatestLifecycleEvent(null);
     setLastOutput(null);
-    setTerminalOutput(null);
+    setTerminalSessions([]);
+    setActiveTerminalSessionId(null);
     setActiveCommand(null);
   }, [stopRunnerProcess, stopTerminalProcess]);
 
@@ -352,10 +426,18 @@ export function useWebContainerRuntimeSession({
     [appendOutput, environmentVariables, stopRunnerProcess],
   );
 
-  const ensureTerminalSession = useCallback(
-    async (instance: WebContainer) => {
-      if (terminalProcessRef.current) {
-        return;
+  const ensureTerminalProcess = useCallback(
+    async (instance: WebContainer, sessionId: string) => {
+      const session = terminalSessionsRef.current.find(
+        (entry) => entry.id === sessionId,
+      );
+
+      if (!session) {
+        throw new Error("Unable to find the requested terminal session.");
+      }
+
+      if (session.process) {
+        return session;
       }
 
       let lastError: unknown = null;
@@ -371,14 +453,14 @@ export function useWebContainerRuntimeSession({
             },
           );
 
-          terminalProcessRef.current = process;
-          terminalInputWriterRef.current = process.input.getWriter();
+          session.process = process;
+          session.inputWriter = process.input.getWriter();
 
           process.output
             .pipeTo(
               new WritableStream({
                 write(chunk) {
-                  appendTerminalOutput(chunk);
+                  appendTerminalOutput(sessionId, chunk);
                 },
               }),
             )
@@ -386,27 +468,41 @@ export function useWebContainerRuntimeSession({
 
           void process.exit
             .then((exitCode) => {
-              if (terminalProcessRef.current !== process) {
+              const currentSession = terminalSessionsRef.current.find(
+                (entry) => entry.id === sessionId,
+              );
+
+              if (!currentSession || currentSession.process !== process) {
                 return;
               }
 
-              terminalInputWriterRef.current?.releaseLock();
-              terminalInputWriterRef.current = null;
-              terminalProcessRef.current = null;
-              appendTerminalOutput(`\nTerminal exited with code ${exitCode}\n`);
+              currentSession.inputWriter?.releaseLock();
+              currentSession.inputWriter = null;
+              currentSession.process = null;
+              appendTerminalOutput(
+                sessionId,
+                `\nTerminal exited with code ${exitCode}\n`,
+              );
             })
             .catch((error) => {
-              if (terminalProcessRef.current !== process) {
+              const currentSession = terminalSessionsRef.current.find(
+                (entry) => entry.id === sessionId,
+              );
+
+              if (!currentSession || currentSession.process !== process) {
                 return;
               }
 
-              terminalInputWriterRef.current?.releaseLock();
-              terminalInputWriterRef.current = null;
-              terminalProcessRef.current = null;
-              appendTerminalOutput(`\n${getRuntimeErrorMessage(error)}\n`);
+              currentSession.inputWriter?.releaseLock();
+              currentSession.inputWriter = null;
+              currentSession.process = null;
+              appendTerminalOutput(
+                sessionId,
+                `\n${getRuntimeErrorMessage(error)}\n`,
+              );
             });
 
-          return;
+          return session;
         } catch (error) {
           lastError = error;
         }
@@ -417,17 +513,77 @@ export function useWebContainerRuntimeSession({
     [appendTerminalOutput, environmentVariables],
   );
 
+  const ensureTerminalSession = useCallback(
+    async (instance: WebContainer) => {
+      let session = terminalSessionsRef.current.find(
+        (entry) => entry.id === activeTerminalSessionIdRef.current,
+      );
+
+      if (!session) {
+        session = createTerminalSessionHandle();
+        terminalSessionsRef.current = [...terminalSessionsRef.current, session];
+        syncTerminalSessions();
+        setActiveTerminalSession(session.id);
+      }
+
+      return ensureTerminalProcess(instance, session.id);
+    },
+    [createTerminalSessionHandle, ensureTerminalProcess, setActiveTerminalSession, syncTerminalSessions],
+  );
+
+  const createTerminalSession = useCallback(
+    async (instance: WebContainer) => {
+      const session = createTerminalSessionHandle();
+      terminalSessionsRef.current = [...terminalSessionsRef.current, session];
+      syncTerminalSessions();
+      setActiveTerminalSession(session.id);
+      await ensureTerminalProcess(instance, session.id);
+    },
+    [createTerminalSessionHandle, ensureTerminalProcess, setActiveTerminalSession, syncTerminalSessions],
+  );
+
+  const closeTerminalSession = useCallback(
+    (sessionId: string) => {
+      const sessions = terminalSessionsRef.current;
+      const sessionIndex = sessions.findIndex((session) => session.id === sessionId);
+
+      if (sessionIndex === -1) {
+        return;
+      }
+
+      stopTerminalProcess(sessionId);
+
+      const nextSessions = sessions.filter((session) => session.id !== sessionId);
+      terminalSessionsRef.current = nextSessions;
+      syncTerminalSessions();
+
+      if (activeTerminalSessionIdRef.current !== sessionId) {
+        return;
+      }
+
+      const fallbackSession =
+        nextSessions[sessionIndex] ?? nextSessions[sessionIndex - 1] ?? null;
+
+      setActiveTerminalSession(fallbackSession?.id ?? null);
+      terminalOutputRef.current = fallbackSession?.output ?? null;
+    },
+    [setActiveTerminalSession, stopTerminalProcess, syncTerminalSessions],
+  );
+
   const writeTerminalInput = useCallback(
     async (instance: WebContainer, input: string) => {
-      await ensureTerminalSession(instance);
-      await terminalInputWriterRef.current?.write(input);
+      const session = await ensureTerminalSession(instance);
+      await session?.inputWriter?.write(input);
     },
     [ensureTerminalSession],
   );
 
   const resizeTerminal = useCallback((size: { cols: number; rows: number }) => {
     terminalSizeRef.current = size;
-    terminalProcessRef.current?.resize(size);
+
+    for (const session of terminalSessionsRef.current) {
+      session.process?.resize(size);
+    }
   }, []);
 
   const hasActiveRunner = useCallback(
@@ -441,6 +597,12 @@ export function useWebContainerRuntimeSession({
       previewUrl: previewUrlRef.current,
       lastOutput: lastOutputRef.current,
       terminalOutput: terminalOutputRef.current,
+      terminalSessions: terminalSessionsRef.current.map(({ id, output, title }) => ({
+        id,
+        output,
+        title,
+      })),
+      activeTerminalSessionId: activeTerminalSessionIdRef.current,
       activeCommand: activeCommandRef.current,
       errorMessage: errorMessageRef.current,
     }),
@@ -457,7 +619,10 @@ export function useWebContainerRuntimeSession({
 
   return {
     activeCommand,
+    activeTerminalSessionId,
     bootInstance,
+    closeTerminalSession,
+    createTerminalSession,
     ensureTerminalSession,
     errorMessage,
     getRecordingSnapshot,
@@ -472,12 +637,14 @@ export function useWebContainerRuntimeSession({
     resetRuntimeSession,
     resizeTerminal,
     runForegroundCommand,
+    setActiveTerminalSession,
     setErrorMessage,
     setStatus,
     startRunnerProcess,
     status,
     statusRef,
-    terminalOutput,
+    terminalOutput: terminalOutputRef.current,
+    terminalSessions,
     writeTerminalInput,
   };
 }
