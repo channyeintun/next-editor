@@ -6,10 +6,10 @@
   "scripts": {
     "dev": "vp dev",
     "start": "vp dev",
-    "build": "vp run asbuild && tsgo -b tsconfig.json && vp build",
+    "build": "tsgo -b tsconfig.json && vp build",
     "asbuild:debug": "asc src/core/assembly/index.ts --target debug",
     "asbuild:release": "asc src/core/assembly/index.ts --target release",
-    "asbuild": "npm run asbuild:release",
+    "asbuild": "asc src/core/assembly/index.ts --target release",
     "clean:core": "rimraf src/core/dist",
     "check": "vp check",
     "test": "vp test",

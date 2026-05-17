@@ -94,6 +94,7 @@ Recordings are exported as `.ne` files.
 ## Learn More
 
 - [SLIDES_USAGE.md](SLIDES_USAGE.md) for slide authoring and synchronization.
+- [SELF_HOSTING.md](SELF_HOSTING.md) for production Docker deployment and self-hosting requirements.
 - [docs/core.md](docs/core.md) for core concepts.
 - [docs/data-flow.md](docs/data-flow.md) for data flow.
 - [docs/state-machines.md](docs/state-machines.md) for the recording/playback machine architecture.
