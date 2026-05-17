@@ -52,6 +52,16 @@ const XtermTerminal = memo(function XtermTerminal({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const lastOutputRef = useRef("");
   const lastSessionIdRef = useRef<string | null>(null);
+  const onDataRef = useRef(onData);
+  const onResizeRef = useRef(onResize);
+
+  useEffect(() => {
+    onDataRef.current = onData;
+  }, [onData]);
+
+  useEffect(() => {
+    onResizeRef.current = onResize;
+  }, [onResize]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -73,7 +83,7 @@ const XtermTerminal = memo(function XtermTerminal({
     const fitAddon = new FitAddon();
     const updateSize = () => {
       fitAddon.fit();
-      onResize?.({ cols: terminal.cols, rows: terminal.rows });
+      onResizeRef.current?.({ cols: terminal.cols, rows: terminal.rows });
     };
 
     terminal.loadAddon(fitAddon);
@@ -87,7 +97,7 @@ const XtermTerminal = memo(function XtermTerminal({
 
     const dataDisposable = terminal.onData((input) => {
       if (interactive) {
-        onData?.(input);
+        onDataRef.current?.(input);
       }
     });
 
@@ -106,7 +116,7 @@ const XtermTerminal = memo(function XtermTerminal({
       lastOutputRef.current = "";
       lastSessionIdRef.current = null;
     };
-  }, [interactive, onData, onResize]);
+  }, [interactive]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -200,7 +210,10 @@ const XtermTerminal = memo(function XtermTerminal({
     <div
       ref={containerRef}
       className="xterm-terminal size-full"
-      onClick={() => terminalRef.current?.focus()}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        terminalRef.current?.focus();
+      }}
     />
   );
 });
