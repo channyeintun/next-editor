@@ -122,10 +122,16 @@ declare module "*.svg" {
 
 let hasConfiguredMonacoTypeScript = false;
 const MONACO_BUNDLER_MODULE_RESOLUTION = 100;
-const PLAYBACK_MODEL_PATH = "file:///__next-editor__/playback-active-file";
+const PLAYBACK_MODEL_ROOT = "file:///__next-editor__/playback";
 
 function toMonacoModelPath(workspacePath: string) {
   return `file:///${encodeURI(normalizeWorkspacePath(workspacePath))}`;
+}
+
+function toPlaybackModelPath(workspacePath: string) {
+  return `${PLAYBACK_MODEL_ROOT}/${encodeURI(
+    normalizeWorkspacePath(workspacePath),
+  )}`;
 }
 
 function configureMonacoTypeScript(monaco: Monaco) {
@@ -186,10 +192,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   // Only subscribe to the flags we actually need for rendering decisions
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } =
     useNextEditorMetadata();
-  const editorModelPath = usesPlaybackModel
-    ? PLAYBACK_MODEL_PATH
-    : toMonacoModelPath(activeFile.path);
   const selectedLanguage = activeFile.language || language || "html";
+  const editorModelPath = usesPlaybackModel
+    ? toPlaybackModelPath(activeFile.path)
+    : toMonacoModelPath(activeFile.path);
 
   // useEffectEvent provides a stable function reference that always reads
   // the latest playback attachment value without causing dependency issues

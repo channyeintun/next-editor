@@ -22,6 +22,7 @@ import {
   useWorkspaceActions,
   useWorkspaceSidebarState,
 } from "../hooks/useWorkspace";
+import { useNextEditorActions } from "../hooks/useNextEditorContext";
 
 type WorkspaceTreeNode =
   | {
@@ -244,6 +245,7 @@ const FileSidebar = memo(function FileSidebar() {
     setCollapsedFolders,
     setPreviewFilePath,
   } = useWorkspaceActions();
+  const { handleWorkspaceEvent } = useNextEditorActions();
   const {
     activeFilePath,
     collapsedFolders: collapsedFolderPaths,
@@ -450,6 +452,11 @@ const FileSidebar = memo(function FileSidebar() {
     }
   };
 
+  const openFile = (path: string) => {
+    setActiveFilePath(path);
+    handleWorkspaceEvent();
+  };
+
   const handleRowContextMenu = (
     event: React.MouseEvent<HTMLElement>,
     kind: SidebarEntryKind,
@@ -458,7 +465,7 @@ const FileSidebar = memo(function FileSidebar() {
     event.preventDefault();
 
     if (kind === "file") {
-      setActiveFilePath(path);
+      openFile(path);
     }
 
     setContextMenu({
@@ -575,7 +582,7 @@ const FileSidebar = memo(function FileSidebar() {
       <div key={node.path} className="px-2">
         <button
           type="button"
-          onClick={() => setActiveFilePath(node.path)}
+          onClick={() => openFile(node.path)}
           onContextMenu={(event) =>
             handleRowContextMenu(event, "file", node.path)
           }
