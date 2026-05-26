@@ -989,7 +989,14 @@ export const editorMachine = setup({
         }
       }
 
-      if (frame.state.previewState && context.applyPreviewState) {
+      if (
+        frame.state.previewState &&
+        context.applyPreviewState &&
+        !recording.previewEvents?.length
+      ) {
+        // Dedicated preview events capture preview UI state changes more
+        // accurately than editor frames, so only fall back to frame snapshots
+        // when no preview event stream exists.
         const nextState = {
           ...frame.state.previewState,
           refreshKey: undefined,
@@ -1190,12 +1197,12 @@ export const editorMachine = setup({
       pendingPlaybackEditorSync: false,
     })),
 
+    // Editor/model swaps only invalidate Monaco-rendered frame state. Keep the
+    // dedicated preview/slide replay cursors stable so file switches do not
+    // replay their full history.
     invalidateRenderedPlaybackState: assign(() => ({
       currentFrame: null,
       lastAppliedFrameIndex: -1,
-      lastAppliedPreviewEventIndex: -1,
-      lastAppliedSlideEventIndex: -1,
-      lastAppliedPreviewState: undefined,
     })),
 
     clearRecording: assign({
@@ -1618,7 +1625,7 @@ export const editorMachine = setup({
     playback: {
       initial: "ready",
       entry: [
-        "applyFrameAtTime",
+        ...APPLY_REPLAY_STATE_ACTIONS,
         enqueueActions(({ context, enqueue }) => {
           enqueue.spawnChild("timeline", {
             id: "timelineActor",
