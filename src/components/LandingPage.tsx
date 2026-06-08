@@ -138,7 +138,6 @@ const LandingPage = () => {
                   >
                     <iframe
                       src="/code?url=/introduction.ne&readOnly=true&deferRuntimeAutostart=true"
-                      allow="cross-origin-isolated"
                       className="absolute top-0 left-0 border-0 origin-top-left"
                       style={{
                         width: "1280px",
