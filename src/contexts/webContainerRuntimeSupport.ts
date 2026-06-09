@@ -23,6 +23,9 @@ export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   runCommand: "npm run dev",
 };
 
+const WEBCONTAINER_VITE_PLUS_RUN_COMMAND =
+  "npx vite --host 0.0.0.0 --configLoader native";
+
 export const TERMINAL_SHELL_CANDIDATES = [
   { command: "jsh", args: [] },
   { command: "bash", args: ["-i"] },
@@ -441,6 +444,38 @@ export function parseCommand(
 
 export function formatCommandError(commandLine: string): string {
   return `"${commandLine}" failed inside the WebContainer runtime`;
+}
+
+export function resolveRuntimeRunCommand(
+  project: WorkspaceProject | null,
+  commandLine: string,
+): string {
+  const normalizedCommandLine = commandLine.trim();
+
+  if (normalizedCommandLine !== DEFAULT_RUNNER_CONFIG.runCommand) {
+    return normalizedCommandLine;
+  }
+
+  const packageJsonFile = project?.files["package.json"];
+
+  if (!packageJsonFile) {
+    return normalizedCommandLine;
+  }
+
+  try {
+    const packageJson = JSON.parse(packageJsonFile.content) as {
+      scripts?: Record<string, string | undefined>;
+    };
+    const devScript = packageJson.scripts?.dev?.trim() ?? "";
+
+    if (devScript === "vp dev" || devScript.startsWith("vp dev ")) {
+      return WEBCONTAINER_VITE_PLUS_RUN_COMMAND;
+    }
+  } catch {
+    return normalizedCommandLine;
+  }
+
+  return normalizedCommandLine;
 }
 
 export function getWorkspaceRoot(projectName: string): string {
