@@ -45,8 +45,8 @@ const LandingPage = () => {
               <div className="absolute -left-16 -top-16 bg-pinata-yellow rounded-full z-0 opacity-20 size-32" />
               <div className="absolute -right-20 bottom-10 bg-pinata-purple rounded-full z-0 opacity-20 size-40" />
 
-              <div className="relative z-10 flex flex-col md:flex-row items-center gap-12">
-                <div className="flex-1 text-left order-2 md:order-1">
+              <div className="relative z-10 flex flex-col items-center gap-12 lg:flex-row">
+                <div className="flex-1 text-left order-1">
                   <h1 className="text-5xl md:text-8xl font-machina text-slate-950 leading-[0.9] mb-8 tracking-tight uppercase">
                     CODE'S <br />
                     NEXT LEVEL
@@ -131,17 +131,17 @@ const LandingPage = () => {
                 </div>
 
                 {/* Mockup code terminal */}
-                <div className="w-full lg:w-150 shrink-0 order-1 md:order-2">
+                <div className="w-full lg:w-150 shrink-0 order-2">
                   <div
                     ref={containerRef}
-                    className="w-full h-112.5 overflow-hidden border border-slate-800 rounded-xl bg-[#11141c] shadow-2xl relative"
+                    className="relative w-full aspect-video overflow-hidden border border-slate-800 rounded-xl bg-[#11141c] shadow-2xl"
                   >
                     <iframe
                       src="/code?url=/introduction.ne&readOnly=true&deferRuntimeAutostart=true"
                       className="absolute top-0 left-0 border-0 origin-top-left"
                       style={{
                         width: "1280px",
-                        height: `${scale ? 450 / scale : 960}px`,
+                        height: "720px",
                         transform: `scale(${scale})`,
                       }}
                       title="Next Editor Live Demo"
