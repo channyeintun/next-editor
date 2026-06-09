@@ -83,18 +83,25 @@ export function useWebContainerRuntimeSession({
   onTerminalOutputRef.current = onTerminalOutput;
   statusRef.current = status;
 
-  const appendOutput = useCallback((chunk: string) => {
-    const sanitizedChunk = sanitizeTerminalChunk(chunk);
+  const appendOutput = useCallback(
+    (chunk: string, options?: { logToConsole?: boolean }) => {
+      const sanitizedChunk = sanitizeTerminalChunk(chunk);
 
-    if (!sanitizedChunk) {
-      return;
-    }
+      if (!sanitizedChunk) {
+        return;
+      }
 
-    setLastOutput((current) => {
-      const next = `${current ?? ""}${sanitizedChunk}`;
-      return next.slice(-RUNNER_OUTPUT_LIMIT);
-    });
-  }, []);
+      if (options?.logToConsole) {
+        console.log("[runner]", sanitizedChunk);
+      }
+
+      setLastOutput((current) => {
+        const next = `${current ?? ""}${sanitizedChunk}`;
+        return next.slice(-RUNNER_OUTPUT_LIMIT);
+      });
+    },
+    [],
+  );
 
   const syncTerminalSessions = useCallback(() => {
     setTerminalSessions(
@@ -279,6 +286,8 @@ export function useWebContainerRuntimeSession({
     runtimeErrorListenerCleanupRef.current = instance.on("error", (error) => {
       const message = getRuntimeErrorMessage(error);
 
+      console.error("[runtime] WebContainer error", error);
+
       setErrorMessage(message);
       setStatus("error");
       pushLifecycleEvent({
@@ -372,7 +381,7 @@ export function useWebContainerRuntimeSession({
       setErrorMessage(null);
       setLastOutput(null);
       setStatus("starting");
-      appendOutput(`$ ${commandLine}\n`);
+      appendOutput(`$ ${commandLine}\n`, { logToConsole: true });
 
       try {
         const process = await instance.spawn(
@@ -387,7 +396,7 @@ export function useWebContainerRuntimeSession({
         process.output.pipeTo(
           new WritableStream({
             write(chunk) {
-              appendOutput(chunk);
+              appendOutput(chunk, { logToConsole: true });
             },
           }),
         );
@@ -400,9 +409,12 @@ export function useWebContainerRuntimeSession({
 
             runnerProcessRef.current = null;
             setPreviewUrl(null);
-            appendOutput(`\nRunner exited with code ${exitCode}\n`);
+            appendOutput(`\nRunner exited with code ${exitCode}\n`, {
+              logToConsole: true,
+            });
 
             if (exitCode !== 0) {
+              console.error("[runner]", formatCommandError(commandLine));
               setStatus("error");
               setErrorMessage(formatCommandError(commandLine));
             }
@@ -414,10 +426,12 @@ export function useWebContainerRuntimeSession({
 
             runnerProcessRef.current = null;
             setPreviewUrl(null);
+            console.error("[runner] Runner process error", error);
             setStatus("error");
             setErrorMessage(getRuntimeErrorMessage(error));
           });
       } catch (error) {
+        console.error("[runner] Failed to start runner process", error);
         setStatus("error");
         setErrorMessage(getRuntimeErrorMessage(error));
       }
