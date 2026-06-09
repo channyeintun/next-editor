@@ -13,7 +13,6 @@ import {
   DEFAULT_RUNNER_CONFIG,
   formatCommandError,
   getRuntimeErrorMessage,
-  resolveRuntimeRunCommand,
   getWorkspaceRoot,
   loadStoredEnvironmentVariables,
   normalizeEnvironmentVariables,
@@ -232,18 +231,12 @@ export const WebContainerRuntimeProvider: React.FC<
         return;
       }
 
-      const project = getProject();
-      const runCommandLine = resolveRuntimeRunCommand(
-        project,
-        runnerConfig.runCommand,
-      );
-
       if (!runnerConfig.enabled) {
         setStatus("ready");
         return;
       }
 
-      await startRunnerProcess(instance, runCommandLine);
+      await startRunnerProcess(instance, runnerConfig.runCommand);
     } catch (error) {
       setStatus("error");
       setErrorMessage(getRuntimeErrorMessage(error));
@@ -251,7 +244,6 @@ export const WebContainerRuntimeProvider: React.FC<
   }, [
     lessonType,
     prepareRuntime,
-    getProject,
     resetRuntime,
     runnerConfig.enabled,
     runnerConfig.runCommand,
@@ -275,18 +267,12 @@ export const WebContainerRuntimeProvider: React.FC<
         return;
       }
 
-      const project = getProject();
-      const runCommandLine = resolveRuntimeRunCommand(
-        project,
-        runnerConfig.runCommand,
-      );
-
       if (!runnerConfig.enabled) {
         setStatus("ready");
         return;
       }
 
-      await startRunnerProcess(instance, runCommandLine);
+      await startRunnerProcess(instance, runnerConfig.runCommand);
     } catch (error) {
       setStatus("error");
       setErrorMessage(getRuntimeErrorMessage(error));
@@ -294,7 +280,6 @@ export const WebContainerRuntimeProvider: React.FC<
   }, [
     lessonType,
     prepareRuntime,
-    getProject,
     resetRuntime,
     runnerConfig.enabled,
     runnerConfig.runCommand,

@@ -216,7 +216,6 @@ const TerminalPanel = memo(function TerminalPanel() {
   const previousPreviewUrlRef = useRef<string | null>(null);
   const previousCommandRef = useRef<string | null>(null);
   const previousErrorRef = useRef<string | null>(null);
-  const previousRunnerOutputRef = useRef<string | null>(null);
   const previousLifecycleEventIdRef = useRef<number | null>(null);
   const previousPreviewMessageIdRef = useRef<number | null>(null);
   const previousRuntimeEventStateRef = useRef<RuntimeEventState | null>(null);
@@ -311,39 +310,6 @@ const TerminalPanel = memo(function TerminalPanel() {
       previousCommandRef.current = null;
     }
   }, [activeCommand, isPlaybackSnapshotActive]);
-
-  useEffect(() => {
-    if (isPlaybackSnapshotActive) {
-      return;
-    }
-
-    if (!lastOutput) {
-      previousRunnerOutputRef.current = null;
-      return;
-    }
-
-    const previousOutput = previousRunnerOutputRef.current ?? "";
-
-    if (lastOutput === previousOutput) {
-      return;
-    }
-
-    const nextOutput = lastOutput.startsWith(previousOutput)
-      ? lastOutput.slice(previousOutput.length)
-      : lastOutput;
-
-    previousRunnerOutputRef.current = lastOutput;
-
-    const formattedOutput = formatTerminalContent(nextOutput);
-
-    if (!formattedOutput) {
-      return;
-    }
-
-    for (const line of formattedOutput.split("\n")) {
-      appendConsoleLine(`[runner] ${line}`);
-    }
-  }, [isPlaybackSnapshotActive, lastOutput]);
 
   useEffect(() => {
     if (isPlaybackSnapshotActive) {
@@ -472,18 +438,15 @@ const TerminalPanel = memo(function TerminalPanel() {
     runtimeStatus === "installing" ||
     runtimeStatus === "starting";
 
-  const effectiveRunnerOutput = lastOutput || recordedOutput || null;
-  const rawContent = effectiveRunnerOutput
-    ? effectiveErrorMessage
-      ? `${effectiveRunnerOutput}\n\nRuntime error\n${effectiveErrorMessage}`
-      : effectiveRunnerOutput
-    : effectiveErrorMessage
-      ? `Runtime error\n${effectiveErrorMessage}`
-      : runtimeStatus === "installing"
+  const rawContent = effectiveErrorMessage
+    ? `Runtime error\n${effectiveErrorMessage}`
+    : lastOutput ||
+      recordedOutput ||
+      (runtimeStatus === "installing"
         ? "Installing dependencies inside the WebContainer..."
         : runtimeStatus === "starting"
           ? "Starting the workspace dev server..."
-          : "Waiting for runtime output...";
+          : "Waiting for runtime output...");
   const content = formatTerminalContent(rawContent);
   const statusLabel = getStatusLabel(runtimeStatus);
   const consoleContent = useMemo(() => {
