@@ -832,16 +832,16 @@ export const editorMachine = setup({
 
       const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
 
-      if (
-        initialWorkspaceEvent &&
-        context.applyWorkspaceSnapshot &&
-        (!currentWorkspaceSnapshot ||
+      if (initialWorkspaceEvent && context.applyWorkspaceSnapshot) {
+        if (
+          !currentWorkspaceSnapshot ||
           !areWorkspaceSnapshotsEqual(
             currentWorkspaceSnapshot,
             initialWorkspaceEvent.snapshot,
-          ))
-      ) {
-        context.applyWorkspaceSnapshot(initialWorkspaceEvent.snapshot);
+          )
+        ) {
+          context.applyWorkspaceSnapshot(initialWorkspaceEvent.snapshot);
+        }
       } else if (
         recording.workspaceSnapshot &&
         context.applyWorkspaceSnapshot &&
