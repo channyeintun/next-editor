@@ -92,7 +92,7 @@ const LandingPage = () => {
                     >
                       Start creating
                     </Link>
-                    <Link
+                    {/* <Link
                       to="/code?url=/introduction.ne&deferRuntimeAutostart=true"
                       className="px-10 py-4 rounded-full bg-[#4de5a6] text-slate-950 text-lg font-semibold hover:bg-[#3cd495] transition-all flex items-center gap-2 shadow-xl"
                     >
@@ -126,7 +126,7 @@ const LandingPage = () => {
                         </svg>
                       </div>
                       Watch demo
-                    </Link>
+                    </Link> */}
                   </div>
                 </div>
 
