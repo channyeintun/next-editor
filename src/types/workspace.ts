@@ -107,8 +107,6 @@ export const DEFAULT_WORKSPACE_FILE_CONTENT = `<html>
 </html>`;
 
 const STARTER_FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><rect width="64" height="64" rx="18" fill="#121826"/><path d="M20 44 30 20h4l10 24h-5.1l-2-5.2H27.1L25 44H20Zm8.6-9.3h6.8L32 25.6l-3.4 9.1Z" fill="#7dd3fc"/><path d="m41 19 4.6 8-4.6 8h-5.4l4.6-8-4.6-8H41Z" fill="#f59e0b"/></svg>`;
-const STARTER_REACT_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-11.5 -10.23174 23 20.46348" aria-hidden="true"><circle cx="0" cy="0" r="2.05" fill="#61dafb"/><g stroke="#61dafb" stroke-width="1" fill="none"><ellipse rx="11" ry="4.2"/><ellipse rx="11" ry="4.2" transform="rotate(60)"/><ellipse rx="11" ry="4.2" transform="rotate(120)"/></g></svg>`;
-const STARTER_VITE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="vite-a" x1="6" x2="38" y1="8" y2="52" gradientUnits="userSpaceOnUse"><stop stop-color="#41d1ff"/><stop offset="1" stop-color="#bd34fe"/></linearGradient><linearGradient id="vite-b" x1="24" x2="42" y1="14" y2="48" gradientUnits="userSpaceOnUse"><stop stop-color="#ffea83"/><stop offset=".5" stop-color="#ffdd35"/><stop offset="1" stop-color="#ffa800"/></linearGradient></defs><path fill="url(#vite-a)" d="M56 10 34.7 52.3a3 3 0 0 1-5.4 0L8 10.1a1.7 1.7 0 0 1 2-2.4l21.4 3.8a1.7 1.7 0 0 0 .6 0L54 7.7a1.7 1.7 0 0 1 2 2.3Z"/><path fill="url(#vite-b)" d="m41.9 14.3-15.7 3.1a.9.9 0 0 0-.7.8l-1 17a.9.9 0 0 0 1.1.9l4.4-1 2.6-11.2a.9.9 0 0 1 1.7-.1l1.6 3.8a.9.9 0 0 0 1 .5l5-.9a.9.9 0 0 0 .7-.8l.8-11.1a.9.9 0 0 0-1-.9Z"/></svg>`;
 
 export function createStarterWorkspacePackageJson(projectName: string): string {
   const normalizedProjectName = projectName
@@ -129,6 +127,8 @@ export function createStarterWorkspacePackageJson(projectName: string): string {
         preview: "vite preview --host 0.0.0.0 --port 4173",
       },
       dependencies: {
+        "@tanstack/react-query": "^5.101.0",
+        "@tanstack/react-virtual": "^3.14.2",
         react: "^19.2.5",
         "react-dom": "^19.2.5",
       },
@@ -263,7 +263,7 @@ export function createStarterWorkspaceProject(): WorkspaceProject {
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Next Editor SPA</title>
+    <title>Mastodon Trending Statuses Lesson</title>
   </head>
   <body>
     <div id="root"></div>
@@ -307,237 +307,571 @@ export default defineConfig({
       "public/favicon.svg",
       STARTER_FAVICON_SVG,
     ),
-    "src/assets/react.svg": createWorkspaceFile(
-      "src/assets/react.svg",
-      STARTER_REACT_SVG,
-    ),
-    "src/assets/vite.svg": createWorkspaceFile(
-      "src/assets/vite.svg",
-      STARTER_VITE_SVG,
-    ),
     "src/main.tsx": createWorkspaceFile(
       "src/main.tsx",
-      `import { StrictMode } from "react";
+      `import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 
+const queryClient = new QueryClient();
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
   </StrictMode>,
 );`,
     ),
+    "src/constants.ts": createWorkspaceFile(
+      "src/constants.ts",
+      `export const DEFAULT_INSTANCE_URL = "https://mastodon.social";
+export const PAGE_SIZE = 20;
+export const TRENDING_STATUSES_ENDPOINT = "/api/v1/trends/statuses";
+export const ESTIMATED_ROW_HEIGHT = 220;
+export const VIRTUAL_ROW_OVERSCAN = 8;`,
+    ),
+    "src/types/mastodon.ts": createWorkspaceFile(
+      "src/types/mastodon.ts",
+      `export interface MastodonAccount {
+  id: string;
+  username: string;
+  acct: string;
+  display_name: string;
+  avatar: string;
+  url: string;
+}
+
+export interface MastodonStatus {
+  id: string;
+  created_at: string;
+  content: string;
+  url: string | null;
+  replies_count: number;
+  reblogs_count: number;
+  favourites_count: number;
+  account: MastodonAccount;
+  reblog: MastodonStatus | null;
+}
+
+export interface TrendingStatusesPage {
+  items: MastodonStatus[];
+  nextOffset?: number;
+}`,
+    ),
+    "src/api/mastodon.ts": createWorkspaceFile(
+      "src/api/mastodon.ts",
+      `import { PAGE_SIZE, TRENDING_STATUSES_ENDPOINT } from "../constants.ts";
+import type {
+  MastodonStatus,
+  TrendingStatusesPage,
+} from "../types/mastodon.ts";
+
+export async function fetchTrendingStatusesPage(
+  instanceUrl: string,
+  offset: number,
+  signal?: AbortSignal,
+): Promise<TrendingStatusesPage> {
+  const url = new URL(TRENDING_STATUSES_ENDPOINT, instanceUrl);
+  url.searchParams.set("limit", String(PAGE_SIZE));
+  url.searchParams.set("offset", String(offset));
+
+  const response = await fetch(url, {
+    signal,
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    let message = "Trending request failed with " + response.status;
+
+    try {
+      const errorPayload = (await response.json()) as { error?: string };
+
+      if (errorPayload.error) {
+        message = errorPayload.error;
+      }
+    } catch {
+      // Keep the HTTP status fallback when the response is not JSON.
+    }
+
+    throw new Error(message);
+  }
+
+  const items = (await response.json()) as MastodonStatus[];
+
+  return {
+    items,
+    nextOffset: items.length === PAGE_SIZE ? offset + items.length : undefined,
+  };
+}`,
+    ),
+    "src/utils/formatting.ts": createWorkspaceFile(
+      "src/utils/formatting.ts",
+      `export function toPlainText(html: string): string {
+  const parsedDocument = new DOMParser().parseFromString(html, "text/html");
+
+  return parsedDocument.body.textContent?.trim() ?? "";
+}
+
+export function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+export function formatTimestamp(value: string): string {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}`,
+    ),
+    "src/hooks/useTrendingStatuses.ts": createWorkspaceFile(
+      "src/hooks/useTrendingStatuses.ts",
+      `import { useInfiniteQuery } from "@tanstack/react-query";
+import { fetchTrendingStatusesPage } from "../api/mastodon.ts";
+
+export function useTrendingStatuses(instanceUrl: string) {
+  const query = useInfiniteQuery({
+    queryKey: ["mastodon-trending-statuses", instanceUrl],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      fetchTrendingStatusesPage(instanceUrl, pageParam, signal),
+    getNextPageParam: (lastPage) => lastPage.nextOffset,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const statuses = query.data?.pages.flatMap((page) => page.items) ?? [];
+  const errorMessage =
+    query.error instanceof Error
+      ? query.error.message
+      : "The trending request failed.";
+
+  return {
+    errorMessage,
+    fetchNextPage: query.fetchNextPage,
+    hasNextPage: query.hasNextPage ?? false,
+    isError: query.isError,
+    isFetchingNextPage: query.isFetchingNextPage,
+    isPending: query.isPending,
+    statuses,
+  };
+}`,
+    ),
     "src/App.tsx": createWorkspaceFile(
       "src/App.tsx",
-      `import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "./assets/vite.svg";
+      `import { DEFAULT_INSTANCE_URL } from "./constants.ts";
+import { TrendingStatusList } from "./components/TrendingStatusList.tsx";
+import { useTrendingStatuses } from "./hooks/useTrendingStatuses.ts";
 import "./App.css";
 
 function App() {
-  const [count, setCount] = useState(0);
+  const timeline = useTrendingStatuses(DEFAULT_INSTANCE_URL);
 
   return (
-    <main className="app-shell">
-      <section className="hero">
-        <div className="hero-mark">
-          <div className="hero-orb" aria-hidden="true" />
-          <img src={reactLogo} className="hero-react" alt="React logo" />
-          <img src={viteLogo} className="hero-vite" alt="Vite logo" />
-        </div>
-        <p className="eyebrow">React SPA</p>
-        <h1>Get started</h1>
-        <p className="intro">
-          Edit <code>src/App.tsx</code> and save to test <code>HMR</code>.
-        </p>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((currentCount) => currentCount + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <section className="cards">
-        <a className="card" href="https://vite.dev/" target="_blank">
-          <span className="card-label">Tooling</span>
-          <strong>Explore Vite</strong>
-          <span>Fast builds, instant HMR, simple config.</span>
-        </a>
-        <a className="card" href="https://react.dev/" target="_blank">
-          <span className="card-label">Framework</span>
-          <strong>Learn React</strong>
-          <span>Components, state, and the modern React model.</span>
-        </a>
-      </section>
+    <main className="page">
+      <TrendingStatusList
+        errorMessage={timeline.errorMessage}
+        hasNextPage={timeline.hasNextPage}
+        isError={timeline.isError}
+        isFetchingNextPage={timeline.isFetchingNextPage}
+        isPending={timeline.isPending}
+        onLoadMore={timeline.fetchNextPage}
+        statuses={timeline.statuses}
+      />
     </main>
   );
 }
 
 export default App;`,
     ),
-    "src/App.css": createWorkspaceFile(
-      "src/App.css",
-      `.app-shell {
-  display: grid;
-  gap: 2rem;
-  min-height: 100svh;
-  padding: 2rem;
+    "src/components/EmptyState.tsx": createWorkspaceFile(
+      "src/components/EmptyState.tsx",
+      `import type { ReactNode } from "react";
+
+interface EmptyStateProps {
+  children: ReactNode;
+  tone?: "default" | "error";
 }
 
-.hero {
+export function EmptyState({
+  children,
+  tone = "default",
+}: EmptyStateProps) {
+  const className =
+    tone === "error" ? "empty-state error-state" : "empty-state";
+
+  return (
+    <div className={className}>
+      <div className="empty-copy">{children}</div>
+    </div>
+  );
+}`,
+    ),
+    "src/components/PostCard.tsx": createWorkspaceFile(
+      "src/components/PostCard.tsx",
+      `import type { MastodonStatus } from "../types/mastodon.ts";
+import {
+  formatCompactNumber,
+  formatTimestamp,
+  toPlainText,
+} from "../utils/formatting.ts";
+
+interface PostCardProps {
+  status: MastodonStatus;
+}
+
+export function PostCard({ status }: PostCardProps) {
+  const displayStatus = status.reblog ?? status;
+  const author = displayStatus.account;
+  const displayName = toPlainText(author.display_name) || author.username;
+  const contentText =
+    toPlainText(displayStatus.content) || "This post does not have text content.";
+
+  return (
+    <article className="post-card">
+      <header className="post-header">
+        <div className="post-author">
+          <strong>{displayName}</strong>
+          <span>@{author.acct}</span>
+        </div>
+        <a
+          className="post-time"
+          href={displayStatus.url ?? author.url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {formatTimestamp(displayStatus.created_at)}
+        </a>
+      </header>
+
+      <p className="post-body">{contentText}</p>
+
+      <footer className="post-stats">
+        <span>{formatCompactNumber(displayStatus.replies_count)} replies</span>
+        <span>{formatCompactNumber(displayStatus.reblogs_count)} boosts</span>
+        <span>{formatCompactNumber(displayStatus.favourites_count)} favorites</span>
+      </footer>
+    </article>
+  );
+}`,
+    ),
+    "src/components/TrendingStatusList.tsx": createWorkspaceFile(
+      "src/components/TrendingStatusList.tsx",
+      `import { useEffect, useRef, useState } from "react";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import {
+  ESTIMATED_ROW_HEIGHT,
+  VIRTUAL_ROW_OVERSCAN,
+} from "../constants.ts";
+import type { MastodonStatus } from "../types/mastodon.ts";
+import { EmptyState } from "./EmptyState.tsx";
+import { PostCard } from "./PostCard.tsx";
+
+interface TrendingStatusListProps {
+  statuses: MastodonStatus[];
+  hasNextPage: boolean;
+  isPending: boolean;
+  isError: boolean;
+  isFetchingNextPage: boolean;
+  errorMessage: string;
+  onLoadMore: () => Promise<unknown>;
+}
+
+export function TrendingStatusList({
+  statuses,
+  hasNextPage,
+  isPending,
+  isError,
+  isFetchingNextPage,
+  errorMessage,
+  onLoadMore,
+}: TrendingStatusListProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+
+  useEffect(() => {
+    const updateScrollMargin = () => {
+      setScrollMargin(containerRef.current?.offsetTop ?? 0);
+    };
+
+    updateScrollMargin();
+    window.addEventListener("resize", updateScrollMargin);
+
+    return () => window.removeEventListener("resize", updateScrollMargin);
+  }, []);
+
+  useEffect(() => {
+    setScrollMargin(containerRef.current?.offsetTop ?? 0);
+  }, [statuses.length, isError, isPending]);
+
+  const virtualizer = useWindowVirtualizer({
+    count: hasNextPage ? statuses.length + 1 : statuses.length,
+    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    overscan: VIRTUAL_ROW_OVERSCAN,
+    scrollMargin,
+  });
+  const virtualRows = virtualizer.getVirtualItems();
+
+  useEffect(() => {
+    const lastRow = virtualRows[virtualRows.length - 1];
+
+    if (!lastRow) {
+      return;
+    }
+
+    if (lastRow.index < statuses.length - 1) {
+      return;
+    }
+
+    if (!hasNextPage || isFetchingNextPage) {
+      return;
+    }
+
+    void onLoadMore();
+  }, [
+    virtualRows,
+    statuses.length,
+    hasNextPage,
+    isFetchingNextPage,
+    onLoadMore,
+  ]);
+
+  if (isError) {
+    return (
+      <section className="timeline-shell" ref={containerRef}>
+        <EmptyState tone="error">
+          <p>{errorMessage}</p>
+          <p>
+            Some instances disable public trending data. Try another server if
+            this one blocks the endpoint.
+          </p>
+        </EmptyState>
+      </section>
+    );
+  }
+
+  if (isPending && statuses.length === 0) {
+    return (
+      <section className="timeline-shell" ref={containerRef}>
+        <EmptyState>
+          <p>Loading the first page...</p>
+        </EmptyState>
+      </section>
+    );
+  }
+
+  if (statuses.length === 0) {
+    return (
+      <section className="timeline-shell" ref={containerRef}>
+        <EmptyState>
+          <p>No trending posts are available for this instance right now.</p>
+        </EmptyState>
+      </section>
+    );
+  }
+
+  return (
+    <section className="timeline-shell" ref={containerRef}>
+      <div
+        className="timeline"
+        style={{ height: virtualizer.getTotalSize() + "px" }}
+      >
+        {virtualRows.map((virtualRow) => {
+          const rowStyle = {
+            transform:
+              "translateY(" + (virtualRow.start - scrollMargin) + "px)",
+          };
+
+          if (virtualRow.index >= statuses.length) {
+            return (
+              <div
+                key="loader-row"
+                className="timeline-row loading-row"
+                style={rowStyle}
+              >
+                Loading more trending posts...
+              </div>
+            );
+          }
+
+          const status = statuses[virtualRow.index];
+
+          return (
+            <div
+              key={status.id}
+              className="timeline-row"
+              data-index={virtualRow.index}
+              ref={virtualizer.measureElement}
+              style={rowStyle}
+            >
+              <PostCard status={status} />
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}`,
+    ),
+    "src/App.css": createWorkspaceFile(
+      "src/App.css",
+      `.page {
+  width: min(100%, 46rem);
+  margin: 0 auto;
+  padding: clamp(1rem, 3vw, 2rem) 0 4rem;
+}
+.post-time:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.empty-copy {
   display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 1rem;
-  min-height: min(40rem, 72svh);
+  gap: 0.5rem;
+}
+
+.timeline-shell {
+  position: relative;
+  width: 100%;
+}
+
+.timeline {
+  position: relative;
+  width: 100%;
+}
+
+.timeline-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding-bottom: 1rem;
+}
+
+.post-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-soft);
+}
+
+.post-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.post-author {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.post-author strong {
+  color: var(--text-strong);
+  font-size: 0.98rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.post-author span,
+.post-time {
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.post-time {
+  text-decoration: none;
+}
+
+.post-time:hover {
+  color: var(--accent);
+}
+
+.post-body {
+  color: var(--text-strong);
+  line-height: 1.6;
+  word-break: break-word;
+  white-space: pre-line;
+}
+
+.post-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.empty-state,
+.loading-row {
+  display: grid;
+  place-items: center;
+  min-height: 6rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  color: var(--text-muted);
   text-align: center;
 }
 
-.hero-mark {
-  position: relative;
-  width: 11rem;
-  height: 11rem;
-}
-
-.hero-orb {
-  position: absolute;
-  inset: 0;
-  border-radius: 38% 62% 44% 56% / 40% 37% 63% 60%;
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.08) 26%, transparent 27%),
-    linear-gradient(160deg, rgba(113, 230, 255, 0.85), rgba(73, 110, 255, 0.95));
-  box-shadow: 0 18px 48px rgba(73, 110, 255, 0.18);
-}
-
-.hero-react,
-.hero-vite {
-  position: absolute;
-  inset-inline: 0;
-  margin: 0 auto;
-}
-
-.hero-react {
-  top: 1.9rem;
-  width: 3.2rem;
-  height: 3.2rem;
-  transform: perspective(2000px) rotateZ(318deg) rotateX(44deg) rotateY(39deg) scale(1.15);
-}
-
-.hero-vite {
-  top: 6.2rem;
-  width: 3rem;
-  height: 3rem;
-  transform: perspective(2000px) rotateZ(302deg) rotateX(40deg) rotateY(39deg) scale(0.82);
-}
-
-.eyebrow {
-  margin: 0;
-  color: var(--accent);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-
-.intro {
-  max-width: 38rem;
-}
-
-.counter {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: var(--accent-bg);
-  color: var(--accent);
-  cursor: pointer;
-  padding: 0.75rem 1rem;
-  transition: border-color 0.2s ease, transform 0.2s ease;
-}
-
-.counter:hover {
-  border-color: var(--accent-border);
-  transform: translateY(-1px);
-}
-
-.counter:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.cards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-.card {
-  display: grid;
-  gap: 0.45rem;
-  padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 1.25rem;
-  background: var(--card-bg);
-  color: inherit;
-  text-decoration: none;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card:hover {
-  border-color: var(--accent-border);
-  box-shadow: var(--shadow);
-  transform: translateY(-2px);
-}
-
-.card strong {
-  color: var(--text-h);
-  font-size: 1.05rem;
-}
-
-.card-label {
-  color: var(--accent);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+.error-state {
+  color: var(--danger);
 }
 
 @media (max-width: 768px) {
-  .app-shell {
-    padding: 1.25rem;
+  .page {
+    padding-top: 1rem;
   }
 
-  .hero {
-    min-height: 32rem;
-  }
-
-  .cards {
+  .post-header {
     grid-template-columns: 1fr;
+  }
+
+  .post-time {
+    justify-self: start;
   }
 }`,
     ),
     "src/index.css": createWorkspaceFile(
       "src/index.css",
       `:root {
-  --text: #64748b;
-  --text-h: #0f172a;
-  --bg: #f8fafc;
-  --border: #dbe4f0;
-  --code-bg: #e8eef7;
-  --accent: #2563eb;
-  --accent-bg: rgba(37, 99, 235, 0.1);
-  --accent-border: rgba(37, 99, 235, 0.35);
-  --card-bg: rgba(255, 255, 255, 0.76);
-  --shadow: rgba(15, 23, 42, 0.08) 0 20px 40px -20px;
-  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  --text: #425466;
+  --text-strong: #122033;
+  --text-muted: #64748b;
+  --border: rgba(18, 32, 51, 0.12);
+  --accent: #0f766e;
+  --accent-strong: #115e59;
+  --surface: rgba(255, 250, 242, 0.78);
+  --surface-elevated: rgba(255, 255, 255, 0.88);
+  --panel: linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(255, 248, 235, 0.84));
+  --chip: rgba(18, 32, 51, 0.06);
+  --danger: #b91c1c;
+  --shadow: 0 30px 80px -48px rgba(34, 47, 62, 0.55);
+  --shadow-soft: 0 24px 48px -36px rgba(34, 47, 62, 0.45);
+  font-family: "Avenir Next", "IBM Plex Sans", "Segoe UI", sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: var(--text);
   background:
-    radial-gradient(circle at top left, rgba(125, 211, 252, 0.35), transparent 30%),
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 25%),
-    linear-gradient(180deg, #f8fafc 0%, #eef4fb 100%);
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.16), transparent 28%),
+    radial-gradient(circle at top right, rgba(245, 158, 11, 0.18), transparent 22%),
+    linear-gradient(180deg, #fcfbf7 0%, #f2ede2 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -546,20 +880,22 @@ export default App;`,
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #94a3b8;
-    --text-h: #e2e8f0;
-    --bg: #020617;
-    --border: #1e293b;
-    --code-bg: #111827;
-    --accent: #7dd3fc;
-    --accent-bg: rgba(125, 211, 252, 0.12);
-    --accent-border: rgba(125, 211, 252, 0.32);
-    --card-bg: rgba(15, 23, 42, 0.72);
-    --shadow: rgba(2, 6, 23, 0.45) 0 24px 48px -20px;
+    --text: #c3cfdd;
+    --text-strong: #f5f7fb;
+    --text-muted: #94a3b8;
+    --border: rgba(195, 207, 221, 0.12);
+    --accent: #5eead4;
+    --accent-strong: #2dd4bf;
+    --surface: rgba(11, 17, 32, 0.76);
+    --surface-elevated: rgba(15, 23, 42, 0.86);
+    --panel: linear-gradient(135deg, rgba(17, 24, 39, 0.92), rgba(11, 17, 32, 0.88));
+    --chip: rgba(195, 207, 221, 0.08);
+    --shadow: 0 30px 80px -48px rgba(2, 8, 23, 0.88);
+    --shadow-soft: 0 24px 48px -36px rgba(2, 8, 23, 0.74);
     background:
-      radial-gradient(circle at top left, rgba(37, 99, 235, 0.25), transparent 26%),
-      radial-gradient(circle at top right, rgba(14, 165, 233, 0.16), transparent 22%),
-      linear-gradient(180deg, #020617 0%, #0f172a 100%);
+      radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 26%),
+      radial-gradient(circle at top right, rgba(249, 115, 22, 0.16), transparent 24%),
+      linear-gradient(180deg, #030712 0%, #111827 100%);
   }
 }
 
@@ -570,10 +906,15 @@ export default App;`,
 body {
   margin: 0;
   min-width: 320px;
+  color: var(--text);
 }
 
 #root {
   min-height: 100svh;
+}
+
+a {
+  color: inherit;
 }
 
 h1,
@@ -582,29 +923,33 @@ p {
 }
 
 h1 {
-  color: var(--text-h);
-  font-size: clamp(3rem, 7vw, 5.2rem);
+  color: var(--text-strong);
+  font-size: clamp(2.8rem, 7vw, 5rem);
   letter-spacing: -0.06em;
-  line-height: 0.95;
+  line-height: 0.96;
 }
 
-code,
-button {
+button,
+input {
   font: inherit;
 }
 
 code {
   padding: 0.15rem 0.45rem;
   border-radius: 0.5rem;
-  background: var(--code-bg);
-  color: var(--text-h);
+  background: var(--chip);
+  color: var(--text-strong);
+}
+
+img {
+  max-width: 100%;
 }`,
     ),
   };
 
   return {
     id: "starter-workspace",
-    name: "Next Editor Node.js",
+    name: "Next Editor Trending Statuses",
     lessonType: "node.js",
     entryFilePath: DEFAULT_WORKSPACE_APP_PATH,
     folders: collectWorkspaceFolders(Object.keys(files)),
