@@ -49,6 +49,7 @@ export function usePreviewMessageBridge({
           return;
         }
 
+        const previousSnapshot = lastRuntimeSnapshotRef.current;
         const snapshot = createReplayableRuntimePreviewFromHtml(
           payload.html,
           effectiveRuntimePreviewUrl,
@@ -56,6 +57,21 @@ export function usePreviewMessageBridge({
 
         if (snapshot) {
           lastRuntimeSnapshotRef.current = snapshot;
+
+          if (
+            snapshot !== previousSnapshot &&
+            isRecordingRef.current &&
+            handlePreviewEventRef.current
+          ) {
+            handlePreviewEventRef.current({
+              type: "preview_refresh",
+              timestamp: Date.now(),
+              size: sizeRef.current,
+              content: snapshot,
+              scrollTop: scrollPositionRef.current.scrollTop,
+              scrollLeft: scrollPositionRef.current.scrollLeft,
+            });
+          }
         }
 
         return;
