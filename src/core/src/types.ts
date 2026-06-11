@@ -1,21 +1,9 @@
 import type * as monaco from "monaco-editor";
-import type {
-  SlideEvent,
-  SlidePreviewState,
-  PreviewEvent,
-  PreviewState,
-  Slide,
-} from "./slides";
+import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from "./slides";
 import type { TimelineActorRef } from "./machine/timelineMachine";
 import type { EditorActorRef } from "./useNextEditor";
-import type {
-  RuntimeRecordingEvent,
-  RuntimeRecordingSnapshot,
-} from "../../types/runtime";
-import type {
-  WorkspaceRecordingEvent,
-  WorkspaceRecordingSnapshot,
-} from "../../types/workspace";
+import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../types/runtime";
+import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../types/workspace";
 
 /**
  * Audio storage placeholder for serialization
@@ -121,10 +109,7 @@ export interface UseNextEditorConfig {
     previewState: SlidePreviewState;
     currentSlideIndex: number;
   } | null;
-  applySlideState?: (
-    slideState: SlidePreviewState,
-    currentSlideIndex: number,
-  ) => void;
+  applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
 
   // Preview state callbacks
   onPreviewEvent?: (event: PreviewEvent) => void;
@@ -195,9 +180,7 @@ export interface UseNextEditorReturn {
   clearRecording: () => void;
 
   // Monaco Editor Integration
-  syncEditorRef: (
-    editor: monaco.editor.IStandaloneCodeEditor | null,
-  ) => void;
+  syncEditorRef: (editor: monaco.editor.IStandaloneCodeEditor | null) => void;
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;

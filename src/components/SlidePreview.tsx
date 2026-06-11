@@ -1,15 +1,9 @@
-import { motion, type Transition } from 'motion/react';
-import { useCallback, useEffect, memo, useRef } from 'react';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Monitor,
-  Keyboard,
-  X,
-} from 'lucide-react';
-import type { Slide, SlideEvent } from '../types/slides';
-import { useNextEditorMetadata } from '../hooks/useNextEditorContext';
-import RevealSlideRenderer from './RevealSlideRenderer';
+import { motion, type Transition } from "motion/react";
+import { useCallback, useEffect, memo, useRef } from "react";
+import { ChevronLeft, ChevronRight, Monitor, Keyboard, X } from "lucide-react";
+import type { Slide, SlideEvent } from "../types/slides";
+import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
+import RevealSlideRenderer from "./RevealSlideRenderer";
 
 interface SlidePreviewProps {
   slides: Slide[];
@@ -21,9 +15,9 @@ interface SlidePreviewProps {
   isOpen: boolean;
   isMaximized?: boolean;
   verticalIndex?: number;
-  currentInteraction?: import('../types/slides').IframeInteractionEvent;
+  currentInteraction?: import("../types/slides").IframeInteractionEvent;
   setSlideNavigator?: (navigator: (indexh: number, indexv: number) => void) => void;
-  positioning?: 'fixed' | 'relative' | 'absolute' | 'sticky';
+  positioning?: "fixed" | "relative" | "absolute" | "sticky";
 }
 
 const SlidePreview = memo(function SlidePreview({
@@ -37,39 +31,45 @@ const SlidePreview = memo(function SlidePreview({
   verticalIndex = 0,
   currentInteraction,
   setSlideNavigator,
-  positioning = 'fixed'
+  positioning = "fixed",
 }: SlidePreviewProps) {
   const { isPlaying } = useNextEditorMetadata();
   // Check record mode from sessionStorage
-  const recordMode = sessionStorage.getItem('recordMode') === 'true';
+  const recordMode = sessionStorage.getItem("recordMode") === "true";
 
   const onSlideEventRef = useRef(onSlideEvent);
   onSlideEventRef.current = onSlideEvent;
 
   const currentSlide = slides[currentSlideIndex];
 
-  const emitSlideEvent = useCallback((type: SlideEvent['type'], slideId?: string, isMaximizedState?: boolean, indexv?: number) => {
-    onSlideEventRef.current?.({
-      type,
-      timestamp: performance.now(),
-      slideId,
-      isMaximized: isMaximizedState,
-      indexv
-    });
-  }, []);
+  const emitSlideEvent = useCallback(
+    (type: SlideEvent["type"], slideId?: string, isMaximizedState?: boolean, indexv?: number) => {
+      onSlideEventRef.current?.({
+        type,
+        timestamp: performance.now(),
+        slideId,
+        isMaximized: isMaximizedState,
+        indexv,
+      });
+    },
+    [],
+  );
 
   const handleClose = useCallback(() => {
     onClose?.();
     onStopPlayback?.();
   }, [onClose, onStopPlayback]);
 
-  const handleSlideChangeFromReveal = useCallback((indexh: number, indexv?: number) => {
-    if (isPlaying) return;
-    onSlideChange(indexh, indexv);
-    if (slides[indexh]) {
-      emitSlideEvent('slide_change', slides[indexh].id, true, indexv);
-    }
-  }, [isPlaying, onSlideChange, slides, emitSlideEvent]);
+  const handleSlideChangeFromReveal = useCallback(
+    (indexh: number, indexv?: number) => {
+      if (isPlaying) return;
+      onSlideChange(indexh, indexv);
+      if (slides[indexh]) {
+        emitSlideEvent("slide_change", slides[indexh].id, true, indexv);
+      }
+    },
+    [isPlaying, onSlideChange, slides, emitSlideEvent],
+  );
 
   // Handle messages from the Reveal iframe
   useEffect(() => {
@@ -77,7 +77,7 @@ const SlidePreview = memo(function SlidePreview({
       if (isPlaying) return;
 
       const { type, payload } = event.data || {};
-      if (type === 'IFRAME_INTERACTION') {
+      if (type === "IFRAME_INTERACTION") {
         const interaction = {
           type: payload.type,
           timestamp: performance.now(),
@@ -87,16 +87,16 @@ const SlidePreview = memo(function SlidePreview({
 
         // Send the interaction event without stale position data
         onSlideEventRef.current?.({
-          type: 'slide_interaction',
+          type: "slide_interaction",
           timestamp: performance.now(),
           slideId: currentSlide?.id,
-          interaction
+          interaction,
         });
       }
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, [isPlaying, currentSlide?.id]);
 
   const goToNextSlide = useCallback(() => {
@@ -104,7 +104,7 @@ const SlidePreview = memo(function SlidePreview({
     if (currentSlideIndex < slides.length - 1) {
       const newIndex = currentSlideIndex + 1;
       onSlideChange(newIndex); // Leave indexv undefined to use memory
-      emitSlideEvent('slide_change', slides[newIndex]?.id, true);
+      emitSlideEvent("slide_change", slides[newIndex]?.id, true);
     }
   }, [isPlaying, currentSlideIndex, slides, onSlideChange, emitSlideEvent]);
 
@@ -113,7 +113,7 @@ const SlidePreview = memo(function SlidePreview({
     if (currentSlideIndex > 0) {
       const newIndex = currentSlideIndex - 1;
       onSlideChange(newIndex); // Leave indexv undefined to use memory
-      emitSlideEvent('slide_change', slides[newIndex]?.id, true);
+      emitSlideEvent("slide_change", slides[newIndex]?.id, true);
     }
   }, [isPlaying, currentSlideIndex, onSlideChange, emitSlideEvent, slides]);
 
@@ -123,23 +123,23 @@ const SlidePreview = memo(function SlidePreview({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
-        case 'ArrowLeft':
+        case "ArrowLeft":
           e.preventDefault();
           goToPrevSlide();
           break;
-        case 'ArrowRight':
+        case "ArrowRight":
           e.preventDefault();
           goToNextSlide();
           break;
-        case 'Escape':
+        case "Escape":
           e.preventDefault();
           handleClose();
           break;
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, goToPrevSlide, goToNextSlide, handleClose]);
 
   if (!isOpen || !currentSlide) {
@@ -147,7 +147,7 @@ const SlidePreview = memo(function SlidePreview({
   }
 
   const layoutTransition: Transition = {
-    type: 'spring',
+    type: "spring",
     stiffness: 300,
     damping: 30,
     mass: 0.8,
@@ -169,8 +169,8 @@ const SlidePreview = memo(function SlidePreview({
         layout
         transition={layoutTransition}
         style={{
-          transformOrigin: 'bottom right',
-          willChange: 'transform'
+          transformOrigin: "bottom right",
+          willChange: "transform",
         }}
         className={`${positioning} top-[10%] left-[10%] right-[10%] bottom-[10%] z-100 bg-slate-900 rounded-2xl overflow-hidden border border-white/10 flex flex-col shadow-2xl transition-shadow size-[80%]`}
         onClick={(e) => {
@@ -197,7 +197,8 @@ const SlidePreview = memo(function SlidePreview({
               <Monitor className="text-indigo-400 size-3" />
             </div>
             <span className="text-[11px] font-bold text-slate-300 tracking-tight uppercase">
-              Slide {currentSlideIndex + 1} <span className="text-slate-500">of {slides.length}</span>
+              Slide {currentSlideIndex + 1}{" "}
+              <span className="text-slate-500">of {slides.length}</span>
             </span>
           </div>
 
@@ -229,10 +230,7 @@ const SlidePreview = memo(function SlidePreview({
         </div>
 
         {/* Slide content area */}
-        <div
-          className="relative w-full flex-1 bg-black"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="relative w-full flex-1 bg-black" onClick={(e) => e.stopPropagation()}>
           <RevealSlideRenderer
             slides={slides}
             currentSlideIndex={currentSlideIndex}

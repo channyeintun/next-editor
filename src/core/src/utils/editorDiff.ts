@@ -1,14 +1,14 @@
-import * as monaco from 'monaco-editor';
-import {
-  findCommonPrefixLengthWasm,
-  findCommonSuffixLengthWasm,
-} from './wasm';
-import type { EditorPosition, EditorSelection } from '../types';
+import * as monaco from "monaco-editor";
+import { findCommonPrefixLengthWasm, findCommonSuffixLengthWasm } from "./wasm";
+import type { EditorPosition, EditorSelection } from "../types";
 
 /**
  * Checks if two positions are equal
  */
-export function arePositionsEqual(pos1: EditorPosition | null, pos2: EditorPosition | null): boolean {
+export function arePositionsEqual(
+  pos1: EditorPosition | null,
+  pos2: EditorPosition | null,
+): boolean {
   if (!pos1 || !pos2) return pos1 === pos2;
   return pos1.lineNumber === pos2.lineNumber && pos1.column === pos2.column;
 }
@@ -16,7 +16,10 @@ export function arePositionsEqual(pos1: EditorPosition | null, pos2: EditorPosit
 /**
  * Checks if two selections are equal
  */
-export function areSelectionsEqual(sel1: EditorSelection | null, sel2: EditorSelection | null): boolean {
+export function areSelectionsEqual(
+  sel1: EditorSelection | null,
+  sel2: EditorSelection | null,
+): boolean {
   if (!sel1 || !sel2) return sel1 === sel2;
   return (
     sel1.startLineNumber === sel2.startLineNumber &&
@@ -36,12 +39,14 @@ export function areSelectionsEqual(sel1: EditorSelection | null, sel2: EditorSel
 export const applyPositionDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
   targetPosition: EditorPosition,
-  knownCurrentPosition?: EditorPosition | null
+  knownCurrentPosition?: EditorPosition | null,
 ): boolean => {
   const actualCurrentPosition = editor.getPosition();
-  const currentPosition = knownCurrentPosition !== undefined && arePositionsEqual(actualCurrentPosition, knownCurrentPosition)
-    ? knownCurrentPosition
-    : actualCurrentPosition;
+  const currentPosition =
+    knownCurrentPosition !== undefined &&
+    arePositionsEqual(actualCurrentPosition, knownCurrentPosition)
+      ? knownCurrentPosition
+      : actualCurrentPosition;
 
   if (arePositionsEqual(currentPosition, targetPosition)) {
     return true; // No change needed
@@ -58,13 +63,13 @@ export const applyPositionDiff = (
     const maxColumn = Math.max(1, lineLength + 1);
     const validPosition = {
       lineNumber: safeLineNumber,
-      column: Math.min(Math.max(targetPosition.column, 1), maxColumn)
+      column: Math.min(Math.max(targetPosition.column, 1), maxColumn),
     };
 
     editor.setPosition(validPosition);
     return true;
   } catch (error) {
-    console.warn('Error applying position diff:', error);
+    console.warn("Error applying position diff:", error);
     return false;
   }
 };
@@ -75,12 +80,14 @@ export const applyPositionDiff = (
 export const applySelectionDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
   targetSelection: EditorSelection,
-  knownCurrentSelection?: EditorSelection | null
+  knownCurrentSelection?: EditorSelection | null,
 ): boolean => {
   const actualCurrentSelection = editor.getSelection();
-  const currentSelection = knownCurrentSelection !== undefined && areSelectionsEqual(actualCurrentSelection, knownCurrentSelection)
-    ? knownCurrentSelection
-    : actualCurrentSelection;
+  const currentSelection =
+    knownCurrentSelection !== undefined &&
+    areSelectionsEqual(actualCurrentSelection, knownCurrentSelection)
+      ? knownCurrentSelection
+      : actualCurrentSelection;
 
   if (areSelectionsEqual(currentSelection, targetSelection)) {
     return true; // No change needed
@@ -99,24 +106,30 @@ export const applySelectionDiff = (
       const maxColumn = Math.max(1, lineLength + 1);
       return {
         lineNumber: safeLineNumber,
-        column: Math.min(Math.max(column, 1), maxColumn)
+        column: Math.min(Math.max(column, 1), maxColumn),
       };
     };
 
-    const validSelectionStart = validatePosition(targetSelection.selectionStartLineNumber, targetSelection.selectionStartColumn);
-    const validPosition = validatePosition(targetSelection.positionLineNumber, targetSelection.positionColumn);
+    const validSelectionStart = validatePosition(
+      targetSelection.selectionStartLineNumber,
+      targetSelection.selectionStartColumn,
+    );
+    const validPosition = validatePosition(
+      targetSelection.positionLineNumber,
+      targetSelection.positionColumn,
+    );
 
     const validSelection = new monaco.Selection(
       validSelectionStart.lineNumber,
       validSelectionStart.column,
       validPosition.lineNumber,
-      validPosition.column
+      validPosition.column,
     );
 
     editor.setSelection(validSelection);
     return true;
   } catch (error) {
-    console.warn('Error applying selection diff:', error);
+    console.warn("Error applying selection diff:", error);
     return false;
   }
 };
@@ -128,15 +141,18 @@ export const applySelectionDiff = (
 export const applyContentDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
   targetContent: string,
-  knownCurrentContent?: string | null
+  knownCurrentContent?: string | null,
 ): boolean => {
   const model = editor.getModel();
   if (!model) return false;
 
   const actualCurrentContent = model.getValue();
-  const currentContent = knownCurrentContent !== undefined && knownCurrentContent !== null && actualCurrentContent === knownCurrentContent
-    ? knownCurrentContent
-    : actualCurrentContent;
+  const currentContent =
+    knownCurrentContent !== undefined &&
+    knownCurrentContent !== null &&
+    actualCurrentContent === knownCurrentContent
+      ? knownCurrentContent
+      : actualCurrentContent;
 
   // If content is identical, no need to apply any operations
   if (currentContent === targetContent) {
@@ -148,7 +164,7 @@ export const applyContentDiff = (
     const commonPrefix = findCommonPrefix(currentContent, targetContent);
     const commonSuffix = findCommonSuffix(
       currentContent.slice(commonPrefix),
-      targetContent.slice(commonPrefix)
+      targetContent.slice(commonPrefix),
     );
 
     const currentMiddle = currentContent.slice(commonPrefix, currentContent.length - commonSuffix);
@@ -164,10 +180,10 @@ export const applyContentDiff = (
           startLineNumber: startPos.lineNumber,
           startColumn: startPos.column,
           endLineNumber: endPos.lineNumber,
-          endColumn: endPos.column
+          endColumn: endPos.column,
         },
         text: targetMiddle,
-        forceMoveMarkers: true
+        forceMoveMarkers: true,
       };
 
       // Apply the edit operation
@@ -177,13 +193,13 @@ export const applyContentDiff = (
 
     return true;
   } catch (error) {
-    console.warn('Error applying content diff:', error);
+    console.warn("Error applying content diff:", error);
     // Fallback to setValue if pushEditOperations fails
     try {
       model.setValue(targetContent);
       return true;
     } catch (fallbackError) {
-      console.warn('Fallback setValue also failed:', fallbackError);
+      console.warn("Fallback setValue also failed:", fallbackError);
       return false;
     }
   }

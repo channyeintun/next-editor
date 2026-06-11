@@ -1,6 +1,7 @@
 # Progress
 
 ## Task Status
+
 - [completed] Task 1: Create planning artifacts
 - [completed] Task 2: Integrate xterm for live WebContainer terminals
 - [completed] Task 3: Upgrade terminal recording model for replay
@@ -8,6 +9,7 @@
 - [completed] Task 5: Final validation and cleanup
 
 ## Completed Work
+
 - Created planning documents for xterm live integration and replay architecture.
 - Added xterm live terminal rendering in the dock and wired keyboard input to WebContainer terminal sessions.
 - Stopped ANSI/control stripping for terminal session output so xterm can render real PTY sequences.
@@ -20,6 +22,7 @@
 - Added a Bun project `format` script and aligned final validation steps with available project commands.
 
 ## Commit Log
+
 - 84ef49b docs: add xterm integration plan
 - 322c433 feat: integrate xterm for live terminal dock
 - fc66b84 feat: record terminal event streams in runtime snapshots

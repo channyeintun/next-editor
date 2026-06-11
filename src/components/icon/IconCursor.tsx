@@ -3,14 +3,18 @@ import React from "react";
 /**
  * IconCursor - SVG cursor icon for playback visualization
  */
-const IconCursor: React.FC<{ width?: number; height?: number; style?: React.CSSProperties }> = ({ width = 24, height = 24, style }) => (
+const IconCursor: React.FC<{ width?: number; height?: number; style?: React.CSSProperties }> = ({
+  width = 24,
+  height = 24,
+  style,
+}) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width={width}
     height={height}
     viewBox="0 0 48 48"
     style={{
-      filter: 'drop-shadow(1px 1px 2px rgba(0,0,0,0.5))',
+      filter: "drop-shadow(1px 1px 2px rgba(0,0,0,0.5))",
       ...style,
     }}
   >

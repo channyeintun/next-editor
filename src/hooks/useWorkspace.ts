@@ -34,10 +34,7 @@ function useWorkspaceStore(hookName: string) {
   return store;
 }
 
-function useWorkspaceSelector<T>(
-  hookName: string,
-  selector: (context: WorkspaceState) => T,
-): T {
+function useWorkspaceSelector<T>(hookName: string, selector: (context: WorkspaceState) => T): T {
   const store = useWorkspaceStore(hookName);
   const selectedAtom = useMemo(() => store.select(selector), [store, selector]);
 
@@ -50,87 +47,52 @@ export const useWorkspaceActions = (): WorkspaceActions => {
   const context = useContext(WorkspaceActionsContext);
 
   if (!context) {
-    throw new Error(
-      "useWorkspaceActions must be used within a WorkspaceProvider",
-    );
+    throw new Error("useWorkspaceActions must be used within a WorkspaceProvider");
   }
 
   return context;
 };
 
 export const useWorkspaceEditorState = (): WorkspaceEditorState => {
-  return useWorkspaceSelector(
-    "useWorkspaceEditorState",
-    selectWorkspaceEditorState,
-  );
+  return useWorkspaceSelector("useWorkspaceEditorState", selectWorkspaceEditorState);
 };
 
 export const useWorkspaceSidebarState = (): WorkspaceSidebarState => {
-  return useWorkspaceSelector(
-    "useWorkspaceSidebarState",
-    selectWorkspaceSidebarState,
-  );
+  return useWorkspaceSelector("useWorkspaceSidebarState", selectWorkspaceSidebarState);
 };
 
 export const useWorkspaceActiveFilePath = (): string => {
-  return useWorkspaceSelector(
-    "useWorkspaceActiveFilePath",
-    selectWorkspaceActiveFilePath,
-  );
+  return useWorkspaceSelector("useWorkspaceActiveFilePath", selectWorkspaceActiveFilePath);
 };
 
 export const useWorkspaceLessonType = (): WorkspaceLessonType => {
-  return useWorkspaceSelector(
-    "useWorkspaceLessonType",
-    selectWorkspaceLessonType,
-  );
+  return useWorkspaceSelector("useWorkspaceLessonType", selectWorkspaceLessonType);
 };
 
 export const useWorkspaceProjectName = (): string => {
-  return useWorkspaceSelector(
-    "useWorkspaceProjectName",
-    selectWorkspaceProjectName,
-  );
+  return useWorkspaceSelector("useWorkspaceProjectName", selectWorkspaceProjectName);
 };
 
 export const useWorkspaceProjectVersion = (): number => {
-  return useWorkspaceSelector(
-    "useWorkspaceProjectVersion",
-    selectWorkspaceProjectVersion,
-  );
+  return useWorkspaceSelector("useWorkspaceProjectVersion", selectWorkspaceProjectVersion);
 };
 
 export const useWorkspaceFileCount = (): number => {
-  return useWorkspaceSelector(
-    "useWorkspaceFileCount",
-    selectWorkspaceFileCount,
-  );
+  return useWorkspaceSelector("useWorkspaceFileCount", selectWorkspaceFileCount);
 };
 
 export const useWorkspacePreviewVersion = (): number => {
-  return useWorkspaceSelector(
-    "useWorkspacePreviewVersion",
-    selectWorkspacePreviewVersion,
-  );
+  return useWorkspaceSelector("useWorkspacePreviewVersion", selectWorkspacePreviewVersion);
 };
 
 export const useWorkspaceDirtyState = (): WorkspaceDirtyState => {
-  return useWorkspaceSelector(
-    "useWorkspaceDirtyState",
-    selectWorkspaceDirtyState,
-  );
+  return useWorkspaceSelector("useWorkspaceDirtyState", selectWorkspaceDirtyState);
 };
 
 export const useWorkspaceSaveVersion = (): number => {
-  return useWorkspaceSelector(
-    "useWorkspaceSaveVersion",
-    selectWorkspaceSaveVersion,
-  );
+  return useWorkspaceSelector("useWorkspaceSaveVersion", selectWorkspaceSaveVersion);
 };
 
 export const useWorkspaceSyncVersion = (): number => {
-  return useWorkspaceSelector(
-    "useWorkspaceSyncVersion",
-    selectWorkspaceSyncVersion,
-  );
+  return useWorkspaceSelector("useWorkspaceSyncVersion", selectWorkspaceSyncVersion);
 };

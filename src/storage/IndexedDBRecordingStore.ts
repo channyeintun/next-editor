@@ -47,10 +47,7 @@ export class IndexedDBRecordingStore {
 
   private openDatabase(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const request = this.getIndexedDB().open(
-        RECORDING_DATABASE_NAME,
-        RECORDING_DATABASE_VERSION,
-      );
+      const request = this.getIndexedDB().open(RECORDING_DATABASE_NAME, RECORDING_DATABASE_VERSION);
 
       request.onupgradeneeded = () => {
         const database = request.result;
@@ -115,9 +112,7 @@ export class IndexedDBRecordingStore {
     return copy.buffer;
   }
 
-  private fromStoredPayload(
-    payload: StoredRecordingPayload | undefined,
-  ): Uint8Array | null {
+  private fromStoredPayload(payload: StoredRecordingPayload | undefined): Uint8Array | null {
     if (!payload) {
       return null;
     }
@@ -127,10 +122,7 @@ export class IndexedDBRecordingStore {
 
   async hasEntries(): Promise<boolean> {
     const database = await this.getDatabase();
-    const transaction = database.transaction(
-      RECORDING_METADATA_STORE,
-      "readonly",
-    );
+    const transaction = database.transaction(RECORDING_METADATA_STORE, "readonly");
     const store = transaction.objectStore(RECORDING_METADATA_STORE);
     const count = await this.requestToPromise(store.count());
     await this.transactionToPromise(transaction);
@@ -139,10 +131,7 @@ export class IndexedDBRecordingStore {
 
   async listMetadata(): Promise<StoredRecordingMetadata[]> {
     const database = await this.getDatabase();
-    const transaction = database.transaction(
-      RECORDING_METADATA_STORE,
-      "readonly",
-    );
+    const transaction = database.transaction(RECORDING_METADATA_STORE, "readonly");
     const store = transaction.objectStore(RECORDING_METADATA_STORE);
     const metadata = await this.requestToPromise(store.getAll());
     await this.transactionToPromise(transaction);
@@ -193,19 +182,14 @@ export class IndexedDBRecordingStore {
     await this.transactionToPromise(transaction);
 
     const payloadById = new Map(
-      payloads.map((payload) => [
-        payload.id,
-        new Uint8Array(payload.binaryData),
-      ]),
+      payloads.map((payload) => [payload.id, new Uint8Array(payload.binaryData)]),
     );
     const missingPayloadIds = metadata
       .filter((entry) => !payloadById.has(entry.id))
       .map((entry) => entry.id);
 
     if (missingPayloadIds.length > 0) {
-      throw new Error(
-        `Missing recording payloads for ids: ${missingPayloadIds.join(", ")}`,
-      );
+      throw new Error(`Missing recording payloads for ids: ${missingPayloadIds.join(", ")}`);
     }
 
     return metadata
@@ -274,10 +258,7 @@ export class IndexedDBRecordingStore {
 
   async getStoredPayload(id: string): Promise<Uint8Array | null> {
     const database = await this.getDatabase();
-    const transaction = database.transaction(
-      RECORDING_PAYLOAD_STORE,
-      "readonly",
-    );
+    const transaction = database.transaction(RECORDING_PAYLOAD_STORE, "readonly");
     const store = transaction.objectStore(RECORDING_PAYLOAD_STORE);
     const payload = await this.requestToPromise(store.get(id));
     await this.transactionToPromise(transaction);
@@ -285,5 +266,4 @@ export class IndexedDBRecordingStore {
   }
 }
 
-export const createIndexedDBRecordingStore = () =>
-  new IndexedDBRecordingStore();
+export const createIndexedDBRecordingStore = () => new IndexedDBRecordingStore();

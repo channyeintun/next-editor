@@ -1,4 +1,4 @@
-import React, { type MouseEvent, useRef, useState, useCallback, useEffect } from 'react';
+import React, { type MouseEvent, useRef, useState, useCallback, useEffect } from "react";
 
 export interface ProgressBarProps {
   /**
@@ -51,40 +51,49 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   progress,
   duration,
   currentTime,
-  width = '100%',
-  height = '2px',
-  backgroundColor = '#475569',
-  progressColor = '#3b82f6',
+  width = "100%",
+  height = "2px",
+  backgroundColor = "#475569",
+  progressColor = "#3b82f6",
   onSeek,
-  className = '',
+  className = "",
   style = {},
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragProgress, setDragProgress] = useState<number | null>(null);
 
-  const calculateProgress = useCallback((clientX: number): number => {
-    if (!containerRef.current || !duration) return 0;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const percentage = Math.max(0, Math.min(x / rect.width, 1));
-    return percentage * 100;
-  }, [duration]);
+  const calculateProgress = useCallback(
+    (clientX: number): number => {
+      if (!containerRef.current || !duration) return 0;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const percentage = Math.max(0, Math.min(x / rect.width, 1));
+      return percentage * 100;
+    },
+    [duration],
+  );
 
-  const calculateTime = useCallback((clientX: number): number => {
-    if (!containerRef.current || !duration) return 0;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const percentage = Math.max(0, Math.min(x / rect.width, 1));
-    return percentage * duration;
-  }, [duration]);
+  const calculateTime = useCallback(
+    (clientX: number): number => {
+      if (!containerRef.current || !duration) return 0;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const percentage = Math.max(0, Math.min(x / rect.width, 1));
+      return percentage * duration;
+    },
+    [duration],
+  );
 
-  const handleMouseDown = useCallback((e: MouseEvent<HTMLDivElement>) => {
-    if (!onSeek || !duration) return;
-    e.preventDefault();
-    setIsDragging(true);
-    setDragProgress(calculateProgress(e.clientX));
-  }, [onSeek, duration, calculateProgress]);
+  const handleMouseDown = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      if (!onSeek || !duration) return;
+      e.preventDefault();
+      setIsDragging(true);
+      setDragProgress(calculateProgress(e.clientX));
+    },
+    [onSeek, duration, calculateProgress],
+  );
 
   useEffect(() => {
     if (!isDragging) return;
@@ -102,12 +111,12 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       setDragProgress(null);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
     };
   }, [isDragging, onSeek, duration, calculateProgress, calculateTime]);
 
@@ -131,11 +140,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     width,
     height,
     backgroundColor,
-    cursor: 'pointer',
-    position: 'relative',
-    borderRadius: '4px',
-    overflow: 'visible',
-    transition: 'height 150ms ease',
+    cursor: "pointer",
+    position: "relative",
+    borderRadius: "4px",
+    overflow: "visible",
+    transition: "height 150ms ease",
     ...style,
   };
 
@@ -154,23 +163,23 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 
   const progressStyle: React.CSSProperties = {
     width: `${Math.max(0, Math.min(displayProgress, 100))}%`,
-    height: '100%',
+    height: "100%",
     backgroundColor: progressColor,
-    borderRadius: 'inherit',
+    borderRadius: "inherit",
   };
 
   const thumbStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '50%',
+    position: "absolute",
+    top: "50%",
     left: `${Math.max(0, Math.min(displayProgress, 100))}%`,
-    width: '12px',
-    height: '12px',
+    width: "12px",
+    height: "12px",
     backgroundColor: progressColor,
-    borderRadius: '50%',
-    transform: 'translate(-50%, -50%)',
-    pointerEvents: 'none',
+    borderRadius: "50%",
+    transform: "translate(-50%, -50%)",
+    pointerEvents: "none",
     zIndex: 10,
-    cursor: isDragging ? 'grabbing' : 'grab',
+    cursor: isDragging ? "grabbing" : "grab",
   };
 
   return (
@@ -178,13 +187,13 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       <style>{containerWithPseudo}</style>
       <div
         ref={containerRef}
-        className={`next-editor-progress-container ${className}${isDragging ? ' dragging' : ''}`}
+        className={`next-editor-progress-container ${className}${isDragging ? " dragging" : ""}`}
         style={containerStyle}
         onClick={handleClick}
         onMouseDown={handleMouseDown}
         onMouseEnter={(e) => {
           // Grow height on hover like the original
-          e.currentTarget.style.height = '6px';
+          e.currentTarget.style.height = "6px";
         }}
         onMouseLeave={(e) => {
           // Return to original height
@@ -196,14 +205,8 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         aria-valuemax={duration}
         aria-label="Playback progress"
       >
-        <div
-          className="next-editor-progress-bar"
-          style={progressStyle}
-        />
-        <div
-          className="next-editor-progress-thumb"
-          style={thumbStyle}
-        />
+        <div className="next-editor-progress-bar" style={progressStyle} />
+        <div className="next-editor-progress-thumb" style={thumbStyle} />
       </div>
     </>
   );

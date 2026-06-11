@@ -11,9 +11,7 @@ function getArchiveFileName(projectName: string): string {
   return normalizedName || "next-editor-workspace";
 }
 
-export async function downloadWorkspaceProjectAsZip(
-  project: WorkspaceProject,
-): Promise<void> {
+export async function downloadWorkspaceProjectAsZip(project: WorkspaceProject): Promise<void> {
   const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
 

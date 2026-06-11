@@ -1,13 +1,6 @@
 import { memo, useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
-import Editor, {
-  type OnMount,
-  type BeforeMount,
-  type Monaco,
-} from "@monaco-editor/react";
-import {
-  useNextEditorActions,
-  useNextEditorMetadata,
-} from "../hooks/useNextEditorContext";
+import Editor, { type OnMount, type BeforeMount, type Monaco } from "@monaco-editor/react";
+import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
   useWorkspaceActions,
   useWorkspaceEditorState,
@@ -68,12 +61,7 @@ function WorkspaceEventRecorder({
       previousProjectVersionRef.current = projectVersion;
       handleWorkspaceEvent();
     }
-  }, [
-    handleWorkspaceEvent,
-    projectVersion,
-    shouldTrackWorkspaceChanges,
-    sidebarState,
-  ]);
+  }, [handleWorkspaceEvent, projectVersion, shouldTrackWorkspaceChanges, sidebarState]);
 
   return null;
 }
@@ -198,8 +186,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const monacoRef = useRef<Monaco | null>(null);
 
   // Only subscribe to the flags we actually need for rendering decisions
-  const { currentRecording, isPlaying, isRecording, usesPlaybackModel } =
-    useNextEditorMetadata();
+  const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
   const selectedLanguage = activeFile.language || language || "html";
   const editorModelPath = usesPlaybackModel
     ? toPlaybackModelPath(activeFile.path)
@@ -210,33 +197,27 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       return null;
     }
 
-    return syncPlaybackModel(
-      monaco,
-      activeFile.path,
-      activeFile.content,
-      selectedLanguage,
-      { preserveExistingContent: true },
-    );
+    return syncPlaybackModel(monaco, activeFile.path, activeFile.content, selectedLanguage, {
+      preserveExistingContent: true,
+    });
   });
 
-  const syncPlaybackEditorModel = useEffectEvent(
-    (editor: Parameters<OnMount>[0] | null) => {
-      const monaco = monacoRef.current;
+  const syncPlaybackEditorModel = useEffectEvent((editor: Parameters<OnMount>[0] | null) => {
+    const monaco = monacoRef.current;
 
-      if (!usesPlaybackModel || !monaco || !editor) {
-        return false;
-      }
+    if (!usesPlaybackModel || !monaco || !editor) {
+      return false;
+    }
 
-      const playbackModel = syncActivePlaybackModel(monaco);
+    const playbackModel = syncActivePlaybackModel(monaco);
 
-      if (playbackModel && editor.getModel() !== playbackModel) {
-        editor.setModel(playbackModel);
-      }
+    if (playbackModel && editor.getModel() !== playbackModel) {
+      editor.setModel(playbackModel);
+    }
 
-      syncEditorRef(editor);
-      return true;
-    },
-  );
+    syncEditorRef(editor);
+    return true;
+  });
 
   // useEffectEvent provides a stable function reference that always reads
   // the latest playback attachment value without causing dependency issues
@@ -245,24 +226,20 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     handleEditorChange();
   });
 
-  const syncEditorContentToWorkspace = useEffectEvent(
-    (editor: Parameters<OnMount>[0] | null) => {
-      if (usesPlaybackModel || !editor) {
-        return;
-      }
+  const syncEditorContentToWorkspace = useEffectEvent((editor: Parameters<OnMount>[0] | null) => {
+    if (usesPlaybackModel || !editor) {
+      return;
+    }
 
-      const modelUri = editor.getModel()?.uri;
-      const modelPath = modelUri
-        ? workspacePathFromMonacoModelUri(modelUri)
-        : null;
+    const modelUri = editor.getModel()?.uri;
+    const modelPath = modelUri ? workspacePathFromMonacoModelUri(modelUri) : null;
 
-      if (!modelPath) {
-        return;
-      }
+    if (!modelPath) {
+      return;
+    }
 
-      updateFileContent(modelPath, editor.getValue());
-    },
-  );
+    updateFileContent(modelPath, editor.getValue());
+  });
 
   const runSaveAction = useEffectEvent(async () => {
     if (usesPlaybackModel) {
@@ -283,8 +260,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   });
 
   const onSaveShortcut = useEffectEvent((event: KeyboardEvent) => {
-    const isSaveShortcut =
-      (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s";
+    const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s";
 
     if (!isSaveShortcut) {
       return;
@@ -294,21 +270,19 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     void runSaveAction();
   });
 
-  const focusEditorIfNeeded = useEffectEvent(
-    (editor: Parameters<OnMount>[0] | null) => {
-      if (!editor) {
-        return;
-      }
+  const focusEditorIfNeeded = useEffectEvent((editor: Parameters<OnMount>[0] | null) => {
+    if (!editor) {
+      return;
+    }
 
-      const domNode = editor.getDomNode();
+    const domNode = editor.getDomNode();
 
-      if (domNode?.contains(domNode.ownerDocument.activeElement)) {
-        return;
-      }
+    if (domNode?.contains(domNode.ownerDocument.activeElement)) {
+      return;
+    }
 
-      editor.focus();
-    },
-  );
+    editor.focus();
+  });
 
   useEffect(() => {
     const handleWindowKeyDown = (event: KeyboardEvent) => {
@@ -352,7 +326,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     activeFile.path,
     editorRef,
     selectedLanguage,
-    syncPlaybackEditorModel,
     syncEditorRef,
     usesPlaybackModel,
   ]);
@@ -565,12 +538,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <FileSidebar />
         {/* Monaco Editor */}
-        <div
-          className={
-            "editor-paint-layer min-w-0 flex-1" +
-            (isPlaying ? " playback-mode" : "")
-          }
-        >
+        <div className={"editor-paint-layer min-w-0 flex-1" + (isPlaying ? " playback-mode" : "")}>
           <Editor
             height="100%"
             path={editorModelPath}

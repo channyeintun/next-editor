@@ -1,8 +1,5 @@
 import { useCallback, useMemo, useRef } from "react";
-import {
-  WorkspaceActionsContext,
-  type WorkspaceActions,
-} from "./WorkspaceContext";
+import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
 import {
   WORKSPACE_STORAGE_KEY,
   WorkspaceStoreContext,
@@ -24,15 +21,9 @@ interface WorkspaceProviderProps {
   children: React.ReactNode;
 }
 
-export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
-  children,
-}) => {
-  const initialSnapshotRef = useRef<StoredWorkspaceSnapshot>(
-    createInitialWorkspaceSnapshot(),
-  );
-  const workspaceStoreRef = useRef(
-    createWorkspaceStore(initialSnapshotRef.current),
-  );
+export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }) => {
+  const initialSnapshotRef = useRef<StoredWorkspaceSnapshot>(createInitialWorkspaceSnapshot());
+  const workspaceStoreRef = useRef(createWorkspaceStore(initialSnapshotRef.current));
 
   const setActiveFilePath = useCallback((path: string) => {
     workspaceStoreRef.current.trigger.setActiveFilePath({ path });
@@ -98,17 +89,13 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     }
 
     try {
-      const { activeFilePath, project } =
-        workspaceStoreRef.current.getSnapshot().context;
+      const { activeFilePath, project } = workspaceStoreRef.current.getSnapshot().context;
       const storedSnapshot = {
         activeFilePath,
         project,
       } satisfies StoredWorkspaceSnapshot;
 
-      window.localStorage.setItem(
-        WORKSPACE_STORAGE_KEY,
-        JSON.stringify(storedSnapshot),
-      );
+      window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(storedSnapshot));
       workspaceStoreRef.current.trigger.markSaved({
         snapshot: cloneWorkspaceSnapshot(storedSnapshot),
       });
@@ -118,18 +105,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   }, []);
 
   const loadProject = useCallback(
-    (
-      project: WorkspaceProject,
-      nextActiveFilePath?: string,
-      collapsedFolders?: string[],
-    ) => {
+    (project: WorkspaceProject, nextActiveFilePath?: string, collapsedFolders?: string[]) => {
       const normalizedProject = normalizeProject(project);
-      const normalizedNextActiveFilePath = normalizeWorkspacePath(
-        nextActiveFilePath ?? "",
-      );
-      const resolvedActiveFilePath = normalizedProject.files[
-        normalizedNextActiveFilePath
-      ]
+      const normalizedNextActiveFilePath = normalizeWorkspacePath(nextActiveFilePath ?? "");
+      const resolvedActiveFilePath = normalizedProject.files[normalizedNextActiveFilePath]
         ? normalizedNextActiveFilePath
         : normalizedProject.entryFilePath;
 
@@ -174,9 +153,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
 
   const getFile = useCallback((path: string) => {
     return (
-      workspaceStoreRef.current.getSnapshot().context.project.files[
-        normalizeWorkspacePath(path)
-      ] ?? null
+      workspaceStoreRef.current.getSnapshot().context.project.files[normalizeWorkspacePath(path)] ??
+      null
     );
   }, []);
 
@@ -235,9 +213,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
 
   return (
     <WorkspaceActionsContext value={actionsValue}>
-      <WorkspaceStoreContext value={workspaceStoreRef.current}>
-        {children}
-      </WorkspaceStoreContext>
+      <WorkspaceStoreContext value={workspaceStoreRef.current}>{children}</WorkspaceStoreContext>
     </WorkspaceActionsContext>
   );
 };

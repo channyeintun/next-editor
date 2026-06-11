@@ -86,12 +86,7 @@ describe("editor model helpers", () => {
   it("reconciles existing playback models to the active replay snapshot", () => {
     const { models, monaco } = createFakeMonaco();
 
-    const firstModel = syncPlaybackModel(
-      monaco,
-      "src/App.tsx",
-      "future content",
-      "javascript",
-    );
+    const firstModel = syncPlaybackModel(monaco, "src/App.tsx", "future content", "javascript");
 
     const secondModel = syncPlaybackModel(
       monaco,

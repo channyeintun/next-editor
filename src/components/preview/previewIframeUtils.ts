@@ -9,18 +9,9 @@ const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
 
-export function getElementByXPath(
-  doc: Document,
-  xpath: string,
-): Element | null {
+export function getElementByXPath(doc: Document, xpath: string): Element | null {
   try {
-    const result = doc.evaluate(
-      xpath,
-      doc,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null,
-    );
+    const result = doc.evaluate(xpath, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     return result.singleNodeValue as Element | null;
   } catch {
     return null;
@@ -54,16 +45,12 @@ function syncElementState(currentElement: Element, nextElement: Element) {
   }
 
   if (tagName === "textarea") {
-    (currentElement as HTMLTextAreaElement).value = (
-      nextElement as HTMLTextAreaElement
-    ).value;
+    (currentElement as HTMLTextAreaElement).value = (nextElement as HTMLTextAreaElement).value;
     return;
   }
 
   if (tagName === "option") {
-    (currentElement as HTMLOptionElement).selected = (
-      nextElement as HTMLOptionElement
-    ).selected;
+    (currentElement as HTMLOptionElement).selected = (nextElement as HTMLOptionElement).selected;
   }
 }
 
@@ -77,28 +64,17 @@ function canPatchNode(currentNode: Node, nextNode: Node): boolean {
   }
 
   return (
-    (currentNode as Element).tagName.toLowerCase() ===
-    (nextNode as Element).tagName.toLowerCase()
+    (currentNode as Element).tagName.toLowerCase() === (nextNode as Element).tagName.toLowerCase()
   );
 }
 
-function patchNode(
-  currentNode: Node,
-  nextNode: Node,
-  ownerDocument: Document,
-) {
+function patchNode(currentNode: Node, nextNode: Node, ownerDocument: Document) {
   if (!canPatchNode(currentNode, nextNode)) {
-    currentNode.parentNode?.replaceChild(
-      ownerDocument.importNode(nextNode, true),
-      currentNode,
-    );
+    currentNode.parentNode?.replaceChild(ownerDocument.importNode(nextNode, true), currentNode);
     return;
   }
 
-  if (
-    currentNode.nodeType === TEXT_NODE ||
-    currentNode.nodeType === COMMENT_NODE
-  ) {
+  if (currentNode.nodeType === TEXT_NODE || currentNode.nodeType === COMMENT_NODE) {
     if (currentNode.nodeValue !== nextNode.nodeValue) {
       currentNode.nodeValue = nextNode.nodeValue;
     }
@@ -117,11 +93,7 @@ function patchNode(
   patchChildNodes(currentElement, nextElement, ownerDocument);
 }
 
-function patchChildNodes(
-  currentParent: Node,
-  nextParent: Node,
-  ownerDocument: Document,
-) {
+function patchChildNodes(currentParent: Node, nextParent: Node, ownerDocument: Document) {
   let index = 0;
 
   while (index < nextParent.childNodes.length) {
@@ -149,11 +121,7 @@ function patchDocumentSection(
   nextSection: Element | null,
   ownerDocument: Document,
 ): boolean {
-  if (
-    !currentSection ||
-    !nextSection ||
-    !canPatchNode(currentSection, nextSection)
-  ) {
+  if (!currentSection || !nextSection || !canPatchNode(currentSection, nextSection)) {
     return false;
   }
 
@@ -166,44 +134,26 @@ export function patchIframeContentFromHtml(
   htmlContent: string,
 ): boolean {
   try {
-    const iframeDocument =
-      iframe.contentDocument || iframe.contentWindow?.document;
+    const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
 
     if (!iframeDocument?.documentElement) {
       return false;
     }
 
-    const nextDocument = new DOMParser().parseFromString(
-      htmlContent,
-      "text/html",
-    );
+    const nextDocument = new DOMParser().parseFromString(htmlContent, "text/html");
 
     if (
       !nextDocument.documentElement ||
-      !canPatchNode(
-        iframeDocument.documentElement,
-        nextDocument.documentElement,
-      )
+      !canPatchNode(iframeDocument.documentElement, nextDocument.documentElement)
     ) {
       return false;
     }
 
-    syncElementAttributes(
-      iframeDocument.documentElement,
-      nextDocument.documentElement,
-    );
+    syncElementAttributes(iframeDocument.documentElement, nextDocument.documentElement);
 
     return (
-      patchDocumentSection(
-        iframeDocument.head,
-        nextDocument.head,
-        iframeDocument,
-      ) &&
-      patchDocumentSection(
-        iframeDocument.body,
-        nextDocument.body,
-        iframeDocument,
-      )
+      patchDocumentSection(iframeDocument.head, nextDocument.head, iframeDocument) &&
+      patchDocumentSection(iframeDocument.body, nextDocument.body, iframeDocument)
     );
   } catch {
     return false;
@@ -215,8 +165,7 @@ export function createReplayableRuntimePreview(
   baseUrl: string,
 ): string | null {
   try {
-    const iframeDocument =
-      iframe.contentDocument || iframe.contentWindow?.document;
+    const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
 
     if (!iframeDocument?.documentElement) {
       return null;

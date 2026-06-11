@@ -77,7 +77,7 @@ sequenceDiagram
     User->>UI: Click Start Recording
     UI->>Context: startRecording()
     Context->>Machine: START_RECORDING event
-    
+
     alt Audio Recording Enabled
         Machine->>Machine: Enter startingRecording
         Machine->>Audio: Spawn audioRecording actor
@@ -95,28 +95,28 @@ sequenceDiagram
         UI->>Context: handleEditorChange()
         Context->>Machine: CAPTURE_FRAME event
         Machine->>Machine: captureFrame action
-        
+
         Mouse-->>Machine: Mouse movement
         Machine->>Machine: CAPTURE_FRAME with position
-        
+
         opt Slide Event
             UI->>Context: handleSlideEvent()
             Context->>Machine: SLIDE_EVENT
             Machine->>Machine: Record slide event
         end
-        
+
         opt Preview Event
             UI->>Context: handlePreviewEvent()
             Context->>Machine: PREVIEW_EVENT
             Machine->>Machine: Record preview state + event
         end
-        
+
         opt Workspace Changes (v3)
             Runtime-->>Machine: File/folder change
             Context->>Machine: WORKSPACE_EVENT
             Machine->>Machine: Record workspace event
         end
-        
+
         opt Runtime Events (v3)
             Runtime-->>Machine: Terminal/process output
             Context->>Machine: RUNTIME_EVENT
@@ -127,7 +127,7 @@ sequenceDiagram
     User->>UI: Click Stop Recording
     UI->>Context: stopRecording()
     Context->>Machine: STOP_RECORDING event
-    
+
     alt Audio Recording Active
         Machine->>Machine: Enter stoppingRecording
         Machine->>Audio: STOP event
@@ -183,11 +183,11 @@ sequenceDiagram
         Machine->>Machine: applySlideEventsAtTime
         Machine->>Machine: applyWorkspaceEventsAtTime (v3)
         Machine->>Machine: applyRuntimeEventsAtTime (v3)
-        
+
         opt Audio Sync (every 250ms)
             Machine->>Audio: SYNC event
         end
-        
+
         opt Preview State Update
             Machine->>Machine: Restore preview state at checkpoint
         end
@@ -264,13 +264,13 @@ flowchart LR
     subgraph Provider["NextEditorProvider"]
         direction TB
         Hook[useNextEditor Hook]
-        
+
         subgraph Contexts["Split Contexts"]
             Actions["Actions Context<br/>(Stable Functions)"]
             Metadata["Metadata Context<br/>(State Flags)"]
             Playback["Playback Context<br/>(High Frequency)"]
         end
-        
+
         Hook --> Actions
         Hook --> Metadata
         Hook --> Playback
@@ -293,6 +293,7 @@ flowchart LR
 ```
 
 This context splitting pattern prevents unnecessary re-renders:
+
 - **Actions Context**: Stable function references, rarely changes
 - **Metadata Context**: Recording state flags, changes on state transitions
 - **Playback Context**: Current time and cursor, updates every animation frame
@@ -305,19 +306,19 @@ This context splitting pattern prevents unnecessary re-renders:
 flowchart TB
     Start([TICK Event]) --> FindIndex[Find frame at currentTime]
     FindIndex --> CheckIndex{Same as<br/>lastAppliedIndex?}
-    
+
     CheckIndex -->|Yes| Skip[Skip - no changes]
     CheckIndex -->|No| CheckDelta{Is next frame<br/>a delta?}
-    
+
     CheckDelta -->|Yes| ApplyDelta[Apply delta to current frame]
     CheckDelta -->|No| Reconstruct[Full reconstruction from keyframe]
-    
+
     ApplyDelta --> Validate{Valid frame state?}
     Reconstruct --> Validate
-    
+
     Validate -->|No| UpdateIndex[Update lastAppliedIndex only]
     Validate -->|Yes| ApplyContent[Apply content to editor]
-    
+
     ApplyContent --> ApplySelection[Apply selection/position]
     ApplySelection --> ApplyView[Apply view state]
     ApplyView --> ApplyDecorations[Apply cursor decorations]

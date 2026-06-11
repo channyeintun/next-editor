@@ -1,8 +1,8 @@
-import { memo } from 'react';
-import { useNextEditorDomainAdapters } from '../contexts/NextEditorDomainAdaptersContext';
-import { useSlidesContext } from '../contexts/SlidesContext';
-import { useNextEditorActions } from '../hooks/useNextEditorContext';
-import SlidePreview from './SlidePreview';
+import { memo } from "react";
+import { useNextEditorDomainAdapters } from "../contexts/NextEditorDomainAdaptersContext";
+import { useSlidesContext } from "../contexts/SlidesContext";
+import { useNextEditorActions } from "../hooks/useNextEditorContext";
+import SlidePreview from "./SlidePreview";
 
 export default memo(function SlidePanel() {
   const {

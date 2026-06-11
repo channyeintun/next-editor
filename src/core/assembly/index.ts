@@ -10,7 +10,7 @@
 /**
  * Finds the length of common prefix between two byte arrays.
  * For UTF-8 strings, pass the encoded bytes.
- * 
+ *
  * @param str1Ptr Pointer to first string bytes
  * @param str1Len Length of first string
  * @param str2Ptr Pointer to second string bytes
@@ -43,7 +43,7 @@ export function findCommonPrefix(str1Ptr: usize, str1Len: i32, str2Ptr: usize, s
 
 /**
  * Finds the length of common suffix between two byte arrays.
- * 
+ *
  * @param str1Ptr Pointer to first string bytes
  * @param str1Len Length of first string
  * @param str2Ptr Pointer to second string bytes
@@ -55,11 +55,9 @@ export function findCommonSuffix(str1Ptr: usize, str1Len: i32, str2Ptr: usize, s
   let i: i32 = 0;
 
   // Process byte by byte from the end
-  while (i < minLen &&
-    load<u8>(str1Ptr + str1Len - 1 - i) == load<u8>(str2Ptr + str2Len - 1 - i)) {
+  while (i < minLen && load<u8>(str1Ptr + str1Len - 1 - i) == load<u8>(str2Ptr + str2Len - 1 - i)) {
     i++;
   }
 
   return i;
 }
-

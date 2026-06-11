@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PreviewEvent, Slide, SlideEvent } from "../slides";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
-import type {
-  WorkspaceRecordingEvent,
-  WorkspaceRecordingSnapshot,
-} from "../../../types/workspace";
+import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import {
   getPreviewReplayResult,
   getRuntimeReplayResult,
@@ -12,9 +9,7 @@ import {
   getWorkspaceReplayResult,
 } from "./replayState";
 
-function createWorkspaceSnapshot(
-  content: string,
-): WorkspaceRecordingSnapshot {
+function createWorkspaceSnapshot(content: string): WorkspaceRecordingSnapshot {
   return {
     activeFilePath: "index.html",
     collapsedFolders: [],

@@ -1,11 +1,5 @@
 import type * as monaco from "monaco-editor";
-import type {
-  SlideEvent,
-  SlidePreviewState,
-  PreviewEvent,
-  PreviewState,
-  Slide,
-} from "../slides";
+import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from "../slides";
 import type {
   MouseCursorPosition,
   EditorFrame,
@@ -13,14 +7,8 @@ import type {
   EditorSelection,
   EditorPosition,
 } from "../types";
-import type {
-  RuntimeRecordingEvent,
-  RuntimeRecordingSnapshot,
-} from "../../../types/runtime";
-import type {
-  WorkspaceRecordingEvent,
-  WorkspaceRecordingSnapshot,
-} from "../../../types/workspace";
+import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
+import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 
 // ============================================================================
 // Machine Status Types
@@ -139,10 +127,7 @@ export interface EditorMachineContext {
   /** Error message if any */
   error: string | null;
   /** Callback to apply slide state during playback */
-  applySlideState?: (
-    slideState: SlidePreviewState,
-    currentSlideIndex: number,
-  ) => void;
+  applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
   /** Callback to apply slides data during playback */
   applySlides?: (slides: Slide[]) => void;
   /** Callback to apply preview state during playback */
@@ -410,10 +395,7 @@ export interface EditorMachineInput {
     previewState: SlidePreviewState;
     currentSlideIndex: number;
   } | null;
-  applySlideState?: (
-    slideState: SlidePreviewState,
-    currentSlideIndex: number,
-  ) => void;
+  applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
   getSlides?: () => Slide[];
   applySlides?: (slides: Slide[]) => void;
   onPreviewEvent?: (event: PreviewEvent) => void;
@@ -434,9 +416,7 @@ export type { EditorSelection, EditorPosition };
 /**
  * Initial context factory
  */
-export const createInitialContext = (
-  input: EditorMachineInput,
-): EditorMachineContext => ({
+export const createInitialContext = (input: EditorMachineInput): EditorMachineContext => ({
   timeline: {
     currentTime: 0,
     duration: 0,

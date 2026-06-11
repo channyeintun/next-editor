@@ -1,7 +1,7 @@
-import React from 'react';
-import { useNextEditorMetadata, useLiveCursor } from '../hooks/useNextEditorContext';
-import type { MouseCursorPosition } from '../core/src';
-import IconCursor from './icon/IconCursor';
+import React from "react";
+import { useNextEditorMetadata, useLiveCursor } from "../hooks/useNextEditorContext";
+import type { MouseCursorPosition } from "../core/src";
+import IconCursor from "./icon/IconCursor";
 
 /**
  * Fake cursor component for playback visualization
@@ -16,12 +16,12 @@ const FakeCursor: React.FC<FakeCursorProps> = ({ position }) => {
   return (
     <div
       style={{
-        position: position.hasParent ? 'absolute' : 'fixed',
+        position: position.hasParent ? "absolute" : "fixed",
         left: -7,
         top: -5,
         width: 24,
         height: 24,
-        pointerEvents: 'none',
+        pointerEvents: "none",
         zIndex: 9999,
         transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
       }}

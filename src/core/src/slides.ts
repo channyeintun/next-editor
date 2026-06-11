@@ -1,4 +1,4 @@
-export type SlideContentType = 'html' | 'markdown';
+export type SlideContentType = "html" | "markdown";
 
 export interface Slide {
   id: string;
@@ -17,7 +17,13 @@ export interface SlidePreviewState {
 }
 
 export interface SlideEvent {
-  type: 'slide_open' | 'slide_close' | 'slide_change' | 'slide_maximize' | 'slide_minimize' | 'slide_interaction';
+  type:
+    | "slide_open"
+    | "slide_close"
+    | "slide_change"
+    | "slide_maximize"
+    | "slide_minimize"
+    | "slide_interaction";
   timestamp: number;
   slideId?: string;
   isMaximized?: boolean;
@@ -28,21 +34,21 @@ export interface SlideEvent {
 /**
  * Preview panel state (for code preview iframe)
  */
-export type PreviewSize = 'small' | 'medium' | 'large' | { width: number; height: number };
+export type PreviewSize = "small" | "medium" | "large" | { width: number; height: number };
 
 /**
  * Iframe interaction event types
  */
 export type IframeInteractionType =
-  | 'click'
-  | 'focus'
-  | 'blur'
-  | 'hover_start'
-  | 'hover_end'
-  | 'keydown'
-  | 'keyup'
-  | 'scroll'
-  | 'input';
+  | "click"
+  | "focus"
+  | "blur"
+  | "hover_start"
+  | "hover_end"
+  | "keydown"
+  | "keyup"
+  | "scroll"
+  | "input";
 
 /**
  * Target element info for precise element targeting during playback
@@ -89,7 +95,14 @@ export interface PreviewState {
 }
 
 export interface PreviewEvent {
-  type: 'preview_open' | 'preview_minimize' | 'preview_maximize' | 'preview_scroll' | 'preview_interaction' | 'preview_refresh' | 'preview_resize';
+  type:
+    | "preview_open"
+    | "preview_minimize"
+    | "preview_maximize"
+    | "preview_scroll"
+    | "preview_interaction"
+    | "preview_refresh"
+    | "preview_resize";
   timestamp: number;
   size?: PreviewSize;
   content?: string;

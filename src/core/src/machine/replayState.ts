@@ -1,14 +1,5 @@
-import type {
-  PreviewEvent,
-  PreviewState,
-  Slide,
-  SlideEvent,
-  SlidePreviewState,
-} from "../slides";
-import type {
-  RuntimeRecordingEvent,
-  RuntimeRecordingSnapshot,
-} from "../../../types/runtime";
+import type { PreviewEvent, PreviewState, Slide, SlideEvent, SlidePreviewState } from "../slides";
+import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
 import {
   areWorkspaceSnapshotsEqual,
   type WorkspaceRecordingEvent,
@@ -63,10 +54,7 @@ export interface SlideReplayResult {
 const LINEAR_SCAN_LIMIT = 128;
 const previewReplayIndexCache = new WeakMap<PreviewEvent[], PreviewReplayIndex>();
 
-export function resolveReplayTime(
-  event: ReplayTriggerEvent,
-  fallbackTime: number,
-): number {
+export function resolveReplayTime(event: ReplayTriggerEvent, fallbackTime: number): number {
   if (event.type === "TICK") {
     return event.currentTime ?? fallbackTime;
   }
@@ -91,11 +79,7 @@ export function advanceReplayCursor<T extends TimedReplayEvent>({
   currentTime: number;
   lastAppliedIndex: number;
 }): ReplayCursorResult<T> {
-  const nextIndex = findTimedEventIndexAtOrBefore(
-    events,
-    currentTime,
-    lastAppliedIndex,
-  );
+  const nextIndex = findTimedEventIndexAtOrBefore(events, currentTime, lastAppliedIndex);
   const latestEvent = nextIndex >= 0 ? events[nextIndex] : null;
 
   return {
@@ -124,10 +108,7 @@ function findTimedEventIndexAtOrBefore<T extends TimedReplayEvent>(
     return findTimedEventIndexAtOrBeforeBinary(events, currentTime, 0, startIndex);
   }
 
-  if (
-    startIndex === lastIndex ||
-    events[startIndex + 1].timestamp > currentTime
-  ) {
+  if (startIndex === lastIndex || events[startIndex + 1].timestamp > currentTime) {
     return startIndex;
   }
 
@@ -143,12 +124,7 @@ function findTimedEventIndexAtOrBefore<T extends TimedReplayEvent>(
     return lastIndex;
   }
 
-  return findTimedEventIndexAtOrBeforeBinary(
-    events,
-    currentTime,
-    scanEnd,
-    lastIndex,
-  );
+  return findTimedEventIndexAtOrBeforeBinary(events, currentTime, scanEnd, lastIndex);
 }
 
 function findTimedEventIndexAtOrBeforeBinary<T extends TimedReplayEvent>(
@@ -183,9 +159,7 @@ function mergePreviewEventState(
     scrollTop: previewEvent.scrollTop ?? previousState?.scrollTop,
     scrollLeft: previewEvent.scrollLeft ?? previousState?.scrollLeft,
     refreshKey:
-      previewEvent.type === "preview_refresh"
-        ? previewEvent.timestamp
-        : previousState?.refreshKey,
+      previewEvent.type === "preview_refresh" ? previewEvent.timestamp : previousState?.refreshKey,
     currentInteraction: previewEvent.interaction,
   };
 
@@ -198,9 +172,7 @@ function mergePreviewEventState(
   };
 }
 
-function getPreviewReplayIndex(
-  previewEvents: PreviewEvent[],
-): PreviewReplayIndex {
+function getPreviewReplayIndex(previewEvents: PreviewEvent[]): PreviewReplayIndex {
   const cachedIndex = previewReplayIndexCache.get(previewEvents);
 
   if (cachedIndex) {
@@ -211,10 +183,7 @@ function getPreviewReplayIndex(
   const retainedStates: PreviewState[] = [];
 
   for (const previewEvent of previewEvents) {
-    const nextPreviewState = mergePreviewEventState(
-      previewEvent,
-      retainedState,
-    );
+    const nextPreviewState = mergePreviewEventState(previewEvent, retainedState);
     retainedState = nextPreviewState.retainedState;
     retainedStates.push(retainedState);
   }
@@ -224,9 +193,7 @@ function getPreviewReplayIndex(
   return replayIndex;
 }
 
-function clonePreviewReplayState(
-  previewState: PreviewState,
-): PreviewState {
+function clonePreviewReplayState(previewState: PreviewState): PreviewState {
   return {
     ...previewState,
     currentInteraction: undefined,
@@ -247,11 +214,7 @@ export function getPreviewReplayResult({
   isSeeking: boolean;
 }): PreviewReplayResult {
   if (isSeeking) {
-    const nextIndex = findTimedEventIndexAtOrBefore(
-      previewEvents,
-      currentTime,
-      -1,
-    );
+    const nextIndex = findTimedEventIndexAtOrBefore(previewEvents, currentTime, -1);
 
     if (nextIndex < 0) {
       return {
@@ -292,10 +255,7 @@ export function getPreviewReplayResult({
       break;
     }
 
-    const nextPreviewState = mergePreviewEventState(
-      previewEvent,
-      retainedState,
-    );
+    const nextPreviewState = mergePreviewEventState(previewEvent, retainedState);
 
     if (!isSeeking) {
       appliedStates.push(nextPreviewState.appliedState);
@@ -335,22 +295,11 @@ export function getWorkspaceReplayResult({
     lastAppliedIndex,
   });
 
-  if (
-    replayCursor.latestEvent &&
-    replayCursor.nextIndex !== lastAppliedIndex
-  ) {
+  if (replayCursor.latestEvent && replayCursor.nextIndex !== lastAppliedIndex) {
     const snapshot =
-      currentSnapshot !== undefined
-        ? currentSnapshot
-        : (getCurrentSnapshot?.() ?? null);
+      currentSnapshot !== undefined ? currentSnapshot : (getCurrentSnapshot?.() ?? null);
 
-    if (
-      !snapshot ||
-      !areWorkspaceSnapshotsEqual(
-        snapshot,
-        replayCursor.latestEvent.snapshot,
-      )
-    ) {
+    if (!snapshot || !areWorkspaceSnapshotsEqual(snapshot, replayCursor.latestEvent.snapshot)) {
       return {
         nextIndex: replayCursor.nextIndex,
         snapshotToApply: replayCursor.latestEvent.snapshot,
@@ -401,10 +350,7 @@ const SLIDE_STRUCTURAL_EVENT_TYPES = new Set<SlideEvent["type"]>([
   "slide_minimize",
 ]);
 
-function buildSlideStateAtEvent(
-  slideEvents: SlideEvent[],
-  eventIndex: number,
-): SlidePreviewState {
+function buildSlideStateAtEvent(slideEvents: SlideEvent[], eventIndex: number): SlidePreviewState {
   const slideEvent = slideEvents[eventIndex];
 
   if (slideEvent.type === "slide_close") {
@@ -437,10 +383,7 @@ function buildSlideStateAtEvent(
       ? lastStructuralEvent.type === "slide_maximize"
       : (slideEvent.isMaximized ?? lastNavigationEvent?.isMaximized ?? false),
     currentSlideId: slideEvent.slideId || lastNavigationEvent?.slideId || null,
-    indexv:
-      slideEvent.indexv ??
-      lastIndexEvent?.indexv ??
-      lastNavigationEvent?.indexv,
+    indexv: slideEvent.indexv ?? lastIndexEvent?.indexv ?? lastNavigationEvent?.indexv,
     currentInteraction: slideEvent.interaction,
   };
 }
@@ -451,8 +394,7 @@ function createSlideReplayApplication(
   eventIndex: number,
 ): SlideReplayApplication | null {
   const slideEvent = slideEvents[eventIndex];
-  const slideIndex =
-    slides?.findIndex((slide) => slide.id === slideEvent.slideId) ?? -1;
+  const slideIndex = slides?.findIndex((slide) => slide.id === slideEvent.slideId) ?? -1;
 
   if (slideIndex === -1 && slideEvent.type !== "slide_close") {
     return null;
@@ -478,15 +420,9 @@ export function getSlideReplayResult({
   isSeeking: boolean;
 }): SlideReplayResult {
   if (isSeeking) {
-    const nextIndex = findTimedEventIndexAtOrBefore(
-      slideEvents,
-      currentTime,
-      -1,
-    );
+    const nextIndex = findTimedEventIndexAtOrBefore(slideEvents, currentTime, -1);
     const application =
-      nextIndex >= 0
-        ? createSlideReplayApplication(slideEvents, slides, nextIndex)
-        : null;
+      nextIndex >= 0 ? createSlideReplayApplication(slideEvents, slides, nextIndex) : null;
 
     return {
       applications: application ? [application] : [],
@@ -517,11 +453,7 @@ export function getSlideReplayResult({
     if (isSeeking) {
       lastMatchedEventIndex = index;
     } else {
-      const application = createSlideReplayApplication(
-        slideEvents,
-        slides,
-        index,
-      );
+      const application = createSlideReplayApplication(slideEvents, slides, index);
 
       if (application) {
         applications.push(application);
@@ -532,11 +464,7 @@ export function getSlideReplayResult({
   }
 
   if (isSeeking && lastMatchedEventIndex >= 0) {
-    const application = createSlideReplayApplication(
-      slideEvents,
-      slides,
-      lastMatchedEventIndex,
-    );
+    const application = createSlideReplayApplication(slideEvents, slides, lastMatchedEventIndex);
 
     if (application) {
       applications.push(application);

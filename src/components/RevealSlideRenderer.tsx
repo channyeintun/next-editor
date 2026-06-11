@@ -1,9 +1,9 @@
-import { useEffect, useRef, useCallback, useState, memo } from 'react';
-import { Deck, Markdown, Slide as RevealReactSlide } from '@revealjs/react';
-import 'reveal.js/reveal.css';
-import 'reveal.js/theme/black.css';
-import type { RevealApi } from 'reveal.js';
-import type { SlideContentType } from '../types/slides';
+import { useEffect, useRef, useCallback, useState, memo } from "react";
+import { Deck, Markdown, Slide as RevealReactSlide } from "@revealjs/react";
+import "reveal.js/reveal.css";
+import "reveal.js/theme/black.css";
+import type { RevealApi } from "reveal.js";
+import type { SlideContentType } from "../types/slides";
 
 interface RevealSlideRendererProps {
   slides: Array<{
@@ -15,7 +15,7 @@ interface RevealSlideRendererProps {
   currentVerticalIndex: number;
   onSlideChange?: (indexh: number, indexv?: number) => void;
   isNavigationEnabled?: boolean;
-  currentInteraction?: import('../types/slides').IframeInteractionEvent;
+  currentInteraction?: import("../types/slides").IframeInteractionEvent;
   setSlideNavigator?: (navigator: (indexh: number, indexv: number) => void) => void;
 }
 
@@ -30,8 +30,8 @@ function RawHtmlSlide({ content }: { content: string }) {
 
     container.innerHTML = content;
 
-    for (const script of Array.from(container.querySelectorAll('script'))) {
-      const nextScript = document.createElement('script');
+    for (const script of Array.from(container.querySelectorAll("script"))) {
+      const nextScript = document.createElement("script");
 
       for (const { name, value } of Array.from(script.attributes)) {
         nextScript.setAttribute(name, value);
@@ -56,7 +56,7 @@ function RevealDeckContent({
   isNavigationEnabled: boolean;
   onReady: (deck: RevealApi) => void;
   onSlideChange: (indexh: number, indexv: number) => void;
-  slides: RevealSlideRendererProps['slides'];
+  slides: RevealSlideRendererProps["slides"];
 }) {
   const handleRevealSlideChange = (event: Event) => {
     const slideChangeEvent = event as Event & {
@@ -76,7 +76,7 @@ function RevealDeckContent({
         progress: true,
         center: true,
         hash: false,
-        transition: 'slide',
+        transition: "slide",
         keyboard: isNavigationEnabled,
         touch: isNavigationEnabled,
       }}
@@ -84,7 +84,7 @@ function RevealDeckContent({
       onSlideChange={handleRevealSlideChange}
     >
       {slides.map((slide) => {
-        if (slide.contentType === 'markdown') {
+        if (slide.contentType === "markdown") {
           return <Markdown key={slide.id} markdown={slide.content} />;
         }
 
@@ -105,7 +105,7 @@ const RevealSlideRenderer = memo(function RevealSlideRenderer({
   onSlideChange,
   isNavigationEnabled = true,
   currentInteraction,
-  setSlideNavigator
+  setSlideNavigator,
 }: RevealSlideRendererProps) {
   const deckRef = useRef<RevealApi | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -183,7 +183,7 @@ const RevealSlideRenderer = memo(function RevealSlideRenderer({
   // Handle interaction replaying
   useEffect(() => {
     if (!isReady || !currentInteraction) return;
-    // We record interactions for potential navigation changes, 
+    // We record interactions for potential navigation changes,
     // but no visual rings or highlights are shown on the slides themselves.
   }, [currentInteraction, isReady]);
 

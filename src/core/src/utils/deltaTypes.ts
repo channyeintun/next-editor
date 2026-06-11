@@ -135,14 +135,11 @@ export function isDelta(frame: DeltaFrame): frame is FrameDelta {
 /**
  * Type guard to check if a recording uses delta compression
  */
-export function isDeltaRecording(
-  recording: unknown,
-): recording is DeltaRecording {
+export function isDeltaRecording(recording: unknown): recording is DeltaRecording {
   return (
     typeof recording === "object" &&
     recording !== null &&
     "version" in recording &&
-    ((recording as DeltaRecording).version === 2 ||
-      (recording as DeltaRecording).version === 3)
+    ((recording as DeltaRecording).version === 2 || (recording as DeltaRecording).version === 3)
   );
 }

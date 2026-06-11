@@ -1,17 +1,17 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import type { Slide, SlidePreviewState, SlideEvent, SlideContentType } from '../types/slides';
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import type { Slide, SlidePreviewState, SlideEvent, SlideContentType } from "../types/slides";
 
-const SLIDES_STORAGE_KEY = 'next-editor-slides';
+const SLIDES_STORAGE_KEY = "next-editor-slides";
 
 // Type guard for Slide
 const isSlide = (item: unknown): item is Slide => {
-  if (typeof item !== 'object' || item === null) return false;
+  if (typeof item !== "object" || item === null) return false;
   const obj = item as { [K in keyof Slide]?: unknown };
   return (
-    typeof obj.id === 'string' &&
-    typeof obj.content === 'string' &&
-    typeof obj.order === 'number' &&
-    (obj.contentType === 'html' || obj.contentType === 'markdown' || obj.contentType === undefined)
+    typeof obj.id === "string" &&
+    typeof obj.content === "string" &&
+    typeof obj.order === "number" &&
+    (obj.contentType === "html" || obj.contentType === "markdown" || obj.contentType === undefined)
   );
 };
 
@@ -23,16 +23,14 @@ const loadSlidesFromStorage = (): Slide[] => {
       const parsed: unknown = JSON.parse(saved);
       if (Array.isArray(parsed)) {
         // Validate and migrate slides
-        return parsed
-          .filter(isSlide)
-          .map(slide => ({
-            ...slide,
-            contentType: slide.contentType ?? 'html' // Migrate old slides missing contentType
-          }));
+        return parsed.filter(isSlide).map((slide) => ({
+          ...slide,
+          contentType: slide.contentType ?? "html", // Migrate old slides missing contentType
+        }));
       }
     }
   } catch (e) {
-    console.error('Failed to load slides from localStorage:', e);
+    console.error("Failed to load slides from localStorage:", e);
   }
   return [];
 };
@@ -42,7 +40,7 @@ const saveSlidesToStorage = (slides: Slide[]): void => {
   try {
     localStorage.setItem(SLIDES_STORAGE_KEY, JSON.stringify(slides));
   } catch (e) {
-    console.error('Failed to save slides to localStorage:', e);
+    console.error("Failed to save slides to localStorage:", e);
   }
 };
 
@@ -56,7 +54,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     isOpen: false,
     isMaximized: false,
     currentSlideId: null,
-    indexv: 0
+    indexv: 0,
   });
 
   // Use a ref for onSlideEvent to keep handleSlideEvent stable
@@ -65,7 +63,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     onSlideEventRef.current = onSlideEvent;
   }, [onSlideEvent]);
 
-  const currentSlideIndex = slides.findIndex(slide => slide.id === previewState.currentSlideId);
+  const currentSlideIndex = slides.findIndex((slide) => slide.id === previewState.currentSlideId);
   const slideEventsRef = useRef<SlideEvent[]>([]);
   const lastVerticalIndicesRef = useRef<Record<string, number>>({});
   const lastViewedSlideIdRef = useRef<string | null>(null);
@@ -81,43 +79,49 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     }
   }, [previewState.currentSlideId]);
 
-  const addSlide = useCallback((content: string, contentType: SlideContentType) => {
-    const newSlide: Slide = {
-      id: Date.now().toString(),
-      content: content.trim(),
-      contentType,
-      order: slides.length,
-    };
-    setSlides(prev => [...prev, newSlide]);
-    return newSlide;
-  }, [slides.length]);
+  const addSlide = useCallback(
+    (content: string, contentType: SlideContentType) => {
+      const newSlide: Slide = {
+        id: Date.now().toString(),
+        content: content.trim(),
+        contentType,
+        order: slides.length,
+      };
+      setSlides((prev) => [...prev, newSlide]);
+      return newSlide;
+    },
+    [slides.length],
+  );
 
-  const removeSlide = useCallback((slideId: string) => {
-    setSlides(prev => {
-      const updated = prev
-        .filter(slide => slide.id !== slideId)
-        .map((slide, index) => ({ ...slide, order: index }));
+  const removeSlide = useCallback(
+    (slideId: string) => {
+      setSlides((prev) => {
+        const updated = prev
+          .filter((slide) => slide.id !== slideId)
+          .map((slide, index) => ({ ...slide, order: index }));
 
-      // If we're removing the current slide, close preview or move to another slide
-      if (previewState.currentSlideId === slideId) {
-        if (updated.length > 0) {
-          const newIndex = Math.min(currentSlideIndex, updated.length - 1);
-          setPreviewState(prevState => ({
-            ...prevState,
-            currentSlideId: updated[newIndex]?.id || null
-          }));
-        } else {
-          setPreviewState(prevState => ({
-            ...prevState,
-            isOpen: false,
-            currentSlideId: null
-          }));
+        // If we're removing the current slide, close preview or move to another slide
+        if (previewState.currentSlideId === slideId) {
+          if (updated.length > 0) {
+            const newIndex = Math.min(currentSlideIndex, updated.length - 1);
+            setPreviewState((prevState) => ({
+              ...prevState,
+              currentSlideId: updated[newIndex]?.id || null,
+            }));
+          } else {
+            setPreviewState((prevState) => ({
+              ...prevState,
+              isOpen: false,
+              currentSlideId: null,
+            }));
+          }
         }
-      }
 
-      return updated;
-    });
-  }, [previewState.currentSlideId, currentSlideIndex]);
+        return updated;
+      });
+    },
+    [previewState.currentSlideId, currentSlideIndex],
+  );
 
   const reorderSlides = useCallback((newSlides: Slide[]) => {
     setSlides(newSlides);
@@ -129,8 +133,8 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
 
     // Update preview state based on event
     switch (event.type) {
-      case 'slide_open':
-        setPreviewState(prev => {
+      case "slide_open":
+        setPreviewState((prev) => {
           const nextSlideId = event.slideId || prev.currentSlideId;
           const nextIndexv = event.indexv ?? 0;
           const nextIsMaximized = event.isMaximized ?? true;
@@ -149,12 +153,12 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
             isOpen: true,
             isMaximized: nextIsMaximized,
             currentSlideId: nextSlideId,
-            indexv: nextIndexv
+            indexv: nextIndexv,
           };
         });
         break;
-      case 'slide_close':
-        setPreviewState(prev => {
+      case "slide_close":
+        setPreviewState((prev) => {
           if (!prev.isOpen && !prev.isMaximized && prev.currentSlideId === null) {
             return prev;
           }
@@ -163,47 +167,50 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
             isOpen: false,
             isMaximized: false,
             currentSlideId: null,
-            indexv: 0
+            indexv: 0,
           };
         });
         break;
-      case 'slide_maximize':
-        setPreviewState(prev => {
+      case "slide_maximize":
+        setPreviewState((prev) => {
           if (prev.isMaximized === (event.isMaximized || false)) {
             return prev;
           }
           return { ...prev, isMaximized: event.isMaximized || false };
         });
         break;
-      case 'slide_minimize':
-        setPreviewState(prev => {
+      case "slide_minimize":
+        setPreviewState((prev) => {
           if (!prev.isMaximized) {
             return prev;
           }
           return { ...prev, isMaximized: false };
         });
         break;
-      case 'slide_change':
-        setPreviewState(prev => {
+      case "slide_change":
+        setPreviewState((prev) => {
           const targetIndexv = event.indexv ?? 0;
-          if (prev.currentSlideId === (event.slideId || prev.currentSlideId) && prev.indexv === targetIndexv) {
+          if (
+            prev.currentSlideId === (event.slideId || prev.currentSlideId) &&
+            prev.indexv === targetIndexv
+          ) {
             return prev;
           }
           return {
             ...prev,
             currentSlideId: event.slideId || prev.currentSlideId,
-            indexv: targetIndexv
+            indexv: targetIndexv,
           };
         });
         break;
-      case 'slide_interaction':
-        setPreviewState(prev => {
+      case "slide_interaction":
+        setPreviewState((prev) => {
           if (prev.currentInteraction === event.interaction) {
             return prev;
           }
           return {
             ...prev,
-            currentInteraction: event.interaction
+            currentInteraction: event.interaction,
           };
         });
         break;
@@ -219,7 +226,7 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     if (slides.length === 0) return;
 
     const rememberedSlide = lastViewedSlideIdRef.current
-      ? slides.find(slide => slide.id === lastViewedSlideIdRef.current)
+      ? slides.find((slide) => slide.id === lastViewedSlideIdRef.current)
       : undefined;
     const targetSlide = rememberedSlide ?? slides[Math.max(currentSlideIndex, 0)] ?? slides[0];
     if (!targetSlide) return;
@@ -230,15 +237,15 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
       isOpen: true,
       isMaximized: true,
       currentSlideId: targetSlide.id,
-      indexv: targetIndexv
+      indexv: targetIndexv,
     });
 
     handleSlideEvent({
-      type: 'slide_open',
+      type: "slide_open",
       timestamp: performance.now(),
       slideId: targetSlide.id,
       isMaximized: true,
-      indexv: targetIndexv
+      indexv: targetIndexv,
     });
   }, [slides, currentSlideIndex, handleSlideEvent]);
 
@@ -249,16 +256,16 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
       isOpen: true,
       isMaximized: true,
       currentSlideId: slides[0].id,
-      indexv: 0
+      indexv: 0,
     });
 
     // Emit open event after setting state
     handleSlideEvent({
-      type: 'slide_open',
+      type: "slide_open",
       timestamp: performance.now(),
       slideId: slides[0].id,
       isMaximized: true,
-      indexv: 0
+      indexv: 0,
     });
   }, [slides, handleSlideEvent]);
 
@@ -266,9 +273,9 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     // Emit close event before closing
     if (previewState.isOpen && previewState.currentSlideId) {
       handleSlideEvent({
-        type: 'slide_close',
+        type: "slide_close",
         timestamp: performance.now(),
-        slideId: previewState.currentSlideId
+        slideId: previewState.currentSlideId,
       });
     }
 
@@ -276,22 +283,25 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
       isOpen: false,
       isMaximized: false,
       currentSlideId: null,
-      indexv: 0
+      indexv: 0,
     });
   }, [previewState.isOpen, previewState.currentSlideId, handleSlideEvent]);
 
-  const goToSlide = useCallback((index: number, indexv?: number) => {
-    if (index >= 0 && index < slides.length) {
-      const slideId = slides[index].id;
-      const targetIndexv = indexv ?? lastVerticalIndicesRef.current[slideId] ?? 0;
+  const goToSlide = useCallback(
+    (index: number, indexv?: number) => {
+      if (index >= 0 && index < slides.length) {
+        const slideId = slides[index].id;
+        const targetIndexv = indexv ?? lastVerticalIndicesRef.current[slideId] ?? 0;
 
-      setPreviewState(prev => ({
-        ...prev,
-        currentSlideId: slideId,
-        indexv: targetIndexv
-      }));
-    }
-  }, [slides]);
+        setPreviewState((prev) => ({
+          ...prev,
+          currentSlideId: slideId,
+          indexv: targetIndexv,
+        }));
+      }
+    },
+    [slides],
+  );
 
   const clearSlideEvents = useCallback(() => {
     slideEventsRef.current = [];
@@ -301,40 +311,43 @@ export const useSlides = ({ onSlideEvent }: UseSlidesConfig = {}) => {
     return [...slideEventsRef.current];
   }, []);
 
-  return useMemo(() => ({
-    // State
-    slides,
-    previewState,
-    currentSlideIndex: Math.max(0, currentSlideIndex),
+  return useMemo(
+    () => ({
+      // State
+      slides,
+      previewState,
+      currentSlideIndex: Math.max(0, currentSlideIndex),
 
-    // Actions
-    addSlide,
-    removeSlide,
-    reorderSlides,
-    setSlides,
-    setPreviewState,
-    openPresentation,
-    startPresentation,
-    closePresentation,
-    goToSlide,
+      // Actions
+      addSlide,
+      removeSlide,
+      reorderSlides,
+      setSlides,
+      setPreviewState,
+      openPresentation,
+      startPresentation,
+      closePresentation,
+      goToSlide,
 
-    // Event handling
-    handleSlideEvent,
-    clearSlideEvents,
-    getSlideEvents,
-  }), [
-    slides,
-    previewState,
-    currentSlideIndex,
-    addSlide,
-    removeSlide,
-    reorderSlides,
-    startPresentation,
-    openPresentation,
-    closePresentation,
-    goToSlide,
-    handleSlideEvent,
-    clearSlideEvents,
-    getSlideEvents
-  ]);
+      // Event handling
+      handleSlideEvent,
+      clearSlideEvents,
+      getSlideEvents,
+    }),
+    [
+      slides,
+      previewState,
+      currentSlideIndex,
+      addSlide,
+      removeSlide,
+      reorderSlides,
+      startPresentation,
+      openPresentation,
+      closePresentation,
+      goToSlide,
+      handleSlideEvent,
+      clearSlideEvents,
+      getSlideEvents,
+    ],
+  );
 };

@@ -23,8 +23,7 @@ export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   runCommand: "npm run dev",
 };
 
-const WEBCONTAINER_VITE_PLUS_RUN_COMMAND =
-  "npx vite --host 0.0.0.0 --configLoader native";
+const WEBCONTAINER_VITE_PLUS_RUN_COMMAND = "npx vite --host 0.0.0.0 --configLoader native";
 
 export const TERMINAL_SHELL_CANDIDATES = [
   { command: "jsh", args: [] },
@@ -35,8 +34,7 @@ export const TERMINAL_SHELL_CANDIDATES = [
 const RUNTIME_ENVIRONMENT_STORAGE_KEY = "next-editor-runtime-environment";
 const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
 const RUNTIME_SNAPSHOT_SCRIPT_MARKER = "__NEXT_EDITOR_RUNTIME_SNAPSHOT__";
-const RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER =
-  "__NEXT_EDITOR_RUNTIME_INTERACTION_CAPTURE__";
+const RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_INTERACTION_CAPTURE__";
 const RUNTIME_IMPORT_IGNORED_ROOTS = new Set([".git", "node_modules"]);
 
 const sharedWebContainerState: {
@@ -130,8 +128,7 @@ function injectRuntimeSnapshotScript(
   const normalizedEntryFilePath = normalizeWorkspacePath(project.entryFilePath);
   const isRuntimeHtmlBootstrap =
     normalizedFilePath.toLowerCase().endsWith(".html") &&
-    (normalizedFilePath === "index.html" ||
-      normalizedFilePath === normalizedEntryFilePath);
+    (normalizedFilePath === "index.html" || normalizedFilePath === normalizedEntryFilePath);
 
   if (
     project.lessonType !== "node.js" ||
@@ -163,9 +160,7 @@ function injectRuntimeSnapshotScript(
   return `${content}\n${snapshotScript}`;
 }
 
-function getNormalizedProjectFiles(
-  project: WorkspaceProject | null,
-): Map<string, WorkspaceFile> {
+function getNormalizedProjectFiles(project: WorkspaceProject | null): Map<string, WorkspaceFile> {
   if (!project) {
     return new Map();
   }
@@ -200,9 +195,7 @@ async function readRuntimeDirectory(
   folders: Set<string>,
 ): Promise<void> {
   const entries = await instance.fs.readdir(runtimePath, { withFileTypes: true });
-  const orderedEntries = [...entries].sort((left, right) =>
-    left.name.localeCompare(right.name),
-  );
+  const orderedEntries = [...entries].sort((left, right) => left.name.localeCompare(right.name));
 
   for (const entry of orderedEntries) {
     const nextWorkspacePath = normalizeWorkspacePath(
@@ -216,13 +209,7 @@ async function readRuntimeDirectory(
 
     if (entry.isDirectory()) {
       folders.add(nextWorkspacePath);
-      await readRuntimeDirectory(
-        instance,
-        nextRuntimePath,
-        nextWorkspacePath,
-        files,
-        folders,
-      );
+      await readRuntimeDirectory(instance, nextRuntimePath, nextWorkspacePath, files, folders);
       continue;
     }
 
@@ -319,11 +306,7 @@ export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
 
     currentDirectory[fileName] = {
       file: {
-        contents: injectRuntimeSnapshotScript(
-          project,
-          normalizedPath,
-          file.content,
-        ),
+        contents: injectRuntimeSnapshotScript(project, normalizedPath, file.content),
       },
     };
   }
@@ -331,10 +314,7 @@ export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
   return tree;
 }
 
-async function ensureDirectory(
-  instance: WebContainer,
-  directoryPath: string,
-): Promise<void> {
+async function ensureDirectory(instance: WebContainer, directoryPath: string): Promise<void> {
   const segments = directoryPath.split("/").filter(Boolean);
   let currentPath = "";
 
@@ -386,13 +366,9 @@ export async function syncWorkspaceProject(
     await ensureDirectory(instance, normalizedFolderPath);
   }
 
-  const deletedPaths = Array.from(previousFiles.keys()).filter(
-    (path) => !nextFiles.has(path),
-  );
+  const deletedPaths = Array.from(previousFiles.keys()).filter((path) => !nextFiles.has(path));
 
-  for (const path of deletedPaths.sort(
-    (left, right) => right.length - left.length,
-  )) {
+  for (const path of deletedPaths.sort((left, right) => right.length - left.length)) {
     try {
       await instance.fs.rm(path);
     } catch {
@@ -404,9 +380,7 @@ export async function syncWorkspaceProject(
     (folderPath) => !nextFolders.has(folderPath),
   );
 
-  for (const folderPath of deletedFolders.sort(
-    (left, right) => right.length - left.length,
-  )) {
+  for (const folderPath of deletedFolders.sort((left, right) => right.length - left.length)) {
     try {
       await instance.fs.rm(folderPath, { recursive: true, force: true });
     } catch {
@@ -422,16 +396,11 @@ export async function syncWorkspaceProject(
     }
 
     await ensureDirectory(instance, getFileDirectory(path));
-    await instance.fs.writeFile(
-      path,
-      injectRuntimeSnapshotScript(nextProject, path, file.content),
-    );
+    await instance.fs.writeFile(path, injectRuntimeSnapshotScript(nextProject, path, file.content));
   }
 }
 
-export function parseCommand(
-  commandLine: string,
-): { command: string; args: string[] } | null {
+export function parseCommand(commandLine: string): { command: string; args: string[] } | null {
   const parts = commandLine.trim().split(/\s+/).filter(Boolean);
 
   if (parts.length === 0) {
@@ -519,9 +488,7 @@ export function loadStoredEnvironmentVariables(): EnvironmentVariables {
   }
 }
 
-export function persistEnvironmentVariables(
-  variables: EnvironmentVariables,
-): void {
+export function persistEnvironmentVariables(variables: EnvironmentVariables): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -532,10 +499,7 @@ export function persistEnvironmentVariables(
       return;
     }
 
-    window.localStorage.setItem(
-      RUNTIME_ENVIRONMENT_STORAGE_KEY,
-      JSON.stringify(variables),
-    );
+    window.localStorage.setItem(RUNTIME_ENVIRONMENT_STORAGE_KEY, JSON.stringify(variables));
   } catch (error) {
     console.warn("Failed to persist runtime environment variables:", error);
   }
@@ -568,9 +532,7 @@ export async function getOrBootSharedWebContainer(): Promise<WebContainer> {
   return sharedWebContainerState.bootPromise;
 }
 
-export function teardownSharedWebContainer(
-  instance: WebContainer | null,
-): void {
+export function teardownSharedWebContainer(instance: WebContainer | null): void {
   if (!instance || instance !== sharedWebContainerState.instance) {
     return;
   }

@@ -1,13 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ChevronDown,
-  ChevronUp,
-  Play,
-  Plus,
-  Settings2,
-  SquareTerminal,
-  X,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Play, Plus, Settings2, SquareTerminal, X } from "lucide-react";
 import { useNextEditorDomainAdapters } from "../contexts/NextEditorDomainAdaptersContext";
 import XtermTerminal from "./XtermTerminal";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -16,10 +8,7 @@ import {
   useWebContainerRuntimeMetadata,
 } from "../hooks/useWebContainerRuntime";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
-import type {
-  RuntimeDockTab,
-  RuntimeRecordingSnapshot,
-} from "../types/runtime";
+import type { RuntimeDockTab, RuntimeRecordingSnapshot } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
 function formatTerminalContent(content: string): string {
@@ -170,9 +159,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const [isCreatingTerminal, setIsCreatingTerminal] = useState(false);
   const [playbackRuntimeSnapshot, setPlaybackRuntimeSnapshot] =
     useState<RuntimeRecordingSnapshot | null>(null);
-  const [consoleLines, setConsoleLines] = useState<string[]>([
-    "[runner] Runtime dock is ready.",
-  ]);
+  const [consoleLines, setConsoleLines] = useState<string[]>(["[runner] Runtime dock is ready."]);
   const { handleRuntimeEvent } = useNextEditorActions();
   const { runtimePanel } = useNextEditorDomainAdapters();
   const {
@@ -200,30 +187,20 @@ const TerminalPanel = memo(function TerminalPanel() {
   } = useWebContainerRuntimeMetadata();
   const { currentRecording, isRecording } = useNextEditorMetadata();
   const recordedRuntimeSnapshot =
-    playbackRuntimeSnapshot ??
-    (isRecording ? null : currentRecording?.runtimeSnapshot) ??
-    null;
+    playbackRuntimeSnapshot ?? (isRecording ? null : currentRecording?.runtimeSnapshot) ?? null;
   const recordableActiveTab = activeTab === "terminal" ? "runner" : activeTab;
-  const runtimeStatus =
-    status === "idle" ? (recordedRuntimeSnapshot?.status ?? status) : status;
+  const runtimeStatus = status === "idle" ? (recordedRuntimeSnapshot?.status ?? status) : status;
   const recordedOutput = recordedRuntimeSnapshot?.lastOutput ?? null;
   const effectivePreviewUrl = previewUrl || recordedRuntimeSnapshot?.previewUrl;
-  const effectiveActiveCommand =
-    activeCommand || recordedRuntimeSnapshot?.activeCommand || null;
-  const effectiveErrorMessage =
-    errorMessage || recordedRuntimeSnapshot?.errorMessage || null;
-  const isPlaybackSnapshotActive = Boolean(
-    currentRecording && playbackRuntimeSnapshot,
-  );
+  const effectiveActiveCommand = activeCommand || recordedRuntimeSnapshot?.activeCommand || null;
+  const effectiveErrorMessage = errorMessage || recordedRuntimeSnapshot?.errorMessage || null;
+  const isPlaybackSnapshotActive = Boolean(currentRecording && playbackRuntimeSnapshot);
   const effectiveTerminalSessions = terminalSessions;
   const effectiveActiveTerminalSessionId =
-    activeTerminalSessionId ||
-    effectiveTerminalSessions[0]?.id ||
-    null;
+    activeTerminalSessionId || effectiveTerminalSessions[0]?.id || null;
   const effectiveTerminalOutput =
-    effectiveTerminalSessions.find(
-      (session) => session.id === effectiveActiveTerminalSessionId,
-    )?.output ?? null;
+    effectiveTerminalSessions.find((session) => session.id === effectiveActiveTerminalSessionId)
+      ?.output ?? null;
   const previousStatusRef = useRef<string | null>(null);
   const previousPreviewUrlRef = useRef<string | null>(null);
   const previousCommandRef = useRef<string | null>(null);
@@ -244,28 +221,16 @@ const TerminalPanel = memo(function TerminalPanel() {
     return () => {
       runtimePanel.setSnapshotGetter(() => null);
     };
-  }, [
-    consoleLines,
-    isCollapsed,
-    isSettingsOpen,
-    recordableActiveTab,
-    runtimePanel,
-  ]);
+  }, [consoleLines, isCollapsed, isSettingsOpen, recordableActiveTab, runtimePanel]);
 
   useEffect(() => {
     runtimePanel.setSnapshotApplier((snapshot) => {
       setPlaybackRuntimeSnapshot(snapshot);
-      setActiveTab(
-        snapshot.activeTab === "terminal"
-          ? "runner"
-          : snapshot.activeTab ?? "runner",
-      );
+      setActiveTab(snapshot.activeTab === "terminal" ? "runner" : (snapshot.activeTab ?? "runner"));
       setIsCollapsed(snapshot.isCollapsed ?? false);
       setIsSettingsOpen(snapshot.isSettingsOpen ?? false);
       setConsoleLines(
-        snapshot.consoleLines?.length
-          ? snapshot.consoleLines
-          : ["[runner] Runtime dock is ready."],
+        snapshot.consoleLines?.length ? snapshot.consoleLines : ["[runner] Runtime dock is ready."],
       );
     });
 
@@ -418,9 +383,7 @@ const TerminalPanel = memo(function TerminalPanel() {
 
     previousPreviewMessageIdRef.current = latestPreviewMessage.id;
 
-    const location = latestPreviewMessage.pathname
-      ? ` ${latestPreviewMessage.pathname}`
-      : "";
+    const location = latestPreviewMessage.pathname ? ` ${latestPreviewMessage.pathname}` : "";
 
     appendConsoleLine(
       `[preview:${latestPreviewMessage.kind}]${location} ${latestPreviewMessage.text}`.trim(),
@@ -462,21 +425,11 @@ const TerminalPanel = memo(function TerminalPanel() {
       return;
     }
 
-    if (
-      !areStructuredDataEqual(
-        previousRuntimeEventStateRef.current,
-        runtimeEventState,
-      )
-    ) {
+    if (!areStructuredDataEqual(previousRuntimeEventStateRef.current, runtimeEventState)) {
       previousRuntimeEventStateRef.current = runtimeEventState;
       handleRuntimeEvent();
     }
-  }, [
-    handleRuntimeEvent,
-    isPlaybackSnapshotActive,
-    isRecording,
-    runtimeEventState,
-  ]);
+  }, [handleRuntimeEvent, isPlaybackSnapshotActive, isRecording, runtimeEventState]);
 
   useEffect(() => {
     if (activeTab !== "terminal" || isCreatingTerminal) {
@@ -547,8 +500,7 @@ const TerminalPanel = memo(function TerminalPanel() {
 
           {effectiveTerminalSessions.map((session) => {
             const isActiveSession =
-              activeTab === "terminal" &&
-              session.id === effectiveActiveTerminalSessionId;
+              activeTab === "terminal" && session.id === effectiveActiveTerminalSessionId;
 
             return (
               <div
@@ -575,10 +527,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                     event.stopPropagation();
                     closeTerminalSession(session.id);
 
-                    if (
-                      activeTab === "terminal" &&
-                      effectiveTerminalSessions.length === 1
-                    ) {
+                    if (activeTab === "terminal" && effectiveTerminalSessions.length === 1) {
                       setActiveTab("runner");
                     }
                   }}
@@ -612,12 +561,8 @@ const TerminalPanel = memo(function TerminalPanel() {
             type="button"
             onClick={() => setIsCollapsed((current) => !current)}
             className="ml-auto inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10"
-            aria-label={
-              isCollapsed ? "Expand runtime dock" : "Collapse runtime dock"
-            }
-            title={
-              isCollapsed ? "Expand runtime dock" : "Collapse runtime dock"
-            }
+            aria-label={isCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
+            title={isCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
           >
             {isCollapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
@@ -664,11 +609,7 @@ const TerminalPanel = memo(function TerminalPanel() {
 
                 <div className="min-h-0 flex-1 overflow-hidden px-5 py-6">
                   <div className="size-full overflow-hidden rounded-lg border border-slate-800/80 bg-[#151821]">
-                    <XtermTerminal
-                      sessionId="runner"
-                      output={runnerOutput}
-                      interactive={false}
-                    />
+                    <XtermTerminal sessionId="runner" output={runnerOutput} interactive={false} />
                   </div>
                 </div>
               </div>
@@ -714,11 +655,7 @@ const TerminalPanel = memo(function TerminalPanel() {
             {activeTab === "console" && (
               <div className="h-72 overflow-hidden bg-[#1d1f29] px-5 py-6">
                 <div className="size-full overflow-hidden rounded-lg border border-slate-800/80 bg-[#151821]">
-                  <XtermTerminal
-                    sessionId="console"
-                    output={consoleContent}
-                    interactive={false}
-                  />
+                  <XtermTerminal sessionId="console" output={consoleContent} interactive={false} />
                 </div>
               </div>
             )}
@@ -745,27 +682,19 @@ const TerminalPanel = memo(function TerminalPanel() {
                 checked={runnerConfig.runOnStartup}
                 label="Run on startup"
                 description="Execute script immediately when opening the project"
-                onChange={(checked) =>
-                  updateRunnerConfig({ runOnStartup: checked })
-                }
+                onChange={(checked) => updateRunnerConfig({ runOnStartup: checked })}
               />
               <RunnerToggle
                 checked={runnerConfig.runOnFileSave}
                 label="Run on file-save"
                 description="Execute script when saving a file"
-                onChange={(checked) =>
-                  updateRunnerConfig({ runOnFileSave: checked })
-                }
+                onChange={(checked) => updateRunnerConfig({ runOnFileSave: checked })}
               />
               <label className="block">
-                <span className="block text-sm font-medium text-slate-100">
-                  Init Command
-                </span>
+                <span className="block text-sm font-medium text-slate-100">Init Command</span>
                 <input
                   value={runnerConfig.initCommand}
-                  onChange={(event) =>
-                    updateRunnerConfig({ initCommand: event.target.value })
-                  }
+                  onChange={(event) => updateRunnerConfig({ initCommand: event.target.value })}
                   className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500"
                 />
                 <span className="mt-2 block text-xs text-slate-500">
@@ -773,14 +702,10 @@ const TerminalPanel = memo(function TerminalPanel() {
                 </span>
               </label>
               <label className="block">
-                <span className="block text-sm font-medium text-slate-100">
-                  Run Command
-                </span>
+                <span className="block text-sm font-medium text-slate-100">Run Command</span>
                 <input
                   value={runnerConfig.runCommand}
-                  onChange={(event) =>
-                    updateRunnerConfig({ runCommand: event.target.value })
-                  }
+                  onChange={(event) => updateRunnerConfig({ runCommand: event.target.value })}
                   className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500"
                 />
                 <span className="mt-2 block text-xs text-slate-500">

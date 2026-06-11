@@ -57,11 +57,10 @@ describe("patchIframeContentFromHtml", () => {
     expect(app).toHaveAttribute("data-ready", "true");
     expect(button).not.toHaveAttribute("disabled");
     expect(iframeDocument.querySelector("h1")).toHaveTextContent("Loaded");
-    expect(
-      Array.from(iframeDocument.querySelectorAll("li")).map(
-        (li) => li.textContent,
-      ),
-    ).toEqual(["New", "Another"]);
+    expect(Array.from(iframeDocument.querySelectorAll("li")).map((li) => li.textContent)).toEqual([
+      "New",
+      "Another",
+    ]);
   });
 
   it("replaces incompatible child elements", () => {

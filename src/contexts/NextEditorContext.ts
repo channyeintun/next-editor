@@ -35,9 +35,7 @@ export interface NextEditorActions {
   deleteFromStorage: (id: string) => Promise<void>;
 }
 
-export const NextEditorActionsContext = createContext<NextEditorActions | null>(
-  null,
-);
+export const NextEditorActionsContext = createContext<NextEditorActions | null>(null);
 
 // 2. Metadata Context: Relatively stable state (flags)
 export interface NextEditorMetadata {

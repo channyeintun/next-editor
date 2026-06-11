@@ -1,12 +1,12 @@
-import React, { useState, useCallback } from 'react';
-import type { Recording } from '../core/src';
+import React, { useState, useCallback } from "react";
+import type { Recording } from "../core/src";
 
 interface RecordingEditorProps {
   recording: Recording;
   onSave: (editedRecording: Recording) => void;
   onCancel: () => void;
   isVisible: boolean;
-  mode?: 'edit' | 'export';
+  mode?: "edit" | "export";
 }
 
 const RecordingEditor: React.FC<RecordingEditorProps> = ({
@@ -14,12 +14,12 @@ const RecordingEditor: React.FC<RecordingEditorProps> = ({
   onSave,
   onCancel,
   isVisible,
-  mode = 'export'
+  mode = "export",
 }) => {
   const [jsonText, setJsonText] = useState(() => {
     const recordingCopy = {
       ...recording,
-      audioBlob: recording.audioBlob ? '[AudioBlob]' : undefined
+      audioBlob: recording.audioBlob ? "[AudioBlob]" : undefined,
     };
     return JSON.stringify(recordingCopy, null, 2);
   });
@@ -32,18 +32,22 @@ const RecordingEditor: React.FC<RecordingEditorProps> = ({
       // Restore audioBlob from original recording
       const editedRecording: Recording = {
         ...parsed,
-        audioBlob: recording.audioBlob
+        audioBlob: recording.audioBlob,
       };
 
       // Validate required fields
-      if (!editedRecording.id || !editedRecording.frames || !Array.isArray(editedRecording.frames)) {
-        throw new Error('Invalid recording format: missing required fields');
+      if (
+        !editedRecording.id ||
+        !editedRecording.frames ||
+        !Array.isArray(editedRecording.frames)
+      ) {
+        throw new Error("Invalid recording format: missing required fields");
       }
 
       setError(null);
       onSave(editedRecording);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid JSON format');
+      setError(err instanceof Error ? err.message : "Invalid JSON format");
     }
   }, [jsonText, recording.audioBlob, onSave]);
 
@@ -60,7 +64,7 @@ const RecordingEditor: React.FC<RecordingEditorProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="text-lg font-semibold text-gray-800">
-            {mode === 'edit' ? 'Edit Recording JSON' : 'Edit Recording Frame'}
+            {mode === "edit" ? "Edit Recording JSON" : "Edit Recording Frame"}
           </h2>
           <button
             onClick={onCancel}
@@ -104,7 +108,7 @@ const RecordingEditor: React.FC<RecordingEditorProps> = ({
             disabled={!!error}
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 transition-colors"
           >
-            {mode === 'edit' ? 'Save Changes' : 'Save & Export'}
+            {mode === "edit" ? "Save Changes" : "Save & Export"}
           </button>
         </div>
       </div>

@@ -24,17 +24,11 @@ async function fetchNextEditorUrl(url: string): Promise<Response> {
   try {
     const proxyResponse = await fetch(proxyUrl);
 
-    if (
-      proxyResponse.ok ||
-      !MISSING_PROXY_STATUS_CODES.has(proxyResponse.status)
-    ) {
+    if (proxyResponse.ok || !MISSING_PROXY_STATUS_CODES.has(proxyResponse.status)) {
       return proxyResponse;
     }
   } catch (error) {
-    console.warn(
-      "Same-origin proxy request failed, falling back to direct fetch:",
-      error,
-    );
+    console.warn("Same-origin proxy request failed, falling back to direct fetch:", error);
   }
 
   return fetch(url);
@@ -83,9 +77,7 @@ export const useUrlLoader = () => {
         }
       } catch (error) {
         console.error("Failed to import file:", error);
-        alert(
-          `Failed to import file: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
+        alert(`Failed to import file: ${error instanceof Error ? error.message : "Unknown error"}`);
       } finally {
         setIsLoading(false);
       }
@@ -140,18 +132,14 @@ export const useUrlLoader = () => {
     let offset = 0;
 
     // Read header
-    const magic = new TextDecoder().decode(
-      binaryData.slice(offset, offset + 4),
-    );
+    const magic = new TextDecoder().decode(binaryData.slice(offset, offset + 4));
     offset += 4;
 
     if (magic !== "SCRM") {
       throw new Error("Invalid binary format: bad magic number");
     }
 
-    const version = new Uint16Array(
-      binaryData.slice(offset, offset + 2).buffer,
-    )[0];
+    const version = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
     offset += 2;
 
     if (version !== 2) {
@@ -161,9 +149,7 @@ export const useUrlLoader = () => {
     }
 
     // Version 2: Uint32 for jsonLength (supports larger files)
-    const jsonLength = new Uint32Array(
-      binaryData.slice(offset, offset + 4).buffer,
-    )[0];
+    const jsonLength = new Uint32Array(binaryData.slice(offset, offset + 4).buffer)[0];
     offset += 4;
 
     if (jsonLength === 0 || jsonLength > binaryData.length - offset) {
@@ -179,15 +165,11 @@ export const useUrlLoader = () => {
     const jsonString = inflate(compressedJson, { to: "string" });
 
     if (!jsonString || typeof jsonString !== "string") {
-      throw new Error(
-        "Failed to decompress JSON data - inflate returned invalid result",
-      );
+      throw new Error("Failed to decompress JSON data - inflate returned invalid result");
     }
 
     if (!superjson || typeof superjson.parse !== "function") {
-      throw new Error(
-        "Storage configuration error: superjson is not available",
-      );
+      throw new Error("Storage configuration error: superjson is not available");
     }
     const recordings = superjson.parse(jsonString) as Recording[];
 
@@ -196,22 +178,14 @@ export const useUrlLoader = () => {
     const audioData = binaryData.slice(audioDataStart);
 
     return recordings.map((recording) => {
-      const audioPlaceholder = recording.audioBlob as
-        | AudioPlaceholder
-        | undefined;
+      const audioPlaceholder = recording.audioBlob as AudioPlaceholder | undefined;
 
-      if (
-        audioPlaceholder &&
-        (audioPlaceholder as AudioPlaceholder).__audio_offset !== undefined
-      ) {
+      if (audioPlaceholder && (audioPlaceholder as AudioPlaceholder).__audio_offset !== undefined) {
         const audioOffset = audioPlaceholder.__audio_offset;
         const audioSize = audioPlaceholder.__audio_size;
         const audioType = audioPlaceholder.__audio_type;
 
-        const audioBytes = audioData.slice(
-          audioOffset,
-          audioOffset + audioSize,
-        );
+        const audioBytes = audioData.slice(audioOffset, audioOffset + audioSize);
         recording.audioBlob = new Blob([audioBytes], { type: audioType });
       }
 

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useUrlLoader } from './useUrlLoader';
+import { useEffect, useState } from "react";
+import { useUrlLoader } from "./useUrlLoader";
 
 export const useDragAndDropUrl = () => {
   const [isDragging, setIsDragging] = useState(false);
@@ -10,8 +10,8 @@ export const useDragAndDropUrl = () => {
       e.preventDefault();
 
       // Check if the drag contains text (URL) or files
-      const hasText = e.dataTransfer?.types.includes('text/plain');
-      const hasFiles = e.dataTransfer?.types.includes('Files');
+      const hasText = e.dataTransfer?.types.includes("text/plain");
+      const hasFiles = e.dataTransfer?.types.includes("Files");
       if (hasText || hasFiles) {
         setIsDragging(true);
       }
@@ -32,28 +32,28 @@ export const useDragAndDropUrl = () => {
       const files = e.dataTransfer?.files;
       if (files && files.length > 0) {
         const file = files[0];
-        if (file.name.endsWith('.png') || file.name.endsWith('.ne')) {
+        if (file.name.endsWith(".png") || file.name.endsWith(".ne")) {
           await importNextEditorFile(file);
         }
       }
 
       // Handle URL drops
-      const text = e.dataTransfer?.getData('text/plain');
+      const text = e.dataTransfer?.getData("text/plain");
       if (text && isNextEditorUrl(text)) {
         await fetchNextEditorFile(text).catch((error: unknown) => {
-          console.error('Failed to load dropped URL:', error);
+          console.error("Failed to load dropped URL:", error);
         });
       }
     };
 
-    document.addEventListener('dragover', handleDragOver);
-    document.addEventListener('dragleave', handleDragLeave);
-    document.addEventListener('drop', handleDrop);
+    document.addEventListener("dragover", handleDragOver);
+    document.addEventListener("dragleave", handleDragLeave);
+    document.addEventListener("drop", handleDrop);
 
     return () => {
-      document.removeEventListener('dragover', handleDragOver);
-      document.removeEventListener('dragleave', handleDragLeave);
-      document.removeEventListener('drop', handleDrop);
+      document.removeEventListener("dragover", handleDragOver);
+      document.removeEventListener("dragleave", handleDragLeave);
+      document.removeEventListener("drop", handleDrop);
     };
   }, [fetchNextEditorFile, importNextEditorFile, isNextEditorUrl]);
 

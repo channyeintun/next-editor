@@ -9,39 +9,44 @@ export let isUnlocked = false;
  * Gets the singleton AudioContext instance
  */
 export function getAudioContext(): AudioContext {
-    if (!sharedAudioContext) {
-        const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        sharedAudioContext = new AudioContextClass();
-    }
-    return sharedAudioContext!;
+  if (!sharedAudioContext) {
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    sharedAudioContext = new AudioContextClass();
+  }
+  return sharedAudioContext!;
 }
 
 /**
  * Aggressively unlocks the AudioContext on the first user gesture
  */
 export function unlockAudioContext(ctx: AudioContext): void {
-    if (isUnlocked) return;
+  if (isUnlocked) return;
 
-    const unlock = () => {
-        ctx.resume().then(() => {
-            if (ctx.state === 'running') {
-                isUnlocked = true;
-                removeListeners();
-            }
-        }).catch((err) => {
-            console.warn('Failed to resume AudioContext:', err);
-        });
-    };
+  const unlock = () => {
+    ctx
+      .resume()
+      .then(() => {
+        if (ctx.state === "running") {
+          isUnlocked = true;
+          removeListeners();
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to resume AudioContext:", err);
+      });
+  };
 
-    const removeListeners = () => {
-        window.removeEventListener('mousedown', unlock);
-        window.removeEventListener('touchstart', unlock);
-        window.removeEventListener('keydown', unlock);
-        window.removeEventListener('click', unlock, true);
-    };
+  const removeListeners = () => {
+    window.removeEventListener("mousedown", unlock);
+    window.removeEventListener("touchstart", unlock);
+    window.removeEventListener("keydown", unlock);
+    window.removeEventListener("click", unlock, true);
+  };
 
-    window.addEventListener('mousedown', unlock);
-    window.addEventListener('touchstart', unlock);
-    window.addEventListener('keydown', unlock);
-    window.addEventListener('click', unlock, true);
+  window.addEventListener("mousedown", unlock);
+  window.addEventListener("touchstart", unlock);
+  window.addEventListener("keydown", unlock);
+  window.addEventListener("click", unlock, true);
 }

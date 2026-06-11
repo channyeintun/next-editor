@@ -1,10 +1,5 @@
 import type * as monaco from "monaco-editor";
-import type {
-  EditorFrame,
-  EditorPosition,
-  EditorSelection,
-  Recording,
-} from "../types";
+import type { EditorFrame, EditorPosition, EditorSelection, Recording } from "../types";
 import type { DeltaFrame } from "./deltaTypes";
 import { isKeyframe } from "./deltaTypes";
 
@@ -58,9 +53,8 @@ function getPrimaryCursorSelection(
     return null;
   }
 
-  const cursorState = (
-    viewState as unknown as { cursorState?: Array<Record<string, unknown>> }
-  ).cursorState;
+  const cursorState = (viewState as unknown as { cursorState?: Array<Record<string, unknown>> })
+    .cursorState;
 
   if (!Array.isArray(cursorState) || cursorState.length === 0) {
     return null;
@@ -82,9 +76,8 @@ function getPrimaryCursorPosition(
     return null;
   }
 
-  const cursorState = (
-    viewState as unknown as { cursorState?: Array<Record<string, unknown>> }
-  ).cursorState;
+  const cursorState = (viewState as unknown as { cursorState?: Array<Record<string, unknown>> })
+    .cursorState;
 
   if (!Array.isArray(cursorState) || cursorState.length === 0) {
     return null;
@@ -103,17 +96,11 @@ export function normalizeEditorPosition(
   position: Partial<EditorPosition> | null | undefined,
   fallback?: Partial<EditorPosition> | null,
 ): EditorPosition {
-  const fallbackLineNumber = Math.max(
-    1,
-    toFiniteInteger(fallback?.lineNumber, 1),
-  );
+  const fallbackLineNumber = Math.max(1, toFiniteInteger(fallback?.lineNumber, 1));
   const fallbackColumn = Math.max(1, toFiniteInteger(fallback?.column, 1));
 
   return {
-    lineNumber: Math.max(
-      1,
-      toFiniteInteger(position?.lineNumber, fallbackLineNumber),
-    ),
+    lineNumber: Math.max(1, toFiniteInteger(position?.lineNumber, fallbackLineNumber)),
     column: Math.max(1, toFiniteInteger(position?.column, fallbackColumn)),
   };
 }
@@ -130,10 +117,7 @@ export function normalizeEditorSelection(
     1,
     toFiniteInteger(
       selection?.startLineNumber,
-      toFiniteInteger(
-        fallback?.startLineNumber,
-        normalizedFallbackPosition.lineNumber,
-      ),
+      toFiniteInteger(fallback?.startLineNumber, normalizedFallbackPosition.lineNumber),
     ),
   );
   const startColumn = Math.max(
@@ -152,10 +136,7 @@ export function normalizeEditorSelection(
   );
   const endColumn = Math.max(
     1,
-    toFiniteInteger(
-      selection?.endColumn,
-      toFiniteInteger(fallback?.endColumn, startColumn),
-    ),
+    toFiniteInteger(selection?.endColumn, toFiniteInteger(fallback?.endColumn, startColumn)),
   );
 
   return {
@@ -203,45 +184,36 @@ export function normalizeEditorViewState(
     return null;
   }
 
-  const normalizedSelection = normalizeEditorSelection(
-    selection,
-    undefined,
-    position,
-  );
+  const normalizedSelection = normalizeEditorSelection(selection, undefined, position);
   const normalizedPosition = normalizeEditorPosition(
     position ?? selectionToPosition(normalizedSelection),
     selectionToPosition(normalizedSelection),
   );
-  const clonedViewState = cloneStructuredData(viewState) as unknown as Record<
-    string,
-    unknown
-  >;
+  const clonedViewState = cloneStructuredData(viewState) as unknown as Record<string, unknown>;
 
   if (Array.isArray(clonedViewState.cursorState)) {
-    clonedViewState.cursorState = clonedViewState.cursorState.map(
-      (cursorState) => {
-        if (!cursorState || typeof cursorState !== "object") {
-          return cursorState;
-        }
+    clonedViewState.cursorState = clonedViewState.cursorState.map((cursorState) => {
+      if (!cursorState || typeof cursorState !== "object") {
+        return cursorState;
+      }
 
-        const normalizedCursorState = {
-          ...(cursorState as Record<string, unknown>),
-        };
-        const cursorSelection = normalizeEditorSelection(
-          normalizedCursorState.selection as Partial<EditorSelection> | null,
-          normalizedSelection,
-          normalizedPosition,
-        );
+      const normalizedCursorState = {
+        ...(cursorState as Record<string, unknown>),
+      };
+      const cursorSelection = normalizeEditorSelection(
+        normalizedCursorState.selection as Partial<EditorSelection> | null,
+        normalizedSelection,
+        normalizedPosition,
+      );
 
-        normalizedCursorState.selection = cursorSelection;
-        normalizedCursorState.position = normalizeEditorPosition(
-          normalizedCursorState.position as Partial<EditorPosition> | null,
-          selectionToPosition(cursorSelection),
-        );
+      normalizedCursorState.selection = cursorSelection;
+      normalizedCursorState.position = normalizeEditorPosition(
+        normalizedCursorState.position as Partial<EditorPosition> | null,
+        selectionToPosition(cursorSelection),
+      );
 
-        return normalizedCursorState;
-      },
-    );
+      return normalizedCursorState;
+    });
   }
 
   return clonedViewState as unknown as monaco.editor.ICodeEditorViewState;
@@ -296,9 +268,7 @@ export function normalizeDeltaFrame(frame: DeltaFrame): DeltaFrame {
     ...frame,
     isKeyframe: false,
     viewState:
-      frame.viewState === undefined
-        ? undefined
-        : normalizeEditorViewState(frame.viewState),
+      frame.viewState === undefined ? undefined : normalizeEditorViewState(frame.viewState),
   };
 }
 

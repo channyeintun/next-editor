@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback } from "react";
 import {
   Plus,
   Trash2,
@@ -11,9 +11,9 @@ import {
   FileText,
   Save,
   RotateCcw,
-  Monitor
-} from 'lucide-react';
-import type { Slide, SlideContentType } from '../types/slides';
+  Monitor,
+} from "lucide-react";
+import type { Slide, SlideContentType } from "../types/slides";
 
 interface SlidesManagerProps {
   slides: Slide[];
@@ -29,14 +29,21 @@ const DEFAULT_MARKDOWN_CONTENT = `# Welcome
 
 Your slide content here`;
 
-export default function SlidesManager({ slides, onSlidesChange, onStartPresentation, onClose }: SlidesManagerProps) {
-  const [newSlideContent, setNewSlideContent] = useState('');
-  const [contentType, setContentType] = useState<SlideContentType>('markdown');
+export default function SlidesManager({
+  slides,
+  onSlidesChange,
+  onStartPresentation,
+  onClose,
+}: SlidesManagerProps) {
+  const [newSlideContent, setNewSlideContent] = useState("");
+  const [contentType, setContentType] = useState<SlideContentType>("markdown");
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState('');
+  const [editContent, setEditContent] = useState("");
 
   const addSlide = useCallback(() => {
-    const content = newSlideContent.trim() || (contentType === 'html' ? DEFAULT_HTML_CONTENT : DEFAULT_MARKDOWN_CONTENT);
+    const content =
+      newSlideContent.trim() ||
+      (contentType === "html" ? DEFAULT_HTML_CONTENT : DEFAULT_MARKDOWN_CONTENT);
 
     const newSlide: Slide = {
       id: Date.now().toString(),
@@ -46,33 +53,42 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
     };
 
     onSlidesChange([...slides, newSlide]);
-    setNewSlideContent('');
+    setNewSlideContent("");
   }, [newSlideContent, contentType, slides, onSlidesChange]);
 
-  const removeSlide = useCallback((slideId: string) => {
-    const updatedSlides = slides
-      .filter(slide => slide.id !== slideId)
-      .map((slide, index) => ({ ...slide, order: index }));
-    onSlidesChange(updatedSlides);
-  }, [slides, onSlidesChange]);
+  const removeSlide = useCallback(
+    (slideId: string) => {
+      const updatedSlides = slides
+        .filter((slide) => slide.id !== slideId)
+        .map((slide, index) => ({ ...slide, order: index }));
+      onSlidesChange(updatedSlides);
+    },
+    [slides, onSlidesChange],
+  );
 
-  const moveSlide = useCallback((slideId: string, direction: 'up' | 'down') => {
-    const slideIndex = slides.findIndex(slide => slide.id === slideId);
-    if (slideIndex === -1) return;
+  const moveSlide = useCallback(
+    (slideId: string, direction: "up" | "down") => {
+      const slideIndex = slides.findIndex((slide) => slide.id === slideId);
+      if (slideIndex === -1) return;
 
-    const newIndex = direction === 'up' ? slideIndex - 1 : slideIndex + 1;
-    if (newIndex < 0 || newIndex >= slides.length) return;
+      const newIndex = direction === "up" ? slideIndex - 1 : slideIndex + 1;
+      if (newIndex < 0 || newIndex >= slides.length) return;
 
-    const updatedSlides = [...slides];
-    [updatedSlides[slideIndex], updatedSlides[newIndex]] = [updatedSlides[newIndex], updatedSlides[slideIndex]];
+      const updatedSlides = [...slides];
+      [updatedSlides[slideIndex], updatedSlides[newIndex]] = [
+        updatedSlides[newIndex],
+        updatedSlides[slideIndex],
+      ];
 
-    // Update order numbers
-    updatedSlides.forEach((slide, index) => {
-      slide.order = index;
-    });
+      // Update order numbers
+      updatedSlides.forEach((slide, index) => {
+        slide.order = index;
+      });
 
-    onSlidesChange(updatedSlides);
-  }, [slides, onSlidesChange]);
+      onSlidesChange(updatedSlides);
+    },
+    [slides, onSlidesChange],
+  );
 
   const startEditing = useCallback((slide: Slide) => {
     setEditingSlideId(slide.id);
@@ -82,30 +98,30 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
   const saveEdit = useCallback(() => {
     if (!editingSlideId) return;
 
-    const updatedSlides = slides.map(slide =>
-      slide.id === editingSlideId
-        ? { ...slide, content: editContent }
-        : slide
+    const updatedSlides = slides.map((slide) =>
+      slide.id === editingSlideId ? { ...slide, content: editContent } : slide,
     );
     onSlidesChange(updatedSlides);
     setEditingSlideId(null);
-    setEditContent('');
+    setEditContent("");
   }, [editingSlideId, editContent, slides, onSlidesChange]);
 
   const cancelEdit = useCallback(() => {
     setEditingSlideId(null);
-    setEditContent('');
+    setEditContent("");
   }, []);
 
   const getPreviewText = (content: string): string => {
     // Extract first meaningful line for preview
-    const lines = content.split('\n').filter(line => line.trim());
-    const firstLine = lines[0] || 'Empty slide';
+    const lines = content.split("\n").filter((line) => line.trim());
+    const firstLine = lines[0] || "Empty slide";
     // Strip HTML/Markdown formatting for preview
-    return firstLine
-      .replace(/<[^>]*>/g, '')
-      .replace(/^#+\s*/, '')
-      .substring(0, 40) + (firstLine.length > 40 ? '...' : '');
+    return (
+      firstLine
+        .replace(/<[^>]*>/g, "")
+        .replace(/^#+\s*/, "")
+        .substring(0, 40) + (firstLine.length > 40 ? "..." : "")
+    );
   };
 
   return (
@@ -118,7 +134,9 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
           </div>
           <div>
             <h3 className="text-sm font-bold text-slate-100 tracking-tight">Presentation Slides</h3>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Reveal.js Powered</p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">
+              Reveal.js Powered
+            </p>
           </div>
         </div>
 
@@ -140,21 +158,23 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
         <div className="space-y-4">
           <div className="flex items-center justify-between p-1 bg-[#11141c]/80 rounded-xl border border-white/5">
             <button
-              onClick={() => setContentType('markdown')}
-              className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-medium transition-all duration-300 ${contentType === 'markdown'
-                ? 'bg-indigo-500 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-                }`}
+              onClick={() => setContentType("markdown")}
+              className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-medium transition-all duration-300 ${
+                contentType === "markdown"
+                  ? "bg-indigo-500 text-white shadow-md"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
             >
               <FileText className="size-3.5" />
               Markdown
             </button>
             <button
-              onClick={() => setContentType('html')}
-              className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-medium transition-all duration-300 ${contentType === 'html'
-                ? 'bg-indigo-500 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-                }`}
+              onClick={() => setContentType("html")}
+              className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-medium transition-all duration-300 ${
+                contentType === "html"
+                  ? "bg-indigo-500 text-white shadow-md"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
             >
               <Code className="size-3.5" />
               HTML
@@ -165,9 +185,11 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
             <textarea
               value={newSlideContent}
               onChange={(e) => setNewSlideContent(e.target.value)}
-              placeholder={contentType === 'html'
-                ? '<h1>Title</h1>\n<p>Content</p>'
-                : '# Title\n\nContent here...'}
+              placeholder={
+                contentType === "html"
+                  ? "<h1>Title</h1>\n<p>Content</p>"
+                  : "# Title\n\nContent here..."
+              }
               className="w-full h-32 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 font-mono resize-none transition-all duration-300"
             />
           </div>
@@ -184,9 +206,11 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
         {/* List Section */}
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
-            <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Your Presentation</h4>
+            <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+              Your Presentation
+            </h4>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/5">
-              {slides.length} {slides.length === 1 ? 'slide' : 'slides'}
+              {slides.length} {slides.length === 1 ? "slide" : "slides"}
             </span>
           </div>
 
@@ -196,7 +220,8 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                 <Monitor className="text-slate-600 size-6" />
               </div>
               <p className="text-slate-400 text-xs font-medium leading-relaxed">
-                Your presentation deck is empty.<br />
+                Your presentation deck is empty.
+                <br />
                 Craft your first slide above.
               </p>
             </div>
@@ -238,7 +263,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                         onClick={() => startEditing(slide)}
                       >
                         <div className="absolute inset-0 flex items-center justify-center">
-                          {slide.contentType === 'html' ? (
+                          {slide.contentType === "html" ? (
                             <Code className="text-indigo-400/40 size-4" />
                           ) : (
                             <FileText className="text-emerald-400/40 size-4" />
@@ -266,7 +291,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                       {/* Right: Actions */}
                       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={() => moveSlide(slide.id, 'up')}
+                          onClick={() => moveSlide(slide.id, "up")}
                           disabled={index === 0}
                           className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg disabled:opacity-0 transition-all"
                           title="Move Up"
@@ -274,7 +299,7 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
                           <ChevronUp className="size-3.5" />
                         </button>
                         <button
-                          onClick={() => moveSlide(slide.id, 'down')}
+                          onClick={() => moveSlide(slide.id, "down")}
                           disabled={index === slides.length - 1}
                           className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg disabled:opacity-0 transition-all"
                           title="Move Down"
@@ -311,8 +336,9 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
         </button>
       </div>
 
-      <style dangerouslySetInnerHTML={{
-        __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         .custom-scrollbar::-webkit-scrollbar {
           width: 4px;
         }
@@ -326,7 +352,9 @@ export default function SlidesManager({ slides, onSlidesChange, onStartPresentat
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: rgba(255, 255, 255, 0.2);
         }
-      `}} />
+      `,
+        }}
+      />
     </div>
   );
 }

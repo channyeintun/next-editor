@@ -1,9 +1,5 @@
 import { useEffect, type RefObject } from "react";
-import type {
-  IframeInteractionEvent,
-  PreviewEvent,
-  PreviewSize,
-} from "../../types/slides";
+import type { IframeInteractionEvent, PreviewEvent, PreviewSize } from "../../types/slides";
 import {
   createReplayableRuntimePreviewFromHtml,
   type PreviewScrollPosition,
@@ -88,9 +84,7 @@ export function usePreviewMessageBridge({
       const isMainDocumentScroll =
         payload.type === "scroll" &&
         payload.data &&
-        (payload.data.isDocument ||
-          payload.targetTag === "BODY" ||
-          payload.targetTag === "HTML");
+        (payload.data.isDocument || payload.targetTag === "BODY" || payload.targetTag === "HTML");
 
       if (isMainDocumentScroll) {
         scrollPositionRef.current = {

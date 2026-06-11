@@ -11,10 +11,7 @@ import type {
   Recording,
 } from "./types";
 import type { SlideEvent, PreviewEvent } from "./slides";
-import {
-  findFrameIndexAtTime,
-  reconstructFrameAtIndex,
-} from "./utils/frameDelta";
+import { findFrameIndexAtTime, reconstructFrameAtIndex } from "./utils/frameDelta";
 import type { TimelineActorRef } from "./machine/timelineMachine";
 import type { SnapshotFrom } from "xstate";
 
@@ -44,8 +41,7 @@ const getPlaybackState = (state: EditorMachineSnapshot): string | null => {
 };
 
 // Recording state selectors
-export const selectIsRecording = (state: EditorMachineSnapshot) =>
-  state.value === "recording";
+export const selectIsRecording = (state: EditorMachineSnapshot) => state.value === "recording";
 export const selectIsRecordingAudio = (state: EditorMachineSnapshot) =>
   state.context.audio.isRecording;
 export const selectRecordingStartTime = (state: EditorMachineSnapshot) =>
@@ -66,27 +62,19 @@ export const selectUsesPlaybackModel = (state: EditorMachineSnapshot) => {
 
   return (
     !state.context.hasManualWorkspaceOverride &&
-    (playbackState === "playing" ||
-      playbackState === "paused" ||
-      playbackState === "ended")
+    (playbackState === "playing" || playbackState === "paused" || playbackState === "ended")
   );
 };
 
 // Timeline selectors (high-frequency updates)
-export const selectPlaybackSpeed = (state: EditorMachineSnapshot) =>
-  state.context.timeline.speed;
-export const selectVolume = (state: EditorMachineSnapshot) =>
-  state.context.timeline.volume;
-export const selectDuration = (state: EditorMachineSnapshot) =>
-  state.context.timeline.duration;
-export const selectLiveTime = (state: EditorMachineSnapshot) =>
-  state.context.timeline.currentTime;
+export const selectPlaybackSpeed = (state: EditorMachineSnapshot) => state.context.timeline.speed;
+export const selectVolume = (state: EditorMachineSnapshot) => state.context.timeline.volume;
+export const selectDuration = (state: EditorMachineSnapshot) => state.context.timeline.duration;
+export const selectLiveTime = (state: EditorMachineSnapshot) => state.context.timeline.currentTime;
 
 // Data selectors
-export const selectRecording = (state: EditorMachineSnapshot) =>
-  state.context.recording;
-export const selectEditor = (state: EditorMachineSnapshot) =>
-  state.context.editorRefs.editor;
+export const selectRecording = (state: EditorMachineSnapshot) => state.context.recording;
+export const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.editor;
 export const selectTimelineActor = (state: EditorMachineSnapshot) =>
   state.children.timelineActor as TimelineActorRef | undefined;
 export const selectLiveCursor = (state: EditorMachineSnapshot) =>
@@ -367,9 +355,7 @@ export const useNextEditorActorBindings = (
  * Uses useActorRef + useSelector for optimized re-renders.
  * Components using specific selectors only re-render when those values change.
  */
-export const useNextEditor = (
-  config: UseNextEditorConfig,
-): UseNextEditorReturn => {
+export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn => {
   // Initialize the actor ref (stable reference, doesn't cause re-renders)
   const actorRef = useActorRef(editorMachine, {
     input: config,

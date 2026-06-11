@@ -18,10 +18,7 @@ import {
   joinWorkspacePath,
   type WorkspaceFile,
 } from "../types/workspace";
-import {
-  useWorkspaceActions,
-  useWorkspaceSidebarState,
-} from "../hooks/useWorkspace";
+import { useWorkspaceActions, useWorkspaceSidebarState } from "../hooks/useWorkspace";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 
 type WorkspaceTreeNode =
@@ -81,10 +78,7 @@ function getDefaultDraftName(kind: "file" | "folder"): string {
   return kind === "file" ? "new-file.js" : "new-folder";
 }
 
-function removeFolderFromCollapsedState(
-  current: Set<string>,
-  folderPath: string,
-): Set<string> {
+function removeFolderFromCollapsedState(current: Set<string>, folderPath: string): Set<string> {
   if (!folderPath || !current.has(folderPath)) {
     return current;
   }
@@ -164,10 +158,7 @@ function buildWorkspaceTree(
     hasActiveFile: true,
     children: [] as WorkspaceTreeNode[],
   };
-  const folderMap = new Map<
-    string,
-    Extract<WorkspaceTreeNode, { kind: "folder" }>
-  >([["", root]]);
+  const folderMap = new Map<string, Extract<WorkspaceTreeNode, { kind: "folder" }>>([["", root]]);
 
   const ensureFolderNode = (folderPath: string) => {
     if (folderMap.has(folderPath)) {
@@ -180,9 +171,7 @@ function buildWorkspaceTree(
       kind: "folder",
       path: folderPath,
       name: getWorkspaceBaseName(folderPath),
-      hasActiveFile:
-        activeFilePath === folderPath ||
-        activeFilePath.startsWith(`${folderPath}/`),
+      hasActiveFile: activeFilePath === folderPath || activeFilePath.startsWith(`${folderPath}/`),
       children: [],
     };
 
@@ -229,8 +218,7 @@ function buildWorkspaceTree(
 const FileSidebar = memo(function FileSidebar() {
   const [draftName, setDraftName] = useState("");
   const [editState, setEditState] = useState<SidebarEditState>(null);
-  const [contextMenu, setContextMenu] =
-    useState<SidebarContextMenuState | null>(null);
+  const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const {
@@ -254,10 +242,7 @@ const FileSidebar = memo(function FileSidebar() {
     lessonType,
     previewFilePath,
   } = useWorkspaceSidebarState();
-  const collapsedFolders = useMemo(
-    () => new Set(collapsedFolderPaths),
-    [collapsedFolderPaths],
-  );
+  const collapsedFolders = useMemo(() => new Set(collapsedFolderPaths), [collapsedFolderPaths]);
   const tree = useMemo(
     () => buildWorkspaceTree(files, folders, activeFilePath),
     [activeFilePath, files, folders],
@@ -283,9 +268,7 @@ const FileSidebar = memo(function FileSidebar() {
     lessonType !== "node.js" && contextMenuFile?.language === "html";
   const isContextFileInPreview = contextMenu?.path === previewFilePath;
   const contextMenuCreateParentPath =
-    contextMenu?.kind === "folder"
-      ? contextMenu.path
-      : (contextMenu?.parentPath ?? "");
+    contextMenu?.kind === "folder" ? contextMenu.path : (contextMenu?.parentPath ?? "");
 
   useEffect(() => {
     if (!editState || !editInputRef.current) {
@@ -326,9 +309,7 @@ const FileSidebar = memo(function FileSidebar() {
   }, [contextMenu]);
 
   const commitCollapsedFolders = (next: Set<string>) => {
-    const nextPaths = Array.from(next).sort((left, right) =>
-      left.localeCompare(right),
-    );
+    const nextPaths = Array.from(next).sort((left, right) => left.localeCompare(right));
 
     if (
       nextPaths.length === collapsedFolderPaths.length &&
@@ -347,9 +328,7 @@ const FileSidebar = memo(function FileSidebar() {
 
   const openCreateInput = (kind: SidebarEntryKind, parentPath: string) => {
     setContextMenu(null);
-    commitCollapsedFolders(
-      removeFolderFromCollapsedState(collapsedFolders, parentPath),
-    );
+    commitCollapsedFolders(removeFolderFromCollapsedState(collapsedFolders, parentPath));
     setEditState({
       mode: "create",
       kind,
@@ -416,9 +395,7 @@ const FileSidebar = memo(function FileSidebar() {
     setContextMenu(null);
 
     const confirmed = window.confirm(
-      kind === "folder"
-        ? `Delete folder ${path} and its contents?`
-        : `Delete ${path}?`,
+      kind === "folder" ? `Delete folder ${path} and its contents?` : `Delete ${path}?`,
     );
 
     if (!confirmed) {
@@ -503,9 +480,7 @@ const FileSidebar = memo(function FileSidebar() {
           className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-900 px-3 py-2"
           style={{ paddingLeft: `${depth * 16 + 12}px` }}
         >
-          <span className="flex shrink-0 items-center justify-center size-5">
-            {icon}
-          </span>
+          <span className="flex shrink-0 items-center justify-center size-5">{icon}</span>
           <input
             ref={editInputRef}
             value={draftName}
@@ -519,13 +494,9 @@ const FileSidebar = memo(function FileSidebar() {
     );
   };
 
-  const renderNode = (
-    node: WorkspaceTreeNode,
-    depth: number,
-  ): React.ReactNode => {
+  const renderNode = (node: WorkspaceTreeNode, depth: number): React.ReactNode => {
     if (node.kind === "folder") {
-      const isEditing =
-        editState?.mode === "rename" && editState.path === node.path;
+      const isEditing = editState?.mode === "rename" && editState.path === node.path;
       const isCollapsed = collapsedFolders.has(node.path);
       const isExpanded = !isCollapsed;
 
@@ -538,9 +509,7 @@ const FileSidebar = memo(function FileSidebar() {
               <button
                 type="button"
                 onClick={() => toggleFolder(node.path)}
-                onContextMenu={(event) =>
-                  handleRowContextMenu(event, "folder", node.path)
-                }
+                onContextMenu={(event) => handleRowContextMenu(event, "folder", node.path)}
                 className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-slate-900 ${
                   node.hasActiveFile ? "text-slate-200" : "text-slate-400"
                 }`}
@@ -563,15 +532,12 @@ const FileSidebar = memo(function FileSidebar() {
             ? renderInlineInput(editState.kind, depth + 1)
             : null}
 
-          {isExpanded
-            ? node.children.map((child) => renderNode(child, depth + 1))
-            : null}
+          {isExpanded ? node.children.map((child) => renderNode(child, depth + 1)) : null}
         </div>
       );
     }
 
-    const isEditing =
-      editState?.mode === "rename" && editState.path === node.path;
+    const isEditing = editState?.mode === "rename" && editState.path === node.path;
     const isActive = activeFilePath === node.path;
 
     if (isEditing) {
@@ -583,9 +549,7 @@ const FileSidebar = memo(function FileSidebar() {
         <button
           type="button"
           onClick={() => openFile(node.path)}
-          onContextMenu={(event) =>
-            handleRowContextMenu(event, "file", node.path)
-          }
+          onContextMenu={(event) => handleRowContextMenu(event, "file", node.path)}
           className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors ${
             isActive
               ? "bg-slate-800 text-white"
@@ -648,18 +612,14 @@ const FileSidebar = memo(function FileSidebar() {
           >
             <button
               type="button"
-              onClick={() =>
-                openCreateInput("file", contextMenuCreateParentPath)
-              }
+              onClick={() => openCreateInput("file", contextMenuCreateParentPath)}
               className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
             >
               New File
             </button>
             <button
               type="button"
-              onClick={() =>
-                openCreateInput("folder", contextMenuCreateParentPath)
-              }
+              onClick={() => openCreateInput("folder", contextMenuCreateParentPath)}
               className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
             >
               New Folder
@@ -701,18 +661,14 @@ const FileSidebar = memo(function FileSidebar() {
             <div className="my-2 border-t border-slate-700" />
             <button
               type="button"
-              onClick={() =>
-                startRenameEntry(contextMenu.kind, contextMenu.path)
-              }
+              onClick={() => startRenameEntry(contextMenu.kind, contextMenu.path)}
               className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
             >
               Rename
             </button>
             <button
               type="button"
-              onClick={() =>
-                handleDeleteEntry(contextMenu.kind, contextMenu.path)
-              }
+              onClick={() => handleDeleteEntry(contextMenu.kind, contextMenu.path)}
               className="flex w-full items-center px-4 py-2 text-sm text-rose-200 transition-colors hover:bg-rose-500/10"
             >
               {contextMenu.kind === "folder" ? "Delete Folder" : "Delete File"}

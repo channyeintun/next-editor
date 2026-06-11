@@ -1,9 +1,5 @@
 import { createContext } from "react";
-import type {
-  WorkspaceFile,
-  WorkspaceLessonType,
-  WorkspaceProject,
-} from "../types/workspace";
+import type { WorkspaceFile, WorkspaceLessonType, WorkspaceProject } from "../types/workspace";
 
 export interface WorkspaceActions {
   setActiveFilePath: (path: string) => void;
@@ -52,6 +48,4 @@ export interface WorkspaceDirtyState {
   hasUnsavedChanges: boolean;
 }
 
-export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(
-  null,
-);
+export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(null);

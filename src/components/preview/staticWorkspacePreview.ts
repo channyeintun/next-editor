@@ -10,10 +10,7 @@ function isLocalWorkspaceAssetPath(path: string): boolean {
   return !/^(?:[a-z]+:|\/\/|#|data:|blob:)/i.test(path);
 }
 
-function resolveWorkspaceAssetPath(
-  sourcePath: string,
-  assetPath: string,
-): string {
+function resolveWorkspaceAssetPath(sourcePath: string, assetPath: string): string {
   if (assetPath.startsWith("/")) {
     return normalizeWorkspacePath(assetPath);
   }
@@ -35,10 +32,7 @@ function getStaticPreviewEntry(project: WorkspaceProject) {
   );
 }
 
-function supportsStaticWorkspaceScript(
-  assetPath: string,
-  content: string,
-): boolean {
+function supportsStaticWorkspaceScript(assetPath: string, content: string): boolean {
   if (/\.(?:jsx|tsx)$/i.test(assetPath)) {
     return false;
   }
@@ -46,9 +40,7 @@ function supportsStaticWorkspaceScript(
   return !/\b(?:import|export)\b/.test(content);
 }
 
-export function createStaticWorkspacePreview(
-  project: WorkspaceProject,
-): string {
+export function createStaticWorkspacePreview(project: WorkspaceProject): string {
   const entryFile = getStaticPreviewEntry(project);
 
   if (!entryFile) {
@@ -59,9 +51,7 @@ export function createStaticWorkspacePreview(
     const parser = new DOMParser();
     const document = parser.parseFromString(entryFile.content, "text/html");
 
-    for (const link of Array.from(
-      document.querySelectorAll('link[rel="stylesheet"][href]'),
-    )) {
+    for (const link of Array.from(document.querySelectorAll('link[rel="stylesheet"][href]'))) {
       const href = link.getAttribute("href");
 
       if (!href || !isLocalWorkspaceAssetPath(href)) {

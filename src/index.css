@@ -36,11 +36,11 @@
   --font-machina: "PP Neue Machina Inktrap Ultrabold", sans-serif;
   --font-telegraf: "PP Telegraf Regular", sans-serif;
 
-  --color-pinata-purple: #6D57FF;
-  --color-pinata-cyan: #4DE5D6;
-  --color-pinata-green: #3ACE8C;
-  --color-pinata-orange: #FF8F33;
-  --color-pinata-yellow: #FFD255;
+  --color-pinata-purple: #6d57ff;
+  --color-pinata-cyan: #4de5d6;
+  --color-pinata-green: #3ace8c;
+  --color-pinata-orange: #ff8f33;
+  --color-pinata-yellow: #ffd255;
   --color-slate-950: #020617;
 }
 
@@ -70,7 +70,6 @@ body {
 }
 
 @keyframes terminal-blink {
-
   0%,
   100% {
     opacity: 1;

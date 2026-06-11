@@ -5,6 +5,7 @@ This feature allows you to add presentation slides using reveal.js to your recor
 ## Features
 
 ### Slide Management
+
 - Add slides using HTML or Markdown content
 - Toggle between Markdown and HTML modes
 - Edit slides inline with live preview
@@ -12,6 +13,7 @@ This feature allows you to add presentation slides using reveal.js to your recor
 - Remove slides individually
 
 ### Slide Preview (powered by reveal.js)
+
 - Two sizes: small (minimized) and large (maximized)
 - Original reveal.js styling with controls and progress bar
 - Full support for reveal.js features (transitions, fragments, backgrounds)
@@ -20,6 +22,7 @@ This feature allows you to add presentation slides using reveal.js to your recor
 - Click to expand from small to large size
 
 ### Recording Integration
+
 - Records slide open/close events during recording
 - Records slide change events (when switching between slides)
 - Records maximize/minimize events
@@ -28,6 +31,7 @@ This feature allows you to add presentation slides using reveal.js to your recor
 ## How to Use
 
 ### 1. Adding Slides
+
 1. Click the "📊 Slides" button in the header (next to Import/Export buttons)
 2. A dropdown will appear with the slides manager
 3. Choose content type: **Markdown** or **HTML**
@@ -35,6 +39,7 @@ This feature allows you to add presentation slides using reveal.js to your recor
 5. Click "Add Slide" to add the slide
 
 ### 2. HTML Slide Content Example
+
 ```html
 <h1>Welcome to My Presentation</h1>
 <p>This is a paragraph with <strong>bold</strong> text.</p>
@@ -46,6 +51,7 @@ This feature allows you to add presentation slides using reveal.js to your recor
 ```
 
 ### 3. Markdown Slide Content Example
+
 ```markdown
 # Welcome to My Presentation
 
@@ -59,6 +65,7 @@ This is a paragraph with **bold** text.
 ### 4. Advanced reveal.js Features
 
 #### Fragments (step-by-step reveal)
+
 ```html
 <h2>Step by Step</h2>
 <p class="fragment">First item appears</p>
@@ -67,6 +74,7 @@ This is a paragraph with **bold** text.
 ```
 
 #### Background Colors
+
 ```html
 <section data-background="#4d7e65">
   <h2>Green Background</h2>
@@ -74,6 +82,7 @@ This is a paragraph with **bold** text.
 ```
 
 #### Transitions
+
 ```html
 <section data-transition="zoom">
   <h2>Zoom Transition</h2>
@@ -81,19 +90,22 @@ This is a paragraph with **bold** text.
 ```
 
 ### 5. Managing Slides
+
 - Click the **✏️** button or slide thumbnail to edit content
 - Use **↑ ↓** buttons to reorder slides
 - Use **×** button to remove slides
 
 ### 6. Starting Presentation
+
 1. Click "Ready" button in the slides manager
 2. The slides manager will automatically close
 3. The slide preview will appear at bottom-right (minimized by default)
 4. Click to expand to large size, or use maximize button
 
 ### 7. Navigation
+
 - **Small size**: Click to expand to large or use green maximize button
-- **Large size**: 
+- **Large size**:
   - Use keyboard arrows (← →) for navigation
   - Click reveal.js navigation arrows
   - Use header navigation buttons (‹ ›)
@@ -101,6 +113,7 @@ This is a paragraph with **bold** text.
 - **Close**: Click outside the large preview
 
 ### 8. Recording with Slides
+
 1. Add your slides first
 2. Start presentation if desired
 3. Start recording

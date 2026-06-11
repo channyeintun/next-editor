@@ -1,9 +1,4 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useCallback,
-} from "react";
+import React, { createContext, useContext, useEffect, useCallback } from "react";
 import { useNextEditorDomainAdapters } from "./NextEditorDomainAdaptersContext";
 import { useSlides } from "../hooks/useSlides";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
@@ -39,10 +34,7 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     };
   }, [slideStateGetter, slides]);
 
-  const slidesGetter = useCallback(
-    () => slidesData.slides,
-    [slidesData.slides],
-  );
+  const slidesGetter = useCallback(() => slidesData.slides, [slidesData.slides]);
 
   useEffect(() => {
     slides.setSlidesGetter(slidesGetter);
@@ -60,10 +52,8 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
       // Set the preview state directly to match the recorded state
       slidesData.setPreviewState((prev) => {
         const nextIsOpen = slideState.isOpen;
-        const nextIsMaximized =
-          slideState.isMaximized ?? prev.isMaximized ?? false;
-        const nextSlideId =
-          slideState.currentSlideId ?? prev.currentSlideId ?? null;
+        const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
+        const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
         // Preserve the current vertical index if slideState.indexv is undefined
         const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
         const nextInteraction = slideState.currentInteraction;
@@ -88,8 +78,7 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
 
       // Update slide index if needed
       if (slideState.isOpen) {
-        const nextIndexv =
-          slideState.indexv ?? slidesData.previewState.indexv ?? 0;
+        const nextIndexv = slideState.indexv ?? slidesData.previewState.indexv ?? 0;
         const prevIndexv = slidesData.previewState.indexv ?? 0;
 
         if (
@@ -107,9 +96,7 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     slides.setSnapshotApplier(slideStateApplier);
 
     return () => {
-      slides.setSnapshotApplier(
-        (_nextSlideState, _nextSlideIndex) => undefined,
-      );
+      slides.setSnapshotApplier((_nextSlideState, _nextSlideIndex) => undefined);
     };
   }, [slideStateApplier, slides]);
 
@@ -136,11 +123,7 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     };
   }, [slides, slidesApplier]);
 
-  return (
-    <SlidesContext.Provider value={slidesData}>
-      {children}
-    </SlidesContext.Provider>
-  );
+  return <SlidesContext.Provider value={slidesData}>{children}</SlidesContext.Provider>;
 };
 
 export const useSlidesContext = () => {

@@ -1,20 +1,20 @@
-import { useState, useRef, useCallback } from 'react';
-import { calculateDurationFromFileReader } from '../utils/audioDuration';
+import { useState, useRef, useCallback } from "react";
+import { calculateDurationFromFileReader } from "../utils/audioDuration";
 
 const getSupportedAudioMimeType = (): string => {
   const mimeTypes = [
-    'audio/webm; codecs=opus',
-    'audio/webm',
-    'audio/mp4; codecs=mp4a.40.2',
-    'audio/mp4',
-    'audio/ogg; codecs=opus',
-    'audio/ogg',
-    'audio/wav',
-    'audio/mpeg'
+    "audio/webm; codecs=opus",
+    "audio/webm",
+    "audio/mp4; codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/ogg; codecs=opus",
+    "audio/ogg",
+    "audio/wav",
+    "audio/mpeg",
   ];
 
-  if (typeof MediaRecorder === 'undefined') {
-    return '';
+  if (typeof MediaRecorder === "undefined") {
+    return "";
   }
 
   for (const mimeType of mimeTypes) {
@@ -23,7 +23,7 @@ const getSupportedAudioMimeType = (): string => {
     }
   }
 
-  return '';
+  return "";
 };
 
 export interface UseAudioRecordingReturn {
@@ -47,7 +47,7 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingStartTimeRef = useRef<number | null>(null);
-  const mimeTypeRef = useRef<string>('');
+  const mimeTypeRef = useRef<string>("");
 
   const startRecording = useCallback(async () => {
     try {
@@ -61,12 +61,12 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
           noiseSuppression: true,
           channelCount: 1,
           sampleRate: 16000,
-        }
+        },
       });
 
       const mimeType = getSupportedAudioMimeType();
       if (!mimeType) {
-        throw new Error('No supported audio MIME type found');
+        throw new Error("No supported audio MIME type found");
       }
 
       mimeTypeRef.current = mimeType;
@@ -87,8 +87,8 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
       mediaRecorder.start();
       setIsRecordingAudio(true);
     } catch (err) {
-      setError('Failed to start recording. Please check microphone permissions.');
-      console.error('Error starting audio recording:', err);
+      setError("Failed to start recording. Please check microphone permissions.");
+      console.error("Error starting audio recording:", err);
       recordingStartTimeRef.current = null;
     }
   }, []);
@@ -101,7 +101,7 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
         const stream = mediaRecorder.stream as MediaStream;
 
         mediaRecorder.onstop = async () => {
-          stream.getTracks().forEach(track => track.stop());
+          stream.getTracks().forEach((track) => track.stop());
 
           const audioBlob = new Blob(audioChunksRef.current, { type: mimeTypeRef.current });
 
@@ -117,7 +117,6 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
       }
     });
   }, [isRecordingAudio]);
-
 
   const calculateExactDuration = useCallback(async (audioBlob: Blob): Promise<number> => {
     return await calculateDurationFromFileReader(audioBlob);

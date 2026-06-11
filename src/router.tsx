@@ -1,20 +1,16 @@
-import type { ComponentType } from 'react';
-import {
-  createBrowserRouter,
-  isRouteErrorResponse,
-  useRouteError,
-} from 'react-router-dom';
+import type { ComponentType } from "react";
+import { createBrowserRouter, isRouteErrorResponse, useRouteError } from "react-router-dom";
 
-const DYNAMIC_IMPORT_RECOVERY_PARAM = '__route_reload';
+const DYNAMIC_IMPORT_RECOVERY_PARAM = "__route_reload";
 const DYNAMIC_IMPORT_ERROR_PATTERN =
   /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
 
 function normalizeRoutePath(routePath: string) {
-  if (routePath === '/') {
+  if (routePath === "/") {
     return routePath;
   }
 
-  return routePath.replace(/\/+$/, '');
+  return routePath.replace(/\/+$/, "");
 }
 
 function getRouteReloadStorageKey(routePath: string) {
@@ -22,11 +18,11 @@ function getRouteReloadStorageKey(routePath: string) {
 }
 
 function hasRouteReloaded(routePath: string) {
-  return sessionStorage.getItem(getRouteReloadStorageKey(routePath)) === '1';
+  return sessionStorage.getItem(getRouteReloadStorageKey(routePath)) === "1";
 }
 
 function markRouteReloaded(routePath: string) {
-  sessionStorage.setItem(getRouteReloadStorageKey(routePath), '1');
+  sessionStorage.setItem(getRouteReloadStorageKey(routePath), "1");
 }
 
 function clearRouteReload(routePath: string) {
@@ -34,7 +30,7 @@ function clearRouteReload(routePath: string) {
 }
 
 function clearRecoverySearchParam() {
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     return;
   }
 
@@ -45,7 +41,7 @@ function clearRecoverySearchParam() {
   }
 
   nextUrl.searchParams.delete(DYNAMIC_IMPORT_RECOVERY_PARAM);
-  window.history.replaceState(window.history.state, '', nextUrl.toString());
+  window.history.replaceState(window.history.state, "", nextUrl.toString());
 }
 
 function isDynamicImportError(error: unknown) {
@@ -53,7 +49,7 @@ function isDynamicImportError(error: unknown) {
     return DYNAMIC_IMPORT_ERROR_PATTERN.test(error.message);
   }
 
-  if (typeof error === 'string') {
+  if (typeof error === "string") {
     return DYNAMIC_IMPORT_ERROR_PATTERN.test(error);
   }
 
@@ -62,14 +58,14 @@ function isDynamicImportError(error: unknown) {
 
 function getRouteErrorMessage(error: unknown) {
   if (isRouteErrorResponse(error)) {
-    return error.statusText || 'The route could not be loaded.';
+    return error.statusText || "The route could not be loaded.";
   }
 
   if (error instanceof Error) {
     return error.message;
   }
 
-  return 'The route could not be loaded.';
+  return "The route could not be loaded.";
 }
 
 function lazyRoute(importer: () => Promise<{ default: ComponentType }>, routePath: string) {
@@ -81,7 +77,7 @@ function lazyRoute(importer: () => Promise<{ default: ComponentType }>, routePat
       return { Component: module.default };
     } catch (error) {
       if (
-        typeof window !== 'undefined' &&
+        typeof window !== "undefined" &&
         isDynamicImportError(error) &&
         !hasRouteReloaded(routePath)
       ) {
@@ -103,10 +99,10 @@ function RouteErrorBoundary() {
   const error = useRouteError();
   const dynamicImportError = isDynamicImportError(error);
 
-  const title = dynamicImportError ? 'App update required' : 'Unexpected application error';
+  const title = dynamicImportError ? "App update required" : "Unexpected application error";
   const description = dynamicImportError
-    ? 'A cached page tried to load an outdated JavaScript chunk. Reloading fetches the current bundle.'
-    : 'This route could not be rendered.';
+    ? "A cached page tried to load an outdated JavaScript chunk. Reloading fetches the current bundle."
+    : "This route could not be rendered.";
 
   const handleReload = () => {
     clearRouteReload(window.location.pathname);
@@ -146,13 +142,13 @@ function RouteErrorBoundary() {
 
 export const router = createBrowserRouter([
   {
-    path: '/',
-    lazy: lazyRoute(() => import('./components/LandingPage'), '/'),
+    path: "/",
+    lazy: lazyRoute(() => import("./components/LandingPage"), "/"),
     ErrorBoundary: RouteErrorBoundary,
   },
   {
-    path: '/code',
-    lazy: lazyRoute(() => import('./components/Editor'), '/code'),
+    path: "/code",
+    lazy: lazyRoute(() => import("./components/Editor"), "/code"),
     ErrorBoundary: RouteErrorBoundary,
   },
 ]);

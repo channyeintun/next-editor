@@ -1,5 +1,5 @@
-import superjson from 'superjson';
-import type { Recording } from '../core/src';
+import superjson from "superjson";
+import type { Recording } from "../core/src";
 
 /**
  * Serializable Blob representation for SuperJSON
@@ -18,18 +18,14 @@ interface SerializableBlob extends Record<string, string | boolean> {
 superjson.registerCustom<SerializableBlob, SerializableBlob>(
   {
     isApplicable: (v): v is SerializableBlob =>
-      v &&
-      typeof v === 'object' &&
-      'data' in v &&
-      'type' in v &&
-      '__isSerializableBlob' in v,
+      v && typeof v === "object" && "data" in v && "type" in v && "__isSerializableBlob" in v,
     serialize: (serializableBlob) => serializableBlob,
     deserialize: (serializableBlob) => {
       // Return the serializable blob as-is, conversion happens at usage level
       return serializableBlob;
     },
   },
-  'SerializableBlob'
+  "SerializableBlob",
 );
 
 /**
@@ -44,11 +40,11 @@ export const blobHelpers = {
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result as string;
-        const base64 = result.split(',')[1];
+        const base64 = result.split(",")[1];
         resolve({
           data: base64,
           type: blob.type,
-          __isSerializableBlob: true
+          __isSerializableBlob: true,
         } as SerializableBlob);
       };
       reader.onerror = reject;
@@ -71,7 +67,7 @@ export const blobHelpers = {
     }
 
     return prepared;
-  }
+  },
 };
 
 // Export configured superjson instance

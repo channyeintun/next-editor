@@ -9,9 +9,7 @@ export function toMonacoModelPath(workspacePath: string) {
 }
 
 export function toPlaybackModelPath(workspacePath: string) {
-  return `${PLAYBACK_MODEL_ROOT}/${encodeURI(
-    normalizeWorkspacePath(workspacePath),
-  )}`;
+  return `${PLAYBACK_MODEL_ROOT}/${encodeURI(normalizeWorkspacePath(workspacePath))}`;
 }
 
 export function syncPlaybackModel(
@@ -39,14 +37,9 @@ export function syncPlaybackModel(
 export function workspacePathFromMonacoModelUri(uri: { toString(): string }) {
   const modelUri = uri.toString();
 
-  if (
-    !modelUri.startsWith(FILE_URI_PREFIX) ||
-    modelUri.startsWith(`${PLAYBACK_MODEL_ROOT}/`)
-  ) {
+  if (!modelUri.startsWith(FILE_URI_PREFIX) || modelUri.startsWith(`${PLAYBACK_MODEL_ROOT}/`)) {
     return null;
   }
 
-  return normalizeWorkspacePath(
-    decodeURI(modelUri.slice(FILE_URI_PREFIX.length)),
-  );
+  return normalizeWorkspacePath(decodeURI(modelUri.slice(FILE_URI_PREFIX.length)));
 }

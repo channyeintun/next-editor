@@ -71,22 +71,18 @@ export class JsonStorage {
   /**
    * Compress recordings to binary format (JSON + audio concatenation)
    */
-  private async compressRecordingsToBinary(
-    recordings: Recording[],
-  ): Promise<Uint8Array> {
+  private async compressRecordingsToBinary(recordings: Recording[]): Promise<Uint8Array> {
     const audioChunks: Uint8Array[] = [];
     let currentOffset = 0;
 
     // Process recordings and extract audio
     const recordingsWithPlaceholders = await Promise.all(
       recordings.map(async (recording) => {
-        const { recordingWithPlaceholders, audioData } =
-          await this.extractAudioData(recording);
+        const { recordingWithPlaceholders, audioData } = await this.extractAudioData(recording);
 
         if (audioData) {
           // Update placeholder with actual offset
-          const placeholder =
-            recordingWithPlaceholders.audioBlob as AudioPlaceholder;
+          const placeholder = recordingWithPlaceholders.audioBlob as AudioPlaceholder;
           placeholder.__audio_offset = currentOffset;
           audioChunks.push(audioData);
           currentOffset += audioData.length;
@@ -106,10 +102,7 @@ export class JsonStorage {
     const jsonLength = new Uint32Array([compressedJson.length]);
 
     // Calculate total size: magic(4) + version(2) + jsonLength(4) + json + audio
-    const audioDataSize = audioChunks.reduce(
-      (sum, chunk) => sum + chunk.length,
-      0,
-    );
+    const audioDataSize = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
     const totalSize = 10 + compressedJson.length + audioDataSize;
 
     // Combine all data
@@ -140,24 +133,18 @@ export class JsonStorage {
   /**
    * Decompress binary format back to recordings with audio blobs
    */
-  private async decompressBinaryToRecordings(
-    binaryData: Uint8Array,
-  ): Promise<Recording[]> {
+  private async decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
     let offset = 0;
 
     // Read header
-    const magic = new TextDecoder().decode(
-      binaryData.slice(offset, offset + 4),
-    );
+    const magic = new TextDecoder().decode(binaryData.slice(offset, offset + 4));
     offset += 4;
 
     if (magic !== "SCRM") {
       throw new Error("Invalid binary format: bad magic number");
     }
 
-    const version = new Uint16Array(
-      binaryData.slice(offset, offset + 2).buffer,
-    )[0];
+    const version = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
     offset += 2;
 
     if (version !== 2) {
@@ -167,9 +154,7 @@ export class JsonStorage {
     }
 
     // Version 2: Uint32 for jsonLength (supports larger files)
-    const jsonLength = new Uint32Array(
-      binaryData.slice(offset, offset + 4).buffer,
-    )[0];
+    const jsonLength = new Uint32Array(binaryData.slice(offset, offset + 4).buffer)[0];
     offset += 4;
 
     if (jsonLength === 0 || jsonLength > binaryData.length - offset) {
@@ -185,9 +170,7 @@ export class JsonStorage {
     const jsonString = inflate(compressedJson, { to: "string" });
 
     if (!jsonString || typeof jsonString !== "string") {
-      throw new Error(
-        "Failed to decompress JSON data - inflate returned invalid result",
-      );
+      throw new Error("Failed to decompress JSON data - inflate returned invalid result");
     }
 
     const recordings = superjson.parse(jsonString) as Recording[];
@@ -198,22 +181,14 @@ export class JsonStorage {
 
     return recordings.map((rawRecording) => {
       const recording = this.normalizeRecording(rawRecording);
-      const audioPlaceholder = recording.audioBlob as
-        | AudioPlaceholder
-        | undefined;
+      const audioPlaceholder = recording.audioBlob as AudioPlaceholder | undefined;
 
-      if (
-        audioPlaceholder &&
-        (audioPlaceholder as AudioPlaceholder).__audio_offset !== undefined
-      ) {
+      if (audioPlaceholder && (audioPlaceholder as AudioPlaceholder).__audio_offset !== undefined) {
         const audioOffset = audioPlaceholder.__audio_offset;
         const audioSize = audioPlaceholder.__audio_size;
         const audioType = audioPlaceholder.__audio_type;
 
-        const audioBytes = audioData.slice(
-          audioOffset,
-          audioOffset + audioSize,
-        );
+        const audioBytes = audioData.slice(audioOffset, audioOffset + audioSize);
         recording.audioBlob = new Blob([audioBytes], { type: audioType });
       }
 
@@ -264,10 +239,7 @@ export class JsonStorage {
     );
   }
 
-  private createStoredMetadata(
-    recording: Recording,
-    payloadSize: number,
-  ): StoredRecordingMetadata {
+  private createStoredMetadata(recording: Recording, payloadSize: number): StoredRecordingMetadata {
     return {
       id: recording.id,
       name: recording.name,
@@ -280,29 +252,18 @@ export class JsonStorage {
     };
   }
 
-  private async createStoredEntry(
-    recording: Recording,
-  ): Promise<StoredRecordingEntry> {
+  private async createStoredEntry(recording: Recording): Promise<StoredRecordingEntry> {
     const normalizedRecording = this.normalizeRecording(recording);
-    const binaryData = await this.compressRecordingsToBinary([
-      normalizedRecording,
-    ]);
+    const binaryData = await this.compressRecordingsToBinary([normalizedRecording]);
 
     return {
-      metadata: this.createStoredMetadata(
-        normalizedRecording,
-        binaryData.byteLength,
-      ),
+      metadata: this.createStoredMetadata(normalizedRecording, binaryData.byteLength),
       binaryData,
     };
   }
 
-  private async decodeStoredEntry(
-    entry: StoredRecordingEntry,
-  ): Promise<Recording> {
-    const recordings = await this.decompressBinaryToRecordings(
-      entry.binaryData,
-    );
+  private async decodeStoredEntry(entry: StoredRecordingEntry): Promise<Recording> {
+    const recordings = await this.decompressBinaryToRecordings(entry.binaryData);
 
     if (recordings.length !== 1) {
       throw new Error(
@@ -378,8 +339,7 @@ export class JsonStorage {
       const link = document.createElement("a");
       link.href = url;
       // Use .ne extension to indicate new binary format
-      const baseFilename =
-        filename?.replace(/\.json$/, "") || `recording-${recording.id}`;
+      const baseFilename = filename?.replace(/\.json$/, "") || `recording-${recording.id}`;
       link.download = `${baseFilename}.ne`;
       document.body.appendChild(link);
       link.click();
@@ -412,8 +372,7 @@ export class JsonStorage {
       link.href = url;
       // Use .ne extension to indicate new binary format
       const baseFilename =
-        filename?.replace(/\.json$/, "") ||
-        `next-editor-recordings-${Date.now()}`;
+        filename?.replace(/\.json$/, "") || `next-editor-recordings-${Date.now()}`;
       link.download = `${baseFilename}.ne`;
       document.body.appendChild(link);
       link.click();
@@ -458,24 +417,17 @@ export class JsonStorage {
           const stripped = trimmedText.replace(/\s/g, "");
           const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
           if (!base64Pattern.test(stripped)) {
-            console.error(
-              "Import validation failed. Start of text:",
-              trimmedText.substring(0, 50),
-            );
+            console.error("Import validation failed. Start of text:", trimmedText.substring(0, 50));
             reject(new Error("File does not contain valid base64 data"));
             return;
           }
 
           const binaryData = this.base64ToBinary(stripped);
 
-          const importedRecordings =
-            await this.decompressBinaryToRecordings(binaryData);
+          const importedRecordings = await this.decompressBinaryToRecordings(binaryData);
 
           // Validate imported recordings
-          if (
-            !Array.isArray(importedRecordings) ||
-            importedRecordings.length === 0
-          ) {
+          if (!Array.isArray(importedRecordings) || importedRecordings.length === 0) {
             reject(new Error("No valid recordings found in file"));
             return;
           }
@@ -485,8 +437,7 @@ export class JsonStorage {
           resolve(importedRecordings);
         } catch (error) {
           console.error("Import error details:", error);
-          const errorMessage =
-            error instanceof Error ? error.message : "Invalid file format";
+          const errorMessage = error instanceof Error ? error.message : "Invalid file format";
           reject(new Error(`Failed to import recordings: ${errorMessage}`));
         }
       };

@@ -34,15 +34,10 @@ interface WebContainerRuntimeProviderProps {
   children: React.ReactNode;
 }
 
-export const WebContainerRuntimeProvider: React.FC<
-  WebContainerRuntimeProviderProps
-> = ({ children }) => {
-  const {
-    getActiveFilePath,
-    getCollapsedFolders,
-    getProject,
-    loadProject,
-  } = useWorkspaceActions();
+export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderProps> = ({
+  children,
+}) => {
+  const { getActiveFilePath, getCollapsedFolders, getProject, loadProject } = useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
   const projectName = useWorkspaceProjectName();
   const syncVersion = useWorkspaceSyncVersion();
@@ -51,17 +46,12 @@ export const WebContainerRuntimeProvider: React.FC<
   const reverseSyncTimeoutRef = useRef<number | null>(null);
   const lessonTypeRef = useRef(lessonType);
   const runnerConfigRef = useRef<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
-  const [environmentVariables, setEnvironmentVariables] =
-    useState<EnvironmentVariables>(loadStoredEnvironmentVariables);
-  const [runnerConfig, setRunnerConfig] = useState<RunnerConfig>(
-    DEFAULT_RUNNER_CONFIG,
+  const [environmentVariables, setEnvironmentVariables] = useState<EnvironmentVariables>(
+    loadStoredEnvironmentVariables,
   );
-  const {
-    hasMountedProjectRef,
-    ensureProjectMounted,
-    queueProjectSync,
-    resetWorkspaceSync,
-  } = useWebContainerWorkspaceSync();
+  const [runnerConfig, setRunnerConfig] = useState<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
+  const { hasMountedProjectRef, ensureProjectMounted, queueProjectSync, resetWorkspaceSync } =
+    useWebContainerWorkspaceSync();
   const {
     activeCommand,
     activeTerminalSessionId,
@@ -124,11 +114,7 @@ export const WebContainerRuntimeProvider: React.FC<
             return;
           }
 
-          loadProject(
-            nextProject,
-            getActiveFilePath(),
-            getCollapsedFolders(),
-          );
+          loadProject(nextProject, getActiveFilePath(), getCollapsedFolders());
         })().catch((error) => {
           setErrorMessage(getRuntimeErrorMessage(error));
         });
@@ -140,17 +126,11 @@ export const WebContainerRuntimeProvider: React.FC<
   runnerConfigRef.current = runnerConfig;
 
   const isSupported = window.crossOriginIsolated;
-  const workspaceRoot = useMemo(
-    () => getWorkspaceRoot(projectName),
-    [projectName],
-  );
+  const workspaceRoot = useMemo(() => getWorkspaceRoot(projectName), [projectName]);
 
   const resetRuntime = useCallback(() => {
     hasRunInitCommandRef.current = false;
-    if (
-      typeof window !== "undefined" &&
-      reverseSyncTimeoutRef.current !== null
-    ) {
+    if (typeof window !== "undefined" && reverseSyncTimeoutRef.current !== null) {
       window.clearTimeout(reverseSyncTimeoutRef.current);
       reverseSyncTimeoutRef.current = null;
     }
@@ -173,11 +153,7 @@ export const WebContainerRuntimeProvider: React.FC<
 
     const instance = await bootInstance();
 
-    if (
-      !instance ||
-      !isMountedRef.current ||
-      !isRuntimeGenerationActive(generation)
-    ) {
+    if (!instance || !isMountedRef.current || !isRuntimeGenerationActive(generation)) {
       return null;
     }
 
@@ -254,10 +230,7 @@ export const WebContainerRuntimeProvider: React.FC<
       }
 
       const project = getProject();
-      const runCommandLine = resolveRuntimeRunCommand(
-        project,
-        runnerConfig.runCommand,
-      );
+      const runCommandLine = resolveRuntimeRunCommand(project, runnerConfig.runCommand);
 
       if (!runnerConfig.enabled) {
         if (isRuntimeGenerationActive(generation)) {
@@ -305,10 +278,7 @@ export const WebContainerRuntimeProvider: React.FC<
       }
 
       const project = getProject();
-      const runCommandLine = resolveRuntimeRunCommand(
-        project,
-        runnerConfig.runCommand,
-      );
+      const runCommandLine = resolveRuntimeRunCommand(project, runnerConfig.runCommand);
 
       if (!runnerConfig.enabled) {
         if (isRuntimeGenerationActive(generation)) {
@@ -412,10 +382,7 @@ export const WebContainerRuntimeProvider: React.FC<
 
         await writeTerminalInput(instance, input);
 
-        if (
-          typeof window !== "undefined" &&
-          (input.includes("\n") || input.includes("\u0003"))
-        ) {
+        if (typeof window !== "undefined" && (input.includes("\n") || input.includes("\u0003"))) {
           if (reverseSyncTimeoutRef.current !== null) {
             window.clearTimeout(reverseSyncTimeoutRef.current);
           }
@@ -429,10 +396,7 @@ export const WebContainerRuntimeProvider: React.FC<
               }
 
               const currentProject = getProject();
-              const nextProject = await readWorkspaceProject(
-                instance,
-                currentProject,
-              );
+              const nextProject = await readWorkspaceProject(instance, currentProject);
 
               if (
                 !isRuntimeGenerationActive(generation) ||
@@ -441,11 +405,7 @@ export const WebContainerRuntimeProvider: React.FC<
                 return;
               }
 
-              loadProject(
-                nextProject,
-                getActiveFilePath(),
-                getCollapsedFolders(),
-              );
+              loadProject(nextProject, getActiveFilePath(), getCollapsedFolders());
             })().catch((error) => {
               if (isRuntimeGenerationActive(generation)) {
                 setErrorMessage(getRuntimeErrorMessage(error));
@@ -516,14 +476,7 @@ export const WebContainerRuntimeProvider: React.FC<
     }
 
     await rerunRunnerRef.current();
-  }, [
-    getProject,
-    hasActiveRunner,
-    instanceRef,
-    queueProjectSync,
-    setErrorMessage,
-    statusRef,
-  ]);
+  }, [getProject, hasActiveRunner, instanceRef, queueProjectSync, setErrorMessage, statusRef]);
 
   const updateRunnerConfig = useCallback((config: Partial<RunnerConfig>) => {
     setRunnerConfig((current) => ({
@@ -532,15 +485,12 @@ export const WebContainerRuntimeProvider: React.FC<
     }));
   }, []);
 
-  const updateEnvironmentVariables = useCallback(
-    (variables: EnvironmentVariables) => {
-      const normalizedVariables = normalizeEnvironmentVariables(variables);
+  const updateEnvironmentVariables = useCallback((variables: EnvironmentVariables) => {
+    const normalizedVariables = normalizeEnvironmentVariables(variables);
 
-      setEnvironmentVariables(normalizedVariables);
-      persistEnvironmentVariables(normalizedVariables);
-    },
-    [],
-  );
+    setEnvironmentVariables(normalizedVariables);
+    persistEnvironmentVariables(normalizedVariables);
+  }, []);
 
   useEffect(() => {
     hasAutoStartedRef.current = false;
@@ -563,13 +513,7 @@ export const WebContainerRuntimeProvider: React.FC<
 
     hasAutoStartedRef.current = true;
     void startRuntime();
-  }, [
-    lessonType,
-    isSupported,
-    runnerConfig.enabled,
-    runnerConfig.runOnStartup,
-    startRuntime,
-  ]);
+  }, [lessonType, isSupported, runnerConfig.enabled, runnerConfig.runOnStartup, startRuntime]);
 
   useEffect(() => {
     hasRunInitCommandRef.current = false;
@@ -597,10 +541,7 @@ export const WebContainerRuntimeProvider: React.FC<
 
   useEffect(() => {
     return () => {
-      if (
-        typeof window !== "undefined" &&
-        reverseSyncTimeoutRef.current !== null
-      ) {
+      if (typeof window !== "undefined" && reverseSyncTimeoutRef.current !== null) {
         window.clearTimeout(reverseSyncTimeoutRef.current);
       }
     };

@@ -10,10 +10,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null;
 }
 
-function areStringArraysEqual(
-  left?: string[],
-  right?: string[],
-): boolean {
+function areStringArraysEqual(left?: string[], right?: string[]): boolean {
   if (left === right) {
     return true;
   }
@@ -25,10 +22,7 @@ function areStringArraysEqual(
   return left.every((value, index) => value === right[index]);
 }
 
-export function areStructuredDataEqual(
-  left: unknown,
-  right: unknown,
-): boolean {
+export function areStructuredDataEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) {
     return true;
   }
@@ -46,17 +40,11 @@ export function areStructuredDataEqual(
       return false;
     }
 
-    return left.every((value, index) =>
-      areStructuredDataEqual(value, right[index]),
-    );
+    return left.every((value, index) => areStructuredDataEqual(value, right[index]));
   }
 
   if (left instanceof Date || right instanceof Date) {
-    return (
-      left instanceof Date &&
-      right instanceof Date &&
-      left.getTime() === right.getTime()
-    );
+    return left instanceof Date && right instanceof Date && left.getTime() === right.getTime();
   }
 
   if (!isPlainObject(left) || !isPlainObject(right)) {
@@ -77,10 +65,7 @@ export function areStructuredDataEqual(
   );
 }
 
-export function arePreviewSizesEqual(
-  left: PreviewSize,
-  right: PreviewSize,
-): boolean {
+export function arePreviewSizesEqual(left: PreviewSize, right: PreviewSize): boolean {
   if (left === right) {
     return true;
   }

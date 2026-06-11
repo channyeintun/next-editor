@@ -91,10 +91,7 @@ export function areWorkspaceSnapshotsEqual(
 
   return (
     left.activeFilePath === right.activeFilePath &&
-    areStringArraysEqual(
-      left.collapsedFolders ?? [],
-      right.collapsedFolders ?? [],
-    ) &&
+    areStringArraysEqual(left.collapsedFolders ?? [], right.collapsedFolders ?? []) &&
     areWorkspaceProjectsEqual(left.project, right.project)
   );
 }
@@ -148,11 +145,7 @@ export function createStarterWorkspacePackageJson(projectName: string): string {
 }
 
 export function normalizeWorkspacePath(path: string): string {
-  return path
-    .replace(/^\/+/, "")
-    .replace(/\\/g, "/")
-    .replace(/\/+/g, "/")
-    .trim();
+  return path.replace(/^\/+/, "").replace(/\\/g, "/").replace(/\/+/g, "/").trim();
 }
 
 export function normalizeWorkspaceFolderPath(path: string): string {
@@ -304,10 +297,7 @@ export default defineConfig({
   plugins: [react()],
 });`,
     ),
-    "public/favicon.svg": createWorkspaceFile(
-      "public/favicon.svg",
-      STARTER_FAVICON_SVG,
-    ),
+    "public/favicon.svg": createWorkspaceFile("public/favicon.svg", STARTER_FAVICON_SVG),
     "src/main.tsx": createWorkspaceFile(
       "src/main.tsx",
       `import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -1015,10 +1005,7 @@ export function createSingleFileWorkspace(
     entryFilePath: DEFAULT_WORKSPACE_ENTRY_PATH,
     folders: collectWorkspaceFolders([DEFAULT_WORKSPACE_ENTRY_PATH]),
     files: {
-      [DEFAULT_WORKSPACE_ENTRY_PATH]: createWorkspaceFile(
-        DEFAULT_WORKSPACE_ENTRY_PATH,
-        content,
-      ),
+      [DEFAULT_WORKSPACE_ENTRY_PATH]: createWorkspaceFile(DEFAULT_WORKSPACE_ENTRY_PATH, content),
     },
   };
 }

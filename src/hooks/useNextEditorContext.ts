@@ -31,9 +31,7 @@ import {
 export const useNextEditorActions = (): NextEditorActions => {
   const context = useContext(NextEditorActionsContext);
   if (!context) {
-    throw new Error(
-      "useNextEditorActions must be used within a NextEditorProvider",
-    );
+    throw new Error("useNextEditorActions must be used within a NextEditorProvider");
   }
   return context;
 };
@@ -44,22 +42,13 @@ export const useNextEditorActions = (): NextEditorActions => {
  */
 export const useNextEditorMetadata = (): NextEditorMetadata => {
   const isRecording = NextEditorActorContext.useSelector(selectIsRecording);
-  const isRecordingAudio = NextEditorActorContext.useSelector(
-    selectIsRecordingAudio,
-  );
+  const isRecordingAudio = NextEditorActorContext.useSelector(selectIsRecordingAudio);
   const isPlaying = NextEditorActorContext.useSelector(selectIsPlaying);
   const isPaused = NextEditorActorContext.useSelector(selectIsPaused);
   const hasEnded = NextEditorActorContext.useSelector(selectHasEnded);
-  const usesPlaybackModel = NextEditorActorContext.useSelector(
-    selectUsesPlaybackModel,
-  );
-  const currentRecording = NextEditorActorContext.useSelector(
-    selectRecording,
-    shallowEqual,
-  );
-  const recordingStartTime = NextEditorActorContext.useSelector(
-    selectRecordingStartTime,
-  );
+  const usesPlaybackModel = NextEditorActorContext.useSelector(selectUsesPlaybackModel);
+  const currentRecording = NextEditorActorContext.useSelector(selectRecording, shallowEqual);
+  const recordingStartTime = NextEditorActorContext.useSelector(selectRecordingStartTime);
 
   return useMemo(
     () => ({

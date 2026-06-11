@@ -24,8 +24,7 @@ export function usePreviewInteractionCapture({
 
     const setupInteractionListeners = () => {
       try {
-        const iframeDoc =
-          iframe.contentDocument || iframe.contentWindow?.document;
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
         if (!iframeDoc) {
           return;
         }
@@ -45,10 +44,7 @@ export function usePreviewInteractionCapture({
 
         return () => undefined;
       } catch (error) {
-        console.warn(
-          "Cannot track interactions in iframe (likely cross-origin):",
-          error,
-        );
+        console.warn("Cannot track interactions in iframe (likely cross-origin):", error);
         return undefined;
       }
     };

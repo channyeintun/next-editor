@@ -1,9 +1,6 @@
 import { useCallback, useRef } from "react";
 import type { WebContainer } from "@webcontainer/api";
-import {
-  createWorkspaceTree,
-  syncWorkspaceProject,
-} from "./webContainerRuntimeSupport";
+import { createWorkspaceTree, syncWorkspaceProject } from "./webContainerRuntimeSupport";
 import type { WorkspaceProject } from "../types/workspace";
 
 interface EnsureProjectMountedOptions {
@@ -26,15 +23,8 @@ export function useWebContainerWorkspaceSync() {
   const syncGenerationRef = useRef(0);
 
   const ensureProjectMounted = useCallback(
-    async ({
-      instance,
-      project,
-      onMountStart,
-    }: EnsureProjectMountedOptions) => {
-      if (
-        hasMountedProjectRef.current &&
-        mountedInstanceRef.current === instance
-      ) {
+    async ({ instance, project, onMountStart }: EnsureProjectMountedOptions) => {
+      if (hasMountedProjectRef.current && mountedInstanceRef.current === instance) {
         return;
       }
 
@@ -55,58 +45,42 @@ export function useWebContainerWorkspaceSync() {
     [],
   );
 
-  const queueProjectSync = useCallback(
-    ({ instance, project }: QueueProjectSyncOptions) => {
-      if (
-        !hasMountedProjectRef.current ||
-        mountedInstanceRef.current !== instance
-      ) {
-        return Promise.resolve();
-      }
+  const queueProjectSync = useCallback(({ instance, project }: QueueProjectSyncOptions) => {
+    if (!hasMountedProjectRef.current || mountedInstanceRef.current !== instance) {
+      return Promise.resolve();
+    }
 
-      const generation = syncGenerationRef.current;
-      queuedProjectRef.current = project;
+    const generation = syncGenerationRef.current;
+    queuedProjectRef.current = project;
 
-      const runQueuedSync = async () => {
-        while (
-          queuedProjectRef.current &&
-          syncGenerationRef.current === generation
+    const runQueuedSync = async () => {
+      while (queuedProjectRef.current && syncGenerationRef.current === generation) {
+        const nextProject = queuedProjectRef.current;
+        queuedProjectRef.current = null;
+
+        if (
+          !nextProject ||
+          mountedInstanceRef.current !== instance ||
+          syncGenerationRef.current !== generation ||
+          lastSyncedProjectRef.current === nextProject
         ) {
-          const nextProject = queuedProjectRef.current;
-          queuedProjectRef.current = null;
-
-          if (
-            !nextProject ||
-            mountedInstanceRef.current !== instance ||
-            syncGenerationRef.current !== generation ||
-            lastSyncedProjectRef.current === nextProject
-          ) {
-            continue;
-          }
-
-          await syncWorkspaceProject(
-            instance,
-            lastSyncedProjectRef.current,
-            nextProject,
-          );
-
-          if (syncGenerationRef.current !== generation) {
-            return;
-          }
-
-          lastSyncedProjectRef.current = nextProject;
+          continue;
         }
-      };
 
-      syncQueueRef.current = syncQueueRef.current.then(
-        runQueuedSync,
-        runQueuedSync,
-      );
+        await syncWorkspaceProject(instance, lastSyncedProjectRef.current, nextProject);
 
-      return syncQueueRef.current;
-    },
-    [],
-  );
+        if (syncGenerationRef.current !== generation) {
+          return;
+        }
+
+        lastSyncedProjectRef.current = nextProject;
+      }
+    };
+
+    syncQueueRef.current = syncQueueRef.current.then(runQueuedSync, runQueuedSync);
+
+    return syncQueueRef.current;
+  }, []);
 
   const resetWorkspaceSync = useCallback(() => {
     syncGenerationRef.current += 1;

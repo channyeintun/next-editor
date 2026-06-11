@@ -65,18 +65,9 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     (filename?: string) => jsonStorage.current.exportAllAsFile(filename),
     [jsonStorage],
   );
-  const importFromFile = useCallback(
-    () => jsonStorage.current.importFromFile(),
-    [jsonStorage],
-  );
-  const clearStorage = useCallback(
-    () => jsonStorage.current.clear(),
-    [jsonStorage],
-  );
-  const getStorageStats = useCallback(
-    () => jsonStorage.current.getStats(),
-    [jsonStorage],
-  );
+  const importFromFile = useCallback(() => jsonStorage.current.importFromFile(), [jsonStorage]);
+  const clearStorage = useCallback(() => jsonStorage.current.clear(), [jsonStorage]);
+  const getStorageStats = useCallback(() => jsonStorage.current.getStats(), [jsonStorage]);
   const deleteFromStorage = useCallback(
     (id: string) => jsonStorage.current.delete(id),
     [jsonStorage],
@@ -159,26 +150,15 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     ],
   );
 
-  return (
-    <NextEditorActionsContext value={actionsValue}>
-      {children}
-    </NextEditorActionsContext>
-  );
+  return <NextEditorActionsContext value={actionsValue}>{children}</NextEditorActionsContext>;
 };
 
-export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
-  children,
-}) => {
+export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
   const { slides, preview, runtimePanel } = useNextEditorDomainAdapters();
-  const {
-    getProject,
-    getActiveFilePath,
-    getCollapsedFolders,
-    loadProject,
-    resetProject,
-  } = useWorkspaceActions();
+  const { getProject, getActiveFilePath, getCollapsedFolders, loadProject, resetProject } =
+    useWorkspaceActions();
   const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
   const runtimeSnapshotRef = useRef(getRuntimeRecordingSnapshot());
@@ -249,11 +229,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
       },
       applyWorkspaceSnapshot: (snapshot) => {
         suppressWorkspaceEvents();
-        loadProject(
-          snapshot.project,
-          snapshot.activeFilePath,
-          snapshot.collapsedFolders ?? [],
-        );
+        loadProject(snapshot.project, snapshot.activeFilePath, snapshot.collapsedFolders ?? []);
         void saveRuntimeWorkspace();
       },
       getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {

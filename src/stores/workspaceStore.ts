@@ -44,9 +44,7 @@ export interface WorkspaceState {
 
 export const WORKSPACE_STORAGE_KEY = "next-editor-workspace";
 
-export function cloneWorkspaceSnapshot(
-  snapshot: StoredWorkspaceSnapshot,
-): StoredWorkspaceSnapshot {
+export function cloneWorkspaceSnapshot(snapshot: StoredWorkspaceSnapshot): StoredWorkspaceSnapshot {
   return {
     activeFilePath: snapshot.activeFilePath,
     project: snapshot.project,
@@ -97,9 +95,7 @@ function getDefaultFile(project: WorkspaceProject): WorkspaceFile {
 }
 
 function listProjectFiles(project: WorkspaceProject): WorkspaceFile[] {
-  return Object.values(project.files).sort((left, right) =>
-    left.path.localeCompare(right.path),
-  );
+  return Object.values(project.files).sort((left, right) => left.path.localeCompare(right.path));
 }
 
 function createWorkspaceFile(path: string, content: string): WorkspaceFile {
@@ -117,11 +113,7 @@ function isPathWithinFolder(path: string, folderPath: string): boolean {
   return path === folderPath || path.startsWith(`${folderPath}/`);
 }
 
-function replacePathPrefix(
-  path: string,
-  currentPrefix: string,
-  nextPrefix: string,
-): string {
+function replacePathPrefix(path: string, currentPrefix: string, nextPrefix: string): string {
   if (path === currentPrefix) {
     return nextPrefix;
   }
@@ -142,26 +134,19 @@ function inferWorkspaceLessonType(
     return "node.js";
   }
 
-  return project.files["package.json"] || project.files["vite.config.js"]
-    ? "node.js"
-    : "html-css";
+  return project.files["package.json"] || project.files["vite.config.js"] ? "node.js" : "html-css";
 }
 
 export function normalizeProject(project: WorkspaceProject): WorkspaceProject {
   const fallbackProject = createSingleFileWorkspace();
-  const files =
-    Object.keys(project.files).length > 0
-      ? project.files
-      : fallbackProject.files;
+  const files = Object.keys(project.files).length > 0 ? project.files : fallbackProject.files;
   const defaultFile = getDefaultFile({ ...project, files });
   const lessonType = inferWorkspaceLessonType({ ...project, files });
 
   return {
     ...project,
     lessonType,
-    entryFilePath: files[project.entryFilePath]
-      ? project.entryFilePath
-      : defaultFile.path,
+    entryFilePath: files[project.entryFilePath] ? project.entryFilePath : defaultFile.path,
     folders: collectWorkspaceFolders(
       Object.keys(files),
       project.folders ?? fallbackProject.folders,
@@ -226,10 +211,7 @@ function createEditorState(
   };
 }
 
-function normalizeCollapsedFolders(
-  folders: string[],
-  collapsedFolders: string[],
-): string[] {
+function normalizeCollapsedFolders(folders: string[], collapsedFolders: string[]): string[] {
   const validFolders = new Set(
     folders.map((folderPath) => normalizeWorkspaceFolderPath(folderPath)),
   );
@@ -243,9 +225,7 @@ function normalizeCollapsedFolders(
     }
   }
 
-  return Array.from(nextCollapsedFolders).sort((left, right) =>
-    left.localeCompare(right),
-  );
+  return Array.from(nextCollapsedFolders).sort((left, right) => left.localeCompare(right));
 }
 
 function createSidebarState(
@@ -271,10 +251,7 @@ function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.every((value, index) => value === right[index]);
 }
 
-function areSidebarFilesEqual(
-  left: WorkspaceFile[],
-  right: WorkspaceFile[],
-): boolean {
+function areSidebarFilesEqual(left: WorkspaceFile[], right: WorkspaceFile[]): boolean {
   if (left.length !== right.length) {
     return false;
   }
@@ -290,10 +267,7 @@ function areSidebarFilesEqual(
   });
 }
 
-function areEditorStatesEqual(
-  left: WorkspaceEditorState,
-  right: WorkspaceEditorState,
-): boolean {
+function areEditorStatesEqual(left: WorkspaceEditorState, right: WorkspaceEditorState): boolean {
   return (
     left.projectVersion === right.projectVersion &&
     left.activeFile.path === right.activeFile.path &&
@@ -303,10 +277,7 @@ function areEditorStatesEqual(
   );
 }
 
-function areSidebarStatesEqual(
-  left: WorkspaceSidebarState,
-  right: WorkspaceSidebarState,
-): boolean {
+function areSidebarStatesEqual(left: WorkspaceSidebarState, right: WorkspaceSidebarState): boolean {
   return (
     left.activeFilePath === right.activeFilePath &&
     left.lessonType === right.lessonType &&
@@ -317,10 +288,7 @@ function areSidebarStatesEqual(
   );
 }
 
-function areDirtyStatesEqual(
-  left: WorkspaceDirtyState,
-  right: WorkspaceDirtyState,
-): boolean {
+function areDirtyStatesEqual(left: WorkspaceDirtyState, right: WorkspaceDirtyState): boolean {
   return (
     left.hasUnsavedChanges === right.hasUnsavedChanges &&
     areStringArraysEqual(left.dirtyFilePaths, right.dirtyFilePaths)
@@ -345,10 +313,7 @@ function withRefreshedWorkspaceSlices(state: WorkspaceState): WorkspaceState {
 
   return {
     ...state,
-    collapsedFolders: areStringArraysEqual(
-      state.collapsedFolders,
-      nextCollapsedFolders,
-    )
+    collapsedFolders: areStringArraysEqual(state.collapsedFolders, nextCollapsedFolders)
       ? state.collapsedFolders
       : nextCollapsedFolders,
     editorState: areEditorStatesEqual(state.editorState, nextEditorState)
@@ -364,10 +329,7 @@ function withRefreshedWorkspaceSlices(state: WorkspaceState): WorkspaceState {
 }
 
 function withDirtyState(state: WorkspaceState): WorkspaceState {
-  const nextDirtyState = createDirtyState(
-    state.project,
-    state.savedSnapshot.project,
-  );
+  const nextDirtyState = createDirtyState(state.project, state.savedSnapshot.project);
 
   if (areDirtyStatesEqual(state.dirtyState, nextDirtyState)) {
     return state;
@@ -379,9 +341,7 @@ function withDirtyState(state: WorkspaceState): WorkspaceState {
   };
 }
 
-function createWorkspaceState(
-  initialSnapshot: StoredWorkspaceSnapshot,
-): WorkspaceState {
+function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): WorkspaceState {
   const savedSnapshot = cloneWorkspaceSnapshot(initialSnapshot);
   const project = initialSnapshot.project;
   const activeFilePath = initialSnapshot.activeFilePath;
@@ -412,10 +372,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
       setActiveFilePath: (context, event: { path: string }) => {
         const normalizedPath = normalizeWorkspacePath(event.path);
 
-        if (
-          !context.project.files[normalizedPath] ||
-          context.activeFilePath === normalizedPath
-        ) {
+        if (!context.project.files[normalizedPath] || context.activeFilePath === normalizedPath) {
           return context;
         }
 
@@ -480,10 +437,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
             ...context,
             project: {
               ...context.project,
-              folders: collectWorkspaceFolders(
-                Object.keys(nextFiles),
-                context.project.folders,
-              ),
+              folders: collectWorkspaceFolders(Object.keys(nextFiles), context.project.folders),
               files: nextFiles,
             },
             activeFilePath: normalizedPath,
@@ -508,10 +462,10 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
             ...context,
             project: {
               ...context.project,
-              folders: collectWorkspaceFolders(
-                Object.keys(context.project.files),
-                [...context.project.folders, normalizedPath],
-              ),
+              folders: collectWorkspaceFolders(Object.keys(context.project.files), [
+                ...context.project.folders,
+                normalizedPath,
+              ]),
             },
             previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
@@ -539,20 +493,14 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           return context;
         }
 
-        const updatedFile = createWorkspaceFile(
-          normalizedNextPath,
-          existingFile.content,
-        );
+        const updatedFile = createWorkspaceFile(normalizedNextPath, existingFile.content);
         const nextFiles = { ...context.project.files };
         delete nextFiles[normalizedCurrentPath];
         nextFiles[normalizedNextPath] = updatedFile;
 
         const nextProject = {
           ...context.project,
-          folders: collectWorkspaceFolders(
-            Object.keys(nextFiles),
-            context.project.folders,
-          ),
+          folders: collectWorkspaceFolders(Object.keys(nextFiles), context.project.folders),
           files: nextFiles,
           entryFilePath:
             context.project.entryFilePath === normalizedCurrentPath
@@ -580,9 +528,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           nextPath: string;
         },
       ) => {
-        const normalizedCurrentPath = normalizeWorkspaceFolderPath(
-          event.currentPath,
-        );
+        const normalizedCurrentPath = normalizeWorkspaceFolderPath(event.currentPath);
         const normalizedNextPath = normalizeWorkspaceFolderPath(event.nextPath);
 
         if (
@@ -600,15 +546,8 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
         const nextFiles: Record<string, WorkspaceFile> = {};
 
         for (const file of Object.values(context.project.files)) {
-          const nextFilePath = isPathWithinFolder(
-            file.path,
-            normalizedCurrentPath,
-          )
-            ? replacePathPrefix(
-                file.path,
-                normalizedCurrentPath,
-                normalizedNextPath,
-              )
+          const nextFilePath = isPathWithinFolder(file.path, normalizedCurrentPath)
+            ? replacePathPrefix(file.path, normalizedCurrentPath, normalizedNextPath)
             : file.path;
 
           if (nextFiles[nextFilePath]) {
@@ -616,9 +555,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           }
 
           nextFiles[nextFilePath] =
-            nextFilePath === file.path
-              ? file
-              : createWorkspaceFile(nextFilePath, file.content);
+            nextFilePath === file.path ? file : createWorkspaceFile(nextFilePath, file.content);
         }
 
         const nextProject = {
@@ -627,19 +564,12 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
             Object.keys(nextFiles),
             context.project.folders.map((folderPath) =>
               isPathWithinFolder(folderPath, normalizedCurrentPath)
-                ? replacePathPrefix(
-                    folderPath,
-                    normalizedCurrentPath,
-                    normalizedNextPath,
-                  )
+                ? replacePathPrefix(folderPath, normalizedCurrentPath, normalizedNextPath)
                 : folderPath,
             ),
           ),
           files: nextFiles,
-          entryFilePath: isPathWithinFolder(
-            context.project.entryFilePath,
-            normalizedCurrentPath,
-          )
+          entryFilePath: isPathWithinFolder(context.project.entryFilePath, normalizedCurrentPath)
             ? replacePathPrefix(
                 context.project.entryFilePath,
                 normalizedCurrentPath,
@@ -652,15 +582,8 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           withRefreshedWorkspaceSlices({
             ...context,
             project: nextProject,
-            activeFilePath: isPathWithinFolder(
-              context.activeFilePath,
-              normalizedCurrentPath,
-            )
-              ? replacePathPrefix(
-                  context.activeFilePath,
-                  normalizedCurrentPath,
-                  normalizedNextPath,
-                )
+            activeFilePath: isPathWithinFolder(context.activeFilePath, normalizedCurrentPath)
+              ? replacePathPrefix(context.activeFilePath, normalizedCurrentPath, normalizedNextPath)
               : context.activeFilePath,
             previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
@@ -693,10 +616,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
 
         const nextProject = {
           ...context.project,
-          folders: collectWorkspaceFolders(
-            Object.keys(nextFiles),
-            context.project.folders,
-          ),
+          folders: collectWorkspaceFolders(Object.keys(nextFiles), context.project.folders),
           files: nextFiles,
           entryFilePath: nextFiles[context.project.entryFilePath]
             ? context.project.entryFilePath
@@ -742,10 +662,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           );
         }
 
-        const nextEntryFilePath = isPathWithinFolder(
-          context.project.entryFilePath,
-          normalizedPath,
-        )
+        const nextEntryFilePath = isPathWithinFolder(context.project.entryFilePath, normalizedPath)
           ? Object.keys(nextFiles)[0]
           : context.project.entryFilePath;
 
@@ -757,8 +674,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
               folders: collectWorkspaceFolders(
                 Object.keys(nextFiles),
                 context.project.folders.filter(
-                  (folderPath) =>
-                    !isPathWithinFolder(folderPath, normalizedPath),
+                  (folderPath) => !isPathWithinFolder(folderPath, normalizedPath),
                 ),
               ),
               files: nextFiles,
@@ -865,49 +781,35 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
 }
 
 export type WorkspaceStoreInstance = ReturnType<typeof createWorkspaceStore>;
-export type WorkspaceStoreSnapshot = ReturnType<
-  WorkspaceStoreInstance["getSnapshot"]
->;
+export type WorkspaceStoreSnapshot = ReturnType<WorkspaceStoreInstance["getSnapshot"]>;
 
-export const WorkspaceStoreContext =
-  createContext<WorkspaceStoreInstance | null>(null);
+export const WorkspaceStoreContext = createContext<WorkspaceStoreInstance | null>(null);
 
-export const selectWorkspaceEditorState = (
-  context: WorkspaceState,
-): WorkspaceEditorState => context.editorState;
+export const selectWorkspaceEditorState = (context: WorkspaceState): WorkspaceEditorState =>
+  context.editorState;
 
-export const selectWorkspaceSidebarState = (
-  context: WorkspaceState,
-): WorkspaceSidebarState => context.sidebarState;
+export const selectWorkspaceSidebarState = (context: WorkspaceState): WorkspaceSidebarState =>
+  context.sidebarState;
 
-export const selectWorkspaceActiveFilePath = (
-  context: WorkspaceState,
-): string => context.activeFilePath;
+export const selectWorkspaceActiveFilePath = (context: WorkspaceState): string =>
+  context.activeFilePath;
 
-export const selectWorkspaceLessonType = (
-  context: WorkspaceState,
-): WorkspaceLessonType => context.lessonType;
+export const selectWorkspaceLessonType = (context: WorkspaceState): WorkspaceLessonType =>
+  context.lessonType;
 
-export const selectWorkspaceProjectName = (context: WorkspaceState): string =>
-  context.projectName;
+export const selectWorkspaceProjectName = (context: WorkspaceState): string => context.projectName;
 
-export const selectWorkspaceProjectVersion = (
-  context: WorkspaceState,
-): number => context.projectVersion;
+export const selectWorkspaceProjectVersion = (context: WorkspaceState): number =>
+  context.projectVersion;
 
-export const selectWorkspaceFileCount = (context: WorkspaceState): number =>
-  context.fileCount;
+export const selectWorkspaceFileCount = (context: WorkspaceState): number => context.fileCount;
 
-export const selectWorkspacePreviewVersion = (
-  context: WorkspaceState,
-): number => context.previewVersion;
+export const selectWorkspacePreviewVersion = (context: WorkspaceState): number =>
+  context.previewVersion;
 
-export const selectWorkspaceDirtyState = (
-  context: WorkspaceState,
-): WorkspaceDirtyState => context.dirtyState;
+export const selectWorkspaceDirtyState = (context: WorkspaceState): WorkspaceDirtyState =>
+  context.dirtyState;
 
-export const selectWorkspaceSaveVersion = (context: WorkspaceState): number =>
-  context.saveVersion;
+export const selectWorkspaceSaveVersion = (context: WorkspaceState): number => context.saveVersion;
 
-export const selectWorkspaceSyncVersion = (context: WorkspaceState): number =>
-  context.syncVersion;
+export const selectWorkspaceSyncVersion = (context: WorkspaceState): number => context.syncVersion;

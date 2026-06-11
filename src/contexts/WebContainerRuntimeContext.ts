@@ -38,10 +38,7 @@ export interface RuntimePort {
   url: string;
 }
 
-export type RuntimeLifecycleEventKind =
-  | "port-open"
-  | "port-close"
-  | "internal-error";
+export type RuntimeLifecycleEventKind = "port-open" | "port-close" | "internal-error";
 
 export interface RuntimeLifecycleEvent {
   id: number;
@@ -92,12 +89,16 @@ export interface WebContainerRuntimeRecordingSnapshot {
   errorMessage: string | null;
 }
 
-export const WebContainerRuntimeActionsContext =
-  createContext<WebContainerRuntimeActions | null>(null);
-export const WebContainerRuntimeSaveWorkspaceContext =
-  createContext<(() => Promise<void>) | null>(null);
-export const WebContainerRuntimeSnapshotGetterContext =
-  createContext<(() => WebContainerRuntimeRecordingSnapshot) | null>(null);
+export const WebContainerRuntimeActionsContext = createContext<WebContainerRuntimeActions | null>(
+  null,
+);
+export const WebContainerRuntimeSaveWorkspaceContext = createContext<(() => Promise<void>) | null>(
+  null,
+);
+export const WebContainerRuntimeSnapshotGetterContext = createContext<
+  (() => WebContainerRuntimeRecordingSnapshot) | null
+>(null);
 
-export const WebContainerRuntimeMetadataContext =
-  createContext<WebContainerRuntimeMetadata | null>(null);
+export const WebContainerRuntimeMetadataContext = createContext<WebContainerRuntimeMetadata | null>(
+  null,
+);

@@ -1,11 +1,11 @@
-import type * as monaco from 'monaco-editor';
-import type { EditorState } from '../types';
+import type * as monaco from "monaco-editor";
+import type { EditorState } from "../types";
 
 /**
  * Validates that an editor state object has all required properties with correct types
  */
 export const isValidEditorState = (state: unknown): state is EditorState => {
-  if (!state || typeof state !== 'object') {
+  if (!state || typeof state !== "object") {
     return false;
   }
 
@@ -17,36 +17,36 @@ export const isValidEditorState = (state: unknown): state is EditorState => {
   }
 
   // Validate position structure
-  if (!obj.position ||
-    typeof obj.position !== 'object' ||
-    obj.position === null) {
+  if (!obj.position || typeof obj.position !== "object" || obj.position === null) {
     return false;
   }
 
   const position = obj.position as Record<string, unknown>;
-  if (typeof position.lineNumber !== 'number' ||
-    typeof position.column !== 'number' ||
+  if (
+    typeof position.lineNumber !== "number" ||
+    typeof position.column !== "number" ||
     !isFinite(position.lineNumber) ||
-    !isFinite(position.column)) {
+    !isFinite(position.column)
+  ) {
     return false;
   }
 
   // Validate selection structure
-  if (!obj.selection ||
-    typeof obj.selection !== 'object' ||
-    obj.selection === null) {
+  if (!obj.selection || typeof obj.selection !== "object" || obj.selection === null) {
     return false;
   }
 
   const selection = obj.selection as Record<string, unknown>;
-  if (typeof selection.startLineNumber !== 'number' ||
-    typeof selection.startColumn !== 'number' ||
-    typeof selection.endLineNumber !== 'number' ||
-    typeof selection.endColumn !== 'number' ||
+  if (
+    typeof selection.startLineNumber !== "number" ||
+    typeof selection.startColumn !== "number" ||
+    typeof selection.endLineNumber !== "number" ||
+    typeof selection.endColumn !== "number" ||
     !isFinite(selection.startLineNumber) ||
     !isFinite(selection.startColumn) ||
     !isFinite(selection.endLineNumber) ||
-    !isFinite(selection.endColumn)) {
+    !isFinite(selection.endColumn)
+  ) {
     return false;
   }
 
@@ -77,7 +77,7 @@ export const isEditorReady = (editor: monaco.editor.IStandaloneCodeEditor | null
 
     return true;
   } catch (err) {
-    console.debug('Editor not ready yet:', err);
+    console.debug("Editor not ready yet:", err);
     return false;
   }
 };

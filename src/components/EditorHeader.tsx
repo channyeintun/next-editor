@@ -1,9 +1,6 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { RotateCw } from "lucide-react";
-import {
-  useNextEditorActions,
-  useNextEditorMetadata,
-} from "../hooks/useNextEditorContext";
+import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
@@ -43,8 +40,7 @@ function isAppleUserAgent(): boolean {
       platform?: string;
     };
   };
-  const userAgentDataPlatform =
-    navigatorWithUserAgentData.userAgentData?.platform;
+  const userAgentDataPlatform = navigatorWithUserAgentData.userAgentData?.platform;
   const platform = userAgentDataPlatform ?? navigator.platform ?? "";
   const userAgent = navigator.userAgent ?? "";
 
@@ -55,9 +51,7 @@ function getSaveShortcutLabel(): string {
   return isAppleUserAgent() ? "CMD + S" : "CTRL + S";
 }
 
-function stringifyEnvironmentVariables(
-  variables: Record<string, string>,
-): string {
+function stringifyEnvironmentVariables(variables: Record<string, string>): string {
   return Object.entries(variables)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${key}=${value}`)
@@ -107,8 +101,7 @@ function parseEnvironmentInput(value: string): {
 
 const SaveAndRerunControls = memo(function SaveAndRerunControls() {
   const { rerunRunner } = useWebContainerRuntimeActions();
-  const { isSupported, runnerConfig, status } =
-    useWebContainerRuntimeMetadata();
+  const { isSupported, runnerConfig, status } = useWebContainerRuntimeMetadata();
   const lessonType = useWorkspaceLessonType();
   const saveShortcutLabel = useMemo(() => getSaveShortcutLabel(), []);
   const isBusy =
@@ -198,10 +191,8 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { rerunRunner, updateEnvironmentVariables, updateRunnerConfig } =
     useWebContainerRuntimeActions();
-  const { environmentVariables, runnerConfig, status } =
-    useWebContainerRuntimeMetadata();
-  const { createNewEditor, getProject, resetProject, saveProject } =
-    useWorkspaceActions();
+  const { environmentVariables, runnerConfig, status } = useWebContainerRuntimeMetadata();
+  const { createNewEditor, getProject, resetProject, saveProject } = useWorkspaceActions();
   const fileCount = useWorkspaceFileCount();
   const lessonType = useWorkspaceLessonType();
   const { hasUnsavedChanges } = useWorkspaceDirtyState();
@@ -266,9 +257,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
     }
 
     const nextLessonLabel =
-      nextLessonType === "node.js"
-        ? "a fresh Node.js lesson"
-        : "a fresh HTML/CSS lesson";
+      nextLessonType === "node.js" ? "a fresh Node.js lesson" : "a fresh HTML/CSS lesson";
     const confirmMessage = hasUnsavedChanges
       ? `Discard the current workspace and unsaved changes? Switching lesson type will replace it with ${nextLessonLabel}.`
       : fileCount > 0
@@ -323,10 +312,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
 
         {isMenuOpen ? (
           <>
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => setIsMenuOpen(false)}
-            />
+            <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
             <div
               role="menu"
               className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
@@ -405,9 +391,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="space-y-5 overflow-y-auto px-5 py-5">
-              <p className="text-sm font-medium text-slate-100">
-                Edit Environment
-              </p>
+              <p className="text-sm font-medium text-slate-100">Edit Environment</p>
 
               <label className="block">
                 <span className="sr-only">Environment variables</span>
@@ -426,9 +410,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
                 />
               </label>
 
-              {errorMessage ? (
-                <p className="text-sm text-rose-300">{errorMessage}</p>
-              ) : null}
+              {errorMessage ? <p className="text-sm text-rose-300">{errorMessage}</p> : null}
 
               <div className="flex items-center justify-end gap-3">
                 <button
@@ -458,14 +440,10 @@ interface EditorHeaderProps {
   showImportExport: boolean;
 }
 
-const EditorHeader = memo(function EditorHeader({
-  showImportExport,
-}: EditorHeaderProps) {
+const EditorHeader = memo(function EditorHeader({ showImportExport }: EditorHeaderProps) {
   return (
     <div className="bg-[#11141c] px-4 py-1.5 flex items-center justify-between">
-      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-        Editor
-      </span>
+      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
       <div className="flex items-center gap-2">
         <SaveAndRerunControls />
         {showImportExport && (

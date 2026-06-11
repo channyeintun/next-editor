@@ -1,21 +1,8 @@
-import {
-  useEffect,
-  useRef,
-  type Dispatch,
-  type RefObject,
-  type SetStateAction,
-} from "react";
+import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { PreviewDomainAdapter } from "../../contexts/NextEditorDomainAdaptersContext";
-import type {
-  IframeInteractionEvent,
-  PreviewSize,
-  PreviewState,
-} from "../../types/slides";
+import type { IframeInteractionEvent, PreviewSize, PreviewState } from "../../types/slides";
 import { arePreviewSizesEqual } from "../../utils/equality";
-import {
-  getElementByXPath,
-  type PreviewScrollPosition,
-} from "./previewIframeUtils";
+import { getElementByXPath, type PreviewScrollPosition } from "./previewIframeUtils";
 
 interface PreviewRefreshOptions {
   content?: string;
@@ -95,18 +82,14 @@ export function usePreviewPlaybackRegistration({
   targetScrollRef,
   rafRef,
 }: UsePreviewPlaybackRegistrationOptions) {
-  const targetScrollInteractionRef = useRef<IframeInteractionEvent | null>(
-    null,
-  );
+  const targetScrollInteractionRef = useRef<IframeInteractionEvent | null>(null);
 
   useEffect(() => {
     previewAdapter.setSnapshotGetter((): PreviewState => {
       const interaction = pendingInteractionRef.current;
       pendingInteractionRef.current = null;
       const content = isRuntimePreviewActive
-        ? captureRuntimePreviewSnapshot() ||
-          lastRuntimeSnapshotRef.current ||
-          undefined
+        ? captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || undefined
         : lastContentRef.current;
 
       return {
@@ -141,14 +124,8 @@ export function usePreviewPlaybackRegistration({
         const maxHeight = Math.max(1, window.innerHeight - 96);
 
         sizeToApply = {
-          width: Math.min(
-            maxWidth,
-            Math.max(MIN_CUSTOM_PREVIEW_WIDTH, sizeToApply.width),
-          ),
-          height: Math.min(
-            maxHeight,
-            Math.max(MIN_CUSTOM_PREVIEW_HEIGHT, sizeToApply.height),
-          ),
+          width: Math.min(maxWidth, Math.max(MIN_CUSTOM_PREVIEW_WIDTH, sizeToApply.width)),
+          height: Math.min(maxHeight, Math.max(MIN_CUSTOM_PREVIEW_HEIGHT, sizeToApply.height)),
         };
       }
 
@@ -203,10 +180,7 @@ export function usePreviewPlaybackRegistration({
 
       const { iframeDoc } = iframeState;
 
-      if (
-        previewState.scrollTop !== undefined ||
-        previewState.scrollLeft !== undefined
-      ) {
+      if (previewState.scrollTop !== undefined || previewState.scrollLeft !== undefined) {
         const targetTop = previewState.scrollTop ?? 0;
         const targetLeft = previewState.scrollLeft ?? 0;
 
@@ -249,10 +223,7 @@ export function usePreviewPlaybackRegistration({
               targetInteraction.data &&
               !targetInteraction.data.isDocument
             ) {
-              const element = getElementByXPath(
-                iframeDoc,
-                targetInteraction.target.xpath,
-              );
+              const element = getElementByXPath(iframeDoc, targetInteraction.target.xpath);
               if (element instanceof Element) {
                 scrollTarget = element;
               }
@@ -262,10 +233,8 @@ export function usePreviewPlaybackRegistration({
             let currentLeft = 0;
             try {
               if (scrollTarget === iframeWindow) {
-                currentTop =
-                  iframeWindow.scrollY || iframeDoc.documentElement.scrollTop;
-                currentLeft =
-                  iframeWindow.scrollX || iframeDoc.documentElement.scrollLeft;
+                currentTop = iframeWindow.scrollY || iframeDoc.documentElement.scrollTop;
+                currentLeft = iframeWindow.scrollX || iframeDoc.documentElement.scrollLeft;
               } else if (scrollTarget instanceof Element) {
                 currentTop = scrollTarget.scrollTop;
                 currentLeft = scrollTarget.scrollLeft;
@@ -305,10 +274,7 @@ export function usePreviewPlaybackRegistration({
       }
 
       const interaction = previewState.currentInteraction;
-      const element = getElementByXPath(
-        iframeDoc,
-        interaction.target.xpath,
-      ) as HTMLElement | null;
+      const element = getElementByXPath(iframeDoc, interaction.target.xpath) as HTMLElement | null;
 
       if (!element) {
         return;
@@ -319,12 +285,8 @@ export function usePreviewPlaybackRegistration({
 
       switch (interaction.type) {
         case "click":
-          elementWithStyle.style.setProperty(
-            "--ring-color",
-            "rgba(59, 130, 246, 0.5)",
-          );
-          elementWithStyle.style.boxShadow =
-            "0 0 0 4px rgba(59, 130, 246, 0.5)";
+          elementWithStyle.style.setProperty("--ring-color", "rgba(59, 130, 246, 0.5)");
+          elementWithStyle.style.boxShadow = "0 0 0 4px rgba(59, 130, 246, 0.5)";
           setTimeout(() => {
             elementWithStyle.style.removeProperty("--ring-color");
             elementWithStyle.style.boxShadow = "";
@@ -343,9 +305,7 @@ export function usePreviewPlaybackRegistration({
           break;
         case "input": {
           const isInput =
-            tagName === "input" ||
-            tagName === "textarea" ||
-            elementWithStyle.isContentEditable;
+            tagName === "input" || tagName === "textarea" || elementWithStyle.isContentEditable;
           if (isInput && interaction.data?.value !== undefined) {
             elementWithStyle.value = interaction.data.value;
           }

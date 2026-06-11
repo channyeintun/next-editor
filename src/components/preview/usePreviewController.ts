@@ -8,10 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type TouchEvent as ReactTouchEvent,
 } from "react";
-import {
-  useNextEditorActions,
-  useNextEditorMetadata,
-} from "../../hooks/useNextEditorContext";
+import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
 import { useNextEditorDomainAdapters } from "../../contexts/NextEditorDomainAdaptersContext";
 import {
   useWorkspaceLessonType,
@@ -20,11 +17,7 @@ import {
 } from "../../hooks/useWorkspace";
 import { useWebContainerRuntimeMetadata } from "../../hooks/useWebContainerRuntime";
 import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRuntimeContext";
-import type {
-  IframeInteractionEvent,
-  PreviewEvent,
-  PreviewSize,
-} from "../../types/slides";
+import type { IframeInteractionEvent, PreviewEvent, PreviewSize } from "../../types/slides";
 import { useCompiledStaticWorkspacePreview } from "./useCompiledStaticWorkspacePreview";
 import {
   createReplayableRuntimePreview,
@@ -71,8 +64,7 @@ function getRuntimePreviewState(
     return {
       label: "Runtime preview unavailable",
       title: "Runtime preview unavailable",
-      description:
-        "WebContainers need cross-origin isolation before the app preview can run.",
+      description: "WebContainers need cross-origin isolation before the app preview can run.",
       placeholderKind: "message",
     };
   }
@@ -81,9 +73,7 @@ function getRuntimePreviewState(
     return {
       label: "Runtime preview error",
       title: "Runtime preview failed",
-      description:
-        errorMessage ??
-        "Check the runner output, fix the error, and rerun the preview.",
+      description: errorMessage ?? "Check the runner output, fix the error, and rerun the preview.",
       placeholderKind: "message",
     };
   }
@@ -92,8 +82,7 @@ function getRuntimePreviewState(
     return {
       label: "Installing runtime",
       title: "Installing dependencies",
-      description:
-        "The project is preparing packages before the live preview can start.",
+      description: "The project is preparing packages before the live preview can start.",
       placeholderKind: "spinner",
     };
   }
@@ -102,8 +91,7 @@ function getRuntimePreviewState(
     return {
       label: "Starting runtime",
       title: "Starting live preview",
-      description:
-        "The dev server is booting and will replace this placeholder when it is ready.",
+      description: "The dev server is booting and will replace this placeholder when it is ready.",
       placeholderKind: "spinner",
     };
   }
@@ -112,8 +100,7 @@ function getRuntimePreviewState(
     return {
       label: "Preparing runtime",
       title: "Preparing runtime preview",
-      description:
-        "The workspace is mounting into the WebContainer before the preview starts.",
+      description: "The workspace is mounting into the WebContainer before the preview starts.",
       placeholderKind: "spinner",
     };
   }
@@ -287,9 +274,7 @@ export function usePreviewController(): PreviewController {
   const userScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const isRecordingRef = useRef(false);
-  const handlePreviewEventRef = useRef<((event: PreviewEvent) => void) | null>(
-    null,
-  );
+  const handlePreviewEventRef = useRef<((event: PreviewEvent) => void) | null>(null);
 
   const { editorRef, handlePreviewEvent } = useNextEditorActions();
   const { preview } = useNextEditorDomainAdapters();
@@ -304,18 +289,12 @@ export function usePreviewController(): PreviewController {
     runnerConfig,
   } = useWebContainerRuntimeMetadata();
 
-  const { currentRecording, isPlaying, isRecording, usesPlaybackModel } =
-    useNextEditorMetadata();
+  const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
   const staticWorkspacePreview = useCompiledStaticWorkspacePreview();
   const isRuntimePlaybackPreviewActive =
-    lessonType === "node.js" &&
-    Boolean(currentRecording) &&
-    usesPlaybackModel &&
-    !isRecording;
+    lessonType === "node.js" && Boolean(currentRecording) && usesPlaybackModel && !isRecording;
   const isPlaybackPreviewActive =
-    lessonType === "node.js"
-      ? isRuntimePlaybackPreviewActive
-      : usesPlaybackModel && !isRecording;
+    lessonType === "node.js" ? isRuntimePlaybackPreviewActive : usesPlaybackModel && !isRecording;
   const recordedRuntimeSnapshot = isRuntimePlaybackPreviewActive
     ? (currentRecording?.runtimeSnapshot ?? null)
     : null;
@@ -323,9 +302,7 @@ export function usePreviewController(): PreviewController {
     | WebContainerRuntimeStatus
     | undefined;
   const effectiveRuntimeStatus =
-    runtimeStatus === "idle"
-      ? (recordedRuntimeStatus ?? runtimeStatus)
-      : runtimeStatus;
+    runtimeStatus === "idle" ? (recordedRuntimeStatus ?? runtimeStatus) : runtimeStatus;
   const effectiveRuntimePreviewUrl =
     runtimePreviewUrl || recordedRuntimeSnapshot?.previewUrl || null;
   const effectiveRuntimeErrorMessage =
@@ -340,8 +317,7 @@ export function usePreviewController(): PreviewController {
     lessonType === "node.js" &&
     effectiveRuntimeStatus === "ready" &&
     Boolean(effectiveRuntimePreviewUrl);
-  const isRuntimeManagedPreview =
-    lessonType === "node.js" && runnerConfig.enabled;
+  const isRuntimeManagedPreview = lessonType === "node.js" && runnerConfig.enabled;
   const runtimePreviewState = useMemo(
     () =>
       getRuntimePreviewState(
@@ -385,10 +361,7 @@ export function usePreviewController(): PreviewController {
       return null;
     }
 
-    const snapshot = createReplayableRuntimePreview(
-      iframe,
-      effectiveRuntimePreviewUrl,
-    );
+    const snapshot = createReplayableRuntimePreview(iframe, effectiveRuntimePreviewUrl);
 
     if (snapshot) {
       lastRuntimeSnapshotRef.current = snapshot;
@@ -448,14 +421,8 @@ export function usePreviewController(): PreviewController {
   });
 
   const updateIframeContent = useCallback(
-    (
-      content: string,
-      options?: { force?: boolean; preserveDocument?: boolean },
-    ) => {
-      if (
-        !iframeRef.current ||
-        (isLiveRuntimePreviewActive && !options?.force)
-      ) {
+    (content: string, options?: { force?: boolean; preserveDocument?: boolean }) => {
+      if (!iframeRef.current || (isLiveRuntimePreviewActive && !options?.force)) {
         return;
       }
 
@@ -523,23 +490,17 @@ export function usePreviewController(): PreviewController {
       }
 
       if (isRuntimePreviewActive && effectiveRuntimePreviewUrl) {
-        const shouldReloadRuntime =
-          options?.reloadRuntime ?? !options?.emitEvent;
+        const shouldReloadRuntime = options?.reloadRuntime ?? !options?.emitEvent;
 
         if (!options?.emitEvent && shouldReloadRuntime) {
-          void refreshRuntimePreview(
-            iframe,
-            effectiveRuntimePreviewUrl,
-          ).finally(finishRefresh);
+          void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).finally(finishRefresh);
           return;
         }
 
         let didFinalize = false;
         let runtimeSnapshotPollTimeout: number | null = null;
         const initialRuntimeSnapshot =
-          captureRuntimePreviewSnapshot() ||
-          lastRuntimeSnapshotRef.current ||
-          "";
+          captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || "";
 
         const cleanupRuntimeRefresh = () => {
           iframe.removeEventListener("load", handleRuntimeRefreshLoad);
@@ -556,8 +517,7 @@ export function usePreviewController(): PreviewController {
           didFinalize = true;
           cleanupRuntimeRefresh();
 
-          const resolvedContent =
-            content || staticWorkspacePreview || undefined;
+          const resolvedContent = content || staticWorkspacePreview || undefined;
 
           emitPreviewEvent(
             "preview_refresh",
@@ -568,9 +528,7 @@ export function usePreviewController(): PreviewController {
 
         const pollRuntimeSnapshot = () => {
           const content =
-            captureRuntimePreviewSnapshot() ||
-            lastRuntimeSnapshotRef.current ||
-            undefined;
+            captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || undefined;
 
           if (content !== undefined && content !== initialRuntimeSnapshot) {
             finalizeRuntimeRefresh(content);
@@ -584,17 +542,11 @@ export function usePreviewController(): PreviewController {
             return;
           }
 
-          runtimeSnapshotPollTimeout = window.setTimeout(
-            pollRuntimeSnapshot,
-            100,
-          );
+          runtimeSnapshotPollTimeout = window.setTimeout(pollRuntimeSnapshot, 100);
         };
 
         const handleRuntimeRefreshLoad = () => {
-          runtimeSnapshotPollTimeout = window.setTimeout(
-            pollRuntimeSnapshot,
-            0,
-          );
+          runtimeSnapshotPollTimeout = window.setTimeout(pollRuntimeSnapshot, 0);
         };
 
         const refreshStartedAt = performance.now();
@@ -608,8 +560,8 @@ export function usePreviewController(): PreviewController {
           once: true,
         });
 
-        void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).catch(
-          () => finalizeRuntimeRefresh(initialRuntimeSnapshot || undefined),
+        void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).catch(() =>
+          finalizeRuntimeRefresh(initialRuntimeSnapshot || undefined),
         );
         return;
       }
@@ -722,11 +674,7 @@ export function usePreviewController(): PreviewController {
     return () => {
       iframe.removeEventListener("load", syncSnapshot);
     };
-  }, [
-    captureRuntimePreviewSnapshot,
-    isPlaybackPreviewActive,
-    isRuntimePreviewActive,
-  ]);
+  }, [captureRuntimePreviewSnapshot, isPlaybackPreviewActive, isRuntimePreviewActive]);
 
   useEffect(() => {
     if (isPlaybackPreviewActive) {
@@ -740,10 +688,7 @@ export function usePreviewController(): PreviewController {
 
     if (lessonType === "node.js" && runtimePreviewUrl) {
       captureRuntimePreviewSnapshot();
-      if (
-        iframe.getAttribute("srcdoc") !== null ||
-        iframe.src !== runtimePreviewUrl
-      ) {
+      if (iframe.getAttribute("srcdoc") !== null || iframe.src !== runtimePreviewUrl) {
         iframe.removeAttribute("srcdoc");
         iframe.src = runtimePreviewUrl;
       }
@@ -834,10 +779,7 @@ export function usePreviewController(): PreviewController {
 
       const editor = editorRef.current;
       if (!editor) {
-        editorBootstrapPollTimeoutRef.current = window.setTimeout(
-          checkForEditor,
-          100,
-        );
+        editorBootstrapPollTimeoutRef.current = window.setTimeout(checkForEditor, 100);
         return;
       }
 
@@ -949,11 +891,7 @@ export function usePreviewController(): PreviewController {
       setIsResizing(true);
 
       const getCoords = (
-        currentEvent:
-          | MouseEvent
-          | TouchEvent
-          | ReactMouseEvent
-          | ReactTouchEvent,
+        currentEvent: MouseEvent | TouchEvent | ReactMouseEvent | ReactTouchEvent,
       ) => {
         if ("touches" in currentEvent) {
           return {
@@ -994,10 +932,7 @@ export function usePreviewController(): PreviewController {
         const maxHeight = window.innerHeight - 96;
 
         const newWidth = Math.min(maxWidth, Math.max(160, startWidth + deltaX));
-        const newHeight = Math.min(
-          maxHeight,
-          Math.max(120, startHeight + deltaY),
-        );
+        const newHeight = Math.min(maxHeight, Math.max(120, startHeight + deltaY));
 
         const newSize = { width: newWidth, height: newHeight };
         setSize(newSize);

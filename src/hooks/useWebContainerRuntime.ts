@@ -46,15 +46,14 @@ export const useWebContainerRuntimeSnapshotGetter =
     return context;
   };
 
-export const useWebContainerRuntimeMetadata =
-  (): WebContainerRuntimeMetadata => {
-    const context = useContext(WebContainerRuntimeMetadataContext);
+export const useWebContainerRuntimeMetadata = (): WebContainerRuntimeMetadata => {
+  const context = useContext(WebContainerRuntimeMetadataContext);
 
-    if (!context) {
-      throw new Error(
-        "useWebContainerRuntimeMetadata must be used within a WebContainerRuntimeProvider",
-      );
-    }
+  if (!context) {
+    throw new Error(
+      "useWebContainerRuntimeMetadata must be used within a WebContainerRuntimeProvider",
+    );
+  }
 
-    return context;
-  };
+  return context;
+};

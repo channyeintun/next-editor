@@ -9,18 +9,11 @@ import {
 } from "xstate";
 import type * as monaco from "monaco-editor";
 import type { SlideEvent, PreviewEvent } from "../slides";
-import type {
-  EditorMachineContext,
-  EditorMachineEvent,
-  EditorMachineInput,
-} from "./types";
+import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
 import { createInitialContext } from "./types";
 import type { EditorFrame, Recording } from "../types";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
-import {
-  areWorkspaceSnapshotsEqual,
-  type WorkspaceRecordingEvent,
-} from "../../../types/workspace";
+import { areWorkspaceSnapshotsEqual, type WorkspaceRecordingEvent } from "../../../types/workspace";
 import {
   compressFrames,
   reconstructFrameAtIndex,
@@ -45,10 +38,7 @@ import {
 } from "../utils/editorState";
 import { isValidFrameState, isEditorReady } from "../utils/validation";
 import { calculateDurationFromFileReader } from "../utils/audioDuration";
-import {
-  arePreviewSizesEqual,
-  areStructuredDataEqual,
-} from "../../../utils/equality";
+import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
 import {
   getPreviewReplayResult,
   getRuntimeReplayResult,
@@ -86,24 +76,14 @@ const applyFrameState = (
 
   try {
     // Apply content changes
-    if (
-      !previousFrame ||
-      previousFrame.state.content !== normalizedFrame.state.content
-    ) {
-      applyContentDiff(
-        editor,
-        normalizedFrame.state.content,
-        previousFrame?.state.content,
-      );
+    if (!previousFrame || previousFrame.state.content !== normalizedFrame.state.content) {
+      applyContentDiff(editor, normalizedFrame.state.content, previousFrame?.state.content);
     }
 
     const viewStateChanged =
       !!normalizedFrame.state.viewState &&
       (!previousFrame ||
-        !areStructuredDataEqual(
-          normalizedFrame.state.viewState,
-          previousFrame.state.viewState,
-        ));
+        !areStructuredDataEqual(normalizedFrame.state.viewState, previousFrame.state.viewState));
 
     // Restore scroll/layout first, then explicitly reapply selection so
     // Monaco cursorState inside viewState cannot override the recorded caret.
@@ -115,16 +95,8 @@ const applyFrameState = (
       }
     }
 
-    applyPositionDiff(
-      editor,
-      normalizedFrame.state.position,
-      editor.getPosition(),
-    );
-    applySelectionDiff(
-      editor,
-      normalizedFrame.state.selection,
-      editor.getSelection(),
-    );
+    applyPositionDiff(editor, normalizedFrame.state.position, editor.getPosition());
+    applySelectionDiff(editor, normalizedFrame.state.selection, editor.getSelection());
 
     // Add cursor decorations during playback only when Monaco's own caret is
     // not visible. This avoids duplicate carets and preserves native
@@ -132,21 +104,14 @@ const applyFrameState = (
     if (isPlaying && !editor.hasTextFocus()) {
       // Only update decorations if selection changed or collection is missing
       const selectionChanged =
-        !previousFrame ||
-        !areSelectionsEqual(
-          previousFrame.state.selection,
-          frame.state.selection,
-        );
+        !previousFrame || !areSelectionsEqual(previousFrame.state.selection, frame.state.selection);
 
       if (selectionChanged || viewStateChanged || !collection) {
         const newDecorations: monaco.editor.IModelDeltaDecoration[] = [];
-        const currentSelections = editor.getSelections() || [
-          frame.state.selection,
-        ];
+        const currentSelections = editor.getSelections() || [frame.state.selection];
 
         currentSelections.forEach((selection) => {
-          const Range = (window as unknown as { monaco: typeof monaco }).monaco
-            .Range;
+          const Range = (window as unknown as { monaco: typeof monaco }).monaco.Range;
           newDecorations.push({
             range: new Range(
               selection.positionLineNumber,
@@ -198,16 +163,8 @@ const createFrame = (
 ): EditorFrame => {
   const content = editor.getValue();
   const position = normalizeEditorPosition(editor.getPosition());
-  const selection = normalizeEditorSelection(
-    editor.getSelection(),
-    undefined,
-    position,
-  );
-  const viewState = normalizeEditorViewState(
-    editor.saveViewState(),
-    selection,
-    position,
-  );
+  const selection = normalizeEditorSelection(editor.getSelection(), undefined, position);
+  const viewState = normalizeEditorViewState(editor.saveViewState(), selection, position);
   const slideState = getSlideState?.();
   const previewState = getPreviewState?.();
 
@@ -277,10 +234,7 @@ const APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS = [
   ...APPLY_REPLAY_STATE_ACTIONS,
 ] as const;
 
-const SET_EDITOR_REF_ACTIONS = [
-  "setEditorRef",
-  "invalidateRenderedPlaybackState",
-] as const;
+const SET_EDITOR_REF_ACTIONS = ["setEditorRef", "invalidateRenderedPlaybackState"] as const;
 
 const REATTACH_AND_APPLY_REPLAY_STATE_ACTIONS = [
   "reattachPlaybackWorkspace",
@@ -309,239 +263,225 @@ interface MouseTrackingInput {
   onMouseMove: (pos: { x: number; y: number; visible: boolean }) => void;
 }
 
-const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(
-  ({ input }) => {
-    const handleMouseMove = (e: MouseEvent) => {
-      input.onMouseMove({ x: e.clientX, y: e.clientY, visible: true });
-    };
+const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({ input }) => {
+  const handleMouseMove = (e: MouseEvent) => {
+    input.onMouseMove({ x: e.clientX, y: e.clientY, visible: true });
+  };
 
-    const handleMouseLeave = () => {
-      input.onMouseMove({ x: 0, y: 0, visible: false });
-    };
+  const handleMouseLeave = () => {
+    input.onMouseMove({ x: 0, y: 0, visible: false });
+  };
 
-    // Handle iframe mouse tracking
-    const iframeListeners = new Map<
-      HTMLIFrameElement,
-      { move: (e: MouseEvent) => void; leave: () => void }
-    >();
-    const iframeLoadHandlers = new Map<HTMLIFrameElement, () => void>();
-    const iframeWindowMap = new Map<Window, HTMLIFrameElement>();
-    const directlyTrackedIframes = new Set<HTMLIFrameElement>();
+  // Handle iframe mouse tracking
+  const iframeListeners = new Map<
+    HTMLIFrameElement,
+    { move: (e: MouseEvent) => void; leave: () => void }
+  >();
+  const iframeLoadHandlers = new Map<HTMLIFrameElement, () => void>();
+  const iframeWindowMap = new Map<Window, HTMLIFrameElement>();
+  const directlyTrackedIframes = new Set<HTMLIFrameElement>();
 
-    const rememberIframeWindow = (iframe: HTMLIFrameElement) => {
-      const iframeWindow = iframe.contentWindow;
+  const rememberIframeWindow = (iframe: HTMLIFrameElement) => {
+    const iframeWindow = iframe.contentWindow;
 
-      if (iframeWindow) {
-        iframeWindowMap.set(iframeWindow, iframe);
-      }
-    };
+    if (iframeWindow) {
+      iframeWindowMap.set(iframeWindow, iframe);
+    }
+  };
 
-    const forgetIframeWindow = (iframe: HTMLIFrameElement) => {
-      const iframeWindow = iframe.contentWindow;
+  const forgetIframeWindow = (iframe: HTMLIFrameElement) => {
+    const iframeWindow = iframe.contentWindow;
 
-      if (!iframeWindow) {
-        return;
-      }
+    if (!iframeWindow) {
+      return;
+    }
 
-      const currentIframe = iframeWindowMap.get(iframeWindow);
-      if (currentIframe === iframe) {
-        iframeWindowMap.delete(iframeWindow);
-      }
-    };
+    const currentIframe = iframeWindowMap.get(iframeWindow);
+    if (currentIframe === iframe) {
+      iframeWindowMap.delete(iframeWindow);
+    }
+  };
 
-    const setupIframeListeners = (iframe: HTMLIFrameElement) => {
-      rememberIframeWindow(iframe);
+  const setupIframeListeners = (iframe: HTMLIFrameElement) => {
+    rememberIframeWindow(iframe);
 
-      const onIframeMouseMove = (e: MouseEvent) => {
-        const rect = iframe.getBoundingClientRect();
-        input.onMouseMove({
-          x: rect.left + e.clientX,
-          y: rect.top + e.clientY,
-          visible: true,
-        });
-      };
-
-      const onIframeMouseLeave = () => {
-        input.onMouseMove({ x: 0, y: 0, visible: false });
-      };
-
-      const attachToDocument = () => {
-        try {
-          const iframeDoc =
-            iframe.contentDocument || iframe.contentWindow?.document;
-          if (!iframeDoc) {
-            directlyTrackedIframes.delete(iframe);
-            return;
-          }
-
-          // Clean up existing listeners if any
-          const existing = iframeListeners.get(iframe);
-          if (existing) {
-            iframeDoc.removeEventListener("mousemove", existing.move);
-            iframeDoc.removeEventListener("mouseleave", existing.leave);
-          }
-
-          iframeDoc.addEventListener("mousemove", onIframeMouseMove, true);
-          iframeDoc.addEventListener("mouseleave", onIframeMouseLeave, true);
-          directlyTrackedIframes.add(iframe);
-
-          iframeListeners.set(iframe, {
-            move: onIframeMouseMove,
-            leave: onIframeMouseLeave,
-          });
-        } catch (err) {
-          // Likely cross-origin
-          directlyTrackedIframes.delete(iframe);
-          console.error("Cannot track mouse in iframe (cross-origin):", err);
-        }
-      };
-
-      const handleLoad = () => {
-        attachToDocument();
-      };
-
-      iframe.addEventListener("load", handleLoad);
-      iframeLoadHandlers.set(iframe, handleLoad);
-      attachToDocument();
-    };
-
-    const removeIframeListeners = (iframe: HTMLIFrameElement) => {
-      directlyTrackedIframes.delete(iframe);
-      forgetIframeWindow(iframe);
-
-      const handlers = iframeListeners.get(iframe);
-      const loadHandler = iframeLoadHandlers.get(iframe);
-
-      if (loadHandler) {
-        iframe.removeEventListener("load", loadHandler);
-        iframeLoadHandlers.delete(iframe);
-      }
-
-      if (handlers) {
-        try {
-          const iframeDoc =
-            iframe.contentDocument || iframe.contentWindow?.document;
-          if (iframeDoc) {
-            iframeDoc.removeEventListener("mousemove", handlers.move);
-            iframeDoc.removeEventListener("mouseleave", handlers.leave);
-          }
-        } catch (err) {
-          console.error("Error removing iframe listeners:", err);
-        }
-        iframeListeners.delete(iframe);
-      }
-    };
-
-    const handleIframeInteractionMessage = (event: MessageEvent) => {
-      const { type, payload } = event.data || {};
-      if (type !== IFRAME_INTERACTION_MESSAGE_TYPE) {
-        return;
-      }
-
-      if (payload?.type !== "mousemove") {
-        return;
-      }
-
-      if (
-        typeof payload?.data?.clientX !== "number" ||
-        typeof payload?.data?.clientY !== "number"
-      ) {
-        return;
-      }
-
-      const sourceWindow = event.source as Window | null;
-      if (!sourceWindow) {
-        return;
-      }
-
-      const iframe = iframeWindowMap.get(sourceWindow);
-      if (!iframe || directlyTrackedIframes.has(iframe)) {
-        return;
-      }
-
+    const onIframeMouseMove = (e: MouseEvent) => {
       const rect = iframe.getBoundingClientRect();
       input.onMouseMove({
-        x: rect.left + payload.data.clientX,
-        y: rect.top + payload.data.clientY,
+        x: rect.left + e.clientX,
+        y: rect.top + e.clientY,
         visible: true,
       });
     };
 
-    // Listen for new iframes and content changes
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === "childList") {
-          mutation.addedNodes.forEach((node) => {
-            if (node instanceof HTMLIFrameElement) {
-              setupIframeListeners(node);
-            } else if (node instanceof HTMLElement) {
-              node.querySelectorAll("iframe").forEach(setupIframeListeners);
-            }
-          });
-          mutation.removedNodes.forEach((node) => {
-            if (node instanceof HTMLIFrameElement) {
-              removeIframeListeners(node);
-            } else if (node instanceof HTMLElement) {
-              node.querySelectorAll("iframe").forEach(removeIframeListeners);
-            }
-          });
-        } else if (
-          mutation.type === "attributes" &&
-          mutation.target instanceof HTMLIFrameElement
-        ) {
-          if (
-            mutation.attributeName === "src" ||
-            mutation.attributeName === "srcdoc"
-          ) {
-            setupIframeListeners(mutation.target);
-          }
-        }
-      });
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["src", "srcdoc"],
-    });
-
-    // Initial setup
-    document.querySelectorAll("iframe").forEach(setupIframeListeners);
-    document.addEventListener("mousemove", handleMouseMove, true);
-    document.addEventListener("mouseleave", handleMouseLeave, true);
-    window.addEventListener("message", handleIframeInteractionMessage);
-
-    return () => {
-      observer.disconnect();
-      document.removeEventListener("mousemove", handleMouseMove, true);
-      document.removeEventListener("mouseleave", handleMouseLeave, true);
-      window.removeEventListener("message", handleIframeInteractionMessage);
-
-      // Clean up load listeners
-      iframeLoadHandlers.forEach((handler, iframe) => {
-        iframe.removeEventListener("load", handler);
-      });
-      iframeLoadHandlers.clear();
-      iframeWindowMap.clear();
-      directlyTrackedIframes.clear();
-
-      iframeListeners.forEach((handlers, iframe) => {
-        try {
-          const iframeDoc =
-            iframe.contentDocument || iframe.contentWindow?.document;
-          if (iframeDoc) {
-            iframeDoc.removeEventListener("mousemove", handlers.move);
-            iframeDoc.removeEventListener("mouseleave", handlers.leave);
-          }
-        } catch (err) {
-          console.error("Failed to cleanup iframe listeners:", err);
-        }
-      });
-      iframeListeners.clear();
+    const onIframeMouseLeave = () => {
+      input.onMouseMove({ x: 0, y: 0, visible: false });
     };
-  },
-);
+
+    const attachToDocument = () => {
+      try {
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!iframeDoc) {
+          directlyTrackedIframes.delete(iframe);
+          return;
+        }
+
+        // Clean up existing listeners if any
+        const existing = iframeListeners.get(iframe);
+        if (existing) {
+          iframeDoc.removeEventListener("mousemove", existing.move);
+          iframeDoc.removeEventListener("mouseleave", existing.leave);
+        }
+
+        iframeDoc.addEventListener("mousemove", onIframeMouseMove, true);
+        iframeDoc.addEventListener("mouseleave", onIframeMouseLeave, true);
+        directlyTrackedIframes.add(iframe);
+
+        iframeListeners.set(iframe, {
+          move: onIframeMouseMove,
+          leave: onIframeMouseLeave,
+        });
+      } catch (err) {
+        // Likely cross-origin
+        directlyTrackedIframes.delete(iframe);
+        console.error("Cannot track mouse in iframe (cross-origin):", err);
+      }
+    };
+
+    const handleLoad = () => {
+      attachToDocument();
+    };
+
+    iframe.addEventListener("load", handleLoad);
+    iframeLoadHandlers.set(iframe, handleLoad);
+    attachToDocument();
+  };
+
+  const removeIframeListeners = (iframe: HTMLIFrameElement) => {
+    directlyTrackedIframes.delete(iframe);
+    forgetIframeWindow(iframe);
+
+    const handlers = iframeListeners.get(iframe);
+    const loadHandler = iframeLoadHandlers.get(iframe);
+
+    if (loadHandler) {
+      iframe.removeEventListener("load", loadHandler);
+      iframeLoadHandlers.delete(iframe);
+    }
+
+    if (handlers) {
+      try {
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.removeEventListener("mousemove", handlers.move);
+          iframeDoc.removeEventListener("mouseleave", handlers.leave);
+        }
+      } catch (err) {
+        console.error("Error removing iframe listeners:", err);
+      }
+      iframeListeners.delete(iframe);
+    }
+  };
+
+  const handleIframeInteractionMessage = (event: MessageEvent) => {
+    const { type, payload } = event.data || {};
+    if (type !== IFRAME_INTERACTION_MESSAGE_TYPE) {
+      return;
+    }
+
+    if (payload?.type !== "mousemove") {
+      return;
+    }
+
+    if (typeof payload?.data?.clientX !== "number" || typeof payload?.data?.clientY !== "number") {
+      return;
+    }
+
+    const sourceWindow = event.source as Window | null;
+    if (!sourceWindow) {
+      return;
+    }
+
+    const iframe = iframeWindowMap.get(sourceWindow);
+    if (!iframe || directlyTrackedIframes.has(iframe)) {
+      return;
+    }
+
+    const rect = iframe.getBoundingClientRect();
+    input.onMouseMove({
+      x: rect.left + payload.data.clientX,
+      y: rect.top + payload.data.clientY,
+      visible: true,
+    });
+  };
+
+  // Listen for new iframes and content changes
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === "childList") {
+        mutation.addedNodes.forEach((node) => {
+          if (node instanceof HTMLIFrameElement) {
+            setupIframeListeners(node);
+          } else if (node instanceof HTMLElement) {
+            node.querySelectorAll("iframe").forEach(setupIframeListeners);
+          }
+        });
+        mutation.removedNodes.forEach((node) => {
+          if (node instanceof HTMLIFrameElement) {
+            removeIframeListeners(node);
+          } else if (node instanceof HTMLElement) {
+            node.querySelectorAll("iframe").forEach(removeIframeListeners);
+          }
+        });
+      } else if (mutation.type === "attributes" && mutation.target instanceof HTMLIFrameElement) {
+        if (mutation.attributeName === "src" || mutation.attributeName === "srcdoc") {
+          setupIframeListeners(mutation.target);
+        }
+      }
+    });
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["src", "srcdoc"],
+  });
+
+  // Initial setup
+  document.querySelectorAll("iframe").forEach(setupIframeListeners);
+  document.addEventListener("mousemove", handleMouseMove, true);
+  document.addEventListener("mouseleave", handleMouseLeave, true);
+  window.addEventListener("message", handleIframeInteractionMessage);
+
+  return () => {
+    observer.disconnect();
+    document.removeEventListener("mousemove", handleMouseMove, true);
+    document.removeEventListener("mouseleave", handleMouseLeave, true);
+    window.removeEventListener("message", handleIframeInteractionMessage);
+
+    // Clean up load listeners
+    iframeLoadHandlers.forEach((handler, iframe) => {
+      iframe.removeEventListener("load", handler);
+    });
+    iframeLoadHandlers.clear();
+    iframeWindowMap.clear();
+    directlyTrackedIframes.clear();
+
+    iframeListeners.forEach((handlers, iframe) => {
+      try {
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.removeEventListener("mousemove", handlers.move);
+          iframeDoc.removeEventListener("mouseleave", handlers.leave);
+        }
+      } catch (err) {
+        console.error("Failed to cleanup iframe listeners:", err);
+      }
+    });
+    iframeListeners.clear();
+  };
+});
 
 // ============================================================================
 // Editor State Machine
@@ -567,8 +507,7 @@ export const editorMachine = setup({
       const audioBlob = input.recording.audioBlob;
       if (audioBlob instanceof Blob) {
         try {
-          const exactDuration =
-            await calculateDurationFromFileReader(audioBlob);
+          const exactDuration = await calculateDurationFromFileReader(audioBlob);
           // Use audio duration as the source of truth if it exists
           // This prevents trailing silence from wall-clock overhead
           duration = exactDuration * 1000;
@@ -730,8 +669,7 @@ export const editorMachine = setup({
         const frames = context.session.frames;
         const lastFrame = frames[frames.length - 1];
         const lastMousePosition = context.session.lastMousePosition;
-        const visibilityChanged =
-          lastMousePosition?.visible !== mousePosition?.visible;
+        const visibilityChanged = lastMousePosition?.visible !== mousePosition?.visible;
 
         if (
           lastFrame &&
@@ -766,10 +704,7 @@ export const editorMachine = setup({
     }),
 
     capturePreviewRefreshFrame: assign(({ context, event }) => {
-      if (
-        event.type !== "PREVIEW_EVENT" ||
-        event.event.type !== "preview_refresh"
-      ) {
+      if (event.type !== "PREVIEW_EVENT" || event.event.type !== "preview_refresh") {
         return {};
       }
 
@@ -873,10 +808,7 @@ export const editorMachine = setup({
       if (initialWorkspaceEvent && context.applyWorkspaceSnapshot) {
         if (
           !currentWorkspaceSnapshot ||
-          !areWorkspaceSnapshotsEqual(
-            currentWorkspaceSnapshot,
-            initialWorkspaceEvent.snapshot,
-          )
+          !areWorkspaceSnapshotsEqual(currentWorkspaceSnapshot, initialWorkspaceEvent.snapshot)
         ) {
           context.applyWorkspaceSnapshot(initialWorkspaceEvent.snapshot);
         }
@@ -884,10 +816,7 @@ export const editorMachine = setup({
         recording.workspaceSnapshot &&
         context.applyWorkspaceSnapshot &&
         (!currentWorkspaceSnapshot ||
-          !areWorkspaceSnapshotsEqual(
-            currentWorkspaceSnapshot,
-            recording.workspaceSnapshot,
-          ))
+          !areWorkspaceSnapshotsEqual(currentWorkspaceSnapshot, recording.workspaceSnapshot))
       ) {
         context.applyWorkspaceSnapshot(recording.workspaceSnapshot);
       }
@@ -923,8 +852,7 @@ export const editorMachine = setup({
     }),
 
     applyFrameAtTime: assign(({ context, event }) => {
-      const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } =
-        context;
+      const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } = context;
       const currentTime =
         event.type === "TICK"
           ? event.currentTime
@@ -939,11 +867,7 @@ export const editorMachine = setup({
       const frames = recording.frames;
       if (!frames?.length) return {};
 
-      const frameIndex = findFrameIndexAtTime(
-        frames,
-        currentTime,
-        lastAppliedFrameIndex,
-      );
+      const frameIndex = findFrameIndexAtTime(frames, currentTime, lastAppliedFrameIndex);
 
       if (frameIndex === lastAppliedFrameIndex) {
         return {};
@@ -952,13 +876,9 @@ export const editorMachine = setup({
       let frame: EditorFrame | null = null;
       const targetFrame = frames[frameIndex];
       const latestWorkspaceEvent =
-        recording.workspaceEvents?.[context.lastAppliedWorkspaceEventIndex] ??
-        null;
+        recording.workspaceEvents?.[context.lastAppliedWorkspaceEventIndex] ?? null;
 
-      if (
-        latestWorkspaceEvent &&
-        targetFrame.timestamp < latestWorkspaceEvent.timestamp
-      ) {
+      if (latestWorkspaceEvent && targetFrame.timestamp < latestWorkspaceEvent.timestamp) {
         return {
           lastAppliedFrameIndex: frameIndex,
           currentFrame: null,
@@ -1014,16 +934,12 @@ export const editorMachine = setup({
           const hasChanged =
             !prevSlideState ||
             frame.state.slideState.isOpen !== prevSlideState.isOpen ||
-            frame.state.slideState.currentSlideId !==
-              prevSlideState.currentSlideId ||
+            frame.state.slideState.currentSlideId !== prevSlideState.currentSlideId ||
             frame.state.slideState.indexv !== prevSlideState.indexv ||
             frame.state.currentSlideIndex !== prevSlideIndex;
 
           if (hasChanged) {
-            context.applySlideState(
-              frame.state.slideState,
-              frame.state.currentSlideIndex,
-            );
+            context.applySlideState(frame.state.slideState, frame.state.currentSlideIndex);
           }
         }
       }
@@ -1047,11 +963,8 @@ export const editorMachine = setup({
           !currentState ||
           !arePreviewSizesEqual(nextState.size, currentState.size) ||
           nextState.content !== currentState.content ||
-          Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) >
-            1 ||
-          Math.abs(
-            (nextState.scrollLeft || 0) - (currentState.scrollLeft || 0),
-          ) > 1
+          Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) > 1 ||
+          Math.abs((nextState.scrollLeft || 0) - (currentState.scrollLeft || 0)) > 1
         ) {
           context.applyPreviewState(nextState);
           updates.lastAppliedPreviewState = nextState;
@@ -1063,10 +976,7 @@ export const editorMachine = setup({
 
     seekToTime: assign(({ context, event }) => {
       if (event.type !== "SEEK") return {};
-      const clampedTime = Math.max(
-        0,
-        Math.min(event.time, context.timeline.duration),
-      );
+      const clampedTime = Math.max(0, Math.min(event.time, context.timeline.duration));
       return {
         timeline: {
           ...context.timeline,
@@ -1158,8 +1068,7 @@ export const editorMachine = setup({
     },
 
     restoreRecordedFrameFromPause: ({ context }) => {
-      const { editorRefs, hasManualWorkspaceOverride, recordedFrameAtPause } =
-        context;
+      const { editorRefs, hasManualWorkspaceOverride, recordedFrameAtPause } = context;
       if (
         hasManualWorkspaceOverride ||
         !editorRefs.editor ||
@@ -1308,10 +1217,7 @@ export const editorMachine = setup({
 
     notifyFrame: assign(({ context }) => {
       const frame = context.currentFrame;
-      if (
-        !frame ||
-        context.lastCallbackFrameTimestamp === frame.timestamp
-      ) {
+      if (!frame || context.lastCallbackFrameTimestamp === frame.timestamp) {
         return {};
       }
 
@@ -1324,10 +1230,7 @@ export const editorMachine = setup({
     }),
 
     notifyPlaybackUpdate: ({ context }) => {
-      context.onPlaybackUpdate?.(
-        context.timeline.currentTime,
-        context.currentFrame,
-      );
+      context.onPlaybackUpdate?.(context.timeline.currentTime, context.currentFrame);
     },
 
     storeAudioBlob: assign(({ event }) => {
@@ -1363,8 +1266,7 @@ export const editorMachine = setup({
     }),
 
     applyPreviewEventsAtTime: assign(({ context, event }) => {
-      const { recording, applyPreviewState, lastAppliedPreviewEventIndex } =
-        context;
+      const { recording, applyPreviewState, lastAppliedPreviewEventIndex } = context;
 
       if (!recording?.previewEvents?.length || !applyPreviewState) {
         return {};
@@ -1421,16 +1323,14 @@ export const editorMachine = setup({
       if (replayResult.snapshotToApply) {
         const activeFileChanged =
           Boolean(currentWorkspaceSnapshot) &&
-          currentWorkspaceSnapshot?.activeFilePath !==
-            replayResult.snapshotToApply.activeFilePath;
+          currentWorkspaceSnapshot?.activeFilePath !== replayResult.snapshotToApply.activeFilePath;
 
         applyWorkspaceSnapshot(replayResult.snapshotToApply);
         return {
           lastAppliedWorkspaceEventIndex: replayResult.nextIndex,
           // File switches change the Monaco model path on the React side.
           // Wait for that model sync before applying editor frame content.
-          pendingPlaybackEditorSync:
-            activeFileChanged || context.pendingPlaybackEditorSync,
+          pendingPlaybackEditorSync: activeFileChanged || context.pendingPlaybackEditorSync,
           currentFrame: null,
           lastAppliedFrameIndex: -1,
           lastAppliedSlideEventIndex: -1,
@@ -1444,8 +1344,7 @@ export const editorMachine = setup({
       return {};
     }),
     applyRuntimeEventsAtTime: assign(({ context, event }) => {
-      const { recording, applyRuntimeSnapshot, lastAppliedRuntimeEventIndex } =
-        context;
+      const { recording, applyRuntimeSnapshot, lastAppliedRuntimeEventIndex } = context;
 
       if (!recording?.runtimeEvents?.length || !applyRuntimeSnapshot) {
         return {};
@@ -1469,8 +1368,7 @@ export const editorMachine = setup({
       return {};
     }),
     applySlideEventsAtTime: assign(({ context, event }) => {
-      const { recording, applySlideState, lastAppliedSlideEventIndex } =
-        context;
+      const { recording, applySlideState, lastAppliedSlideEventIndex } = context;
 
       if (!recording?.slideEvents?.length || !applySlideState) {
         return {};
@@ -1624,10 +1522,7 @@ export const editorMachine = setup({
               if (!context.session) return {};
 
               return {
-                session: appendSlideRecordingEvent(
-                  context.session,
-                  event.event,
-                ),
+                session: appendSlideRecordingEvent(context.session, event.event),
               };
             }),
             "captureFrame",
@@ -1640,10 +1535,7 @@ export const editorMachine = setup({
               if (!context.session) return {};
 
               return {
-                session: appendPreviewRecordingEvent(
-                  context.session,
-                  event.event,
-                ),
+                session: appendPreviewRecordingEvent(context.session, event.event),
               };
             }),
             "capturePreviewRefreshFrame",
@@ -1656,10 +1548,7 @@ export const editorMachine = setup({
               const snapshot = context.getWorkspaceSnapshot?.();
               if (!context.session || !snapshot) return {};
 
-              const nextSession = appendWorkspaceRecordingEvent(
-                context.session,
-                snapshot,
-              );
+              const nextSession = appendWorkspaceRecordingEvent(context.session, snapshot);
 
               if (nextSession === context.session) {
                 return {};
@@ -1677,10 +1566,7 @@ export const editorMachine = setup({
               const snapshot = context.getRuntimeSnapshot?.();
               if (!context.session || !snapshot) return {};
 
-              const nextSession = appendRuntimeRecordingEvent(
-                context.session,
-                snapshot,
-              );
+              const nextSession = appendRuntimeRecordingEvent(context.session, snapshot);
 
               if (nextSession === context.session) {
                 return {};
@@ -1695,8 +1581,7 @@ export const editorMachine = setup({
         STOP_RECORDING: [
           {
             target: "stoppingRecording",
-            guard: ({ context }) =>
-              context.enableAudioRecording && context.audio.isRecording,
+            guard: ({ context }) => context.enableAudioRecording && context.audio.isRecording,
           },
           {
             target: "loading",
@@ -1731,8 +1616,7 @@ export const editorMachine = setup({
       invoke: {
         src: "loadRecording",
         input: ({ context, event }) => {
-          if (event.type === "LOAD_RECORDING")
-            return { recording: event.recording };
+          if (event.type === "LOAD_RECORDING") return { recording: event.recording };
           if (context.recording) return { recording: context.recording };
           throw new Error("No recording found to load");
         },
@@ -1745,9 +1629,7 @@ export const editorMachine = setup({
           actions: [
             assign({
               error: ({ event }) =>
-                event.error instanceof Error
-                  ? event.error.message
-                  : "Failed to load recording",
+                event.error instanceof Error ? event.error.message : "Failed to load recording",
             }),
             "notifyError",
           ],
@@ -1783,11 +1665,7 @@ export const editorMachine = setup({
           }
         }),
       ],
-      exit: [
-        stopChild("timelineActor"),
-        stopChild("audioPlayer"),
-        "clearCursorDecorations",
-      ],
+      exit: [stopChild("timelineActor"), stopChild("audioPlayer"), "clearCursorDecorations"],
       on: {
         WORKSPACE_EVENT: {
           actions: ["detachPlaybackWorkspace"],
@@ -1990,10 +1868,7 @@ export const editorMachine = setup({
             },
             PLAY: {
               target: "playing",
-              actions: [
-                "restoreRecordedFrameFromPause",
-                "reattachPlaybackWorkspace",
-              ],
+              actions: ["restoreRecordedFrameFromPause", "reattachPlaybackWorkspace"],
             },
           },
         },
@@ -2004,8 +1879,7 @@ export const editorMachine = setup({
               {
                 target: "playing",
                 guard: ({ context }) =>
-                  context.timeline.currentTime >=
-                  context.timeline.duration - 100, // Fuzzy end check
+                  context.timeline.currentTime >= context.timeline.duration - 100, // Fuzzy end check
                 actions: [
                   "reattachPlaybackWorkspace",
                   "resetPlayback",

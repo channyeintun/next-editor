@@ -47,13 +47,9 @@ export function appendWorkspaceRecordingEvent(
   session: RecordingSession,
   snapshot: WorkspaceRecordingSnapshot,
 ): RecordingSession {
-  const previousEvent =
-    session.workspaceEvents[session.workspaceEvents.length - 1];
+  const previousEvent = session.workspaceEvents[session.workspaceEvents.length - 1];
 
-  if (
-    previousEvent &&
-    areWorkspaceSnapshotsEqual(previousEvent.snapshot, snapshot)
-  ) {
+  if (previousEvent && areWorkspaceSnapshotsEqual(previousEvent.snapshot, snapshot)) {
     return session;
   }
 
@@ -75,10 +71,7 @@ export function appendRuntimeRecordingEvent(
 ): RecordingSession {
   const previousEvent = session.runtimeEvents[session.runtimeEvents.length - 1];
 
-  if (
-    previousEvent &&
-    areRuntimeRecordingSnapshotsEqual(previousEvent.snapshot, snapshot)
-  ) {
+  if (previousEvent && areRuntimeRecordingSnapshotsEqual(previousEvent.snapshot, snapshot)) {
     return session;
   }
 

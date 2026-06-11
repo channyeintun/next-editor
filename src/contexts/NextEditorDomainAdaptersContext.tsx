@@ -1,18 +1,6 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  type PropsWithChildren,
-} from "react";
-import type {
-  PreviewState,
-  Slide,
-  SlidePreviewState,
-} from "../types/slides";
-import type {
-  RuntimePanelRecordingState,
-  RuntimeRecordingSnapshot,
-} from "../types/runtime";
+import { createContext, useContext, useState, type PropsWithChildren } from "react";
+import type { PreviewState, Slide, SlidePreviewState } from "../types/slides";
+import type { RuntimePanelRecordingState, RuntimeRecordingSnapshot } from "../types/runtime";
 
 export interface SlideStateSnapshot {
   previewState: SlidePreviewState;
@@ -21,19 +9,13 @@ export interface SlideStateSnapshot {
 
 export interface SlidesDomainAdapter {
   getSnapshot: () => SlideStateSnapshot | null;
-  applySnapshot: (
-    slideState: SlidePreviewState,
-    currentSlideIndex: number,
-  ) => void;
+  applySnapshot: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
   getSlides: () => Slide[];
   applySlides: (slides: Slide[]) => void;
   navigate: (indexh: number, indexv: number) => void;
   setSnapshotGetter: (getter: () => SlideStateSnapshot | null) => void;
   setSnapshotApplier: (
-    applier: (
-      slideState: SlidePreviewState,
-      currentSlideIndex: number,
-    ) => void,
+    applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void,
   ) => void;
   setSlidesGetter: (getter: () => Slide[]) => void;
   setSlidesApplier: (applier: (slides: Slide[]) => void) => void;
@@ -50,12 +32,8 @@ export interface PreviewDomainAdapter {
 export interface RuntimePanelDomainAdapter {
   getSnapshot: () => RuntimePanelRecordingState | null;
   applySnapshot: (snapshot: RuntimeRecordingSnapshot) => void;
-  setSnapshotGetter: (
-    getter: () => RuntimePanelRecordingState | null,
-  ) => void;
-  setSnapshotApplier: (
-    applier: (snapshot: RuntimeRecordingSnapshot) => void,
-  ) => void;
+  setSnapshotGetter: (getter: () => RuntimePanelRecordingState | null) => void;
+  setSnapshotApplier: (applier: (snapshot: RuntimeRecordingSnapshot) => void) => void;
 }
 
 export interface NextEditorDomainAdapters {
@@ -66,18 +44,15 @@ export interface NextEditorDomainAdapters {
 
 function createSlidesDomainAdapter(): SlidesDomainAdapter {
   let getSnapshot: () => SlideStateSnapshot | null = () => null;
-  let applySnapshot: (
-    slideState: SlidePreviewState,
-    currentSlideIndex: number,
-  ) => void = () => undefined;
+  let applySnapshot: (slideState: SlidePreviewState, currentSlideIndex: number) => void = () =>
+    undefined;
   let getSlides: () => Slide[] = () => [];
   let applySlides: (slides: Slide[]) => void = () => undefined;
   let navigate: (indexh: number, indexv: number) => void = () => undefined;
 
   return {
     getSnapshot: () => getSnapshot(),
-    applySnapshot: (slideState, currentSlideIndex) =>
-      applySnapshot(slideState, currentSlideIndex),
+    applySnapshot: (slideState, currentSlideIndex) => applySnapshot(slideState, currentSlideIndex),
     getSlides: () => getSlides(),
     applySlides: (slides) => applySlides(slides),
     navigate: (indexh, indexv) => navigate(indexh, indexv),
@@ -117,8 +92,7 @@ function createPreviewDomainAdapter(): PreviewDomainAdapter {
 
 function createRuntimePanelDomainAdapter(): RuntimePanelDomainAdapter {
   let getSnapshot: () => RuntimePanelRecordingState | null = () => null;
-  let applySnapshot: (snapshot: RuntimeRecordingSnapshot) => void =
-    () => undefined;
+  let applySnapshot: (snapshot: RuntimeRecordingSnapshot) => void = () => undefined;
 
   return {
     getSnapshot: () => getSnapshot(),
@@ -132,12 +106,9 @@ function createRuntimePanelDomainAdapter(): RuntimePanelDomainAdapter {
   };
 }
 
-const NextEditorDomainAdaptersContext =
-  createContext<NextEditorDomainAdapters | null>(null);
+const NextEditorDomainAdaptersContext = createContext<NextEditorDomainAdapters | null>(null);
 
-export function NextEditorDomainAdaptersProvider({
-  children,
-}: PropsWithChildren) {
+export function NextEditorDomainAdaptersProvider({ children }: PropsWithChildren) {
   const [adapters] = useState<NextEditorDomainAdapters>(() => ({
     slides: createSlidesDomainAdapter(),
     preview: createPreviewDomainAdapter(),
@@ -145,9 +116,7 @@ export function NextEditorDomainAdaptersProvider({
   }));
 
   return (
-    <NextEditorDomainAdaptersContext value={adapters}>
-      {children}
-    </NextEditorDomainAdaptersContext>
+    <NextEditorDomainAdaptersContext value={adapters}>{children}</NextEditorDomainAdaptersContext>
   );
 }
 

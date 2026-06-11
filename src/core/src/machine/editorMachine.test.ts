@@ -132,9 +132,7 @@ class MockTextModel {
     const startOffset = edit.range.startColumn - 1;
     const endOffset = edit.range.endColumn - 1;
     this.content =
-      this.content.slice(0, startOffset) +
-      (edit.text ?? "") +
-      this.content.slice(endOffset);
+      this.content.slice(0, startOffset) + (edit.text ?? "") + this.content.slice(endOffset);
     return null;
   }
 }
@@ -202,17 +200,13 @@ describe("editorMachine actor lifecycle", () => {
     expect(actor.getSnapshot().children.audioPlayer).toBeUndefined();
 
     actor.send({ type: "PLAY" });
-    await waitFor(actor, (snapshot) =>
-      snapshot.matches({ playback: "playing" }),
-    );
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "playing" }));
 
     actor.send({ type: "SET_SPEED", speed: 2 });
     actor.send({ type: "SEEK", time: 500 });
     actor.send({ type: "PAUSE" });
 
-    await waitFor(actor, (snapshot) =>
-      snapshot.matches({ playback: "paused" }),
-    );
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "paused" }));
     expect(actor.getSnapshot().status).toBe("active");
     expect(actor.getSnapshot().children.audioPlayer).toBeUndefined();
 
@@ -306,9 +300,7 @@ describe("editorMachine actor lifecycle", () => {
         getWorkspaceSnapshot: () => currentWorkspace,
         applyWorkspaceSnapshot: (snapshot) => {
           currentWorkspace = snapshot;
-          calls.push(
-            `workspace:${snapshot.project.files["index.html"].content}`,
-          );
+          calls.push(`workspace:${snapshot.project.files["index.html"].content}`);
         },
         applyRuntimeSnapshot: (snapshot) => {
           calls.push(`runtime:${snapshot.status}`);
@@ -322,41 +314,21 @@ describe("editorMachine actor lifecycle", () => {
     actor.send({ type: "LOAD_RECORDING", recording });
     await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
 
-    expect(calls).toEqual([
-      "workspace:first",
-      "runtime:starting",
-      "preview:first-preview",
-    ]);
+    expect(calls).toEqual(["workspace:first", "runtime:starting", "preview:first-preview"]);
 
     calls.length = 0;
     actor.send({ type: "SEEK", time: 100 });
 
-    expect(calls).toEqual([
-      "workspace:second",
-      "runtime:ready",
-      "preview:second-preview",
-    ]);
+    expect(calls).toEqual(["workspace:second", "runtime:ready", "preview:second-preview"]);
 
     actor.stop();
   });
 
   it("waits for Monaco model sync before applying frames after replayed file switches", async () => {
     const editor = new MockEditor(new MockTextModel("outside"));
-    const firstWorkspace = createTwoFileWorkspaceSnapshot(
-      "a.ts",
-      "a-snapshot",
-      "b-before-open",
-    );
-    const secondWorkspace = createTwoFileWorkspaceSnapshot(
-      "b.ts",
-      "a-snapshot",
-      "b-snapshot",
-    );
-    let currentWorkspace = createTwoFileWorkspaceSnapshot(
-      "a.ts",
-      "outside-a",
-      "outside-b",
-    );
+    const firstWorkspace = createTwoFileWorkspaceSnapshot("a.ts", "a-snapshot", "b-before-open");
+    const secondWorkspace = createTwoFileWorkspaceSnapshot("b.ts", "a-snapshot", "b-snapshot");
+    let currentWorkspace = createTwoFileWorkspaceSnapshot("a.ts", "outside-a", "outside-b");
 
     const recording: Recording = {
       ...createRecording(),
@@ -554,10 +526,7 @@ class MockAudioWorkletNode extends EventTarget {
   }
 }
 
-async function waitUntil(
-  condition: () => boolean,
-  timeoutMs = 1000,
-): Promise<void> {
+async function waitUntil(condition: () => boolean, timeoutMs = 1000): Promise<void> {
   const startedAt = Date.now();
 
   while (!condition()) {
