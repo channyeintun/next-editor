@@ -1,5 +1,4 @@
 import { fromCallback, type ActorRefFrom } from "xstate";
-import { getAudioContext } from "../utils/audioContext";
 
 // ============================================================================
 // Audio Actor Types
@@ -41,48 +40,6 @@ export type AudioPlaybackEmit =
   | { type: "READY"; duration: number }
   | { type: "FINISHED" }
   | { type: "ERROR"; error: string };
-
-type PitchPreservingAudioElement = HTMLAudioElement & {
-  preservesPitch?: boolean;
-  mozPreservesPitch?: boolean;
-  webkitPreservesPitch?: boolean;
-};
-
-type SoundTouchNodeConstructor = typeof import("@soundtouchjs/audio-worklet").SoundTouchNode;
-type SoundTouchNodeInstance = InstanceType<SoundTouchNodeConstructor>;
-
-let soundTouchLoader: Promise<{
-  SoundTouchNode: SoundTouchNodeConstructor;
-  processorUrl: string;
-}> | null = null;
-const soundTouchRegistrations = new WeakMap<BaseAudioContext, Promise<void>>();
-
-const loadSoundTouch = async () => {
-  if (!soundTouchLoader) {
-    soundTouchLoader = Promise.all([
-      import("@soundtouchjs/audio-worklet"),
-      import("@soundtouchjs/audio-worklet/processor?url"),
-    ]).then(([module, processor]) => ({
-      SoundTouchNode: module.SoundTouchNode,
-      processorUrl: processor.default,
-    }));
-  }
-
-  return soundTouchLoader;
-};
-
-const registerSoundTouch = async (context: BaseAudioContext) => {
-  const { SoundTouchNode, processorUrl } = await loadSoundTouch();
-  let registration = soundTouchRegistrations.get(context);
-
-  if (!registration) {
-    registration = SoundTouchNode.register(context, processorUrl);
-    soundTouchRegistrations.set(context, registration);
-  }
-
-  await registration;
-  return SoundTouchNode;
-};
 
 // ============================================================================
 // Audio Recording Actor
@@ -253,146 +210,8 @@ export const audioPlaybackActor = fromCallback<
 >(({ sendBack, receive, input }) => {
   let audio: HTMLAudioElement | null = null;
   let audioUrl: string | null = null;
-  let audioContext: AudioContext | null = null;
-  let mediaElementSource: MediaElementAudioSourceNode | null = null;
-  let soundTouchNode: SoundTouchNodeInstance | null = null;
-  let gainNode: GainNode | null = null;
-  let soundTouchSetup: Promise<void> | null = null;
-  let disposed = false;
-  let wantsPlaying = false;
-  let currentVolume = Math.max(0, Math.min(1, input.volume));
-  let currentPlaybackRate =
-    Number.isFinite(input.playbackRate) && input.playbackRate > 0 ? input.playbackRate : 1;
-
-  const applyPitchPreservation = (preservePitch: boolean) => {
-    if (!audio) return;
-
-    const pitchAudio = audio as PitchPreservingAudioElement;
-    pitchAudio.preservesPitch = preservePitch;
-    pitchAudio.mozPreservesPitch = preservePitch;
-    pitchAudio.webkitPreservesPitch = preservePitch;
-  };
-
-  const applyVolume = () => {
-    if (!audio) return;
-
-    if (gainNode) {
-      audio.volume = 1;
-      gainNode.gain.value = currentVolume;
-    } else {
-      audio.volume = currentVolume;
-    }
-  };
-
-  const applyPlaybackRate = (rate: number) => {
-    if (!audio) return;
-
-    const playbackRate = Number.isFinite(rate) && rate > 0 ? rate : 1;
-    currentPlaybackRate = playbackRate;
-
-    audio.playbackRate = playbackRate;
-    if (soundTouchNode) {
-      // SoundTouch handles pitch correction. Native pitch preservation
-      // must stay disabled to avoid double processing and echo.
-      applyPitchPreservation(false);
-      soundTouchNode.playbackRate.value = playbackRate;
-      soundTouchNode.pitch.value = 1;
-      soundTouchNode.pitchSemitones.value = 0;
-    } else {
-      // Fallback path: preserve pitch natively rather than raising it.
-      applyPitchPreservation(true);
-    }
-  };
-
-  const setupSoundTouch = async () => {
-    if (!audio || typeof window === "undefined" || !("AudioWorkletNode" in window)) {
-      applyPlaybackRate(currentPlaybackRate);
-      return;
-    }
-
-    try {
-      audioContext = getAudioContext();
-      if (!audioContext.audioWorklet) {
-        applyPlaybackRate(currentPlaybackRate);
-        return;
-      }
-
-      const SoundTouchNode = await registerSoundTouch(audioContext);
-      if (!audio || disposed) return;
-
-      const nextSoundTouchNode = new SoundTouchNode({
-        context: audioContext,
-      });
-      const nextGainNode = audioContext.createGain();
-      const nextSource = audioContext.createMediaElementSource(audio);
-
-      nextSoundTouchNode.setStretchParameters({
-        overlapMs: 12,
-        quickSeek: false,
-      });
-
-      nextSource.connect(nextSoundTouchNode);
-      nextSoundTouchNode.connect(nextGainNode);
-      nextGainNode.connect(audioContext.destination);
-
-      mediaElementSource = nextSource;
-      soundTouchNode = nextSoundTouchNode;
-      gainNode = nextGainNode;
-
-      applyVolume();
-      applyPlaybackRate(currentPlaybackRate);
-    } catch (error) {
-      console.warn("[AudioActor] SoundTouch setup failed, using native playback:", error);
-      try {
-        mediaElementSource?.disconnect();
-        soundTouchNode?.disconnect();
-        gainNode?.disconnect();
-      } catch {
-        // Ignore partial graph cleanup failures.
-      }
-      mediaElementSource = null;
-      soundTouchNode = null;
-      gainNode = null;
-      applyVolume();
-      applyPlaybackRate(currentPlaybackRate);
-    }
-  };
-
-  const playAudio = async () => {
-    if (!audio || !wantsPlaying) return;
-
-    if (soundTouchSetup) {
-      await soundTouchSetup.catch(() => undefined);
-    }
-
-    if (!audio || !wantsPlaying || disposed) return;
-
-    if (audioContext) {
-      await audioContext.resume().catch(() => undefined);
-    }
-
-    if (audio.paused) {
-      audio.play().catch((err) => {
-        // On some browsers, play() might fail if not triggered by user gesture
-        // even if the AudioContext was unlocked.
-        console.warn("[AudioActor] Play failed:", err);
-      });
-    }
-  };
 
   const cleanup = () => {
-    disposed = true;
-    wantsPlaying = false;
-    try {
-      mediaElementSource?.disconnect();
-      soundTouchNode?.disconnect();
-      gainNode?.disconnect();
-    } catch {
-      // Ignore graph cleanup failures while tearing down playback.
-    }
-    mediaElementSource = null;
-    soundTouchNode = null;
-    gainNode = null;
     if (audio) {
       audio.oncanplaythrough = null;
       audio.onended = null;
@@ -412,10 +231,9 @@ export const audioPlaybackActor = fromCallback<
     try {
       audioUrl = URL.createObjectURL(input.blob);
       audio = new Audio(audioUrl);
-      applyVolume();
-      applyPlaybackRate(currentPlaybackRate);
+      audio.volume = input.volume;
+      audio.playbackRate = input.playbackRate;
       audio.currentTime = input.startPositionMs / 1000;
-      soundTouchSetup = setupSoundTouch();
 
       audio.oncanplaythrough = () => {
         if (audio) {
@@ -448,12 +266,16 @@ export const audioPlaybackActor = fromCallback<
 
     switch (event.type) {
       case "PLAY":
-        wantsPlaying = true;
-        void playAudio();
+        if (audio.paused) {
+          audio.play().catch((err) => {
+            // On some browsers, play() might fail if not triggered by user gesture
+            // even if the AudioContext was unlocked.
+            console.warn("[AudioActor] Play failed:", err);
+          });
+        }
         break;
 
       case "PAUSE":
-        wantsPlaying = false;
         audio.pause();
         break;
 
@@ -462,12 +284,11 @@ export const audioPlaybackActor = fromCallback<
         break;
 
       case "SET_VOLUME":
-        currentVolume = Math.max(0, Math.min(1, event.volume));
-        applyVolume();
+        audio.volume = Math.max(0, Math.min(1, event.volume));
         break;
 
       case "SET_PLAYBACK_RATE":
-        applyPlaybackRate(event.rate);
+        audio.playbackRate = Number.isFinite(event.rate) && event.rate > 0 ? event.rate : 1;
         break;
 
       case "SYNC": {

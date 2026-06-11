@@ -7,7 +7,6 @@
       "dependencies": {
         "@monaco-editor/react": "^4.7.0",
         "@revealjs/react": "^0.2.1",
-        "@soundtouchjs/audio-worklet": "^2.0.4",
         "@types/pako": "^2.0.4",
         "@webcontainer/api": "^1.6.4",
         "@xstate/react": "^6.1.0",
@@ -374,14 +373,6 @@
     "@rollup/rollup-win32-x64-gnu": ["@rollup/rollup-win32-x64-gnu@4.55.1", "", { "os": "win32", "cpu": "x64" }, "sha512-xGGY5pXj69IxKb4yv/POoocPy/qmEGhimy/FoTpTSVju3FYXUQQMFCaZZXJVidsmGxRioZAwpThl/4zX41gRKg=="],
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.55.1", "", { "os": "win32", "cpu": "x64" }, "sha512-SPEpaL6DX4rmcXtnhdrQYgzQ5W2uW3SCJch88lB2zImhJRhIIK44fkUrgIV/Q8yUNfw5oyZ5vkeQsZLhCb06lw=="],
-
-    "@soundtouchjs/audio-worklet": ["@soundtouchjs/audio-worklet@2.0.4", "", { "dependencies": { "@soundtouchjs/core": "2.0.4", "@soundtouchjs/interpolation-strategy-lanczos": "2.0.4", "@soundtouchjs/worklet-base": "2.0.4" } }, "sha512-Qfj0wjo3sG5vLsgEeepvs0xo9KjhpicYB1JOMEqnLyy79/DPleNE3x2qwVTdb7ATl0NVFtSyGJggLmY1M40viA=="],
-
-    "@soundtouchjs/core": ["@soundtouchjs/core@2.0.4", "", { "dependencies": { "@soundtouchjs/interpolation-strategy-lanczos": "2.0.4" } }, "sha512-QVCEtyyVPPFGA4WW9NAXKZb/ujLpUGZeMexkuqJYwh0lVZ5fV+iWQHfI86xLpBSo676E0M+5cskBd6gecV8pUA=="],
-
-    "@soundtouchjs/interpolation-strategy-lanczos": ["@soundtouchjs/interpolation-strategy-lanczos@2.0.4", "", {}, "sha512-yjmKTFqxcfZbR34gVybaMjrYJETvYk6gKzgRpZ1NQsIdQdLJnbFnvn88H2HH7NUUZgcUTtC+y9fsQWFurw755w=="],
-
-    "@soundtouchjs/worklet-base": ["@soundtouchjs/worklet-base@2.0.4", "", { "dependencies": { "@soundtouchjs/core": "2.0.4" } }, "sha512-2gj49iFxrsvxuecFYIfeJFcgnMp6y5lSHCa5kykBPFOsnmSIfTVJYJCNrFNn4m6hWhobBQbdS/TfHptKehaBLg=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
