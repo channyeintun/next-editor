@@ -17,7 +17,8 @@
     "format": "vp lint --fix",
     "lint": "vp lint",
     "typecheck": "tsgo -b tsconfig.json",
-    "preview": "vp preview"
+    "preview": "vp preview",
+    "prepare": "vp config --hooks-only"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

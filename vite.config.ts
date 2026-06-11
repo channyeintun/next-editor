@@ -9,6 +9,9 @@ const crossOriginHeaders = {
 
 // https://viteplus.dev/ alignment
 export default defineConfig({
+  staged: {
+    "*": "vp check --fix",
+  },
   plugins: lazyPlugins(async () => {
     const [{ default: react }, { default: checker }] = await Promise.all([
       import("@vitejs/plugin-react"),
@@ -28,10 +31,11 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     alias: {
-      "monaco-editor": fileURLToPath(
-        new URL("./src/test/monaco-editor.mock.ts", import.meta.url),
-      ),
+      "monaco-editor": fileURLToPath(new URL("./src/test/monaco-editor.mock.ts", import.meta.url)),
     },
+  },
+  fmt: {
+    ignorePatterns: ["dist/**", "public/**"],
   },
   lint: {
     jsPlugins: ["oxlint-tailwindcss"],
