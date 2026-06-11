@@ -23,6 +23,7 @@ export function useWebContainerWorkspaceSync() {
   const lastSyncedProjectRef = useRef<WorkspaceProject | null>(null);
   const queuedProjectRef = useRef<WorkspaceProject | null>(null);
   const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const syncGenerationRef = useRef(0);
 
   const ensureProjectMounted = useCallback(
     async ({
@@ -37,8 +38,15 @@ export function useWebContainerWorkspaceSync() {
         return;
       }
 
+      const generation = syncGenerationRef.current;
+
       onMountStart?.();
       await instance.mount(createWorkspaceTree(project));
+
+      if (syncGenerationRef.current !== generation) {
+        return;
+      }
+
       mountedInstanceRef.current = instance;
       lastSyncedProjectRef.current = project;
       queuedProjectRef.current = null;
@@ -56,16 +64,21 @@ export function useWebContainerWorkspaceSync() {
         return Promise.resolve();
       }
 
+      const generation = syncGenerationRef.current;
       queuedProjectRef.current = project;
 
       const runQueuedSync = async () => {
-        while (queuedProjectRef.current) {
+        while (
+          queuedProjectRef.current &&
+          syncGenerationRef.current === generation
+        ) {
           const nextProject = queuedProjectRef.current;
           queuedProjectRef.current = null;
 
           if (
             !nextProject ||
             mountedInstanceRef.current !== instance ||
+            syncGenerationRef.current !== generation ||
             lastSyncedProjectRef.current === nextProject
           ) {
             continue;
@@ -76,6 +89,11 @@ export function useWebContainerWorkspaceSync() {
             lastSyncedProjectRef.current,
             nextProject,
           );
+
+          if (syncGenerationRef.current !== generation) {
+            return;
+          }
+
           lastSyncedProjectRef.current = nextProject;
         }
       };
@@ -91,6 +109,7 @@ export function useWebContainerWorkspaceSync() {
   );
 
   const resetWorkspaceSync = useCallback(() => {
+    syncGenerationRef.current += 1;
     hasMountedProjectRef.current = false;
     mountedInstanceRef.current = null;
     lastSyncedProjectRef.current = null;

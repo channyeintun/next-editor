@@ -71,8 +71,10 @@ export const WebContainerRuntimeProvider: React.FC<
     ensureTerminalSession,
     errorMessage,
     getRecordingSnapshot,
+    getRuntimeGeneration,
     hasActiveRunner,
     instanceRef,
+    isRuntimeGenerationActive,
     isMountedRef,
     lastOutput,
     latestLifecycleEvent,
@@ -157,6 +159,8 @@ export const WebContainerRuntimeProvider: React.FC<
   }, [resetRuntimeSession, resetWorkspaceSync]);
 
   const prepareRuntime = useCallback(async () => {
+    const generation = getRuntimeGeneration();
+
     if (!isSupported) {
       setStatus("error");
       setErrorMessage(
@@ -169,7 +173,11 @@ export const WebContainerRuntimeProvider: React.FC<
 
     const instance = await bootInstance();
 
-    if (!instance || !isMountedRef.current) {
+    if (
+      !instance ||
+      !isMountedRef.current ||
+      !isRuntimeGenerationActive(generation)
+    ) {
       return null;
     }
 
@@ -181,6 +189,10 @@ export const WebContainerRuntimeProvider: React.FC<
       onMountStart: () => setStatus("mounting"),
     });
 
+    if (!isRuntimeGenerationActive(generation)) {
+      return null;
+    }
+
     const initCommand = runnerConfig.initCommand.trim();
     if (!initCommand || hasRunInitCommandRef.current) {
       return instance;
@@ -191,6 +203,10 @@ export const WebContainerRuntimeProvider: React.FC<
       clearOutput: true,
     });
 
+    if (!isRuntimeGenerationActive(generation)) {
+      return null;
+    }
+
     if (initExitCode !== 0) {
       throw new Error(formatCommandError(initCommand));
     }
@@ -200,7 +216,9 @@ export const WebContainerRuntimeProvider: React.FC<
   }, [
     bootInstance,
     ensureProjectMounted,
+    getRuntimeGeneration,
     getProject,
+    isRuntimeGenerationActive,
     isMountedRef,
     isSupported,
     runForegroundCommand,
@@ -215,20 +233,23 @@ export const WebContainerRuntimeProvider: React.FC<
       return;
     }
 
+    const currentStatus = statusRef.current;
     if (
-      status === "booting" ||
-      status === "mounting" ||
-      status === "installing" ||
-      status === "starting"
+      currentStatus === "booting" ||
+      currentStatus === "mounting" ||
+      currentStatus === "installing" ||
+      currentStatus === "starting"
     ) {
       return;
     }
+
+    const generation = getRuntimeGeneration();
 
     try {
       setStatus("booting");
 
       const instance = await prepareRuntime();
-      if (!instance) {
+      if (!instance || !isRuntimeGenerationActive(generation)) {
         return;
       }
 
@@ -239,26 +260,32 @@ export const WebContainerRuntimeProvider: React.FC<
       );
 
       if (!runnerConfig.enabled) {
-        setStatus("ready");
+        if (isRuntimeGenerationActive(generation)) {
+          setStatus("ready");
+        }
         return;
       }
 
       await startRunnerProcess(instance, runCommandLine);
     } catch (error) {
-      setStatus("error");
-      setErrorMessage(getRuntimeErrorMessage(error));
+      if (isRuntimeGenerationActive(generation)) {
+        setStatus("error");
+        setErrorMessage(getRuntimeErrorMessage(error));
+      }
     }
   }, [
+    getRuntimeGeneration,
     lessonType,
     prepareRuntime,
     getProject,
+    isRuntimeGenerationActive,
     resetRuntime,
     runnerConfig.enabled,
     runnerConfig.runCommand,
     setErrorMessage,
     setStatus,
     startRunnerProcess,
-    status,
+    statusRef,
   ]);
 
   const rerunRunner = useCallback(async () => {
@@ -267,11 +294,13 @@ export const WebContainerRuntimeProvider: React.FC<
       return;
     }
 
+    const generation = getRuntimeGeneration();
+
     try {
       setStatus("booting");
       const instance = await prepareRuntime();
 
-      if (!instance) {
+      if (!instance || !isRuntimeGenerationActive(generation)) {
         return;
       }
 
@@ -282,19 +311,25 @@ export const WebContainerRuntimeProvider: React.FC<
       );
 
       if (!runnerConfig.enabled) {
-        setStatus("ready");
+        if (isRuntimeGenerationActive(generation)) {
+          setStatus("ready");
+        }
         return;
       }
 
       await startRunnerProcess(instance, runCommandLine);
     } catch (error) {
-      setStatus("error");
-      setErrorMessage(getRuntimeErrorMessage(error));
+      if (isRuntimeGenerationActive(generation)) {
+        setStatus("error");
+        setErrorMessage(getRuntimeErrorMessage(error));
+      }
     }
   }, [
+    getRuntimeGeneration,
     lessonType,
     prepareRuntime,
     getProject,
+    isRuntimeGenerationActive,
     resetRuntime,
     runnerConfig.enabled,
     runnerConfig.runCommand,
@@ -310,26 +345,56 @@ export const WebContainerRuntimeProvider: React.FC<
       return;
     }
 
-    const instance = await prepareRuntime();
-    if (!instance) {
-      return;
-    }
+    const generation = getRuntimeGeneration();
 
-    await ensureTerminalSession(instance);
-  }, [ensureTerminalSession, lessonType, prepareRuntime]);
+    try {
+      const instance = await prepareRuntime();
+      if (!instance || !isRuntimeGenerationActive(generation)) {
+        return;
+      }
+
+      await ensureTerminalSession(instance);
+    } catch (error) {
+      if (isRuntimeGenerationActive(generation)) {
+        setErrorMessage(getRuntimeErrorMessage(error));
+      }
+    }
+  }, [
+    ensureTerminalSession,
+    getRuntimeGeneration,
+    isRuntimeGenerationActive,
+    lessonType,
+    prepareRuntime,
+    setErrorMessage,
+  ]);
 
   const createTerminalSession = useCallback(async () => {
     if (lessonType !== "node.js") {
       return;
     }
 
-    const instance = await prepareRuntime();
-    if (!instance) {
-      return;
-    }
+    const generation = getRuntimeGeneration();
 
-    await createTerminalSessionInRuntime(instance);
-  }, [createTerminalSessionInRuntime, lessonType, prepareRuntime]);
+    try {
+      const instance = await prepareRuntime();
+      if (!instance || !isRuntimeGenerationActive(generation)) {
+        return;
+      }
+
+      await createTerminalSessionInRuntime(instance);
+    } catch (error) {
+      if (isRuntimeGenerationActive(generation)) {
+        setErrorMessage(getRuntimeErrorMessage(error));
+      }
+    }
+  }, [
+    createTerminalSessionInRuntime,
+    getRuntimeGeneration,
+    isRuntimeGenerationActive,
+    lessonType,
+    prepareRuntime,
+    setErrorMessage,
+  ]);
 
   const sendTerminalInput = useCallback(
     async (input: string) => {
@@ -337,47 +402,69 @@ export const WebContainerRuntimeProvider: React.FC<
         return;
       }
 
-      const instance = await prepareRuntime();
-      if (!instance) {
-        return;
-      }
+      const generation = getRuntimeGeneration();
 
-      await writeTerminalInput(instance, input);
-
-      if (
-        typeof window !== "undefined" &&
-        (input.includes("\n") || input.includes("\u0003"))
-      ) {
-        if (reverseSyncTimeoutRef.current !== null) {
-          window.clearTimeout(reverseSyncTimeoutRef.current);
+      try {
+        const instance = await prepareRuntime();
+        if (!instance || !isRuntimeGenerationActive(generation)) {
+          return;
         }
 
-        reverseSyncTimeoutRef.current = window.setTimeout(() => {
-          reverseSyncTimeoutRef.current = null;
+        await writeTerminalInput(instance, input);
 
-          void (async () => {
-            const currentProject = getProject();
-            const nextProject = await readWorkspaceProject(instance, currentProject);
+        if (
+          typeof window !== "undefined" &&
+          (input.includes("\n") || input.includes("\u0003"))
+        ) {
+          if (reverseSyncTimeoutRef.current !== null) {
+            window.clearTimeout(reverseSyncTimeoutRef.current);
+          }
 
-            if (areWorkspaceProjectsEqual(currentProject, nextProject)) {
-              return;
-            }
+          reverseSyncTimeoutRef.current = window.setTimeout(() => {
+            reverseSyncTimeoutRef.current = null;
 
-            loadProject(
-              nextProject,
-              getActiveFilePath(),
-              getCollapsedFolders(),
-            );
-          })().catch((error) => {
-            setErrorMessage(getRuntimeErrorMessage(error));
-          });
-        }, 150);
+            void (async () => {
+              if (!isRuntimeGenerationActive(generation)) {
+                return;
+              }
+
+              const currentProject = getProject();
+              const nextProject = await readWorkspaceProject(
+                instance,
+                currentProject,
+              );
+
+              if (
+                !isRuntimeGenerationActive(generation) ||
+                areWorkspaceProjectsEqual(currentProject, nextProject)
+              ) {
+                return;
+              }
+
+              loadProject(
+                nextProject,
+                getActiveFilePath(),
+                getCollapsedFolders(),
+              );
+            })().catch((error) => {
+              if (isRuntimeGenerationActive(generation)) {
+                setErrorMessage(getRuntimeErrorMessage(error));
+              }
+            });
+          }, 150);
+        }
+      } catch (error) {
+        if (isRuntimeGenerationActive(generation)) {
+          setErrorMessage(getRuntimeErrorMessage(error));
+        }
       }
     },
     [
       getActiveFilePath,
       getCollapsedFolders,
+      getRuntimeGeneration,
       getProject,
+      isRuntimeGenerationActive,
       lessonType,
       loadProject,
       prepareRuntime,
