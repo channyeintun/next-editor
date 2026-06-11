@@ -129,6 +129,7 @@ export function createStarterWorkspacePackageJson(projectName: string): string {
       dependencies: {
         "@tanstack/react-query": "^5.101.0",
         "@tanstack/react-virtual": "^3.14.2",
+        axios: "^1.13.2",
         react: "^19.2.5",
         "react-dom": "^19.2.5",
       },
@@ -363,7 +364,9 @@ export interface TrendingStatusesPage {
     ),
     "src/api/mastodon.ts": createWorkspaceFile(
       "src/api/mastodon.ts",
-      `import { PAGE_SIZE, TRENDING_STATUSES_ENDPOINT } from "../constants.ts";
+      `import axios from "axios";
+import { PAGE_SIZE, TRENDING_STATUSES_ENDPOINT } from "../constants.ts";
+import { getNextOffsetFromLinkHeader } from "../utils/linkHeader.ts";
 import type {
   MastodonStatus,
   TrendingStatusesPage,
@@ -378,35 +381,80 @@ export async function fetchTrendingStatusesPage(
   url.searchParams.set("limit", String(PAGE_SIZE));
   url.searchParams.set("offset", String(offset));
 
-  const response = await fetch(url, {
-    signal,
-    headers: {
-      Accept: "application/json",
-    },
-  });
+  try {
+    const response = await axios.get<MastodonStatus[]>(url.toString(), {
+      signal,
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    const items = response.data;
 
-  if (!response.ok) {
-    let message = "Trending request failed with " + response.status;
-
-    try {
-      const errorPayload = (await response.json()) as { error?: string };
-
-      if (errorPayload.error) {
-        message = errorPayload.error;
-      }
-    } catch {
-      // Keep the HTTP status fallback when the response is not JSON.
+    return {
+      items,
+      nextOffset: getNextOffsetFromLinkHeader(response.headers.link),
+    };
+  } catch (error) {
+    if (axios.isCancel(error)) {
+      throw error;
     }
 
-    throw new Error(message);
+    if (axios.isAxiosError<{ error?: string }>(error)) {
+      const status = error.response?.status;
+      const message =
+        error.response?.data?.error ??
+        (status
+          ? "Trending request failed with " + status
+          : "Trending request failed.");
+
+      throw new Error(message);
+    }
+
+    throw error;
+  }
+}`,
+    ),
+    "src/utils/linkHeader.ts": createWorkspaceFile(
+      "src/utils/linkHeader.ts",
+      `function getHeaderText(header: unknown): string | undefined {
+  if (typeof header === "string") {
+    return header;
   }
 
-  const items = (await response.json()) as MastodonStatus[];
+  if (Array.isArray(header)) {
+    return header.join(",");
+  }
 
-  return {
-    items,
-    nextOffset: items.length === PAGE_SIZE ? offset + items.length : undefined,
-  };
+  return undefined;
+}
+
+export function getNextOffsetFromLinkHeader(
+  linkHeader: unknown,
+): number | undefined {
+  const headerText = getHeaderText(linkHeader);
+
+  if (!headerText) {
+    return undefined;
+  }
+
+  const nextLink = headerText
+    .split(",")
+    .map((entry) => entry.trim())
+    .find((entry) => entry.includes('rel="next"'));
+  const nextUrl = nextLink?.match(/<([^>]+)>/)?.[1];
+
+  if (!nextUrl) {
+    return undefined;
+  }
+
+  try {
+    const parsedUrl = new URL(nextUrl);
+    const nextOffset = Number(parsedUrl.searchParams.get("offset"));
+
+    return Number.isFinite(nextOffset) ? nextOffset : undefined;
+  } catch {
+    return undefined;
+  }
 }`,
     ),
     "src/utils/formatting.ts": createWorkspaceFile(
