@@ -62,6 +62,18 @@ function decorateConsoleLine(line: string): string {
   return `${prefixColor}${prefix}${ANSI_RESET}${ANSI_COLORS.dim}${suffix}${ANSI_RESET}`;
 }
 
+function shouldMirrorConsoleLineToBrowser(line: string): boolean {
+  const normalizedLine = line.toLowerCase();
+
+  return (
+    normalizedLine.startsWith("[error]") ||
+    normalizedLine.startsWith("[runtime:internal-error]") ||
+    normalizedLine.startsWith("[preview:console-error]") ||
+    normalizedLine.startsWith("[preview:uncaught-exception]") ||
+    normalizedLine.startsWith("[preview:unhandled-rejection]")
+  );
+}
+
 function getStatusLabel(status: string): string {
   switch (status) {
     case "booting":
@@ -269,6 +281,10 @@ const TerminalPanel = memo(function TerminalPanel() {
   }, [currentRecording]);
 
   const appendConsoleLine = (message: string) => {
+    if (shouldMirrorConsoleLineToBrowser(message)) {
+      console.log(message);
+    }
+
     setConsoleLines((current) => [...current.slice(-24), message]);
   };
 

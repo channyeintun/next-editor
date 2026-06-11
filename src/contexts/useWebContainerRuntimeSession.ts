@@ -329,7 +329,7 @@ export function useWebContainerRuntimeSession({
         setLastOutput(null);
       }
 
-      appendOutput(`$ ${commandLine}\n`);
+      appendOutput(`$ ${commandLine}\n`, { logToConsole: true });
 
       if (options.trackAsActiveCommand) {
         setActiveCommand(commandLine);
@@ -347,16 +347,26 @@ export function useWebContainerRuntimeSession({
         process.output.pipeTo(
           new WritableStream({
             write(chunk) {
-              appendOutput(chunk);
+              appendOutput(chunk, { logToConsole: true });
             },
           }),
         );
 
         const exitCode = await process.exit;
-        appendOutput(`\nCommand exited with code ${exitCode}\n`);
+        appendOutput(`\nCommand exited with code ${exitCode}\n`, {
+          logToConsole: true,
+        });
+
+        if (exitCode !== 0) {
+          console.log("[runner]", formatCommandError(commandLine));
+        }
+
         return exitCode;
       } catch (error) {
-        appendOutput(`\n${getRuntimeErrorMessage(error)}\n`);
+        console.log("[runner]", getRuntimeErrorMessage(error), error);
+        appendOutput(`\n${getRuntimeErrorMessage(error)}\n`, {
+          logToConsole: true,
+        });
         return -1;
       } finally {
         if (options.trackAsActiveCommand) {
