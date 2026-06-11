@@ -28,6 +28,7 @@ import type {
 import { useCompiledStaticWorkspacePreview } from "./useCompiledStaticWorkspacePreview";
 import {
   createReplayableRuntimePreview,
+  patchIframeContentFromHtml,
   type PreviewScrollPosition,
 } from "./previewIframeUtils";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
@@ -447,7 +448,10 @@ export function usePreviewController(): PreviewController {
   });
 
   const updateIframeContent = useCallback(
-    (content: string, options?: { force?: boolean }) => {
+    (
+      content: string,
+      options?: { force?: boolean; preserveDocument?: boolean },
+    ) => {
       if (
         !iframeRef.current ||
         (isLiveRuntimePreviewActive && !options?.force)
@@ -455,16 +459,25 @@ export function usePreviewController(): PreviewController {
         return;
       }
 
-      if (lastContentRef.current === content) {
+      if (!options?.force && lastContentRef.current === content) {
         return;
       }
-      lastContentRef.current = content;
 
       const iframe = iframeRef.current;
 
       try {
+        if (
+          options?.preserveDocument &&
+          iframe.getAttribute("src") === null &&
+          patchIframeContentFromHtml(iframe, content)
+        ) {
+          lastContentRef.current = content;
+          return;
+        }
+
         iframe.removeAttribute("src");
         iframe.srcdoc = content;
+        lastContentRef.current = content;
       } catch (error) {
         console.error("Error updating iframe srcdoc:", error);
       }

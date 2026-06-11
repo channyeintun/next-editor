@@ -35,7 +35,10 @@ interface UsePreviewPlaybackRegistrationOptions {
   effectiveRuntimePreviewUrl: string | null;
   staticWorkspacePreview: string;
   forceRefreshPreview: (options?: PreviewRefreshOptions) => void;
-  updateIframeContent: (content: string, options?: { force?: boolean }) => void;
+  updateIframeContent: (
+    content: string,
+    options?: { force?: boolean; preserveDocument?: boolean },
+  ) => void;
   iframeRef: RefObject<HTMLIFrameElement | null>;
   setSize: Dispatch<SetStateAction<PreviewSize>>;
   lastRefreshKeyRef: RefObject<number | undefined>;
@@ -144,10 +147,17 @@ export function usePreviewPlaybackRegistration({
 
       if (didRefreshKeyChange) {
         if (previewState.content !== undefined) {
-          forceRefreshPreview({
-            content: previewState.content,
-            emitEvent: false,
-          });
+          if (isRuntimePreviewActive) {
+            updateIframeContent(previewState.content, {
+              force: true,
+              preserveDocument: true,
+            });
+          } else {
+            forceRefreshPreview({
+              content: previewState.content,
+              emitEvent: false,
+            });
+          }
         } else if (effectiveRuntimePreviewUrl && staticWorkspacePreview) {
           forceRefreshPreview({
             content: staticWorkspacePreview,
@@ -158,7 +168,10 @@ export function usePreviewPlaybackRegistration({
         previewState.content !== undefined &&
         previewState.content !== lastContentRef.current
       ) {
-        updateIframeContent(previewState.content, { force: true });
+        updateIframeContent(previewState.content, {
+          force: true,
+          preserveDocument: isRuntimePreviewActive,
+        });
       }
 
       const iframe = iframeRef.current;
