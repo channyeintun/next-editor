@@ -19,6 +19,9 @@ import {
     normalizeEditorViewState,
 } from './editorState';
 
+const LINEAR_SCAN_LIMIT = 128;
+const keyframeIndexCache = new WeakMap<DeltaFrame[], number[]>();
+
 /**
  * Finds the length of the common prefix between two strings using WebAssembly.
  * Includes safety checks to ensure we don't cut in the middle of a multi-byte UTF-8 character.
@@ -360,12 +363,38 @@ export function findNearestKeyframeIndex(
     frames: DeltaFrame[],
     targetIndex: number
 ): number {
-    for (let i = Math.min(targetIndex, frames.length - 1); i >= 0; i--) {
-        if (isKeyframe(frames[i])) {
-            return i;
+    if (!frames.length) return -1;
+
+    const boundedTargetIndex = Math.min(targetIndex, frames.length - 1);
+    let keyframeIndices = keyframeIndexCache.get(frames);
+
+    if (!keyframeIndices) {
+        keyframeIndices = [];
+        for (let i = 0; i < frames.length; i++) {
+            if (isKeyframe(frames[i])) {
+                keyframeIndices.push(i);
+            }
+        }
+        keyframeIndexCache.set(frames, keyframeIndices);
+    }
+
+    let low = 0;
+    let high = keyframeIndices.length - 1;
+    let nearestIndex = -1;
+
+    while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        const keyframeIndex = keyframeIndices[mid];
+
+        if (keyframeIndex <= boundedTargetIndex) {
+            nearestIndex = keyframeIndex;
+            low = mid + 1;
+        } else {
+            high = mid - 1;
         }
     }
-    return -1; // No keyframe found (should not happen if first frame is always keyframe)
+
+    return nearestIndex; // No keyframe found should not happen if first frame is a keyframe.
 }
 
 /**
@@ -464,26 +493,57 @@ export function findFrameIndexAtTime(
 ): number {
     if (!frames.length) return -1;
 
-    // Fast path: try starting from previous index
-    let index = Math.max(0, startIndex);
+    const lastIndex = frames.length - 1;
+    const hasValidStartIndex = startIndex >= 0 && startIndex <= lastIndex;
 
-    // Ensure index is within bounds
-    if (index >= frames.length) index = frames.length - 1;
-
-    // If we've jumped back, search from the beginning
-    if (frames[index].timestamp > time) {
-        index = 0;
+    if (!hasValidStartIndex) {
+        return findFrameIndexAtTimeBinary(frames, time, 0, lastIndex);
     }
 
-    // Linear search forward (efficient for incremental ticks)
-    let bestIndex = index;
-    for (let i = index; i < frames.length; i++) {
-        if (frames[i].timestamp <= time) {
-            bestIndex = i;
-        } else {
-            break;
+    if (frames[startIndex].timestamp > time) {
+        return findFrameIndexAtTimeBinary(frames, time, 0, startIndex);
+    }
+
+    if (
+        startIndex === lastIndex ||
+        frames[startIndex + 1].timestamp > time
+    ) {
+        return startIndex;
+    }
+
+    const scanEnd = Math.min(lastIndex, startIndex + LINEAR_SCAN_LIMIT);
+
+    for (let index = startIndex + 1; index <= scanEnd; index++) {
+        if (frames[index].timestamp > time) {
+            return index - 1;
         }
     }
 
-    return bestIndex;
+    if (scanEnd === lastIndex) {
+        return lastIndex;
+    }
+
+    return findFrameIndexAtTimeBinary(frames, time, scanEnd, lastIndex);
+}
+
+function findFrameIndexAtTimeBinary(
+    frames: Array<{ timestamp: number }>,
+    time: number,
+    low: number,
+    high: number,
+): number {
+    let nearestIndex = low > 0 ? low - 1 : 0;
+
+    while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+
+        if (frames[mid].timestamp <= time) {
+            nearestIndex = mid;
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+
+    return nearestIndex;
 }

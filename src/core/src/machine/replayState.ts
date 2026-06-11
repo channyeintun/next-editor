@@ -30,6 +30,10 @@ interface ReplayCursorResult<T extends TimedReplayEvent> {
   nextIndex: number;
 }
 
+interface PreviewReplayIndex {
+  retainedStates: PreviewState[];
+}
+
 export interface PreviewReplayResult {
   appliedStates: PreviewState[];
   nextIndex: number;
@@ -55,6 +59,9 @@ export interface SlideReplayResult {
   applications: SlideReplayApplication[];
   nextIndex: number;
 }
+
+const LINEAR_SCAN_LIMIT = 128;
+const previewReplayIndexCache = new WeakMap<PreviewEvent[], PreviewReplayIndex>();
 
 export function resolveReplayTime(
   event: ReplayTriggerEvent,
@@ -84,33 +91,86 @@ export function advanceReplayCursor<T extends TimedReplayEvent>({
   currentTime: number;
   lastAppliedIndex: number;
 }): ReplayCursorResult<T> {
-  let nextIndex = lastAppliedIndex;
-
-  if (
-    nextIndex >= 0 &&
-    nextIndex < events.length &&
-    events[nextIndex].timestamp > currentTime
-  ) {
-    nextIndex = -1;
-  }
-
-  let latestEvent = nextIndex >= 0 ? events[nextIndex] : null;
-
-  for (let index = nextIndex + 1; index < events.length; index++) {
-    const replayEvent = events[index];
-
-    if (replayEvent.timestamp > currentTime) {
-      break;
-    }
-
-    latestEvent = replayEvent;
-    nextIndex = index;
-  }
+  const nextIndex = findTimedEventIndexAtOrBefore(
+    events,
+    currentTime,
+    lastAppliedIndex,
+  );
+  const latestEvent = nextIndex >= 0 ? events[nextIndex] : null;
 
   return {
     latestEvent,
     nextIndex,
   };
+}
+
+function findTimedEventIndexAtOrBefore<T extends TimedReplayEvent>(
+  events: T[],
+  currentTime: number,
+  startIndex: number,
+): number {
+  if (!events.length) {
+    return -1;
+  }
+
+  const lastIndex = events.length - 1;
+  const hasValidStartIndex = startIndex >= 0 && startIndex <= lastIndex;
+
+  if (!hasValidStartIndex) {
+    return findTimedEventIndexAtOrBeforeBinary(events, currentTime, 0, lastIndex);
+  }
+
+  if (events[startIndex].timestamp > currentTime) {
+    return findTimedEventIndexAtOrBeforeBinary(events, currentTime, 0, startIndex);
+  }
+
+  if (
+    startIndex === lastIndex ||
+    events[startIndex + 1].timestamp > currentTime
+  ) {
+    return startIndex;
+  }
+
+  const scanEnd = Math.min(lastIndex, startIndex + LINEAR_SCAN_LIMIT);
+
+  for (let index = startIndex + 1; index <= scanEnd; index++) {
+    if (events[index].timestamp > currentTime) {
+      return index - 1;
+    }
+  }
+
+  if (scanEnd === lastIndex) {
+    return lastIndex;
+  }
+
+  return findTimedEventIndexAtOrBeforeBinary(
+    events,
+    currentTime,
+    scanEnd,
+    lastIndex,
+  );
+}
+
+function findTimedEventIndexAtOrBeforeBinary<T extends TimedReplayEvent>(
+  events: T[],
+  currentTime: number,
+  low: number,
+  high: number,
+): number {
+  let nearestIndex = low > 0 ? low - 1 : -1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+
+    if (events[mid].timestamp <= currentTime) {
+      nearestIndex = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return nearestIndex;
 }
 
 function mergePreviewEventState(
@@ -138,6 +198,41 @@ function mergePreviewEventState(
   };
 }
 
+function getPreviewReplayIndex(
+  previewEvents: PreviewEvent[],
+): PreviewReplayIndex {
+  const cachedIndex = previewReplayIndexCache.get(previewEvents);
+
+  if (cachedIndex) {
+    return cachedIndex;
+  }
+
+  let retainedState: PreviewState | undefined;
+  const retainedStates: PreviewState[] = [];
+
+  for (const previewEvent of previewEvents) {
+    const nextPreviewState = mergePreviewEventState(
+      previewEvent,
+      retainedState,
+    );
+    retainedState = nextPreviewState.retainedState;
+    retainedStates.push(retainedState);
+  }
+
+  const replayIndex = { retainedStates };
+  previewReplayIndexCache.set(previewEvents, replayIndex);
+  return replayIndex;
+}
+
+function clonePreviewReplayState(
+  previewState: PreviewState,
+): PreviewState {
+  return {
+    ...previewState,
+    currentInteraction: undefined,
+  };
+}
+
 export function getPreviewReplayResult({
   previewEvents,
   currentTime,
@@ -151,6 +246,32 @@ export function getPreviewReplayResult({
   lastAppliedState?: PreviewState;
   isSeeking: boolean;
 }): PreviewReplayResult {
+  if (isSeeking) {
+    const nextIndex = findTimedEventIndexAtOrBefore(
+      previewEvents,
+      currentTime,
+      -1,
+    );
+
+    if (nextIndex < 0) {
+      return {
+        appliedStates: [],
+        nextIndex,
+        retainedState: undefined,
+      };
+    }
+
+    const retainedState = clonePreviewReplayState(
+      getPreviewReplayIndex(previewEvents).retainedStates[nextIndex],
+    );
+
+    return {
+      appliedStates: [retainedState],
+      nextIndex,
+      retainedState,
+    };
+  }
+
   let nextIndex = isSeeking ? -1 : lastAppliedIndex;
   let retainedState = isSeeking ? undefined : lastAppliedState;
   const appliedStates: PreviewState[] = [];
@@ -199,11 +320,13 @@ export function getWorkspaceReplayResult({
   workspaceEvents,
   currentTime,
   currentSnapshot,
+  getCurrentSnapshot,
   lastAppliedIndex,
 }: {
   workspaceEvents: WorkspaceRecordingEvent[];
   currentTime: number;
-  currentSnapshot: WorkspaceRecordingSnapshot | null;
+  currentSnapshot?: WorkspaceRecordingSnapshot | null;
+  getCurrentSnapshot?: () => WorkspaceRecordingSnapshot | null;
   lastAppliedIndex: number;
 }): WorkspaceReplayResult {
   const replayCursor = advanceReplayCursor({
@@ -214,17 +337,25 @@ export function getWorkspaceReplayResult({
 
   if (
     replayCursor.latestEvent &&
-    replayCursor.nextIndex !== lastAppliedIndex &&
-    (!currentSnapshot ||
-      !areWorkspaceSnapshotsEqual(
-        currentSnapshot,
-        replayCursor.latestEvent.snapshot,
-      ))
+    replayCursor.nextIndex !== lastAppliedIndex
   ) {
-    return {
-      nextIndex: replayCursor.nextIndex,
-      snapshotToApply: replayCursor.latestEvent.snapshot,
-    };
+    const snapshot =
+      currentSnapshot !== undefined
+        ? currentSnapshot
+        : (getCurrentSnapshot?.() ?? null);
+
+    if (
+      !snapshot ||
+      !areWorkspaceSnapshotsEqual(
+        snapshot,
+        replayCursor.latestEvent.snapshot,
+      )
+    ) {
+      return {
+        nextIndex: replayCursor.nextIndex,
+        snapshotToApply: replayCursor.latestEvent.snapshot,
+      };
+    }
   }
 
   return {
@@ -346,6 +477,23 @@ export function getSlideReplayResult({
   lastAppliedIndex: number;
   isSeeking: boolean;
 }): SlideReplayResult {
+  if (isSeeking) {
+    const nextIndex = findTimedEventIndexAtOrBefore(
+      slideEvents,
+      currentTime,
+      -1,
+    );
+    const application =
+      nextIndex >= 0
+        ? createSlideReplayApplication(slideEvents, slides, nextIndex)
+        : null;
+
+    return {
+      applications: application ? [application] : [],
+      nextIndex,
+    };
+  }
+
   let nextIndex = lastAppliedIndex;
   const applications: SlideReplayApplication[] = [];
 

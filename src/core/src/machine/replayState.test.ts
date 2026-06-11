@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { PreviewEvent } from "../slides";
+import type { PreviewEvent, Slide, SlideEvent } from "../slides";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
 import type {
   WorkspaceRecordingEvent,
@@ -8,6 +8,7 @@ import type {
 import {
   getPreviewReplayResult,
   getRuntimeReplayResult,
+  getSlideReplayResult,
   getWorkspaceReplayResult,
 } from "./replayState";
 
@@ -145,6 +146,104 @@ describe("replayState", () => {
 
     expect(backwardSeek.nextIndex).toBe(0);
     expect(backwardSeek.snapshotToApply).toBe(firstSnapshot);
+  });
+
+  it("does not read the current workspace snapshot when the workspace cursor is unchanged", () => {
+    const firstSnapshot = createWorkspaceSnapshot("first");
+    const secondSnapshot = createWorkspaceSnapshot("second");
+    const workspaceEvents: WorkspaceRecordingEvent[] = [
+      {
+        timestamp: 0,
+        snapshot: firstSnapshot,
+      },
+      {
+        timestamp: 100,
+        snapshot: secondSnapshot,
+      },
+    ];
+    let snapshotReads = 0;
+
+    const unchangedCursor = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 50,
+      getCurrentSnapshot: () => {
+        snapshotReads++;
+        return firstSnapshot;
+      },
+      lastAppliedIndex: 0,
+    });
+
+    expect(unchangedCursor.nextIndex).toBe(0);
+    expect(unchangedCursor.snapshotToApply).toBeUndefined();
+    expect(snapshotReads).toBe(0);
+
+    const advancedCursor = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 100,
+      getCurrentSnapshot: () => {
+        snapshotReads++;
+        return firstSnapshot;
+      },
+      lastAppliedIndex: 0,
+    });
+
+    expect(advancedCursor.nextIndex).toBe(1);
+    expect(advancedCursor.snapshotToApply).toBe(secondSnapshot);
+    expect(snapshotReads).toBe(1);
+  });
+
+  it("seeks to the latest slide event at or before the target time", () => {
+    const slides: Slide[] = [
+      {
+        id: "slide-1",
+        order: 0,
+        content: "<section>One</section>",
+        contentType: "html",
+      },
+      {
+        id: "slide-2",
+        order: 1,
+        content: "<section>Two</section>",
+        contentType: "html",
+      },
+    ];
+    const slideEvents: SlideEvent[] = [
+      {
+        type: "slide_open",
+        timestamp: 0,
+        slideId: "slide-1",
+        isMaximized: true,
+        indexv: 0,
+      },
+      {
+        type: "slide_change",
+        timestamp: 100,
+        slideId: "slide-2",
+        indexv: 1,
+      },
+    ];
+
+    const result = getSlideReplayResult({
+      slideEvents,
+      slides,
+      currentTime: 150,
+      lastAppliedIndex: -1,
+      isSeeking: true,
+    });
+
+    expect(result.nextIndex).toBe(1);
+    expect(result.applications).toEqual([
+      {
+        slideIndex: 1,
+        slideState: {
+          isOpen: true,
+          isMaximized: false,
+          currentSlideId: "slide-2",
+          indexv: 1,
+          currentInteraction: undefined,
+        },
+      },
+    ]);
   });
 
   it("returns the latest runtime snapshot when its replay cursor advances", () => {

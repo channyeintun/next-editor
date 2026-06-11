@@ -86,11 +86,16 @@ const applyFrameState = (
 
   try {
     // Apply content changes
-    applyContentDiff(
-      editor,
-      normalizedFrame.state.content,
-      previousFrame?.state.content,
-    );
+    if (
+      !previousFrame ||
+      previousFrame.state.content !== normalizedFrame.state.content
+    ) {
+      applyContentDiff(
+        editor,
+        normalizedFrame.state.content,
+        previousFrame?.state.content,
+      );
+    }
 
     const viewStateChanged =
       !!normalizedFrame.state.viewState &&
@@ -1408,7 +1413,7 @@ export const editorMachine = setup({
       const replayResult = getWorkspaceReplayResult({
         workspaceEvents: recording.workspaceEvents,
         currentTime: resolveReplayTime(event, context.timeline.currentTime),
-        currentSnapshot: context.getWorkspaceSnapshot?.() ?? null,
+        getCurrentSnapshot: () => context.getWorkspaceSnapshot?.() ?? null,
         lastAppliedIndex: lastAppliedWorkspaceEventIndex,
       });
 

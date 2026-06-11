@@ -6,6 +6,7 @@ import {
     createContentDelta,
     findCommonPrefixLength,
     findCommonSuffixLength,
+    findFrameIndexAtTime,
     reconstructFrameAtIndex,
 } from '../frameDelta';
 import { isKeyframe, isDelta } from '../deltaTypes';
@@ -136,6 +137,16 @@ describe('Delta Compression Optimization', () => {
 
         const reconstructed400 = reconstructFrameAtIndex(compressed, 2);
         expect(reconstructed400?.state.content).toBe('abc');
+    });
+
+    it('should find late frames across seeks and long jumps', () => {
+        const frames = Array.from({ length: 10_000 }, (_, index) =>
+            createMockFrame(`content ${index}`, index * 10),
+        );
+
+        expect(findFrameIndexAtTime(frames, 98_760, -1)).toBe(9_876);
+        expect(findFrameIndexAtTime(frames, 1_230, 9_876)).toBe(123);
+        expect(findFrameIndexAtTime(frames, 77_770, 10)).toBe(7_777);
     });
 
     it('should not treat a shared UTF-8 lead byte as a shared character prefix', () => {
