@@ -37,6 +37,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     workspaceStoreRef.current.trigger.setCollapsedFolders({ paths });
   }, []);
 
+  const setSidebarScrollTop = useCallback((scrollTop: number) => {
+    workspaceStoreRef.current.trigger.setSidebarScrollTop({ scrollTop });
+  }, []);
+
   const createFile = useCallback((path: string, content = "") => {
     workspaceStoreRef.current.trigger.createFile({ path, content });
   }, []);
@@ -105,7 +109,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, []);
 
   const loadProject = useCallback(
-    (project: WorkspaceProject, nextActiveFilePath?: string, collapsedFolders?: string[]) => {
+    (
+      project: WorkspaceProject,
+      nextActiveFilePath?: string,
+      collapsedFolders?: string[],
+      sidebarScrollTop?: number,
+    ) => {
       const normalizedProject = normalizeProject(project);
       const normalizedNextActiveFilePath = normalizeWorkspacePath(nextActiveFilePath ?? "");
       const resolvedActiveFilePath = normalizedProject.files[normalizedNextActiveFilePath]
@@ -121,6 +130,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         project: normalizedProject,
         activeFilePath: resolvedActiveFilePath,
         collapsedFolders,
+        sidebarScrollTop,
         savedSnapshot,
       });
     },
@@ -151,6 +161,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     return workspaceStoreRef.current.getSnapshot().context.collapsedFolders;
   }, []);
 
+  const getSidebarScrollTop = useCallback(() => {
+    return workspaceStoreRef.current.getSnapshot().context.sidebarScrollTop;
+  }, []);
+
   const getFile = useCallback((path: string) => {
     return (
       workspaceStoreRef.current.getSnapshot().context.project.files[normalizeWorkspacePath(path)] ??
@@ -167,6 +181,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       setActiveFilePath,
       setPreviewFilePath,
       setCollapsedFolders,
+      setSidebarScrollTop,
       createNewEditor,
       createFile,
       createFolder,
@@ -183,6 +198,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       getProject,
       getActiveFilePath,
       getCollapsedFolders,
+      getSidebarScrollTop,
       getFile,
       listFiles,
     }),
@@ -194,6 +210,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       deleteFile,
       getActiveFilePath,
       getCollapsedFolders,
+      getSidebarScrollTop,
       getFile,
       getProject,
       listFiles,
@@ -204,6 +221,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       saveProject,
       setActiveFilePath,
       setCollapsedFolders,
+      setSidebarScrollTop,
       setPreviewFilePath,
       updateLessonType,
       updateActiveFileContent,

@@ -9,10 +9,14 @@ import {
   getWorkspaceReplayResult,
 } from "./replayState";
 
-function createWorkspaceSnapshot(content: string): WorkspaceRecordingSnapshot {
+function createWorkspaceSnapshot(
+  content: string,
+  sidebarScrollTop = 0,
+): WorkspaceRecordingSnapshot {
   return {
     activeFilePath: "index.html",
     collapsedFolders: [],
+    sidebarScrollTop,
     project: {
       id: "project-1",
       name: "Project",
@@ -136,6 +140,41 @@ describe("replayState", () => {
       workspaceEvents,
       currentTime: 50,
       currentSnapshot: secondSnapshot,
+      lastAppliedIndex: 1,
+    });
+
+    expect(backwardSeek.nextIndex).toBe(0);
+    expect(backwardSeek.snapshotToApply).toBe(firstSnapshot);
+  });
+
+  it("replays scroll-only workspace snapshots and restores scroll when seeking backward", () => {
+    const firstSnapshot = createWorkspaceSnapshot("same", 0);
+    const scrolledSnapshot = createWorkspaceSnapshot("same", 360);
+    const workspaceEvents: WorkspaceRecordingEvent[] = [
+      {
+        timestamp: 0,
+        snapshot: firstSnapshot,
+      },
+      {
+        timestamp: 100,
+        snapshot: scrolledSnapshot,
+      },
+    ];
+
+    const scrollForward = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 100,
+      currentSnapshot: firstSnapshot,
+      lastAppliedIndex: 0,
+    });
+
+    expect(scrollForward.nextIndex).toBe(1);
+    expect(scrollForward.snapshotToApply).toBe(scrolledSnapshot);
+
+    const backwardSeek = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 50,
+      currentSnapshot: scrolledSnapshot,
       lastAppliedIndex: 1,
     });
 

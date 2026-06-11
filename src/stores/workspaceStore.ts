@@ -29,6 +29,7 @@ export interface WorkspaceState {
   project: WorkspaceProject;
   activeFilePath: string;
   collapsedFolders: string[];
+  sidebarScrollTop: number;
   savedSnapshot: StoredWorkspaceSnapshot;
   projectVersion: number;
   previewVersion: number;
@@ -228,16 +229,26 @@ function normalizeCollapsedFolders(folders: string[], collapsedFolders: string[]
   return Array.from(nextCollapsedFolders).sort((left, right) => left.localeCompare(right));
 }
 
+function normalizeSidebarScrollTop(scrollTop: number | undefined): number {
+  if (!Number.isFinite(scrollTop)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.round(scrollTop ?? 0));
+}
+
 function createSidebarState(
   project: WorkspaceProject,
   activeFilePath: string,
   collapsedFolders: string[],
+  sidebarScrollTop: number,
 ): WorkspaceSidebarState {
   return {
     activeFilePath,
     files: listProjectFiles(project),
     folders: project.folders,
     collapsedFolders,
+    sidebarScrollTop,
     lessonType: project.lessonType,
     previewFilePath: project.entryFilePath,
   };
@@ -282,6 +293,7 @@ function areSidebarStatesEqual(left: WorkspaceSidebarState, right: WorkspaceSide
     left.activeFilePath === right.activeFilePath &&
     left.lessonType === right.lessonType &&
     left.previewFilePath === right.previewFilePath &&
+    left.sidebarScrollTop === right.sidebarScrollTop &&
     areStringArraysEqual(left.collapsedFolders, right.collapsedFolders) &&
     areStringArraysEqual(left.folders, right.folders) &&
     areSidebarFilesEqual(left.files, right.files)
@@ -309,6 +321,7 @@ function withRefreshedWorkspaceSlices(state: WorkspaceState): WorkspaceState {
     state.project,
     state.activeFilePath,
     nextCollapsedFolders,
+    state.sidebarScrollTop,
   );
 
   return {
@@ -346,18 +359,20 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
   const project = initialSnapshot.project;
   const activeFilePath = initialSnapshot.activeFilePath;
   const collapsedFolders = normalizeCollapsedFolders(project.folders, []);
+  const sidebarScrollTop = 0;
 
   return {
     project,
     activeFilePath,
     collapsedFolders,
+    sidebarScrollTop,
     savedSnapshot,
     projectVersion: 0,
     previewVersion: 0,
     saveVersion: 0,
     syncVersion: 0,
     editorState: createEditorState(project, activeFilePath, 0),
-    sidebarState: createSidebarState(project, activeFilePath, collapsedFolders),
+    sidebarState: createSidebarState(project, activeFilePath, collapsedFolders, sidebarScrollTop),
     lessonType: project.lessonType,
     projectName: project.name,
     fileCount: Object.keys(project.files).length,
@@ -407,6 +422,18 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
         return withRefreshedWorkspaceSlices({
           ...context,
           collapsedFolders: event.paths,
+        });
+      },
+      setSidebarScrollTop: (context, event: { scrollTop: number }) => {
+        const sidebarScrollTop = normalizeSidebarScrollTop(event.scrollTop);
+
+        if (context.sidebarScrollTop === sidebarScrollTop) {
+          return context;
+        }
+
+        return withRefreshedWorkspaceSlices({
+          ...context,
+          sidebarScrollTop,
         });
       },
       createFile: (
@@ -748,6 +775,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           activeFilePath: string;
           savedSnapshot: StoredWorkspaceSnapshot;
           collapsedFolders?: string[];
+          sidebarScrollTop?: number;
         },
       ) => {
         return withDirtyState(
@@ -756,6 +784,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
             project: event.project,
             activeFilePath: event.activeFilePath,
             collapsedFolders: event.collapsedFolders ?? [],
+            sidebarScrollTop: normalizeSidebarScrollTop(event.sidebarScrollTop),
             savedSnapshot: event.savedSnapshot,
             projectVersion: context.projectVersion + 1,
             previewVersion: context.previewVersion + 1,

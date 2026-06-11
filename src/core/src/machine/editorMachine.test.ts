@@ -42,10 +42,14 @@ function createRecording(audioBlob?: Blob): Recording {
   };
 }
 
-function createWorkspaceSnapshot(content: string): WorkspaceRecordingSnapshot {
+function createWorkspaceSnapshot(
+  content: string,
+  sidebarScrollTop = 0,
+): WorkspaceRecordingSnapshot {
   return {
     activeFilePath: "index.html",
     collapsedFolders: [],
+    sidebarScrollTop,
     project: {
       id: "project-1",
       name: "Project",
@@ -244,8 +248,8 @@ describe("editorMachine actor lifecycle", () => {
 
   it("applies workspace, runtime, then preview snapshots during replay sync", async () => {
     const calls: string[] = [];
-    const firstWorkspace = createWorkspaceSnapshot("first");
-    const secondWorkspace = createWorkspaceSnapshot("second");
+    const firstWorkspace = createWorkspaceSnapshot("first", 0);
+    const secondWorkspace = createWorkspaceSnapshot("second", 240);
     let currentWorkspace = createWorkspaceSnapshot("outside");
 
     const recording: Recording = {
@@ -300,7 +304,9 @@ describe("editorMachine actor lifecycle", () => {
         getWorkspaceSnapshot: () => currentWorkspace,
         applyWorkspaceSnapshot: (snapshot) => {
           currentWorkspace = snapshot;
-          calls.push(`workspace:${snapshot.project.files["index.html"].content}`);
+          calls.push(
+            `workspace:${snapshot.project.files["index.html"].content}:${snapshot.sidebarScrollTop ?? 0}`,
+          );
         },
         applyRuntimeSnapshot: (snapshot) => {
           calls.push(`runtime:${snapshot.status}`);
@@ -314,12 +320,12 @@ describe("editorMachine actor lifecycle", () => {
     actor.send({ type: "LOAD_RECORDING", recording });
     await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
 
-    expect(calls).toEqual(["workspace:first", "runtime:starting", "preview:first-preview"]);
+    expect(calls).toEqual(["workspace:first:0", "runtime:starting", "preview:first-preview"]);
 
     calls.length = 0;
     actor.send({ type: "SEEK", time: 100 });
 
-    expect(calls).toEqual(["workspace:second", "runtime:ready", "preview:second-preview"]);
+    expect(calls).toEqual(["workspace:second:240", "runtime:ready", "preview:second-preview"]);
 
     actor.stop();
   });

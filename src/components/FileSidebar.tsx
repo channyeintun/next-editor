@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type UIEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   FileCode2,
   FileJson2,
@@ -58,6 +58,55 @@ interface SidebarContextMenuState {
   kind: SidebarEntryKind;
   path: string;
   parentPath: string;
+}
+
+interface ContextMenuPlacementInput {
+  anchorX: number;
+  anchorY: number;
+  menuWidth: number;
+  menuHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  margin?: number;
+}
+
+interface ContextMenuPlacement {
+  left: number;
+  top: number;
+  maxHeight: number;
+}
+
+const CONTEXT_MENU_VIEWPORT_MARGIN = 8;
+const CONTEXT_MENU_FALLBACK_WIDTH = 224;
+const CONTEXT_MENU_FALLBACK_HEIGHT = 320;
+
+function clampViewportValue(value: number, min: number, max: number): number {
+  if (max < min) {
+    return min;
+  }
+
+  return Math.min(Math.max(value, min), max);
+}
+
+export function getViewportClampedContextMenuPlacement({
+  anchorX,
+  anchorY,
+  menuWidth,
+  menuHeight,
+  viewportWidth,
+  viewportHeight,
+  margin = CONTEXT_MENU_VIEWPORT_MARGIN,
+}: ContextMenuPlacementInput): ContextMenuPlacement {
+  const availableWidth = Math.max(viewportWidth - margin * 2, 0);
+  const availableHeight = Math.max(viewportHeight - margin * 2, 0);
+  const renderedWidth = Math.min(Math.max(menuWidth, 0), availableWidth);
+  const renderedHeight = Math.min(Math.max(menuHeight, 0), availableHeight);
+
+  return {
+    left: clampViewportValue(anchorX, margin, viewportWidth - renderedWidth - margin),
+    top: clampViewportValue(anchorY, margin, viewportHeight - renderedHeight - margin),
+    maxHeight: availableHeight,
+  };
 }
 
 const FILE_TEMPLATES: Record<string, string> = {
@@ -221,6 +270,13 @@ const FileSidebar = memo(function FileSidebar() {
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const sidebarScrollAnimationFrameRef = useRef<number | null>(null);
+  const pendingSidebarScrollTopRef = useRef(0);
+  const [contextMenuSize, setContextMenuSize] = useState({
+    width: CONTEXT_MENU_FALLBACK_WIDTH,
+    height: CONTEXT_MENU_FALLBACK_HEIGHT,
+  });
   const {
     createFile,
     createFolder,
@@ -231,6 +287,7 @@ const FileSidebar = memo(function FileSidebar() {
     saveProject,
     setActiveFilePath,
     setCollapsedFolders,
+    setSidebarScrollTop,
     setPreviewFilePath,
   } = useWorkspaceActions();
   const { handleWorkspaceEvent } = useNextEditorActions();
@@ -241,6 +298,7 @@ const FileSidebar = memo(function FileSidebar() {
     folders,
     lessonType,
     previewFilePath,
+    sidebarScrollTop,
   } = useWorkspaceSidebarState();
   const collapsedFolders = useMemo(() => new Set(collapsedFolderPaths), [collapsedFolderPaths]);
   const tree = useMemo(
@@ -252,11 +310,21 @@ const FileSidebar = memo(function FileSidebar() {
       return undefined;
     }
 
+    const placement = getViewportClampedContextMenuPlacement({
+      anchorX: contextMenu.x,
+      anchorY: contextMenu.y,
+      menuWidth: contextMenuSize.width,
+      menuHeight: contextMenuSize.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
+
     return {
-      left: Math.min(contextMenu.x, window.innerWidth - 240),
-      top: Math.min(contextMenu.y, window.innerHeight - 240),
+      left: placement.left,
+      top: placement.top,
+      maxHeight: placement.maxHeight,
     };
-  }, [contextMenu]);
+  }, [contextMenu, contextMenuSize]);
   const contextMenuFile = useMemo(() => {
     if (!contextMenu || contextMenu.kind !== "file") {
       return null;
@@ -280,6 +348,48 @@ const FileSidebar = memo(function FileSidebar() {
     const selectionEnd = getEditableSelectionEnd(input.value, editState.kind);
     input.setSelectionRange(0, selectionEnd);
   }, [editState]);
+
+  useLayoutEffect(() => {
+    const container = sidebarScrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    pendingSidebarScrollTopRef.current = sidebarScrollTop;
+
+    if (Math.abs(container.scrollTop - sidebarScrollTop) > 1) {
+      container.scrollTop = sidebarScrollTop;
+    }
+  }, [sidebarScrollTop]);
+
+  useLayoutEffect(() => {
+    if (!contextMenu || !contextMenuRef.current) {
+      return;
+    }
+
+    const menu = contextMenuRef.current;
+    const bounds = menu.getBoundingClientRect();
+    const nextSize = {
+      width: bounds.width || CONTEXT_MENU_FALLBACK_WIDTH,
+      height: menu.scrollHeight || bounds.height || CONTEXT_MENU_FALLBACK_HEIGHT,
+    };
+
+    setContextMenuSize((currentSize) => {
+      if (currentSize.width === nextSize.width && currentSize.height === nextSize.height) {
+        return currentSize;
+      }
+
+      return nextSize;
+    });
+  }, [contextMenu, canOpenContextFileInPreview]);
+
+  useEffect(() => {
+    return () => {
+      if (sidebarScrollAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(sidebarScrollAnimationFrameRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!contextMenu) {
@@ -432,6 +542,19 @@ const FileSidebar = memo(function FileSidebar() {
   const openFile = (path: string) => {
     setActiveFilePath(path);
     handleWorkspaceEvent();
+  };
+
+  const handleSidebarScroll = (event: UIEvent<HTMLDivElement>) => {
+    pendingSidebarScrollTopRef.current = event.currentTarget.scrollTop;
+
+    if (sidebarScrollAnimationFrameRef.current !== null) {
+      return;
+    }
+
+    sidebarScrollAnimationFrameRef.current = window.requestAnimationFrame(() => {
+      sidebarScrollAnimationFrameRef.current = null;
+      setSidebarScrollTop(pendingSidebarScrollTopRef.current);
+    });
   };
 
   const handleRowContextMenu = (
@@ -596,7 +719,11 @@ const FileSidebar = memo(function FileSidebar() {
         </div>
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto px-2 py-3">
+      <div
+        ref={sidebarScrollContainerRef}
+        onScroll={handleSidebarScroll}
+        className="relative min-h-0 flex-1 overflow-y-auto px-2 py-3"
+      >
         <div className="space-y-1">
           {editState?.mode === "create" && editState.parentPath === ""
             ? renderInlineInput(editState.kind, 0)
@@ -607,7 +734,7 @@ const FileSidebar = memo(function FileSidebar() {
         {contextMenu && (
           <div
             ref={contextMenuRef}
-            className="fixed z-60 min-w-56 overflow-hidden rounded-xl border border-slate-700 bg-[#1b2029] py-2 shadow-[0_20px_40px_rgba(2,6,23,0.55)]"
+            className="fixed z-60 min-w-56 overflow-y-auto rounded-xl border border-slate-700 bg-[#1b2029] py-2 shadow-[0_20px_40px_rgba(2,6,23,0.55)]"
             style={menuStyle}
           >
             <button

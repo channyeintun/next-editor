@@ -157,8 +157,14 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const jsonStorage = useRef(createJsonStorage());
   const { slides, preview, runtimePanel } = useNextEditorDomainAdapters();
-  const { getProject, getActiveFilePath, getCollapsedFolders, loadProject, resetProject } =
-    useWorkspaceActions();
+  const {
+    getProject,
+    getActiveFilePath,
+    getCollapsedFolders,
+    getSidebarScrollTop,
+    loadProject,
+    resetProject,
+  } = useWorkspaceActions();
   const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
   const runtimeSnapshotRef = useRef(getRuntimeRecordingSnapshot());
@@ -207,13 +213,15 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
         const project = getProject();
         const activeFilePath = getActiveFilePath();
         const collapsedFolders = getCollapsedFolders();
+        const sidebarScrollTop = getSidebarScrollTop();
         const cachedSnapshot = workspaceSnapshotRef.current;
 
         if (
           cachedSnapshot &&
           cachedSnapshot.project === project &&
           cachedSnapshot.activeFilePath === activeFilePath &&
-          cachedSnapshot.collapsedFolders === collapsedFolders
+          cachedSnapshot.collapsedFolders === collapsedFolders &&
+          (cachedSnapshot.sidebarScrollTop ?? 0) === sidebarScrollTop
         ) {
           return cachedSnapshot;
         }
@@ -222,6 +230,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
           project,
           activeFilePath,
           collapsedFolders,
+          sidebarScrollTop,
         } satisfies WorkspaceRecordingSnapshot;
 
         workspaceSnapshotRef.current = nextSnapshot;
@@ -229,7 +238,12 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       },
       applyWorkspaceSnapshot: (snapshot) => {
         suppressWorkspaceEvents();
-        loadProject(snapshot.project, snapshot.activeFilePath, snapshot.collapsedFolders ?? []);
+        loadProject(
+          snapshot.project,
+          snapshot.activeFilePath,
+          snapshot.collapsedFolders ?? [],
+          snapshot.sidebarScrollTop ?? 0,
+        );
         void saveRuntimeWorkspace();
       },
       getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
@@ -252,6 +266,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     [
       getActiveFilePath,
       getCollapsedFolders,
+      getSidebarScrollTop,
       getProject,
       loadProject,
       preview,
