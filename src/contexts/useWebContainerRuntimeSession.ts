@@ -158,7 +158,11 @@ export function useWebContainerRuntimeSession({
       }
 
       if (options?.logToConsole) {
-        console.log("[runner]", sanitizedChunk);
+        const consoleChunk = sanitizedChunk.trim();
+
+        if (consoleChunk) {
+          console.log("[runner]", consoleChunk);
+        }
       }
 
       setLastOutput(

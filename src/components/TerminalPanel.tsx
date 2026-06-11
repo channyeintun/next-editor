@@ -357,6 +357,10 @@ const TerminalPanel = memo(function TerminalPanel() {
     }
 
     for (const line of formattedOutput.split("\n")) {
+      if (!line.trim()) {
+        continue;
+      }
+
       appendConsoleLine(`[runner] ${line}`);
     }
   }, [isPlaybackSnapshotActive, lastOutput]);
