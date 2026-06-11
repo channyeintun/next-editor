@@ -1,47 +1,26 @@
-# Xterm Integration Plan
+# Plan: Sidebar Replay, Menu Bounds, and 2x Audio Start
 
-## Goal
+## Summary
 
-Replace the custom text-based terminal renderer with an xterm-powered terminal that works with WebContainer live sessions and supports recording/replay with raw terminal events.
+Fix three playback/UI issues: record and replay sidebar scroll position, keep the file context menu fully inside the viewport, and remove the remaining audio echo when playback starts at `2x`.
 
-## Constraints
+## Key Changes
 
-- Never add tests.
-- Preserve the existing multi-session dock UX.
-- Keep the runtime and replay model compatible with the existing recording architecture.
-- Use Bun project commands for install, formatting, and validation.
+- Replace the current `plan.md` contents with this plan; the existing file is for the completed xterm work.
+- Add optional `sidebarScrollTop` to `WorkspaceRecordingSnapshot` and include it in workspace snapshot equality so scroll-only changes are recorded and replayed.
+- Store sidebar scroll in workspace state/actions, update it from `FileSidebar` with throttling, and restore it after `applyWorkspaceSnapshot`/`loadProject` during playback.
+- Change `FileSidebar` context menu positioning to use measured menu dimensions plus viewport clamping, with a small margin and `max-height` fallback when the menu is taller than the viewport.
+- Update `audioPlaybackActor` so high-speed SoundTouch playback never starts through the native pitch-preserving path first; defer rate application until the SoundTouch/fallback mode is known, disable native pitch preservation for the SoundTouch path before first `play()`, and keep native pitch preservation only for fallback playback.
 
-## Task 1: Create planning artifacts
+## Tests
 
-- Create `plan.md` and `progress.md`.
-- Track tasks, status, and commits.
+- Extend workspace replay tests for scroll-only snapshots and backward seek restoration.
+- Add/extend sidebar menu positioning helper tests for bottom/right viewport clamping.
+- Add audio actor regression coverage for `playbackRate: 2` from initial start, including a delayed SoundTouch setup case where `PLAY` must wait for setup and must not use native pitch preservation first.
+- Run `bun run test`, `bun run typecheck`, and `bun run lint`.
 
-## Task 2: Integrate xterm for live WebContainer terminals
+## Assumptions
 
-- Add xterm dependencies needed for browser rendering and resizing.
-- Introduce a reusable xterm React view for dock terminal sessions.
-- Stop sanitizing live terminal output before display.
-- Feed raw WebContainer output into xterm instances.
-- Route xterm keyboard input back to the active terminal session.
-- Keep the existing dock session creation, activation, and close behavior.
-
-## Task 3: Upgrade terminal recording model for replay
-
-- Extend runtime recording types to store terminal events instead of only terminal text snapshots.
-- Record per-session terminal output chunks, resize events, and session lifecycle changes with timestamps.
-- Preserve compatibility with existing runtime snapshot playback where practical.
-- Keep replay data explicit and simple.
-
-## Task 4: Add xterm-based replay rendering
-
-- Render recorded terminal sessions through xterm during playback.
-- Reconstruct terminal state by applying recorded events in timestamp order.
-- Ensure seeking and paused playback can restore the correct terminal buffer for the active session.
-- Keep non-playback live runtime behavior unchanged.
-
-## Task 5: Final validation and cleanup
-
-- Run `bun run format` for code changes.
-- Run typecheck after each code task.
-- Commit each completed task with git CLI before starting the next task.
-- Update `progress.md` after every completed task.
+- Sidebar scroll means vertical file-tree scroll only, so `sidebarScrollTop` is enough.
+- Existing recordings remain compatible by treating missing `sidebarScrollTop` as `0`.
+- No recording schema version bump is required because the new snapshot field is optional.
