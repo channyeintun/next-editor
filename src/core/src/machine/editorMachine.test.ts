@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createActor, waitFor } from "xstate";
+import type * as monaco from "monaco-editor";
 import { editorMachine } from "./editorMachine";
 import { audioPlaybackActor } from "./audioActor";
 import type { Recording } from "../types";
@@ -61,6 +62,130 @@ function createWorkspaceSnapshot(content: string): WorkspaceRecordingSnapshot {
       },
     },
   };
+}
+
+function createTwoFileWorkspaceSnapshot(
+  activeFilePath: "a.ts" | "b.ts",
+  aContent: string,
+  bContent: string,
+): WorkspaceRecordingSnapshot {
+  return {
+    activeFilePath,
+    collapsedFolders: [],
+    project: {
+      id: "project-1",
+      name: "Project",
+      lessonType: "html-css",
+      entryFilePath: "a.ts",
+      folders: [],
+      files: {
+        "a.ts": {
+          path: "a.ts",
+          name: "a.ts",
+          language: "typescript",
+          content: aContent,
+        },
+        "b.ts": {
+          path: "b.ts",
+          name: "b.ts",
+          language: "typescript",
+          content: bContent,
+        },
+      },
+    },
+  };
+}
+
+class MockTextModel {
+  constructor(private content: string) {}
+
+  getValue() {
+    return this.content;
+  }
+
+  getLineCount() {
+    return this.content.split("\n").length;
+  }
+
+  getValueLength() {
+    return this.content.length;
+  }
+
+  setValue(content: string) {
+    this.content = content;
+  }
+
+  getPositionAt(offset: number) {
+    return { lineNumber: 1, column: offset + 1 };
+  }
+
+  pushEditOperations(
+    _selections: unknown[],
+    edits: monaco.editor.IIdentifiedSingleEditOperation[],
+  ) {
+    const edit = edits[0];
+
+    if (!edit) {
+      return null;
+    }
+
+    const startOffset = edit.range.startColumn - 1;
+    const endOffset = edit.range.endColumn - 1;
+    this.content =
+      this.content.slice(0, startOffset) +
+      (edit.text ?? "") +
+      this.content.slice(endOffset);
+    return null;
+  }
+}
+
+class MockEditor {
+  private position: monaco.IPosition = { lineNumber: 1, column: 1 };
+  private editorSelection: monaco.Selection = selection as monaco.Selection;
+
+  constructor(private model: MockTextModel) {}
+
+  getModel() {
+    return this.model as unknown as monaco.editor.ITextModel;
+  }
+
+  setModel(model: monaco.editor.ITextModel | null) {
+    if (model) {
+      this.model = model as unknown as MockTextModel;
+    }
+  }
+
+  getValue() {
+    return this.model.getValue();
+  }
+
+  saveViewState() {
+    return null;
+  }
+
+  restoreViewState() {
+    return undefined;
+  }
+
+  getPosition() {
+    return this.position;
+  }
+
+  setPosition(position: monaco.IPosition) {
+    this.position = position;
+  }
+
+  getSelection() {
+    return this.editorSelection;
+  }
+
+  setSelection(nextSelection: monaco.Selection) {
+    this.editorSelection = nextSelection;
+  }
+
+  hasTextFocus() {
+    return true;
+  }
 }
 
 describe("editorMachine actor lifecycle", () => {
@@ -211,6 +336,96 @@ describe("editorMachine actor lifecycle", () => {
       "runtime:ready",
       "preview:second-preview",
     ]);
+
+    actor.stop();
+  });
+
+  it("waits for Monaco model sync before applying frames after replayed file switches", async () => {
+    const editor = new MockEditor(new MockTextModel("outside"));
+    const firstWorkspace = createTwoFileWorkspaceSnapshot(
+      "a.ts",
+      "a-snapshot",
+      "b-before-open",
+    );
+    const secondWorkspace = createTwoFileWorkspaceSnapshot(
+      "b.ts",
+      "a-snapshot",
+      "b-snapshot",
+    );
+    let currentWorkspace = createTwoFileWorkspaceSnapshot(
+      "a.ts",
+      "outside-a",
+      "outside-b",
+    );
+
+    const recording: Recording = {
+      ...createRecording(),
+      frames: [
+        {
+          timestamp: 0,
+          isKeyframe: true,
+          state: {
+            content: "a-frame",
+            selection,
+            position: { lineNumber: 1, column: 1 },
+            viewState: null,
+            mouseCursor: { x: 0, y: 0, visible: false },
+          },
+        },
+        {
+          timestamp: 100,
+          isKeyframe: true,
+          state: {
+            content: "b-frame",
+            selection,
+            position: { lineNumber: 1, column: 1 },
+            viewState: null,
+            mouseCursor: { x: 0, y: 0, visible: false },
+          },
+        },
+      ],
+      workspaceEvents: [
+        {
+          timestamp: 0,
+          snapshot: firstWorkspace,
+        },
+        {
+          timestamp: 100,
+          snapshot: secondWorkspace,
+        },
+      ],
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: {
+          current: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+        },
+        getWorkspaceSnapshot: () => currentWorkspace,
+        applyWorkspaceSnapshot: (snapshot) => {
+          currentWorkspace = snapshot;
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    expect(editor.getValue()).toBe("a-frame");
+
+    actor.send({ type: "SEEK", time: 100 });
+
+    expect(currentWorkspace.activeFilePath).toBe("b.ts");
+    expect(actor.getSnapshot().context.pendingPlaybackEditorSync).toBe(true);
+    expect(editor.getValue()).toBe("a-frame");
+
+    actor.send({
+      type: "SET_EDITOR_REF",
+      editor: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+    });
+
+    expect(actor.getSnapshot().context.pendingPlaybackEditorSync).toBe(false);
+    expect(editor.getValue()).toBe("b-frame");
 
     actor.stop();
   });

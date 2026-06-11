@@ -1,4 +1,4 @@
-import { memo, useEffect, useEffectEvent, useRef } from "react";
+import { memo, useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
 import Editor, {
   type OnMount,
   type BeforeMount,
@@ -17,7 +17,12 @@ import {
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
-import { normalizeWorkspacePath } from "../types/workspace";
+import {
+  syncPlaybackModel,
+  toMonacoModelPath,
+  toPlaybackModelPath,
+  workspacePathFromMonacoModelUri,
+} from "./editorModels";
 
 interface CodeEditorProps {
   language?: string;
@@ -136,17 +141,6 @@ declare module "*.svg" {
 
 let hasConfiguredMonacoTypeScript = false;
 const MONACO_BUNDLER_MODULE_RESOLUTION = 100;
-const PLAYBACK_MODEL_ROOT = "file:///__next-editor__/playback";
-
-function toMonacoModelPath(workspacePath: string) {
-  return `file:///${encodeURI(normalizeWorkspacePath(workspacePath))}`;
-}
-
-function toPlaybackModelPath(workspacePath: string) {
-  return `${PLAYBACK_MODEL_ROOT}/${encodeURI(
-    normalizeWorkspacePath(workspacePath),
-  )}`;
-}
 
 function configureMonacoTypeScript(monaco: Monaco) {
   if (hasConfiguredMonacoTypeScript) {
@@ -197,7 +191,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 }) => {
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
-  const { saveProject, updateActiveFileContent } = useWorkspaceActions();
+  const { saveProject, updateFileContent } = useWorkspaceActions();
   const saveWorkspace = useWebContainerRuntimeSaveWorkspace();
   const { activeFile } = useWorkspaceEditorState();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
@@ -211,6 +205,39 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     ? toPlaybackModelPath(activeFile.path)
     : toMonacoModelPath(activeFile.path);
 
+  const syncActivePlaybackModel = useEffectEvent((monaco: Monaco) => {
+    if (!usesPlaybackModel) {
+      return null;
+    }
+
+    return syncPlaybackModel(
+      monaco,
+      activeFile.path,
+      activeFile.content,
+      selectedLanguage,
+      { preserveExistingContent: true },
+    );
+  });
+
+  const syncPlaybackEditorModel = useEffectEvent(
+    (editor: Parameters<OnMount>[0] | null) => {
+      const monaco = monacoRef.current;
+
+      if (!usesPlaybackModel || !monaco || !editor) {
+        return false;
+      }
+
+      const playbackModel = syncActivePlaybackModel(monaco);
+
+      if (playbackModel && editor.getModel() !== playbackModel) {
+        editor.setModel(playbackModel);
+      }
+
+      syncEditorRef(editor);
+      return true;
+    },
+  );
+
   // useEffectEvent provides a stable function reference that always reads
   // the latest playback attachment value without causing dependency issues
   const onEditorChange = useEffectEvent(() => {
@@ -218,13 +245,24 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     handleEditorChange();
   });
 
-  const syncEditorContentToWorkspace = useEffectEvent((content: string) => {
-    if (usesPlaybackModel) {
-      return;
-    }
+  const syncEditorContentToWorkspace = useEffectEvent(
+    (editor: Parameters<OnMount>[0] | null) => {
+      if (usesPlaybackModel || !editor) {
+        return;
+      }
 
-    updateActiveFileContent(content);
-  });
+      const modelUri = editor.getModel()?.uri;
+      const modelPath = modelUri
+        ? workspacePathFromMonacoModelUri(modelUri)
+        : null;
+
+      if (!modelPath) {
+        return;
+      }
+
+      updateFileContent(modelPath, editor.getValue());
+    },
+  );
 
   const runSaveAction = useEffectEvent(async () => {
     if (usesPlaybackModel) {
@@ -234,7 +272,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     const editor = editorRef.current;
 
     if (editor) {
-      syncEditorContentToWorkspace(editor.getValue());
+      syncEditorContentToWorkspace(editor);
     }
 
     try {
@@ -299,6 +337,26 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     };
   }, [editorRef, syncEditorRef]);
 
+  useLayoutEffect(() => {
+    const monaco = monacoRef.current;
+
+    if (!monaco || !usesPlaybackModel) {
+      return;
+    }
+
+    const editor = editorRef.current;
+
+    syncPlaybackEditorModel(editor);
+  }, [
+    activeFile.content,
+    activeFile.path,
+    editorRef,
+    selectedLanguage,
+    syncPlaybackEditorModel,
+    syncEditorRef,
+    usesPlaybackModel,
+  ]);
+
   useEffect(() => {
     const editor = editorRef.current;
 
@@ -323,13 +381,21 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     disposeEditorListeners();
     editorRef.current = editor;
     syncEditorRef(editor);
-    syncEditorContentToWorkspace(editor.getValue());
+    syncEditorContentToWorkspace(editor);
 
     focusEditorIfNeeded(editor);
 
     editorDisposablesRef.current = [
+      editor.onDidChangeModel(() => {
+        if (syncPlaybackEditorModel(editor)) {
+          return;
+        }
+
+        syncEditorContentToWorkspace(editor);
+        syncEditorRef(editor);
+      }),
       editor.onDidChangeModelContent(() => {
-        syncEditorContentToWorkspace(editor.getValue());
+        syncEditorContentToWorkspace(editor);
         onEditorChange();
       }),
       editor.onDidChangeCursorPosition(() => {
@@ -351,6 +417,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const handleEditorBeforeMount: BeforeMount = (monaco: Monaco) => {
     monacoRef.current = monaco;
     configureMonacoTypeScript(monaco);
+    syncActivePlaybackModel(monaco);
 
     // Define dark theme based on yCe configuration
     monaco.editor.defineTheme("next-editor-dark", {
@@ -509,6 +576,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             path={editorModelPath}
             language={selectedLanguage}
             theme={theme}
+            defaultValue={usesPlaybackModel ? activeFile.content : undefined}
             value={usesPlaybackModel ? undefined : activeFile.content}
             saveViewState={!usesPlaybackModel}
             onMount={handleEditorDidMount}

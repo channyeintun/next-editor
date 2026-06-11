@@ -932,7 +932,7 @@ export const editorMachine = setup({
             ? event.time
             : context.timeline.currentTime;
 
-      if (!recording || !editorRefs.editor) {
+      if (!recording || !editorRefs.editor || context.pendingPlaybackEditorSync) {
         return {};
       }
 
@@ -1410,17 +1410,27 @@ export const editorMachine = setup({
         return {};
       }
 
+      const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
       const replayResult = getWorkspaceReplayResult({
         workspaceEvents: recording.workspaceEvents,
         currentTime: resolveReplayTime(event, context.timeline.currentTime),
-        getCurrentSnapshot: () => context.getWorkspaceSnapshot?.() ?? null,
+        currentSnapshot: currentWorkspaceSnapshot,
         lastAppliedIndex: lastAppliedWorkspaceEventIndex,
       });
 
       if (replayResult.snapshotToApply) {
+        const activeFileChanged =
+          Boolean(currentWorkspaceSnapshot) &&
+          currentWorkspaceSnapshot?.activeFilePath !==
+            replayResult.snapshotToApply.activeFilePath;
+
         applyWorkspaceSnapshot(replayResult.snapshotToApply);
         return {
           lastAppliedWorkspaceEventIndex: replayResult.nextIndex,
+          // File switches change the Monaco model path on the React side.
+          // Wait for that model sync before applying editor frame content.
+          pendingPlaybackEditorSync:
+            activeFileChanged || context.pendingPlaybackEditorSync,
           currentFrame: null,
           lastAppliedFrameIndex: -1,
           lastAppliedSlideEventIndex: -1,
