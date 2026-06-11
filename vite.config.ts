@@ -1,5 +1,6 @@
 import { defineConfig, lazyPlugins } from "vite-plus";
 import type { PluginOption } from "@voidzero-dev/vite-plus-core";
+import { fileURLToPath } from "node:url";
 
 const crossOriginHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -26,6 +27,11 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    alias: {
+      "monaco-editor": fileURLToPath(
+        new URL("./src/test/monaco-editor.mock.ts", import.meta.url),
+      ),
+    },
   },
   lint: {
     jsPlugins: ["oxlint-tailwindcss"],

@@ -287,6 +287,11 @@ const RESET_AND_REATTACH_REPLAY_STATE_ACTIONS = [
   ...REATTACH_AND_APPLY_REPLAY_STATE_ACTIONS,
 ] as const;
 
+const MOUSE_FRAME_INTERVAL_MS = 50;
+
+const hasPlaybackAudio = (context: EditorMachineContext): boolean =>
+  context.recording?.audioBlob instanceof Blob;
+
 /**
  * Find the appropriate frame for a given timestamp (optimized)
  */
@@ -574,7 +579,7 @@ export const editorMachine = setup({
     hasRecording: ({ context }) => context.recording !== null,
     canPlay: ({ context }) =>
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
-    hasAudio: ({ context }) => context.recording?.audioBlob !== undefined,
+    hasAudio: ({ context }) => hasPlaybackAudio(context),
     shouldPauseOnInteraction: ({ context }) => context.pauseOnUserInteraction,
     shouldSyncPlaybackEditorRef: ({ context, event }) =>
       event.type === "SET_EDITOR_REF" &&
@@ -648,6 +653,7 @@ export const editorMachine = setup({
           runtimeEvents,
           lastMousePosition: { x: 0, y: 0, visible: false },
         },
+        lastCallbackFrameTimestamp: undefined,
       };
     }),
 
@@ -700,6 +706,7 @@ export const editorMachine = setup({
           ...session,
           frames: [initialFrame],
         },
+        currentFrame: initialFrame,
       };
     }),
 
@@ -713,6 +720,27 @@ export const editorMachine = setup({
         event.type === "CAPTURE_FRAME" && event.mousePosition
           ? event.mousePosition
           : context.session.lastMousePosition;
+
+      if (event.type === "CAPTURE_FRAME" && event.isMouseMovement) {
+        const frames = context.session.frames;
+        const lastFrame = frames[frames.length - 1];
+        const lastMousePosition = context.session.lastMousePosition;
+        const visibilityChanged =
+          lastMousePosition?.visible !== mousePosition?.visible;
+
+        if (
+          lastFrame &&
+          timestamp - lastFrame.timestamp < MOUSE_FRAME_INTERVAL_MS &&
+          !visibilityChanged
+        ) {
+          return {
+            session: {
+              ...context.session,
+              lastMousePosition: mousePosition,
+            },
+          };
+        }
+      }
 
       const frame = createFrame(
         editor,
@@ -803,6 +831,11 @@ export const editorMachine = setup({
       return {
         recording,
         session: null,
+        audio: {
+          ...context.audio,
+          isRecording: false,
+          mediaRecorder: null,
+        },
         timeline: {
           ...context.timeline,
           duration,
@@ -874,6 +907,7 @@ export const editorMachine = setup({
           pausedAt: 0,
         },
         currentFrame: null,
+        lastCallbackFrameTimestamp: undefined,
         lastAppliedFrameIndex: -1,
         lastAppliedPreviewEventIndex: -1,
         lastAppliedSlideEventIndex: -1,
@@ -1158,6 +1192,7 @@ export const editorMachine = setup({
         pausedAt: 0,
       },
       currentFrame: null,
+      lastCallbackFrameTimestamp: undefined,
       lastAppliedFrameIndex: -1,
       lastAppliedPreviewEventIndex: -1,
       lastAppliedSlideEventIndex: -1,
@@ -1168,6 +1203,7 @@ export const editorMachine = setup({
 
     invalidateAppliedPlaybackState: assign(() => ({
       currentFrame: null,
+      lastCallbackFrameTimestamp: undefined,
       lastAppliedFrameIndex: -1,
       lastAppliedPreviewEventIndex: -1,
       lastAppliedSlideEventIndex: -1,
@@ -1210,6 +1246,7 @@ export const editorMachine = setup({
       pendingPlaybackEditorSync: false,
       recording: null,
       currentFrame: null,
+      lastCallbackFrameTimestamp: undefined,
       lastAppliedFrameIndex: -1,
       lastAppliedPreviewEventIndex: -1,
       lastAppliedSlideEventIndex: -1,
@@ -1229,6 +1266,64 @@ export const editorMachine = setup({
     }),
 
     clearError: assign({ error: null }),
+
+    notifyRecordingStart: ({ context }) => {
+      context.onRecordingStart?.();
+    },
+
+    notifyRecordingStop: ({ context }) => {
+      if (context.recording) {
+        context.onRecordingStop?.(context.recording);
+      }
+    },
+
+    notifyPlaybackStart: ({ context }) => {
+      context.onPlaybackStart?.();
+    },
+
+    notifyPlaybackPause: ({ context }) => {
+      context.onPlaybackPause?.();
+    },
+
+    notifyPlaybackEnd: ({ context }) => {
+      context.onPlaybackEnd?.();
+    },
+
+    notifySeek: ({ context, event }) => {
+      if (event.type === "SEEK") {
+        context.onSeek?.(event.time);
+      }
+    },
+
+    notifyError: ({ context }) => {
+      if (context.error) {
+        context.onError?.(new Error(context.error));
+      }
+    },
+
+    notifyFrame: assign(({ context }) => {
+      const frame = context.currentFrame;
+      if (
+        !frame ||
+        context.lastCallbackFrameTimestamp === frame.timestamp
+      ) {
+        return {};
+      }
+
+      context.onFrame?.(frame);
+      context.onStateChange?.(frame.state);
+
+      return {
+        lastCallbackFrameTimestamp: frame.timestamp,
+      };
+    }),
+
+    notifyPlaybackUpdate: ({ context }) => {
+      context.onPlaybackUpdate?.(
+        context.timeline.currentTime,
+        context.currentFrame,
+      );
+    },
 
     storeAudioBlob: assign(({ event }) => {
       if (event.type !== "STOPPED") return {};
@@ -1413,7 +1508,12 @@ export const editorMachine = setup({
           },
           {
             target: "recording",
-            actions: ["initRecordingSession", "captureInitialFrame"],
+            actions: [
+              "initRecordingSession",
+              "captureInitialFrame",
+              "notifyRecordingStart",
+              "notifyFrame",
+            ],
           },
         ],
         LOAD_RECORDING: "loading",
@@ -1442,14 +1542,28 @@ export const editorMachine = setup({
       on: {
         STARTED: {
           target: "recording",
-          actions: ["initRecordingSession", "captureInitialFrame"],
+          actions: [
+            "initRecordingSession",
+            "captureInitialFrame",
+            "notifyRecordingStart",
+            "notifyFrame",
+          ],
         },
         ERROR: {
           target: "idle",
-          actions: assign({
-            error: ({ event }) =>
-              event.type === "ERROR" ? event.error : "Failed to start audio",
-          }),
+          actions: [
+            stopChild("audioRecorder"),
+            assign({
+              error: ({ event }) =>
+                event.type === "ERROR" ? event.error : "Failed to start audio",
+              audio: ({ context }) => ({
+                ...context.audio,
+                isRecording: false,
+                mediaRecorder: null,
+              }),
+            }),
+            "notifyError",
+          ],
         },
         STOP_RECORDING: {
           target: "idle",
@@ -1481,10 +1595,10 @@ export const editorMachine = setup({
           }),
         }),
       ],
-      exit: [],
+      exit: [stopChild("mouseTracker")],
       on: {
         CAPTURE_FRAME: {
-          actions: "captureFrame",
+          actions: ["captureFrame", "notifyFrame"],
         },
         STOPPED: {
           actions: "storeAudioBlob",
@@ -1502,6 +1616,7 @@ export const editorMachine = setup({
               };
             }),
             "captureFrame",
+            "notifyFrame",
           ],
         },
         PREVIEW_EVENT: {
@@ -1517,6 +1632,7 @@ export const editorMachine = setup({
               };
             }),
             "capturePreviewRefreshFrame",
+            "notifyFrame",
           ],
         },
         WORKSPACE_EVENT: {
@@ -1569,7 +1685,7 @@ export const editorMachine = setup({
           },
           {
             target: "loading",
-            actions: "finalizeRecording",
+            actions: ["finalizeRecording", "notifyRecordingStop"],
           },
         ],
       },
@@ -1577,7 +1693,6 @@ export const editorMachine = setup({
 
     stoppingRecording: {
       entry: [
-        stopChild("mouseTracker"),
         enqueueActions(({ enqueue }) => {
           enqueue.sendTo("audioRecorder", { type: "STOP" });
         }),
@@ -1586,13 +1701,13 @@ export const editorMachine = setup({
       on: {
         STOPPED: {
           target: "loading",
-          actions: ["storeAudioBlob", "finalizeRecording"],
+          actions: ["storeAudioBlob", "finalizeRecording", "notifyRecordingStop"],
         },
       },
       after: {
         2000: {
           target: "loading",
-          actions: "finalizeRecording",
+          actions: ["finalizeRecording", "notifyRecordingStop"],
         },
       },
     },
@@ -1612,12 +1727,15 @@ export const editorMachine = setup({
         },
         onError: {
           target: "idle",
-          actions: assign({
-            error: ({ event }) =>
-              event.error instanceof Error
-                ? event.error.message
-                : "Failed to load recording",
-          }),
+          actions: [
+            assign({
+              error: ({ event }) =>
+                event.error instanceof Error
+                  ? event.error.message
+                  : "Failed to load recording",
+            }),
+            "notifyError",
+          ],
         },
       },
     },
@@ -1644,7 +1762,7 @@ export const editorMachine = setup({
                 blob: audioBlob,
                 volume: context.timeline.volume,
                 playbackRate: context.timeline.speed,
-                startPosition: context.timeline.currentTime / 1000,
+                startPositionMs: context.timeline.currentTime,
               },
             });
           }
@@ -1677,14 +1795,15 @@ export const editorMachine = setup({
               // Sync audio to timeline every 250ms or on seek
               const lastSync = context.lastSyncTime || 0;
               const now = performance.now();
-              if (now - lastSync > 250) {
+              if (hasPlaybackAudio(context) && now - lastSync > 250) {
                 enqueue.sendTo("audioPlayer", {
                   type: "SYNC",
-                  time: event.currentTime,
+                  timeMs: event.currentTime,
                 });
                 enqueue.assign({ lastSyncTime: now });
               }
             }),
+            "notifyPlaybackUpdate",
           ],
         },
         SEEK: {
@@ -1692,26 +1811,32 @@ export const editorMachine = setup({
             "reattachPlaybackWorkspace",
             "seekToTime",
             ...APPLY_REPLAY_STATE_ACTIONS,
-            enqueueActions(({ event, enqueue }) => {
+            "notifySeek",
+            "notifyPlaybackUpdate",
+            enqueueActions(({ context, event, enqueue }) => {
               const time = event.type === "SEEK" ? event.time : 0;
               enqueue.sendTo("timelineActor", { type: "SEEK", time });
-              enqueue.sendTo("audioPlayer", {
-                type: "SEEK",
-                time: time / 1000,
-              });
+              if (hasPlaybackAudio(context)) {
+                enqueue.sendTo("audioPlayer", {
+                  type: "SEEK",
+                  timeMs: time,
+                });
+              }
             }),
           ],
         },
         SET_SPEED: {
           actions: [
             "setPlaybackSpeed",
-            enqueueActions(({ event, enqueue }) => {
+            enqueueActions(({ context, event, enqueue }) => {
               const speed = event.type === "SET_SPEED" ? event.speed : 1;
               enqueue.sendTo("timelineActor", { type: "SET_SPEED", speed });
-              enqueue.sendTo("audioPlayer", {
-                type: "SET_PLAYBACK_RATE",
-                rate: speed,
-              });
+              if (hasPlaybackAudio(context)) {
+                enqueue.sendTo("audioPlayer", {
+                  type: "SET_PLAYBACK_RATE",
+                  rate: speed,
+                });
+              }
             }),
           ],
         },
@@ -1732,9 +1857,12 @@ export const editorMachine = setup({
           target: ".ready",
           actions: [
             ...RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
-            enqueueActions(({ enqueue }) => {
+            "notifyPlaybackUpdate",
+            enqueueActions(({ context, enqueue }) => {
               enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
-              enqueue.sendTo("audioPlayer", { type: "SEEK", time: 0 });
+              if (hasPlaybackAudio(context)) {
+                enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: 0 });
+              }
             }),
           ],
         },
@@ -1759,43 +1887,62 @@ export const editorMachine = setup({
             "invalidateAppliedPlaybackState",
             ...APPLY_REPLAY_STATE_ACTIONS,
             enqueueActions(({ context, enqueue }) => {
-              enqueue.sendTo("timelineActor", { type: "START" });
-              enqueue.sendTo("audioPlayer", { type: "PLAY" });
-              // Ensure actors are at the machine's current time
+              // Ensure actors are positioned before starting playback. Starting
+              // audio first can briefly play stale audio at high speeds.
               enqueue.sendTo("timelineActor", {
                 type: "SEEK",
                 time: context.timeline.currentTime,
               });
-              enqueue.sendTo("audioPlayer", {
-                type: "SEEK",
-                time: context.timeline.currentTime / 1000,
-              });
+              if (hasPlaybackAudio(context)) {
+                enqueue.sendTo("audioPlayer", {
+                  type: "SEEK",
+                  timeMs: context.timeline.currentTime,
+                });
+                enqueue.sendTo("audioPlayer", {
+                  type: "SET_PLAYBACK_RATE",
+                  rate: context.timeline.speed,
+                });
+              }
+              enqueue.sendTo("timelineActor", { type: "START" });
+              if (hasPlaybackAudio(context)) {
+                enqueue.sendTo("audioPlayer", { type: "PLAY" });
+              }
             }),
+            "notifyPlaybackStart",
+            "notifyPlaybackUpdate",
           ],
-          exit: enqueueActions(({ enqueue }) => {
+          exit: enqueueActions(({ context, enqueue }) => {
             enqueue.sendTo("timelineActor", { type: "PAUSE" });
-            enqueue.sendTo("audioPlayer", { type: "PAUSE" });
+            if (hasPlaybackAudio(context)) {
+              enqueue.sendTo("audioPlayer", { type: "PAUSE" });
+            }
           }),
           on: {
             PAUSE: {
               target: "paused",
+              actions: "notifyPlaybackPause",
             },
             WORKSPACE_EVENT: {
               target: "paused",
-              actions: ["detachPlaybackWorkspace"],
+              actions: ["detachPlaybackWorkspace", "notifyPlaybackPause"],
             },
             USER_INTERACTION: {
               target: "paused",
               guard: "shouldPauseOnInteraction",
+              actions: "notifyPlaybackPause",
             },
             FINISHED: {
               target: "ended",
-              actions: assign({
-                timeline: ({ context }) => ({
-                  ...context.timeline,
-                  currentTime: context.timeline.duration,
+              actions: [
+                assign({
+                  timeline: ({ context }) => ({
+                    ...context.timeline,
+                    currentTime: context.timeline.duration,
+                  }),
                 }),
-              }),
+                "notifyPlaybackEnd",
+                "notifyPlaybackUpdate",
+              ],
             },
           },
         },
@@ -1812,13 +1959,17 @@ export const editorMachine = setup({
                 "seekToTime",
                 ...APPLY_REPLAY_STATE_ACTIONS,
                 ...SYNC_PAUSED_WORKSPACE_ACTIONS,
-                enqueueActions(({ event, enqueue }) => {
+                "notifySeek",
+                "notifyPlaybackUpdate",
+                enqueueActions(({ context, event, enqueue }) => {
                   const time = event.type === "SEEK" ? event.time : 0;
                   enqueue.sendTo("timelineActor", { type: "SEEK", time });
-                  enqueue.sendTo("audioPlayer", {
-                    type: "SEEK",
-                    time: time / 1000,
-                  });
+                  if (hasPlaybackAudio(context)) {
+                    enqueue.sendTo("audioPlayer", {
+                      type: "SEEK",
+                      timeMs: time,
+                    });
+                  }
                 }),
               ],
             },
@@ -1844,9 +1995,12 @@ export const editorMachine = setup({
                   "reattachPlaybackWorkspace",
                   "resetPlayback",
                   ...APPLY_REPLAY_STATE_ACTIONS,
-                  enqueueActions(({ enqueue }) => {
+                  "notifyPlaybackUpdate",
+                  enqueueActions(({ context, enqueue }) => {
                     enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
-                    enqueue.sendTo("audioPlayer", { type: "SEEK", time: 0 });
+                    if (hasPlaybackAudio(context)) {
+                      enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: 0 });
+                    }
                   }),
                 ],
               },

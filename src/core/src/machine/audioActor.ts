@@ -16,8 +16,8 @@ export interface AudioPlaybackInput {
     volume: number;
     /** Initial playback rate */
     playbackRate: number;
-    /** Starting position in seconds */
-    startPosition: number;
+    /** Starting position in milliseconds */
+    startPositionMs: number;
 }
 
 export type AudioRecordingEvent =
@@ -27,10 +27,10 @@ export type AudioRecordingEvent =
 export type AudioPlaybackEvent =
     | { type: 'PLAY' }
     | { type: 'PAUSE' }
-    | { type: 'SEEK'; time: number }
+    | { type: 'SEEK'; timeMs: number }
     | { type: 'SET_VOLUME'; volume: number }
     | { type: 'SET_PLAYBACK_RATE'; rate: number }
-    | { type: 'SYNC'; time: number };
+    | { type: 'SYNC'; timeMs: number };
 
 export type AudioRecordingEmit =
     | { type: 'STARTED'; mediaRecorder: MediaRecorder; mimeType: string }
@@ -84,8 +84,23 @@ export const audioRecordingActor = fromCallback<AudioRecordingEvent, AudioRecord
         let stream: MediaStream | null = null;
         let chunks: Blob[] = [];
         let mimeType = '';
+        let disposed = false;
+        let starting = false;
+
+        const cleanupStream = () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+        };
 
         const startRecording = async () => {
+            if (starting || mediaRecorder) {
+                return;
+            }
+
+            starting = true;
+
             try {
                 stream = await navigator.mediaDevices.getUserMedia({
                     audio: input.constraints ?? {
@@ -97,9 +112,17 @@ export const audioRecordingActor = fromCallback<AudioRecordingEvent, AudioRecord
                     }
                 });
 
+                if (disposed) {
+                    cleanupStream();
+                    return;
+                }
+
                 mimeType = getSupportedAudioMimeType();
                 if (!mimeType) {
-                    sendBack({ type: 'ERROR', error: 'No supported audio MIME type found' });
+                    cleanupStream();
+                    if (!disposed) {
+                        sendBack({ type: 'ERROR', error: 'No supported audio MIME type found' });
+                    }
                     return;
                 }
 
@@ -119,25 +142,30 @@ export const audioRecordingActor = fromCallback<AudioRecordingEvent, AudioRecord
 
                 mediaRecorder.onstop = () => {
                     const blob = new Blob(chunks, { type: mimeType });
-                    sendBack({ type: 'STOPPED', blob });
-
-                    // Clean up stream
-                    if (stream) {
-                        stream.getTracks().forEach(track => track.stop());
-                        stream = null;
+                    if (!disposed) {
+                        sendBack({ type: 'STOPPED', blob });
                     }
+
+                    cleanupStream();
                 };
 
                 mediaRecorder.onstart = () => {
-                    sendBack({ type: 'STARTED', mediaRecorder, mimeType });
+                    if (!disposed && mediaRecorder) {
+                        sendBack({ type: 'STARTED', mediaRecorder, mimeType });
+                    }
                 };
 
                 mediaRecorder.start();
             } catch (error) {
-                sendBack({
-                    type: 'ERROR',
-                    error: error instanceof Error ? error.message : 'Failed to start recording'
-                });
+                cleanupStream();
+                if (!disposed) {
+                    sendBack({
+                        type: 'ERROR',
+                        error: error instanceof Error ? error.message : 'Failed to start recording'
+                    });
+                }
+            } finally {
+                starting = false;
             }
         };
 
@@ -159,12 +187,11 @@ export const audioRecordingActor = fromCallback<AudioRecordingEvent, AudioRecord
         });
 
         return () => {
+            disposed = true;
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
             }
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-            }
+            cleanupStream();
         };
     }
 );
@@ -183,6 +210,9 @@ export const audioPlaybackActor = fromCallback<AudioPlaybackEvent, AudioPlayback
 
         const cleanup = () => {
             if (audio) {
+                audio.oncanplaythrough = null;
+                audio.onended = null;
+                audio.onerror = null;
                 audio.pause();
                 audio.src = '';
                 audio.load();
@@ -200,7 +230,7 @@ export const audioPlaybackActor = fromCallback<AudioPlaybackEvent, AudioPlayback
                 audio = new Audio(audioUrl);
                 audio.volume = input.volume;
                 audio.playbackRate = input.playbackRate;
-                audio.currentTime = input.startPosition;
+                audio.currentTime = input.startPositionMs / 1000;
 
                 audio.oncanplaythrough = () => {
                     if (audio) {
@@ -233,11 +263,13 @@ export const audioPlaybackActor = fromCallback<AudioPlaybackEvent, AudioPlayback
 
             switch (event.type) {
                 case 'PLAY':
-                    audio.play().catch(err => {
-                        // On some browsers, play() might fail if not triggered by user gesture
-                        // even if the AudioContext was unlocked.
-                        console.warn('[AudioActor] Play failed:', err);
-                    });
+                    if (audio.paused) {
+                        audio.play().catch(err => {
+                            // On some browsers, play() might fail if not triggered by user gesture
+                            // even if the AudioContext was unlocked.
+                            console.warn('[AudioActor] Play failed:', err);
+                        });
+                    }
                     break;
 
                 case 'PAUSE':
@@ -245,7 +277,7 @@ export const audioPlaybackActor = fromCallback<AudioPlaybackEvent, AudioPlayback
                     break;
 
                 case 'SEEK':
-                    audio.currentTime = event.time / 1000;
+                    audio.currentTime = event.timeMs / 1000;
                     break;
 
                 case 'SET_VOLUME':
@@ -253,16 +285,21 @@ export const audioPlaybackActor = fromCallback<AudioPlaybackEvent, AudioPlayback
                     break;
 
                 case 'SET_PLAYBACK_RATE':
-                    audio.playbackRate = event.rate;
+                    audio.playbackRate = Number.isFinite(event.rate) && event.rate > 0 ? event.rate : 1;
                     break;
 
                 case 'SYNC': {
-                    const targetTime = event.time / 1000;
-                    const diff = Math.abs(audio.currentTime - targetTime);
+                    if (audio.paused) {
+                        break;
+                    }
 
-                    // Re-sync if drift is significant (> 150ms for HTMLAudioElement)
-                    // HTMLAudioElement is less precise than AudioContext, so we use a larger threshold
-                    if (diff > 0.15) {
+                    const targetTime = event.timeMs / 1000;
+                    const diff = Math.abs(audio.currentTime - targetTime);
+                    const syncDriftThresholdSeconds = Math.max(0.35, 0.2 * audio.playbackRate);
+
+                    // Keep sync correction coarse. Frequent tiny seeks at high speed
+                    // can sound like echoing or repeated syllables in HTMLAudioElement.
+                    if (diff > syncDriftThresholdSeconds) {
                         audio.currentTime = targetTime;
                     }
                     break;

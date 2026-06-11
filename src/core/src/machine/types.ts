@@ -184,6 +184,28 @@ export interface EditorMachineContext {
   hasManualWorkspaceOverride: boolean;
   /** Whether the next editor mount should resync playback state */
   pendingPlaybackEditorSync: boolean;
+  /** Last frame timestamp sent to granular callbacks */
+  lastCallbackFrameTimestamp?: number;
+  /** Callback invoked after recording starts */
+  onRecordingStart?: () => void;
+  /** Callback invoked after recording stops */
+  onRecordingStop?: (recording: Recording) => void;
+  /** Callback invoked after playback starts */
+  onPlaybackStart?: () => void;
+  /** Callback invoked after playback pauses */
+  onPlaybackPause?: () => void;
+  /** Callback invoked after playback ends */
+  onPlaybackEnd?: () => void;
+  /** Callback invoked after seeking */
+  onSeek?: (time: number) => void;
+  /** Callback invoked after machine errors */
+  onError?: (error: Error) => void;
+  /** Callback invoked after a frame is captured */
+  onFrame?: (frame: EditorFrame) => void;
+  /** Callback invoked after editor state changes */
+  onStateChange?: (state: EditorFrame["state"]) => void;
+  /** Callback invoked after playback time/frame updates */
+  onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
 }
 
 // ============================================================================
@@ -446,6 +468,7 @@ export const createInitialContext = (
   error: null,
   hasManualWorkspaceOverride: false,
   pendingPlaybackEditorSync: false,
+  lastCallbackFrameTimestamp: undefined,
   lastAppliedFrameIndex: -1,
   lastAppliedPreviewEventIndex: -1,
   lastAppliedSlideEventIndex: -1,
@@ -462,4 +485,14 @@ export const createInitialContext = (
   applyWorkspaceSnapshot: input.applyWorkspaceSnapshot,
   getRuntimeSnapshot: input.getRuntimeSnapshot,
   applyRuntimeSnapshot: input.applyRuntimeSnapshot,
+  onRecordingStart: input.onRecordingStart,
+  onRecordingStop: input.onRecordingStop,
+  onPlaybackStart: input.onPlaybackStart,
+  onPlaybackPause: input.onPlaybackPause,
+  onPlaybackEnd: input.onPlaybackEnd,
+  onSeek: input.onSeek,
+  onError: input.onError,
+  onFrame: input.onFrame,
+  onStateChange: input.onStateChange,
+  onPlaybackUpdate: input.onPlaybackUpdate,
 });
