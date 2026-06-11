@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   type Dispatch,
   type RefObject,
   type SetStateAction,
@@ -21,6 +22,9 @@ interface PreviewRefreshOptions {
   emitEvent?: boolean;
   showSpinner?: boolean;
 }
+
+const MIN_CUSTOM_PREVIEW_WIDTH = 160;
+const MIN_CUSTOM_PREVIEW_HEIGHT = 120;
 
 interface UsePreviewPlaybackRegistrationOptions {
   previewAdapter: PreviewDomainAdapter;
@@ -91,6 +95,10 @@ export function usePreviewPlaybackRegistration({
   targetScrollRef,
   rafRef,
 }: UsePreviewPlaybackRegistrationOptions) {
+  const targetScrollInteractionRef = useRef<IframeInteractionEvent | null>(
+    null,
+  );
+
   useEffect(() => {
     previewAdapter.setSnapshotGetter((): PreviewState => {
       const interaction = pendingInteractionRef.current;
@@ -129,9 +137,18 @@ export function usePreviewPlaybackRegistration({
       let sizeToApply = previewState.size;
 
       if (typeof sizeToApply === "object") {
+        const maxWidth = Math.max(1, window.innerWidth - 32);
+        const maxHeight = Math.max(1, window.innerHeight - 96);
+
         sizeToApply = {
-          width: Math.min(sizeToApply.width, window.innerWidth - 32),
-          height: Math.min(sizeToApply.height, window.innerHeight - 96),
+          width: Math.min(
+            maxWidth,
+            Math.max(MIN_CUSTOM_PREVIEW_WIDTH, sizeToApply.width),
+          ),
+          height: Math.min(
+            maxHeight,
+            Math.max(MIN_CUSTOM_PREVIEW_HEIGHT, sizeToApply.height),
+          ),
         };
       }
 
@@ -201,6 +218,10 @@ export function usePreviewPlaybackRegistration({
           scrollTop: targetTop,
           scrollLeft: targetLeft,
         };
+        targetScrollInteractionRef.current =
+          previewState.currentInteraction?.type === "scroll"
+            ? previewState.currentInteraction
+            : null;
 
         if (!rafRef.current) {
           rafRef.current = requestAnimationFrame(() => {
@@ -221,15 +242,16 @@ export function usePreviewPlaybackRegistration({
             const { iframeDoc, iframeWindow } = iframeState;
 
             let scrollTarget: Element | Window = iframeWindow;
+            const targetInteraction = targetScrollInteractionRef.current;
 
             if (
-              previewState.currentInteraction?.type === "scroll" &&
-              previewState.currentInteraction.data &&
-              !previewState.currentInteraction.data.isDocument
+              targetInteraction?.type === "scroll" &&
+              targetInteraction.data &&
+              !targetInteraction.data.isDocument
             ) {
               const element = getElementByXPath(
                 iframeDoc,
-                previewState.currentInteraction.target.xpath,
+                targetInteraction.target.xpath,
               );
               if (element instanceof Element) {
                 scrollTarget = element;

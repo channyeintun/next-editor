@@ -16,6 +16,7 @@ import {
   selectWorkspaceFileCount,
   selectWorkspaceLessonType,
   selectWorkspacePreviewVersion,
+  selectWorkspaceProjectVersion,
   selectWorkspaceProjectName,
   selectWorkspaceSaveVersion,
   selectWorkspaceSidebarState,
@@ -89,6 +90,13 @@ export const useWorkspaceProjectName = (): string => {
   return useWorkspaceSelector(
     "useWorkspaceProjectName",
     selectWorkspaceProjectName,
+  );
+};
+
+export const useWorkspaceProjectVersion = (): number => {
+  return useWorkspaceSelector(
+    "useWorkspaceProjectVersion",
+    selectWorkspaceProjectVersion,
   );
 };
 

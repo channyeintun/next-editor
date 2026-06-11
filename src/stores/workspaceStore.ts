@@ -891,6 +891,10 @@ export const selectWorkspaceLessonType = (
 export const selectWorkspaceProjectName = (context: WorkspaceState): string =>
   context.projectName;
 
+export const selectWorkspaceProjectVersion = (
+  context: WorkspaceState,
+): number => context.projectVersion;
+
 export const selectWorkspaceFileCount = (context: WorkspaceState): number =>
   context.fileCount;
 

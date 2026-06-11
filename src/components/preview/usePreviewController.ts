@@ -699,7 +699,6 @@ export function usePreviewController(): PreviewController {
     iframeRef,
     isRecording,
     isRuntimePreviewActive: isLiveRuntimePreviewActive,
-    size,
   });
 
   useEffect(() => {

@@ -1,19 +1,16 @@
 import { useEffect, type RefObject } from "react";
-import type { PreviewSize } from "../../types/slides";
 import { createIframeInteractionCaptureScript } from "../../utils/iframeInteractionCapture";
 
 interface UsePreviewInteractionCaptureOptions {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   isRecording: boolean;
   isRuntimePreviewActive: boolean;
-  size: PreviewSize;
 }
 
 export function usePreviewInteractionCapture({
   iframeRef,
   isRecording,
   isRuntimePreviewActive,
-  size,
 }: UsePreviewInteractionCaptureOptions) {
   useEffect(() => {
     if (!isRecording || isRuntimePreviewActive) {
@@ -70,5 +67,5 @@ export function usePreviewInteractionCapture({
       iframe.removeEventListener("load", handleIframeLoad);
       cleanup?.();
     };
-  }, [iframeRef, isRecording, isRuntimePreviewActive, size]);
+  }, [iframeRef, isRecording, isRuntimePreviewActive]);
 }

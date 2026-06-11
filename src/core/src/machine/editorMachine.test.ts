@@ -3,6 +3,7 @@ import { createActor, waitFor } from "xstate";
 import { editorMachine } from "./editorMachine";
 import { audioPlaybackActor } from "./audioActor";
 import type { Recording } from "../types";
+import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 
 const selection = {
   startLineNumber: 1,
@@ -37,6 +38,28 @@ function createRecording(audioBlob?: Blob): Recording {
         },
       },
     ],
+  };
+}
+
+function createWorkspaceSnapshot(content: string): WorkspaceRecordingSnapshot {
+  return {
+    activeFilePath: "index.html",
+    collapsedFolders: [],
+    project: {
+      id: "project-1",
+      name: "Project",
+      lessonType: "html-css",
+      entryFilePath: "index.html",
+      folders: [],
+      files: {
+        "index.html": {
+          path: "index.html",
+          name: "index.html",
+          language: "html",
+          content,
+        },
+      },
+    },
   };
 }
 
@@ -96,6 +119,98 @@ describe("editorMachine actor lifecycle", () => {
     expect(actor.getSnapshot().children.mouseTracker).toBeUndefined();
     expect(events).toEqual(["recording:start", "recording:stop"]);
     expect(stoppedRecording?.frames.length).toBeGreaterThan(0);
+
+    actor.stop();
+  });
+
+  it("applies workspace, runtime, then preview snapshots during replay sync", async () => {
+    const calls: string[] = [];
+    const firstWorkspace = createWorkspaceSnapshot("first");
+    const secondWorkspace = createWorkspaceSnapshot("second");
+    let currentWorkspace = createWorkspaceSnapshot("outside");
+
+    const recording: Recording = {
+      ...createRecording(),
+      workspaceEvents: [
+        {
+          timestamp: 0,
+          snapshot: firstWorkspace,
+        },
+        {
+          timestamp: 100,
+          snapshot: secondWorkspace,
+        },
+      ],
+      runtimeEvents: [
+        {
+          timestamp: 0,
+          snapshot: {
+            mode: "webcontainer",
+            status: "starting",
+            previewUrl: null,
+          },
+        },
+        {
+          timestamp: 100,
+          snapshot: {
+            mode: "webcontainer",
+            status: "ready",
+            previewUrl: "http://localhost:4173",
+          },
+        },
+      ],
+      previewEvents: [
+        {
+          type: "preview_refresh",
+          timestamp: 0,
+          size: "small",
+          content: "first-preview",
+        },
+        {
+          type: "preview_refresh",
+          timestamp: 100,
+          size: "medium",
+          content: "second-preview",
+        },
+      ],
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        getWorkspaceSnapshot: () => currentWorkspace,
+        applyWorkspaceSnapshot: (snapshot) => {
+          currentWorkspace = snapshot;
+          calls.push(
+            `workspace:${snapshot.project.files["index.html"].content}`,
+          );
+        },
+        applyRuntimeSnapshot: (snapshot) => {
+          calls.push(`runtime:${snapshot.status}`);
+        },
+        applyPreviewState: (snapshot) => {
+          calls.push(`preview:${snapshot.content ?? ""}`);
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    expect(calls).toEqual([
+      "workspace:first",
+      "runtime:starting",
+      "preview:first-preview",
+    ]);
+
+    calls.length = 0;
+    actor.send({ type: "SEEK", time: 100 });
+
+    expect(calls).toEqual([
+      "workspace:second",
+      "runtime:ready",
+      "preview:second-preview",
+    ]);
 
     actor.stop();
   });

@@ -11,6 +11,7 @@ import {
 import {
   useWorkspaceActions,
   useWorkspaceEditorState,
+  useWorkspaceProjectVersion,
   useWorkspaceSidebarState,
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
@@ -34,27 +35,40 @@ function WorkspaceEventRecorder({
   shouldTrackWorkspaceChanges,
 }: WorkspaceEventRecorderProps) {
   const sidebarState = useWorkspaceSidebarState();
+  const projectVersion = useWorkspaceProjectVersion();
   const previousSidebarStateRef = useRef(sidebarState);
+  const previousProjectVersionRef = useRef(projectVersion);
   const wasTrackingRef = useRef(false);
 
   useEffect(() => {
     if (!shouldTrackWorkspaceChanges) {
       previousSidebarStateRef.current = sidebarState;
+      previousProjectVersionRef.current = projectVersion;
       wasTrackingRef.current = false;
       return;
     }
 
     if (!wasTrackingRef.current) {
       previousSidebarStateRef.current = sidebarState;
+      previousProjectVersionRef.current = projectVersion;
       wasTrackingRef.current = true;
       return;
     }
 
-    if (previousSidebarStateRef.current !== sidebarState) {
+    if (
+      previousSidebarStateRef.current !== sidebarState ||
+      previousProjectVersionRef.current !== projectVersion
+    ) {
       previousSidebarStateRef.current = sidebarState;
+      previousProjectVersionRef.current = projectVersion;
       handleWorkspaceEvent();
     }
-  }, [handleWorkspaceEvent, shouldTrackWorkspaceChanges, sidebarState]);
+  }, [
+    handleWorkspaceEvent,
+    projectVersion,
+    shouldTrackWorkspaceChanges,
+    sidebarState,
+  ]);
 
   return null;
 }
