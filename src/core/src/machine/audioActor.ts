@@ -50,7 +50,6 @@ type PitchPreservingAudioElement = HTMLAudioElement & {
 
 type SoundTouchNodeConstructor = typeof import("@soundtouchjs/audio-worklet").SoundTouchNode;
 type SoundTouchNodeInstance = InstanceType<SoundTouchNodeConstructor>;
-type PlaybackProcessingMode = "pending" | "native" | "soundtouch";
 
 let soundTouchLoader: Promise<{
   SoundTouchNode: SoundTouchNodeConstructor;
@@ -261,7 +260,6 @@ export const audioPlaybackActor = fromCallback<
   let soundTouchSetup: Promise<void> | null = null;
   let disposed = false;
   let wantsPlaying = false;
-  let playbackProcessingMode: PlaybackProcessingMode = "pending";
   let currentVolume = Math.max(0, Math.min(1, input.volume));
   let currentPlaybackRate =
     Number.isFinite(input.playbackRate) && input.playbackRate > 0 ? input.playbackRate : 1;
@@ -287,31 +285,27 @@ export const audioPlaybackActor = fromCallback<
   };
 
   const applyPlaybackRate = (rate: number) => {
+    if (!audio) return;
+
     const playbackRate = Number.isFinite(rate) && rate > 0 ? rate : 1;
     currentPlaybackRate = playbackRate;
 
-    if (!audio || playbackProcessingMode === "pending") {
-      return;
-    }
-
-    if (playbackProcessingMode === "soundtouch" && soundTouchNode) {
+    audio.playbackRate = playbackRate;
+    if (soundTouchNode) {
       // SoundTouch handles pitch correction. Native pitch preservation
       // must stay disabled to avoid double processing and echo.
       applyPitchPreservation(false);
-      audio.playbackRate = playbackRate;
       soundTouchNode.playbackRate.value = playbackRate;
       soundTouchNode.pitch.value = 1;
       soundTouchNode.pitchSemitones.value = 0;
     } else {
       // Fallback path: preserve pitch natively rather than raising it.
       applyPitchPreservation(true);
-      audio.playbackRate = playbackRate;
     }
   };
 
   const setupSoundTouch = async () => {
     if (!audio || typeof window === "undefined" || !("AudioWorkletNode" in window)) {
-      playbackProcessingMode = "native";
       applyPlaybackRate(currentPlaybackRate);
       return;
     }
@@ -319,7 +313,6 @@ export const audioPlaybackActor = fromCallback<
     try {
       audioContext = getAudioContext();
       if (!audioContext.audioWorklet) {
-        playbackProcessingMode = "native";
         applyPlaybackRate(currentPlaybackRate);
         return;
       }
@@ -345,7 +338,6 @@ export const audioPlaybackActor = fromCallback<
       mediaElementSource = nextSource;
       soundTouchNode = nextSoundTouchNode;
       gainNode = nextGainNode;
-      playbackProcessingMode = "soundtouch";
 
       applyVolume();
       applyPlaybackRate(currentPlaybackRate);
@@ -361,7 +353,6 @@ export const audioPlaybackActor = fromCallback<
       mediaElementSource = null;
       soundTouchNode = null;
       gainNode = null;
-      playbackProcessingMode = "native";
       applyVolume();
       applyPlaybackRate(currentPlaybackRate);
     }
@@ -402,7 +393,6 @@ export const audioPlaybackActor = fromCallback<
     mediaElementSource = null;
     soundTouchNode = null;
     gainNode = null;
-    playbackProcessingMode = "pending";
     if (audio) {
       audio.oncanplaythrough = null;
       audio.onended = null;
@@ -422,9 +412,8 @@ export const audioPlaybackActor = fromCallback<
     try {
       audioUrl = URL.createObjectURL(input.blob);
       audio = new Audio(audioUrl);
-      audio.playbackRate = 1;
-      applyPitchPreservation(false);
       applyVolume();
+      applyPlaybackRate(currentPlaybackRate);
       audio.currentTime = input.startPositionMs / 1000;
       soundTouchSetup = setupSoundTouch();
 

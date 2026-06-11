@@ -415,7 +415,6 @@ class MockAudio {
   currentTime = 0;
   volume = 1;
   playbackRate = 1;
-  playCalls = 0;
   preservesPitch = true;
   mozPreservesPitch = true;
   webkitPreservesPitch = true;
@@ -432,7 +431,6 @@ class MockAudio {
   }
 
   play() {
-    this.playCalls++;
     this.paused = false;
     return Promise.resolve();
   }
@@ -498,24 +496,6 @@ class MockAudioContext {
   }
 }
 
-class DelayedMockAudioContext extends MockAudioContext {
-  static instance: DelayedMockAudioContext | null = null;
-  resolveModule: (() => void) | null = null;
-
-  constructor() {
-    super();
-    DelayedMockAudioContext.instance = this;
-    this.audioWorklet = {
-      addModule: async (url: string | URL) => {
-        this.registeredModules.push(String(url));
-        await new Promise<void>((resolve) => {
-          this.resolveModule = resolve;
-        });
-      },
-    };
-  }
-}
-
 class MockAudioWorkletNode extends EventTarget {
   static instances: MockAudioWorkletNode[] = [];
   connectedTo: unknown = null;
@@ -568,7 +548,6 @@ describe("audioPlaybackActor", () => {
   const originalAudio = globalThis.Audio;
   const originalAudioContext = window.AudioContext;
   const originalAudioWorkletNode = globalThis.AudioWorkletNode;
-  const originalWindowAudioWorkletNode = window.AudioWorkletNode;
   const originalCreateObjectUrl = URL.createObjectURL;
   const originalRevokeObjectUrl = URL.revokeObjectURL;
 
@@ -585,16 +564,11 @@ describe("audioPlaybackActor", () => {
       configurable: true,
       value: originalAudioWorkletNode,
     });
-    Object.defineProperty(window, "AudioWorkletNode", {
-      configurable: true,
-      value: originalWindowAudioWorkletNode,
-    });
     URL.createObjectURL = originalCreateObjectUrl;
     URL.revokeObjectURL = originalRevokeObjectUrl;
     MockAudio.instances = [];
     MockGainNode.instances = [];
     MockAudioWorkletNode.instances = [];
-    DelayedMockAudioContext.instance = null;
   });
 
   it("uses milliseconds for seek and avoids tiny high-speed sync corrections", async () => {
@@ -641,60 +615,6 @@ describe("audioPlaybackActor", () => {
     actor.stop();
   });
 
-  it("waits for delayed SoundTouch setup before initial high-speed play", async () => {
-    Object.defineProperty(globalThis, "Audio", {
-      configurable: true,
-      value: MockAudio,
-    });
-    Object.defineProperty(window, "AudioContext", {
-      configurable: true,
-      value: DelayedMockAudioContext,
-    });
-    Object.defineProperty(globalThis, "AudioWorkletNode", {
-      configurable: true,
-      value: MockAudioWorkletNode,
-    });
-    Object.defineProperty(window, "AudioWorkletNode", {
-      configurable: true,
-      value: MockAudioWorkletNode,
-    });
-    URL.createObjectURL = () => "blob:mock-audio";
-    URL.revokeObjectURL = () => undefined;
-
-    const actor = createActor(audioPlaybackActor, {
-      input: {
-        blob: new Blob(["audio"], { type: "audio/webm" }),
-        volume: 0.5,
-        playbackRate: 2,
-        startPositionMs: 0,
-      },
-    }).start();
-
-    const audio = MockAudio.instances[0];
-    expect(audio.playbackRate).toBe(1);
-    expect(audio.preservesPitch).toBe(false);
-
-    actor.send({ type: "PLAY" });
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(audio.playCalls).toBe(0);
-    expect(MockAudioWorkletNode.instances).toHaveLength(0);
-
-    await waitUntil(() => DelayedMockAudioContext.instance?.resolveModule !== null);
-    DelayedMockAudioContext.instance?.resolveModule?.();
-
-    await waitUntil(() => MockAudioWorkletNode.instances.length === 1);
-    await waitUntil(() => audio.playCalls === 1);
-
-    const soundTouchNode = MockAudioWorkletNode.instances[0];
-    expect(audio.playbackRate).toBe(2);
-    expect(audio.preservesPitch).toBe(false);
-    expect(soundTouchNode.parameters.get("playbackRate")?.value).toBe(2);
-
-    actor.stop();
-  });
-
   it("uses SoundTouch to keep pitch stable at high playback rates", async () => {
     Object.defineProperty(globalThis, "Audio", {
       configurable: true,
@@ -705,10 +625,6 @@ describe("audioPlaybackActor", () => {
       value: MockAudioContext,
     });
     Object.defineProperty(globalThis, "AudioWorkletNode", {
-      configurable: true,
-      value: MockAudioWorkletNode,
-    });
-    Object.defineProperty(window, "AudioWorkletNode", {
       configurable: true,
       value: MockAudioWorkletNode,
     });
