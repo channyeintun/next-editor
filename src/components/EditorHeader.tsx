@@ -298,24 +298,24 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
 
   return (
     <>
-      <div className="relative">
+      <div className={`relative ${isMenuOpen ? "z-2147483647" : ""}`}>
         <button
           type="button"
           aria-label="Open workspace settings"
           aria-expanded={isMenuOpen}
           aria-haspopup="menu"
           onClick={() => setIsMenuOpen((current) => !current)}
-          className="relative z-50 flex items-center justify-center rounded bg-slate-700 text-slate-300 transition-colors hover:bg-slate-600 hover:text-white size-8"
+          className="relative z-2147483647 flex items-center justify-center rounded bg-slate-700 text-slate-300 transition-colors hover:bg-slate-600 hover:text-white size-8"
         >
           <SettingIcon />
         </button>
 
         {isMenuOpen ? (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
+            <div className="fixed inset-0 z-2147483646" onClick={() => setIsMenuOpen(false)} />
             <div
               role="menu"
-              className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
+              className="absolute right-0 top-full z-2147483647 mt-2 w-56 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
             >
               {LESSON_TYPE_OPTIONS.map((option) => {
                 const isActive = option.value === lessonType;
