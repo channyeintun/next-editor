@@ -27,6 +27,11 @@ import {
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
 import { usePreviewMessageBridge } from "./usePreviewMessageBridge";
 import { usePreviewPlaybackRegistration } from "./usePreviewPlaybackRegistration";
+import {
+  clampCustomPreviewSize,
+  getCustomPreviewSizeFromResize,
+  isCustomPreviewSize,
+} from "./previewSizeUtils";
 
 function escapePreviewHtml(value: string): string {
   return value
@@ -870,6 +875,34 @@ export function usePreviewController(): PreviewController {
   }, [forceRefreshPreview]);
 
   useEffect(() => {
+    const clampCurrentCustomSize = () => {
+      setSize((currentSize) => {
+        if (!isCustomPreviewSize(currentSize)) {
+          return currentSize;
+        }
+
+        const nextSize = clampCustomPreviewSize(currentSize, {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        });
+
+        if (nextSize.width === currentSize.width && nextSize.height === currentSize.height) {
+          return currentSize;
+        }
+
+        return nextSize;
+      });
+    };
+
+    clampCurrentCustomSize();
+    window.addEventListener("resize", clampCurrentCustomSize);
+
+    return () => {
+      window.removeEventListener("resize", clampCurrentCustomSize);
+    };
+  }, []);
+
+  useEffect(() => {
     const wasRecording = previousIsRecordingRef.current;
     previousIsRecordingRef.current = isRecording;
 
@@ -916,7 +949,12 @@ export function usePreviewController(): PreviewController {
       const startWidth = rect.width;
       const startHeight = rect.height;
 
-      setSize({ width: startWidth, height: startHeight });
+      setSize(
+        clampCustomPreviewSize(
+          { width: startWidth, height: startHeight },
+          { width: window.innerWidth, height: window.innerHeight },
+        ),
+      );
 
       let resizeRaf: number | null = null;
       const onMove = (moveEvent: MouseEvent | TouchEvent) => {
@@ -925,16 +963,12 @@ export function usePreviewController(): PreviewController {
         }
         const { x: currentX, y: currentY } = getCoords(moveEvent);
 
-        const deltaX = startX - currentX;
-        const deltaY = currentY - startY;
-
-        const maxWidth = window.innerWidth - 32;
-        const maxHeight = window.innerHeight - 96;
-
-        const newWidth = Math.min(maxWidth, Math.max(160, startWidth + deltaX));
-        const newHeight = Math.min(maxHeight, Math.max(120, startHeight + deltaY));
-
-        const newSize = { width: newWidth, height: newHeight };
+        const newSize = getCustomPreviewSizeFromResize({
+          startSize: { width: startWidth, height: startHeight },
+          startPointer: { x: startX, y: startY },
+          currentPointer: { x: currentX, y: currentY },
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+        });
         setSize(newSize);
 
         if (resizeRaf) {

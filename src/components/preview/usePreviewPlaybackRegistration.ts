@@ -3,15 +3,13 @@ import type { PreviewDomainAdapter } from "../../contexts/NextEditorDomainAdapte
 import type { IframeInteractionEvent, PreviewSize, PreviewState } from "../../types/slides";
 import { arePreviewSizesEqual } from "../../utils/equality";
 import { getElementByXPath, type PreviewScrollPosition } from "./previewIframeUtils";
+import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
 
 interface PreviewRefreshOptions {
   content?: string;
   emitEvent?: boolean;
   showSpinner?: boolean;
 }
-
-const MIN_CUSTOM_PREVIEW_WIDTH = 160;
-const MIN_CUSTOM_PREVIEW_HEIGHT = 120;
 
 interface UsePreviewPlaybackRegistrationOptions {
   previewAdapter: PreviewDomainAdapter;
@@ -119,14 +117,11 @@ export function usePreviewPlaybackRegistration({
     previewAdapter.setSnapshotApplier((previewState: PreviewState) => {
       let sizeToApply = previewState.size;
 
-      if (typeof sizeToApply === "object") {
-        const maxWidth = Math.max(1, window.innerWidth - 32);
-        const maxHeight = Math.max(1, window.innerHeight - 96);
-
-        sizeToApply = {
-          width: Math.min(maxWidth, Math.max(MIN_CUSTOM_PREVIEW_WIDTH, sizeToApply.width)),
-          height: Math.min(maxHeight, Math.max(MIN_CUSTOM_PREVIEW_HEIGHT, sizeToApply.height)),
-        };
+      if (isCustomPreviewSize(sizeToApply)) {
+        sizeToApply = clampCustomPreviewSize(sizeToApply, {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        });
       }
 
       if (!arePreviewSizesEqual(sizeToApply, sizeRef.current)) {

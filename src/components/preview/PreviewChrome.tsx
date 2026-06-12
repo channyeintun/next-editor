@@ -25,10 +25,10 @@ function getSizeClasses(size: PreviewSize): string {
   }
 
   if (size === "medium") {
-    return "shadow-lg border border-gray-300 transition-shadow z-32";
+    return "shadow-lg border border-gray-300 transition-shadow z-55";
   }
 
-  return "shadow-md border border-gray-300 cursor-pointer transition-shadow z-31";
+  return "shadow-md border border-gray-300 cursor-pointer transition-shadow z-55";
 }
 
 function getPreviewVariants(size: PreviewSize) {
@@ -83,6 +83,11 @@ const springTransition: Transition = {
   mass: 1,
 };
 
+const resizeTransition: Transition = {
+  type: "tween",
+  duration: 0,
+};
+
 export function PreviewChrome({
   children,
   containerRef,
@@ -96,8 +101,9 @@ export function PreviewChrome({
 }: PreviewChromeProps) {
   const isLarge = size === "large";
   const isSmall = size === "small";
+  const isCustomSize = typeof size === "object";
   const variants = getPreviewVariants(size);
-  const animateState = typeof size === "object" ? "custom" : size;
+  const animateState = isCustomSize ? "custom" : size;
 
   return (
     <>
@@ -117,7 +123,7 @@ export function PreviewChrome({
         variants={variants}
         initial={false}
         animate={animateState}
-        transition={springTransition}
+        transition={isCustomSize ? resizeTransition : springTransition}
         ref={containerRef}
         onAnimationStart={onTransitionStart}
         onAnimationComplete={onTransitionComplete}
