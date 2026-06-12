@@ -1,4 +1,5 @@
 export type RuntimeDockTab = "runner" | "terminal" | "console";
+export type RuntimeTerminalScrollLines = Record<string, number>;
 
 export interface RuntimeTerminalSessionSnapshot {
   id: string;
@@ -11,6 +12,7 @@ export interface RuntimePanelRecordingState {
   isCollapsed?: boolean;
   isSettingsOpen?: boolean;
   consoleLines?: string[];
+  terminalScrollLines?: RuntimeTerminalScrollLines;
 }
 
 export interface RuntimeRecordingSnapshot extends RuntimePanelRecordingState {
@@ -20,6 +22,8 @@ export interface RuntimeRecordingSnapshot extends RuntimePanelRecordingState {
   lastOutput?: string | null;
   activeCommand?: string | null;
   errorMessage?: string | null;
+  terminalSessions?: RuntimeTerminalSessionSnapshot[];
+  activeTerminalSessionId?: string | null;
 }
 
 export interface RuntimeRecordingEvent {

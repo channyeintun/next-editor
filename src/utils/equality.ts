@@ -1,4 +1,8 @@
-import type { RuntimeRecordingSnapshot } from "../types/runtime";
+import type {
+  RuntimeRecordingSnapshot,
+  RuntimeTerminalScrollLines,
+  RuntimeTerminalSessionSnapshot,
+} from "../types/runtime";
 import type { PreviewSize } from "../types/slides";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -20,6 +24,53 @@ function areStringArraysEqual(left?: string[], right?: string[]): boolean {
   }
 
   return left.every((value, index) => value === right[index]);
+}
+
+function areTerminalSessionSnapshotsEqual(
+  left?: RuntimeTerminalSessionSnapshot[],
+  right?: RuntimeTerminalSessionSnapshot[],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((leftSession, index) => {
+    const rightSession = right[index];
+
+    return (
+      leftSession.id === rightSession.id &&
+      leftSession.title === rightSession.title &&
+      leftSession.output === rightSession.output
+    );
+  });
+}
+
+function areTerminalScrollLinesEqual(
+  left?: RuntimeTerminalScrollLines,
+  right?: RuntimeTerminalScrollLines,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every(
+    (key) => Object.prototype.hasOwnProperty.call(right, key) && left[key] === right[key],
+  );
 }
 
 export function areStructuredDataEqual(left: unknown, right: unknown): boolean {
@@ -88,9 +139,12 @@ export function areRuntimeRecordingSnapshotsEqual(
     left.lastOutput === right.lastOutput &&
     left.activeCommand === right.activeCommand &&
     left.errorMessage === right.errorMessage &&
+    left.activeTerminalSessionId === right.activeTerminalSessionId &&
     left.activeTab === right.activeTab &&
     left.isCollapsed === right.isCollapsed &&
     left.isSettingsOpen === right.isSettingsOpen &&
-    areStringArraysEqual(left.consoleLines, right.consoleLines)
+    areStringArraysEqual(left.consoleLines, right.consoleLines) &&
+    areTerminalSessionSnapshotsEqual(left.terminalSessions, right.terminalSessions) &&
+    areTerminalScrollLinesEqual(left.terminalScrollLines, right.terminalScrollLines)
   );
 }

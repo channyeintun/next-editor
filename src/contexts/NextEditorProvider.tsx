@@ -167,12 +167,9 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   } = useWorkspaceActions();
   const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
-  const runtimeSnapshotRef = useRef(getRuntimeRecordingSnapshot());
   const workspaceSnapshotRef = useRef<WorkspaceRecordingSnapshot | null>(null);
   const suppressWorkspaceEventsRef = useRef(false);
   const clearWorkspaceEventSuppressionTimeoutRef = useRef<number | null>(null);
-
-  runtimeSnapshotRef.current = getRuntimeRecordingSnapshot();
 
   useEffect(() => {
     return () => {
@@ -247,7 +244,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
         void saveRuntimeWorkspace();
       },
       getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
-        const snapshot = runtimeSnapshotRef.current;
+        const snapshot = getRuntimeRecordingSnapshot();
 
         return {
           mode: snapshot.previewUrl ? "webcontainer" : "single-file",
@@ -256,6 +253,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
           lastOutput: snapshot.lastOutput,
           activeCommand: snapshot.activeCommand,
           errorMessage: snapshot.errorMessage,
+          terminalSessions: snapshot.terminalSessions,
+          activeTerminalSessionId: snapshot.activeTerminalSessionId,
           ...runtimePanel.getSnapshot(),
         };
       },
@@ -267,6 +266,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       getActiveFilePath,
       getCollapsedFolders,
       getSidebarScrollTop,
+      getRuntimeRecordingSnapshot,
       getProject,
       loadProject,
       preview,

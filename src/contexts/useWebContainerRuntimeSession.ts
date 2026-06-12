@@ -852,6 +852,12 @@ export function useWebContainerRuntimeSession({
       lastOutput: lastOutputRef.current,
       activeCommand: activeCommandRef.current,
       errorMessage: errorMessageRef.current,
+      terminalSessions: terminalSessionsRef.current.map(({ id, output, title }) => ({
+        id,
+        output,
+        title,
+      })),
+      activeTerminalSessionId: activeTerminalSessionIdRef.current,
     }),
     [],
   );

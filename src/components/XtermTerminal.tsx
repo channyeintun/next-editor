@@ -8,8 +8,10 @@ interface XtermTerminalProps {
   sessionId: string | null;
   interactive: boolean;
   shouldFocus?: boolean;
+  scrollLine?: number;
   onData?: (input: string) => void;
   onResize?: (size: { cols: number; rows: number }) => void;
+  onScroll?: (scrollLine: number) => void;
 }
 
 const TERMINAL_THEME = {
@@ -51,8 +53,10 @@ const XtermTerminal = memo(function XtermTerminal({
   sessionId,
   interactive,
   shouldFocus = false,
+  scrollLine,
   onData,
   onResize,
+  onScroll,
 }: XtermTerminalProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -61,6 +65,7 @@ const XtermTerminal = memo(function XtermTerminal({
   const lastSessionIdRef = useRef<string | null>(null);
   const onDataRef = useRef(onData);
   const onResizeRef = useRef(onResize);
+  const onScrollRef = useRef(onScroll);
 
   useEffect(() => {
     onDataRef.current = onData;
@@ -69,6 +74,10 @@ const XtermTerminal = memo(function XtermTerminal({
   useEffect(() => {
     onResizeRef.current = onResize;
   }, [onResize]);
+
+  useEffect(() => {
+    onScrollRef.current = onScroll;
+  }, [onScroll]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -108,6 +117,9 @@ const XtermTerminal = memo(function XtermTerminal({
         onDataRef.current?.(input);
       }
     });
+    const scrollDisposable = terminal.onScroll((line) => {
+      onScrollRef.current?.(line);
+    });
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
@@ -116,6 +128,7 @@ const XtermTerminal = memo(function XtermTerminal({
 
     return () => {
       dataDisposable.dispose();
+      scrollDisposable.dispose();
       resizeObserver.disconnect();
       fitAddon.dispose();
       terminal.dispose();
@@ -175,13 +188,29 @@ const XtermTerminal = memo(function XtermTerminal({
     if (output.startsWith(lastOutputRef.current)) {
       terminal.write(output.slice(lastOutputRef.current.length));
       lastOutputRef.current = output;
+      if (scrollLine !== undefined) {
+        terminal.scrollToLine(scrollLine);
+      }
       return;
     }
 
     terminal.reset();
     terminal.write(output);
     lastOutputRef.current = output;
-  }, [output, sessionId]);
+    if (scrollLine !== undefined) {
+      terminal.scrollToLine(scrollLine);
+    }
+  }, [output, scrollLine, sessionId]);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+
+    if (!terminal || scrollLine === undefined) {
+      return;
+    }
+
+    terminal.scrollToLine(scrollLine);
+  }, [scrollLine]);
 
   const terminalStyle: TerminalStyle = {
     "--terminal-background": interactive

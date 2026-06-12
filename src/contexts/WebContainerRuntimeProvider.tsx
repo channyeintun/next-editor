@@ -58,6 +58,8 @@ const fallbackSnapshot: WebContainerRuntimeRecordingSnapshot = {
   lastOutput: null,
   activeCommand: null,
   errorMessage: null,
+  terminalSessions: [],
+  activeTerminalSessionId: null,
 };
 
 function getFallbackMetadata(): WebContainerRuntimeMetadata {
