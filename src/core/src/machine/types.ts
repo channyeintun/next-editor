@@ -2,6 +2,7 @@ import type * as monaco from "monaco-editor";
 import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from "../slides";
 import type {
   MouseCursorPosition,
+  CursorRecordingEvent,
   EditorFrame,
   Recording,
   EditorSelection,
@@ -68,6 +69,8 @@ export interface RecordingSession {
   workspaceEvents: WorkspaceRecordingEvent[];
   /** Collected runtime events during recording */
   runtimeEvents: RuntimeRecordingEvent[];
+  /** High-cadence fake cursor samples during recording */
+  cursorEvents: CursorRecordingEvent[];
   /** Last known mouse position */
   lastMousePosition: MouseCursorPosition;
 }
@@ -207,7 +210,7 @@ export type StopRecordingEvent = { type: "STOP_RECORDING" };
 export type CaptureFrameEvent = {
   type: "CAPTURE_FRAME";
   isMouseMovement?: boolean;
-  mousePosition?: { x: number; y: number; visible: boolean };
+  mousePosition?: MouseCursorPosition;
 };
 
 /** Load a recording for playback */

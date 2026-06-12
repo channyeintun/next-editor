@@ -25,6 +25,7 @@ export { default as SlidePanel } from "../../components/SlidePanel";
 // Type exports for users
 export type {
   MouseCursorPosition,
+  CursorRecordingEvent,
   EditorFrame,
   Recording,
   UseNextEditorConfig,

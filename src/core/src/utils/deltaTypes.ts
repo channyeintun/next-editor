@@ -1,5 +1,5 @@
 import type * as monaco from "monaco-editor";
-import type { MouseCursorPosition, EditorFrame } from "../types";
+import type { CursorRecordingEvent, MouseCursorPosition, EditorFrame } from "../types";
 import type { SlidePreviewState, PreviewState } from "../slides";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent } from "../../../types/workspace";
@@ -97,6 +97,7 @@ export interface DeltaRecording {
   previewEvents?: import("../slides").PreviewEvent[];
   workspaceEvents?: WorkspaceRecordingEvent[];
   runtimeEvents?: RuntimeRecordingEvent[];
+  cursorEvents?: CursorRecordingEvent[];
   slides?: Array<{
     id: string;
     imageUrl: string;

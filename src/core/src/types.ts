@@ -35,6 +35,13 @@ export interface MouseCursorPosition {
 }
 
 /**
+ * Lightweight cursor sample used for smooth fake-cursor playback.
+ */
+export interface CursorRecordingEvent extends MouseCursorPosition {
+  timestamp: number;
+}
+
+/**
  * Editor frame containing the complete state at a specific timestamp
  */
 export interface EditorFrame {
@@ -69,6 +76,7 @@ export interface Recording {
   previewEvents?: PreviewEvent[];
   workspaceEvents?: WorkspaceRecordingEvent[];
   runtimeEvents?: RuntimeRecordingEvent[];
+  cursorEvents?: CursorRecordingEvent[];
   slides?: Slide[];
   audioBlob?: Blob | AudioPlaceholder;
   workspaceSnapshot?: WorkspaceRecordingSnapshot;

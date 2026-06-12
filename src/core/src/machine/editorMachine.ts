@@ -11,7 +11,7 @@ import type * as monaco from "monaco-editor";
 import type { SlideEvent, PreviewEvent } from "../slides";
 import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
 import { createInitialContext } from "./types";
-import type { EditorFrame, Recording } from "../types";
+import type { CursorRecordingEvent, EditorFrame, MouseCursorPosition, Recording } from "../types";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
 import { areWorkspaceSnapshotsEqual, type WorkspaceRecordingEvent } from "../../../types/workspace";
 import {
@@ -247,6 +247,36 @@ const RESET_AND_REATTACH_REPLAY_STATE_ACTIONS = [
 ] as const;
 
 const MOUSE_FRAME_INTERVAL_MS = 50;
+const CURSOR_EVENT_INTERVAL_MS = 8;
+
+const didCursorPositionChange = (
+  previous: MouseCursorPosition | undefined,
+  next: MouseCursorPosition | undefined,
+): boolean => {
+  if (!previous && !next) return false;
+  if (!previous || !next) return true;
+  return previous.x !== next.x || previous.y !== next.y || previous.visible !== next.visible;
+};
+
+const appendCursorEvent = (
+  cursorEvents: CursorRecordingEvent[],
+  timestamp: number,
+  mousePosition: MouseCursorPosition | undefined,
+): CursorRecordingEvent[] => {
+  if (!mousePosition) return cursorEvents;
+
+  const lastCursorEvent = cursorEvents[cursorEvents.length - 1];
+  const visibilityChanged = lastCursorEvent?.visible !== mousePosition.visible;
+  const cursorChanged = didCursorPositionChange(lastCursorEvent, mousePosition);
+  const isCadenceDue =
+    !lastCursorEvent || timestamp - lastCursorEvent.timestamp >= CURSOR_EVENT_INTERVAL_MS;
+
+  if (!cursorChanged || (!visibilityChanged && !isCadenceDue)) {
+    return cursorEvents;
+  }
+
+  return [...cursorEvents, { timestamp, ...mousePosition }];
+};
 
 const hasPlaybackAudio = (context: EditorMachineContext): boolean =>
   context.recording?.audioBlob instanceof Blob;
@@ -545,6 +575,7 @@ export const editorMachine = setup({
       const previewEvents: PreviewEvent[] = [];
       const workspaceEvents: WorkspaceRecordingEvent[] = [];
       const runtimeEvents: RuntimeRecordingEvent[] = [];
+      const initialMousePosition: MouseCursorPosition = { x: 0, y: 0, visible: false };
 
       // Capture initial slide state if open
       const initialSlideState = context.getSlideState?.();
@@ -595,7 +626,8 @@ export const editorMachine = setup({
           previewEvents,
           workspaceEvents,
           runtimeEvents,
-          lastMousePosition: { x: 0, y: 0, visible: false },
+          cursorEvents: [{ timestamp: 0, ...initialMousePosition }],
+          lastMousePosition: initialMousePosition,
         },
         lastCallbackFrameTimestamp: undefined,
       };
@@ -664,6 +696,10 @@ export const editorMachine = setup({
         event.type === "CAPTURE_FRAME" && event.mousePosition
           ? event.mousePosition
           : context.session.lastMousePosition;
+      const cursorEvents =
+        event.type === "CAPTURE_FRAME" && event.isMouseMovement
+          ? appendCursorEvent(context.session.cursorEvents ?? [], timestamp, mousePosition)
+          : context.session.cursorEvents;
 
       if (event.type === "CAPTURE_FRAME" && event.isMouseMovement) {
         const frames = context.session.frames;
@@ -679,6 +715,7 @@ export const editorMachine = setup({
           return {
             session: {
               ...context.session,
+              cursorEvents,
               lastMousePosition: mousePosition,
             },
           };
@@ -697,6 +734,7 @@ export const editorMachine = setup({
         session: {
           ...context.session,
           frames: [...context.session.frames, frame],
+          cursorEvents,
           lastMousePosition: mousePosition,
         },
         currentFrame: frame,
@@ -761,6 +799,7 @@ export const editorMachine = setup({
         previewEvents: context.session.previewEvents,
         workspaceEvents: context.session.workspaceEvents,
         runtimeEvents: context.session.runtimeEvents,
+        cursorEvents: context.session.cursorEvents,
         slides: slides,
         duration,
         audioBlob: context.audio.blob || undefined,
