@@ -54,7 +54,21 @@ export function findCommonSuffix(str1Ptr: usize, str1Len: i32, str2Ptr: usize, s
   const minLen = min(str1Len, str2Len);
   let i: i32 = 0;
 
-  // Process byte by byte from the end
+  // Process 8 bytes at a time from the end.
+  while (i + 8 <= minLen) {
+    if (load<u64>(str1Ptr + str1Len - i - 8) != load<u64>(str2Ptr + str2Len - i - 8)) {
+      while (
+        i < minLen &&
+        load<u8>(str1Ptr + str1Len - 1 - i) == load<u8>(str2Ptr + str2Len - 1 - i)
+      ) {
+        i++;
+      }
+      return i;
+    }
+    i += 8;
+  }
+
+  // Process remaining bytes.
   while (i < minLen && load<u8>(str1Ptr + str1Len - 1 - i) == load<u8>(str2Ptr + str2Len - 1 - i)) {
     i++;
   }

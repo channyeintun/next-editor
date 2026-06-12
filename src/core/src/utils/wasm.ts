@@ -22,6 +22,11 @@ interface PreparedWasmStringPair {
   ptr2: number;
 }
 
+export interface CommonAffixLengths {
+  prefixLen: number;
+  suffixLen: number;
+}
+
 function getWasmScratchBaseOffset(exports: WasmExports): number {
   return (exports.__heap_base?.value as number) || WASM_SCRATCH_BASE_OFFSET;
 }
@@ -99,6 +104,25 @@ export function findCommonSuffixLengthWasm(str1: string, str2: string): number |
   const { bytes1, bytes2, ptr1, ptr2 } = prepareWasmStringPair(exports, str1, str2);
   const suffixBytes = exports.findCommonSuffix(ptr1, bytes1.length, ptr2, bytes2.length);
   return suffixBytesToCharacterLength(bytes1, suffixBytes);
+}
+
+export function findCommonAffixLengthsWasm(str1: string, str2: string): CommonAffixLengths | null {
+  const exports = getWasmExports();
+  if (!exports) return null;
+
+  const { bytes1, bytes2, ptr1, ptr2 } = prepareWasmStringPair(exports, str1, str2);
+  const prefixBytes = exports.findCommonPrefix(ptr1, bytes1.length, ptr2, bytes2.length);
+  const suffixBytes = exports.findCommonSuffix(
+    ptr1 + prefixBytes,
+    bytes1.length - prefixBytes,
+    ptr2 + prefixBytes,
+    bytes2.length - prefixBytes,
+  );
+
+  return {
+    prefixLen: prefixBytesToCharacterLength(bytes1, prefixBytes),
+    suffixLen: suffixBytesToCharacterLength(bytes1, suffixBytes),
+  };
 }
 
 /**

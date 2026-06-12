@@ -146,6 +146,22 @@ function findCommonSuffixLengthWasm(exports, str1, str2) {
   return suffixBytesToCharacterLength(bytes1, suffixBytes);
 }
 
+function findCommonAffixLengthsWasm(exports, str1, str2) {
+  const { bytes1, bytes2, ptr1, ptr2 } = prepareWasmStringPair(exports, str1, str2);
+  const prefixBytes = exports.findCommonPrefix(ptr1, bytes1.length, ptr2, bytes2.length);
+  const suffixBytes = exports.findCommonSuffix(
+    ptr1 + prefixBytes,
+    bytes1.length - prefixBytes,
+    ptr2 + prefixBytes,
+    bytes2.length - prefixBytes,
+  );
+
+  return {
+    prefixLen: prefixBytesToCharacterLength(bytes1, prefixBytes),
+    suffixLen: suffixBytesToCharacterLength(bytes1, suffixBytes),
+  };
+}
+
 function findCommonPrefixLengthTs(str1, str2) {
   const minLen = Math.min(str1.length, str2.length);
   let i = 0;
@@ -167,6 +183,16 @@ function createContentDeltaWith(prefixFn, suffixFn, previous, next) {
   const prevRemainder = previous.slice(prefixLen);
   const nextRemainder = next.slice(prefixLen);
   const suffixLen = suffixFn(prevRemainder, nextRemainder);
+  const insert = nextRemainder.slice(0, nextRemainder.length - suffixLen);
+
+  return { prefixLen, suffixLen, insert };
+}
+
+function createContentDeltaWithAffixes(affixFn, previous, next) {
+  if (previous === next) return null;
+
+  const { prefixLen, suffixLen } = affixFn(previous, next);
+  const nextRemainder = next.slice(prefixLen);
   const insert = nextRemainder.slice(0, nextRemainder.length - suffixLen);
 
   return { prefixLen, suffixLen, insert };
@@ -209,7 +235,14 @@ function assertValidDelta(name, previous, next, delta) {
 }
 
 function printRows(rows) {
-  const headers = ["case", "TypeScript ops/s", "WASM ops/s", "WASM vs TS"];
+  const headers = [
+    "case",
+    "TypeScript ops/s",
+    "WASM separate ops/s",
+    "WASM combined ops/s",
+    "combined vs TS",
+    "combined vs separate",
+  ];
   const widths = headers.map((header, column) =>
     Math.max(header.length, ...rows.map((row) => String(row[column]).length)),
   );
@@ -240,9 +273,20 @@ for (const testCase of cases) {
     testCase.previous,
     testCase.next,
   );
+  const combinedWasmDelta = createContentDeltaWithAffixes(
+    (a, b) => findCommonAffixLengthsWasm(exports, a, b),
+    testCase.previous,
+    testCase.next,
+  );
 
   assertValidDelta(`${testCase.name} TypeScript`, testCase.previous, testCase.next, tsDelta);
-  assertValidDelta(`${testCase.name} WASM`, testCase.previous, testCase.next, wasmDelta);
+  assertValidDelta(`${testCase.name} WASM separate`, testCase.previous, testCase.next, wasmDelta);
+  assertValidDelta(
+    `${testCase.name} WASM combined`,
+    testCase.previous,
+    testCase.next,
+    combinedWasmDelta,
+  );
 
   for (let i = 0; i < 100; i++) {
     createContentDeltaWith(
@@ -257,6 +301,11 @@ for (const testCase of cases) {
       testCase.previous,
       testCase.next,
     );
+    createContentDeltaWithAffixes(
+      (a, b) => findCommonAffixLengthsWasm(exports, a, b),
+      testCase.previous,
+      testCase.next,
+    );
   }
 
   const ts = bench(() =>
@@ -267,10 +316,17 @@ for (const testCase of cases) {
       testCase.next,
     ),
   );
-  const wasm = bench(() =>
+  const wasmSeparate = bench(() =>
     createContentDeltaWith(
       (a, b) => findCommonPrefixLengthWasm(exports, a, b),
       (a, b) => findCommonSuffixLengthWasm(exports, a, b),
+      testCase.previous,
+      testCase.next,
+    ),
+  );
+  const wasmCombined = bench(() =>
+    createContentDeltaWithAffixes(
+      (a, b) => findCommonAffixLengthsWasm(exports, a, b),
       testCase.previous,
       testCase.next,
     ),
@@ -279,8 +335,10 @@ for (const testCase of cases) {
   rows.push([
     testCase.name,
     formatNumber(ts.opsPerSecond),
-    formatNumber(wasm.opsPerSecond),
-    `${formatNumber(wasm.opsPerSecond / ts.opsPerSecond)}x`,
+    formatNumber(wasmSeparate.opsPerSecond),
+    formatNumber(wasmCombined.opsPerSecond),
+    `${formatNumber(wasmCombined.opsPerSecond / ts.opsPerSecond)}x`,
+    `${formatNumber(wasmCombined.opsPerSecond / wasmSeparate.opsPerSecond)}x`,
   ]);
 }
 

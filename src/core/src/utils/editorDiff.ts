@@ -1,5 +1,5 @@
 import * as monaco from "monaco-editor";
-import { findCommonPrefixLengthWasm, findCommonSuffixLengthWasm } from "./wasm";
+import { findCommonAffixLengthsWasm } from "./wasm";
 import type { EditorPosition, EditorSelection } from "../types";
 
 /**
@@ -161,11 +161,12 @@ export const applyContentDiff = (
 
   try {
     // Find the common prefix and suffix to minimize the edit range (using Wasm)
-    const commonPrefix = findCommonPrefix(currentContent, targetContent);
-    const commonSuffix = findCommonSuffix(
-      currentContent.slice(commonPrefix),
-      targetContent.slice(commonPrefix),
-    );
+    const wasmAffixes = findCommonAffixLengthsWasm(currentContent, targetContent);
+    const commonPrefix =
+      wasmAffixes?.prefixLen ?? findCommonPrefixJS(currentContent, targetContent);
+    const commonSuffix =
+      wasmAffixes?.suffixLen ??
+      findCommonSuffixJS(currentContent.slice(commonPrefix), targetContent.slice(commonPrefix));
 
     const currentMiddle = currentContent.slice(commonPrefix, currentContent.length - commonSuffix);
     const targetMiddle = targetContent.slice(commonPrefix, targetContent.length - commonSuffix);
@@ -204,22 +205,6 @@ export const applyContentDiff = (
     }
   }
 };
-
-/**
- * Finds the length of the common prefix between two strings using WebAssembly.
- * Falls back to a JS scan when Wasm is not available.
- */
-function findCommonPrefix(str1: string, str2: string): number {
-  return findCommonPrefixLengthWasm(str1, str2) ?? findCommonPrefixJS(str1, str2);
-}
-
-/**
- * Finds the length of the common suffix between two strings using WebAssembly.
- * Falls back to a JS scan when Wasm is not available.
- */
-function findCommonSuffix(str1: string, str2: string): number {
-  return findCommonSuffixLengthWasm(str1, str2) ?? findCommonSuffixJS(str1, str2);
-}
 
 function findCommonPrefixJS(str1: string, str2: string): number {
   const minLen = Math.min(str1.length, str2.length);

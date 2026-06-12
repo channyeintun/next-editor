@@ -67,16 +67,49 @@
  (func $src/core/assembly/index/findCommonSuffix (param $0 i32) (param $1 i32) (param $2 i32) (param $3 i32) (result i32)
   (local $4 i32)
   (local $5 i32)
+  (local $6 i32)
   local.get $1
   local.get $3
   local.get $1
   local.get $3
   i32.lt_s
   select
-  local.set $5
+  local.set $6
   loop $while-continue|0
    local.get $4
-   local.get $5
+   i32.const 8
+   i32.add
+   local.tee $5
+   local.get $6
+   i32.le_s
+   if
+    local.get $0
+    local.get $1
+    i32.add
+    local.get $4
+    i32.sub
+    i32.const 8
+    i32.sub
+    i64.load
+    local.get $2
+    local.get $3
+    i32.add
+    local.get $4
+    i32.sub
+    i32.const 8
+    i32.sub
+    i64.load
+    i64.eq
+    if
+     local.get $5
+     local.set $4
+     br $while-continue|0
+    end
+   end
+  end
+  loop $while-continue|1
+   local.get $4
+   local.get $6
    i32.lt_s
    if (result i32)
     local.get $0
@@ -104,7 +137,7 @@
     i32.const 1
     i32.add
     local.set $4
-    br $while-continue|0
+    br $while-continue|1
    end
   end
   local.get $4

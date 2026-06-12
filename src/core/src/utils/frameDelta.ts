@@ -10,7 +10,11 @@ import type {
 } from "./deltaTypes";
 import { DELTA_CONFIG, isKeyframe, isDelta } from "./deltaTypes";
 export { isKeyframe, isDelta };
-import { findCommonPrefixLengthWasm, findCommonSuffixLengthWasm } from "./wasm";
+import {
+  findCommonAffixLengthsWasm,
+  findCommonPrefixLengthWasm,
+  findCommonSuffixLengthWasm,
+} from "./wasm";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
 import {
   normalizeEditorFrame,
@@ -64,14 +68,15 @@ function findCommonSuffixJS(str1: string, str2: string): number {
 export function createContentDelta(prev: string, next: string): ContentDelta | null {
   if (prev === next) return null;
 
-  const prefixLen = findCommonPrefixLength(prev, next);
+  const wasmAffixes = findCommonAffixLengthsWasm(prev, next);
+  const prefixLen = wasmAffixes?.prefixLen ?? findCommonPrefixJS(prev, next);
+  const suffixLen =
+    wasmAffixes?.suffixLen ?? findCommonSuffixJS(prev.slice(prefixLen), next.slice(prefixLen));
 
-  // After removing common prefix, find common suffix
-  const prevRemainder = prev.slice(prefixLen);
+  // The insert is computed from the remainder after the common prefix.
   const nextRemainder = next.slice(prefixLen);
-  const suffixLen = findCommonSuffixLength(prevRemainder, nextRemainder);
 
-  // The insert is what's in the middle of next, after prefix and before suffix
+  // The insert is what's in the middle of next, after prefix and before suffix.
   const insert = nextRemainder.slice(0, nextRemainder.length - suffixLen);
 
   return { prefixLen, suffixLen, insert };
