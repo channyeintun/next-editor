@@ -292,19 +292,8 @@ export const audioPlaybackActor = fromCallback<
         break;
 
       case "SYNC": {
-        if (audio.paused) {
-          break;
-        }
-
-        const targetTime = event.timeMs / 1000;
-        const diff = Math.abs(audio.currentTime - targetTime);
-        const syncDriftThresholdSeconds = Math.max(0.35, 0.2 * audio.playbackRate);
-
-        // Keep sync correction coarse. Frequent tiny seeks at high speed
-        // can sound like echoing or repeated syllables in HTMLAudioElement.
-        if (diff > syncDriftThresholdSeconds) {
-          audio.currentTime = targetTime;
-        }
+        // Let the media element own playback time. Periodic timer-driven
+        // currentTime nudges can send the audio slightly backward at higher speeds.
         break;
       }
     }

@@ -60,6 +60,11 @@ export const timelineMachine = setup({
             accumulatedTime: event.time,
           })),
         },
+        SET_SPEED: {
+          actions: assign(({ event }) => ({
+            speed: event.speed,
+          })),
+        },
       },
     },
     running: {
@@ -116,6 +121,11 @@ export const timelineMachine = setup({
           actions: assign(({ event }) => ({
             currentTime: event.time,
             accumulatedTime: event.time,
+          })),
+        },
+        SET_SPEED: {
+          actions: assign(({ event }) => ({
+            speed: event.speed,
           })),
         },
       },
