@@ -151,12 +151,6 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
       [setVolume],
     );
 
-    const handleEditClick = useCallback(() => {
-      if (currentRecording) {
-        setShowRecordingEditor(true);
-      }
-    }, [currentRecording]);
-
     const handleSaveRecording = useCallback(
       async (editedRecording: Recording) => {
         try {
@@ -279,16 +273,6 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
                           />
                         </div>
                       </div>
-                      {recordMode && (
-                        <div className="pt-3 border-t">
-                          <button
-                            onClick={handleEditClick}
-                            className="w-full px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm mb-2"
-                          >
-                            Edit JSON
-                          </button>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
