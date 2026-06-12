@@ -140,15 +140,25 @@ function RouteErrorBoundary() {
   );
 }
 
+function RouteHydrateFallback() {
+  return (
+    <div className="min-h-dvh flex items-center justify-center bg-slate-950 px-6 text-white">
+      <div className="size-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+    </div>
+  );
+}
+
 export const router = createBrowserRouter([
   {
     path: "/",
     lazy: lazyRoute(() => import("./components/LandingPage"), "/"),
+    HydrateFallback: RouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
   {
     path: "/code",
     lazy: lazyRoute(() => import("./components/Editor"), "/code"),
+    HydrateFallback: RouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
 ]);
