@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
-import type { Recording, AudioPlaceholder } from "../core/src/types";
-import { decodeBase64 } from "../core/src/utils/base64";
 import { useNextEditorActions } from "./useNextEditorContext";
+import { decodeBase64ToRecordings } from "../storage/recordingCodecClient";
 
 const SAME_ORIGIN_PROXY_PATH = "/api/proxy";
 const MISSING_PROXY_STATUS_CODES = new Set([404, 405, 501]);
@@ -68,8 +67,7 @@ export const useUrlLoader = () => {
             throw new Error("File does not contain valid base64 data");
           }
 
-          const binaryData = decodeBase64(stripped);
-          const recordings = await decompressBinaryToRecordings(binaryData);
+          const recordings = await decodeBase64ToRecordings(stripped);
 
           if (recordings.length > 0) {
             loadRecording(recordings[0]);
@@ -116,82 +114,6 @@ export const useUrlLoader = () => {
     },
     [importNextEditorFile],
   );
-
-  // Helper functions from JsonStorage (still needed for .ne files)
-  const decompressBinaryToRecordings = async (binaryData: Uint8Array) => {
-    const pakoModule = await import("pako");
-    const inflate = pakoModule.inflate || pakoModule.default;
-
-    if (!inflate) {
-      throw new Error("Storage configuration error: pako is not available");
-    }
-    // Import superjson directly from package to avoid code splitting issues on Vercel
-    const superjsonModule = await import("superjson");
-    const superjson = superjsonModule.default;
-
-    let offset = 0;
-
-    // Read header
-    const magic = new TextDecoder().decode(binaryData.slice(offset, offset + 4));
-    offset += 4;
-
-    if (magic !== "SCRM") {
-      throw new Error("Invalid binary format: bad magic number");
-    }
-
-    const version = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
-    offset += 2;
-
-    if (version !== 2) {
-      throw new Error(
-        `Unsupported binary format version: ${version}. Legacy Version 1 is no longer supported.`,
-      );
-    }
-
-    // Version 2: Uint32 for jsonLength (supports larger files)
-    const jsonLength = new Uint32Array(binaryData.slice(offset, offset + 4).buffer)[0];
-    offset += 4;
-
-    if (jsonLength === 0 || jsonLength > binaryData.length - offset) {
-      throw new Error(
-        `Invalid JSON length: ${jsonLength}, remaining data: ${binaryData.length - offset}`,
-      );
-    }
-
-    // Read and decompress JSON
-    const compressedJson = binaryData.slice(offset, offset + jsonLength);
-    offset += jsonLength;
-
-    const jsonString = inflate(compressedJson, { to: "string" });
-
-    if (!jsonString || typeof jsonString !== "string") {
-      throw new Error("Failed to decompress JSON data - inflate returned invalid result");
-    }
-
-    if (!superjson || typeof superjson.parse !== "function") {
-      throw new Error("Storage configuration error: superjson is not available");
-    }
-    const recordings = superjson.parse(jsonString) as Recording[];
-
-    // Read audio data and reconstruct blobs
-    const audioDataStart = offset;
-    const audioData = binaryData.slice(audioDataStart);
-
-    return recordings.map((recording) => {
-      const audioPlaceholder = recording.audioBlob as AudioPlaceholder | undefined;
-
-      if (audioPlaceholder && (audioPlaceholder as AudioPlaceholder).__audio_offset !== undefined) {
-        const audioOffset = audioPlaceholder.__audio_offset;
-        const audioSize = audioPlaceholder.__audio_size;
-        const audioType = audioPlaceholder.__audio_type;
-
-        const audioBytes = audioData.slice(audioOffset, audioOffset + audioSize);
-        recording.audioBlob = new Blob([audioBytes], { type: audioType });
-      }
-
-      return recording;
-    });
-  };
 
   return {
     fetchNextEditorFile,

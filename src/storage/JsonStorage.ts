@@ -1,14 +1,16 @@
 import type { Recording } from "../core/src";
-import { superjson } from "./SuperJsonConfig";
-import { deflate, inflate } from "pako";
-import { type AudioPlaceholder } from "../core/src/types";
-import { encodeBase64, decodeBase64 } from "../core/src/utils/base64";
-import { normalizeRecordingData } from "../core/src/utils/editorState";
 import {
   createIndexedDBRecordingStore,
   type StoredRecordingEntry,
   type StoredRecordingMetadata,
 } from "./IndexedDBRecordingStore";
+import {
+  compressRecordingsToBinary,
+  decodeBase64ToRecordings,
+  decompressBinaryToRecordings,
+  encodeRecordingsToBase64,
+  normalizeRecording,
+} from "./recordingCodecClient";
 
 interface StorageStats {
   count: number;
@@ -23,192 +25,6 @@ interface StorageStats {
  */
 export class JsonStorage {
   private indexedDBStore = createIndexedDBRecordingStore();
-
-  /**
-   * Normalize supported recording versions while preserving legacy version 2 files.
-   */
-  private normalizeRecording(recording: Recording): Recording {
-    if (recording.version === 2 || recording.version === 3) {
-      return normalizeRecordingData(recording);
-    }
-
-    throw new Error(
-      `Unsupported recording version: ${(recording as Recording & { version?: unknown }).version ?? "unknown"}`,
-    );
-  }
-
-  /**
-   * Extract audio blobs from recording and replace with placeholders
-   */
-  private async extractAudioData(recording: Recording): Promise<{
-    recordingWithPlaceholders: Recording;
-    audioData: Uint8Array | null;
-  }> {
-    if (!recording.audioBlob || !(recording.audioBlob instanceof Blob)) {
-      return { recordingWithPlaceholders: recording, audioData: null };
-    }
-
-    // Convert blob to binary data
-    const arrayBuffer = await recording.audioBlob.arrayBuffer();
-    const audioData = new Uint8Array(arrayBuffer);
-
-    // Create placeholder
-    const placeholder: AudioPlaceholder = {
-      __audio_offset: 0, // Will be set during concatenation
-      __audio_size: audioData.length,
-      __audio_type: recording.audioBlob.type,
-    };
-
-    // Create recording with placeholder
-    const recordingWithPlaceholders: Recording = {
-      ...recording,
-      audioBlob: placeholder,
-    };
-
-    return { recordingWithPlaceholders, audioData };
-  }
-
-  /**
-   * Compress recordings to binary format (JSON + audio concatenation)
-   */
-  private async compressRecordingsToBinary(recordings: Recording[]): Promise<Uint8Array> {
-    const audioChunks: Uint8Array[] = [];
-    let currentOffset = 0;
-
-    // Process recordings and extract audio
-    const recordingsWithPlaceholders = await Promise.all(
-      recordings.map(async (recording) => {
-        const { recordingWithPlaceholders, audioData } = await this.extractAudioData(recording);
-
-        if (audioData) {
-          // Update placeholder with actual offset
-          const placeholder = recordingWithPlaceholders.audioBlob as AudioPlaceholder;
-          placeholder.__audio_offset = currentOffset;
-          audioChunks.push(audioData);
-          currentOffset += audioData.length;
-        }
-
-        return recordingWithPlaceholders;
-      }),
-    );
-
-    // Serialize JSON without audio blobs
-    const jsonString = superjson.stringify(recordingsWithPlaceholders);
-    const compressedJson = deflate(jsonString, { level: 9 });
-
-    // Create header - version 2 uses Uint32 for jsonLength (supports files > 65KB)
-    const magic = new TextEncoder().encode("SCRM");
-    const version = new Uint16Array([2]); // Version 2 uses Uint32 for jsonLength
-    const jsonLength = new Uint32Array([compressedJson.length]);
-
-    // Calculate total size: magic(4) + version(2) + jsonLength(4) + json + audio
-    const audioDataSize = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-    const totalSize = 10 + compressedJson.length + audioDataSize;
-
-    // Combine all data
-    const result = new Uint8Array(totalSize);
-    let offset = 0;
-
-    // Write header
-    result.set(magic, offset);
-    offset += 4;
-    result.set(new Uint8Array(version.buffer), offset);
-    offset += 2;
-    result.set(new Uint8Array(jsonLength.buffer), offset);
-    offset += 4;
-
-    // Write compressed JSON
-    result.set(compressedJson, offset);
-    offset += compressedJson.length;
-
-    // Write audio data
-    for (const audioChunk of audioChunks) {
-      result.set(audioChunk, offset);
-      offset += audioChunk.length;
-    }
-
-    return result;
-  }
-
-  /**
-   * Decompress binary format back to recordings with audio blobs
-   */
-  private async decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
-    let offset = 0;
-
-    // Read header
-    const magic = new TextDecoder().decode(binaryData.slice(offset, offset + 4));
-    offset += 4;
-
-    if (magic !== "SCRM") {
-      throw new Error("Invalid binary format: bad magic number");
-    }
-
-    const version = new Uint16Array(binaryData.slice(offset, offset + 2).buffer)[0];
-    offset += 2;
-
-    if (version !== 2) {
-      throw new Error(
-        `Unsupported binary format version: ${version}. Legacy Version 1 is no longer supported.`,
-      );
-    }
-
-    // Version 2: Uint32 for jsonLength (supports larger files)
-    const jsonLength = new Uint32Array(binaryData.slice(offset, offset + 4).buffer)[0];
-    offset += 4;
-
-    if (jsonLength === 0 || jsonLength > binaryData.length - offset) {
-      throw new Error(
-        `Invalid JSON length: ${jsonLength}, remaining data: ${binaryData.length - offset}`,
-      );
-    }
-
-    // Read and decompress JSON
-    const compressedJson = binaryData.slice(offset, offset + jsonLength);
-    offset += jsonLength;
-
-    const jsonString = inflate(compressedJson, { to: "string" });
-
-    if (!jsonString || typeof jsonString !== "string") {
-      throw new Error("Failed to decompress JSON data - inflate returned invalid result");
-    }
-
-    const recordings = superjson.parse(jsonString) as Recording[];
-
-    // Read audio data and reconstruct blobs
-    const audioDataStart = offset;
-    const audioData = binaryData.slice(audioDataStart);
-
-    return recordings.map((rawRecording) => {
-      const recording = this.normalizeRecording(rawRecording);
-      const audioPlaceholder = recording.audioBlob as AudioPlaceholder | undefined;
-
-      if (audioPlaceholder && (audioPlaceholder as AudioPlaceholder).__audio_offset !== undefined) {
-        const audioOffset = audioPlaceholder.__audio_offset;
-        const audioSize = audioPlaceholder.__audio_size;
-        const audioType = audioPlaceholder.__audio_type;
-
-        const audioBytes = audioData.slice(audioOffset, audioOffset + audioSize);
-        recording.audioBlob = new Blob([audioBytes], { type: audioType });
-      }
-
-      return recording;
-    });
-  }
-
-  /**
-   * Convert binary data to base64 for storage using Wasm acceleration
-   */
-  private binaryToBase64(binaryData: Uint8Array): string {
-    return encodeBase64(binaryData);
-  }
-
-  /**
-   * Convert base64 to binary data using Wasm acceleration
-   */
-  private base64ToBinary(base64Data: string): Uint8Array {
-    return decodeBase64(base64Data);
-  }
 
   private formatSize(bytes: number): string {
     const units = ["B", "KB", "MB", "GB"];
@@ -253,8 +69,8 @@ export class JsonStorage {
   }
 
   private async createStoredEntry(recording: Recording): Promise<StoredRecordingEntry> {
-    const normalizedRecording = this.normalizeRecording(recording);
-    const binaryData = await this.compressRecordingsToBinary([normalizedRecording]);
+    const normalizedRecording = normalizeRecording(recording);
+    const binaryData = await compressRecordingsToBinary([normalizedRecording]);
 
     return {
       metadata: this.createStoredMetadata(normalizedRecording, binaryData.byteLength),
@@ -263,7 +79,7 @@ export class JsonStorage {
   }
 
   private async decodeStoredEntry(entry: StoredRecordingEntry): Promise<Recording> {
-    const recordings = await this.decompressBinaryToRecordings(entry.binaryData);
+    const recordings = await decompressBinaryToRecordings(entry.binaryData);
 
     if (recordings.length !== 1) {
       throw new Error(
@@ -271,7 +87,7 @@ export class JsonStorage {
       );
     }
 
-    return this.normalizeRecording(recordings[0]);
+    return normalizeRecording(recordings[0]);
   }
 
   private async loadIndexedDBRecordings(): Promise<Recording[]> {
@@ -328,9 +144,7 @@ export class JsonStorage {
    */
   async exportAsFile(recording: Recording, filename?: string): Promise<void> {
     try {
-      // Use new binary format for export
-      const binaryData = await this.compressRecordingsToBinary([recording]);
-      const base64Data = this.binaryToBase64(binaryData);
+      const base64Data = await encodeRecordingsToBase64([recording]);
 
       // Create blob with base64 data (will be decoded on import)
       const blob = new Blob([base64Data], { type: "application/octet-stream" });
@@ -360,9 +174,7 @@ export class JsonStorage {
   async exportAllAsFile(filename?: string): Promise<void> {
     try {
       const recordings = await this.load();
-      // Use new binary format for export
-      const binaryData = await this.compressRecordingsToBinary(recordings);
-      const base64Data = this.binaryToBase64(binaryData);
+      const base64Data = await encodeRecordingsToBase64(recordings);
 
       // Create blob with base64 data (will be decoded on import)
       const blob = new Blob([base64Data], { type: "application/octet-stream" });
@@ -422,9 +234,7 @@ export class JsonStorage {
             return;
           }
 
-          const binaryData = this.base64ToBinary(stripped);
-
-          const importedRecordings = await this.decompressBinaryToRecordings(binaryData);
+          const importedRecordings = await decodeBase64ToRecordings(stripped);
 
           // Validate imported recordings
           if (!Array.isArray(importedRecordings) || importedRecordings.length === 0) {
