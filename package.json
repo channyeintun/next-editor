@@ -17,6 +17,7 @@
     "format": "vp lint --fix",
     "lint": "vp lint",
     "typecheck": "tsgo -b tsconfig.json",
+    "benchmark:wasm": "node scripts/benchmark-wasm-diff.mjs",
     "preview": "vp preview",
     "prepare": "vp config --hooks-only"
   },
