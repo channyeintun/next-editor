@@ -1,7 +1,7 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, type CSSProperties } from "react";
 import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "xterm";
-import "xterm/css/xterm.css";
+import { Terminal } from "@xterm/xterm";
+import "@xterm/xterm/css/xterm.css";
 
 interface XtermTerminalProps {
   output: string;
@@ -41,6 +41,10 @@ const PASSIVE_TERMINAL_THEME = {
   cursor: "transparent",
   cursorAccent: "transparent",
 } as const;
+
+type TerminalStyle = CSSProperties & {
+  "--terminal-background"?: string;
+};
 
 const XtermTerminal = memo(function XtermTerminal({
   output,
@@ -179,10 +183,17 @@ const XtermTerminal = memo(function XtermTerminal({
     lastOutputRef.current = output;
   }, [output, sessionId]);
 
+  const terminalStyle: TerminalStyle = {
+    "--terminal-background": interactive
+      ? TERMINAL_THEME.background
+      : PASSIVE_TERMINAL_THEME.background,
+  };
+
   return (
     <div
       ref={containerRef}
       className={`xterm-terminal size-full ${interactive ? "" : "passive"}`.trim()}
+      style={terminalStyle}
       onMouseDown={(event) => {
         if (!interactive) {
           return;

@@ -51,17 +51,26 @@ body {
 }
 
 .xterm-terminal {
+  --terminal-background: #1d1f29;
   height: 100%;
   width: 100%;
+  background-color: var(--terminal-background);
 }
 
 .xterm-terminal .xterm {
   height: 100%;
   padding: 12px 14px;
+  background-color: var(--terminal-background);
 }
 
 .xterm-terminal .xterm-viewport {
+  background-color: var(--terminal-background) !important;
   overflow-y: auto !important;
+}
+
+.xterm-terminal .xterm-screen,
+.xterm-terminal .xterm-screen canvas {
+  background-color: var(--terminal-background);
 }
 
 .xterm-terminal.passive .xterm-cursor-layer,

@@ -28,6 +28,7 @@
     "@xstate/react": "^6.1.0",
     "@xstate/store-react": "^1.0.1",
     "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.562.0",
     "motion": "^12.26.2",
@@ -37,8 +38,7 @@
     "react-router-dom": "^7.12.0",
     "reveal.js": "^6.0.1",
     "superjson": "^2.2.6",
-    "xstate": "^5.31.1",
-    "xterm": "^5.3.0"
+    "xstate": "^5.31.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
