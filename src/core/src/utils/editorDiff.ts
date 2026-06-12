@@ -1,4 +1,4 @@
-import * as monaco from "monaco-editor";
+import type * as monaco from "monaco-editor";
 import { findCommonAffixLengthsWasm } from "./wasm";
 import type { EditorPosition, EditorSelection } from "../types";
 
@@ -119,12 +119,16 @@ export const applySelectionDiff = (
       targetSelection.positionColumn,
     );
 
-    const validSelection = new monaco.Selection(
-      validSelectionStart.lineNumber,
-      validSelectionStart.column,
-      validPosition.lineNumber,
-      validPosition.column,
-    );
+    const validSelection = {
+      startLineNumber: validSelectionStart.lineNumber,
+      startColumn: validSelectionStart.column,
+      endLineNumber: validPosition.lineNumber,
+      endColumn: validPosition.column,
+      selectionStartLineNumber: validSelectionStart.lineNumber,
+      selectionStartColumn: validSelectionStart.column,
+      positionLineNumber: validPosition.lineNumber,
+      positionColumn: validPosition.column,
+    } as monaco.IRange & monaco.ISelection;
 
     editor.setSelection(validSelection);
     return true;

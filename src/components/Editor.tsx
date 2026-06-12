@@ -1,10 +1,7 @@
-import { memo } from "react";
-import CodeEditor from "./CodeEditor";
+import { lazy, memo, Suspense } from "react";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
-import Preview from "./Preview.tsx";
 import SlidePanel from "./SlidePanel";
-import TerminalPanel from "./TerminalPanel";
 import FloatingPlayButton from "./FloatingPlayButton";
 import { NextEditorProvider } from "../contexts/NextEditorProvider.tsx";
 import { NextEditorDomainAdaptersProvider } from "../contexts/NextEditorDomainAdaptersContext";
@@ -15,6 +12,18 @@ import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useWorkspaceLessonType } from "../hooks/useWorkspace";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import CursorComponent from "./Cursor.tsx";
+
+const CodeEditor = lazy(() => import("./CodeEditor"));
+const Preview = lazy(() => import("./Preview"));
+const TerminalPanel = lazy(() => import("./TerminalPanel"));
+
+function EditorSurfaceFallback() {
+  return (
+    <div className="h-full flex items-center justify-center bg-slate-950">
+      <div className="size-8 animate-spin rounded-full border-2 border-white/15 border-t-white/80" />
+    </div>
+  );
+}
 
 export const EditorLayout = memo(function EditorLayout() {
   const { isDragging, isLoading: dragLoading } = useDragAndDropUrl();
@@ -30,10 +39,18 @@ export const EditorLayout = memo(function EditorLayout() {
   return (
     <div className="h-dvh flex flex-col bg-slate-950 text-white overflow-hidden">
       <div className="flex-1 relative overflow-hidden">
-        <CodeEditor showImportExport={!readOnly} />
+        <Suspense fallback={<EditorSurfaceFallback />}>
+          <CodeEditor showImportExport={!readOnly} />
+        </Suspense>
         <CursorComponent />
-        <Preview />
-        {lessonType === "node.js" ? <TerminalPanel /> : null}
+        <Suspense fallback={null}>
+          <Preview />
+        </Suspense>
+        {lessonType === "node.js" ? (
+          <Suspense fallback={null}>
+            <TerminalPanel />
+          </Suspense>
+        ) : null}
         <SlidePanel />
       </div>
 

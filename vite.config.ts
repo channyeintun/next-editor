@@ -71,6 +71,18 @@ export default defineConfig({
               test: /[\\/]node_modules[\\/](@monaco-editor|monaco-editor)[\\/]/,
             },
             {
+              name: "webcontainer",
+              test: /[\\/]node_modules[\\/]@webcontainer[\\/]/,
+            },
+            {
+              name: "terminal",
+              test: /[\\/]node_modules[\\/]@xterm[\\/]/,
+            },
+            {
+              name: "archive",
+              test: /[\\/]node_modules[\\/]jszip[\\/]/,
+            },
+            {
               name: "xstate",
               test: /[\\/]node_modules[\\/](xstate|@xstate\/react)[\\/]/,
             },

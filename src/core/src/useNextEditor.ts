@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from "react";
-import * as monaco from "monaco-editor";
+import type * as monaco from "monaco-editor";
 import { useActorRef, useSelector, shallowEqual } from "@xstate/react";
 import type { ActorRefFrom } from "xstate";
 import { editorMachine } from "./machine/editorMachine";
@@ -20,6 +20,35 @@ import type { SnapshotFrom } from "xstate";
 // ============================================================================
 export type EditorMachineSnapshot = SnapshotFrom<typeof editorMachine>;
 export type EditorActorRef = ActorRefFrom<typeof editorMachine>;
+
+const IGNORED_PLAYBACK_INPUT_KEYS = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowDown",
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+  "Shift",
+  "Control",
+  "Alt",
+  "Meta",
+  "CapsLock",
+  "Escape",
+  "F1",
+  "F2",
+  "F3",
+  "F4",
+  "F5",
+  "F6",
+  "F7",
+  "F8",
+  "F9",
+  "F10",
+  "F11",
+  "F12",
+]);
 
 // ============================================================================
 // Selectors - Memoized functions for extracting state slices
@@ -189,36 +218,7 @@ export const useNextEditorActorBindings = (
       disposables.push(
         editor.onKeyDown((e) => {
           // Ignore navigation/modifier keys to only pause on potential value changes
-          const ignoreKeys = [
-            monaco.KeyCode.LeftArrow,
-            monaco.KeyCode.RightArrow,
-            monaco.KeyCode.UpArrow,
-            monaco.KeyCode.DownArrow,
-            monaco.KeyCode.PageUp,
-            monaco.KeyCode.PageDown,
-            monaco.KeyCode.Home,
-            monaco.KeyCode.End,
-            monaco.KeyCode.Shift,
-            monaco.KeyCode.Ctrl,
-            monaco.KeyCode.Alt,
-            monaco.KeyCode.Meta,
-            monaco.KeyCode.CapsLock,
-            monaco.KeyCode.Escape,
-            monaco.KeyCode.F1,
-            monaco.KeyCode.F2,
-            monaco.KeyCode.F3,
-            monaco.KeyCode.F4,
-            monaco.KeyCode.F5,
-            monaco.KeyCode.F6,
-            monaco.KeyCode.F7,
-            monaco.KeyCode.F8,
-            monaco.KeyCode.F9,
-            monaco.KeyCode.F10,
-            monaco.KeyCode.F11,
-            monaco.KeyCode.F12,
-          ];
-
-          if (!ignoreKeys.includes(e.keyCode)) {
+          if (!IGNORED_PLAYBACK_INPUT_KEYS.has(e.browserEvent.key)) {
             actorRef.send({ type: "USER_INTERACTION" });
           }
         }),

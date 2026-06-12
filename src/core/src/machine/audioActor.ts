@@ -1,5 +1,7 @@
 import { fromCallback, type ActorRefFrom } from "xstate";
 
+const AUDIO_SYNC_DRIFT_THRESHOLD_SECONDS = 0.5;
+
 // ============================================================================
 // Audio Actor Types
 // ============================================================================
@@ -292,8 +294,15 @@ export const audioPlaybackActor = fromCallback<
         break;
 
       case "SYNC": {
-        // Let the media element own playback time. Periodic timer-driven
-        // currentTime nudges can send the audio slightly backward at higher speeds.
+        // Let the media element own small playback drift. Periodic timer-driven
+        // nudges can send audio backward at higher speeds, but larger drift
+        // still needs correction after tab throttling or seek races.
+        const targetTime = event.timeMs / 1000;
+
+        if (Math.abs(audio.currentTime - targetTime) >= AUDIO_SYNC_DRIFT_THRESHOLD_SECONDS) {
+          audio.currentTime = targetTime;
+        }
+
         break;
       }
     }
