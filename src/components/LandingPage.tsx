@@ -5,14 +5,14 @@ import { useState, useEffect, useRef } from "react";
 
 const LandingPage = () => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.46875);
+  const [scale, setScale] = useState(0.4513888888888889);
 
   useEffect(() => {
     if (!containerRef.current) return;
     const resizeObserver = new ResizeObserver((entries) => {
       for (let entry of entries) {
         const width = entry.contentRect.width;
-        setScale(width > 0 ? width / 1280 : 0.46875);
+        setScale(width > 0 ? width / 1440 : 0.4513888888888889);
       }
     });
     resizeObserver.observe(containerRef.current);
@@ -140,8 +140,8 @@ const LandingPage = () => {
                       src="/code?url=/introduction.ne&readOnly=true&deferRuntimeAutostart=true"
                       className="absolute top-0 left-0 border-0 origin-top-left"
                       style={{
-                        width: "1280px",
-                        height: "720px",
+                        width: "1440px",
+                        height: "812px",
                         transform: `scale(${scale})`,
                       }}
                       title="Next Editor Live Demo"
