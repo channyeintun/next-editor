@@ -35,6 +35,7 @@ export interface SlideEvent {
  * Preview panel state (for code preview iframe)
  */
 export type PreviewSize = "small" | "medium" | "large" | { width: number; height: number };
+export type PreviewPanelMode = "floating" | "docked";
 
 /**
  * Iframe interaction event types
@@ -92,6 +93,8 @@ export interface IframeInteractionEvent {
 
 export interface PreviewState {
   size: PreviewSize;
+  isOpen?: boolean;
+  mode?: PreviewPanelMode;
   content?: string;
   scrollTop?: number;
   scrollLeft?: number;
@@ -103,6 +106,9 @@ export interface PreviewState {
 export interface PreviewEvent {
   type:
     | "preview_open"
+    | "preview_close"
+    | "preview_float"
+    | "preview_unfloat"
     | "preview_minimize"
     | "preview_maximize"
     | "preview_scroll"
@@ -111,6 +117,8 @@ export interface PreviewEvent {
     | "preview_resize";
   timestamp: number;
   size?: PreviewSize;
+  isOpen?: boolean;
+  mode?: PreviewPanelMode;
   content?: string;
   scrollTop?: number;
   scrollLeft?: number;

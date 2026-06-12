@@ -50,6 +50,7 @@ export type {
   SlidePreviewState,
   SlideEvent,
   PreviewSize,
+  PreviewPanelMode,
   PreviewState,
   PreviewEvent,
 } from "./slides";

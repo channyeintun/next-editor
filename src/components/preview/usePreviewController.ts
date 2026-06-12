@@ -10,14 +10,23 @@ import {
 } from "react";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
 import { useNextEditorDomainAdapters } from "../../contexts/NextEditorDomainAdaptersContext";
+import { clampPreviewDockWidth, usePreviewPanel } from "../../contexts/PreviewPanelContext";
 import {
   useWorkspaceLessonType,
   useWorkspacePreviewVersion,
   useWorkspaceSaveVersion,
 } from "../../hooks/useWorkspace";
-import { useWebContainerRuntimeMetadata } from "../../hooks/useWebContainerRuntime";
+import {
+  useWebContainerRuntimeActions,
+  useWebContainerRuntimeMetadata,
+} from "../../hooks/useWebContainerRuntime";
 import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRuntimeContext";
-import type { IframeInteractionEvent, PreviewEvent, PreviewSize } from "../../types/slides";
+import type {
+  IframeInteractionEvent,
+  PreviewEvent,
+  PreviewPanelMode,
+  PreviewSize,
+} from "../../types/slides";
 import { useCompiledStaticWorkspacePreview } from "./useCompiledStaticWorkspacePreview";
 import {
   createReplayableRuntimePreview,
@@ -241,22 +250,26 @@ export interface PreviewController {
   containerRef: RefObject<HTMLDivElement | null>;
   iframeRef: RefObject<HTMLIFrameElement | null>;
   size: PreviewSize;
+  isOpen: boolean;
+  panelMode: PreviewPanelMode;
+  dockWidth: number;
   isRefreshing: boolean;
   isResizing: boolean;
   isTransitioning: boolean;
   disablePointerEvents: boolean;
   rendererKind: "runtime" | "static";
-  handleClick: () => void;
-  handleMinimize: () => void;
-  handleMaximize: () => void;
+  handleClose: () => void;
+  handleFloat: () => void;
+  handleDock: () => void;
   handleRefresh: () => void;
   handleResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
+  handleDockResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
   handleTransitionStart: () => void;
   handleTransitionComplete: () => void;
 }
 
 export function usePreviewController(): PreviewController {
-  const [size, setSize] = useState<PreviewSize>("small");
+  const [size, setSize] = useState<PreviewSize>("medium");
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -283,6 +296,17 @@ export function usePreviewController(): PreviewController {
 
   const { editorRef, handlePreviewEvent } = useNextEditorActions();
   const { preview } = useNextEditorDomainAdapters();
+  const {
+    isOpen,
+    mode: panelMode,
+    dockWidth,
+    closePreview,
+    floatPreview,
+    dockPreview,
+    setDockWidth,
+    applyPreviewPanelState,
+  } = usePreviewPanel();
+  const { startRuntime } = useWebContainerRuntimeActions();
   const lessonType = useWorkspaceLessonType();
   const previewVersion = useWorkspacePreviewVersion();
   const saveVersion = useWorkspaceSaveVersion();
@@ -351,9 +375,15 @@ export function usePreviewController(): PreviewController {
 
   const sizeRef = useRef<PreviewSize>(size);
   sizeRef.current = size;
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+  const panelModeRef = useRef<PreviewPanelMode>(panelMode);
+  panelModeRef.current = panelMode;
   const previousSaveVersionRef = useRef<number | null>(null);
   const previousIsRecordingRef = useRef(isRecording);
   const lastRefreshKeyRef = useRef<number | undefined>(undefined);
+  const previousPanelStateRef = useRef({ isOpen, panelMode });
+  const hasRequestedRuntimeStartForOpenRef = useRef(false);
 
   const captureRuntimePreviewSnapshot = useCallback(() => {
     if (!effectiveRuntimePreviewUrl) {
@@ -389,6 +419,8 @@ export function usePreviewController(): PreviewController {
       eventType: PreviewEvent["type"],
       options?: {
         newSize?: PreviewSize;
+        isOpen?: boolean;
+        mode?: PreviewPanelMode;
         content?: string;
         scrollTop?: number;
         scrollLeft?: number;
@@ -400,6 +432,8 @@ export function usePreviewController(): PreviewController {
           type: eventType,
           timestamp: performance.now(),
           size: options?.newSize ?? sizeRef.current,
+          isOpen: options?.isOpen ?? isOpenRef.current,
+          mode: options?.mode ?? panelModeRef.current,
           content: options?.content,
           scrollTop: options?.scrollTop,
           scrollLeft: options?.scrollLeft,
@@ -639,12 +673,15 @@ export function usePreviewController(): PreviewController {
     lastContentRef,
     scrollPositionRef,
     sizeRef,
+    isOpenRef,
+    modeRef: panelModeRef,
     effectiveRuntimePreviewUrl,
     staticWorkspacePreview,
     forceRefreshPreview,
     updateIframeContent,
     iframeRef,
     setSize,
+    applyPreviewPanelState,
     lastRefreshKeyRef,
     isRecordingRef,
     isUserScrollingRef,
@@ -683,6 +720,10 @@ export function usePreviewController(): PreviewController {
 
   useEffect(() => {
     if (isPlaybackPreviewActive) {
+      return;
+    }
+
+    if (!isOpen) {
       return;
     }
 
@@ -725,10 +766,12 @@ export function usePreviewController(): PreviewController {
     }
   }, [
     editorRef,
+    isOpen,
     isPlaybackPreviewActive,
     isStaticWorkspacePreview,
     isRuntimeManagedPreview,
     lessonType,
+    panelMode,
     previewVersion,
     runtimePreviewPlaceholder,
     runtimePreviewUrl,
@@ -850,25 +893,79 @@ export function usePreviewController(): PreviewController {
     updateIframeContent,
   ]);
 
-  const handleClick = useCallback(() => {
-    if (size !== "small") {
+  useEffect(() => {
+    const previousPanelState = previousPanelStateRef.current;
+    previousPanelStateRef.current = { isOpen, panelMode };
+
+    if (previousPanelState.isOpen !== isOpen) {
+      emitPreviewEvent(isOpen ? "preview_open" : "preview_close", {
+        isOpen,
+        mode: panelMode,
+      });
       return;
     }
 
-    setSize("medium");
-    emitPreviewEvent("preview_open", { newSize: "medium" });
-  }, [emitPreviewEvent, size]);
+    if (isOpen && previousPanelState.panelMode !== panelMode) {
+      emitPreviewEvent(panelMode === "floating" ? "preview_float" : "preview_unfloat", {
+        isOpen,
+        mode: panelMode,
+      });
+    }
+  }, [emitPreviewEvent, isOpen, panelMode]);
 
-  const handleMinimize = useCallback(() => {
-    setSize("small");
-    emitPreviewEvent("preview_minimize", { newSize: "small" });
-  }, [emitPreviewEvent]);
+  useEffect(() => {
+    if (!isOpen) {
+      hasRequestedRuntimeStartForOpenRef.current = false;
+      return;
+    }
 
-  const handleMaximize = useCallback(() => {
-    const newSize = size === "large" ? "medium" : "large";
-    setSize(newSize);
-    emitPreviewEvent("preview_maximize", { newSize });
-  }, [emitPreviewEvent, size]);
+    if (
+      lessonType !== "node.js" ||
+      isPlaybackPreviewActive ||
+      !isRuntimeSupported ||
+      !runnerConfig.enabled ||
+      runtimePreviewUrl
+    ) {
+      return;
+    }
+
+    const isRuntimeBusy =
+      runtimeStatus === "booting" ||
+      runtimeStatus === "mounting" ||
+      runtimeStatus === "installing" ||
+      runtimeStatus === "starting";
+
+    if (isRuntimeBusy || hasRequestedRuntimeStartForOpenRef.current) {
+      return;
+    }
+
+    hasRequestedRuntimeStartForOpenRef.current = true;
+    void startRuntime();
+  }, [
+    isOpen,
+    isPlaybackPreviewActive,
+    isRuntimeSupported,
+    lessonType,
+    runnerConfig.enabled,
+    runtimePreviewUrl,
+    runtimeStatus,
+    startRuntime,
+  ]);
+
+  const handleClose = useCallback(() => {
+    closePreview();
+  }, [closePreview]);
+
+  const handleFloat = useCallback(() => {
+    setSize((currentSize) =>
+      currentSize === "small" || currentSize === "large" ? "medium" : currentSize,
+    );
+    floatPreview();
+  }, [floatPreview]);
+
+  const handleDock = useCallback(() => {
+    dockPreview();
+  }, [dockPreview]);
 
   const handleRefresh = useCallback(() => {
     forceRefreshPreview({ emitEvent: true, showSpinner: true });
@@ -999,6 +1096,64 @@ export function usePreviewController(): PreviewController {
     [emitPreviewEvent],
   );
 
+  const handleDockResizeStart = useCallback(
+    (event: ReactMouseEvent | ReactTouchEvent) => {
+      if ("button" in event && event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setIsResizing(true);
+
+      const getCoords = (
+        currentEvent: MouseEvent | TouchEvent | ReactMouseEvent | ReactTouchEvent,
+      ) => {
+        if ("touches" in currentEvent) {
+          return {
+            x: currentEvent.touches[0].clientX,
+            y: currentEvent.touches[0].clientY,
+          };
+        }
+
+        return { x: currentEvent.clientX, y: currentEvent.clientY };
+      };
+
+      const { x: startX } = getCoords(event);
+      const rect = containerRef.current?.getBoundingClientRect();
+
+      if (!rect) {
+        setIsResizing(false);
+        return;
+      }
+
+      const startWidth = rect.width;
+
+      const onMove = (moveEvent: MouseEvent | TouchEvent) => {
+        if (moveEvent.cancelable) {
+          moveEvent.preventDefault();
+        }
+
+        const { x: currentX } = getCoords(moveEvent);
+        setDockWidth(clampPreviewDockWidth(startWidth + startX - currentX, window.innerWidth));
+      };
+
+      const onEnd = () => {
+        setIsResizing(false);
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onEnd);
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("touchend", onEnd);
+      };
+
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onEnd);
+      window.addEventListener("touchmove", onMove, { passive: false });
+      window.addEventListener("touchend", onEnd);
+    },
+    [setDockWidth],
+  );
+
   const handleTransitionStart = useCallback(() => {
     setIsTransitioning(true);
   }, []);
@@ -1011,16 +1166,20 @@ export function usePreviewController(): PreviewController {
     containerRef,
     iframeRef,
     size,
+    isOpen,
+    panelMode,
+    dockWidth,
     isRefreshing,
     isResizing,
     isTransitioning,
     disablePointerEvents: isTransitioning || isResizing,
     rendererKind: lessonType === "node.js" ? "runtime" : "static",
-    handleClick,
-    handleMinimize,
-    handleMaximize,
+    handleClose,
+    handleFloat,
+    handleDock,
     handleRefresh,
     handleResizeStart,
+    handleDockResizeStart,
     handleTransitionStart,
     handleTransitionComplete,
   };

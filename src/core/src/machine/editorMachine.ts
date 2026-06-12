@@ -596,6 +596,8 @@ export const editorMachine = setup({
           type: "preview_open",
           timestamp: 0,
           size: initialPreviewState.size,
+          isOpen: initialPreviewState.isOpen,
+          mode: initialPreviewState.mode,
           content: initialPreviewState.content,
           scrollTop: initialPreviewState.scrollTop,
           scrollLeft: initialPreviewState.scrollLeft,
@@ -1001,6 +1003,8 @@ export const editorMachine = setup({
         if (
           !currentState ||
           !arePreviewSizesEqual(nextState.size, currentState.size) ||
+          nextState.isOpen !== currentState.isOpen ||
+          nextState.mode !== currentState.mode ||
           nextState.content !== currentState.content ||
           Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) > 1 ||
           Math.abs((nextState.scrollLeft || 0) - (currentState.scrollLeft || 0)) > 1

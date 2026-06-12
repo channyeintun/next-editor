@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { RotateCw } from "lucide-react";
+import { PanelRight, RotateCw } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
+import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
@@ -132,6 +133,34 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
         </button>
       ) : null}
     </div>
+  );
+});
+
+const PreviewHeaderButton = memo(function PreviewHeaderButton() {
+  const { isOpen, openPreview, closePreview } = usePreviewPanel();
+
+  return (
+    <button
+      type="button"
+      aria-label={isOpen ? "Close preview" : "Open preview"}
+      aria-pressed={isOpen}
+      title={isOpen ? "Close preview" : "Open preview"}
+      onClick={() => {
+        if (isOpen) {
+          closePreview();
+          return;
+        }
+
+        openPreview();
+      }}
+      className={`inline-flex items-center justify-center rounded-lg border transition-colors size-8 ${
+        isOpen
+          ? "border-[#5da4ff] bg-[#273449] text-white shadow-[0_0_0_1px_rgba(93,164,255,0.22)]"
+          : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600 hover:text-white"
+      }`}
+    >
+      <PanelRight size={16} />
+    </button>
   );
 });
 
@@ -451,10 +480,13 @@ const EditorHeader = memo(function EditorHeader({ showImportExport }: EditorHead
             <ImportButton />
             <ExportButton />
             <WorkspaceSettingsButton />
-            <div className="h-4 w-px bg-slate-700 mx-1" />
-            <SlidesButton />
           </>
         )}
+        <div className="h-4 w-px bg-slate-700 mx-1" />
+        <div className="flex items-center gap-2">
+          <PreviewHeaderButton />
+          {showImportExport ? <SlidesButton /> : null}
+        </div>
       </div>
     </div>
   );

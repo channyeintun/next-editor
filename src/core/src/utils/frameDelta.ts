@@ -234,6 +234,8 @@ function previewStateChanged(
   if (!prev || !next) return true;
   return (
     !arePreviewSizesEqual(prev.size, next.size) ||
+    prev.isOpen !== next.isOpen ||
+    prev.mode !== next.mode ||
     prev.content !== next.content ||
     prev.scrollTop !== next.scrollTop ||
     prev.scrollLeft !== next.scrollLeft

@@ -153,6 +153,9 @@ function mergePreviewEventState(
   previewEvent: PreviewEvent,
   previousState?: PreviewState,
 ): { appliedState: PreviewState; retainedState: PreviewState } {
+  const isCloseEvent = previewEvent.type === "preview_close";
+  const nextIsOpen = previewEvent.isOpen ?? (isCloseEvent ? false : previousState?.isOpen);
+  const nextMode = previewEvent.mode ?? previousState?.mode;
   const appliedState: PreviewState = {
     size: previewEvent.size ?? previousState?.size ?? "small",
     content: previewEvent.content ?? previousState?.content,
@@ -162,6 +165,14 @@ function mergePreviewEventState(
       previewEvent.type === "preview_refresh" ? previewEvent.timestamp : previousState?.refreshKey,
     currentInteraction: previewEvent.interaction,
   };
+
+  if (nextIsOpen !== undefined) {
+    appliedState.isOpen = nextIsOpen;
+  }
+
+  if (nextMode !== undefined) {
+    appliedState.mode = nextMode;
+  }
 
   return {
     appliedState,

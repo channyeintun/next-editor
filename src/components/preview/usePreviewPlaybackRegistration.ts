@@ -1,6 +1,11 @@
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { PreviewDomainAdapter } from "../../contexts/NextEditorDomainAdaptersContext";
-import type { IframeInteractionEvent, PreviewSize, PreviewState } from "../../types/slides";
+import type {
+  IframeInteractionEvent,
+  PreviewPanelMode,
+  PreviewSize,
+  PreviewState,
+} from "../../types/slides";
 import { arePreviewSizesEqual } from "../../utils/equality";
 import { getElementByXPath, type PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
@@ -21,6 +26,8 @@ interface UsePreviewPlaybackRegistrationOptions {
   lastContentRef: RefObject<string>;
   scrollPositionRef: RefObject<PreviewScrollPosition>;
   sizeRef: RefObject<PreviewSize>;
+  isOpenRef: RefObject<boolean>;
+  modeRef: RefObject<PreviewPanelMode>;
   effectiveRuntimePreviewUrl: string | null;
   staticWorkspacePreview: string;
   forceRefreshPreview: (options?: PreviewRefreshOptions) => void;
@@ -30,6 +37,7 @@ interface UsePreviewPlaybackRegistrationOptions {
   ) => void;
   iframeRef: RefObject<HTMLIFrameElement | null>;
   setSize: Dispatch<SetStateAction<PreviewSize>>;
+  applyPreviewPanelState: (state: { isOpen?: boolean; mode?: PreviewPanelMode }) => void;
   lastRefreshKeyRef: RefObject<number | undefined>;
   isRecordingRef: RefObject<boolean>;
   isUserScrollingRef: RefObject<boolean>;
@@ -68,12 +76,15 @@ export function usePreviewPlaybackRegistration({
   lastContentRef,
   scrollPositionRef,
   sizeRef,
+  isOpenRef,
+  modeRef,
   effectiveRuntimePreviewUrl,
   staticWorkspacePreview,
   forceRefreshPreview,
   updateIframeContent,
   iframeRef,
   setSize,
+  applyPreviewPanelState,
   lastRefreshKeyRef,
   isRecordingRef,
   isUserScrollingRef,
@@ -83,7 +94,11 @@ export function usePreviewPlaybackRegistration({
   const targetScrollInteractionRef = useRef<IframeInteractionEvent | null>(null);
 
   useEffect(() => {
-    previewAdapter.setSnapshotGetter((): PreviewState => {
+    previewAdapter.setSnapshotGetter((): PreviewState | null => {
+      if (!isOpenRef.current) {
+        return null;
+      }
+
       const interaction = pendingInteractionRef.current;
       pendingInteractionRef.current = null;
       const content = isRuntimePreviewActive
@@ -92,6 +107,8 @@ export function usePreviewPlaybackRegistration({
 
       return {
         size: sizeRef.current,
+        isOpen: isOpenRef.current,
+        mode: modeRef.current,
         content,
         scrollTop: scrollPositionRef.current.scrollTop,
         scrollLeft: scrollPositionRef.current.scrollLeft,
@@ -105,8 +122,10 @@ export function usePreviewPlaybackRegistration({
   }, [
     captureRuntimePreviewSnapshot,
     isRuntimePreviewActive,
+    isOpenRef,
     lastContentRef,
     lastRuntimeSnapshotRef,
+    modeRef,
     pendingInteractionRef,
     previewAdapter,
     scrollPositionRef,
@@ -127,6 +146,11 @@ export function usePreviewPlaybackRegistration({
       if (!arePreviewSizesEqual(sizeToApply, sizeRef.current)) {
         setSize(sizeToApply);
       }
+
+      applyPreviewPanelState({
+        isOpen: previewState.isOpen,
+        mode: previewState.mode,
+      });
 
       const didRefreshKeyChange =
         previewState.refreshKey !== undefined &&
@@ -313,6 +337,7 @@ export function usePreviewPlaybackRegistration({
       previewAdapter.setSnapshotApplier((_previewState) => undefined);
     };
   }, [
+    applyPreviewPanelState,
     effectiveRuntimePreviewUrl,
     forceRefreshPreview,
     iframeRef,

@@ -8,13 +8,13 @@ import { NextEditorDomainAdaptersProvider } from "../contexts/NextEditorDomainAd
 import { SlidesProvider } from "../contexts/SlidesContext";
 import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
+import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useWorkspaceLessonType } from "../hooks/useWorkspace";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import CursorComponent from "./Cursor.tsx";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
-const Preview = lazy(() => import("./Preview"));
 const TerminalPanel = lazy(() => import("./TerminalPanel"));
 
 function EditorSurfaceFallback() {
@@ -43,9 +43,6 @@ export const EditorLayout = memo(function EditorLayout() {
           <CodeEditor showImportExport={!readOnly} />
         </Suspense>
         <CursorComponent />
-        <Suspense fallback={null}>
-          <Preview />
-        </Suspense>
         {lessonType === "node.js" ? (
           <Suspense fallback={null}>
             <TerminalPanel />
@@ -70,7 +67,9 @@ export default function Editor() {
         <NextEditorDomainAdaptersProvider>
           <NextEditorProvider>
             <SlidesProvider>
-              <EditorLayout />
+              <PreviewPanelProvider>
+                <EditorLayout />
+              </PreviewPanelProvider>
             </SlidesProvider>
           </NextEditorProvider>
         </NextEditorDomainAdaptersProvider>

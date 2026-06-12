@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Play, Plus, Settings2, SquareTerminal, X } from "lucide-react";
 import { useNextEditorDomainAdapters } from "../contexts/NextEditorDomainAdaptersContext";
+import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import XtermTerminal from "./XtermTerminal";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
@@ -172,6 +173,7 @@ const TerminalPanel = memo(function TerminalPanel() {
     useState<RuntimeRecordingSnapshot | null>(null);
   const [consoleLines, setConsoleLines] = useState<string[]>(DEFAULT_CONSOLE_LINES);
   const [terminalScrollLines, setTerminalScrollLines] = useState<RuntimeTerminalScrollLines>({});
+  const { dockWidth: previewDockWidth, isDocked: isPreviewDocked } = usePreviewPanel();
   const { handleRuntimeEvent } = useNextEditorActions();
   const { runtimePanel } = useNextEditorDomainAdapters();
   const {
@@ -548,7 +550,10 @@ const TerminalPanel = memo(function TerminalPanel() {
 
   return (
     <>
-      <div className="fixed bottom-12 left-4 right-4 z-40 flex flex-col overflow-hidden rounded-xl border border-slate-900 bg-[#1d1f29] shadow-[0_18px_40px_rgba(2,6,23,0.42)] md:left-76">
+      <div
+        className="fixed bottom-12 left-4 z-40 flex flex-col overflow-hidden rounded-xl border border-slate-900 bg-[#1d1f29] shadow-[0_18px_40px_rgba(2,6,23,0.42)] md:left-76"
+        style={{ right: isPreviewDocked ? previewDockWidth + 16 : 16 }}
+      >
         <div className="flex items-center border-b border-slate-800 bg-[#232633] px-2">
           {DOCK_TABS.map((tab) => {
             const isActive = tab.id === displayActiveTab;

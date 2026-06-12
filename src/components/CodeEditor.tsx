@@ -1,4 +1,4 @@
-import { memo, useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
+import { lazy, memo, Suspense, useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
 import Editor, { type OnMount, type BeforeMount, type Monaco } from "@monaco-editor/react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
@@ -16,6 +16,8 @@ import {
   toPlaybackModelPath,
   workspacePathFromMonacoModelUri,
 } from "./editorModels";
+
+const Preview = lazy(() => import("./Preview"));
 
 interface CodeEditorProps {
   language?: string;
@@ -538,74 +540,81 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <FileSidebar />
         {/* Monaco Editor */}
-        <div className={"editor-paint-layer min-w-0 flex-1" + (isPlaying ? " playback-mode" : "")}>
-          <Editor
-            height="100%"
-            path={editorModelPath}
-            language={selectedLanguage}
-            theme={theme}
-            defaultValue={usesPlaybackModel ? activeFile.content : undefined}
-            value={usesPlaybackModel ? undefined : activeFile.content}
-            saveViewState={!usesPlaybackModel}
-            onMount={handleEditorDidMount}
-            beforeMount={handleEditorBeforeMount}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: "on",
-              roundedSelection: false,
-              scrollBeyondLastLine: true,
-              readOnly: false, // Keep editor writable to allow cursor blinking
-              cursorStyle: "line",
-              cursorBlinking: isPlaying ? "solid" : "smooth",
-              renderValidationDecorations: "off",
-              automaticLayout: true,
-              // Disable code suggestions and IntelliSense
-              quickSuggestions: false,
-              suggestOnTriggerCharacters: false,
-              acceptSuggestionOnEnter: "off",
-              tabCompletion: "off",
-              wordBasedSuggestions: "currentDocument",
-              parameterHints: { enabled: false },
-              fontWeight: "normal",
-              hover: { enabled: false },
-              contextmenu: false,
-              // Disable other distracting features
-              folding: false,
-              foldingHighlight: false,
-              unfoldOnClickAfterEndOfLine: false,
-              showUnused: false,
-              occurrencesHighlight: "off",
-              selectionHighlight: false,
-              renderLineHighlight: "none",
-              fontFamily: "Source Code Pro",
-              fontLigatures: false,
-              wrappingIndent: "same",
-              dragAndDrop: false,
-              hideCursorInOverviewRuler: true,
-              overviewRulerBorder: false,
-              lineNumbersMinChars: 3,
-              glyphMargin: false,
-              lineDecorationsWidth: "1ch",
-              colorDecorators: false,
-              guides: {
-                indentation: false,
-              },
-              renderWhitespace: "selection",
-              matchBrackets: "never",
-              links: false,
-              padding: { top: 12 },
-              scrollbar: {
-                useShadows: false,
-                verticalScrollbarSize: 8,
-                horizontalScrollbarSize: 8,
-                horizontal: "hidden",
-              },
-              unicodeHighlight: {
-                ambiguousCharacters: false,
-              },
-            }}
-          />
+        <div className="flex min-w-0 flex-1 gap-2 overflow-hidden bg-[#11141c]">
+          <div
+            className={"editor-paint-layer min-w-0 flex-1" + (isPlaying ? " playback-mode" : "")}
+          >
+            <Editor
+              height="100%"
+              path={editorModelPath}
+              language={selectedLanguage}
+              theme={theme}
+              defaultValue={usesPlaybackModel ? activeFile.content : undefined}
+              value={usesPlaybackModel ? undefined : activeFile.content}
+              saveViewState={!usesPlaybackModel}
+              onMount={handleEditorDidMount}
+              beforeMount={handleEditorBeforeMount}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: "on",
+                roundedSelection: false,
+                scrollBeyondLastLine: true,
+                readOnly: false, // Keep editor writable to allow cursor blinking
+                cursorStyle: "line",
+                cursorBlinking: isPlaying ? "solid" : "smooth",
+                renderValidationDecorations: "off",
+                automaticLayout: true,
+                // Disable code suggestions and IntelliSense
+                quickSuggestions: false,
+                suggestOnTriggerCharacters: false,
+                acceptSuggestionOnEnter: "off",
+                tabCompletion: "off",
+                wordBasedSuggestions: "currentDocument",
+                parameterHints: { enabled: false },
+                fontWeight: "normal",
+                hover: { enabled: false },
+                contextmenu: false,
+                // Disable other distracting features
+                folding: false,
+                foldingHighlight: false,
+                unfoldOnClickAfterEndOfLine: false,
+                showUnused: false,
+                occurrencesHighlight: "off",
+                selectionHighlight: false,
+                renderLineHighlight: "none",
+                fontFamily: "Source Code Pro",
+                fontLigatures: false,
+                wrappingIndent: "same",
+                dragAndDrop: false,
+                hideCursorInOverviewRuler: true,
+                overviewRulerBorder: false,
+                lineNumbersMinChars: 3,
+                glyphMargin: false,
+                lineDecorationsWidth: "1ch",
+                colorDecorators: false,
+                guides: {
+                  indentation: false,
+                },
+                renderWhitespace: "selection",
+                matchBrackets: "never",
+                links: false,
+                padding: { top: 12 },
+                scrollbar: {
+                  useShadows: false,
+                  verticalScrollbarSize: 8,
+                  horizontalScrollbarSize: 8,
+                  horizontal: "hidden",
+                },
+                unicodeHighlight: {
+                  ambiguousCharacters: false,
+                },
+              }}
+            />
+          </div>
+          <Suspense fallback={null}>
+            <Preview />
+          </Suspense>
         </div>
       </div>
     </div>

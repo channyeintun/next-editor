@@ -1,5 +1,4 @@
 import { memo } from "react";
-import { createPortal } from "react-dom";
 import { PreviewChrome } from "./preview/PreviewChrome";
 import { RuntimePreviewRenderer } from "./preview/RuntimePreviewRenderer";
 import { StaticPreviewRenderer } from "./preview/StaticPreviewRenderer";
@@ -8,7 +7,7 @@ import { usePreviewController } from "./preview/usePreviewController";
 const Preview = memo(function Preview() {
   const controller = usePreviewController();
 
-  if (typeof document === "undefined") {
+  if (!controller.isOpen) {
     return null;
   }
 
@@ -25,21 +24,25 @@ const Preview = memo(function Preview() {
       />
     );
 
-  return createPortal(
+  const previewChrome = (
     <PreviewChrome
       containerRef={controller.containerRef}
       size={controller.size}
-      onClick={controller.handleClick}
-      onMinimize={controller.handleMinimize}
-      onMaximize={controller.handleMaximize}
+      mode={controller.panelMode}
+      dockWidth={controller.dockWidth}
+      onClose={controller.handleClose}
+      onFloat={controller.handleFloat}
+      onDock={controller.handleDock}
       onResizeStart={controller.handleResizeStart}
+      onDockResizeStart={controller.handleDockResizeStart}
       onTransitionStart={controller.handleTransitionStart}
       onTransitionComplete={controller.handleTransitionComplete}
     >
       {previewRenderer}
-    </PreviewChrome>,
-    document.body,
+    </PreviewChrome>
   );
+
+  return previewChrome;
 });
 
 export default Preview;
