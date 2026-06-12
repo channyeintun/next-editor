@@ -49,6 +49,7 @@ export default function SlidesButton() {
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={() => {
           if (showPresentationToggle) {
             handlePresentationToggle();
@@ -59,13 +60,13 @@ export default function SlidesButton() {
         }}
         disabled={showPresentationToggle && !hasSlides}
         aria-pressed={showPresentationToggle ? isPresentationVisible : showManager}
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 border shadow-sm ${
+        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
           showPresentationToggle
             ? isPresentationVisible
-              ? "bg-indigo-600 border-indigo-500 text-white shadow-md"
+              ? "border-[#5da4ff] bg-[#273449] text-white"
               : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600"
             : showManager
-              ? "bg-indigo-600 border-indigo-500 text-white shadow-md"
+              ? "border-[#5da4ff] bg-[#273449] text-white"
               : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600"
         } ${showPresentationToggle && !hasSlides ? "cursor-not-allowed opacity-50" : ""}`}
         title={
@@ -82,7 +83,9 @@ export default function SlidesButton() {
         {hasSlides && (
           <span
             className={`flex items-center justify-center min-w-4.5 h-4.5 px-1 rounded-md text-[10px] font-black ${
-              showManager ? "bg-white text-indigo-600" : "bg-slate-700 text-slate-300"
+              showManager || isPresentationVisible
+                ? "bg-[#5da4ff] text-slate-950"
+                : "bg-slate-700 text-slate-300"
             }`}
           >
             {slides.length}
@@ -101,8 +104,8 @@ export default function SlidesButton() {
       {showManager && !showPresentationToggle && (
         <>
           {/* Backdrop for mobile/click away */}
-          <div className="fixed inset-0 z-49 bg-black/5" onClick={() => setShowManager(false)} />
-          <div className="fixed inset-x-4 top-20 z-50 sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-3 sm:w-auto animate-in fade-in slide-in-from-top-2 duration-300 ease-out origin-top sm:origin-top-right">
+          <div className="fixed inset-0 z-103 bg-black/5" onClick={() => setShowManager(false)} />
+          <div className="fixed inset-x-4 top-20 z-104 animate-in fade-in slide-in-from-top-2 duration-300 ease-out origin-top sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-3 sm:w-auto sm:origin-top-right">
             <SlidesManager
               slides={slides}
               onSlidesChange={setSlides}

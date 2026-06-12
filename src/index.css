@@ -107,3 +107,26 @@ body {
   vertical-align: baseline;
   margin-left: 1px;
 }
+
+.editor-scrollbar {
+  scrollbar-color: rgba(71, 85, 105, 0.7) transparent;
+  scrollbar-width: thin;
+}
+
+.editor-scrollbar::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.editor-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.editor-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.7);
+  border-radius: 999px;
+}
+
+.editor-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.85);
+}
