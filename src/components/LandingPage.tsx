@@ -24,7 +24,7 @@ const LandingPage = () => {
       <Navbar />
 
       {/* Hero Section */}
-      <main className="relative pt-32 pb-20 px-6 max-w-7xl mx-auto">
+      <main className="relative pt-8 pb-20 px-6 max-w-7xl mx-auto sm:pt-10">
         {/* Background Colorful Blobs */}
         <div className="absolute top-0 left-0 -z-10 overflow-hidden pointer-events-none size-full">
           <div className="absolute top-[-10%] right-[-5%] size-87.5 md:size-175 bg-[radial-gradient(circle,hsla(248,100%,67%,0.3)_0%,hsla(248,100%,67%,0)_70%)] rounded-full will-change-transform" />
