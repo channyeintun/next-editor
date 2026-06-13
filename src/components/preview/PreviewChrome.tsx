@@ -306,7 +306,7 @@ export function PreviewChrome({
         onOpenConsole={onOpenConsole}
       />
 
-      <div className="relative min-h-0 flex-1 bg-white">
+      <div className="relative min-h-0 flex-1 bg-white" data-cursor-replay-target="preview-content">
         {children}
         {mode === "floating" ? <PreviewResizeHandle onResizeStart={onResizeStart} /> : null}
       </div>
@@ -326,6 +326,7 @@ export function PreviewChrome({
       ref={containerRef}
       className={rootClassName}
       style={rootStyle}
+      data-cursor-replay-target="preview"
       onTransitionStart={(event) => {
         if (event.target === event.currentTarget) {
           onTransitionStart();

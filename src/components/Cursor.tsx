@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { selectIsPlaying, selectRecording } from "../core/src/useNextEditor";
+import { resolveCursorViewportPosition } from "../core/src/utils/cursorCoordinates";
 import { getCursorPositionAtTime, getCursorReplaySamples } from "../core/src/utils/cursorReplay";
 import IconCursor from "./icon/IconCursor";
 import {
@@ -66,11 +67,18 @@ const CursorComponent: React.FC<{
         cursorSampleIndex = result.index;
       }
 
-      if (!result?.cursor.visible) {
+      const cursorPosition = result ? resolveCursorViewportPosition(result.cursor) : null;
+
+      if (!cursorPosition) {
         element.style.opacity = "0";
       } else {
+        const offsetParent = hasParent ? element.offsetParent : null;
+        const offsetRect = offsetParent?.getBoundingClientRect();
+        const x = offsetRect ? cursorPosition.x - offsetRect.left : cursorPosition.x;
+        const y = offsetRect ? cursorPosition.y - offsetRect.top : cursorPosition.y;
+
         element.style.opacity = "1";
-        element.style.transform = `translate3d(${result.cursor.x}px, ${result.cursor.y}px, 0)`;
+        element.style.transform = `translate3d(${x}px, ${y}px, 0)`;
       }
 
       animationFrameId = requestAnimationFrame(updateCursor);
@@ -82,7 +90,7 @@ const CursorComponent: React.FC<{
       cancelAnimationFrame(animationFrameId);
       element.style.opacity = "0";
     };
-  }, [actorRef, cursorSamples, isPlaying]);
+  }, [actorRef, cursorSamples, hasParent, isPlaying]);
 
   if (!isPlaying || isCursorSuppressed || cursorSamples.length === 0) {
     return null;

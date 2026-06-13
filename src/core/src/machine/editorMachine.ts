@@ -62,6 +62,10 @@ import {
   appendWorkspaceRecordingEvent,
 } from "./recordingSession";
 import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../../../utils/iframeInteractionCapture";
+import {
+  areMouseCursorPositionsEqual,
+  createCursorPositionFromClientPoint,
+} from "../utils/cursorCoordinates";
 
 // ============================================================================
 // Helper Functions
@@ -165,7 +169,7 @@ const applyFrameState = (
 const createFrame = (
   editor: monaco.editor.IStandaloneCodeEditor,
   timestamp: number,
-  mouseCursor: { x: number; y: number; visible: boolean },
+  mouseCursor: MouseCursorPosition,
   getSlideState?: EditorMachineInput["getSlideState"],
   getPreviewState?: EditorMachineInput["getPreviewState"],
 ): EditorFrame => {
@@ -261,9 +265,7 @@ const didCursorPositionChange = (
   previous: MouseCursorPosition | undefined,
   next: MouseCursorPosition | undefined,
 ): boolean => {
-  if (!previous && !next) return false;
-  if (!previous || !next) return true;
-  return previous.x !== next.x || previous.y !== next.y || previous.visible !== next.visible;
+  return !areMouseCursorPositionsEqual(previous, next);
 };
 
 const appendCursorEvent = (
@@ -298,14 +300,21 @@ const hasPlaybackAudio = (context: EditorMachineContext): boolean =>
 // ============================================================================
 
 interface MouseTrackingInput {
-  onMouseMove: (pos: { x: number; y: number; visible: boolean }) => void;
+  onMouseMove: (pos: MouseCursorPosition) => void;
 }
 
 const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({ input }) => {
   let forceRecordedCursorHidden = false;
 
   const handleMouseMove = (e: MouseEvent) => {
-    input.onMouseMove({ x: e.clientX, y: e.clientY, visible: !forceRecordedCursorHidden });
+    input.onMouseMove(
+      createCursorPositionFromClientPoint({
+        clientX: e.clientX,
+        clientY: e.clientY,
+        visible: !forceRecordedCursorHidden,
+        eventTarget: e.target,
+      }),
+    );
   };
 
   const handleMouseLeave = () => {
@@ -318,7 +327,17 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
     }
 
     forceRecordedCursorHidden = !event.detail.visible;
-    input.onMouseMove(event.detail);
+    input.onMouseMove(
+      createCursorPositionFromClientPoint({
+        clientX: event.detail.x,
+        clientY: event.detail.y,
+        visible: event.detail.visible,
+        eventTarget:
+          typeof document.elementFromPoint === "function"
+            ? document.elementFromPoint(event.detail.x, event.detail.y)
+            : null,
+      }),
+    );
   };
 
   // Handle iframe mouse tracking
@@ -356,11 +375,14 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
 
     const onIframeMouseMove = (e: MouseEvent) => {
       const rect = iframe.getBoundingClientRect();
-      input.onMouseMove({
-        x: rect.left + e.clientX,
-        y: rect.top + e.clientY,
-        visible: !forceRecordedCursorHidden,
-      });
+      input.onMouseMove(
+        createCursorPositionFromClientPoint({
+          clientX: rect.left + e.clientX,
+          clientY: rect.top + e.clientY,
+          visible: !forceRecordedCursorHidden,
+          targetElement: iframe,
+        }),
+      );
     };
 
     const onIframeMouseLeave = () => {
@@ -457,11 +479,14 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
     }
 
     const rect = iframe.getBoundingClientRect();
-    input.onMouseMove({
-      x: rect.left + payload.data.clientX,
-      y: rect.top + payload.data.clientY,
-      visible: !forceRecordedCursorHidden,
-    });
+    input.onMouseMove(
+      createCursorPositionFromClientPoint({
+        clientX: rect.left + payload.data.clientX,
+        clientY: rect.top + payload.data.clientY,
+        visible: !forceRecordedCursorHidden,
+        targetElement: iframe,
+      }),
+    );
   };
 
   // Listen for new iframes and content changes

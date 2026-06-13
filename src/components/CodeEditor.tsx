@@ -533,18 +533,25 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col" data-cursor-replay-target="workspace">
       <WorkspaceEventRecorder
         handleWorkspaceEvent={handleWorkspaceEvent}
         shouldTrackWorkspaceChanges={isRecording || Boolean(currentRecording)}
       />
       <EditorHeader showImportExport={showImportExport} />
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div
+        className="flex min-h-0 flex-1 overflow-hidden"
+        data-cursor-replay-target="workspace-body"
+      >
         <FileSidebar />
         {/* Monaco Editor */}
-        <div className="flex min-w-0 flex-1 gap-2 overflow-hidden bg-[#11141c]">
+        <div
+          className="flex min-w-0 flex-1 gap-2 overflow-hidden bg-[#11141c]"
+          data-cursor-replay-target="editor-and-preview"
+        >
           <div
             className={"editor-paint-layer min-w-0 flex-1" + (isPlaying ? " playback-mode" : "")}
+            data-cursor-replay-target="code-editor"
           >
             <Editor
               height="100%"

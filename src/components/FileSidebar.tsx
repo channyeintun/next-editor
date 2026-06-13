@@ -813,6 +813,7 @@ const FileSidebar = memo(function FileSidebar() {
     <aside
       className="relative flex h-full shrink-0 flex-col border-r border-slate-800 bg-[#11141c] text-slate-100"
       style={{ width: sidebarWidth }}
+      data-cursor-replay-target="file-sidebar"
     >
       <div className="border-b border-slate-800 px-4 py-3">
         <div className="flex items-center justify-between gap-3">

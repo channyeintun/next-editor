@@ -48,6 +48,49 @@ describe("cursorReplay", () => {
     expect(result?.cursor).toEqual({ x: 50, y: 25, visible: true });
   });
 
+  it("interpolates target-relative cursor positions for the same target", () => {
+    const samples = [
+      {
+        timestamp: 0,
+        x: 10,
+        y: 20,
+        visible: true,
+        target: {
+          id: "code-editor",
+          x: 10,
+          y: 20,
+          rect: { left: 0, top: 0, width: 100, height: 200 },
+        },
+      },
+      {
+        timestamp: 100,
+        x: 90,
+        y: 180,
+        visible: true,
+        target: {
+          id: "code-editor",
+          x: 90,
+          y: 180,
+          rect: { left: 0, top: 0, width: 100, height: 200 },
+        },
+      },
+    ];
+
+    const result = getCursorPositionAtTime(samples, 50);
+
+    expect(result?.cursor).toEqual({
+      x: 50,
+      y: 100,
+      visible: true,
+      target: {
+        id: "code-editor",
+        x: 50,
+        y: 100,
+        rect: { left: 0, top: 0, width: 100, height: 200 },
+      },
+    });
+  });
+
   it("does not interpolate across visibility changes", () => {
     const samples = [
       { timestamp: 0, x: 0, y: 0, visible: false },

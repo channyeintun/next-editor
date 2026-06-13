@@ -26,12 +26,34 @@ export type EditorSelection = monaco.ISelection & monaco.IRange;
 export type EditorPosition = monaco.IPosition;
 
 /**
- * Mouse cursor position relative to editor container
+ * Bounding box for the UI region that a cursor sample was recorded against.
+ */
+export interface CursorTargetRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Cursor coordinates relative to a stable UI region. Playback can use this
+ * to remap a recorded position onto the current layout.
+ */
+export interface CursorTargetSnapshot {
+  id: string;
+  rect: CursorTargetRect;
+  x: number;
+  y: number;
+}
+
+/**
+ * Mouse cursor position in viewport pixels, with optional target-relative data.
  */
 export interface MouseCursorPosition {
   x: number;
   y: number;
   visible: boolean; // Whether cursor is within editor bounds
+  target?: CursorTargetSnapshot;
 }
 
 /**

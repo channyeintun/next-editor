@@ -22,6 +22,7 @@ import {
   normalizeEditorSelection,
   normalizeEditorViewState,
 } from "./editorState";
+import { areMouseCursorPositionsEqual } from "./cursorCoordinates";
 
 const LINEAR_SCAN_LIMIT = 128;
 const keyframeIndexCache = new WeakMap<DeltaFrame[], number[]>();
@@ -202,9 +203,7 @@ function mouseCursorChanged(
   prev: MouseCursorPosition | undefined,
   next: MouseCursorPosition | undefined,
 ): boolean {
-  if (!prev && !next) return false;
-  if (!prev || !next) return true;
-  return prev.x !== next.x || prev.y !== next.y || prev.visible !== next.visible;
+  return !areMouseCursorPositionsEqual(prev, next);
 }
 
 /**

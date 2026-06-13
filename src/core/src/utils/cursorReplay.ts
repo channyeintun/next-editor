@@ -1,7 +1,14 @@
-import type { CursorRecordingEvent, MouseCursorPosition, Recording } from "../types";
+import type {
+  CursorRecordingEvent,
+  CursorTargetRect,
+  CursorTargetSnapshot,
+  MouseCursorPosition,
+  Recording,
+} from "../types";
 import type { DeltaFrame } from "./deltaTypes";
 import { findFrameIndexAtTime } from "./frameDelta";
 import { isKeyframe } from "./deltaTypes";
+import { areMouseCursorPositionsEqual } from "./cursorCoordinates";
 
 export type CursorReplaySample = CursorRecordingEvent;
 
@@ -16,14 +23,60 @@ export interface CursorReplayPositionResult {
 const hasFiniteCursorPosition = (cursor: MouseCursorPosition): boolean =>
   Number.isFinite(cursor.x) && Number.isFinite(cursor.y);
 
-const areCursorPositionsEqual = (
-  previous: MouseCursorPosition | undefined,
-  next: MouseCursorPosition | undefined,
-): boolean =>
-  Boolean(previous && next) &&
-  previous?.x === next?.x &&
-  previous?.y === next?.y &&
-  previous?.visible === next?.visible;
+const copyCursorTarget = (
+  target: CursorTargetSnapshot | undefined,
+): CursorTargetSnapshot | undefined =>
+  target
+    ? {
+        id: target.id,
+        x: target.x,
+        y: target.y,
+        rect: {
+          left: target.rect.left,
+          top: target.rect.top,
+          width: target.rect.width,
+          height: target.rect.height,
+        },
+      }
+    : undefined;
+
+const copyCursorPosition = (cursor: MouseCursorPosition): MouseCursorPosition => ({
+  x: cursor.x,
+  y: cursor.y,
+  visible: cursor.visible,
+  target: copyCursorTarget(cursor.target),
+});
+
+const interpolateNumber = (start: number, end: number, progress: number): number =>
+  start + (end - start) * progress;
+
+const interpolateTargetRect = (
+  previous: CursorTargetRect,
+  next: CursorTargetRect,
+  progress: number,
+): CursorTargetRect => ({
+  left: interpolateNumber(previous.left, next.left, progress),
+  top: interpolateNumber(previous.top, next.top, progress),
+  width: interpolateNumber(previous.width, next.width, progress),
+  height: interpolateNumber(previous.height, next.height, progress),
+});
+
+const interpolateCursorTarget = (
+  previous: CursorTargetSnapshot | undefined,
+  next: CursorTargetSnapshot | undefined,
+  progress: number,
+): CursorTargetSnapshot | undefined => {
+  if (!previous || !next || previous.id !== next.id) {
+    return undefined;
+  }
+
+  return {
+    id: previous.id,
+    x: interpolateNumber(previous.x, next.x, progress),
+    y: interpolateNumber(previous.y, next.y, progress),
+    rect: interpolateTargetRect(previous.rect, next.rect, progress),
+  };
+};
 
 const appendCursorSample = (
   samples: CursorReplaySample[],
@@ -32,26 +85,25 @@ const appendCursorSample = (
 ): void => {
   if (!cursor || !hasFiniteCursorPosition(cursor)) return;
 
-  const sample = {
+  const sample: CursorReplaySample = {
     timestamp: Math.max(0, timestamp),
-    x: cursor.x,
-    y: cursor.y,
-    visible: cursor.visible,
+    ...copyCursorPosition(cursor),
   };
   const previousSample = samples[samples.length - 1];
 
   if (
     previousSample &&
-    !areCursorPositionsEqual(previousSample, sample) &&
+    !areMouseCursorPositionsEqual(previousSample, sample) &&
     sample.timestamp - previousSample.timestamp > STATIONARY_HOLD_GAP_MS
   ) {
     samples.push({
       ...previousSample,
+      target: copyCursorTarget(previousSample.target),
       timestamp: Math.max(previousSample.timestamp, sample.timestamp - STATIONARY_HOLD_LEAD_MS),
     });
   }
 
-  if (areCursorPositionsEqual(samples[samples.length - 1], sample)) {
+  if (areMouseCursorPositionsEqual(samples[samples.length - 1], sample)) {
     return;
   }
 
@@ -112,9 +164,7 @@ export const getCursorPositionAtTime = (
   if (!next || !previous.visible || !next.visible || previous.visible !== next.visible) {
     return {
       cursor: {
-        x: previous.x,
-        y: previous.y,
-        visible: previous.visible,
+        ...copyCursorPosition(previous),
       },
       index,
     };
@@ -124,9 +174,7 @@ export const getCursorPositionAtTime = (
   if (duration <= 0) {
     return {
       cursor: {
-        x: previous.x,
-        y: previous.y,
-        visible: previous.visible,
+        ...copyCursorPosition(previous),
       },
       index,
     };
@@ -139,6 +187,7 @@ export const getCursorPositionAtTime = (
       x: previous.x + (next.x - previous.x) * progress,
       y: previous.y + (next.y - previous.y) * progress,
       visible: true,
+      target: interpolateCursorTarget(previous.target, next.target, progress),
     },
     index,
   };

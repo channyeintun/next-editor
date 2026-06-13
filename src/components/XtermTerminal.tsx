@@ -217,12 +217,14 @@ const XtermTerminal = memo(function XtermTerminal({
       ? TERMINAL_THEME.background
       : PASSIVE_TERMINAL_THEME.background,
   };
+  const cursorReplayTargetId = sessionId ? `terminal-${sessionId}` : "terminal-empty";
 
   return (
     <div
       ref={containerRef}
       className={`xterm-terminal size-full ${interactive ? "" : "passive"}`.trim()}
       style={terminalStyle}
+      data-cursor-replay-target={cursorReplayTargetId}
       onMouseDown={(event) => {
         if (!interactive) {
           return;

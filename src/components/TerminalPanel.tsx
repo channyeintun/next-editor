@@ -459,6 +459,7 @@ const TerminalPanel = memo(function TerminalPanel() {
       <div
         className="runtime-dock fixed bottom-12 z-40 flex flex-col overflow-hidden rounded-lg border border-[#0f131a] bg-[#15191f] shadow-[0_18px_40px_rgba(2,6,23,0.42)]"
         style={dockStyle}
+        data-cursor-replay-target="runtime-dock"
       >
         <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">
           {DOCK_TABS.map((tab) => {

@@ -173,6 +173,7 @@ const SlidePreview = memo(function SlidePreview({
           willChange: "transform",
         }}
         className={`${positioning} top-[10%] left-[10%] right-[10%] bottom-[10%] z-100 bg-slate-900 rounded-2xl overflow-hidden border border-white/10 flex flex-col shadow-2xl transition-shadow size-[80%]`}
+        data-cursor-replay-target="slide-preview"
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -230,7 +231,11 @@ const SlidePreview = memo(function SlidePreview({
         </div>
 
         {/* Slide content area */}
-        <div className="relative w-full flex-1 bg-black" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="relative w-full flex-1 bg-black"
+          data-cursor-replay-target="slide-content"
+          onClick={(e) => e.stopPropagation()}
+        >
           <RevealSlideRenderer
             slides={slides}
             currentSlideIndex={currentSlideIndex}
