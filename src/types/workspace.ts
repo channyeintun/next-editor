@@ -813,6 +813,7 @@ export function TrendingStatusList({
 .timeline-shell {
   position: relative;
   width: 100%;
+  padding-inline: 1rem;
 }
 
 .timeline {
