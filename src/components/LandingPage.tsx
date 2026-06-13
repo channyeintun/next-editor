@@ -4,16 +4,20 @@ import { Link } from "react-router-dom";
 import Navbar from "./Navbar";
 import { useState, useEffect, useRef } from "react";
 
+const DEMO_IFRAME_WIDTH = 1440;
+const DEMO_IFRAME_HEIGHT = 900;
+const DEFAULT_IFRAME_SCALE = 0.4513888888888889;
+
 const LandingPage = () => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.4513888888888889);
+  const [scale, setScale] = useState(DEFAULT_IFRAME_SCALE);
 
   useEffect(() => {
     if (!containerRef.current) return;
     const resizeObserver = new ResizeObserver((entries) => {
       for (let entry of entries) {
         const width = entry.contentRect.width;
-        setScale(width > 0 ? width / 1440 : 0.4513888888888889);
+        setScale(width > 0 ? width / DEMO_IFRAME_WIDTH : DEFAULT_IFRAME_SCALE);
       }
     });
     resizeObserver.observe(containerRef.current);
@@ -169,14 +173,14 @@ const LandingPage = () => {
                     </div>
                     <div
                       ref={containerRef}
-                      className="relative w-full aspect-video overflow-hidden bg-[#11141c]"
+                      className="relative w-full aspect-1440/900 overflow-hidden bg-[#11141c]"
                     >
                       <iframe
                         src="/code?url=/introduction.ne&readOnly=true&deferRuntimeAutostart=true"
                         className="absolute top-0 left-0 border-0 origin-top-left"
                         style={{
-                          width: "1440px",
-                          height: "812px",
+                          width: DEMO_IFRAME_WIDTH,
+                          height: DEMO_IFRAME_HEIGHT,
                           transform: `scale(${scale})`,
                         }}
                         title="Next Editor Live Demo"
