@@ -67,6 +67,7 @@ export interface WebContainerRuntimeActions {
 export interface WebContainerRuntimeMetadata {
   status: WebContainerRuntimeStatus;
   previewUrl: string | null;
+  previewPort: number | null;
   isSupported: boolean;
   errorMessage: string | null;
   latestPreviewMessage: RuntimePreviewMessage | null;
@@ -84,6 +85,7 @@ export interface WebContainerRuntimeMetadata {
 export interface WebContainerRuntimeRecordingSnapshot {
   status: WebContainerRuntimeStatus;
   previewUrl: string | null;
+  previewPort: number | null;
   lastOutput: string | null;
   activeCommand: string | null;
   errorMessage: string | null;

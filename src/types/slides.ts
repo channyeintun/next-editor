@@ -96,6 +96,7 @@ export interface PreviewState {
   isOpen?: boolean;
   mode?: PreviewPanelMode;
   content?: string;
+  route?: string;
   scrollTop?: number;
   scrollLeft?: number;
   refreshKey?: number;
@@ -113,6 +114,7 @@ export interface PreviewEvent {
     | "preview_maximize"
     | "preview_scroll"
     | "preview_interaction"
+    | "preview_route_change"
     | "preview_refresh"
     | "preview_resize";
   timestamp: number;
@@ -120,6 +122,7 @@ export interface PreviewEvent {
   isOpen?: boolean;
   mode?: PreviewPanelMode;
   content?: string;
+  route?: string;
   scrollTop?: number;
   scrollLeft?: number;
   interaction?: IframeInteractionEvent;

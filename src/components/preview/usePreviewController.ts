@@ -20,6 +20,7 @@ import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
 } from "../../hooks/useWebContainerRuntime";
+import { IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE } from "../../utils/iframeInteractionCapture";
 import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRuntimeContext";
 import type {
   IframeInteractionEvent,
@@ -49,6 +50,119 @@ function escapePreviewHtml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+interface RuntimePreviewLocation {
+  href: string;
+  port: number | null;
+  route: string;
+}
+
+function getUrlPort(url: URL): number | null {
+  const port = Number(url.port);
+
+  return Number.isFinite(port) && port > 0 ? port : null;
+}
+
+function isHttpUrl(url: URL): boolean {
+  return url.protocol === "http:" || url.protocol === "https:";
+}
+
+function formatPreviewRoute(pathname: string, search: string, hash: string): string {
+  const normalizedPathname = pathname.startsWith("/") ? pathname : `/${pathname || ""}`;
+  const route = `${normalizedPathname || "/"}${search}${hash}`;
+
+  return route || "/";
+}
+
+function normalizePreviewRoute(route: string): string {
+  const trimmedRoute = route.trim();
+
+  if (!trimmedRoute) {
+    return "/";
+  }
+
+  try {
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmedRoute)) {
+      const parsedUrl = new URL(trimmedRoute);
+      return formatPreviewRoute(parsedUrl.pathname || "/", parsedUrl.search, parsedUrl.hash);
+    }
+  } catch {
+    // Treat malformed values as relative routes.
+  }
+
+  if (trimmedRoute.startsWith("/")) {
+    return trimmedRoute;
+  }
+
+  if (trimmedRoute.startsWith("?") || trimmedRoute.startsWith("#")) {
+    return `/${trimmedRoute}`;
+  }
+
+  return `/${trimmedRoute}`;
+}
+
+function createRuntimePreviewLocationFromUrl(
+  url: string | null,
+  fallbackPort: number | null,
+): RuntimePreviewLocation | null {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+
+    if (!isHttpUrl(parsedUrl)) {
+      return null;
+    }
+
+    return {
+      href: parsedUrl.href,
+      port: fallbackPort ?? getUrlPort(parsedUrl),
+      route: formatPreviewRoute(parsedUrl.pathname || "/", parsedUrl.search, parsedUrl.hash),
+    };
+  } catch {
+    return {
+      href: url,
+      port: fallbackPort,
+      route: "/",
+    };
+  }
+}
+
+function formatPreviewAddressLabel(location: RuntimePreviewLocation | null): string {
+  if (!location) {
+    return "Preview";
+  }
+
+  return location.port === null ? location.route : `:${location.port} ${location.route}`;
+}
+
+function applyRouteToRuntimePreviewLocation(
+  location: RuntimePreviewLocation | null,
+  route: string,
+): RuntimePreviewLocation | null {
+  if (!location) {
+    return null;
+  }
+
+  const normalizedRoute = normalizePreviewRoute(route);
+
+  try {
+    const routeUrl = new URL(normalizedRoute, location.href);
+
+    return {
+      ...location,
+      href: routeUrl.href,
+      route: normalizedRoute,
+    };
+  } catch {
+    return {
+      ...location,
+      route: normalizedRoute,
+    };
+  }
 }
 
 async function refreshRuntimePreview(
@@ -258,10 +372,15 @@ export interface PreviewController {
   isTransitioning: boolean;
   disablePointerEvents: boolean;
   rendererKind: "runtime" | "static";
+  previewAddressLabel: string;
+  previewAddressTitle: string;
   handleClose: () => void;
   handleFloat: () => void;
   handleDock: () => void;
+  handleBack: () => void;
+  handleForward: () => void;
   handleRefresh: () => void;
+  handleOpenConsole: () => void;
   handleResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
   handleDockResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
   handleTransitionStart: () => void;
@@ -273,6 +392,7 @@ export function usePreviewController(): PreviewController {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [previewRoute, setPreviewRoute] = useState("/");
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -284,6 +404,7 @@ export function usePreviewController(): PreviewController {
     scrollLeft: 0,
   });
   const pendingInteractionRef = useRef<IframeInteractionEvent | null>(null);
+  const previewRouteRef = useRef("/");
 
   const targetScrollRef = useRef<PreviewScrollPosition | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -295,7 +416,7 @@ export function usePreviewController(): PreviewController {
   const handlePreviewEventRef = useRef<((event: PreviewEvent) => void) | null>(null);
 
   const { editorRef, handlePreviewEvent } = useNextEditorActions();
-  const { preview } = useNextEditorDomainAdapters();
+  const { preview, runtimePanel } = useNextEditorDomainAdapters();
   const {
     isOpen,
     mode: panelMode,
@@ -312,6 +433,7 @@ export function usePreviewController(): PreviewController {
   const saveVersion = useWorkspaceSaveVersion();
   const {
     previewUrl: runtimePreviewUrl,
+    previewPort: runtimePreviewPort,
     status: runtimeStatus,
     errorMessage: runtimeErrorMessage,
     isSupported: isRuntimeSupported,
@@ -334,6 +456,8 @@ export function usePreviewController(): PreviewController {
     runtimeStatus === "idle" ? (recordedRuntimeStatus ?? runtimeStatus) : runtimeStatus;
   const effectiveRuntimePreviewUrl =
     runtimePreviewUrl || recordedRuntimeSnapshot?.previewUrl || null;
+  const effectiveRuntimePreviewPort =
+    runtimePreviewPort ?? recordedRuntimeSnapshot?.previewPort ?? null;
   const effectiveRuntimeErrorMessage =
     runtimeErrorMessage || recordedRuntimeSnapshot?.errorMessage || null;
   const isStaticWorkspacePreview = lessonType === "html-css";
@@ -385,6 +509,24 @@ export function usePreviewController(): PreviewController {
   const previousPanelStateRef = useRef({ isOpen, panelMode });
   const hasRequestedRuntimeStartForOpenRef = useRef(false);
 
+  const applyPreviewRoute = useCallback((route: string) => {
+    const normalizedRoute = normalizePreviewRoute(route);
+
+    previewRouteRef.current = normalizedRoute;
+    setPreviewRoute((currentRoute) =>
+      currentRoute === normalizedRoute ? currentRoute : normalizedRoute,
+    );
+  }, []);
+
+  useEffect(() => {
+    const location = createRuntimePreviewLocationFromUrl(
+      effectiveRuntimePreviewUrl,
+      effectiveRuntimePreviewPort,
+    );
+
+    applyPreviewRoute(location?.route ?? "/");
+  }, [applyPreviewRoute, effectiveRuntimePreviewPort, effectiveRuntimePreviewUrl]);
+
   const captureRuntimePreviewSnapshot = useCallback(() => {
     if (!effectiveRuntimePreviewUrl) {
       return null;
@@ -422,6 +564,7 @@ export function usePreviewController(): PreviewController {
         isOpen?: boolean;
         mode?: PreviewPanelMode;
         content?: string;
+        route?: string;
         scrollTop?: number;
         scrollLeft?: number;
         interaction?: IframeInteractionEvent;
@@ -435,6 +578,7 @@ export function usePreviewController(): PreviewController {
           isOpen: options?.isOpen ?? isOpenRef.current,
           mode: options?.mode ?? panelModeRef.current,
           content: options?.content,
+          route: options?.route,
           scrollTop: options?.scrollTop,
           scrollLeft: options?.scrollLeft,
           interaction: options?.interaction,
@@ -457,6 +601,7 @@ export function usePreviewController(): PreviewController {
     targetScrollRef,
     pendingInteractionRef,
     sizeRef,
+    onRouteChange: applyPreviewRoute,
   });
 
   const updateIframeContent = useCallback(
@@ -672,6 +817,7 @@ export function usePreviewController(): PreviewController {
     lastRuntimeSnapshotRef,
     lastContentRef,
     scrollPositionRef,
+    routeRef: previewRouteRef,
     sizeRef,
     isOpenRef,
     modeRef: panelModeRef,
@@ -681,6 +827,7 @@ export function usePreviewController(): PreviewController {
     updateIframeContent,
     iframeRef,
     setSize,
+    applyPreviewRoute,
     applyPreviewPanelState,
     lastRefreshKeyRef,
     isRecordingRef,
@@ -971,6 +1118,75 @@ export function usePreviewController(): PreviewController {
     forceRefreshPreview({ emitEvent: true, showSpinner: true });
   }, [forceRefreshPreview]);
 
+  const handleBack = useCallback(() => {
+    const iframeWindow = iframeRef.current?.contentWindow;
+
+    if (!iframeWindow) {
+      return;
+    }
+
+    try {
+      iframeWindow.history.back();
+      return;
+    } catch {
+      iframeWindow.postMessage(
+        {
+          type: IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE,
+          payload: {
+            action: "back",
+          },
+        },
+        "*",
+      );
+    }
+  }, []);
+
+  const handleForward = useCallback(() => {
+    const iframeWindow = iframeRef.current?.contentWindow;
+
+    if (!iframeWindow) {
+      return;
+    }
+
+    try {
+      iframeWindow.history.forward();
+      return;
+    } catch {
+      iframeWindow.postMessage(
+        {
+          type: IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE,
+          payload: {
+            action: "forward",
+          },
+        },
+        "*",
+      );
+    }
+  }, []);
+
+  const handleOpenConsole = useCallback(() => {
+    runtimePanel.openConsole();
+  }, [runtimePanel]);
+
+  const previewAddress = useMemo(() => {
+    if (lessonType !== "node.js") {
+      return {
+        label: "Static preview",
+        title: "Static preview",
+      };
+    }
+
+    const location = applyRouteToRuntimePreviewLocation(
+      createRuntimePreviewLocationFromUrl(effectiveRuntimePreviewUrl, effectiveRuntimePreviewPort),
+      previewRoute,
+    );
+
+    return {
+      label: formatPreviewAddressLabel(location),
+      title: location?.href ?? effectiveRuntimePreviewUrl ?? "Preview",
+    };
+  }, [effectiveRuntimePreviewPort, effectiveRuntimePreviewUrl, lessonType, previewRoute]);
+
   useEffect(() => {
     const clampCurrentCustomSize = () => {
       setSize((currentSize) => {
@@ -1174,10 +1390,15 @@ export function usePreviewController(): PreviewController {
     isTransitioning,
     disablePointerEvents: isTransitioning || isResizing,
     rendererKind: lessonType === "node.js" ? "runtime" : "static",
+    previewAddressLabel: previewAddress.label,
+    previewAddressTitle: previewAddress.title,
     handleClose,
     handleFloat,
     handleDock,
+    handleBack,
+    handleForward,
     handleRefresh,
+    handleOpenConsole,
     handleResizeStart,
     handleDockResizeStart,
     handleTransitionStart,

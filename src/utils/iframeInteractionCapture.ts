@@ -1,7 +1,9 @@
 export const IFRAME_INTERACTION_MESSAGE_TYPE = "IFRAME_INTERACTION";
+export const IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE = "IFRAME_NAVIGATION_COMMAND";
 
 interface IframeInteractionCaptureScriptOptions {
   includeMouseMove?: boolean;
+  includeRouteChange?: boolean;
 }
 
 export function createIframeInteractionCaptureScript(
@@ -9,6 +11,7 @@ export function createIframeInteractionCaptureScript(
   options?: IframeInteractionCaptureScriptOptions,
 ): string {
   const includeMouseMove = options?.includeMouseMove ?? false;
+  const includeRouteChange = options?.includeRouteChange ?? false;
 
   return `
     (function() {
@@ -17,7 +20,9 @@ export function createIframeInteractionCaptureScript(
       window[marker] = true;
 
       const messageType = ${JSON.stringify(IFRAME_INTERACTION_MESSAGE_TYPE)};
+      const navigationCommandMessageType = ${JSON.stringify(IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE)};
       const includeMouseMove = ${JSON.stringify(includeMouseMove)};
+      const includeRouteChange = ${JSON.stringify(includeRouteChange)};
 
       function getXPath(element) {
         if (element.id) return '//*[@id="' + element.id + '"]';
@@ -63,6 +68,82 @@ export function createIframeInteractionCaptureScript(
           '*',
         );
       }
+
+      let lastRoute = null;
+
+      function getCurrentRoute() {
+        const pathname = window.location.pathname || '/';
+        return pathname + (window.location.search || '') + (window.location.hash || '');
+      }
+
+      function emitRouteChange() {
+        if (!includeRouteChange) {
+          return;
+        }
+
+        const route = getCurrentRoute();
+        if (route === lastRoute) {
+          return;
+        }
+
+        lastRoute = route;
+        window.parent.postMessage(
+          {
+            type: messageType,
+            payload: {
+              type: 'route_change',
+              data: {
+                href: window.location.href,
+                pathname: window.location.pathname || '/',
+                search: window.location.search || '',
+                hash: window.location.hash || '',
+                route,
+              },
+            },
+          },
+          '*',
+        );
+      }
+
+      if (includeRouteChange) {
+        const wrapHistoryMethod = (methodName) => {
+          const originalMethod = window.history && window.history[methodName];
+
+          if (typeof originalMethod !== 'function') {
+            return;
+          }
+
+          window.history[methodName] = function() {
+            const result = originalMethod.apply(this, arguments);
+            emitRouteChange();
+            return result;
+          };
+        };
+
+        wrapHistoryMethod('pushState');
+        wrapHistoryMethod('replaceState');
+        emitRouteChange();
+        window.addEventListener('load', emitRouteChange);
+        window.addEventListener('pageshow', emitRouteChange);
+        window.addEventListener('popstate', emitRouteChange);
+        window.addEventListener('hashchange', emitRouteChange);
+      }
+
+      window.addEventListener('message', (event) => {
+        const message = event.data || {};
+
+        if (
+          message.type === navigationCommandMessageType &&
+          message.payload &&
+          (message.payload.action === 'back' || message.payload.action === 'forward')
+        ) {
+          if (message.payload.action === 'back') {
+            window.history.back();
+          } else {
+            window.history.forward();
+          }
+        }
+      });
 
       document.addEventListener(
         'click',

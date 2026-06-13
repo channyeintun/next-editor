@@ -255,6 +255,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
           mode: snapshot.previewUrl ? "webcontainer" : "single-file",
           status: snapshot.status,
           previewUrl: snapshot.previewUrl,
+          previewPort: snapshot.previewPort,
           lastOutput: snapshot.lastOutput,
           activeCommand: snapshot.activeCommand,
           errorMessage: snapshot.errorMessage,

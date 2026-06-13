@@ -8,7 +8,15 @@ import {
   type RefObject,
   type TouchEvent as ReactTouchEvent,
 } from "react";
-import { MoreVertical, PanelRight, PictureInPicture2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  MoreVertical,
+  PanelRight,
+  PictureInPicture2,
+  SquareTerminal,
+  X,
+} from "lucide-react";
 import type { PreviewPanelMode, PreviewSize } from "../../types/slides";
 
 interface PreviewChromeProps {
@@ -20,10 +28,15 @@ interface PreviewChromeProps {
   onClose: () => void;
   onFloat: () => void;
   onDock: () => void;
+  onBack: () => void;
+  onForward: () => void;
+  onOpenConsole: () => void;
   onResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
   onDockResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
   onTransitionStart: () => void;
   onTransitionComplete: () => void;
+  previewAddressLabel: string;
+  previewAddressTitle: string;
 }
 
 function isCustomSize(size: PreviewSize): size is { width: number; height: number } {
@@ -65,12 +78,27 @@ function getFloatingStyle(size: PreviewSize): CSSProperties {
 
 interface PreviewToolbarProps {
   mode: PreviewPanelMode;
+  previewAddressLabel: string;
+  previewAddressTitle: string;
   onClose: () => void;
   onFloat: () => void;
   onDock: () => void;
+  onBack: () => void;
+  onForward: () => void;
+  onOpenConsole: () => void;
 }
 
-function PreviewToolbar({ mode, onClose, onFloat, onDock }: PreviewToolbarProps) {
+function PreviewToolbar({
+  mode,
+  previewAddressLabel,
+  previewAddressTitle,
+  onClose,
+  onFloat,
+  onDock,
+  onBack,
+  onForward,
+  onOpenConsole,
+}: PreviewToolbarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -106,50 +134,94 @@ function PreviewToolbar({ mode, onClose, onFloat, onDock }: PreviewToolbarProps)
   };
 
   return (
-    <div className="flex h-11 shrink-0 items-center justify-end border-b border-slate-800 bg-[#242938] px-3">
-      <div ref={menuRef} className="relative">
+    <div className="shrink-0 border-b border-slate-800 bg-[#242938]">
+      <div className="flex h-11 items-center justify-end px-3">
+        <div ref={menuRef} className="relative">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsMenuOpen((current) => !current);
+            }}
+            className="inline-flex items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-slate-700 hover:text-white size-7"
+            aria-label="Preview options"
+            aria-expanded={isMenuOpen}
+            aria-haspopup="menu"
+            title="Preview options"
+          >
+            <MoreVertical size={16} />
+          </button>
+
+          {isMenuOpen ? (
+            <div
+              role="menu"
+              className="absolute right-0 top-full z-80 mt-2 w-44 rounded-lg border border-slate-700 bg-[#30343d] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleDockMode}
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700"
+              >
+                {mode === "floating" ? <PanelRight size={15} /> : <PictureInPicture2 size={15} />}
+                {mode === "floating" ? "Unfloat" : "Float"}
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleClose}
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700"
+              >
+                <X size={15} />
+                Close
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex h-10.5 items-center gap-2 border-t border-slate-900/80 px-3">
         <button
           type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            setIsMenuOpen((current) => !current);
-          }}
-          className="inline-flex items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-slate-700 hover:text-white size-7"
-          aria-label="Preview options"
-          aria-expanded={isMenuOpen}
-          aria-haspopup="menu"
-          title="Preview options"
+          onClick={onBack}
+          className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
+          aria-label="Go back in preview"
+          title="Go back in preview"
         >
-          <MoreVertical size={16} />
+          <ArrowLeft size={18} />
         </button>
 
-        {isMenuOpen ? (
-          <div
-            role="menu"
-            className="absolute right-0 top-full z-80 mt-2 w-44 rounded-lg border border-slate-700 bg-[#30343d] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleDockMode}
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700"
-            >
-              {mode === "floating" ? <PanelRight size={15} /> : <PictureInPicture2 size={15} />}
-              {mode === "floating" ? "Unfloat" : "Float"}
-            </button>
+        <button
+          type="button"
+          onClick={onForward}
+          className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
+          aria-label="Go forward in preview"
+          title="Go forward in preview"
+        >
+          <ArrowRight size={18} />
+        </button>
 
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleClose}
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700"
-            >
-              <X size={15} />
-              Close
-            </button>
-          </div>
-        ) : null}
+        <div
+          className="flex h-6 min-w-0 flex-1 items-center rounded-lg border border-slate-950/70 bg-[#1e2430] px-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+          title={previewAddressTitle}
+          aria-label="Preview address"
+        >
+          <span className="truncate font-mono text-[13px] font-semibold leading-none text-slate-300">
+            {previewAddressLabel}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={onOpenConsole}
+          className="inline-flex size-6.5 shrink-0 items-center justify-center rounded-md border border-slate-800 bg-[#263346] text-sky-300 transition-colors hover:border-sky-500/60 hover:bg-[#2b3f58] hover:text-sky-100"
+          aria-label="Open preview console"
+          title="Open preview console"
+        >
+          <SquareTerminal size={16} />
+        </button>
       </div>
     </div>
   );
@@ -210,14 +282,29 @@ export function PreviewChrome({
   onClose,
   onFloat,
   onDock,
+  onBack,
+  onForward,
+  onOpenConsole,
   onResizeStart,
   onDockResizeStart,
   onTransitionStart,
   onTransitionComplete,
+  previewAddressLabel,
+  previewAddressTitle,
 }: PreviewChromeProps) {
   const content = (
     <>
-      <PreviewToolbar mode={mode} onClose={onClose} onFloat={onFloat} onDock={onDock} />
+      <PreviewToolbar
+        mode={mode}
+        previewAddressLabel={previewAddressLabel}
+        previewAddressTitle={previewAddressTitle}
+        onClose={onClose}
+        onFloat={onFloat}
+        onDock={onDock}
+        onBack={onBack}
+        onForward={onForward}
+        onOpenConsole={onOpenConsole}
+      />
 
       <div className="relative min-h-0 flex-1 bg-white">
         {children}

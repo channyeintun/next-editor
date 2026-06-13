@@ -616,6 +616,7 @@ export const editorMachine = setup({
           isOpen: initialPreviewState.isOpen,
           mode: initialPreviewState.mode,
           content: initialPreviewState.content,
+          route: initialPreviewState.route,
           scrollTop: initialPreviewState.scrollTop,
           scrollLeft: initialPreviewState.scrollLeft,
         });

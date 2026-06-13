@@ -18,6 +18,7 @@ interface UsePreviewMessageBridgeOptions {
   targetScrollRef: RefObject<PreviewScrollPosition | null>;
   pendingInteractionRef: RefObject<IframeInteractionEvent | null>;
   sizeRef: RefObject<PreviewSize>;
+  onRouteChange: (route: string) => void;
 }
 
 export function usePreviewMessageBridge({
@@ -32,6 +33,7 @@ export function usePreviewMessageBridge({
   targetScrollRef,
   pendingInteractionRef,
   sizeRef,
+  onRouteChange,
 }: UsePreviewMessageBridgeOptions) {
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -78,6 +80,27 @@ export function usePreviewMessageBridge({
       }
 
       if (payload.type === "mousemove") {
+        return;
+      }
+
+      if (payload.type === "route_change") {
+        const route = payload.data?.route;
+
+        if (!effectiveRuntimePreviewUrl || typeof route !== "string") {
+          return;
+        }
+
+        onRouteChange(route);
+
+        if (isRecordingRef.current && handlePreviewEventRef.current) {
+          handlePreviewEventRef.current({
+            type: "preview_route_change",
+            timestamp: Date.now(),
+            size: sizeRef.current,
+            route,
+          });
+        }
+
         return;
       }
 
@@ -149,6 +172,7 @@ export function usePreviewMessageBridge({
     isRecordingRef,
     isUserScrollingRef,
     lastRuntimeSnapshotRef,
+    onRouteChange,
     pendingInteractionRef,
     scrollPositionRef,
     sizeRef,

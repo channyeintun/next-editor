@@ -77,6 +77,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     latestLifecycleEvent,
     latestPreviewMessage,
     openPorts,
+    previewPort,
     previewUrl,
     resetRuntimeSession,
     resizeTerminal,
@@ -611,6 +612,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     () => ({
       status,
       previewUrl,
+      previewPort,
       isSupported,
       errorMessage,
       latestPreviewMessage,
@@ -634,6 +636,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       latestLifecycleEvent,
       latestPreviewMessage,
       openPorts,
+      previewPort,
       previewUrl,
       runnerConfig,
       status,

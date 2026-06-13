@@ -78,6 +78,7 @@ export function useWebContainerRuntimeSession({
   const previewMessageIdRef = useRef(0);
   const isMountedRef = useRef(true);
   const previewUrlRef = useRef<string | null>(null);
+  const previewPortRef = useRef<number | null>(null);
   const errorMessageRef = useRef<string | null>(null);
   const lastOutputRef = useRef<string | null>(null);
   const activeTerminalSessionIdRef = useRef<string | null>(null);
@@ -86,6 +87,7 @@ export function useWebContainerRuntimeSession({
   const statusRef = useRef<WebContainerRuntimeStatus>("idle");
   const [status, setStatusState] = useState<WebContainerRuntimeStatus>("idle");
   const [previewUrl, setPreviewUrlState] = useState<string | null>(null);
+  const [previewPort, setPreviewPortState] = useState<number | null>(null);
   const [errorMessage, setErrorMessageState] = useState<string | null>(null);
   const [latestPreviewMessage, setLatestPreviewMessage] = useState<RuntimePreviewMessage | null>(
     null,
@@ -100,6 +102,7 @@ export function useWebContainerRuntimeSession({
   const [activeCommand, setActiveCommandState] = useState<string | null>(null);
 
   previewUrlRef.current = previewUrl;
+  previewPortRef.current = previewPort;
   errorMessageRef.current = errorMessage;
   lastOutputRef.current = lastOutput;
   activeTerminalSessionIdRef.current = activeTerminalSessionId;
@@ -122,6 +125,11 @@ export function useWebContainerRuntimeSession({
   const setPreviewUrl = useCallback((nextPreviewUrl: string | null) => {
     previewUrlRef.current = nextPreviewUrl;
     setPreviewUrlState(nextPreviewUrl);
+  }, []);
+
+  const setPreviewPort = useCallback((nextPreviewPort: number | null) => {
+    previewPortRef.current = nextPreviewPort;
+    setPreviewPortState(nextPreviewPort);
   }, []);
 
   const setErrorMessage = useCallback((nextErrorMessage: string | null) => {
@@ -285,6 +293,7 @@ export function useWebContainerRuntimeSession({
     activeTerminalSessionIdRef.current = null;
     setStatus("idle");
     setPreviewUrl(null);
+    setPreviewPort(null);
     setErrorMessage(null);
     setLatestPreviewMessage(null);
     setOpenPorts([]);
@@ -298,6 +307,7 @@ export function useWebContainerRuntimeSession({
     setErrorMessage,
     setLastOutput,
     setPreviewUrl,
+    setPreviewPort,
     setStatus,
     stopForegroundProcesses,
     stopRunnerProcess,
@@ -319,7 +329,7 @@ export function useWebContainerRuntimeSession({
     instanceRef.current = instance;
 
     devServerListenerCleanupRef.current?.();
-    devServerListenerCleanupRef.current = instance.on("server-ready", (_port, url) => {
+    devServerListenerCleanupRef.current = instance.on("server-ready", (port, url) => {
       if (!isRuntimeGenerationActive(generation) || instanceRef.current !== instance) {
         return;
       }
@@ -328,6 +338,7 @@ export function useWebContainerRuntimeSession({
         return;
       }
 
+      setPreviewPort(port);
       setPreviewUrl(url);
       setStatus("ready");
     });
@@ -389,7 +400,14 @@ export function useWebContainerRuntimeSession({
     });
 
     return instance;
-  }, [isRuntimeGenerationActive, pushLifecycleEvent, setErrorMessage, setPreviewUrl, setStatus]);
+  }, [
+    isRuntimeGenerationActive,
+    pushLifecycleEvent,
+    setErrorMessage,
+    setPreviewPort,
+    setPreviewUrl,
+    setStatus,
+  ]);
 
   const runForegroundCommand = useCallback(
     async (
@@ -515,6 +533,7 @@ export function useWebContainerRuntimeSession({
       }
 
       setPreviewUrl(null);
+      setPreviewPort(null);
       setErrorMessage(null);
       setLastOutput(null);
       setStatus("starting");
@@ -560,6 +579,7 @@ export function useWebContainerRuntimeSession({
             console.error("[runner] Runner output stream error", error);
             runnerProcessRef.current = null;
             setPreviewUrl(null);
+            setPreviewPort(null);
             setStatus("error");
             setErrorMessage(getRuntimeErrorMessage(error));
           });
@@ -576,6 +596,7 @@ export function useWebContainerRuntimeSession({
 
             runnerProcessRef.current = null;
             setPreviewUrl(null);
+            setPreviewPort(null);
             appendOutput(`\nRunner exited with code ${exitCode}\n`, {
               logToConsole: true,
             });
@@ -597,6 +618,7 @@ export function useWebContainerRuntimeSession({
 
             runnerProcessRef.current = null;
             setPreviewUrl(null);
+            setPreviewPort(null);
             console.error("[runner] Runner process error", error);
             setStatus("error");
             setErrorMessage(getRuntimeErrorMessage(error));
@@ -618,6 +640,7 @@ export function useWebContainerRuntimeSession({
       setErrorMessage,
       setLastOutput,
       setPreviewUrl,
+      setPreviewPort,
       setStatus,
       stopRunnerProcess,
     ],
@@ -849,6 +872,7 @@ export function useWebContainerRuntimeSession({
     (): WebContainerRuntimeRecordingSnapshot => ({
       status: statusRef.current,
       previewUrl: previewUrlRef.current,
+      previewPort: previewPortRef.current,
       lastOutput: lastOutputRef.current,
       activeCommand: activeCommandRef.current,
       errorMessage: errorMessageRef.current,
@@ -889,6 +913,7 @@ export function useWebContainerRuntimeSession({
     latestPreviewMessage,
     openPorts,
     previewUrl,
+    previewPort,
     resetRuntimeSession,
     resizeTerminal,
     runForegroundCommand,

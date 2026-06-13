@@ -237,6 +237,7 @@ function previewStateChanged(
     prev.isOpen !== next.isOpen ||
     prev.mode !== next.mode ||
     prev.content !== next.content ||
+    prev.route !== next.route ||
     prev.scrollTop !== next.scrollTop ||
     prev.scrollLeft !== next.scrollLeft
   );

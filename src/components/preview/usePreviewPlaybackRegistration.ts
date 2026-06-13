@@ -25,6 +25,7 @@ interface UsePreviewPlaybackRegistrationOptions {
   lastRuntimeSnapshotRef: RefObject<string>;
   lastContentRef: RefObject<string>;
   scrollPositionRef: RefObject<PreviewScrollPosition>;
+  routeRef: RefObject<string>;
   sizeRef: RefObject<PreviewSize>;
   isOpenRef: RefObject<boolean>;
   modeRef: RefObject<PreviewPanelMode>;
@@ -37,6 +38,7 @@ interface UsePreviewPlaybackRegistrationOptions {
   ) => void;
   iframeRef: RefObject<HTMLIFrameElement | null>;
   setSize: Dispatch<SetStateAction<PreviewSize>>;
+  applyPreviewRoute: (route: string) => void;
   applyPreviewPanelState: (state: { isOpen?: boolean; mode?: PreviewPanelMode }) => void;
   lastRefreshKeyRef: RefObject<number | undefined>;
   isRecordingRef: RefObject<boolean>;
@@ -75,6 +77,7 @@ export function usePreviewPlaybackRegistration({
   lastRuntimeSnapshotRef,
   lastContentRef,
   scrollPositionRef,
+  routeRef,
   sizeRef,
   isOpenRef,
   modeRef,
@@ -84,6 +87,7 @@ export function usePreviewPlaybackRegistration({
   updateIframeContent,
   iframeRef,
   setSize,
+  applyPreviewRoute,
   applyPreviewPanelState,
   lastRefreshKeyRef,
   isRecordingRef,
@@ -110,6 +114,7 @@ export function usePreviewPlaybackRegistration({
         isOpen: isOpenRef.current,
         mode: modeRef.current,
         content,
+        route: routeRef.current,
         scrollTop: scrollPositionRef.current.scrollTop,
         scrollLeft: scrollPositionRef.current.scrollLeft,
         currentInteraction: interaction || undefined,
@@ -128,6 +133,7 @@ export function usePreviewPlaybackRegistration({
     modeRef,
     pendingInteractionRef,
     previewAdapter,
+    routeRef,
     scrollPositionRef,
     sizeRef,
   ]);
@@ -151,6 +157,10 @@ export function usePreviewPlaybackRegistration({
         isOpen: previewState.isOpen,
         mode: previewState.mode,
       });
+
+      if (previewState.route !== undefined) {
+        applyPreviewRoute(previewState.route);
+      }
 
       const didRefreshKeyChange =
         previewState.refreshKey !== undefined &&
@@ -338,6 +348,7 @@ export function usePreviewPlaybackRegistration({
     };
   }, [
     applyPreviewPanelState,
+    applyPreviewRoute,
     effectiveRuntimePreviewUrl,
     forceRefreshPreview,
     iframeRef,

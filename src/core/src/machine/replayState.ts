@@ -159,6 +159,7 @@ function mergePreviewEventState(
   const appliedState: PreviewState = {
     size: previewEvent.size ?? previousState?.size ?? "small",
     content: previewEvent.content ?? previousState?.content,
+    route: previewEvent.route ?? previousState?.route,
     scrollTop: previewEvent.scrollTop ?? previousState?.scrollTop,
     scrollLeft: previewEvent.scrollLeft ?? previousState?.scrollLeft,
     refreshKey:

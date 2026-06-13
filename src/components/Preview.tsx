@@ -33,10 +33,15 @@ const Preview = memo(function Preview() {
       onClose={controller.handleClose}
       onFloat={controller.handleFloat}
       onDock={controller.handleDock}
+      onBack={controller.handleBack}
+      onForward={controller.handleForward}
+      onOpenConsole={controller.handleOpenConsole}
       onResizeStart={controller.handleResizeStart}
       onDockResizeStart={controller.handleDockResizeStart}
       onTransitionStart={controller.handleTransitionStart}
       onTransitionComplete={controller.handleTransitionComplete}
+      previewAddressLabel={controller.previewAddressLabel}
+      previewAddressTitle={controller.previewAddressTitle}
     >
       {previewRenderer}
     </PreviewChrome>

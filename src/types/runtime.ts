@@ -19,6 +19,7 @@ export interface RuntimeRecordingSnapshot extends RuntimePanelRecordingState {
   mode: "single-file" | "webcontainer";
   status: string;
   previewUrl?: string | null;
+  previewPort?: number | null;
   lastOutput?: string | null;
   activeCommand?: string | null;
   errorMessage?: string | null;

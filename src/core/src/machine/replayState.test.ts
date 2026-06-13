@@ -43,6 +43,7 @@ describe("replayState", () => {
         timestamp: 0,
         size: "small",
         content: "<html><body>Initial</body></html>",
+        route: "/",
         scrollTop: 0,
         scrollLeft: 0,
       },
@@ -51,6 +52,12 @@ describe("replayState", () => {
         timestamp: 100,
         size: "medium",
         scrollTop: 80,
+      },
+      {
+        type: "preview_route_change",
+        timestamp: 150,
+        size: "medium",
+        route: "/about",
       },
       {
         type: "preview_interaction",
@@ -82,10 +89,11 @@ describe("replayState", () => {
     });
 
     expect(seekToInteraction.appliedStates).toHaveLength(1);
-    expect(seekToInteraction.nextIndex).toBe(2);
+    expect(seekToInteraction.nextIndex).toBe(3);
     expect(seekToInteraction.appliedStates[0]).toEqual({
       size: "medium",
       content: "<html><body>Initial</body></html>",
+      route: "/about",
       scrollTop: 80,
       scrollLeft: 0,
       refreshKey: undefined,
@@ -95,16 +103,17 @@ describe("replayState", () => {
     const seekToRefresh = getPreviewReplayResult({
       previewEvents,
       currentTime: 350,
-      lastAppliedIndex: 2,
+      lastAppliedIndex: 3,
       lastAppliedState: seekToInteraction.retainedState,
       isSeeking: true,
     });
 
     expect(seekToRefresh.appliedStates).toHaveLength(1);
-    expect(seekToRefresh.nextIndex).toBe(3);
+    expect(seekToRefresh.nextIndex).toBe(4);
     expect(seekToRefresh.appliedStates[0]).toMatchObject({
       size: "large",
       content: "<html><body>Refreshed</body></html>",
+      route: "/about",
       scrollTop: 80,
       scrollLeft: 0,
       refreshKey: 300,

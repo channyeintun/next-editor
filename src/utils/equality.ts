@@ -136,6 +136,7 @@ export function areRuntimeRecordingSnapshotsEqual(
     left.mode === right.mode &&
     left.status === right.status &&
     left.previewUrl === right.previewUrl &&
+    left.previewPort === right.previewPort &&
     left.lastOutput === right.lastOutput &&
     left.activeCommand === right.activeCommand &&
     left.errorMessage === right.errorMessage &&

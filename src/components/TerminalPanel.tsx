@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ChevronDown, ChevronUp, Diamond, Plus, Settings, SquareTerminal, X } from "lucide-react";
 import { useNextEditorDomainAdapters } from "../contexts/NextEditorDomainAdaptersContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
@@ -22,7 +22,7 @@ function formatTerminalContent(content: string): string {
 }
 
 const ANSI_RESET = "\u001b[0m";
-const DEFAULT_CONSOLE_LINES = ["[runner] Runtime dock is ready."];
+const DEFAULT_CONSOLE_LINES: string[] = [];
 const RUNTIME_PANEL_BG = "bg-[#15191f]";
 const RUNTIME_COMMAND_BAR_CLASS =
   "flex min-h-15.5 items-center justify-between border-b border-[#11151d] bg-[#191d25] px-4 py-3";
@@ -62,37 +62,6 @@ function decorateConsoleLine(line: string): string {
   return `${prefixColor}${prefix}${ANSI_RESET}${ANSI_COLORS.dim}${suffix}${ANSI_RESET}`;
 }
 
-function shouldMirrorConsoleLineToBrowser(line: string): boolean {
-  const normalizedLine = line.toLowerCase();
-
-  return (
-    normalizedLine.startsWith("[error]") ||
-    normalizedLine.startsWith("[runtime:internal-error]") ||
-    normalizedLine.startsWith("[preview:console-error]") ||
-    normalizedLine.startsWith("[preview:uncaught-exception]") ||
-    normalizedLine.startsWith("[preview:unhandled-rejection]")
-  );
-}
-
-function getStatusLabel(status: string): string {
-  switch (status) {
-    case "booting":
-      return "Booting";
-    case "mounting":
-      return "Mounting";
-    case "installing":
-      return "Installing";
-    case "starting":
-      return "Starting";
-    case "ready":
-      return "Ready";
-    case "error":
-      return "Error";
-    default:
-      return "Idle";
-  }
-}
-
 interface RuntimeDockTabConfig {
   id: RuntimeDockTab;
   label: string;
@@ -105,6 +74,7 @@ interface RuntimeEventState {
   isSettingsOpen: boolean;
   status: string;
   previewUrl: string | null;
+  previewPort: number | null;
   activeCommand: string | null;
   errorMessage: string | null;
   consoleLines: string[];
@@ -202,8 +172,8 @@ const TerminalPanel = memo(function TerminalPanel() {
     lastOutput,
     errorMessage,
     activeCommand,
-    latestLifecycleEvent,
     latestPreviewMessage,
+    previewPort,
     previewUrl,
     runnerConfig,
     terminalSessions,
@@ -256,12 +226,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const effectiveTerminalOutput =
     effectiveTerminalSessions.find((session) => session.id === effectiveActiveTerminalSessionId)
       ?.output ?? null;
-  const previousStatusRef = useRef<string | null>(null);
-  const previousPreviewUrlRef = useRef<string | null>(null);
   const previousCommandRef = useRef<string | null>(null);
-  const previousErrorRef = useRef<string | null>(null);
-  const previousRunnerOutputRef = useRef<string | null>(null);
-  const previousLifecycleEventIdRef = useRef<number | null>(null);
   const previousPreviewMessageIdRef = useRef<number | null>(null);
   const previousRuntimeEventStateRef = useRef<RuntimeEventState | null>(null);
 
@@ -297,18 +262,29 @@ const TerminalPanel = memo(function TerminalPanel() {
   }, [runtimePanel]);
 
   useEffect(() => {
+    runtimePanel.setConsoleOpener(() => {
+      if (isPlaybackSnapshotActive) {
+        return;
+      }
+
+      setIsCollapsed(false);
+      setActiveTab("console");
+    });
+
+    return () => {
+      runtimePanel.setConsoleOpener(() => undefined);
+    };
+  }, [isPlaybackSnapshotActive, runtimePanel]);
+
+  useEffect(() => {
     if (!currentRecording) {
       setPlaybackRuntimeSnapshot(null);
     }
   }, [currentRecording]);
 
-  const appendConsoleLine = (message: string) => {
-    if (shouldMirrorConsoleLineToBrowser(message)) {
-      console.log(message);
-    }
-
+  const appendConsoleLine = useCallback((message: string) => {
     setConsoleLines((current) => [...current.slice(-24), message]);
-  };
+  }, []);
 
   const updateTerminalScrollLine = (surfaceId: string | null, scrollLine: number) => {
     if (!surfaceId || isPlaybackSnapshotActive) {
@@ -332,33 +308,8 @@ const TerminalPanel = memo(function TerminalPanel() {
       return;
     }
 
-    if (previousStatusRef.current !== runtimeStatus) {
-      previousStatusRef.current = runtimeStatus;
-      appendConsoleLine(
-        `[runtime] ${new Date().toLocaleTimeString()} ${getStatusLabel(runtimeStatus)}`,
-      );
-    }
-  }, [isPlaybackSnapshotActive, runtimeStatus]);
-
-  useEffect(() => {
-    if (isPlaybackSnapshotActive) {
-      return;
-    }
-
-    if (previewUrl && previousPreviewUrlRef.current !== previewUrl) {
-      previousPreviewUrlRef.current = previewUrl;
-      appendConsoleLine(`[preview] ${previewUrl}`);
-    }
-  }, [isPlaybackSnapshotActive, previewUrl]);
-
-  useEffect(() => {
-    if (isPlaybackSnapshotActive) {
-      return;
-    }
-
     if (activeCommand && previousCommandRef.current !== activeCommand) {
       previousCommandRef.current = activeCommand;
-      appendConsoleLine(`[command] ${activeCommand}`);
       setActiveTab("terminal");
     }
 
@@ -366,85 +317,6 @@ const TerminalPanel = memo(function TerminalPanel() {
       previousCommandRef.current = null;
     }
   }, [activeCommand, isPlaybackSnapshotActive]);
-
-  useEffect(() => {
-    if (isPlaybackSnapshotActive) {
-      return;
-    }
-
-    if (!lastOutput) {
-      previousRunnerOutputRef.current = null;
-      return;
-    }
-
-    const previousOutput = previousRunnerOutputRef.current ?? "";
-
-    if (lastOutput === previousOutput) {
-      return;
-    }
-
-    const nextOutput = lastOutput.startsWith(previousOutput)
-      ? lastOutput.slice(previousOutput.length)
-      : lastOutput;
-
-    previousRunnerOutputRef.current = lastOutput;
-
-    const formattedOutput = formatTerminalContent(nextOutput);
-
-    if (!formattedOutput) {
-      return;
-    }
-
-    for (const line of formattedOutput.split("\n")) {
-      if (!line.trim()) {
-        continue;
-      }
-
-      appendConsoleLine(`[runner] ${line}`);
-    }
-  }, [isPlaybackSnapshotActive, lastOutput]);
-
-  useEffect(() => {
-    if (isPlaybackSnapshotActive) {
-      return;
-    }
-
-    if (errorMessage && previousErrorRef.current !== errorMessage) {
-      previousErrorRef.current = errorMessage;
-      appendConsoleLine(`[error] ${errorMessage}`);
-      setActiveTab("console");
-    }
-
-    if (!errorMessage) {
-      previousErrorRef.current = null;
-    }
-  }, [errorMessage, isPlaybackSnapshotActive]);
-
-  useEffect(() => {
-    if (isPlaybackSnapshotActive || !latestLifecycleEvent) {
-      return;
-    }
-
-    if (previousLifecycleEventIdRef.current === latestLifecycleEvent.id) {
-      return;
-    }
-
-    previousLifecycleEventIdRef.current = latestLifecycleEvent.id;
-
-    const details = latestLifecycleEvent.url
-      ? ` ${latestLifecycleEvent.url}`
-      : latestLifecycleEvent.port !== null
-        ? ` ${latestLifecycleEvent.port}`
-        : "";
-
-    appendConsoleLine(
-      `[runtime:${latestLifecycleEvent.kind}]${details} ${latestLifecycleEvent.text}`.trim(),
-    );
-
-    if (latestLifecycleEvent.kind === "internal-error") {
-      setActiveTab("console");
-    }
-  }, [isPlaybackSnapshotActive, latestLifecycleEvent]);
 
   useEffect(() => {
     if (isPlaybackSnapshotActive || !latestPreviewMessage) {
@@ -463,7 +335,7 @@ const TerminalPanel = memo(function TerminalPanel() {
       `[preview:${latestPreviewMessage.kind}]${location} ${latestPreviewMessage.text}`.trim(),
     );
     setActiveTab("console");
-  }, [isPlaybackSnapshotActive, latestPreviewMessage]);
+  }, [appendConsoleLine, isPlaybackSnapshotActive, latestPreviewMessage]);
 
   const runtimeEventState = useMemo<RuntimeEventState>(
     () => ({
@@ -472,6 +344,7 @@ const TerminalPanel = memo(function TerminalPanel() {
       isSettingsOpen,
       status,
       previewUrl: previewUrl ?? null,
+      previewPort: previewPort ?? null,
       activeCommand,
       errorMessage,
       consoleLines,
@@ -486,6 +359,7 @@ const TerminalPanel = memo(function TerminalPanel() {
       errorMessage,
       isCollapsed,
       isSettingsOpen,
+      previewPort,
       previewUrl,
       recordableActiveTab,
       status,
@@ -540,7 +414,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const content = formatTerminalContent(rawContent);
   const consoleContent = useMemo(() => {
     if (effectiveConsoleLines.length === 0) {
-      return "No console events yet.";
+      return "";
     }
 
     return effectiveConsoleLines.map(decorateConsoleLine).join("\n");

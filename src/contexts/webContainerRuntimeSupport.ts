@@ -88,10 +88,13 @@ export function formatPreviewMessage(message: {
   port?: number;
   type?: string;
 }): Omit<RuntimePreviewMessage, "id"> {
+  const normalizedType = message.type?.toLowerCase();
   const kind =
-    message.type === "console-error"
+    normalizedType === "console-error" || normalizedType === "preview_console_error"
       ? "console-error"
-      : message.type === "unhandledrejection"
+      : normalizedType === "unhandledrejection" ||
+          normalizedType === "unhandled-rejection" ||
+          normalizedType === "preview_unhandled_rejection"
         ? "unhandled-rejection"
         : "uncaught-exception";
   const text =
@@ -140,7 +143,7 @@ function injectRuntimeSnapshotScript(
 
   const interactionCaptureScript = createIframeInteractionCaptureScript(
     RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER,
-    { includeMouseMove: true },
+    { includeMouseMove: true, includeRouteChange: true },
   );
 
   const snapshotScript = `<script data-next-editor-runtime-snapshot>(function(){const marker=${JSON.stringify(

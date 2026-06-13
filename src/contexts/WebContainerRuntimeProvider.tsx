@@ -56,6 +56,7 @@ function getIsRuntimeSupported(): boolean {
 const fallbackSnapshot: WebContainerRuntimeRecordingSnapshot = {
   status: "idle",
   previewUrl: null,
+  previewPort: null,
   lastOutput: null,
   activeCommand: null,
   errorMessage: null,
@@ -67,6 +68,7 @@ function getFallbackMetadata(): WebContainerRuntimeMetadata {
   return {
     status: "idle",
     previewUrl: null,
+    previewPort: null,
     isSupported: getIsRuntimeSupported(),
     errorMessage: null,
     latestPreviewMessage: null,

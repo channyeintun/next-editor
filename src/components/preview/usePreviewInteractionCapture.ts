@@ -31,7 +31,7 @@ export function usePreviewInteractionCapture({
 
         const captureScript = createIframeInteractionCaptureScript(
           "__INTERACTION_CAPTURE_SETUP__",
-          { includeMouseMove: false },
+          { includeMouseMove: false, includeRouteChange: true },
         );
 
         const scriptElement = iframeDoc.createElement("script");
