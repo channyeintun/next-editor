@@ -11,6 +11,7 @@ import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRun
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import {
+  disposePlaybackModels,
   syncPlaybackModel,
   toMonacoModelPath,
   toPlaybackModelPath,
@@ -223,6 +224,18 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     return true;
   });
 
+  const disposePlaybackModelsIfIdle = useEffectEvent(
+    (preservedUri: { toString(): string } | null = null) => {
+      const monaco = monacoRef.current;
+
+      if (!monaco || usesPlaybackModel) {
+        return;
+      }
+
+      disposePlaybackModels(monaco, preservedUri);
+    },
+  );
+
   // useEffectEvent provides a stable function reference that always reads
   // the latest playback attachment value without causing dependency issues
   const onEditorChange = useEffectEvent(() => {
@@ -310,10 +323,20 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   useEffect(() => {
     return () => {
       disposeEditorListeners();
+      const monaco = monacoRef.current;
+
+      if (monaco) {
+        disposePlaybackModels(monaco);
+      }
+
       editorRef.current = null;
       syncEditorRef(null);
     };
   }, [editorRef, syncEditorRef]);
+
+  useEffect(() => {
+    disposePlaybackModelsIfIdle(editorRef.current?.getModel()?.uri ?? null);
+  }, [editorModelPath, editorRef, usesPlaybackModel]);
 
   useLayoutEffect(() => {
     const monaco = monacoRef.current;
@@ -368,6 +391,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           return;
         }
 
+        disposePlaybackModelsIfIdle(editor.getModel()?.uri ?? null);
         syncEditorContentToWorkspace(editor);
         syncEditorRef(editor);
       }),

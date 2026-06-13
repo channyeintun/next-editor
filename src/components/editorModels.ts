@@ -12,6 +12,25 @@ export function toPlaybackModelPath(workspacePath: string) {
   return `${PLAYBACK_MODEL_ROOT}/${encodeURI(normalizeWorkspacePath(workspacePath))}`;
 }
 
+function isPlaybackModelUri(uri: { toString(): string }) {
+  return uri.toString().startsWith(`${PLAYBACK_MODEL_ROOT}/`);
+}
+
+export function disposePlaybackModels(
+  monaco: Monaco,
+  preservedUri: { toString(): string } | null = null,
+) {
+  const preservedModelUri = preservedUri?.toString();
+
+  monaco.editor.getModels().forEach((model) => {
+    const modelUri = model.uri.toString();
+
+    if (modelUri.startsWith(`${PLAYBACK_MODEL_ROOT}/`) && modelUri !== preservedModelUri) {
+      model.dispose();
+    }
+  });
+}
+
 export function syncPlaybackModel(
   monaco: Monaco,
   workspacePath: string,
@@ -37,7 +56,7 @@ export function syncPlaybackModel(
 export function workspacePathFromMonacoModelUri(uri: { toString(): string }) {
   const modelUri = uri.toString();
 
-  if (!modelUri.startsWith(FILE_URI_PREFIX) || modelUri.startsWith(`${PLAYBACK_MODEL_ROOT}/`)) {
+  if (!modelUri.startsWith(FILE_URI_PREFIX) || isPlaybackModelUri(uri)) {
     return null;
   }
 
