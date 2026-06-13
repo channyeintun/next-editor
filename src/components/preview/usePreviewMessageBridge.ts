@@ -1,6 +1,11 @@
 import { useEffect, type RefObject } from "react";
 import type { IframeInteractionEvent, PreviewEvent, PreviewSize } from "../../types/slides";
 import {
+  IFRAME_CONSOLE_MESSAGE_TYPE,
+  isIframeConsoleMethod,
+  type IframeConsoleMessagePayload,
+} from "../../utils/iframeConsoleBridge";
+import {
   createReplayableRuntimePreviewFromHtml,
   type PreviewScrollPosition,
   RUNTIME_SNAPSHOT_MESSAGE_TYPE,
@@ -18,7 +23,27 @@ interface UsePreviewMessageBridgeOptions {
   targetScrollRef: RefObject<PreviewScrollPosition | null>;
   pendingInteractionRef: RefObject<IframeInteractionEvent | null>;
   sizeRef: RefObject<PreviewSize>;
+  onConsoleMessage: (message: string) => void;
   onRouteChange: (route: string) => void;
+}
+
+function formatPreviewConsoleMessage(payload: unknown): string | null {
+  const consolePayload = payload as Partial<IframeConsoleMessagePayload> | null;
+
+  if (!consolePayload || !isIframeConsoleMethod(consolePayload.method)) {
+    return null;
+  }
+
+  const args = Array.isArray(consolePayload.args)
+    ? consolePayload.args.filter((arg): arg is string => typeof arg === "string")
+    : [];
+  const message = args.join(" ");
+  const location =
+    typeof consolePayload.pathname === "string" && consolePayload.pathname
+      ? ` ${consolePayload.pathname}`
+      : "";
+
+  return `[preview:${consolePayload.method}]${location} ${message}`.trim();
 }
 
 export function usePreviewMessageBridge({
@@ -33,6 +58,7 @@ export function usePreviewMessageBridge({
   targetScrollRef,
   pendingInteractionRef,
   sizeRef,
+  onConsoleMessage,
   onRouteChange,
 }: UsePreviewMessageBridgeOptions) {
   useEffect(() => {
@@ -42,6 +68,16 @@ export function usePreviewMessageBridge({
       }
 
       const { type, payload } = event.data || {};
+      if (type === IFRAME_CONSOLE_MESSAGE_TYPE) {
+        const message = formatPreviewConsoleMessage(payload);
+
+        if (message) {
+          onConsoleMessage(message);
+        }
+
+        return;
+      }
+
       if (type === RUNTIME_SNAPSHOT_MESSAGE_TYPE) {
         if (typeof payload?.html !== "string" || !effectiveRuntimePreviewUrl) {
           return;
@@ -172,6 +208,7 @@ export function usePreviewMessageBridge({
     isRecordingRef,
     isUserScrollingRef,
     lastRuntimeSnapshotRef,
+    onConsoleMessage,
     onRouteChange,
     pendingInteractionRef,
     scrollPositionRef,

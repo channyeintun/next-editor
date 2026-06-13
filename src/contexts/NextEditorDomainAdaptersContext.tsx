@@ -30,9 +30,11 @@ export interface PreviewDomainAdapter {
 }
 
 export interface RuntimePanelDomainAdapter {
+  appendConsoleLine: (line: string) => void;
   getSnapshot: () => RuntimePanelRecordingState | null;
   applySnapshot: (snapshot: RuntimeRecordingSnapshot) => void;
   openConsole: () => void;
+  setConsoleAppender: (appender: (line: string) => void) => void;
   setSnapshotGetter: (getter: () => RuntimePanelRecordingState | null) => void;
   setSnapshotApplier: (applier: (snapshot: RuntimeRecordingSnapshot) => void) => void;
   setConsoleOpener: (opener: () => void) => void;
@@ -96,11 +98,16 @@ function createRuntimePanelDomainAdapter(): RuntimePanelDomainAdapter {
   let getSnapshot: () => RuntimePanelRecordingState | null = () => null;
   let applySnapshot: (snapshot: RuntimeRecordingSnapshot) => void = () => undefined;
   let openConsole: () => void = () => undefined;
+  let appendConsoleLine: (line: string) => void = () => undefined;
 
   return {
+    appendConsoleLine: (line) => appendConsoleLine(line),
     getSnapshot: () => getSnapshot(),
     applySnapshot: (snapshot) => applySnapshot(snapshot),
     openConsole: () => openConsole(),
+    setConsoleAppender: (appender) => {
+      appendConsoleLine = appender;
+    },
     setSnapshotGetter: (getter) => {
       getSnapshot = getter;
     },

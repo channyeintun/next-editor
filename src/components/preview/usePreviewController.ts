@@ -601,6 +601,7 @@ export function usePreviewController(): PreviewController {
     targetScrollRef,
     pendingInteractionRef,
     sizeRef,
+    onConsoleMessage: runtimePanel.appendConsoleLine,
     onRouteChange: applyPreviewRoute,
   });
 

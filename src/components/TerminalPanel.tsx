@@ -283,8 +283,35 @@ const TerminalPanel = memo(function TerminalPanel() {
   }, [currentRecording]);
 
   const appendConsoleLine = useCallback((message: string) => {
-    setConsoleLines((current) => [...current.slice(-24), message]);
+    const nextMessage = message.trim();
+
+    if (!nextMessage) {
+      return;
+    }
+
+    setConsoleLines((current) => {
+      if (current[current.length - 1] === nextMessage) {
+        return current;
+      }
+
+      return [...current.slice(-24), nextMessage];
+    });
   }, []);
+
+  useEffect(() => {
+    runtimePanel.setConsoleAppender((message) => {
+      if (isPlaybackSnapshotActive) {
+        return;
+      }
+
+      appendConsoleLine(message);
+      setActiveTab("console");
+    });
+
+    return () => {
+      runtimePanel.setConsoleAppender(() => undefined);
+    };
+  }, [appendConsoleLine, isPlaybackSnapshotActive, runtimePanel]);
 
   const updateTerminalScrollLine = (surfaceId: string | null, scrollLine: number) => {
     if (!surfaceId || isPlaybackSnapshotActive) {
