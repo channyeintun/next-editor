@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { PanelRight, RotateCw } from "lucide-react";
+import { PanelRight, RotateCw, Settings } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import {
@@ -14,7 +14,6 @@ import {
   useWorkspaceLessonType,
 } from "../hooks/useWorkspace";
 import type { WorkspaceLessonType } from "../types/workspace";
-import SettingIcon from "./icon/Setting";
 import SlidesButton from "./SlidesButton";
 
 const LESSON_TYPE_OPTIONS: Array<{
@@ -30,6 +29,11 @@ const LESSON_TYPE_OPTIONS: Array<{
     label: "HTML/CSS Lesson",
   },
 ];
+
+const HEADER_TEXT_BUTTON_CLASS =
+  "inline-flex h-8 items-center justify-center rounded-md px-3 text-xs font-semibold transition-colors";
+const HEADER_ICON_BUTTON_CLASS =
+  "inline-flex size-8 items-center justify-center rounded-lg border transition-colors";
 
 function isAppleUserAgent(): boolean {
   if (typeof navigator === "undefined") {
@@ -127,7 +131,7 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
             void rerunRunner();
           }}
           disabled={!isSupported || !runnerConfig.enabled || isBusy}
-          className="rounded-md bg-[#173925] px-3 py-1.5 text-[13px] font-bold tracking-[0.04em] text-[#58d88d] uppercase transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6] disabled:cursor-not-allowed disabled:bg-[#17241e] disabled:text-[#4f8e68]"
+          className={`${HEADER_TEXT_BUTTON_CLASS} bg-[#173925] font-bold tracking-[0.04em] text-[#58d88d] uppercase hover:bg-[#1f4a31] hover:text-[#75efa6] disabled:cursor-not-allowed disabled:bg-[#17241e] disabled:text-[#4f8e68]`}
         >
           RUN
         </button>
@@ -153,7 +157,7 @@ const PreviewHeaderButton = memo(function PreviewHeaderButton() {
 
         openPreview();
       }}
-      className={`inline-flex items-center justify-center rounded-lg border transition-colors size-8 ${
+      className={`${HEADER_ICON_BUTTON_CLASS} ${
         isOpen
           ? "border-[#5da4ff] bg-[#273449] text-white shadow-[0_0_0_1px_rgba(93,164,255,0.22)]"
           : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600 hover:text-white"
@@ -182,7 +186,7 @@ const ExportButton = memo(function ExportButton() {
     <button
       onClick={handleExport}
       disabled={!currentRecording}
-      className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+      className={`${HEADER_TEXT_BUTTON_CLASS} bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50`}
     >
       Export
     </button>
@@ -206,7 +210,7 @@ const ImportButton = memo(function ImportButton() {
   return (
     <button
       onClick={handleImport}
-      className="px-3 py-1 text-xs text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+      className={`${HEADER_TEXT_BUTTON_CLASS} bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white`}
     >
       Import
     </button>
@@ -334,9 +338,9 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
           aria-expanded={isMenuOpen}
           aria-haspopup="menu"
           onClick={() => setIsMenuOpen((current) => !current)}
-          className="relative z-2147483647 flex items-center justify-center rounded bg-slate-700 text-slate-300 transition-colors hover:bg-slate-600 hover:text-white size-8"
+          className={`relative z-2147483647 ${HEADER_ICON_BUTTON_CLASS} border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600 hover:text-white`}
         >
-          <SettingIcon />
+          <Settings size={16} aria-hidden="true" />
         </button>
 
         {isMenuOpen ? (

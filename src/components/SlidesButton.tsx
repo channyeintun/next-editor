@@ -60,7 +60,7 @@ export default function SlidesButton() {
         }}
         disabled={showPresentationToggle && !hasSlides}
         aria-pressed={showPresentationToggle ? isPresentationVisible : showManager}
-        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+        className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors ${
           showPresentationToggle
             ? isPresentationVisible
               ? "border-[#5da4ff] bg-[#273449] text-white"
