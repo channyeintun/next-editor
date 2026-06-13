@@ -14,6 +14,8 @@ export interface AudioPlaceholder {
   __audio_type: string;
 }
 
+export type RecordingAudioSource = "microphone" | "external";
+
 /**
  * Data-only type for monaco.Selection that includes both selection and range info.
  * This is compatible with monaco.ISelection and monaco.IRange.
@@ -101,6 +103,7 @@ export interface Recording {
   cursorEvents?: CursorRecordingEvent[];
   slides?: Slide[];
   audioBlob?: Blob | AudioPlaceholder;
+  audioSource?: RecordingAudioSource;
   workspaceSnapshot?: WorkspaceRecordingSnapshot;
   runtimeSnapshot?: RuntimeRecordingSnapshot;
   duration: number;
@@ -194,7 +197,7 @@ export interface UseNextEditorReturn {
   actualDuration: number;
 
   // Recording Controls
-  startRecording: () => void;
+  startRecording: (options?: { audioBlob?: Blob }) => void;
   stopRecording: () => void;
 
   // Playback Controls

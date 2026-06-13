@@ -143,9 +143,12 @@ export const useNextEditorActorBindings = (
   }); // No dependencies - run on every render to catch ref changes
 
   // Recording Controls
-  const startRecording = useCallback(() => {
-    actorRef.send({ type: "START_RECORDING" });
-  }, [actorRef]);
+  const startRecording = useCallback(
+    (options?: { audioBlob?: Blob }) => {
+      actorRef.send({ type: "START_RECORDING", audioBlob: options?.audioBlob });
+    },
+    [actorRef],
+  );
 
   const stopRecording = useCallback(() => {
     actorRef.send({ type: "STOP_RECORDING" });

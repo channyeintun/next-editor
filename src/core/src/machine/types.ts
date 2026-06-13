@@ -7,6 +7,7 @@ import type {
   Recording,
   EditorSelection,
   EditorPosition,
+  RecordingAudioSource,
 } from "../types";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
@@ -91,6 +92,10 @@ export interface AudioState {
   chunks: Blob[];
   /** Detected MIME type */
   mimeType: string;
+  /** Source used for the active or finalized recording audio */
+  source: RecordingAudioSource | null;
+  /** Known duration for external audio, in milliseconds */
+  externalDurationMs: number | null;
 }
 
 /**
@@ -201,7 +206,7 @@ export interface EditorMachineContext {
 // ============================================================================
 
 /** Start recording event */
-export type StartRecordingEvent = { type: "START_RECORDING" };
+export type StartRecordingEvent = { type: "START_RECORDING"; audioBlob?: Blob };
 
 /** Stop recording event */
 export type StopRecordingEvent = { type: "STOP_RECORDING" };
@@ -276,6 +281,12 @@ export type FinishedEvent = { type: "FINISHED" };
 export type AudioActorStoppedEvent = {
   type: "STOPPED";
   blob: Blob;
+};
+
+/** Audio playback actor loaded metadata */
+export type AudioPlaybackReadyEvent = {
+  type: "READY";
+  duration: number;
 };
 
 /** Audio actor started event */
@@ -361,6 +372,7 @@ export type EditorMachineEvent =
   | WorkspaceEventOccurred
   | RuntimeEventOccurred
   | AudioChunkEvent
+  | AudioPlaybackReadyEvent
   | AudioActorStoppedEvent
   | AudioActorStartedEvent
   | AudioActorErrorEvent
@@ -440,6 +452,8 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     mediaRecorder: null,
     chunks: [],
     mimeType: "",
+    source: null,
+    externalDurationMs: null,
   },
   editorRefs: {
     editor: input.editorRef.current,

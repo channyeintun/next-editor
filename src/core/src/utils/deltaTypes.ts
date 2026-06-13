@@ -105,6 +105,7 @@ export interface DeltaRecording {
     order: number;
   }>;
   audioBlob?: Blob | import("../types").AudioPlaceholder;
+  audioSource?: import("../types").RecordingAudioSource;
   duration: number;
   createdAt: number;
 }

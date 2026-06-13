@@ -588,7 +588,7 @@ export const editorMachine = setup({
       let duration = input.recording.duration;
 
       const audioBlob = input.recording.audioBlob;
-      if (audioBlob instanceof Blob) {
+      if (audioBlob instanceof Blob && input.recording.audioSource !== "external") {
         try {
           const exactDuration = await calculateDurationFromFileReader(audioBlob);
           // Use audio duration as the source of truth if it exists
@@ -607,6 +607,14 @@ export const editorMachine = setup({
     canPlay: ({ context }) =>
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
     hasAudio: ({ context }) => hasPlaybackAudio(context),
+    hasExternalAudioBlob: ({ event }) =>
+      event.type === "START_RECORDING" && event.audioBlob instanceof Blob,
+    isMicrophoneAudioRecording: ({ context }) =>
+      context.enableAudioRecording &&
+      context.audio.isRecording &&
+      context.audio.source === "microphone",
+    isExternalAudioRecording: ({ context }) =>
+      context.audio.isRecording && context.audio.source === "external",
     shouldPauseOnInteraction: ({ context }) => context.pauseOnUserInteraction,
     shouldSyncPlaybackEditorRef: ({ context, event }) =>
       event.type === "SET_EDITOR_REF" &&
@@ -622,6 +630,56 @@ export const editorMachine = setup({
   },
   actions: {
     // Recording actions
+    prepareExternalAudioRecording: assign(({ context, event }) => {
+      if (event.type !== "START_RECORDING" || !(event.audioBlob instanceof Blob)) {
+        return {};
+      }
+
+      return {
+        audio: {
+          ...context.audio,
+          blob: event.audioBlob,
+          element: null,
+          isRecording: true,
+          mediaRecorder: null,
+          chunks: [],
+          mimeType: event.audioBlob.type,
+          source: "external" as const,
+          externalDurationMs: null,
+        },
+      };
+    }),
+
+    startExternalAudioPlayback: enqueueActions(({ context, event, enqueue }) => {
+      if (event.type !== "START_RECORDING" || !(event.audioBlob instanceof Blob)) {
+        return;
+      }
+
+      enqueue.spawnChild("audioPlayback", {
+        id: "recordingAudioPlayer",
+        input: {
+          blob: event.audioBlob,
+          volume: context.timeline.volume,
+          playbackRate: 1,
+          startPositionMs: 0,
+        },
+      });
+      enqueue.sendTo("recordingAudioPlayer", { type: "PLAY" });
+    }),
+
+    storeExternalAudioDuration: assign(({ context, event }) => {
+      if (event.type !== "READY" || context.audio.source !== "external") {
+        return {};
+      }
+
+      return {
+        audio: {
+          ...context.audio,
+          externalDurationMs: Number.isFinite(event.duration) ? event.duration : null,
+        },
+      };
+    }),
+
     initRecordingSession: assign(({ context }) => {
       const startedAt = Date.now();
       const slideEvents: SlideEvent[] = [];
@@ -832,11 +890,17 @@ export const editorMachine = setup({
       };
     }),
 
-    finalizeRecording: assign(({ context }) => {
+    finalizeRecording: assign(({ context, event }) => {
       if (!context.session) return { recording: null };
 
       // Base duration from session timing
-      const duration = Math.max(Date.now() - context.session.startedAt, 1);
+      const duration =
+        event.type === "FINISHED" &&
+        context.audio.source === "external" &&
+        typeof context.audio.externalDurationMs === "number" &&
+        Number.isFinite(context.audio.externalDurationMs)
+          ? Math.max(context.audio.externalDurationMs, 1)
+          : Math.max(Date.now() - context.session.startedAt, 1);
       const slides = context.getSlides?.();
       const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() || undefined;
       const workspaceSnapshot = currentWorkspaceSnapshot
@@ -862,6 +926,7 @@ export const editorMachine = setup({
         slides: slides,
         duration,
         audioBlob: context.audio.blob || undefined,
+        audioSource: context.audio.source || undefined,
         workspaceSnapshot,
         runtimeSnapshot,
       };
@@ -873,6 +938,8 @@ export const editorMachine = setup({
           ...context.audio,
           isRecording: false,
           mediaRecorder: null,
+          source: null,
+          externalDurationMs: null,
         },
         timeline: {
           ...context.timeline,
@@ -1343,6 +1410,8 @@ export const editorMachine = setup({
           mediaRecorder: null,
           chunks: [],
           mimeType: event.blob.type,
+          source: "microphone" as const,
+          externalDurationMs: null,
         },
       };
     }),
@@ -1516,6 +1585,18 @@ export const editorMachine = setup({
       on: {
         START_RECORDING: [
           {
+            target: "recording",
+            guard: "hasExternalAudioBlob",
+            actions: [
+              "prepareExternalAudioRecording",
+              "initRecordingSession",
+              "captureInitialFrame",
+              "startExternalAudioPlayback",
+              "notifyRecordingStart",
+              "notifyFrame",
+            ],
+          },
+          {
             target: "startingRecording",
             guard: ({ context }) => context.enableAudioRecording,
           },
@@ -1548,7 +1629,15 @@ export const editorMachine = setup({
           });
           enqueue.sendTo("audioRecorder", { type: "START" });
           enqueue.assign({
-            audio: { ...context.audio, isRecording: true },
+            audio: {
+              ...context.audio,
+              blob: null,
+              isRecording: true,
+              chunks: [],
+              mimeType: "",
+              source: "microphone" as const,
+              externalDurationMs: null,
+            },
           });
         }),
       ],
@@ -1573,6 +1662,7 @@ export const editorMachine = setup({
                 ...context.audio,
                 isRecording: false,
                 mediaRecorder: null,
+                source: null,
               }),
             }),
             "notifyError",
@@ -1586,6 +1676,7 @@ export const editorMachine = setup({
               audio: ({ context }) => ({
                 ...context.audio,
                 isRecording: false,
+                source: null,
               }),
             }),
           ],
@@ -1608,13 +1699,39 @@ export const editorMachine = setup({
           }),
         }),
       ],
-      exit: [stopChild("mouseTracker")],
+      exit: [stopChild("mouseTracker"), stopChild("recordingAudioPlayer")],
       on: {
         CAPTURE_FRAME: {
           actions: ["captureFrame", "notifyFrame"],
         },
+        READY: {
+          actions: "storeExternalAudioDuration",
+        },
         STOPPED: {
           actions: "storeAudioBlob",
+        },
+        FINISHED: {
+          target: "loading",
+          guard: "isExternalAudioRecording",
+          actions: ["finalizeRecording", "notifyRecordingStop"],
+        },
+        ERROR: {
+          target: "idle",
+          guard: "isExternalAudioRecording",
+          actions: [
+            assign({
+              error: ({ event }) =>
+                event.type === "ERROR" ? event.error : "Failed to play external audio",
+              audio: ({ context }) => ({
+                ...context.audio,
+                isRecording: false,
+                source: null,
+                externalDurationMs: null,
+              }),
+              session: null,
+            }),
+            "notifyError",
+          ],
         },
         SLIDE_EVENT: {
           actions: [
@@ -1685,7 +1802,12 @@ export const editorMachine = setup({
         STOP_RECORDING: [
           {
             target: "stoppingRecording",
-            guard: ({ context }) => context.enableAudioRecording && context.audio.isRecording,
+            guard: "isMicrophoneAudioRecording",
+          },
+          {
+            target: "loading",
+            guard: "isExternalAudioRecording",
+            actions: ["finalizeRecording", "notifyRecordingStop"],
           },
           {
             target: "loading",

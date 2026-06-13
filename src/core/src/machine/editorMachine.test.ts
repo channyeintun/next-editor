@@ -470,6 +470,64 @@ class MockAudio {
   }
 }
 
+describe("editorMachine external audio recording", () => {
+  const originalAudio = globalThis.Audio;
+  const originalCreateObjectUrl = URL.createObjectURL;
+  const originalRevokeObjectUrl = URL.revokeObjectURL;
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, "Audio", {
+      configurable: true,
+      value: originalAudio,
+    });
+    URL.createObjectURL = originalCreateObjectUrl;
+    URL.revokeObjectURL = originalRevokeObjectUrl;
+    MockAudio.instances = [];
+  });
+
+  it("plays an uploaded audio file while recording and stops when it ends", async () => {
+    Object.defineProperty(globalThis, "Audio", {
+      configurable: true,
+      value: MockAudio,
+    });
+    URL.createObjectURL = () => "blob:external-audio";
+    URL.revokeObjectURL = () => undefined;
+
+    const events: string[] = [];
+    let stoppedRecording: Recording | null = null;
+    const audioBlob = new Blob(["external audio"], { type: "audio/webm" });
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        onRecordingStart: () => events.push("recording:start"),
+        onRecordingStop: (recording) => {
+          events.push("recording:stop");
+          stoppedRecording = recording;
+        },
+      },
+    }).start();
+
+    actor.send({ type: "START_RECORDING", audioBlob });
+    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+
+    const audio = MockAudio.instances[0];
+    expect(audio.paused).toBe(false);
+    expect(actor.getSnapshot().context.audio.source).toBe("external");
+
+    audio.oncanplaythrough?.();
+    audio.onended?.();
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    expect(events).toEqual(["recording:start", "recording:stop"]);
+    expect(stoppedRecording?.audioBlob).toBe(audioBlob);
+    expect(stoppedRecording?.audioSource).toBe("external");
+    expect(stoppedRecording?.duration).toBe(60_000);
+    expect(actor.getSnapshot().children.recordingAudioPlayer).toBeUndefined();
+
+    actor.stop();
+  });
+});
+
 describe("audioPlaybackActor", () => {
   const originalAudio = globalThis.Audio;
   const originalCreateObjectUrl = URL.createObjectURL;

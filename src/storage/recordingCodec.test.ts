@@ -65,13 +65,14 @@ describe("recordingCodec", () => {
     const audioBlob = new Blob([new Uint8Array([1, 2, 3, 4])], {
       type: "audio/webm",
     });
-    const recording = createRecording({ audioBlob });
+    const recording = createRecording({ audioBlob, audioSource: "external" });
 
     const encoded = await encodeRecordingsToBase64([recording]);
     const [decoded] = await decodeBase64ToRecordings(encoded);
 
     expect(decoded.id).toBe(recording.id);
     expect(decoded.version).toBe(3);
+    expect(decoded.audioSource).toBe("external");
     expect(decoded.frames).toEqual(recording.frames);
     const decodedAudioBlob = decoded.audioBlob;
     expect(decodedAudioBlob).toBeInstanceOf(Blob);
