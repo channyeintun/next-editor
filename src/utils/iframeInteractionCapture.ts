@@ -16,6 +16,12 @@ export function createIframeInteractionCaptureScript(
   return `
     (function() {
       const marker = ${JSON.stringify(setupMarker)};
+      const cleanupMarker = marker + ':cleanup';
+
+      if (typeof window[cleanupMarker] === 'function') {
+        window[cleanupMarker]();
+      }
+
       if (window[marker]) return;
       window[marker] = true;
 
@@ -23,6 +29,61 @@ export function createIframeInteractionCaptureScript(
       const navigationCommandMessageType = ${JSON.stringify(IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE)};
       const includeMouseMove = ${JSON.stringify(includeMouseMove)};
       const includeRouteChange = ${JSON.stringify(includeRouteChange)};
+      const cleanupCallbacks = [];
+      let pendingMouseMove = null;
+      let mouseMoveFrame = 0;
+      let lastMouseMoveSignature = '';
+      let pendingScrollTarget = null;
+      let scrollFrame = 0;
+      let scrollTicking = false;
+
+      function addWindowListener(type, listener, options) {
+        window.addEventListener(type, listener, options);
+        cleanupCallbacks.push(function() {
+          window.removeEventListener(type, listener, options);
+        });
+      }
+
+      function addDocumentListener(type, listener, options) {
+        document.addEventListener(type, listener, options);
+        cleanupCallbacks.push(function() {
+          document.removeEventListener(type, listener, options);
+        });
+      }
+
+      function cleanupInteractionCapture() {
+        while (cleanupCallbacks.length) {
+          const cleanup = cleanupCallbacks.pop();
+
+          try {
+            cleanup();
+          } catch {}
+        }
+
+        if (mouseMoveFrame) {
+          window.cancelAnimationFrame(mouseMoveFrame);
+          mouseMoveFrame = 0;
+        }
+
+        if (scrollFrame) {
+          window.cancelAnimationFrame(scrollFrame);
+          scrollFrame = 0;
+        }
+
+        pendingMouseMove = null;
+        pendingScrollTarget = null;
+        scrollTicking = false;
+
+        try {
+          delete window[marker];
+          delete window[cleanupMarker];
+        } catch {
+          window[marker] = false;
+          window[cleanupMarker] = undefined;
+        }
+      }
+
+      window[cleanupMarker] = cleanupInteractionCapture;
 
       function getXPath(element) {
         if (element.id) return '//*[@id="' + element.id + '"]';
@@ -113,23 +174,30 @@ export function createIframeInteractionCaptureScript(
             return;
           }
 
-          window.history[methodName] = function() {
+          const wrappedMethod = function() {
             const result = originalMethod.apply(this, arguments);
             emitRouteChange();
             return result;
           };
+
+          window.history[methodName] = wrappedMethod;
+          cleanupCallbacks.push(function() {
+            if (window.history && window.history[methodName] === wrappedMethod) {
+              window.history[methodName] = originalMethod;
+            }
+          });
         };
 
         wrapHistoryMethod('pushState');
         wrapHistoryMethod('replaceState');
         emitRouteChange();
-        window.addEventListener('load', emitRouteChange);
-        window.addEventListener('pageshow', emitRouteChange);
-        window.addEventListener('popstate', emitRouteChange);
-        window.addEventListener('hashchange', emitRouteChange);
+        addWindowListener('load', emitRouteChange);
+        addWindowListener('pageshow', emitRouteChange);
+        addWindowListener('popstate', emitRouteChange);
+        addWindowListener('hashchange', emitRouteChange);
       }
 
-      window.addEventListener('message', (event) => {
+      addWindowListener('message', (event) => {
         const message = event.data || {};
 
         if (
@@ -145,7 +213,7 @@ export function createIframeInteractionCaptureScript(
         }
       });
 
-      document.addEventListener(
+      addDocumentListener(
         'click',
         (event) => {
           emit('click', event.target, {
@@ -158,10 +226,6 @@ export function createIframeInteractionCaptureScript(
       );
 
       if (includeMouseMove) {
-        let pendingMouseMove = null;
-        let mouseMoveFrame = 0;
-        let lastMouseMoveSignature = '';
-
         const flushMouseMove = () => {
           mouseMoveFrame = 0;
 
@@ -189,7 +253,7 @@ export function createIframeInteractionCaptureScript(
           });
         };
 
-        document.addEventListener(
+        addDocumentListener(
           'mousemove',
           (event) => {
             if (!(event.target instanceof Element)) {
@@ -210,7 +274,7 @@ export function createIframeInteractionCaptureScript(
         );
       }
 
-      document.addEventListener(
+      addDocumentListener(
         'mouseenter',
         (event) => {
           if (event.target !== document.body) {
@@ -223,7 +287,7 @@ export function createIframeInteractionCaptureScript(
         true,
       );
 
-      document.addEventListener(
+      addDocumentListener(
         'mouseleave',
         (event) => {
           if (event.target !== document.body) {
@@ -233,7 +297,7 @@ export function createIframeInteractionCaptureScript(
         true,
       );
 
-      document.addEventListener(
+      addDocumentListener(
         'focus',
         (event) => {
           emit('focus', event.target);
@@ -241,7 +305,7 @@ export function createIframeInteractionCaptureScript(
         true,
       );
 
-      document.addEventListener(
+      addDocumentListener(
         'blur',
         (event) => {
           emit('blur', event.target);
@@ -249,7 +313,7 @@ export function createIframeInteractionCaptureScript(
         true,
       );
 
-      document.addEventListener(
+      addDocumentListener(
         'keydown',
         (event) => {
           emit('keydown', event.target, { key: event.key, code: event.code });
@@ -257,7 +321,7 @@ export function createIframeInteractionCaptureScript(
         true,
       );
 
-      document.addEventListener(
+      addDocumentListener(
         'keyup',
         (event) => {
           emit('keyup', event.target, { key: event.key, code: event.code });
@@ -265,7 +329,7 @@ export function createIframeInteractionCaptureScript(
         true,
       );
 
-      document.addEventListener(
+      addDocumentListener(
         'input',
         (event) => {
           const target = event.target;
@@ -280,8 +344,7 @@ export function createIframeInteractionCaptureScript(
         true,
       );
 
-      let scrollTicking = false;
-      document.addEventListener(
+      addDocumentListener(
         'scroll',
         (event) => {
           if (scrollTicking) {
@@ -289,14 +352,20 @@ export function createIframeInteractionCaptureScript(
           }
 
           const target = event.target;
+          pendingScrollTarget = target;
           scrollTicking = true;
 
-          window.requestAnimationFrame(() => {
+          scrollFrame = window.requestAnimationFrame(() => {
+            scrollFrame = 0;
+            scrollTicking = false;
+            const nextTarget = pendingScrollTarget;
+            pendingScrollTarget = null;
+
             if (
-              target === document ||
-              target === window ||
-              target === document.body ||
-              target === document.documentElement
+              nextTarget === document ||
+              nextTarget === window ||
+              nextTarget === document.body ||
+              nextTarget === document.documentElement
             ) {
               const scrollElement =
                 document.scrollingElement || document.documentElement;
@@ -305,15 +374,13 @@ export function createIframeInteractionCaptureScript(
                 scrollLeft: scrollElement.scrollLeft,
                 isDocument: true,
               });
-            } else if (target instanceof Element) {
-              emit('scroll', target, {
-                scrollTop: target.scrollTop,
-                scrollLeft: target.scrollLeft,
+            } else if (nextTarget instanceof Element) {
+              emit('scroll', nextTarget, {
+                scrollTop: nextTarget.scrollTop,
+                scrollLeft: nextTarget.scrollLeft,
                 isDocument: false,
               });
             }
-
-            scrollTicking = false;
           });
         },
         true,

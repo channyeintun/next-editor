@@ -1,6 +1,9 @@
 import { useEffect, type RefObject } from "react";
 import { createIframeInteractionCaptureScript } from "../../utils/iframeInteractionCapture";
 
+const INTERACTION_CAPTURE_SETUP_MARKER = "__INTERACTION_CAPTURE_SETUP__";
+const INTERACTION_CAPTURE_CLEANUP_MARKER = `${INTERACTION_CAPTURE_SETUP_MARKER}:cleanup`;
+
 interface UsePreviewInteractionCaptureOptions {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   isRecording: boolean;
@@ -25,12 +28,14 @@ export function usePreviewInteractionCapture({
     const setupInteractionListeners = () => {
       try {
         const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        const iframeWindow = iframe.contentWindow as (Window & Record<string, unknown>) | null;
+
         if (!iframeDoc) {
           return;
         }
 
         const captureScript = createIframeInteractionCaptureScript(
-          "__INTERACTION_CAPTURE_SETUP__",
+          INTERACTION_CAPTURE_SETUP_MARKER,
           { includeMouseMove: false, includeRouteChange: true },
         );
 
@@ -42,7 +47,15 @@ export function usePreviewInteractionCapture({
           iframeDoc.documentElement.appendChild(scriptElement);
         }
 
-        return () => undefined;
+        return () => {
+          const cleanup = iframeWindow?.[INTERACTION_CAPTURE_CLEANUP_MARKER];
+
+          if (typeof cleanup === "function") {
+            cleanup.call(iframeWindow);
+          }
+
+          scriptElement.remove();
+        };
       } catch (error) {
         console.warn("Cannot track interactions in iframe (likely cross-origin):", error);
         return undefined;
