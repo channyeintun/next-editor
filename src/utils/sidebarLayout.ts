@@ -1,5 +1,5 @@
-export const DEFAULT_FILE_SIDEBAR_WIDTH = 288;
-export const MIN_FILE_SIDEBAR_WIDTH = 220;
+export const DEFAULT_FILE_SIDEBAR_WIDTH = 248;
+export const MIN_FILE_SIDEBAR_WIDTH = 200;
 export const MAX_FILE_SIDEBAR_WIDTH = 520;
 export const MIN_MAIN_EDITOR_WIDTH = 360;
 export const FILE_SIDEBAR_WIDTH_STORAGE_KEY = "next-editor:file-sidebar-width";

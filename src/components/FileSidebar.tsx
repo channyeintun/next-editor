@@ -88,6 +88,12 @@ interface ContextMenuPlacement {
 const CONTEXT_MENU_VIEWPORT_MARGIN = 8;
 const CONTEXT_MENU_FALLBACK_WIDTH = 224;
 const CONTEXT_MENU_FALLBACK_HEIGHT = 320;
+const SIDEBAR_TREE_INDENT = 12;
+const SIDEBAR_TREE_OFFSET = 10;
+
+function getSidebarTreePaddingLeft(depth: number): string {
+  return `${depth * SIDEBAR_TREE_INDENT + SIDEBAR_TREE_OFFSET}px`;
+}
 
 function clampViewportValue(value: number, min: number, max: number): number {
   if (max < min) {
@@ -712,25 +718,25 @@ const FileSidebar = memo(function FileSidebar() {
   const renderInlineInput = (kind: "file" | "folder", depth: number) => {
     const icon =
       kind === "folder" ? (
-        <FolderPlus size={14} className="text-slate-400" />
+        <FolderPlus size={13} className="text-slate-400" />
       ) : (
-        <FilePlus2 size={14} className="text-slate-400" />
+        <FilePlus2 size={13} className="text-slate-400" />
       );
 
     return (
-      <div className="px-2">
+      <div className="px-1.5">
         <div
-          className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-900 px-3 py-2"
-          style={{ paddingLeft: `${depth * 16 + 12}px` }}
+          className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5"
+          style={{ paddingLeft: getSidebarTreePaddingLeft(depth) }}
         >
-          <span className="flex shrink-0 items-center justify-center size-5">{icon}</span>
+          <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
           <input
             ref={editInputRef}
             value={draftName}
             onChange={(event) => setDraftName(event.target.value)}
             onKeyDown={handleDraftKeyDown}
             onBlur={commitInlineEdit}
-            className="min-w-0 flex-1 bg-transparent text-sm text-slate-100 outline-none"
+            className="min-w-0 flex-1 bg-transparent text-[13px] leading-5 text-slate-100 outline-none"
           />
         </div>
       </div>
@@ -744,26 +750,26 @@ const FileSidebar = memo(function FileSidebar() {
       const isExpanded = !isCollapsed;
 
       return (
-        <div key={node.path} className="space-y-1">
+        <div key={node.path} className="space-y-0.5">
           {isEditing ? (
             renderInlineInput("folder", depth)
           ) : (
-            <div className="px-2">
+            <div className="px-1.5">
               <button
                 type="button"
                 onClick={() => toggleFolder(node.path)}
                 onContextMenu={(event) => handleRowContextMenu(event, "folder", node.path)}
-                className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-slate-900 ${
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5 transition-colors hover:bg-slate-900 ${
                   node.hasActiveFile ? "text-slate-200" : "text-slate-400"
                 }`}
-                style={{ paddingLeft: `${depth * 16 + 12}px` }}
+                style={{ paddingLeft: getSidebarTreePaddingLeft(depth) }}
                 aria-expanded={isExpanded}
               >
-                <span className="flex shrink-0 items-center justify-center size-5">
+                <span className="flex size-4 shrink-0 items-center justify-center">
                   {isExpanded || node.hasActiveFile ? (
-                    <FolderOpen size={14} className="text-sky-300" />
+                    <FolderOpen size={13} className="text-sky-300" />
                   ) : (
-                    <Folder size={14} className="text-slate-500" />
+                    <Folder size={13} className="text-slate-500" />
                   )}
                 </span>
                 <span className="truncate font-medium">{node.name}</span>
@@ -788,22 +794,22 @@ const FileSidebar = memo(function FileSidebar() {
     }
 
     return (
-      <div key={node.path} className="px-2">
+      <div key={node.path} className="px-1.5">
         <button
           type="button"
           onClick={() => openFile(node.path)}
           onContextMenu={(event) => handleRowContextMenu(event, "file", node.path)}
-          className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors ${
+          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5 transition-colors ${
             isActive
               ? "bg-slate-800 text-white"
               : "text-slate-300 hover:bg-slate-900 hover:text-white"
           }`}
-          style={{ paddingLeft: `${depth * 16 + 12}px` }}
+          style={{ paddingLeft: getSidebarTreePaddingLeft(depth) }}
         >
-          <span className="flex shrink-0 items-center justify-center size-5">
+          <span className="flex size-4 shrink-0 items-center justify-center">
             {getFileIcon(node.file)}
           </span>
-          <span className="truncate text-sm font-medium">{node.name}</span>
+          <span className="truncate font-medium">{node.name}</span>
         </button>
       </div>
     );
@@ -815,29 +821,29 @@ const FileSidebar = memo(function FileSidebar() {
       style={{ width: sidebarWidth }}
       data-cursor-replay-target="file-sidebar"
     >
-      <div className="border-b border-slate-800 px-4 py-3">
+      <div className="border-b border-slate-800 px-3 py-2">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
             Files
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={handleCreateFile}
-              className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-white size-6"
+              className="inline-flex size-5 items-center justify-center text-slate-400 transition-colors hover:text-white"
               aria-label="Create file"
               title="Create file"
             >
-              <FilePlus2 size={15} />
+              <FilePlus2 size={14} />
             </button>
             <button
               type="button"
               onClick={handleCreateFolder}
-              className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-white size-6"
+              className="inline-flex size-5 items-center justify-center text-slate-400 transition-colors hover:text-white"
               aria-label="Create folder"
               title="Create folder"
             >
-              <FolderPlus size={15} />
+              <FolderPlus size={14} />
             </button>
           </div>
         </div>
@@ -846,9 +852,9 @@ const FileSidebar = memo(function FileSidebar() {
       <div
         ref={sidebarScrollContainerRef}
         onScroll={handleSidebarScroll}
-        className="relative min-h-0 flex-1 overflow-y-auto px-2 py-3"
+        className="relative min-h-0 flex-1 overflow-y-auto px-1.5 py-2"
       >
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {editState?.mode === "create" && editState.parentPath === ""
             ? renderInlineInput(editState.kind, 0)
             : null}
