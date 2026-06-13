@@ -126,6 +126,18 @@ function replacePathPrefix(path: string, currentPrefix: string, nextPrefix: stri
   return `${nextPrefix}${path.slice(currentPrefix.length)}`;
 }
 
+function remapCollapsedFolders(
+  collapsedFolders: string[],
+  currentPrefix: string,
+  nextPrefix: string,
+): string[] {
+  return collapsedFolders.map((folderPath) =>
+    isPathWithinFolder(folderPath, currentPrefix)
+      ? replacePathPrefix(folderPath, currentPrefix, nextPrefix)
+      : folderPath,
+  );
+}
+
 function inferWorkspaceLessonType(
   project: Pick<WorkspaceProject, "files"> & {
     lessonType?: string;
@@ -653,6 +665,11 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
             activeFilePath: isPathWithinFolder(context.activeFilePath, normalizedCurrentPath)
               ? replacePathPrefix(context.activeFilePath, normalizedCurrentPath, normalizedNextPath)
               : context.activeFilePath,
+            collapsedFolders: remapCollapsedFolders(
+              context.collapsedFolders,
+              normalizedCurrentPath,
+              normalizedNextPath,
+            ),
             previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
