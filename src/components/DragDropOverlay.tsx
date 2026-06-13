@@ -1,4 +1,5 @@
 import React from "react";
+import LoadingSpinner from "./LoadingSpinner";
 
 interface DragDropOverlayProps {
   isDragging: boolean;
@@ -17,7 +18,7 @@ const DragDropOverlay: React.FC<DragDropOverlayProps> = ({ isDragging, isLoading
       >
         {isLoading ? (
           <div className="text-blue-400">
-            <div className="animate-spin rounded-full border-b-2 border-blue-400 mx-auto size-12"></div>
+            <LoadingSpinner />
           </div>
         ) : (
           <div className="text-blue-400">

@@ -13,6 +13,7 @@ import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useWorkspaceLessonType } from "../hooks/useWorkspace";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import CursorComponent from "./Cursor.tsx";
+import LoadingSpinner from "./LoadingSpinner";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
 const TerminalPanel = lazy(() => import("./TerminalPanel"));
@@ -20,7 +21,7 @@ const TerminalPanel = lazy(() => import("./TerminalPanel"));
 function EditorSurfaceFallback() {
   return (
     <div className="h-full flex items-center justify-center bg-slate-950">
-      <div className="size-8 animate-spin rounded-full border-2 border-white/15 border-t-white/80" />
+      <LoadingSpinner />
     </div>
   );
 }

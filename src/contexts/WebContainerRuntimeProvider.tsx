@@ -10,6 +10,7 @@ import {
   type WebContainerRuntimeRecordingSnapshot,
 } from "./WebContainerRuntimeContext";
 import { useWorkspaceLessonType } from "../hooks/useWorkspace";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 interface WebContainerRuntimeProviderProps {
   children: React.ReactNode;
@@ -98,7 +99,7 @@ function StaticWebContainerRuntimeProvider({ children }: WebContainerRuntimeProv
 function RuntimeProviderFallback() {
   return (
     <div className="h-dvh flex items-center justify-center bg-slate-950 text-white">
-      <div className="size-8 animate-spin rounded-full border-2 border-white/15 border-t-white/80" />
+      <LoadingSpinner />
     </div>
   );
 }
