@@ -827,7 +827,10 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
             activeFilePath: event.activeFilePath,
             collapsedFolders: event.collapsedFolders ?? [],
             sidebarScrollTop: normalizeSidebarScrollTop(event.sidebarScrollTop),
-            sidebarWidth: normalizeSidebarWidth(event.sidebarWidth),
+            sidebarWidth:
+              event.sidebarWidth === undefined
+                ? context.sidebarWidth
+                : normalizeSidebarWidth(event.sidebarWidth),
             savedSnapshot: event.savedSnapshot,
             projectVersion: context.projectVersion + 1,
             previewVersion: context.previewVersion + 1,

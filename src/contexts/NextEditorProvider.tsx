@@ -87,13 +87,16 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     resetProject();
   }, [clearRecordingBase, resetProject]);
 
-  const handleWorkspaceEvent = useCallback(() => {
-    if (suppressWorkspaceEventsRef.current) {
-      return;
-    }
+  const handleWorkspaceEvent = useCallback(
+    (event?: { sidebarWidthDelta?: number }) => {
+      if (suppressWorkspaceEventsRef.current) {
+        return;
+      }
 
-    handleWorkspaceEventBase();
-  }, [handleWorkspaceEventBase, suppressWorkspaceEventsRef]);
+      handleWorkspaceEventBase(event);
+    },
+    [handleWorkspaceEventBase, suppressWorkspaceEventsRef],
+  );
 
   const actionsValue = useMemo(
     () => ({
@@ -165,6 +168,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     getSidebarWidth,
     loadProject,
     resetProject,
+    setSidebarWidth,
   } = useWorkspaceActions();
   const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
@@ -212,7 +216,6 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
         const activeFilePath = getActiveFilePath();
         const collapsedFolders = getCollapsedFolders();
         const sidebarScrollTop = getSidebarScrollTop();
-        const sidebarWidth = getSidebarWidth();
         const cachedSnapshot = workspaceSnapshotRef.current;
 
         if (
@@ -220,8 +223,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
           cachedSnapshot.project === project &&
           cachedSnapshot.activeFilePath === activeFilePath &&
           cachedSnapshot.collapsedFolders === collapsedFolders &&
-          (cachedSnapshot.sidebarScrollTop ?? 0) === sidebarScrollTop &&
-          cachedSnapshot.sidebarWidth === sidebarWidth
+          (cachedSnapshot.sidebarScrollTop ?? 0) === sidebarScrollTop
         ) {
           return cachedSnapshot;
         }
@@ -231,7 +233,6 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
           activeFilePath,
           collapsedFolders,
           sidebarScrollTop,
-          sidebarWidth,
         } satisfies WorkspaceRecordingSnapshot;
 
         workspaceSnapshotRef.current = nextSnapshot;
@@ -244,8 +245,14 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
           snapshot.activeFilePath,
           snapshot.collapsedFolders ?? [],
           snapshot.sidebarScrollTop ?? 0,
-          snapshot.sidebarWidth,
         );
+        if (
+          typeof snapshot.sidebarWidthDelta === "number" &&
+          Number.isFinite(snapshot.sidebarWidthDelta) &&
+          snapshot.sidebarWidthDelta !== 0
+        ) {
+          setSidebarWidth(getSidebarWidth() + snapshot.sidebarWidthDelta);
+        }
         void saveRuntimeWorkspace();
       },
       getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
@@ -279,6 +286,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       preview,
       runtimePanel,
       saveRuntimeWorkspace,
+      setSidebarWidth,
       slides,
       suppressWorkspaceEvents,
     ],

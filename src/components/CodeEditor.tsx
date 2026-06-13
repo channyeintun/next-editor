@@ -26,7 +26,7 @@ interface CodeEditorProps {
 }
 
 interface WorkspaceEventRecorderProps {
-  handleWorkspaceEvent: () => void;
+  handleWorkspaceEvent: (event?: { sidebarWidthDelta?: number }) => void;
   shouldTrackWorkspaceChanges: boolean;
 }
 
@@ -59,9 +59,11 @@ function WorkspaceEventRecorder({
       previousSidebarStateRef.current !== sidebarState ||
       previousProjectVersionRef.current !== projectVersion
     ) {
+      const sidebarWidthDelta =
+        sidebarState.sidebarWidth - previousSidebarStateRef.current.sidebarWidth;
       previousSidebarStateRef.current = sidebarState;
       previousProjectVersionRef.current = projectVersion;
-      handleWorkspaceEvent();
+      handleWorkspaceEvent({ sidebarWidthDelta });
     }
   }, [handleWorkspaceEvent, projectVersion, shouldTrackWorkspaceChanges, sidebarState]);
 

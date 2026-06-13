@@ -149,6 +149,79 @@ function findTimedEventIndexAtOrBeforeBinary<T extends TimedReplayEvent>(
   return nearestIndex;
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function getWorkspaceSidebarWidthDelta(
+  workspaceEvents: WorkspaceRecordingEvent[],
+  nextIndex: number,
+  lastAppliedIndex: number,
+): { delta: number; hasDelta: boolean } {
+  if (nextIndex === lastAppliedIndex) {
+    return { delta: 0, hasDelta: false };
+  }
+
+  let delta = 0;
+  let hasDelta = false;
+
+  if (nextIndex > lastAppliedIndex) {
+    const startIndex = Math.max(0, lastAppliedIndex + 1);
+
+    for (let index = startIndex; index <= nextIndex; index++) {
+      const eventDelta = workspaceEvents[index]?.snapshot.sidebarWidthDelta;
+
+      if (isFiniteNumber(eventDelta)) {
+        delta += eventDelta;
+        hasDelta = true;
+      }
+    }
+
+    return { delta, hasDelta };
+  }
+
+  const endIndex = Math.min(workspaceEvents.length - 1, lastAppliedIndex);
+
+  for (let index = nextIndex + 1; index <= endIndex; index++) {
+    const eventDelta = workspaceEvents[index]?.snapshot.sidebarWidthDelta;
+
+    if (isFiniteNumber(eventDelta)) {
+      delta -= eventDelta;
+      hasDelta = true;
+    }
+  }
+
+  return { delta, hasDelta };
+}
+
+function resolveWorkspaceSnapshotForReplay({
+  workspaceEvents,
+  nextIndex,
+  lastAppliedIndex,
+}: {
+  workspaceEvents: WorkspaceRecordingEvent[];
+  nextIndex: number;
+  lastAppliedIndex: number;
+}): WorkspaceRecordingSnapshot {
+  const snapshot = workspaceEvents[nextIndex].snapshot;
+  const sidebarWidthDelta = getWorkspaceSidebarWidthDelta(
+    workspaceEvents,
+    nextIndex,
+    lastAppliedIndex,
+  );
+
+  if (!sidebarWidthDelta.hasDelta) {
+    return snapshot;
+  }
+
+  const { sidebarWidthDelta: _sidebarWidthDelta, ...snapshotWithoutSidebarDelta } = snapshot;
+
+  return {
+    ...snapshotWithoutSidebarDelta,
+    sidebarWidthDelta: sidebarWidthDelta.delta,
+  };
+}
+
 function mergePreviewEventState(
   previewEvent: PreviewEvent,
   previousState?: PreviewState,
@@ -310,11 +383,16 @@ export function getWorkspaceReplayResult({
   if (replayCursor.latestEvent && replayCursor.nextIndex !== lastAppliedIndex) {
     const snapshot =
       currentSnapshot !== undefined ? currentSnapshot : (getCurrentSnapshot?.() ?? null);
+    const snapshotToApply = resolveWorkspaceSnapshotForReplay({
+      workspaceEvents,
+      nextIndex: replayCursor.nextIndex,
+      lastAppliedIndex,
+    });
 
-    if (!snapshot || !areWorkspaceSnapshotsEqual(snapshot, replayCursor.latestEvent.snapshot)) {
+    if (!snapshot || !areWorkspaceSnapshotsEqual(snapshot, snapshotToApply)) {
       return {
         nextIndex: replayCursor.nextIndex,
-        snapshotToApply: replayCursor.latestEvent.snapshot,
+        snapshotToApply,
       };
     }
   }

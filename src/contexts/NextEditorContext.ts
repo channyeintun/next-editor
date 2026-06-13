@@ -24,7 +24,7 @@ export interface NextEditorActions {
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
-  handleWorkspaceEvent: () => void;
+  handleWorkspaceEvent: (event?: { sidebarWidthDelta?: number }) => void;
   handleRuntimeEvent: () => void;
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;
   exportAllAsFile: (filename?: string) => Promise<void>;

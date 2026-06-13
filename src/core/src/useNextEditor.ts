@@ -269,9 +269,12 @@ export const useNextEditorActorBindings = (
     [actorRef],
   );
 
-  const handleWorkspaceEvent = useCallback(() => {
-    actorRef.send({ type: "WORKSPACE_EVENT" });
-  }, [actorRef]);
+  const handleWorkspaceEvent = useCallback(
+    (event?: { sidebarWidthDelta?: number }) => {
+      actorRef.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: event?.sidebarWidthDelta });
+    },
+    [actorRef],
+  );
 
   const handleRuntimeEvent = useCallback(() => {
     actorRef.send({ type: "RUNTIME_EVENT" });

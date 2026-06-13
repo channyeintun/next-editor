@@ -12,11 +12,13 @@ import {
 function createWorkspaceSnapshot(
   content: string,
   sidebarScrollTop = 0,
+  sidebarWidthDelta?: number,
 ): WorkspaceRecordingSnapshot {
   return {
     activeFilePath: "index.html",
     collapsedFolders: [],
     sidebarScrollTop,
+    ...(sidebarWidthDelta === undefined ? {} : { sidebarWidthDelta }),
     project: {
       id: "project-1",
       name: "Project",
@@ -154,6 +156,90 @@ describe("replayState", () => {
 
     expect(backwardSeek.nextIndex).toBe(0);
     expect(backwardSeek.snapshotToApply).toBe(firstSnapshot);
+  });
+
+  it("replays sidebar resize deltas against the current local width", () => {
+    const firstSnapshot = createWorkspaceSnapshot("same", 0, 0);
+    const resizedSnapshot = createWorkspaceSnapshot("same", 0, 52);
+    const currentSnapshot = createWorkspaceSnapshot("same", 0);
+    const workspaceEvents: WorkspaceRecordingEvent[] = [
+      {
+        timestamp: 0,
+        snapshot: firstSnapshot,
+      },
+      {
+        timestamp: 100,
+        snapshot: resizedSnapshot,
+      },
+    ];
+
+    const resizeForward = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 100,
+      currentSnapshot,
+      lastAppliedIndex: 0,
+    });
+
+    expect(resizeForward.nextIndex).toBe(1);
+    expect(resizeForward.snapshotToApply).toMatchObject({
+      sidebarWidthDelta: 52,
+    });
+  });
+
+  it("keeps the local sidebar width when the recording did not resize it", () => {
+    const firstSnapshot = createWorkspaceSnapshot("first", 0, 0);
+    const currentSnapshot = createWorkspaceSnapshot("outside", 0);
+    const workspaceEvents: WorkspaceRecordingEvent[] = [
+      {
+        timestamp: 0,
+        snapshot: firstSnapshot,
+      },
+    ];
+
+    const initialReplay = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 0,
+      currentSnapshot,
+      lastAppliedIndex: -1,
+    });
+
+    expect(initialReplay.nextIndex).toBe(0);
+    expect(initialReplay.snapshotToApply).toMatchObject({
+      sidebarWidthDelta: 0,
+    });
+  });
+
+  it("undoes later sidebar resize deltas when seeking backward", () => {
+    const firstSnapshot = createWorkspaceSnapshot("first", 0, 0);
+    const expandedSnapshot = createWorkspaceSnapshot("expanded", 0, 40);
+    const narrowedSnapshot = createWorkspaceSnapshot("narrowed", 0, -15);
+    const currentSnapshot = createWorkspaceSnapshot("narrowed", 0);
+    const workspaceEvents: WorkspaceRecordingEvent[] = [
+      {
+        timestamp: 0,
+        snapshot: firstSnapshot,
+      },
+      {
+        timestamp: 100,
+        snapshot: expandedSnapshot,
+      },
+      {
+        timestamp: 200,
+        snapshot: narrowedSnapshot,
+      },
+    ];
+
+    const backwardSeek = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 100,
+      currentSnapshot,
+      lastAppliedIndex: 2,
+    });
+
+    expect(backwardSeek.nextIndex).toBe(1);
+    expect(backwardSeek.snapshotToApply).toMatchObject({
+      sidebarWidthDelta: 15,
+    });
   });
 
   it("replays scroll-only workspace snapshots and restores scroll when seeking backward", () => {

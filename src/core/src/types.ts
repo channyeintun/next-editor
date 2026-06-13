@@ -192,7 +192,7 @@ export interface UseNextEditorReturn {
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
-  handleWorkspaceEvent: () => void;
+  handleWorkspaceEvent: (event?: { sidebarWidthDelta?: number }) => void;
   handleRuntimeEvent: () => void;
 
   // Helper functions

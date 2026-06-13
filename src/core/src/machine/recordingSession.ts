@@ -2,6 +2,7 @@ import type { PreviewEvent, SlideEvent } from "../slides";
 import type { RuntimeRecordingSnapshot } from "../../../types/runtime";
 import {
   areWorkspaceSnapshotsEqual,
+  toSidebarWidthDeltaSnapshot,
   type WorkspaceRecordingSnapshot,
 } from "../../../types/workspace";
 import { areRuntimeRecordingSnapshotsEqual } from "../../../utils/equality";
@@ -46,10 +47,12 @@ export function appendPreviewRecordingEvent(
 export function appendWorkspaceRecordingEvent(
   session: RecordingSession,
   snapshot: WorkspaceRecordingSnapshot,
+  sidebarWidthDelta?: number,
 ): RecordingSession {
+  const recordingSnapshot = toSidebarWidthDeltaSnapshot(snapshot, sidebarWidthDelta);
   const previousEvent = session.workspaceEvents[session.workspaceEvents.length - 1];
 
-  if (previousEvent && areWorkspaceSnapshotsEqual(previousEvent.snapshot, snapshot)) {
+  if (previousEvent && areWorkspaceSnapshotsEqual(previousEvent.snapshot, recordingSnapshot)) {
     return session;
   }
 
@@ -59,7 +62,7 @@ export function appendWorkspaceRecordingEvent(
       ...session.workspaceEvents,
       {
         timestamp: getRecordingTimestamp(session),
-        snapshot,
+        snapshot: recordingSnapshot,
       },
     ],
   };

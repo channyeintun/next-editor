@@ -321,6 +321,7 @@ export type PreviewEventOccurred = {
 /** Workspace event occurred */
 export type WorkspaceEventOccurred = {
   type: "WORKSPACE_EVENT";
+  sidebarWidthDelta?: number;
 };
 
 /** Runtime event occurred */

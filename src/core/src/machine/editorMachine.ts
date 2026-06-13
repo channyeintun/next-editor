@@ -13,7 +13,11 @@ import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } fro
 import { createInitialContext } from "./types";
 import type { CursorRecordingEvent, EditorFrame, MouseCursorPosition, Recording } from "../types";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
-import { areWorkspaceSnapshotsEqual, type WorkspaceRecordingEvent } from "../../../types/workspace";
+import {
+  areWorkspaceSnapshotsEqual,
+  toSidebarWidthDeltaSnapshot,
+  type WorkspaceRecordingEvent,
+} from "../../../types/workspace";
 import {
   compressFrames,
   reconstructFrameAtIndex,
@@ -626,7 +630,7 @@ export const editorMachine = setup({
       if (initialWorkspaceSnapshot) {
         workspaceEvents.push({
           timestamp: 0,
-          snapshot: initialWorkspaceSnapshot,
+          snapshot: toSidebarWidthDeltaSnapshot(initialWorkspaceSnapshot, 0),
         });
       }
 
@@ -802,7 +806,10 @@ export const editorMachine = setup({
       // Base duration from session timing
       const duration = Math.max(Date.now() - context.session.startedAt, 1);
       const slides = context.getSlides?.();
-      const workspaceSnapshot = context.getWorkspaceSnapshot?.() || undefined;
+      const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() || undefined;
+      const workspaceSnapshot = currentWorkspaceSnapshot
+        ? toSidebarWidthDeltaSnapshot(currentWorkspaceSnapshot, 0)
+        : undefined;
       const runtimeSnapshot = context.getRuntimeSnapshot?.() || undefined;
 
       // Compress frames into delta frames
@@ -1605,11 +1612,15 @@ export const editorMachine = setup({
         },
         WORKSPACE_EVENT: {
           actions: [
-            assign(({ context }) => {
+            assign(({ context, event }) => {
               const snapshot = context.getWorkspaceSnapshot?.();
               if (!context.session || !snapshot) return {};
 
-              const nextSession = appendWorkspaceRecordingEvent(context.session, snapshot);
+              const nextSession = appendWorkspaceRecordingEvent(
+                context.session,
+                snapshot,
+                event.sidebarWidthDelta,
+              );
 
               if (nextSession === context.session) {
                 return {};

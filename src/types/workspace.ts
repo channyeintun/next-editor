@@ -1,5 +1,3 @@
-import { DEFAULT_FILE_SIDEBAR_WIDTH } from "../utils/sidebarLayout";
-
 export interface WorkspaceFile {
   path: string;
   name: string;
@@ -23,7 +21,8 @@ export interface WorkspaceRecordingSnapshot {
   activeFilePath: string;
   collapsedFolders?: string[];
   sidebarScrollTop?: number;
-  sidebarWidth?: number;
+  /** Width change since the previous recorded workspace event. */
+  sidebarWidthDelta?: number;
 }
 
 export interface WorkspaceRecordingEvent {
@@ -67,6 +66,20 @@ function areWorkspaceFilesEqual(
   });
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function areWorkspaceSidebarDeltasEqual(
+  left: WorkspaceRecordingSnapshot,
+  right: WorkspaceRecordingSnapshot,
+): boolean {
+  const leftDelta = isFiniteNumber(left.sidebarWidthDelta) ? left.sidebarWidthDelta : 0;
+  const rightDelta = isFiniteNumber(right.sidebarWidthDelta) ? right.sidebarWidthDelta : 0;
+
+  return leftDelta === rightDelta;
+}
+
 export function areWorkspaceProjectsEqual(
   left: WorkspaceProject,
   right: WorkspaceProject,
@@ -96,11 +109,24 @@ export function areWorkspaceSnapshotsEqual(
   return (
     left.activeFilePath === right.activeFilePath &&
     (left.sidebarScrollTop ?? 0) === (right.sidebarScrollTop ?? 0) &&
-    (left.sidebarWidth ?? DEFAULT_FILE_SIDEBAR_WIDTH) ===
-      (right.sidebarWidth ?? DEFAULT_FILE_SIDEBAR_WIDTH) &&
+    areWorkspaceSidebarDeltasEqual(left, right) &&
     areStringArraysEqual(left.collapsedFolders ?? [], right.collapsedFolders ?? []) &&
     areWorkspaceProjectsEqual(left.project, right.project)
   );
+}
+
+export function toSidebarWidthDeltaSnapshot(
+  snapshot: WorkspaceRecordingSnapshot,
+  sidebarWidthDelta: number | undefined,
+): WorkspaceRecordingSnapshot {
+  if (!isFiniteNumber(sidebarWidthDelta)) {
+    return snapshot;
+  }
+
+  return {
+    ...snapshot,
+    sidebarWidthDelta,
+  };
 }
 
 export const DEFAULT_WORKSPACE_ENTRY_PATH = "index.html";

@@ -246,6 +246,35 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  it("records file sidebar resizes as per-event width deltas", async () => {
+    let currentWorkspace = createWorkspaceSnapshot("same", 0);
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        getWorkspaceSnapshot: () => currentWorkspace,
+      },
+    }).start();
+
+    actor.send({ type: "START_RECORDING" });
+    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+
+    const initialWorkspaceEvent = actor.getSnapshot().context.session?.workspaceEvents[0];
+
+    expect(initialWorkspaceEvent?.snapshot.sidebarWidthDelta).toBe(0);
+
+    currentWorkspace = createWorkspaceSnapshot("same", 0);
+    actor.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: 40 });
+
+    currentWorkspace = createWorkspaceSnapshot("same", 0);
+    actor.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: -15 });
+
+    const workspaceEvents = actor.getSnapshot().context.session?.workspaceEvents ?? [];
+
+    expect(workspaceEvents.map((event) => event.snapshot.sidebarWidthDelta)).toEqual([0, 40, -15]);
+
+    actor.stop();
+  });
+
   it("applies workspace, runtime, then preview snapshots during replay sync", async () => {
     const calls: string[] = [];
     const firstWorkspace = createWorkspaceSnapshot("first", 0);
