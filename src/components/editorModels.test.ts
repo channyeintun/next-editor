@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { Monaco } from "@monaco-editor/react";
 import {
+  disposePlaybackModels,
   syncPlaybackModel,
   toMonacoModelPath,
   toPlaybackModelPath,
@@ -13,7 +14,10 @@ interface FakeUri {
 
 interface FakeModel {
   content: string;
+  disposed: boolean;
   language: string;
+  uri: FakeUri;
+  dispose(): void;
   getValue(): string;
   setValue(content: string): void;
 }
@@ -36,7 +40,13 @@ function createFakeMonaco() {
       createModel(content: string, language: string, uri: FakeUri) {
         const model: FakeModel = {
           content,
+          disposed: false,
           language,
+          uri,
+          dispose() {
+            this.disposed = true;
+            models.delete(uri.toString());
+          },
           getValue() {
             return this.content;
           },
@@ -50,6 +60,9 @@ function createFakeMonaco() {
       },
       setModelLanguage(model: FakeModel, language: string) {
         model.language = language;
+      },
+      getModels() {
+        return Array.from(models.values());
       },
     },
   };
@@ -115,5 +128,39 @@ describe("editor model helpers", () => {
         toString: () => "file:///__next-editor__/playback/src/App.tsx",
       }),
     ).toBeNull();
+  });
+
+  it("disposes inactive playback models while preserving normal models", () => {
+    const { models, monaco } = createFakeMonaco();
+    const normalUri = monaco.Uri.parse(toMonacoModelPath("src/App.tsx"));
+    const normalModel = monaco.editor.createModel(
+      "workspace content",
+      "typescript",
+      normalUri,
+    ) as unknown as FakeModel;
+    const activePlaybackModel = syncPlaybackModel(
+      monaco,
+      "src/App.tsx",
+      "active replay content",
+      "typescript",
+    ) as unknown as FakeModel;
+    const stalePlaybackModel = syncPlaybackModel(
+      monaco,
+      "src/Old.tsx",
+      "stale replay content",
+      "typescript",
+    ) as unknown as FakeModel;
+
+    disposePlaybackModels(monaco, activePlaybackModel.uri);
+
+    expect(normalModel.disposed).toBe(false);
+    expect(activePlaybackModel.disposed).toBe(false);
+    expect(stalePlaybackModel.disposed).toBe(true);
+    expect(models.has(stalePlaybackModel.uri.toString())).toBe(false);
+
+    disposePlaybackModels(monaco);
+
+    expect(normalModel.disposed).toBe(false);
+    expect(activePlaybackModel.disposed).toBe(true);
   });
 });

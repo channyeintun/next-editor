@@ -387,6 +387,26 @@ export interface PreviewController {
   handleTransitionComplete: () => void;
 }
 
+export function shouldUsePlaybackPreview({
+  currentRecording,
+  isPlaying,
+  isRecording,
+  lessonType,
+  usesPlaybackModel,
+}: {
+  currentRecording: unknown;
+  isPlaying: boolean;
+  isRecording: boolean;
+  lessonType: string;
+  usesPlaybackModel: boolean;
+}) {
+  const isPlaybackModelActive = isPlaying && usesPlaybackModel && !isRecording;
+
+  return lessonType === "node.js"
+    ? Boolean(currentRecording) && isPlaybackModelActive
+    : isPlaybackModelActive;
+}
+
 export function usePreviewController(): PreviewController {
   const [size, setSize] = useState<PreviewSize>("medium");
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -442,10 +462,14 @@ export function usePreviewController(): PreviewController {
 
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
   const staticWorkspacePreview = useCompiledStaticWorkspacePreview();
-  const isRuntimePlaybackPreviewActive =
-    lessonType === "node.js" && Boolean(currentRecording) && usesPlaybackModel && !isRecording;
-  const isPlaybackPreviewActive =
-    lessonType === "node.js" ? isRuntimePlaybackPreviewActive : usesPlaybackModel && !isRecording;
+  const isPlaybackPreviewActive = shouldUsePlaybackPreview({
+    currentRecording,
+    isPlaying,
+    isRecording,
+    lessonType,
+    usesPlaybackModel,
+  });
+  const isRuntimePlaybackPreviewActive = lessonType === "node.js" && isPlaybackPreviewActive;
   const recordedRuntimeSnapshot = isRuntimePlaybackPreviewActive
     ? (currentRecording?.runtimeSnapshot ?? null)
     : null;
@@ -812,6 +836,7 @@ export function usePreviewController(): PreviewController {
   usePreviewPlaybackRegistration({
     previewAdapter: preview,
     captureRuntimePreviewSnapshot,
+    isPlaybackPreviewActive,
     isRuntimePreviewActive,
     isLiveRuntimePreviewActive,
     pendingInteractionRef,
@@ -824,7 +849,6 @@ export function usePreviewController(): PreviewController {
     modeRef: panelModeRef,
     effectiveRuntimePreviewUrl,
     staticWorkspacePreview,
-    forceRefreshPreview,
     updateIframeContent,
     iframeRef,
     setSize,

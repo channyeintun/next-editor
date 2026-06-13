@@ -47,11 +47,11 @@ export function usePreviewInteractionCapture({
           iframeDoc.documentElement.appendChild(scriptElement);
         }
 
-        return () => {
-          const cleanup = iframeWindow?.[INTERACTION_CAPTURE_CLEANUP_MARKER];
+        const cleanupInteractionCapture = iframeWindow?.[INTERACTION_CAPTURE_CLEANUP_MARKER];
 
-          if (typeof cleanup === "function") {
-            cleanup.call(iframeWindow);
+        return () => {
+          if (typeof cleanupInteractionCapture === "function") {
+            cleanupInteractionCapture();
           }
 
           scriptElement.remove();

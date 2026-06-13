@@ -2,7 +2,17 @@
 
 Date: 2026-06-14
 
-Scope: review of the provided Chrome Memory heap snapshot screenshot plus the local code paths that own recording data, preview iframes, Monaco editor state, Xterm terminals, workers, and WebContainer runtime lifecycle. This is analysis only; no implementation changes were made.
+Scope: review of the provided Chrome Memory heap snapshot screenshot plus the local code paths that own recording data, preview iframes, Monaco editor state, Xterm terminals, workers, and WebContainer runtime lifecycle. This review was originally written before implementation changes; the validation section below reflects the current code after the fixes tracked in [progress.md](progress.md).
+
+## Validation Against Progress
+
+Validated on 2026-06-14 against the current repository and the last four commits.
+
+- Finding 3, static iframe interaction listener cleanup, is addressed by the explicit generated-script cleanup added in `ada3be9` plus the follow-up parent cleanup fix. Parent cleanup now retains the exact cleanup function created for the injected document instead of re-reading it from `contentWindow` later.
+- Finding 4, recording mouse tracking cleanup across iframe document changes, is addressed by `fc50299`. The current code stores the exact iframe `Document` used for mouse listener attachment and removes capture-phase listeners from that same document during navigation and teardown.
+- Finding 5, Monaco playback model disposal, is addressed by `9d2e340`. Playback models are now under a distinct replay URI root and inactive replay models are disposed when the editor returns to normal workspace models or unmounts.
+- Findings 1 and 2 remain intentional high-memory replay/runtime snapshot retention paths, not confirmed leaks. They still need product-level limits or deduplication decisions before implementation.
+- Finding 6 remains intentionally unchanged: the recording codec worker is an app-lifetime singleton and is still low severity for the current app lifecycle.
 
 ## Snapshot Read
 
@@ -39,6 +49,8 @@ This is a likely source of `ExternalStringData` and `(string)` growth. It can be
 
 Confidence: medium. Severity: medium.
 
+Current status: fixed by `ada3be9` plus the follow-up parent cleanup patch.
+
 For static preview recording, `usePreviewInteractionCapture` injects a generated script into the iframe document. The returned cleanup from `setupInteractionListeners` is a no-op, while the injected script installs document/window listeners for click, focus, key, input, scroll, route changes, and navigation messages: [src/components/preview/usePreviewInteractionCapture.ts](src/components/preview/usePreviewInteractionCapture.ts#L38-L45), [src/utils/iframeInteractionCapture.ts](src/utils/iframeInteractionCapture.ts#L126-L284).
 
 If iframe documents are fully replaced, browser GC should usually collect the old document and its listener graph. The heap snapshot's detached DOM rows mean this area is still worth investigating: a stale iframe document retained by a listener, closure, DevTools reference, bfcache-like behavior, or parent reference could keep those injected listeners and DOM subtrees alive.
@@ -46,6 +58,8 @@ If iframe documents are fully replaced, browser GC should usually collect the ol
 ### 4. Mouse tracking may miss cleanup for listeners attached to previous iframe documents
 
 Confidence: medium. Severity: medium.
+
+Current status: fixed by `fc50299`.
 
 During recording, the mouse tracking actor observes the whole document for iframes and re-runs `setupIframeListeners` when an iframe `src` or `srcdoc` attribute changes. It stores handlers by iframe element and attempts to remove existing handlers from the current `iframe.contentDocument`: [src/core/src/machine/editorMachine.ts](src/core/src/machine/editorMachine.ts#L373-L413), [src/core/src/machine/editorMachine.ts](src/core/src/machine/editorMachine.ts#L493-L512).
 
@@ -56,6 +70,8 @@ This is one of the stronger code-level matches for detached iframe DOM after rec
 ### 5. Monaco playback models are created but not explicitly disposed
 
 Confidence: medium. Severity: low to medium.
+
+Current status: fixed by `9d2e340`.
 
 Playback models are created under `file:///__next-editor__/playback` via `monaco.editor.createModel`, and I did not find a matching disposal path for those models: [src/components/editorModels.ts](src/components/editorModels.ts#L4-L26). The CodeEditor cleans its event disposables and editor ref on unmount, which is good, but that cleanup does not dispose Monaco models: [src/components/CodeEditor.tsx](src/components/CodeEditor.tsx#L303-L313).
 
@@ -83,12 +99,14 @@ Confidence: high.
 
 The heap snapshot strongly suggests heavy intentional retention from recording and preview snapshot data. The detached DOM rows are the part most worth treating as possible leak evidence.
 
-Most likely leak candidates, in priority order:
+Original likely leak candidates, in priority order:
 
 1. Iframe lifecycle around preview refresh/runtime snapshots, especially injected iframe scripts and `MutationObserver` usage.
 2. Mouse tracking listener cleanup across iframe `src`/`srcdoc` document changes while recording.
 3. Undisposed Monaco playback models during long sessions with project/file churn.
 4. App-lifetime recording codec worker, mostly relevant for embedded/unmount scenarios.
+
+After validating [progress.md](progress.md), items 2 and 3 are addressed, and item 1 is partially addressed for static iframe interaction scripts. The runtime snapshot `MutationObserver` and full HTML snapshot path remain intentionally unchanged.
 
 Useful confirmation signals in Chrome DevTools:
 

@@ -11,6 +11,8 @@ Date: 2026-06-14
 ## Current Evaluation
 
 - Plan is complete. All selected memory-leak review fixes are validated and committed.
+- Follow-up review found and fixed one remaining static iframe interaction cleanup edge case: parent cleanup now keeps the exact generated cleanup function from the injected iframe document instead of looking it up later through the current iframe window.
+- Follow-up validation passed with `bun run check`, `bun run lint`, targeted tests for `iframeInteractionCapture` and `editorModels`, and `bun run build`. Full `bun run test` still has an unrelated existing `FileSidebar` width expectation failure.
 - Runtime preview snapshot size and recording data retention are not changed because they are intentional replay data paths and need separate product tradeoff decisions.
 - The app-lifetime recording codec worker is not changed because the review rates it low severity and likely intentional for this app lifecycle.
 

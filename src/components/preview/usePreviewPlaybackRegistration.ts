@@ -10,15 +10,10 @@ import { arePreviewSizesEqual } from "../../utils/equality";
 import { getElementByXPath, type PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
 
-interface PreviewRefreshOptions {
-  content?: string;
-  emitEvent?: boolean;
-  showSpinner?: boolean;
-}
-
 interface UsePreviewPlaybackRegistrationOptions {
   previewAdapter: PreviewDomainAdapter;
   captureRuntimePreviewSnapshot: () => string | null;
+  isPlaybackPreviewActive: boolean;
   isRuntimePreviewActive: boolean;
   isLiveRuntimePreviewActive: boolean;
   pendingInteractionRef: RefObject<IframeInteractionEvent | null>;
@@ -31,7 +26,6 @@ interface UsePreviewPlaybackRegistrationOptions {
   modeRef: RefObject<PreviewPanelMode>;
   effectiveRuntimePreviewUrl: string | null;
   staticWorkspacePreview: string;
-  forceRefreshPreview: (options?: PreviewRefreshOptions) => void;
   updateIframeContent: (
     content: string,
     options?: { force?: boolean; preserveDocument?: boolean },
@@ -71,6 +65,7 @@ function getIframeDocumentAndWindow(iframe: HTMLIFrameElement): {
 export function usePreviewPlaybackRegistration({
   previewAdapter,
   captureRuntimePreviewSnapshot,
+  isPlaybackPreviewActive,
   isRuntimePreviewActive,
   isLiveRuntimePreviewActive,
   pendingInteractionRef,
@@ -83,7 +78,6 @@ export function usePreviewPlaybackRegistration({
   modeRef,
   effectiveRuntimePreviewUrl,
   staticWorkspacePreview,
-  forceRefreshPreview,
   updateIframeContent,
   iframeRef,
   setSize,
@@ -158,6 +152,10 @@ export function usePreviewPlaybackRegistration({
         mode: previewState.mode,
       });
 
+      if (!isPlaybackPreviewActive) {
+        return;
+      }
+
       if (previewState.route !== undefined) {
         applyPreviewRoute(previewState.route);
       }
@@ -170,21 +168,14 @@ export function usePreviewPlaybackRegistration({
 
       if (didRefreshKeyChange) {
         if (previewState.content !== undefined) {
-          if (isRuntimePreviewActive) {
-            updateIframeContent(previewState.content, {
-              force: true,
-              preserveDocument: true,
-            });
-          } else {
-            forceRefreshPreview({
-              content: previewState.content,
-              emitEvent: false,
-            });
-          }
+          updateIframeContent(previewState.content, {
+            force: true,
+            preserveDocument: true,
+          });
         } else if (effectiveRuntimePreviewUrl && staticWorkspacePreview) {
-          forceRefreshPreview({
-            content: staticWorkspacePreview,
-            emitEvent: false,
+          updateIframeContent(staticWorkspacePreview, {
+            force: true,
+            preserveDocument: true,
           });
         }
       } else if (
@@ -193,7 +184,7 @@ export function usePreviewPlaybackRegistration({
       ) {
         updateIframeContent(previewState.content, {
           force: true,
-          preserveDocument: isRuntimePreviewActive,
+          preserveDocument: true,
         });
       }
 
@@ -350,11 +341,10 @@ export function usePreviewPlaybackRegistration({
     applyPreviewPanelState,
     applyPreviewRoute,
     effectiveRuntimePreviewUrl,
-    forceRefreshPreview,
     iframeRef,
+    isPlaybackPreviewActive,
     isLiveRuntimePreviewActive,
     isRecordingRef,
-    isRuntimePreviewActive,
     isUserScrollingRef,
     lastContentRef,
     lastRefreshKeyRef,

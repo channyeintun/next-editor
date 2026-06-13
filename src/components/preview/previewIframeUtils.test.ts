@@ -89,4 +89,23 @@ describe("patchIframeContentFromHtml", () => {
     expect(newSlot?.tagName).toBe("SECTION");
     expect(newSlot).toHaveTextContent("New");
   });
+
+  it("patches an initially blank iframe without replacing the document", () => {
+    const iframe = createIframeWithContent("");
+    const iframeDocument = iframe.contentDocument!;
+
+    const didPatch = patchIframeContentFromHtml(
+      iframe,
+      `<!doctype html>
+<html>
+  <head><title>Replay</title></head>
+  <body><main id="app">Snapshot</main></body>
+</html>`,
+    );
+
+    expect(didPatch).toBe(true);
+    expect(iframe.contentDocument).toBe(iframeDocument);
+    expect(iframeDocument.title).toBe("Replay");
+    expect(iframeDocument.querySelector("#app")).toHaveTextContent("Snapshot");
+  });
 });

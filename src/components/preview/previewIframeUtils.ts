@@ -129,6 +129,24 @@ function patchDocumentSection(
   return true;
 }
 
+function replaceDocumentElement(currentDocument: Document, nextDocument: Document): boolean {
+  const nextDocumentElement = nextDocument.documentElement;
+
+  if (!nextDocumentElement) {
+    return false;
+  }
+
+  const importedDocumentElement = currentDocument.importNode(nextDocumentElement, true);
+
+  if (currentDocument.documentElement) {
+    currentDocument.replaceChild(importedDocumentElement, currentDocument.documentElement);
+  } else {
+    currentDocument.appendChild(importedDocumentElement);
+  }
+
+  return true;
+}
+
 export function patchIframeContentFromHtml(
   iframe: HTMLIFrameElement,
   htmlContent: string,
@@ -136,25 +154,30 @@ export function patchIframeContentFromHtml(
   try {
     const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
 
-    if (!iframeDocument?.documentElement) {
+    if (!iframeDocument) {
       return false;
     }
 
     const nextDocument = new DOMParser().parseFromString(htmlContent, "text/html");
 
+    if (!nextDocument.documentElement) {
+      return false;
+    }
+
     if (
-      !nextDocument.documentElement ||
+      !iframeDocument.documentElement ||
       !canPatchNode(iframeDocument.documentElement, nextDocument.documentElement)
     ) {
-      return false;
+      return replaceDocumentElement(iframeDocument, nextDocument);
     }
 
     syncElementAttributes(iframeDocument.documentElement, nextDocument.documentElement);
 
-    return (
+    const didPatchSections =
       patchDocumentSection(iframeDocument.head, nextDocument.head, iframeDocument) &&
-      patchDocumentSection(iframeDocument.body, nextDocument.body, iframeDocument)
-    );
+      patchDocumentSection(iframeDocument.body, nextDocument.body, iframeDocument);
+
+    return didPatchSections || replaceDocumentElement(iframeDocument, nextDocument);
   } catch {
     return false;
   }
