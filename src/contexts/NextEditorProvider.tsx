@@ -162,6 +162,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     getActiveFilePath,
     getCollapsedFolders,
     getSidebarScrollTop,
+    getSidebarWidth,
     loadProject,
     resetProject,
   } = useWorkspaceActions();
@@ -211,6 +212,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
         const activeFilePath = getActiveFilePath();
         const collapsedFolders = getCollapsedFolders();
         const sidebarScrollTop = getSidebarScrollTop();
+        const sidebarWidth = getSidebarWidth();
         const cachedSnapshot = workspaceSnapshotRef.current;
 
         if (
@@ -218,7 +220,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
           cachedSnapshot.project === project &&
           cachedSnapshot.activeFilePath === activeFilePath &&
           cachedSnapshot.collapsedFolders === collapsedFolders &&
-          (cachedSnapshot.sidebarScrollTop ?? 0) === sidebarScrollTop
+          (cachedSnapshot.sidebarScrollTop ?? 0) === sidebarScrollTop &&
+          cachedSnapshot.sidebarWidth === sidebarWidth
         ) {
           return cachedSnapshot;
         }
@@ -228,6 +231,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
           activeFilePath,
           collapsedFolders,
           sidebarScrollTop,
+          sidebarWidth,
         } satisfies WorkspaceRecordingSnapshot;
 
         workspaceSnapshotRef.current = nextSnapshot;
@@ -240,6 +244,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
           snapshot.activeFilePath,
           snapshot.collapsedFolders ?? [],
           snapshot.sidebarScrollTop ?? 0,
+          snapshot.sidebarWidth,
         );
         void saveRuntimeWorkspace();
       },
@@ -266,6 +271,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       getActiveFilePath,
       getCollapsedFolders,
       getSidebarScrollTop,
+      getSidebarWidth,
       getRuntimeRecordingSnapshot,
       getProject,
       loadProject,

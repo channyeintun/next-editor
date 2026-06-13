@@ -20,6 +20,7 @@ import {
   selectWorkspaceProjectName,
   selectWorkspaceSaveVersion,
   selectWorkspaceSidebarState,
+  selectWorkspaceSidebarWidth,
   selectWorkspaceSyncVersion,
 } from "../stores/workspaceStore";
 import type { WorkspaceLessonType } from "../types/workspace";
@@ -59,6 +60,10 @@ export const useWorkspaceEditorState = (): WorkspaceEditorState => {
 
 export const useWorkspaceSidebarState = (): WorkspaceSidebarState => {
   return useWorkspaceSelector("useWorkspaceSidebarState", selectWorkspaceSidebarState);
+};
+
+export const useWorkspaceSidebarWidth = (): number => {
+  return useWorkspaceSelector("useWorkspaceSidebarWidth", selectWorkspaceSidebarWidth);
 };
 
 export const useWorkspaceActiveFilePath = (): string => {

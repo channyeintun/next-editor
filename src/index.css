@@ -108,6 +108,10 @@ body {
   margin-left: 1px;
 }
 
+.runtime-dock {
+  left: var(--runtime-dock-left, 19rem);
+}
+
 .editor-scrollbar {
   scrollbar-color: rgba(71, 85, 105, 0.7) transparent;
   scrollbar-width: thin;

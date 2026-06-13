@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getClampedFileSidebarWidth } from "../utils/sidebarLayout";
 import { getViewportClampedContextMenuPlacement } from "./FileSidebar";
 
 describe("getViewportClampedContextMenuPlacement", () => {
@@ -43,5 +44,17 @@ describe("getViewportClampedContextMenuPlacement", () => {
 
     expect(placement.top).toBe(8);
     expect(placement.maxHeight).toBe(784);
+  });
+});
+
+describe("getClampedFileSidebarWidth", () => {
+  it("keeps the sidebar width inside the configured bounds", () => {
+    expect(getClampedFileSidebarWidth(120, 1200)).toBe(220);
+    expect(getClampedFileSidebarWidth(320, 1200)).toBe(320);
+    expect(getClampedFileSidebarWidth(900, 1200)).toBe(520);
+  });
+
+  it("reserves room for the main editor on narrow screens", () => {
+    expect(getClampedFileSidebarWidth(320, 640)).toBe(280);
   });
 });

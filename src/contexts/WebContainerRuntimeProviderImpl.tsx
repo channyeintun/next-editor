@@ -37,8 +37,14 @@ interface WebContainerRuntimeProviderProps {
 export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderProps> = ({
   children,
 }) => {
-  const { getActiveFilePath, getCollapsedFolders, getProject, getSidebarScrollTop, loadProject } =
-    useWorkspaceActions();
+  const {
+    getActiveFilePath,
+    getCollapsedFolders,
+    getProject,
+    getSidebarScrollTop,
+    getSidebarWidth,
+    loadProject,
+  } = useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
   const projectName = useWorkspaceProjectName();
   const syncVersion = useWorkspaceSyncVersion();
@@ -120,6 +126,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
             getActiveFilePath(),
             getCollapsedFolders(),
             getSidebarScrollTop(),
+            getSidebarWidth(),
           );
         })().catch((error) => {
           setErrorMessage(getRuntimeErrorMessage(error));
@@ -416,6 +423,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
                 getActiveFilePath(),
                 getCollapsedFolders(),
                 getSidebarScrollTop(),
+                getSidebarWidth(),
               );
             })().catch((error) => {
               if (isRuntimeGenerationActive(generation)) {
@@ -434,6 +442,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       getActiveFilePath,
       getCollapsedFolders,
       getSidebarScrollTop,
+      getSidebarWidth,
       getRuntimeGeneration,
       getProject,
       isRuntimeGenerationActive,

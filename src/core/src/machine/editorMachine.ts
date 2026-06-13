@@ -40,6 +40,10 @@ import { isValidFrameState, isEditorReady } from "../utils/validation";
 import { calculateDurationFromFileReader } from "../utils/audioDuration";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
 import {
+  isRecordedCursorVisibilityDetail,
+  RECORDED_CURSOR_VISIBILITY_EVENT,
+} from "../../../utils/recordedCursorVisibility";
+import {
   getPreviewReplayResult,
   getRuntimeReplayResult,
   getSlideReplayResult,
@@ -294,12 +298,23 @@ interface MouseTrackingInput {
 }
 
 const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({ input }) => {
+  let forceRecordedCursorHidden = false;
+
   const handleMouseMove = (e: MouseEvent) => {
-    input.onMouseMove({ x: e.clientX, y: e.clientY, visible: true });
+    input.onMouseMove({ x: e.clientX, y: e.clientY, visible: !forceRecordedCursorHidden });
   };
 
   const handleMouseLeave = () => {
     input.onMouseMove({ x: 0, y: 0, visible: false });
+  };
+
+  const handleRecordedCursorVisibility = (event: Event) => {
+    if (!(event instanceof CustomEvent) || !isRecordedCursorVisibilityDetail(event.detail)) {
+      return;
+    }
+
+    forceRecordedCursorHidden = !event.detail.visible;
+    input.onMouseMove(event.detail);
   };
 
   // Handle iframe mouse tracking
@@ -340,7 +355,7 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
       input.onMouseMove({
         x: rect.left + e.clientX,
         y: rect.top + e.clientY,
-        visible: true,
+        visible: !forceRecordedCursorHidden,
       });
     };
 
@@ -441,7 +456,7 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
     input.onMouseMove({
       x: rect.left + payload.data.clientX,
       y: rect.top + payload.data.clientY,
-      visible: true,
+      visible: !forceRecordedCursorHidden,
     });
   };
 
@@ -482,12 +497,14 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
   document.querySelectorAll("iframe").forEach(setupIframeListeners);
   document.addEventListener("mousemove", handleMouseMove, true);
   document.addEventListener("mouseleave", handleMouseLeave, true);
+  window.addEventListener(RECORDED_CURSOR_VISIBILITY_EVENT, handleRecordedCursorVisibility);
   window.addEventListener("message", handleIframeInteractionMessage);
 
   return () => {
     observer.disconnect();
     document.removeEventListener("mousemove", handleMouseMove, true);
     document.removeEventListener("mouseleave", handleMouseLeave, true);
+    window.removeEventListener(RECORDED_CURSOR_VISIBILITY_EVENT, handleRecordedCursorVisibility);
     window.removeEventListener("message", handleIframeInteractionMessage);
 
     // Clean up load listeners

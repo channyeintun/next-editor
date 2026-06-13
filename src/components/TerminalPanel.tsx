@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ChevronDown, ChevronUp, Play, Plus, Settings2, SquareTerminal, X } from "lucide-react";
 import { useNextEditorDomainAdapters } from "../contexts/NextEditorDomainAdaptersContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
@@ -9,6 +9,7 @@ import {
   useWebContainerRuntimeMetadata,
 } from "../hooks/useWebContainerRuntime";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
+import { useWorkspaceSidebarWidth } from "../hooks/useWorkspace";
 import type {
   RuntimeDockTab,
   RuntimeRecordingSnapshot,
@@ -108,6 +109,10 @@ interface RuntimeEventState {
   terminalScrollLines: RuntimeTerminalScrollLines;
 }
 
+type RuntimeDockStyle = CSSProperties & {
+  "--runtime-dock-left": string;
+};
+
 const DOCK_TABS: RuntimeDockTabConfig[] = [
   {
     id: "runner",
@@ -174,6 +179,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const [consoleLines, setConsoleLines] = useState<string[]>(DEFAULT_CONSOLE_LINES);
   const [terminalScrollLines, setTerminalScrollLines] = useState<RuntimeTerminalScrollLines>({});
   const { dockWidth: previewDockWidth, isDocked: isPreviewDocked } = usePreviewPanel();
+  const sidebarWidth = useWorkspaceSidebarWidth();
   const { handleRuntimeEvent } = useNextEditorActions();
   const { runtimePanel } = useNextEditorDomainAdapters();
   const {
@@ -547,12 +553,16 @@ const TerminalPanel = memo(function TerminalPanel() {
     : openPorts.length > 0
       ? openPorts.map(({ port, url }) => `${port} ${url}`).join("\n")
       : "No open ports";
+  const dockStyle: RuntimeDockStyle = {
+    "--runtime-dock-left": `${sidebarWidth + 16}px`,
+    right: isPreviewDocked ? previewDockWidth + 16 : 16,
+  };
 
   return (
     <>
       <div
-        className="fixed bottom-12 left-4 z-40 flex flex-col overflow-hidden rounded-xl border border-slate-900 bg-[#1d1f29] shadow-[0_18px_40px_rgba(2,6,23,0.42)] md:left-76"
-        style={{ right: isPreviewDocked ? previewDockWidth + 16 : 16 }}
+        className="runtime-dock fixed bottom-12 z-40 flex flex-col overflow-hidden rounded-xl border border-slate-900 bg-[#1d1f29] shadow-[0_18px_40px_rgba(2,6,23,0.42)]"
+        style={dockStyle}
       >
         <div className="flex items-center border-b border-slate-800 bg-[#232633] px-2">
           {DOCK_TABS.map((tab) => {

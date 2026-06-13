@@ -16,6 +16,7 @@ import {
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
+import { writeStoredFileSidebarWidth } from "../utils/sidebarLayout";
 
 interface WorkspaceProviderProps {
   children: React.ReactNode;
@@ -39,6 +40,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
   const setSidebarScrollTop = useCallback((scrollTop: number) => {
     workspaceStoreRef.current.trigger.setSidebarScrollTop({ scrollTop });
+  }, []);
+
+  const setSidebarWidth = useCallback((width: number) => {
+    workspaceStoreRef.current.trigger.setSidebarWidth({ width });
+    writeStoredFileSidebarWidth(workspaceStoreRef.current.getSnapshot().context.sidebarWidth);
   }, []);
 
   const createFile = useCallback((path: string, content = "") => {
@@ -93,10 +99,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     }
 
     try {
-      const { activeFilePath, project } = workspaceStoreRef.current.getSnapshot().context;
+      const { activeFilePath, project, sidebarWidth } =
+        workspaceStoreRef.current.getSnapshot().context;
       const storedSnapshot = {
         activeFilePath,
         project,
+        sidebarWidth,
       } satisfies StoredWorkspaceSnapshot;
 
       window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(storedSnapshot));
@@ -114,6 +122,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       nextActiveFilePath?: string,
       collapsedFolders?: string[],
       sidebarScrollTop?: number,
+      sidebarWidth?: number,
     ) => {
       const normalizedProject = normalizeProject(project);
       const normalizedNextActiveFilePath = normalizeWorkspacePath(nextActiveFilePath ?? "");
@@ -124,6 +133,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       const savedSnapshot = cloneWorkspaceSnapshot({
         activeFilePath: resolvedActiveFilePath,
         project: normalizedProject,
+        sidebarWidth,
       });
 
       workspaceStoreRef.current.trigger.loadProject({
@@ -131,6 +141,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         activeFilePath: resolvedActiveFilePath,
         collapsedFolders,
         sidebarScrollTop,
+        sidebarWidth,
         savedSnapshot,
       });
     },
@@ -165,6 +176,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     return workspaceStoreRef.current.getSnapshot().context.sidebarScrollTop;
   }, []);
 
+  const getSidebarWidth = useCallback(() => {
+    return workspaceStoreRef.current.getSnapshot().context.sidebarWidth;
+  }, []);
+
   const getFile = useCallback((path: string) => {
     return (
       workspaceStoreRef.current.getSnapshot().context.project.files[normalizeWorkspacePath(path)] ??
@@ -182,6 +197,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       setPreviewFilePath,
       setCollapsedFolders,
       setSidebarScrollTop,
+      setSidebarWidth,
       createNewEditor,
       createFile,
       createFolder,
@@ -199,6 +215,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       getActiveFilePath,
       getCollapsedFolders,
       getSidebarScrollTop,
+      getSidebarWidth,
       getFile,
       listFiles,
     }),
@@ -210,6 +227,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       deleteFile,
       getActiveFilePath,
       getCollapsedFolders,
+      getSidebarWidth,
       getSidebarScrollTop,
       getFile,
       getProject,
@@ -222,6 +240,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       setActiveFilePath,
       setCollapsedFolders,
       setSidebarScrollTop,
+      setSidebarWidth,
       setPreviewFilePath,
       updateLessonType,
       updateActiveFileContent,

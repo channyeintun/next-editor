@@ -1,8 +1,12 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { selectIsPlaying, selectRecording } from "../core/src/useNextEditor";
 import { getCursorPositionAtTime, getCursorReplaySamples } from "../core/src/utils/cursorReplay";
 import IconCursor from "./icon/IconCursor";
+import {
+  isRecordedCursorVisibilityDetail,
+  RECORDED_CURSOR_VISIBILITY_EVENT,
+} from "../utils/recordedCursorVisibility";
 
 /**
  * CursorComponent - Displays a fake cursor overlay during playback.
@@ -14,10 +18,26 @@ const CursorComponent: React.FC<{
   const isPlaying = NextEditorActorContext.useSelector(selectIsPlaying);
   const recording = NextEditorActorContext.useSelector(selectRecording);
   const cursorRef = useRef<HTMLDivElement>(null);
+  const [isCursorSuppressed, setIsCursorSuppressed] = useState(false);
   const cursorSamples = useMemo(
     () => (recording ? getCursorReplaySamples(recording) : []),
     [recording],
   );
+
+  useEffect(() => {
+    const handleRecordedCursorVisibility = (event: Event) => {
+      if (!(event instanceof CustomEvent) || !isRecordedCursorVisibilityDetail(event.detail)) {
+        return;
+      }
+
+      setIsCursorSuppressed(!event.detail.visible);
+    };
+
+    window.addEventListener(RECORDED_CURSOR_VISIBILITY_EVENT, handleRecordedCursorVisibility);
+    return () => {
+      window.removeEventListener(RECORDED_CURSOR_VISIBILITY_EVENT, handleRecordedCursorVisibility);
+    };
+  }, []);
 
   useEffect(() => {
     const element = cursorRef.current;
@@ -64,7 +84,7 @@ const CursorComponent: React.FC<{
     };
   }, [actorRef, cursorSamples, isPlaying]);
 
-  if (!isPlaying || cursorSamples.length === 0) {
+  if (!isPlaying || isCursorSuppressed || cursorSamples.length === 0) {
     return null;
   }
 

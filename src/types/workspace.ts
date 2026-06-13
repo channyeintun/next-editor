@@ -1,3 +1,5 @@
+import { DEFAULT_FILE_SIDEBAR_WIDTH } from "../utils/sidebarLayout";
+
 export interface WorkspaceFile {
   path: string;
   name: string;
@@ -21,6 +23,7 @@ export interface WorkspaceRecordingSnapshot {
   activeFilePath: string;
   collapsedFolders?: string[];
   sidebarScrollTop?: number;
+  sidebarWidth?: number;
 }
 
 export interface WorkspaceRecordingEvent {
@@ -93,6 +96,8 @@ export function areWorkspaceSnapshotsEqual(
   return (
     left.activeFilePath === right.activeFilePath &&
     (left.sidebarScrollTop ?? 0) === (right.sidebarScrollTop ?? 0) &&
+    (left.sidebarWidth ?? DEFAULT_FILE_SIDEBAR_WIDTH) ===
+      (right.sidebarWidth ?? DEFAULT_FILE_SIDEBAR_WIDTH) &&
     areStringArraysEqual(left.collapsedFolders ?? [], right.collapsedFolders ?? []) &&
     areWorkspaceProjectsEqual(left.project, right.project)
   );

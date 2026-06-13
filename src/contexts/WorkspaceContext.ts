@@ -6,6 +6,7 @@ export interface WorkspaceActions {
   setPreviewFilePath: (path: string) => void;
   setCollapsedFolders: (paths: string[]) => void;
   setSidebarScrollTop: (scrollTop: number) => void;
+  setSidebarWidth: (width: number) => void;
   createNewEditor: () => void;
   createFile: (path: string, content?: string) => void;
   createFolder: (path: string) => void;
@@ -21,6 +22,7 @@ export interface WorkspaceActions {
     activeFilePath?: string,
     collapsedFolders?: string[],
     sidebarScrollTop?: number,
+    sidebarWidth?: number,
   ) => void;
   resetProject: () => void;
   updateLessonType: (lessonType: WorkspaceLessonType) => void;
@@ -28,6 +30,7 @@ export interface WorkspaceActions {
   getActiveFilePath: () => string;
   getCollapsedFolders: () => string[];
   getSidebarScrollTop: () => number;
+  getSidebarWidth: () => number;
   getFile: (path: string) => WorkspaceFile | null;
   listFiles: () => WorkspaceFile[];
 }
@@ -43,6 +46,7 @@ export interface WorkspaceSidebarState {
   folders: string[];
   collapsedFolders: string[];
   sidebarScrollTop: number;
+  sidebarWidth: number;
   lessonType: WorkspaceLessonType;
   previewFilePath: string;
 }

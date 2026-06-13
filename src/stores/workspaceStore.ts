@@ -19,10 +19,12 @@ import {
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
+import { getClampedFileSidebarWidth, readStoredFileSidebarWidth } from "../utils/sidebarLayout";
 
 export interface StoredWorkspaceSnapshot {
   activeFilePath: string;
   project: WorkspaceProject;
+  sidebarWidth?: number;
 }
 
 export interface WorkspaceState {
@@ -30,6 +32,7 @@ export interface WorkspaceState {
   activeFilePath: string;
   collapsedFolders: string[];
   sidebarScrollTop: number;
+  sidebarWidth: number;
   savedSnapshot: StoredWorkspaceSnapshot;
   projectVersion: number;
   previewVersion: number;
@@ -49,6 +52,7 @@ export function cloneWorkspaceSnapshot(snapshot: StoredWorkspaceSnapshot): Store
   return {
     activeFilePath: snapshot.activeFilePath,
     project: snapshot.project,
+    sidebarWidth: snapshot.sidebarWidth,
   };
 }
 
@@ -177,6 +181,7 @@ function loadStoredWorkspaceSnapshot(): StoredWorkspaceSnapshot | null {
     return {
       activeFilePath,
       project,
+      sidebarWidth: parsed.sidebarWidth,
     };
   } catch (error) {
     console.warn("Failed to load workspace snapshot:", error);
@@ -195,6 +200,7 @@ export function createInitialWorkspaceSnapshot(): StoredWorkspaceSnapshot {
   return {
     activeFilePath: project.entryFilePath,
     project,
+    sidebarWidth: readStoredFileSidebarWidth(),
   };
 }
 
@@ -237,11 +243,23 @@ function normalizeSidebarScrollTop(scrollTop: number | undefined): number {
   return Math.max(0, Math.round(scrollTop ?? 0));
 }
 
+function normalizeSidebarWidth(width: number | undefined): number {
+  if (typeof width === "number" && Number.isFinite(width)) {
+    return getClampedFileSidebarWidth(
+      width,
+      typeof window === "undefined" ? undefined : window.innerWidth,
+    );
+  }
+
+  return readStoredFileSidebarWidth();
+}
+
 function createSidebarState(
   project: WorkspaceProject,
   activeFilePath: string,
   collapsedFolders: string[],
   sidebarScrollTop: number,
+  sidebarWidth: number,
 ): WorkspaceSidebarState {
   return {
     activeFilePath,
@@ -249,6 +267,7 @@ function createSidebarState(
     folders: project.folders,
     collapsedFolders,
     sidebarScrollTop,
+    sidebarWidth,
     lessonType: project.lessonType,
     previewFilePath: project.entryFilePath,
   };
@@ -294,6 +313,7 @@ function areSidebarStatesEqual(left: WorkspaceSidebarState, right: WorkspaceSide
     left.lessonType === right.lessonType &&
     left.previewFilePath === right.previewFilePath &&
     left.sidebarScrollTop === right.sidebarScrollTop &&
+    left.sidebarWidth === right.sidebarWidth &&
     areStringArraysEqual(left.collapsedFolders, right.collapsedFolders) &&
     areStringArraysEqual(left.folders, right.folders) &&
     areSidebarFilesEqual(left.files, right.files)
@@ -322,6 +342,7 @@ function withRefreshedWorkspaceSlices(state: WorkspaceState): WorkspaceState {
     state.activeFilePath,
     nextCollapsedFolders,
     state.sidebarScrollTop,
+    state.sidebarWidth,
   );
 
   return {
@@ -360,19 +381,27 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
   const activeFilePath = initialSnapshot.activeFilePath;
   const collapsedFolders = normalizeCollapsedFolders(project.folders, []);
   const sidebarScrollTop = 0;
+  const sidebarWidth = normalizeSidebarWidth(initialSnapshot.sidebarWidth);
 
   return {
     project,
     activeFilePath,
     collapsedFolders,
     sidebarScrollTop,
+    sidebarWidth,
     savedSnapshot,
     projectVersion: 0,
     previewVersion: 0,
     saveVersion: 0,
     syncVersion: 0,
     editorState: createEditorState(project, activeFilePath, 0),
-    sidebarState: createSidebarState(project, activeFilePath, collapsedFolders, sidebarScrollTop),
+    sidebarState: createSidebarState(
+      project,
+      activeFilePath,
+      collapsedFolders,
+      sidebarScrollTop,
+      sidebarWidth,
+    ),
     lessonType: project.lessonType,
     projectName: project.name,
     fileCount: Object.keys(project.files).length,
@@ -434,6 +463,18 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
         return withRefreshedWorkspaceSlices({
           ...context,
           sidebarScrollTop,
+        });
+      },
+      setSidebarWidth: (context, event: { width: number }) => {
+        const sidebarWidth = normalizeSidebarWidth(event.width);
+
+        if (context.sidebarWidth === sidebarWidth) {
+          return context;
+        }
+
+        return withRefreshedWorkspaceSlices({
+          ...context,
+          sidebarWidth,
         });
       },
       createFile: (
@@ -776,6 +817,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           savedSnapshot: StoredWorkspaceSnapshot;
           collapsedFolders?: string[];
           sidebarScrollTop?: number;
+          sidebarWidth?: number;
         },
       ) => {
         return withDirtyState(
@@ -785,6 +827,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
             activeFilePath: event.activeFilePath,
             collapsedFolders: event.collapsedFolders ?? [],
             sidebarScrollTop: normalizeSidebarScrollTop(event.sidebarScrollTop),
+            sidebarWidth: normalizeSidebarWidth(event.sidebarWidth),
             savedSnapshot: event.savedSnapshot,
             projectVersion: context.projectVersion + 1,
             previewVersion: context.previewVersion + 1,
@@ -819,6 +862,9 @@ export const selectWorkspaceEditorState = (context: WorkspaceState): WorkspaceEd
 
 export const selectWorkspaceSidebarState = (context: WorkspaceState): WorkspaceSidebarState =>
   context.sidebarState;
+
+export const selectWorkspaceSidebarWidth = (context: WorkspaceState): number =>
+  context.sidebarWidth;
 
 export const selectWorkspaceActiveFilePath = (context: WorkspaceState): string =>
   context.activeFilePath;
