@@ -341,36 +341,50 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
   };
 
   // Handle iframe mouse tracking
-  const iframeListeners = new Map<
-    HTMLIFrameElement,
-    { move: (e: MouseEvent) => void; leave: () => void }
-  >();
+  type IframeMouseListeners = {
+    document: Document;
+    move: (e: MouseEvent) => void;
+    leave: () => void;
+  };
+
+  const iframeListeners = new Map<HTMLIFrameElement, IframeMouseListeners>();
   const iframeLoadHandlers = new Map<HTMLIFrameElement, () => void>();
   const iframeWindowMap = new Map<Window, HTMLIFrameElement>();
+  const iframeWindows = new Map<HTMLIFrameElement, Window>();
   const directlyTrackedIframes = new Set<HTMLIFrameElement>();
+
+  const removeIframeDocumentListeners = (handlers: IframeMouseListeners) => {
+    handlers.document.removeEventListener("mousemove", handlers.move, true);
+    handlers.document.removeEventListener("mouseleave", handlers.leave, true);
+  };
 
   const rememberIframeWindow = (iframe: HTMLIFrameElement) => {
     const iframeWindow = iframe.contentWindow;
 
     if (iframeWindow) {
+      const previousWindow = iframeWindows.get(iframe);
+
+      if (previousWindow && previousWindow !== iframeWindow) {
+        iframeWindowMap.delete(previousWindow);
+      }
+
+      iframeWindows.set(iframe, iframeWindow);
       iframeWindowMap.set(iframeWindow, iframe);
     }
   };
 
   const forgetIframeWindow = (iframe: HTMLIFrameElement) => {
-    const iframeWindow = iframe.contentWindow;
+    const iframeWindow = iframeWindows.get(iframe);
 
-    if (!iframeWindow) {
-      return;
-    }
-
-    const currentIframe = iframeWindowMap.get(iframeWindow);
-    if (currentIframe === iframe) {
+    if (iframeWindow && iframeWindowMap.get(iframeWindow) === iframe) {
       iframeWindowMap.delete(iframeWindow);
     }
+
+    iframeWindows.delete(iframe);
   };
 
   const setupIframeListeners = (iframe: HTMLIFrameElement) => {
+    removeIframeListeners(iframe);
     rememberIframeWindow(iframe);
 
     const onIframeMouseMove = (e: MouseEvent) => {
@@ -390,6 +404,12 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
     };
 
     const attachToDocument = () => {
+      const existing = iframeListeners.get(iframe);
+      if (existing) {
+        removeIframeDocumentListeners(existing);
+        iframeListeners.delete(iframe);
+      }
+
       try {
         const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
         if (!iframeDoc) {
@@ -397,18 +417,12 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
           return;
         }
 
-        // Clean up existing listeners if any
-        const existing = iframeListeners.get(iframe);
-        if (existing) {
-          iframeDoc.removeEventListener("mousemove", existing.move);
-          iframeDoc.removeEventListener("mouseleave", existing.leave);
-        }
-
         iframeDoc.addEventListener("mousemove", onIframeMouseMove, true);
         iframeDoc.addEventListener("mouseleave", onIframeMouseLeave, true);
         directlyTrackedIframes.add(iframe);
 
         iframeListeners.set(iframe, {
+          document: iframeDoc,
           move: onIframeMouseMove,
           leave: onIframeMouseLeave,
         });
@@ -442,11 +456,7 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
 
     if (handlers) {
       try {
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (iframeDoc) {
-          iframeDoc.removeEventListener("mousemove", handlers.move);
-          iframeDoc.removeEventListener("mouseleave", handlers.leave);
-        }
+        removeIframeDocumentListeners(handlers);
       } catch (err) {
         console.error("Error removing iframe listeners:", err);
       }
@@ -542,15 +552,12 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
     });
     iframeLoadHandlers.clear();
     iframeWindowMap.clear();
+    iframeWindows.clear();
     directlyTrackedIframes.clear();
 
-    iframeListeners.forEach((handlers, iframe) => {
+    iframeListeners.forEach((handlers) => {
       try {
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (iframeDoc) {
-          iframeDoc.removeEventListener("mousemove", handlers.move);
-          iframeDoc.removeEventListener("mouseleave", handlers.leave);
-        }
+        removeIframeDocumentListeners(handlers);
       } catch (err) {
         console.error("Failed to cleanup iframe listeners:", err);
       }
