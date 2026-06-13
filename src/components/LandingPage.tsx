@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { ArrowUpRight, PlayCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import Navbar from "./Navbar";
 import { useState, useEffect, useRef } from "react";
@@ -132,20 +133,55 @@ const LandingPage = () => {
 
                 {/* Mockup code terminal */}
                 <div className="w-full lg:w-150 shrink-0 order-2">
-                  <div
-                    ref={containerRef}
-                    className="relative w-full aspect-video overflow-hidden border border-slate-800 rounded-xl bg-[#11141c] shadow-2xl"
-                  >
-                    <iframe
-                      src="/code?url=/introduction.ne&readOnly=true&deferRuntimeAutostart=true"
-                      className="absolute top-0 left-0 border-0 origin-top-left"
-                      style={{
-                        width: "1440px",
-                        height: "812px",
-                        transform: `scale(${scale})`,
-                      }}
-                      title="Next Editor Live Demo"
-                    />
+                  <div className="overflow-hidden rounded-xl border border-slate-800 bg-[#11141c] shadow-2xl">
+                    <div className="flex min-h-14 items-center justify-between gap-3 border-b border-white/10 bg-slate-950 px-3 py-2 sm:px-4">
+                      <div className="flex min-w-0 items-center gap-3 text-slate-400">
+                        <div className="flex shrink-0 gap-1.5" aria-hidden="true">
+                          <span className="size-2 rounded-full bg-[#ff5f57]" />
+                          <span className="size-2 rounded-full bg-[#ffbd2e]" />
+                          <span className="size-2 rounded-full bg-[#28c840]" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="block truncate text-xs font-semibold uppercase tracking-[0.16em]">
+                            introduction.ne
+                          </span>
+                          <span className="hidden truncate text-[11px] text-slate-500 sm:block">
+                            Recorded editor session
+                          </span>
+                        </div>
+                      </div>
+                      <Link
+                        to="/code?url=/introduction.ne"
+                        aria-label="Open the introduction demo in the editor"
+                        className="group inline-flex shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white px-3 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-slate-950/20 transition-all hover:-translate-y-0.5 hover:bg-pinata-cyan active:translate-y-0 sm:px-4"
+                      >
+                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white transition-transform group-hover:scale-105">
+                          <PlayCircle className="size-4" strokeWidth={2.4} aria-hidden="true" />
+                        </span>
+                        <span className="hidden sm:inline">Open demo</span>
+                        <span className="sm:hidden">Open</span>
+                        <ArrowUpRight
+                          className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                          strokeWidth={2.6}
+                          aria-hidden="true"
+                        />
+                      </Link>
+                    </div>
+                    <div
+                      ref={containerRef}
+                      className="relative w-full aspect-video overflow-hidden bg-[#11141c]"
+                    >
+                      <iframe
+                        src="/code?url=/introduction.ne&readOnly=true&deferRuntimeAutostart=true"
+                        className="absolute top-0 left-0 border-0 origin-top-left"
+                        style={{
+                          width: "1440px",
+                          height: "812px",
+                          transform: `scale(${scale})`,
+                        }}
+                        title="Next Editor Live Demo"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
