@@ -127,9 +127,9 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
             void rerunRunner();
           }}
           disabled={!isSupported || !runnerConfig.enabled || isBusy}
-          className="px-3 py-1 text-xs text-emerald-300 hover:text-emerald-200 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors font-semibold"
+          className="rounded-md bg-[#173925] px-3 py-1.5 text-[13px] font-bold tracking-[0.04em] text-[#58d88d] uppercase transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6] disabled:cursor-not-allowed disabled:bg-[#17241e] disabled:text-[#4f8e68]"
         >
-          RERUN
+          RUN
         </button>
       ) : null}
     </div>

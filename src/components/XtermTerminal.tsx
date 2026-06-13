@@ -15,10 +15,10 @@ interface XtermTerminalProps {
 }
 
 const TERMINAL_THEME = {
-  background: "#1d1f29",
+  background: "#15191f",
   foreground: "#e2e8f0",
   cursor: "#f8fafc",
-  cursorAccent: "#1d1f29",
+  cursorAccent: "#15191f",
   selectionBackground: "#33415588",
   black: "#0f172a",
   red: "#f87171",

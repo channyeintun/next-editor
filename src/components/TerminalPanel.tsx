@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ChevronDown, ChevronUp, Play, Plus, Settings2, SquareTerminal, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Diamond, Plus, Settings, SquareTerminal, X } from "lucide-react";
 import { useNextEditorDomainAdapters } from "../contexts/NextEditorDomainAdaptersContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import XtermTerminal from "./XtermTerminal";
@@ -23,6 +23,10 @@ function formatTerminalContent(content: string): string {
 
 const ANSI_RESET = "\u001b[0m";
 const DEFAULT_CONSOLE_LINES = ["[runner] Runtime dock is ready."];
+const RUNTIME_PANEL_BG = "bg-[#15191f]";
+const RUNTIME_COMMAND_BAR_CLASS =
+  "flex min-h-15.5 items-center justify-between border-b border-[#11151d] bg-[#191d25] px-4 py-3";
+const RUNTIME_COMMAND_TEXT_CLASS = "truncate font-mono text-[13px] font-semibold text-slate-400";
 const ANSI_COLORS: Record<string, string> = {
   dim: "\u001b[90m",
   blue: "\u001b[94m",
@@ -117,7 +121,7 @@ const DOCK_TABS: RuntimeDockTabConfig[] = [
   {
     id: "runner",
     label: "Runner",
-    icon: <Play size={13} />,
+    icon: <Diamond size={15} strokeWidth={2.25} />,
   },
   {
     id: "console",
@@ -200,7 +204,6 @@ const TerminalPanel = memo(function TerminalPanel() {
     activeCommand,
     latestLifecycleEvent,
     latestPreviewMessage,
-    openPorts,
     previewUrl,
     runnerConfig,
     terminalSessions,
@@ -535,7 +538,6 @@ const TerminalPanel = memo(function TerminalPanel() {
           ? "Starting the workspace dev server..."
           : "Waiting for runtime output...";
   const content = formatTerminalContent(rawContent);
-  const statusLabel = getStatusLabel(runtimeStatus);
   const consoleContent = useMemo(() => {
     if (effectiveConsoleLines.length === 0) {
       return "No console events yet.";
@@ -546,13 +548,6 @@ const TerminalPanel = memo(function TerminalPanel() {
 
   const runnerCommand = runnerConfig.runCommand.trim() || "Runner disabled";
   const runnerOutput = content || "Waiting for runner output...";
-  const openPortSummary = isPlaybackSnapshotActive
-    ? recordedRuntimeSnapshot?.previewUrl
-      ? recordedRuntimeSnapshot.previewUrl
-      : "No open ports"
-    : openPorts.length > 0
-      ? openPorts.map(({ port, url }) => `${port} ${url}`).join("\n")
-      : "No open ports";
   const dockStyle: RuntimeDockStyle = {
     "--runtime-dock-left": `${sidebarWidth + 16}px`,
     right: isPreviewDocked ? previewDockWidth + 16 : 16,
@@ -561,10 +556,10 @@ const TerminalPanel = memo(function TerminalPanel() {
   return (
     <>
       <div
-        className="runtime-dock fixed bottom-12 z-40 flex flex-col overflow-hidden rounded-xl border border-slate-900 bg-[#1d1f29] shadow-[0_18px_40px_rgba(2,6,23,0.42)]"
+        className="runtime-dock fixed bottom-12 z-40 flex flex-col overflow-hidden rounded-lg border border-[#0f131a] bg-[#15191f] shadow-[0_18px_40px_rgba(2,6,23,0.42)]"
         style={dockStyle}
       >
-        <div className="flex items-center border-b border-slate-800 bg-[#232633] px-2">
+        <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">
           {DOCK_TABS.map((tab) => {
             const isActive = tab.id === displayActiveTab;
 
@@ -574,10 +569,10 @@ const TerminalPanel = memo(function TerminalPanel() {
                 type="button"
                 disabled={isPlaybackSnapshotActive}
                 onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex items-center gap-2 border-r border-slate-800 px-4 py-3 text-xs font-medium transition-colors ${
+                className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${
                   isActive
-                    ? "border-b border-b-[#5da4ff] bg-[#1d1f29] text-white"
-                    : "text-slate-400 hover:bg-[#1d1f29] hover:text-white"
+                    ? "border-b border-b-[#64a3ff] bg-[#171b22] text-white"
+                    : "text-slate-400 hover:bg-[#171b22] hover:text-white"
                 } disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
               >
                 {tab.icon}
@@ -593,10 +588,10 @@ const TerminalPanel = memo(function TerminalPanel() {
             return (
               <div
                 key={session.id}
-                className={`inline-flex items-center border-r border-slate-800 text-xs font-medium transition-colors ${
+                className={`inline-flex items-center border-r border-[#11151d] text-xs font-medium transition-colors ${
                   isActiveSession
-                    ? "border-b border-b-[#5da4ff] bg-[#1d1f29] text-white"
-                    : "text-slate-400 hover:bg-[#1d1f29] hover:text-white"
+                    ? "border-b border-b-[#64a3ff] bg-[#171b22] text-white"
+                    : "text-slate-400 hover:bg-[#171b22] hover:text-white"
                 }`}
               >
                 <button
@@ -663,62 +658,60 @@ const TerminalPanel = memo(function TerminalPanel() {
         {!displayIsCollapsed && (
           <>
             {displayActiveTab === "runner" && (
-              <div className="flex h-72 flex-col bg-[#1d1f29]">
-                <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-                  <div className="min-w-0">
-                    <p className="truncate font-mono text-[13px] text-slate-300">
+              <div className={`flex h-72 flex-col ${RUNTIME_PANEL_BG}`}>
+                <div className={RUNTIME_COMMAND_BAR_CLASS}>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <p className={RUNTIME_COMMAND_TEXT_CLASS}>
                       {runnerConfig.enabled ? runnerCommand : "Runner disabled"}
                     </p>
-                    <pre className="mt-2 whitespace-pre-wrap font-mono text-[11px] leading-5 text-slate-500">
-                      {openPortSummary}
-                    </pre>
+                    {isBusy ? (
+                      <span
+                        aria-label="Runner is starting"
+                        className="inline-block size-2.5 shrink-0 animate-spin rounded-full border-2 border-[#d48a37] border-t-transparent"
+                      />
+                    ) : null}
                   </div>
-                  <div className="ml-4 flex items-center gap-4">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      {statusLabel}
-                    </span>
+                  <div className="ml-4 flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {
                         void rerunRunner();
                       }}
                       disabled={isPlaybackSnapshotActive || !runnerConfig.enabled || isBusy}
-                      className="text-sm font-semibold uppercase tracking-[0.08em] text-[#13d77d] transition-colors hover:text-[#39f39a] disabled:cursor-not-allowed disabled:text-slate-600"
+                      className="rounded-md bg-[#173925] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6] disabled:cursor-not-allowed disabled:bg-[#17241e] disabled:text-[#4f8e68]"
                     >
-                      RERUN
+                      RUN
                     </button>
                     <button
                       type="button"
                       onClick={() => setIsSettingsOpen(true)}
                       disabled={isPlaybackSnapshotActive}
-                      className="text-slate-500 transition-colors hover:text-white disabled:cursor-default disabled:hover:text-slate-500"
+                      className="inline-flex size-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-200 disabled:cursor-default disabled:hover:text-slate-500"
                       aria-label="Open runner settings"
                       title="Open runner settings"
                     >
-                      <Settings2 size={17} />
+                      <Settings size={18} />
                     </button>
                   </div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-hidden px-5 py-6">
-                  <div className="size-full overflow-hidden rounded-lg border border-slate-800/80 bg-[#151821]">
-                    <XtermTerminal
-                      sessionId="runner"
-                      output={runnerOutput}
-                      interactive={false}
-                      scrollLine={
-                        isPlaybackSnapshotActive ? effectiveTerminalScrollLines.runner : undefined
-                      }
-                      onScroll={(scrollLine) => updateTerminalScrollLine("runner", scrollLine)}
-                    />
-                  </div>
+                <div className={`min-h-0 flex-1 overflow-hidden px-5 py-6 ${RUNTIME_PANEL_BG}`}>
+                  <XtermTerminal
+                    sessionId="runner"
+                    output={runnerOutput}
+                    interactive={false}
+                    scrollLine={
+                      isPlaybackSnapshotActive ? effectiveTerminalScrollLines.runner : undefined
+                    }
+                    onScroll={(scrollLine) => updateTerminalScrollLine("runner", scrollLine)}
+                  />
                 </div>
               </div>
             )}
 
             {displayActiveTab === "terminal" && (
-              <div className="flex h-72 flex-col bg-[#1d1f29] px-5 py-6">
-                <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-800/80 bg-[#151821]">
+              <div className={`flex h-72 flex-col px-5 py-6 ${RUNTIME_PANEL_BG}`}>
+                <div className="relative min-h-0 flex-1 overflow-hidden">
                   {!effectiveActiveTerminalSessionId && (
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center font-mono text-[13px] text-slate-500">
                       Open the terminal to start a shell session.
@@ -752,11 +745,11 @@ const TerminalPanel = memo(function TerminalPanel() {
                 <div className="mt-3 flex justify-end">
                   <button
                     type="button"
-                    disabled={isPlaybackSnapshotActive}
+                    disabled={isPlaybackSnapshotActive || !effectiveActiveTerminalSessionId}
                     onClick={() => {
                       void sendTerminalInput("\u0003");
                     }}
-                    className="rounded-md border border-slate-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-slate-500 hover:text-white disabled:cursor-default disabled:hover:border-slate-700 disabled:hover:text-slate-400"
+                    className="rounded-md border border-[#303746] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:border-slate-500 hover:text-white disabled:cursor-default disabled:opacity-50 disabled:hover:border-[#303746] disabled:hover:text-slate-400"
                   >
                     Ctrl+C
                   </button>
@@ -765,18 +758,16 @@ const TerminalPanel = memo(function TerminalPanel() {
             )}
 
             {displayActiveTab === "console" && (
-              <div className="h-72 overflow-hidden bg-[#1d1f29] px-5 py-6">
-                <div className="size-full overflow-hidden rounded-lg border border-slate-800/80 bg-[#151821]">
-                  <XtermTerminal
-                    sessionId="console"
-                    output={consoleContent}
-                    interactive={false}
-                    scrollLine={
-                      isPlaybackSnapshotActive ? effectiveTerminalScrollLines.console : undefined
-                    }
-                    onScroll={(scrollLine) => updateTerminalScrollLine("console", scrollLine)}
-                  />
-                </div>
+              <div className={`h-72 overflow-hidden px-5 py-6 ${RUNTIME_PANEL_BG}`}>
+                <XtermTerminal
+                  sessionId="console"
+                  output={consoleContent}
+                  interactive={false}
+                  scrollLine={
+                    isPlaybackSnapshotActive ? effectiveTerminalScrollLines.console : undefined
+                  }
+                  onScroll={(scrollLine) => updateTerminalScrollLine("console", scrollLine)}
+                />
               </div>
             )}
           </>

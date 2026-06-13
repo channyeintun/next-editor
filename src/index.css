@@ -51,7 +51,7 @@ body {
 }
 
 .xterm-terminal {
-  --terminal-background: #1d1f29;
+  --terminal-background: #15191f;
   height: 100%;
   width: 100%;
   background-color: var(--terminal-background);
