@@ -314,9 +314,10 @@ The protocol defines `MSR_START=241`, `MSR_CHUNK=242`, and `MSR_END=243`.
 Current client evidence:
 
 - `MediaStreamStartAction` and `MediaStreamEndAction` exist, but are minimal.
-- No active `MSR_CHUNK` producer was found in this pass.
+- `MSR_CHUNK` appears only in the opcode enum in this inspected bundle; no class registration or active producer was found.
 - Modern microphone capture uses `AudioRecording` plus browser `MediaRecorder`; chunks are assembled into WebM and appended to `MediaStreamRecording.webm`, an embedded `OPByteStream`.
 - `MediaStreamRecording.url` resolves non-legacy recordings to `/legacy/files/${this.id}.webm`.
+- `ScrimRec.byte_offset` exists as model metadata but was not assigned by visible client code in this pass.
 
 ### File/View Actions
 
@@ -329,6 +330,22 @@ Current client evidence:
 `ViewCloseAction` (`VIEW_CLOSE=251`) removes a widget/file from the group and reopens the previous active view when appropriate.
 
 `SaveAction` (`SAVE=221`) records the target's `lastSave`, stores current contents into the target body, and has a `scrim-save-marker`.
+
+### Commit/Marker Actions
+
+`COMMIT=220` is assigned in the opcode enum.
+
+Current client evidence:
+
+- No registered `CommitAction` class or active `COMMIT=220` producer was found in `tmp/chunks/ide.36BDFLCO.js`.
+- Commit markers visible in the player/editor are `ScrimCommit` content records, not decoded stream actions in the inspected client path.
+- `ScrimCommit` stores `offset`, `summary`, `desc`, `squashed`, `template`, and `snapshot`.
+- `ScrimCommit.marker_offset` returns the commit offset.
+- `ScrimCommit.opΞownΞdialog()` and `IDEStream.opΞcommitΞdialog()` both render `ide-commit-dialog`.
+- `ide-commit-dialog` mutates/validates a commit-like `value`, emits `resolve`, and exposes toggles for template updates and squashed commits; it does not itself write a `COMMIT=220` stream action in the visible client code.
+- `scrim-commit-marker` and the `ScrimCommit` marker adapter render commit markers in timeline UI.
+- `IDEStream.segments` uses squashed first commit markers as segment bases and filters later markers by `marker_offset`.
+- `IDEStream.trimToAction(...)` deletes commits whose offsets are at or after the trim target.
 
 ### Cursor/Playback
 
@@ -369,6 +386,8 @@ For a Scrimba-like system, the core engine needs:
 - What exact server-side store receives `OPBinaryChunk` packets?
 - What exactly does the `ScrimStream.load_from_prod` RPC do?
 - Are `/legacy/files/<id>` responses always raw msgpack stream bytes, or can they be transformed by the backend?
-- How are media stream chunks (`MSR_*`) stored and linked to `ScrimRec`/`ScrimClip`?
-- How are branch markers and commit offsets encoded in persisted `Scrim` records?
-- What are the host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir`?
+- Is `MSR_CHUNK` legacy/reserved, or is it produced only by a missing tracker/bundle artifact?
+- Is `ScrimRec.byte_offset` populated server-side, by legacy clients, or by another bundle not present under `tmp/`?
+- How exactly are commit records persisted server-side, and is `COMMIT=220` still used outside this bundle?
+- How are branch marker offsets encoded in persisted `Scrim` records beyond the client-side `marker_offset` model API?
+- What are the host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, `WCWorkspace.webfetch`, and `WCWorkspace.serializeDir`?

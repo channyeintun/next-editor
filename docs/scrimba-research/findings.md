@@ -109,6 +109,9 @@ High confidence:
 - `OPBufferChunks.readableSize` only exposes the contiguous readable prefix from byte offset zero. `IDEStream.syncBuffer` decodes only `stream.chunked.slice(previousReadableOffset, readableSize)`.
 - Missing byte ranges are represented by `OPMissingBinaryChunk`; `OPBinaryChunkRequest` can answer a request by slicing a loaded chunk and sending an `OPBinaryChunk` back through `OP.$send`.
 - `ScrimStream.trim(offset)` delegates to the normal saved-stream trim path when saved, but for unsaved streams trims the local buffer, clears the socket, and resends the retained prefix.
+- `ScrimRec.byte_offset` exists as a numeric model field, but this pass found no client-side assignment outside the `ScrimRec` model definition.
+- Modern microphone media bytes are not stored in the main action stream. `AudioRecording` writes browser `MediaRecorder` data into a WebM assembler, appends WebM bytes to `MediaStreamRecording.webm`, and patches the finalized WebM stream through `OPBinaryChunk`.
+- `MediaStreamRecording.webm` is an embedded `OPByteStream`; non-legacy media URLs resolve to `/legacy/files/${recording.id}.webm`.
 - `IDEStream.load()` is the bridge from content model to action stream:
   - It resolves the `Scrim`.
   - For trunk streams, it awaits `scrim.stream`; if the stream is empty and the scrim exists it calls `stream.load_from_prod()`, then awaits the stream again.
@@ -121,6 +124,7 @@ Medium confidence:
 - Persisted Scrim stream storage is the raw msgpack multi-value byte stream, served from `/legacy/files/<stream-id>` and updated through `OPBinaryChunk` packets.
 - `load_from_prod` is an RPC action whose implementation is server-side and not present in the local bundle; it likely exists to backfill or migrate missing legacy stream bytes.
 - `verifiedSize` is a server-confirmed byte count, while `readableSize` is the currently contiguous locally available byte count.
+- `ScrimRec.byte_offset` may be legacy/server-maintained metadata for relating recording records to stream byte positions, but that relationship is not implemented in visible client code.
 
 ## Editing, Branching, And Recording
 
@@ -171,6 +175,29 @@ Medium confidence:
 - Workspace-mode recording staging differs from legacy recording: workspace mode stages through `wsp.sync()` and `ScrimRec.stage().mount()`, while legacy mode enables pointer tracker directly.
 - `COMMIT=220` is assigned in the opcode table, but this pass did not find a registered `CommitAction` class; visible commit markers are represented by `ScrimCommit` content models.
 
+## Commit And Marker Semantics
+
+High confidence:
+
+- `COMMIT=220` exists in the opcode enum, but no active `CommitAction` registration or producer was found in `tmp/chunks/ide.36BDFLCO.js`.
+- Visible commits are modeled as `ScrimCommit` content records in `tmp/app.UK3DL7B2.js`.
+- `ScrimCommit` stores `offset`, `summary`, `desc`, `squashed`, `template`, and `snapshot`.
+- `ScrimCommit.marker_offset` returns the commit `offset`, so commits participate in timeline marker placement by model metadata rather than by a decoded stream action in the inspected client.
+- `ScrimCommit.as_label` falls back to `"Unnamed commit"` when no summary is set.
+- `ScrimCommit.opΞownΞdialog()` renders `ide-commit-dialog` with the commit model as `value`.
+- `IDEStream.opΞcommitΞdialog()` renders the same `ide-commit-dialog` with the active branch.
+- `ide-commit-dialog` labels the first commit flow as `"Save Scrim"` and later flows as `"Commit"`.
+- The dialog edits `value.summary`, supports an `"Update template"` toggle when `scrim.templateΦ` is true, and supports a `"Squash Changes"` toggle bound to `value.squashed`.
+- The dialog submit action validates `this.value` when a validator exists and emits `resolve` with `this.value`; commit persistence/creation is not implemented directly in the dialog body.
+- `scrim-commit-marker` is the marker UI, and a `ScrimCommit` marker adapter exposes `opΞownΞmarker(...)` to render it.
+- `IDEStream.segments` treats a first `ScrimCommit` marker with `squashed` enabled as a segment base/start, filters later markers by `marker_offset`, and builds clip/timeline segments from `ScrimRec` arrays.
+- `IDEStream.trimToAction(...)` removes `scrim.commits` whose `offset` is at or after the trim target, alongside later recordings and byte stream data.
+
+Medium confidence:
+
+- Commit metadata is persisted as Scrim model data, while `COMMIT=220` is either legacy, server-side, or reserved for another bundle path not present under `tmp/`.
+- Squashed commits hide or collapse individual edits in commit history/timeline segmentation rather than changing the raw action stream bytes in the visible client code.
+
 ## Capture Paths
 
 High confidence:
@@ -206,11 +233,16 @@ High confidence:
 - `pointer-tracker` listens globally for `pointermove`, `pointerup`, `pointerdown`, `keydown`, and custom `browserevent`.
 - `pointer-tracker.stamp(...)` records `{ x, y, flags, hover, time, targetLayout, prev }` and pushes an `IDEPointerUpdateAction` while recording or debugging outside workspace mode.
 - `IDEPointerUpdateAction` uses a schema of `["x", "y", "flags", "hover", "angle", "pressure"]`, delta-encodes coordinates relative to the previous pointer action, and groups pointer updates into `PointerUpdateGroup` segments.
+- `IDEPointerUpdateAction.commitToStream(...)` links each pointer action to the previous pointer frame and calls `analyzeAndGroup(...)`.
+- Pointer grouping tracks target snapshots by `sref`, pointer-down/up state, movement distance, elapsed time, speed, and target changes; long gaps and slow/stopped motion can break groups.
+- `PointerUpdateGroup.finish(...)` analyzes accumulated angles/movement, can mark frames as splitting points, and can split a group at sharp direction changes.
+- `ide-pointer-widget` is the replay cursor renderer. It finds the nearest unskipped pointer frame, maps recorded positions to local IDE coordinates, updates hover/hidden/button state, animates target movement through `drawTarget(...)`/`draw()`, and triggers `pointer-wave` click feedback.
+- `PointerFrame` is a timeline/editor marker for pointer frames; it flags pressed/up/down/splitting state and stores `data-ref` from the pointer frame's `sref`.
 - Modern microphone recording uses `AudioRecording`, `MediaRecorder`, and `MediaStreamRecording`.
 - `AudioRecording.onrecdataavailable(...)` collects browser `MediaRecorder` blobs and writes them into a local WebM assembler.
 - `AudioRecording.onrecstart(...)` can create a `MediaStreamRecording`, appends WebM data to `model.webm`, and patches the final WebM stream through `OPBinaryChunk`.
 - `MediaStreamRecording.webm` is an embedded `OPByteStream`; its non-legacy URL is `/legacy/files/${this.id}.webm`.
-- `MSR_START`, `MSR_CHUNK`, and `MSR_END` opcodes exist, but this pass found only minimal `MediaStreamStartAction`/`MediaStreamEndAction` classes and did not find an active `MSR_CHUNK` producer in the bundled client.
+- `MSR_START`, `MSR_CHUNK`, and `MSR_END` opcodes exist. This pass found only minimal `MediaStreamStartAction`/`MediaStreamEndAction` classes; `MSR_CHUNK` appears only in the opcode enum in the inspected bundle.
 
 ## Browser Preview Replay
 
@@ -245,6 +277,7 @@ High confidence:
 - It can spawn `/bin/jsh --osc` terminals.
 - It has an opt-out path via local storage key `WEBCONTAINER_OFF` and skips in embed mode.
 - Service-worker/iframe infrastructure includes `ide-sw-container`, `ServiceWorkerFrame`, `runner-frame`, `player-frame`, `__sw__.html`, `__sw__blank.html`, and `__sw__tracker.js`.
+- The standalone service-worker/player/tracker HTML or JS artifacts are not present under `tmp/`; the client bundle only references the URLs and implements the message handlers around them.
 
 Medium confidence:
 
@@ -341,7 +374,10 @@ High confidence:
 - `HostWorkspace` is a base host model. Its `$send` throws unless implemented by a subclass, and its `$changed` throttles `save()`.
 - `LocalWorkspace` extends `HostWorkspace`. It sends through a `SILocalHost` socket (or Electron store when available), has a no-op client-side `boot`, and exposes `merge` as an RPC action.
 - `WCWorkspace` extends `HostWorkspace`. It embeds a `HostFSRoot`, sends through `SWC.send(...)`, and exposes `boot`, `install`, `merge`, `webfetch`, and `serializeDir` as WebContainer/bridge-facing actions.
-- `WCWorkspace.boot` calls `SWC.boot(this, workspace)`, marks the host as booted, and then runs `install(...)` once.
+- `LocalWorkspace.merge` is an atomic RPC action with `callback=false`; its host-side merge implementation is not in this client class body.
+- `WCWorkspace.webfetch`, `serializeDir`, `install`, and `merge` are RPC actions with `callback=false`; their concrete bridge/host implementations are not in this client class body.
+- `WCWorkspace.boot` is a visible client action: it calls `SWC.boot(this, workspace)`, logs the host boot, marks the host as booted, and then runs `install(...)` once.
+- `WCWorkspace.download_as_zip` is client-side helper logic: it awaits `serializeDir(path)`, imports JSZip through `ScrimArchiver.jszip`, builds a zip tree from the serialized directory, and triggers a browser download.
 - `HostFSEntry` is the shared host file entry base; `HostFile` and `HostDir` persist to/read from a host filesystem.
 - `HostDir.pullFromDisk(...)` crawls the host directory, creates `HostFile`/`HostDir` entries for disk nodes, skips `.DS_Store`, records inode data, and recurses.
 - `HostDir.watch()` uses host `fs.watch(...)` and `onfsevent(...)` to mark removed nodes, create new host entries, or refresh changed file bodies.
@@ -357,7 +393,7 @@ High confidence:
 Medium confidence:
 
 - For modern scrims, the authoritative runtime file tree is the host/provider graph reached from `SIWorkspace.host`, not the legacy `scrim-view.toContainerSnapshot()` helper.
-- `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir` are RPC/bridge actions; their actual host-side implementations are not visible in the client bundle.
+- `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, `WCWorkspace.webfetch`, and `WCWorkspace.serializeDir` are RPC/bridge actions; their actual host-side implementations are not visible in the client bundle.
 
 ## Workspace And Default State
 
@@ -461,6 +497,7 @@ Medium confidence:
 - Exact server-side storage implementation for `OPBinaryChunk` persistence is not visible in the local bundle.
 - Exact `load_from_prod` RPC behavior and production backfill endpoint are not visible in the local bundle.
 - Exact external browser tracker implementation is not visible because `/assets/tracker.4FYFXZYK.iife.js` is referenced but not present under `tmp/`.
-- `LCSCROLL` and `MSR_CHUNK` producers were not found in this bundle pass and may be legacy-only or produced by another artifact.
-- Commit/marker server semantics around `COMMIT=220`, `ScrimCommit`, and `ide-commit-dialog` still need targeted tracing.
+- `LCSCROLL` producers were not found in this bundle pass and may be legacy-only or produced by another artifact.
+- `MSR_CHUNK` has no visible producer in this bundle; modern media bytes are stored through `MediaStreamRecording.webm`/`OPByteStream`.
+- Server-side commit persistence semantics around `COMMIT=220` are not visible; client-side `ScrimCommit` model/UI semantics have been traced.
 - Host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir` are not visible in the client class bodies.

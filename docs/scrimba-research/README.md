@@ -12,7 +12,7 @@ The source material is minified production JavaScript. There are no JavaScript s
 
 - `findings.md` - current architecture findings and behavioral model.
 - `action-protocol.md` - stream/action opcode map and action semantics found so far.
-- `progress.md` - file-by-file research status, summaries, and remaining work.
+- `progress.md` - file-by-file research status, exact completed source spans, summaries, and remaining work.
 
 ## High-Level Findings
 
@@ -31,7 +31,8 @@ The source material is minified production JavaScript. There are no JavaScript s
 
 ## Important Evidence Anchors
 
-- Action opcode table: `tmp/chunks/ide.36BDFLCO.js`, character offset `566697`.
+- Completed skip map: `progress.md`, section `Completed Evidence Ranges`.
+- Action opcode table: `tmp/chunks/ide.36BDFLCO.js`, character offset `567982` for the `COMMIT`/`MSR` area and `566697` for the broader enum section.
 - Action registration helper `Ve(...)`: `tmp/chunks/ide.36BDFLCO.js`, near character offset `569461`.
 - Base action class `IDEStreamAction`: `tmp/chunks/ide.36BDFLCO.js`, near character offset `2293694`.
 - Stream cursor apply/revert logic: `IDEStreamCursor` in `tmp/chunks/ide.36BDFLCO.js`.
@@ -51,5 +52,5 @@ Recommended next research tasks:
 1. De-minify only targeted class regions, not whole bundles.
 2. Trace host-side implementations hidden behind RPC/bridge actions such as `load_from_prod`, `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir`.
 3. Locate or reconstruct standalone service-worker/tracker artifacts (`/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`, and `/assets/tracker.4FYFXZYK.iife.js`) if they are available outside this bundle.
-4. Deepen commit/marker behavior around `COMMIT=220`, `ScrimCommit`, and `ide-commit-dialog`.
+4. Continue commit research only if server-side artifacts or another client bundle are available; the visible `ScrimCommit`/`ide-commit-dialog` client path has been traced.
 5. If product parity is the goal, decide whether Next Editor should emulate Scrimba's action stream/branch cursor or keep its existing frame/delta recording model.

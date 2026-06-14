@@ -8,6 +8,8 @@ This is a bundle-level research pass. It identifies the major architecture, acti
 
 Overall status: partial, usable handoff.
 
+Progress tracking rule: every completed source area must be recorded with file spans. Because the Scrimba bundles are minified into very long lines, line spans are written as `line:column` and character spans are the reliable skip markers. Character offsets below are zero-based half-open ranges unless a row says otherwise.
+
 ## File Inventory And Research Status
 
 | File                                |   Size | Status                                 | Summary                                                                                                                                                                                         |
@@ -37,12 +39,17 @@ Overall status: partial, usable handoff.
 - Extracted partial stream framing behavior from `IDEStream.parsedValue`, `syncBuffer`, and `write`.
 - Extracted client-side stream persistence behavior from `IDEStream.load`, `ScrimStream`, `OPDataStream`, `OPByteStream`, `OPBufferChunks`, `OPBinaryChunk`, and `OPBinaryChunkRequest`.
 - Extracted capture paths for Monaco text edits/selections/scroll state, browser tracker action messages, pointer tracking, and modern audio recording.
+- Extracted pointer replay/rendering path through `IDEPointerUpdateAction`, `PointerUpdateGroup`, `ide-pointer-widget`, `pointer-wave`, and `PointerFrame`.
 - Extracted DOM mutation subprotocol.
 - Extracted branch/editing/recording behavior from `IDEStream`.
 - Extracted branch ancestry, fork creation, cursor route traversal, and exercise solution branch creation.
 - Extracted workspace split between legacy `IDEFile`/`IDEFS` widget state and modern `SIWorkspace`/`SIFS` OP-diff state.
 - Extracted host/provider sync path through `HostWorkspace`, `LocalWorkspace`, `WCWorkspace`, `HostFile`/`HostDir`, `SIWorkspace.host`, and `SIWebContainer`.
+- Extracted host/provider RPC surface: `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, `WCWorkspace.webfetch`, and `WCWorkspace.serializeDir` are visible as RPC actions with hidden callback implementations; `WCWorkspace.boot` is the visible client action that calls `SWC.boot(...)` and one-time `install(...)`.
 - Extracted runtime request routing through `ide-sw-container`, `ServiceWorkerFrame`, `runner-frame`, `player-frame`, `scrim-view.oncontainermessage`, and `SIWebContainer` bridge handling.
+- Extracted commit/marker UI semantics around `ScrimCommit`, `scrim-commit-marker`, `ide-commit-dialog`, and `IDEStream.segments`; no active registered `COMMIT=220` action class was found in the inspected client bundle.
+- Extracted media persistence semantics around `ScrimRec.byte_offset`, `AudioRecording`, `MediaStreamRecording`, and `MSR_*`; `MSR_CHUNK=242` appears only in the opcode enum in this bundle.
+- Confirmed that `/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`, and `/assets/tracker.4FYFXZYK.iife.js` are referenced by the bundle but not present as standalone files under `tmp/`.
 - Compared Scrimba's action stream architecture with this repo's frame/delta recording, workspace/runtime snapshot, storage codec, and WebContainer provider approach.
 - Inspected `scrim.blank.json` manually.
 - Wrote durable research docs:
@@ -50,6 +57,127 @@ Overall status: partial, usable handoff.
   - `findings.md`
   - `action-protocol.md`
   - this `progress.md`
+
+## Completed Evidence Ranges
+
+Coverage note: these ranges have been inspected and summarized for architecture/protocol research. Future agents can skip them for the same high-level questions, but should reopen a targeted method if they need exact statement-by-statement behavior.
+
+### `tmp/app.UK3DL7B2.js`
+
+| Area                   | Minified symbol | Completed source span   | Character span    | Notes                                                                 |
+| ---------------------- | --------------- | ----------------------- | ----------------- | --------------------------------------------------------------------- |
+| `WebViewStream`        | `AAe`           | `738:492-738:852`       | `2872158-2872518` | Load-from-production RPC action model.                                |
+| `ScrimStream`          | `ice`           | `738:940-738:2463`      | `2872606-2874129` | Scrim byte stream URL, trim, preview state.                           |
+| `ScrimPractice`        | `Yi`            | `738:3991-738:14478`    | `2875657-2886144` | Exercise/practice branch creation and solution reset.                 |
+| `ScrimSnapshot`        | `EH`            | `739:57575-739:58270`   | `2948471-2949166` | Snapshot body/object preview model.                                   |
+| `ScrimRec`             | `Ql`            | `739:43206-739:48806`   | `2934102-2939702` | Recording model, `byte_offset`, stop/process/caption actions.         |
+| `ScrimClip`            | `w5`            | `739:39444-739:41578`   | `2930340-2932474` | Audio/timeline clip abstraction.                                      |
+| `ScrimAudio`           | `hj`            | `739:49052-739:50094`   | `2939948-2940990` | Audio embed with WebM stream/captions/offset.                         |
+| `ScrimCommit`          | `C5`            | `739:53664-739:56394`   | `2944560-2947290` | Commit marker model, summary/squash/template/snapshot fields, dialog. |
+| `ScrimPreview`         | `ab`            | `741:768-741:3583`      | `2951961-2954776` | Preview/layout snapshot model.                                        |
+| `Scrim`                | `gr`            | `746:4688-746:34618`    | `2965115-2995045` | Primary scrim content object, refs, recs, commits, stream/head/base.  |
+| `Caption`              | `Tj`            | `827:42373-827:43485`   | `3287232-3288344` | Caption part model.                                                   |
+| `Captions`             | `MC`            | `827:43559-827:45131`   | `3288418-3289990` | Caption collection/transcript support.                                |
+| `MediaStreamRecording` | `Jp`            | `827:47367-827:50218`   | `3292226-3295077` | Media recording model, WebM byte stream.                              |
+| `ScrimAudioTrack`      | `IC`            | `827:51737-827:53847`   | `3296596-3298706` | Audio track/caption model.                                            |
+| `ScrimArchiver`        | `Vqt`           | `859:29-859:3596`       | `3363596-3367163` | Export/archive base.                                                  |
+| `WSPScrimArchiver`     | `zqt`           | `859:3685-859:4833`     | `3367252-3368400` | Workspace export variant.                                             |
+| `ViteScrimArchiver`    | `Bqt`           | `859:4928-868:6`        | `3368495-3370172` | Vite export path.                                                     |
+| `WebpackScrimArchiver` | `Wqt`           | `868:102-876:611`       | `3370268-3372986` | Webpack export path.                                                  |
+| `OPBinaryChunkRequest` | `TO`            | `129:205977-129:207010` | `876046-877079`   | Missing-range request handler.                                        |
+| `OPBinaryChunk`        | `T_`            | `129:208345-129:210816` | `878414-880885`   | Byte chunk load/flush/patch behavior.                                 |
+| `OPBufferChunks`       | `mYe`           | `129:210900-129:214926` | `880969-884995`   | Contiguous readable byte buffer/fragments.                            |
+| `OPByteStream`         | `P_`            | `129:218167-129:224050` | `888236-894119`   | Fetch/append/trim byte stream.                                        |
+| `OPDataStream`         | `ZYe`           | `129:224194-129:224711` | `894263-894780`   | Msgpack multi-value append layer.                                     |
+| `HostFSEntry`          | `z$`            | `900:12050-900:15148`   | `3685495-3688593` | Host file-system entry base.                                          |
+| `HostFile`             | `qE`            | `900:15228-900:18043`   | `3688673-3691488` | Host file sync/read/write model.                                      |
+| `HostDir`              | `B$`            | `900:18117-900:21432`   | `3691562-3694877` | Host directory crawl/watch model.                                     |
+| `HostFSRoot`           | `Xfe`           | `900:21506-900:22303`   | `3694951-3695748` | Host FS root model.                                                   |
+| `HostWorkspace`        | `j0`            | `901:1814-901:4327`     | `3702036-3704549` | Base host workspace and save throttle.                                |
+| `LocalWorkspace`       | `W$`            | `901:4428-901:6385`     | `3704650-3706607` | Local host/RPC workspace.                                             |
+| `WCWorkspace`          | `la`            | `901:6553-901:12049`    | `3706775-3712271` | WebContainer host/RPC workspace.                                      |
+| `AppIDE`               | `Xk`            | `157:83927-157:85489`   | `1965690-1967252` | App-level IDE route/wrapper.                                          |
+
+### `tmp/chunks/ide.36BDFLCO.js`
+
+| Area                         | Minified symbol | Completed source span     | Character span    | Notes                                                                               |
+| ---------------------------- | --------------- | ------------------------- | ----------------- | ----------------------------------------------------------------------------------- |
+| Opcode/target enum           | n/a             | `41:38849-41:39090`       | `567982-568223`   | Includes `COMMIT=220`, `MSR_START=241`, `MSR_CHUNK=242`, `MSR_END=243`, target ids. |
+| `SIObject`                   | `J2`            | `41:41234-41:43657`       | `570367-572790`   | Modern workspace object base.                                                       |
+| `SIPointer`                  | `Ml`            | `41:45222-41:47908`       | `574355-577041`   | Modern/live pointer state model.                                                    |
+| `si-pointer-view`            | `R_`            | `41:48918-41:51377`       | `578051-580510`   | Modern/live pointer view renderer.                                                  |
+| `SIRunner`                   | `Fs`            | `41:127455-42:2856`       | `656588-666527`   | Modern runner command execution.                                                    |
+| `SITerminal`                 | `rp`            | `41:115660-41:117635`     | `644793-646768`   | Modern terminal model.                                                              |
+| `SIBrowser`                  | `ap`            | `42:30907-42:33290`       | `694578-696961`   | Modern browser view model.                                                          |
+| `SIWebConsole`               | `AG`            | `42:88417-42:88848`       | `752088-752519`   | Modern web console model.                                                           |
+| `SIFSEntry`                  | `dn`            | `516:5336-516:10783`      | `1092839-1098286` | Modern filesystem entry base.                                                       |
+| `SIFile`                     | `Xa`            | `516:10858-516:15269`     | `1098361-1102772` | Modern file model.                                                                  |
+| `SIDir`                      | `Yo`            | `516:15339-516:20898`     | `1102842-1108401` | Modern directory/snapshot/WebContainer tree model.                                  |
+| `SIFS`                       | `qh`            | `516:22002-516:24518`     | `1109505-1112021` | Modern filesystem root wrapper.                                                     |
+| `SIWorkspace`                | `Pi`            | `516:35244-520:8874`      | `1122747-1143225` | Modern workspace snapshots, diffs, sync, host provider.                             |
+| `SIWebContainerPort`         | `Cp`            | `521:4542-521:5552`       | `1159724-1160734` | WebContainer port model.                                                            |
+| `SIWebContainer`             | `Qf`            | `521:5610-523:1172`       | `1160792-1165192` | WebContainer boot, bridge, spawn, tracker install.                                  |
+| `IDEStreamAction`            | `Jp`            | `5338:11338-5338:14763`   | `2293464-2296889` | Base reversible action and decode path.                                             |
+| `SnapshotAction`             | `iw`            | `5338:16068-5338:17254`   | `2298194-2299380` | Legacy widget snapshot action.                                                      |
+| `BranchAction`               | `rw`            | `5338:17424-5338:17516`   | `2299550-2299642` | Minimal branch action.                                                              |
+| `ForkAction`                 | `sw`            | `5338:17669-5338:17740`   | `2299795-2299866` | Minimal fork action.                                                                |
+| `KeyframeAction`             | `aw`            | `5338:19425-5338:19496`   | `2301551-2301622` | Specialized snapshot/keyframe action.                                               |
+| `TextEditAction`             | `hw`            | `5338:20610-5338:21191`   | `2302736-2303317` | Multi-edit action.                                                                  |
+| `TextInsertAction`           | `dw`            | `5338:21352-5338:22062`   | `2303478-2304188` | Insert action and compact encode.                                                   |
+| `TextDeleteAction`           | `uw`            | `5338:22231-5338:22501`   | `2304357-2304627` | Delete action.                                                                      |
+| `TextSelectionAction`        | `pw`            | `5338:22673-5338:23331`   | `2304799-2305457` | Cursor/selection action.                                                            |
+| `TextScrollAction`           | `mw`            | `5338:23509-5338:23580`   | `2305635-2305706` | Scroll action class; producer not found.                                            |
+| `PointerUpdateGroup`         | `gw`            | `5338:24296-5338:26475`   | `2306422-2308601` | Pointer update group.                                                               |
+| `IDEPointerUpdateAction`     | `_w`            | `5338:26653-5338:30377`   | `2308779-2312503` | Pointer action delta encoding.                                                      |
+| `FSMoveAction`               | `vw`            | `5338:31074-5338:31719`   | `2313200-2313845` | Filesystem move action.                                                             |
+| `PageLoadAction`             | `Ew`            | `5338:34835-5338:35340`   | `2316961-2317466` | Page load action.                                                                   |
+| `PageLogAction`              | `h3`            | `5338:37170-5338:38193`   | `2319296-2320319` | Console/page log action.                                                            |
+| `DOMMutateAction`            | `Aw`            | `5338:39069-5338:39404`   | `2321195-2321530` | DOM mutation action.                                                                |
+| `RecStartAction`             | `Dw`            | `5338:41722-5338:41877`   | `2323848-2324003` | Legacy recording start action.                                                      |
+| `RecStopAction`              | `Hw`            | `5338:42049-5338:42120`   | `2324175-2324246` | Legacy recording stop action.                                                       |
+| `MediaStreamAction`          | `Phe`           | `5338:42263-5338:42289`   | `2324389-2324415` | Base media stream action.                                                           |
+| `MediaStreamStartAction`     | `Bw`            | `5338:42407-5338:42546`   | `2324533-2324672` | Minimal `MSR_START` action.                                                         |
+| `MediaStreamEndAction`       | `Nw`            | `5338:42727-5338:42798`   | `2324853-2324924` | Minimal `MSR_END` action.                                                           |
+| `TrimActionAction`           | `Fw`            | `5338:42970-5338:43041`   | `2325096-2325167` | Minimal trim action.                                                                |
+| `MarkerAction`               | `Gw`            | `5338:44828-5338:45499`   | `2326954-2327625` | Generic timeline marker action.                                                     |
+| `ViewOpenAction`             | `Qw`            | `5338:46305-5338:46771`   | `2328431-2328897` | Editor/view open action.                                                            |
+| `ViewCloseAction`            | `Yw`            | `5338:46939-5338:47339`   | `2329065-2329465` | Editor/view close action.                                                           |
+| `SaveAction`                 | `d3`            | `5338:47976-5338:48529`   | `2330102-2330655` | File save action and marker.                                                        |
+| `SeedAction`                 | `Zw`            | `5338:48723-5338:48794`   | `2330849-2330920` | Minimal seed action.                                                                |
+| `IDEOPDeltaAction`           | `tx`            | `5338:49586-5338:50695`   | `2331712-2332821` | Workspace OP diff action.                                                           |
+| `IDEOPSnapshotAction`        | `ix`            | `5338:50865-5338:51361`   | `2332991-2333487` | Workspace OP snapshot action.                                                       |
+| `SIRollbackAction`           | `rx`            | `5338:51540-5338:51905`   | `2333666-2334031` | Workspace rollback action.                                                          |
+| `AudioRecording`             | `Xhe`           | `5338:76886-5338:82911`   | `2359012-2365037` | Browser `MediaRecorder`, WebM assembly, OP byte patching.                           |
+| `IDEStream`                  | `Bt`            | `5340:4212-5340:68750`    | `2382265-2446803` | Branch/stream loading, parsing, writing, recording, trimming, commit dialog.        |
+| `IDETrunk`                   | `zde`           | `5340:69325-5340:69351`   | `2447378-2447404` | Trunk stream class.                                                                 |
+| `IDEBranch`                  | `cL`            | `5340:69429-5340:69534`   | `2447482-2447587` | Branch stream class.                                                                |
+| `IDESolutionBranch`          | `hL`            | `5340:69610-5340:69852`   | `2447663-2447905` | Solution branch class.                                                              |
+| `TextModel`                  | `$ue`           | `5340:90312-5341:748`     | `2468365-2472551` | Monaco model wrapper, `applyEdits` override, text/selection event producers.        |
+| `IDEFile`                    | `Z0`            | `5341:827-5341:7306`      | `2472630-2479109` | Legacy file model.                                                                  |
+| `IDEFS`                      | `Cx`            | `5341:14448-5341:16094`   | `2486251-2487897` | Legacy filesystem model.                                                            |
+| `BrowserPage`                | `ML`            | `5653:613-5653:13553`     | `2493739-2506679` | Browser DOM replay engine.                                                          |
+| `IDEBrowserHistory`          | `Bue`           | `5653:13645-5653:14605`   | `2506771-2507731` | Browser history model.                                                              |
+| `ServiceWorkerFrame`         | `DL`            | `5653:15179-5653:15367`   | `2508305-2508493` | Service-worker iframe sender.                                                       |
+| `ide-sw-container`           | `HL`            | `5653:15526-5653:18193`   | `2508652-2511319` | Service-worker runner/player container.                                             |
+| `runner-frame`               | `NL`            | `5653:18554-5653:21731`   | `2511680-2514857` | Live preview iframe and tracker message handler.                                    |
+| `player-frame`               | `VL`            | `5653:22104-5653:23413`   | `2515230-2516539` | Replay iframe rendering `BrowserPage`.                                              |
+| `IDEBrowser`                 | `d1`            | `5653:27551-5653:32326`   | `2520677-2525452` | Browser widget/model.                                                               |
+| `browser-widget`             | `GL`            | `5653:32507-5653:50647`   | `2525633-2543773` | Browser UI and request routing.                                                     |
+| `editor-widget`              | `QL`            | `5653:52509-5653:65135`   | `2545635-2558261` | Monaco editor UI, scroll capture, file/view syncing.                                |
+| `IDEEditor`                  | `O2e`           | `5653:65322-5653:68181`   | `2558448-2561307` | Editor wrapper.                                                                     |
+| `pointer-wave`               | `rM`            | `5653:89481-5653:90172`   | `2582607-2583298` | Pointer click/wave feedback.                                                        |
+| `ide-pointer-widget`         | `sM`            | `5653:90262-5653:97681`   | `2583388-2590807` | Replayed pointer cursor renderer and animation.                                     |
+| `IDEPointer`                 | `npe`           | `5653:97770-5653:98080`   | `2590896-2591206` | Pointer widget state.                                                               |
+| `BaseTimeline`               | `hh`            | `5655:23143-5655:28095`   | `2659641-2664593` | Timeline base.                                                                      |
+| `ClipTimeline`               | `zme`           | `5655:28430-5655:30775`   | `2664928-2667273` | Clip/audio timeline.                                                                |
+| `IDEConsole`                 | `yv`            | `5655:61075-5655:63507`   | `2697573-2700005` | Console panel/log UI.                                                               |
+| `pointer-tracker`            | `ZM`            | `5655:76081-5655:80641`   | `2712579-2717139` | Pointer/browser event capture and `IDEPointerUpdateAction` producer.                |
+| `scrim-commit-marker`        | `LI`            | `5655:121373-5655:122058` | `2757871-2758556` | Commit timeline marker UI.                                                          |
+| `ScrimCommit` marker adapter | `P0e`           | `5655:122782-5655:123265` | `2759280-2759763` | `opΞownΞmarker` adapter for commit model.                                           |
+| `ide-commit-dialog`          | `nS`            | `5655:175303-5655:178158` | `2809801-2812656` | Commit dialog UI and submit/cancel wiring.                                          |
+| `IDEBranchTimeline`          | `yD`            | `5655:183705-5655:194559` | `2820203-2831057` | Branch timeline UI.                                                                 |
+| `PointerFrame`               | `ID`            | `5655:208466-5655:209000` | `2844964-2845498` | Pointer timeline/frame renderer.                                                    |
+| `scrim-view` runtime handler | n/a             | `5659:28657-5659:30580`   | `2922819-2924742` | `/__sw__tracker.js`, `getState`, `request`, `resolveFile` handling.                 |
 
 ## Key Classes Already Summarized
 
@@ -100,7 +228,9 @@ Researched enough for a high-level summary:
 - `IDEBranchTimeline`
 - `BaseTimeline`
 - `ClipTimeline`
+- `TextModel`
 - `IDEEditor`
+- `editor-widget`
 - `IDEFile`
 - `IDEFS`
 - `IDEBrowser`
@@ -113,6 +243,9 @@ Researched enough for a high-level summary:
 - `browser-widget`
 - `IDEConsole`
 - `IDEPointer`
+- `pointer-wave`
+- `ide-pointer-widget`
+- `pointer-tracker`
 - `SIObject`
 - `SIFSEntry`
 - `SIFile`
@@ -293,28 +426,27 @@ PY
 ## Next Recommended Tasks
 
 1. Continue stream persistence:
-   - Trace the server-facing `load_from_prod` RPC call site as far as possible from client metadata.
-   - Look for any client-visible backend route declarations for `/legacy/files/` and `/op/stream/`.
-   - Trace how `ScrimRec.byte_offset`, media chunks, and stream byte offsets relate.
+   - Server-side `load_from_prod` behavior remains unavailable in this local client bundle; only the RPC action declaration and call site are visible.
+   - Look for any client-visible backend route declarations for `/legacy/files/` and `/op/stream/` in other artifacts if they become available.
+   - `ScrimRec.byte_offset` is defined as a numeric field, but no client assignment was found beyond the model definition; continue only if another bundle/server artifact is available.
 
 2. Trace capture paths:
    - Deeply inspect the external tracker bundle if it becomes available; the local bundle references `/assets/tracker.4FYFXZYK.iife.js` but the file is not present under `tmp/`.
    - Confirm whether `LCSCROLL` has a producer in another bundle revision or is legacy-only.
-   - Confirm whether `MSR_CHUNK` has a producer in another bundle revision or is legacy-only.
-   - Further trace pointer rendering in `IDEPointer`/`PointerFrame`.
+   - `MSR_CHUNK` has no producer in this inspected bundle; confirm in another bundle revision or tracker artifact if available.
+   - Pointer rendering is traced at the client-architecture level; only CSS/visual polish details remain if needed.
 
 3. Trace branch semantics:
-   - Trace any server-side meaning exposed by `COMMIT=220`; no registered `CommitAction` class was found in this pass.
-   - Inspect commit creation UI/actions around `ScrimCommit` and `ide-commit-dialog`.
+   - Trace any server-side meaning exposed by `COMMIT=220`; no registered `CommitAction` class was found in this pass, and visible commit UI uses `ScrimCommit` content records/markers.
    - Trace route/path behavior for nested scribbles and solutions beyond the creation path.
 
 4. Deepen workspace host/provider sync:
-   - Trace host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir`.
-   - Trace how WebContainer bridge messages implement the RPC-facing `WCWorkspace` actions.
+   - Trace host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, `WCWorkspace.webfetch`, and `WCWorkspace.serializeDir` if a host/bootstrap artifact becomes available.
+   - Trace how WebContainer bridge messages implement the RPC-facing `WCWorkspace` actions; the visible client class bodies declare these as RPC actions with `callback=false`.
    - Confirm where host diffs/save payloads are persisted after `HostWorkspace.$changed` throttles `save()`.
 
 5. Trace runtime request routing:
-   - Locate or reconstruct the standalone `/__sw__.html`, `/__sw__blank.html`, and `/__sw__tracker.js` artifacts if they exist outside the inspected bundle.
+   - Locate or reconstruct the standalone `/__sw__.html`, `/__sw__blank.html`, and `/__sw__tracker.js` artifacts if they exist outside the inspected bundle; they are not present under `tmp/`.
    - Deepen the WebContainer bridge protocol around `.bootstrap.mjs`, reserved bridge port handling, and OP-packed `ArrayBuffer` messages.
    - Trace external tracker bundle behavior if `/assets/tracker.4FYFXZYK.iife.js` becomes available.
 
@@ -327,6 +459,7 @@ PY
 
 - Prefer targeted regex extraction over direct `rg` line output; the minified bundles have very long lines and can flood context.
 - Use character offsets when line numbers are unhelpful.
+- Add exact source spans to `Completed Evidence Ranges` before marking new areas done.
 - Preserve "confirmed" vs "inferred" distinctions.
 - Keep adding to these docs as research progresses.
 - If creating de-minified extracts, store only small targeted snippets or summaries to avoid committing massive generated files.
