@@ -1,6 +1,6 @@
 # Scrimba Research Findings
 
-Last updated: 2026-06-14
+Last updated: 2026-06-15
 
 ## Scope And Method
 
@@ -168,6 +168,14 @@ High confidence:
 - Opening a `ScrimPractice` without an existing solution creates a new solution branch with `{ exercise, kind: "solution" }`, loads it, saves the child scrim, and opens it.
 - `ScrimPractice.reset_solution` follows the same solution-branch creation pattern from the exercise offset, then reloads the page.
 - `ForkAction`, `BranchAction`, `SeedAction`, and `TrimActionAction` classes exist in the action bundle but are minimal in the inspected client code. The operational branch behavior above lives mostly in `IDEStream`, `IDEStreamCursor`, and `ScrimPractice`.
+- `scrim-view.sync(...)` treats the current route as a branch-selection signal. It filters route objects into scopes, finds the last routed `Scrim` or `CourseEntry`, resolves an in-memory branch with `branchForModel(...)`, loads that branch, and targets the cursor at the route scope or branch.
+- `scrim-view.open(...)` uses `toΞurl()` when opening normal scrims/streams. If the target is already the current branch's scrim, it replaces the path; otherwise it navigates to the generated path.
+- `scrim-view.open(ScrimPractice)` creates a solution branch only when the practice has no existing solution: it seeks to the exercise offset, creates a branch with `{ exercise, kind: "solution" }`, optionally names it, loads it, saves the child scrim, and opens it. Existing solutions are opened directly.
+- Nested URL generation is client-visible:
+  - `Scrim.asΞurl` appends scribbles to `via_lesson` or `origin`, and appends exercise solutions to the exercise scrim URL.
+  - `Scrim.toΞurl` nests under the origin's matched route when available, otherwise uses `/<scrim-id>`.
+  - `IDEStream.toΞurl` uses its matched route base, otherwise `parent.toΞurl() + /<scrim-id>`, otherwise `/ide/<scrim-id>`.
+  - `ScrimPractice.toΞurl` appends the practice-specific suffix to the parent scrim/stream URL.
 
 Medium confidence:
 
@@ -215,7 +223,8 @@ High confidence:
 - `TextModel.onDidChangeCursorSelection(...)` appends selection state to a preceding `LCINSERT`, `LCDELETE`, or `LCEDIT` when possible; otherwise it emits `LCSELECTION` while editing, or stores `file.localSel` while only viewing.
 - `TextModel.flushEvents()` sends one queued event through `file.push_(type, params, state)` or batches multiple events through `file.batch_(pairs, state)`.
 - Legacy/widget objects implement `push_(type, params, state)` by looking up the action class from the opcode table, building it, and handing it to `ide.cursor.pushAction(...)`.
-- Monaco scroll changes are observed in `editor-widget`. The current bundle writes `file.localScroll` and, while editing, assigns `file.scrollTop`/`file.scrollLeft`; those property setters go through widget attributes and can become normal `SET` actions. `TextScrollAction`/`LCSCROLL` exists, but a current producer was not found in this pass.
+- Monaco scroll changes are observed in `editor-widget`. The current bundle writes `file.localScroll` and, while editing, assigns `file.scrollTop`/`file.scrollLeft`; those property setters go through widget attributes and can become normal `SET` actions. `TextScrollAction`/`LCSCROLL` exists, but a current producer was not found.
+- A later repo-wide string/offset scan found only three `LCSCROLL` occurrences in local artifacts: the opcode enum, the `TextScrollAction` registration/body, and documentation. That supports "no local producer" at high confidence, but not "never used historically."
 - Browser preview capture flows through `runner-frame.handle(...)`.
 - For tracker messages of type `actions`, `runner-frame` iterates tracker-provided `[opcode, params]` arrays and pushes them through the browser widget with `this.data.push_(opcode, params)`.
 - Browser focus/hover/active actions are filtered out unless the pointer tracker is enabled.
@@ -243,6 +252,7 @@ High confidence:
 - `AudioRecording.onrecstart(...)` can create a `MediaStreamRecording`, appends WebM data to `model.webm`, and patches the final WebM stream through `OPBinaryChunk`.
 - `MediaStreamRecording.webm` is an embedded `OPByteStream`; its non-legacy URL is `/legacy/files/${this.id}.webm`.
 - `MSR_START`, `MSR_CHUNK`, and `MSR_END` opcodes exist. This pass found only minimal `MediaStreamStartAction`/`MediaStreamEndAction` classes; `MSR_CHUNK` appears only in the opcode enum in the inspected bundle.
+- A later repo-wide string/offset scan found no local `MSR_CHUNK` occurrence outside the opcode enum and documentation. Its producer, if any, is outside these artifacts.
 
 ## Browser Preview Replay
 
@@ -276,8 +286,9 @@ High confidence:
 - It listens for `port`, `preview-message`, and `server-ready`.
 - It can spawn `/bin/jsh --osc` terminals.
 - It has an opt-out path via local storage key `WEBCONTAINER_OFF` and skips in embed mode.
+- The bundled client points to `/assets/webcontainer.RMFWBHQ3.mjs?file` for the WebContainer bootstrap asset and `/assets/tracker.4FYFXZYK.iife.js` for the preview tracker asset.
 - Service-worker/iframe infrastructure includes `ide-sw-container`, `ServiceWorkerFrame`, `runner-frame`, `player-frame`, `__sw__.html`, `__sw__blank.html`, and `__sw__tracker.js`.
-- The standalone service-worker/player/tracker HTML or JS artifacts are not present under `tmp/`; the client bundle only references the URLs and implements the message handlers around them.
+- The standalone service-worker/player/tracker HTML or JS artifacts and the WebContainer bootstrap/tracker assets are not present as standalone artifact files under `tmp/` or elsewhere in this repo; the client bundle only references the URLs and implements the message handlers around them.
 
 Medium confidence:
 
@@ -315,10 +326,17 @@ High confidence:
 - `player-frame` waits for `ide.container.player`, loads `/__sw__blank.html`, and renders replayed `BrowserPage` state into its iframe window.
 - `SIWebContainer.init()` creates a separate bridge path for WebContainer:
   - boots WebContainer with `workdirName: "projects"`.
+  - prefetches `/assets/webcontainer.RMFWBHQ3.mjs?file` and `/assets/tracker.4FYFXZYK.iife.js`.
+  - mounts the fetched bootstrap text into `.bootstrap.mjs`.
+  - spawns `node .bootstrap.mjs` with `OP.origin` and `OP_ORIGIN`.
+  - installs the fetched tracker script with `webcontainer.setPreviewScript(...)`.
   - listens for WebContainer `port` and `server-ready` events.
   - calls `workspace.serverΞready(port, origin)` for normal ports.
-  - creates a bridge iframe for the reserved bridge port.
-  - accepts bridge `ArrayBuffer` messages, parses them through `OP.$parse(...)`, and applies `OPDataUpdate` patches or handles OP messages.
+  - creates a bridge iframe for reserved port `8123`.
+  - accepts bridge `ArrayBuffer` messages, parses them through `OP.$parse(...)`, applies `OPDataUpdate` values as store patches, and otherwise forwards parsed OP packets through `OP.$handle(...)`.
+  - sends queued outbound bridge messages after the iframe posts `"open"`.
+  - packs non-`Uint8Array` bridge messages with `OP.$pack(...)`, copies them into a new `Uint8Array`, and sends them with `postMessage(..., "*")`.
+- `OP.$pack(...)` is a thin wrapper around msgpack packing and `OP.$parse(...)` delegates to `OP.$unpack(...)`. `OPDataUpdate` is an `OPStruct`-style array with `value`, `id`, and `rev` accessors.
 
 Medium confidence:
 
@@ -372,6 +390,7 @@ High confidence:
 - `SIWorkspace.ready` awaits `host.boot(workspace)`, marks the host state pushable, merges `$plain` into `LocalWorkspace` hosts, pushes workspace state to the host when not already pushing, then calls `hostΞready`.
 - `SIWorkspace.pushΞtoΞhost` traverses `workspace.fs` and sends cloned file entries to `host.merge({ entries })` on first boot/push. Later pushes use host diff/save behavior.
 - `HostWorkspace` is a base host model. Its `$send` throws unless implemented by a subclass, and its `$changed` throttles `save()`.
+- `HostWorkspace.$changed(...)` creates a throttled function that calls inherited `save()` and runs it for change flags that include deserialized/plain state changes. It does not implement custom persistence itself.
 - `LocalWorkspace` extends `HostWorkspace`. It sends through a `SILocalHost` socket (or Electron store when available), has a no-op client-side `boot`, and exposes `merge` as an RPC action.
 - `WCWorkspace` extends `HostWorkspace`. It embeds a `HostFSRoot`, sends through `SWC.send(...)`, and exposes `boot`, `install`, `merge`, `webfetch`, and `serializeDir` as WebContainer/bridge-facing actions.
 - `LocalWorkspace.merge` is an atomic RPC action with `callback=false`; its host-side merge implementation is not in this client class body.
@@ -384,6 +403,10 @@ High confidence:
 - `HostFile.syncFromDisk(...)` reads files under 2 MB from disk and stores either text `body` or binary data depending on content.
 - `HostFile.body_set`, `binary_set`, and `asset_set` write workspace/provider changes back to disk when the file has a path/inode.
 - `HostFile.read` calls `read_rpc`, then copies returned `body` into `$cloud.body` and `$plain.body`.
+- `OPObject.$save(...)` is the inherited save path for `HostWorkspace`: it stages unstaged roots, checks parent/virtual constraints, then delegates to `this.$$store.save(this, options, presaveResult)`.
+- For the visible server-backed common store, `save(...)` computes an OP diff, optionally merges referenced unsaved objects/assets, wraps the diff in `OPStorePush.new({ diff })`, sends it, awaits the response, and applies returned per-id values or errors.
+- For local/session stores, visible save logic writes sanitized root state into `localStorage`/`sessionStorage` and broadcasts a packed delta to other tabs.
+- Therefore, after `HostWorkspace.$changed` fires, visible persistence is normal OP object/store diff persistence. The WebContainer bridge is used for `WCWorkspace` RPC actions, not for the inherited `HostWorkspace.save()` path in the inspected code.
 - `SIWebContainer.init()` boots the WebContainer with `workdirName: "projects"`, mounts `.bootstrap.mjs`, spawns `node .bootstrap.mjs`, installs the preview tracker script, and creates a bridge iframe for OP-packed messages.
 - `SIWebContainer.spawn(...)` sets `PATH`, `WEBCONTAINER=true`, and `cwd=this.host.ns` before calling WebContainer `spawn`.
 - `SIRunner.run` waits for `workspace.ready`, saves all workspace files, optionally runs an init command once, then starts the configured run command through `SWC.spawn(...)`.
@@ -496,8 +519,9 @@ Medium confidence:
 
 - Exact server-side storage implementation for `OPBinaryChunk` persistence is not visible in the local bundle.
 - Exact `load_from_prod` RPC behavior and production backfill endpoint are not visible in the local bundle.
-- Exact external browser tracker implementation is not visible because `/assets/tracker.4FYFXZYK.iife.js` is referenced but not present under `tmp/`.
-- `LCSCROLL` producers were not found in this bundle pass and may be legacy-only or produced by another artifact.
-- `MSR_CHUNK` has no visible producer in this bundle; modern media bytes are stored through `MediaStreamRecording.webm`/`OPByteStream`.
+- Exact external browser tracker implementation is not visible because `/assets/tracker.4FYFXZYK.iife.js` is referenced but not present as a standalone artifact file under `tmp/` or elsewhere in this repo.
+- Exact WebContainer bootstrap implementation is not visible because `/assets/webcontainer.RMFWBHQ3.mjs?file` is referenced but not present as a standalone artifact file under `tmp/` or elsewhere in this repo.
+- `LCSCROLL` has no producer in the local artifacts outside the enum/action-class references; determining whether it is legacy-only needs another bundle/source artifact.
+- `MSR_CHUNK` has no local producer; modern media bytes are stored through `MediaStreamRecording.webm`/`OPByteStream`.
 - Server-side commit persistence semantics around `COMMIT=220` are not visible; client-side `ScrimCommit` model/UI semantics have been traced.
-- Host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir` are not visible in the client class bodies.
+- Host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, `WCWorkspace.webfetch`, and `WCWorkspace.serializeDir` are not visible in the client class bodies or available local bootstrap artifacts.

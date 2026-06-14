@@ -1,6 +1,6 @@
 # Scrimba Action Protocol Notes
 
-Last updated: 2026-06-14
+Last updated: 2026-06-15
 
 Source: `tmp/chunks/ide.36BDFLCO.js`
 
@@ -22,8 +22,12 @@ Evidence anchors:
 - `IDEStream.load` starts near character offset `2412495`.
 - `ScrimStream` starts near character offset `2872606` in `tmp/app.UK3DL7B2.js`.
 - `OPBufferChunks`, `OPByteStream`, and `OPDataStream` start near character offsets `880969`, `888236`, and `894263` in `tmp/app.UK3DL7B2.js`.
+- `OPDataUpdate` and OP struct/msgpack helpers are in `tmp/app.UK3DL7B2.js`, character offsets `452600-454620`.
+- `OP.$pack`, `OP.$unpack`, and `OP.$parse` are in `tmp/app.UK3DL7B2.js`, character offsets `674500-676000`.
+- OP object save/diff persistence is in `tmp/app.UK3DL7B2.js`, character offsets `616969-620198` and `1165200-1175200`.
 - `SIWorkspace` starts near character offset `1122747` in `tmp/chunks/ide.36BDFLCO.js`; its registration is near `1143423`.
 - `scrim-view` starts near character offset `2904227` in `tmp/chunks/ide.36BDFLCO.js`.
+- `SIWebContainer` bootstrap/bridge details are in `tmp/chunks/ide.36BDFLCO.js`, character offsets `1159200-1165200`.
 - `IDEFile`, `IDEDir`, and `IDEFS` register near character offsets `2479110`, `2486012`, and `2487898`.
 
 ## Stream Framing Found So Far
@@ -230,7 +234,8 @@ Producer notes:
 - Single deletions become `LCDELETE`.
 - Multi-edit or complex edit arrays become `LCEDIT`.
 - Selection changes are either attached to the preceding text action or emitted as `LCSELECTION`.
-- `editor-widget` captures Monaco scroll changes, but the current producer found in this pass writes `scrollTop`/`scrollLeft` attributes rather than emitting `LCSCROLL`; `TextScrollAction` may be legacy or produced elsewhere.
+- `editor-widget` captures Monaco scroll changes, but the current producer found in this pass writes `scrollTop`/`scrollLeft` attributes rather than emitting `LCSCROLL`.
+- A repo-wide string/offset scan found only three local `LCSCROLL` occurrences: opcode enum, `TextScrollAction`, and documentation. This supports "no local producer" at high confidence; legacy/other-bundle use remains unknown.
 
 ### Snapshot And Keyframe
 
@@ -269,6 +274,8 @@ Producer notes:
 - `SIWorkspace.pushΞtoΞhost` traverses `workspace.fs`, clones entries into a host `entries` payload, and calls `host.merge(...)` on first push.
 - Changed `SIObject`s sync to their upstream/provider objects through `syncΞtoΞhost`; provider changes can be staged and later pushed to the host.
 - `WCWorkspace.merge`, `install`, `webfetch`, and `serializeDir` are bridge/RPC-facing actions, so their concrete host-side effects are outside the visible client class bodies.
+- `HostWorkspace.$changed(...)` throttles inherited `save()`. The inherited OP object save path stages roots and delegates to the object's store; the visible server-backed common store saves by computing an OP diff, sending `OPStorePush.new({ diff })`, awaiting a response, and applying returned values/errors.
+- Local/session store save paths write sanitized root state to browser storage and broadcast packed deltas to other tabs.
 
 ### Browser/Page Actions
 
@@ -296,6 +303,26 @@ Producer notes:
 - WebContainer preview mode installs `/assets/tracker.4FYFXZYK.iife.js` through `setPreviewScript(...)`.
 - WebContainer bridge messages are a separate OP-packed path handled by `SIWebContainer` through a bridge iframe and `OP.$parse(...)`.
 
+### WebContainer OP Bridge
+
+High confidence:
+
+- `SIWebContainer.init()` prefetches `/assets/webcontainer.RMFWBHQ3.mjs?file` and `/assets/tracker.4FYFXZYK.iife.js`.
+- It boots WebContainer with `workdirName: "projects"`, mounts fetched bootstrap text as `.bootstrap.mjs`, spawns `node .bootstrap.mjs` with `OP.origin`, and sets `OP_ORIGIN` in the spawned process environment.
+- It installs the fetched tracker script with `webcontainer.setPreviewScript(...)`.
+- WebContainer `server-ready` for reserved port `8123` creates a hidden iframe bridge pointed at that port's URL.
+- When the bridge iframe posts `"open"`, `SIWebContainer` sets `readyState = 1` and flushes queued outbound messages.
+- Bridge `ArrayBuffer` messages are copied into `Uint8Array`, parsed through `OP.$parse(...)`, and handled as follows:
+  - parsed array payloads use their second element;
+  - `OPDataUpdate` values patch `SIWebContainer.store`;
+  - other parsed OP messages go through `OP.$handle(message, SIWebContainer)`.
+- `SIWebContainer.send(...)` packs non-`Uint8Array` messages with `OP.$pack(...)`, copies the bytes into a new `Uint8Array`, and sends the bytes to the bridge iframe with `postMessage(..., "*")`; messages queue until the iframe is open.
+- `OPDataUpdate` is an `OPStruct`-style array with `value`, `id`, and `rev` accessors.
+
+Blocked locally:
+
+- The bootstrap file itself is not present as a standalone local artifact, so the bridge-side implementations of `WCWorkspace.merge`, `install`, `webfetch`, and `serializeDir` are not visible.
+
 ### Pointer Actions
 
 `IDEPointerUpdateAction` (`POINTER_UPDATE=12`) stores pointer coordinates, button/key flags, hover target, and optional angle/pressure data.
@@ -318,6 +345,7 @@ Current client evidence:
 - Modern microphone capture uses `AudioRecording` plus browser `MediaRecorder`; chunks are assembled into WebM and appended to `MediaStreamRecording.webm`, an embedded `OPByteStream`.
 - `MediaStreamRecording.url` resolves non-legacy recordings to `/legacy/files/${this.id}.webm`.
 - `ScrimRec.byte_offset` exists as model metadata but was not assigned by visible client code in this pass.
+- A repo-wide string/offset scan found no local `MSR_CHUNK` occurrence outside the opcode enum and documentation.
 
 ### File/View Actions
 
@@ -386,8 +414,8 @@ For a Scrimba-like system, the core engine needs:
 - What exact server-side store receives `OPBinaryChunk` packets?
 - What exactly does the `ScrimStream.load_from_prod` RPC do?
 - Are `/legacy/files/<id>` responses always raw msgpack stream bytes, or can they be transformed by the backend?
-- Is `MSR_CHUNK` legacy/reserved, or is it produced only by a missing tracker/bundle artifact?
+- Is `MSR_CHUNK` legacy/reserved, or is it produced only by a missing tracker/bundle artifact? The local artifacts contain no producer.
 - Is `ScrimRec.byte_offset` populated server-side, by legacy clients, or by another bundle not present under `tmp/`?
 - How exactly are commit records persisted server-side, and is `COMMIT=220` still used outside this bundle?
 - How are branch marker offsets encoded in persisted `Scrim` records beyond the client-side `marker_offset` model API?
-- What are the host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, `WCWorkspace.webfetch`, and `WCWorkspace.serializeDir`?
+- What are the host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, `WCWorkspace.webfetch`, and `WCWorkspace.serializeDir`? The visible client bridge is traced, but the bootstrap/host implementation artifact is missing locally.

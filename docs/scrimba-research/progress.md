@@ -1,10 +1,10 @@
 # Scrimba Research Progress
 
-Last updated: 2026-06-14
+Last updated: 2026-06-15
 
 ## Current Status
 
-This is a bundle-level research pass. It identifies the major architecture, action protocol, client-side stream persistence path, capture/branch behavior, the legacy-vs-modern workspace split, the modern workspace host/provider path, runtime request routing, and key differences from this repo's current recording architecture, but does not fully de-minify every class or server RPC boundary.
+This is a bundle-level research pass. It identifies the major architecture, action protocol, client-side stream persistence path, capture/branch behavior, nested route behavior, the legacy-vs-modern workspace split, the modern workspace host/provider path, runtime request routing, WebContainer OP bridge shape, host save/diff persistence path, and key differences from this repo's current recording architecture, but does not fully de-minify every class or server RPC boundary.
 
 Overall status: partial, usable handoff.
 
@@ -47,9 +47,13 @@ Progress tracking rule: every completed source area must be recorded with file s
 - Extracted host/provider sync path through `HostWorkspace`, `LocalWorkspace`, `WCWorkspace`, `HostFile`/`HostDir`, `SIWorkspace.host`, and `SIWebContainer`.
 - Extracted host/provider RPC surface: `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, `WCWorkspace.webfetch`, and `WCWorkspace.serializeDir` are visible as RPC actions with hidden callback implementations; `WCWorkspace.boot` is the visible client action that calls `SWC.boot(...)` and one-time `install(...)`.
 - Extracted runtime request routing through `ide-sw-container`, `ServiceWorkerFrame`, `runner-frame`, `player-frame`, `scrim-view.oncontainermessage`, and `SIWebContainer` bridge handling.
+- Deepened WebContainer bridge handling: bundled references point to `/assets/webcontainer.RMFWBHQ3.mjs?file` and `/assets/tracker.4FYFXZYK.iife.js`; `SIWebContainer` mounts `.bootstrap.mjs`, creates a bridge iframe on reserved port `8123`, parses bridge `ArrayBuffer` messages through `OP.$parse`, applies `OPDataUpdate` patches, and sends messages with `OP.$pack` plus `postMessage`.
+- Deepened route/path behavior for nested scribbles and exercise solutions through `scrim-view.sync/open`, `Scrim.asΞurl`, `Scrim.toΞurl`, `ScrimPractice.toΞurl`, and `IDEStream.toΞurl`.
+- Deepened host save persistence after `HostWorkspace.$changed`: visible client code throttles inherited `save()`, `OPObject.$save()` delegates to the object's `$$store`, and the server-backed common store sends an `OPStorePush` diff.
 - Extracted commit/marker UI semantics around `ScrimCommit`, `scrim-commit-marker`, `ide-commit-dialog`, and `IDEStream.segments`; no active registered `COMMIT=220` action class was found in the inspected client bundle.
 - Extracted media persistence semantics around `ScrimRec.byte_offset`, `AudioRecording`, `MediaStreamRecording`, and `MSR_*`; `MSR_CHUNK=242` appears only in the opcode enum in this bundle.
-- Confirmed that `/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`, and `/assets/tracker.4FYFXZYK.iife.js` are referenced by the bundle but not present as standalone files under `tmp/`.
+- Confirmed that `/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`, `/assets/tracker.4FYFXZYK.iife.js`, and `/assets/webcontainer.RMFWBHQ3.mjs?file` are referenced by the bundle but not present as standalone artifact files under `tmp/` or elsewhere in this repo. Only bundle/documentation/source-code string references were found.
+- Confirmed by string/offset scan that `LCSCROLL` has no producer in the local artifacts outside the opcode enum and `TextScrollAction` class, and `MSR_CHUNK` has no local occurrence outside the opcode enum.
 - Compared Scrimba's action stream architecture with this repo's frame/delta recording, workspace/runtime snapshot, storage codec, and WebContainer provider approach.
 - Inspected `scrim.blank.json` manually.
 - Wrote durable research docs:
@@ -64,39 +68,47 @@ Coverage note: these ranges have been inspected and summarized for architecture/
 
 ### `tmp/app.UK3DL7B2.js`
 
-| Area                   | Minified symbol | Completed source span   | Character span    | Notes                                                                 |
-| ---------------------- | --------------- | ----------------------- | ----------------- | --------------------------------------------------------------------- |
-| `WebViewStream`        | `AAe`           | `738:492-738:852`       | `2872158-2872518` | Load-from-production RPC action model.                                |
-| `ScrimStream`          | `ice`           | `738:940-738:2463`      | `2872606-2874129` | Scrim byte stream URL, trim, preview state.                           |
-| `ScrimPractice`        | `Yi`            | `738:3991-738:14478`    | `2875657-2886144` | Exercise/practice branch creation and solution reset.                 |
-| `ScrimSnapshot`        | `EH`            | `739:57575-739:58270`   | `2948471-2949166` | Snapshot body/object preview model.                                   |
-| `ScrimRec`             | `Ql`            | `739:43206-739:48806`   | `2934102-2939702` | Recording model, `byte_offset`, stop/process/caption actions.         |
-| `ScrimClip`            | `w5`            | `739:39444-739:41578`   | `2930340-2932474` | Audio/timeline clip abstraction.                                      |
-| `ScrimAudio`           | `hj`            | `739:49052-739:50094`   | `2939948-2940990` | Audio embed with WebM stream/captions/offset.                         |
-| `ScrimCommit`          | `C5`            | `739:53664-739:56394`   | `2944560-2947290` | Commit marker model, summary/squash/template/snapshot fields, dialog. |
-| `ScrimPreview`         | `ab`            | `741:768-741:3583`      | `2951961-2954776` | Preview/layout snapshot model.                                        |
-| `Scrim`                | `gr`            | `746:4688-746:34618`    | `2965115-2995045` | Primary scrim content object, refs, recs, commits, stream/head/base.  |
-| `Caption`              | `Tj`            | `827:42373-827:43485`   | `3287232-3288344` | Caption part model.                                                   |
-| `Captions`             | `MC`            | `827:43559-827:45131`   | `3288418-3289990` | Caption collection/transcript support.                                |
-| `MediaStreamRecording` | `Jp`            | `827:47367-827:50218`   | `3292226-3295077` | Media recording model, WebM byte stream.                              |
-| `ScrimAudioTrack`      | `IC`            | `827:51737-827:53847`   | `3296596-3298706` | Audio track/caption model.                                            |
-| `ScrimArchiver`        | `Vqt`           | `859:29-859:3596`       | `3363596-3367163` | Export/archive base.                                                  |
-| `WSPScrimArchiver`     | `zqt`           | `859:3685-859:4833`     | `3367252-3368400` | Workspace export variant.                                             |
-| `ViteScrimArchiver`    | `Bqt`           | `859:4928-868:6`        | `3368495-3370172` | Vite export path.                                                     |
-| `WebpackScrimArchiver` | `Wqt`           | `868:102-876:611`       | `3370268-3372986` | Webpack export path.                                                  |
-| `OPBinaryChunkRequest` | `TO`            | `129:205977-129:207010` | `876046-877079`   | Missing-range request handler.                                        |
-| `OPBinaryChunk`        | `T_`            | `129:208345-129:210816` | `878414-880885`   | Byte chunk load/flush/patch behavior.                                 |
-| `OPBufferChunks`       | `mYe`           | `129:210900-129:214926` | `880969-884995`   | Contiguous readable byte buffer/fragments.                            |
-| `OPByteStream`         | `P_`            | `129:218167-129:224050` | `888236-894119`   | Fetch/append/trim byte stream.                                        |
-| `OPDataStream`         | `ZYe`           | `129:224194-129:224711` | `894263-894780`   | Msgpack multi-value append layer.                                     |
-| `HostFSEntry`          | `z$`            | `900:12050-900:15148`   | `3685495-3688593` | Host file-system entry base.                                          |
-| `HostFile`             | `qE`            | `900:15228-900:18043`   | `3688673-3691488` | Host file sync/read/write model.                                      |
-| `HostDir`              | `B$`            | `900:18117-900:21432`   | `3691562-3694877` | Host directory crawl/watch model.                                     |
-| `HostFSRoot`           | `Xfe`           | `900:21506-900:22303`   | `3694951-3695748` | Host FS root model.                                                   |
-| `HostWorkspace`        | `j0`            | `901:1814-901:4327`     | `3702036-3704549` | Base host workspace and save throttle.                                |
-| `LocalWorkspace`       | `W$`            | `901:4428-901:6385`     | `3704650-3706607` | Local host/RPC workspace.                                             |
-| `WCWorkspace`          | `la`            | `901:6553-901:12049`    | `3706775-3712271` | WebContainer host/RPC workspace.                                      |
-| `AppIDE`               | `Xk`            | `157:83927-157:85489`   | `1965690-1967252` | App-level IDE route/wrapper.                                          |
+| Area                     | Minified symbol | Completed source span   | Character span    | Notes                                                                 |
+| ------------------------ | --------------- | ----------------------- | ----------------- | --------------------------------------------------------------------- |
+| `WebViewStream`          | `AAe`           | `738:492-738:852`       | `2872158-2872518` | Load-from-production RPC action model.                                |
+| `ScrimStream`            | `ice`           | `738:940-738:2463`      | `2872606-2874129` | Scrim byte stream URL, trim, preview state.                           |
+| `ScrimPractice`          | `Yi`            | `738:3991-738:14478`    | `2875657-2886144` | Exercise/practice branch creation and solution reset.                 |
+| `ScrimSnapshot`          | `EH`            | `739:57575-739:58270`   | `2948471-2949166` | Snapshot body/object preview model.                                   |
+| `ScrimRec`               | `Ql`            | `739:43206-739:48806`   | `2934102-2939702` | Recording model, `byte_offset`, stop/process/caption actions.         |
+| `ScrimClip`              | `w5`            | `739:39444-739:41578`   | `2930340-2932474` | Audio/timeline clip abstraction.                                      |
+| `ScrimAudio`             | `hj`            | `739:49052-739:50094`   | `2939948-2940990` | Audio embed with WebM stream/captions/offset.                         |
+| `ScrimCommit`            | `C5`            | `739:53664-739:56394`   | `2944560-2947290` | Commit marker model, summary/squash/template/snapshot fields, dialog. |
+| `ScrimPreview`           | `ab`            | `741:768-741:3583`      | `2951961-2954776` | Preview/layout snapshot model.                                        |
+| `Scrim`                  | `gr`            | `746:4688-746:34618`    | `2965115-2995045` | Primary scrim content object, refs, recs, commits, stream/head/base.  |
+| `Caption`                | `Tj`            | `827:42373-827:43485`   | `3287232-3288344` | Caption part model.                                                   |
+| `Captions`               | `MC`            | `827:43559-827:45131`   | `3288418-3289990` | Caption collection/transcript support.                                |
+| `MediaStreamRecording`   | `Jp`            | `827:47367-827:50218`   | `3292226-3295077` | Media recording model, WebM byte stream.                              |
+| `ScrimAudioTrack`        | `IC`            | `827:51737-827:53847`   | `3296596-3298706` | Audio track/caption model.                                            |
+| `ScrimArchiver`          | `Vqt`           | `859:29-859:3596`       | `3363596-3367163` | Export/archive base.                                                  |
+| `WSPScrimArchiver`       | `zqt`           | `859:3685-859:4833`     | `3367252-3368400` | Workspace export variant.                                             |
+| `ViteScrimArchiver`      | `Bqt`           | `859:4928-868:6`        | `3368495-3370172` | Vite export path.                                                     |
+| `WebpackScrimArchiver`   | `Wqt`           | `868:102-876:611`       | `3370268-3372986` | Webpack export path.                                                  |
+| `OPBinaryChunkRequest`   | `TO`            | `129:205977-129:207010` | `876046-877079`   | Missing-range request handler.                                        |
+| `OPBinaryChunk`          | `T_`            | `129:208345-129:210816` | `878414-880885`   | Byte chunk load/flush/patch behavior.                                 |
+| `OPBufferChunks`         | `mYe`           | `129:210900-129:214926` | `880969-884995`   | Contiguous readable byte buffer/fragments.                            |
+| `OPByteStream`           | `P_`            | `129:218167-129:224050` | `888236-894119`   | Fetch/append/trim byte stream.                                        |
+| `OPDataStream`           | `ZYe`           | `129:224194-129:224711` | `894263-894780`   | Msgpack multi-value append layer.                                     |
+| `OPDataUpdate`/structs   | `JNe`           | `122:46363-122:48383`   | `452600-454620`   | `OPStruct`, `OPDataUpdate` value/id/rev shape, packed array structs.  |
+| OP pack/parse helpers    | n/a             | `129:4431-129:5931`     | `674500-676000`   | `OP.$pack`, `$unpack`, `$parse` msgpack helpers.                      |
+| `OPObject.$save`         | `an`            | `128:62524-128:65753`   | `616969-620198`   | Autosave and inherited save delegation into `$$store.save`.           |
+| `OPCommonData.save`      | `AX`            | `146:1623-146:5073`     | `1165200-1168650` | Store diff save path, local store save, `OPStorePush` start.          |
+| OP server update path    | `p2`            | `146:5073-146:11623`    | `1168650-1175200` | `OPStorePush` response handling and `OPDataUpdate` patch handling.    |
+| `ScrimPractice.toΞurl`   | `Yi`            | `738:13934-738:14584`   | `2885600-2886250` | Practice URL suffixing relative to parent scrim/stream.               |
+| `Scrim.asΞurl/toΞurl`    | `gr`            | `746:23973-746:24623`   | `2984400-2985050` | Nested scribble/exercise-solution URL construction.                   |
+| `HostFSEntry`            | `z$`            | `900:12050-900:15148`   | `3685495-3688593` | Host file-system entry base.                                          |
+| `HostFile`               | `qE`            | `900:15228-900:18043`   | `3688673-3691488` | Host file sync/read/write model.                                      |
+| `HostDir`                | `B$`            | `900:18117-900:21432`   | `3691562-3694877` | Host directory crawl/watch model.                                     |
+| `HostFSRoot`             | `Xfe`           | `900:21506-900:22303`   | `3694951-3695748` | Host FS root model.                                                   |
+| `HostWorkspace`          | `j0`            | `901:1814-901:4327`     | `3702036-3704549` | Base host workspace and save throttle.                                |
+| `HostWorkspace.$changed` | `j0`            | `901:1628-901:4398`     | `3701850-3704620` | Exact throttled `save()` trigger and `$cloud`/`$send` behavior.       |
+| `LocalWorkspace`         | `W$`            | `901:4428-901:6385`     | `3704650-3706607` | Local host/RPC workspace.                                             |
+| `WCWorkspace`            | `la`            | `901:6553-901:12049`    | `3706775-3712271` | WebContainer host/RPC workspace.                                      |
+| `AppIDE`                 | `Xk`            | `157:83927-157:85489`   | `1965690-1967252` | App-level IDE route/wrapper.                                          |
 
 ### `tmp/chunks/ide.36BDFLCO.js`
 
@@ -117,6 +129,8 @@ Coverage note: these ranges have been inspected and summarized for architecture/
 | `SIWorkspace`                | `Pi`            | `516:35244-520:8874`      | `1122747-1143225` | Modern workspace snapshots, diffs, sync, host provider.                             |
 | `SIWebContainerPort`         | `Cp`            | `521:4542-521:5552`       | `1159724-1160734` | WebContainer port model.                                                            |
 | `SIWebContainer`             | `Qf`            | `521:5610-523:1172`       | `1160792-1165192` | WebContainer boot, bridge, spawn, tracker install.                                  |
+| `SIWebContainer` assets/boot | `Qf`            | `521:4018-521:7618`       | `1159200-1162800` | Bootstrap/tracker asset URLs, WebContainer boot start, reserved port setup.         |
+| `SIWebContainer` bridge/send | `Qf`            | `521:7418-523:1180`       | `1162600-1165200` | Bridge iframe, OP-packed `ArrayBuffer` receive/send and `postMessage`.              |
 | `IDEStreamAction`            | `Jp`            | `5338:11338-5338:14763`   | `2293464-2296889` | Base reversible action and decode path.                                             |
 | `SnapshotAction`             | `iw`            | `5338:16068-5338:17254`   | `2298194-2299380` | Legacy widget snapshot action.                                                      |
 | `BranchAction`               | `rw`            | `5338:17424-5338:17516`   | `2299550-2299642` | Minimal branch action.                                                              |
@@ -149,6 +163,7 @@ Coverage note: these ranges have been inspected and summarized for architecture/
 | `SIRollbackAction`           | `rx`            | `5338:51540-5338:51905`   | `2333666-2334031` | Workspace rollback action.                                                          |
 | `AudioRecording`             | `Xhe`           | `5338:76886-5338:82911`   | `2359012-2365037` | Browser `MediaRecorder`, WebM assembly, OP byte patching.                           |
 | `IDEStream`                  | `Bt`            | `5340:4212-5340:68750`    | `2382265-2446803` | Branch/stream loading, parsing, writing, recording, trimming, commit dialog.        |
+| `IDEStream.toΞurl`           | `Bt`            | `5340:43347-5340:43797`   | `2421400-2421850` | Branch URL fallback: route base, parent URL, or `/ide/<id>`.                        |
 | `IDETrunk`                   | `zde`           | `5340:69325-5340:69351`   | `2447378-2447404` | Trunk stream class.                                                                 |
 | `IDEBranch`                  | `cL`            | `5340:69429-5340:69534`   | `2447482-2447587` | Branch stream class.                                                                |
 | `IDESolutionBranch`          | `hL`            | `5340:69610-5340:69852`   | `2447663-2447905` | Solution branch class.                                                              |
@@ -177,6 +192,8 @@ Coverage note: these ranges have been inspected and summarized for architecture/
 | `ide-commit-dialog`          | `nS`            | `5655:175303-5655:178158` | `2809801-2812656` | Commit dialog UI and submit/cancel wiring.                                          |
 | `IDEBranchTimeline`          | `yD`            | `5655:183705-5655:194559` | `2820203-2831057` | Branch timeline UI.                                                                 |
 | `PointerFrame`               | `ID`            | `5655:208466-5655:209000` | `2844964-2845498` | Pointer timeline/frame renderer.                                                    |
+| `SIAIChat.create_scribble`   | `ka`            | `462:3183-462:3883`       | `991000-991700`   | AI chat path creates/awaits a scribble branch before focused input.                 |
+| `scrim-view.sync/open`       | n/a             | `5659:23038-5659:26038`   | `2917200-2920200` | Route synchronization, branch loading, solution-branch open/create behavior.        |
 | `scrim-view` runtime handler | n/a             | `5659:28657-5659:30580`   | `2922819-2924742` | `/__sw__tracker.js`, `getState`, `request`, `resolveFile` handling.                 |
 
 ## Key Classes Already Summarized
@@ -431,23 +448,23 @@ PY
    - `ScrimRec.byte_offset` is defined as a numeric field, but no client assignment was found beyond the model definition; continue only if another bundle/server artifact is available.
 
 2. Trace capture paths:
-   - Deeply inspect the external tracker bundle if it becomes available; the local bundle references `/assets/tracker.4FYFXZYK.iife.js` but the file is not present under `tmp/`.
-   - Confirm whether `LCSCROLL` has a producer in another bundle revision or is legacy-only.
-   - `MSR_CHUNK` has no producer in this inspected bundle; confirm in another bundle revision or tracker artifact if available.
+   - Deeply inspect the external tracker bundle if it becomes available; the local bundle references `/assets/tracker.4FYFXZYK.iife.js` but the file is not present under `tmp/` or elsewhere in this repo.
+   - `LCSCROLL` has no producer in the local artifacts outside the enum/action-class references; only another bundle revision or source artifact can determine whether it is legacy-only.
+   - `MSR_CHUNK` has no producer in the local artifacts; only another bundle revision, tracker artifact, or server/source artifact can determine whether it is legacy/reserved.
    - Pointer rendering is traced at the client-architecture level; only CSS/visual polish details remain if needed.
 
 3. Trace branch semantics:
    - Trace any server-side meaning exposed by `COMMIT=220`; no registered `CommitAction` class was found in this pass, and visible commit UI uses `ScrimCommit` content records/markers.
-   - Trace route/path behavior for nested scribbles and solutions beyond the creation path.
+   - Client-side route/path behavior for nested scribbles and exercise solutions is now traced. Only server-side route resolution or persisted URL migration behavior remains unknown.
 
 4. Deepen workspace host/provider sync:
    - Trace host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, `WCWorkspace.webfetch`, and `WCWorkspace.serializeDir` if a host/bootstrap artifact becomes available.
-   - Trace how WebContainer bridge messages implement the RPC-facing `WCWorkspace` actions; the visible client class bodies declare these as RPC actions with `callback=false`.
-   - Confirm where host diffs/save payloads are persisted after `HostWorkspace.$changed` throttles `save()`.
+   - Trace how WebContainer bridge messages implement the RPC-facing `WCWorkspace` actions inside the missing bootstrap asset; the visible client class bodies declare these as RPC actions with `callback=false`.
+   - The visible host save path after `HostWorkspace.$changed` is now traced to inherited OP store diff persistence and `OPStorePush`; server-side handling of that push is not present locally.
 
 5. Trace runtime request routing:
-   - Locate or reconstruct the standalone `/__sw__.html`, `/__sw__blank.html`, and `/__sw__tracker.js` artifacts if they exist outside the inspected bundle; they are not present under `tmp/`.
-   - Deepen the WebContainer bridge protocol around `.bootstrap.mjs`, reserved bridge port handling, and OP-packed `ArrayBuffer` messages.
+   - Locate or reconstruct the standalone `/__sw__.html`, `/__sw__blank.html`, and `/__sw__tracker.js` artifacts if they exist outside the inspected bundle; they are not present as standalone artifact files under `tmp/` or elsewhere in this repo.
+   - Locate or reconstruct `/assets/webcontainer.RMFWBHQ3.mjs?file`; the client bridge around `.bootstrap.mjs`, reserved port `8123`, and OP-packed `ArrayBuffer` messages is traced, but bootstrap-side RPC implementations are missing.
    - Trace external tracker bundle behavior if `/assets/tracker.4FYFXZYK.iife.js` becomes available.
 
 6. Product architecture follow-up:
