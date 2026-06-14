@@ -237,8 +237,10 @@ High confidence:
 - Legacy/widget objects implement `push_(type, params, state)` by looking up the action class from the opcode table, building it, and handing it to `ide.cursor.pushAction(...)`.
 - Monaco scroll changes are observed in `editor-widget`. The current bundle writes `file.localScroll` and, while editing, assigns `file.scrollTop`/`file.scrollLeft`; those property setters go through widget attributes and can become normal `SET` actions. `TextScrollAction`/`LCSCROLL` exists, but a current producer was not found.
 - A later repo-wide string/offset scan found only three `LCSCROLL` occurrences in local artifacts: the opcode enum, the `TextScrollAction` registration/body, and documentation. That supports "no local producer" at high confidence, but not "never used historically."
-- Browser preview capture flows through `runner-frame.handle(...)`.
-- For tracker messages of type `actions`, `runner-frame` iterates tracker-provided `[opcode, params]` arrays and pushes them through the browser widget with `this.data.push_(opcode, params)`.
+- Browser preview capture flows through `runner-frame.handle(...)`, but two input shapes are visible locally.
+- The standalone `tmp/tracker.4FYFXZYK.iife.js` posts parent callback messages named `append`, `event`, `resolveAsset`, and `keycombo`; `append` is handed to the current `BrowserPage`, `event` becomes `browserevent` for pointer tracking, and `resolveAsset` round-trips CSS/blob rewrites.
+- An older/service-worker path still handles tracker messages of type `actions` as `[opcode, params]` stream actions and also handles location/history/pageload/loader messages directly.
+- The standalone tracker emits DOM init/root/mutation/property/attribute/log/hover/focus packets, but its `select`/`selectionchange` listeners are no-op and no explicit active-state producer is visible there.
 - Browser focus/hover/active actions are filtered out unless the pointer tracker is enabled.
 - `DOM_MUTATE` actions are dropped for locally initiated pages, avoiding recording local replay mutations as new capture events.
 - `PAGE_LOG` payloads can be redacted through `ME.env.redact(...)` before being pushed.
@@ -304,11 +306,12 @@ High confidence:
 - It has an opt-out path via local storage key `WEBCONTAINER_OFF` and skips in embed mode.
 - The bundled client points to `/assets/webcontainer.RMFWBHQ3.mjs?file` for the WebContainer bootstrap asset and `/assets/tracker.4FYFXZYK.iife.js` for the preview tracker asset.
 - Service-worker/iframe infrastructure includes `ide-sw-container`, `ServiceWorkerFrame`, `runner-frame`, `player-frame`, `__sw__.html`, `__sw__blank.html`, and `__sw__tracker.js`.
-- The standalone service-worker/player/tracker HTML or JS artifacts and the WebContainer bootstrap/tracker assets are not present as standalone artifact files under `tmp/` or elsewhere in this repo; the client bundle only references the URLs and implements the message handlers around them.
+- The standalone preview tracker asset is now locally present as `tmp/tracker.4FYFXZYK.iife.js`, and the added `tmp/headless.html`, `tmp/headless-siO4QJGT.js`, `tmp/webcontainer.5162ecc8.js`, `tmp/iframe.main.5162ecc8.js`, and `tmp/semver-Zyv2pDaP.js` show a StackBlitz headless WebContainer shell embedded by Scrimba.
+- The standalone service-worker/player pages (`/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`) and the specific bootstrap source asset `/assets/webcontainer.RMFWBHQ3.mjs?file` are still not present as standalone local artifacts.
 
 Medium confidence:
 
-- WebContainer hosts the running project, while `BrowserPage`/tracker infrastructure captures preview state and makes replay deterministic.
+- WebContainer hosts the running project, while `BrowserPage` plus standalone tracker/service-worker infrastructure captures preview state and makes replay deterministic.
 - The service-worker frames isolate runner/player origins and route preview/browser requests through Scrimba-controlled message handlers.
 
 ## Runtime Request Routing
@@ -536,7 +539,7 @@ Medium confidence:
 - Record/replay local bundle research is summarized in `record-replay.md`.
 - Exact server-side storage implementation for `OPBinaryChunk` persistence is not visible in the local bundle.
 - Exact `load_from_prod` RPC behavior and production backfill endpoint are not visible in the local bundle.
-- Exact external browser tracker implementation is not visible because `/assets/tracker.4FYFXZYK.iife.js` is referenced but not present as a standalone artifact file under `tmp/` or elsewhere in this repo.
+- The standalone preview tracker implementation is now visible in `tmp/tracker.4FYFXZYK.iife.js`, but the exact service-worker tracker path behind `/__sw__tracker.js` and any additional selection/active-state capture it performs are still not visible locally.
 - Exact WebContainer bootstrap implementation is not visible because `/assets/webcontainer.RMFWBHQ3.mjs?file` is referenced but not present as a standalone artifact file under `tmp/` or elsewhere in this repo.
 - `LCSCROLL` has no producer in the local artifacts outside the enum/action-class references; determining whether it is legacy-only needs another bundle/source artifact.
 - `MSR_CHUNK` has no local producer; modern media bytes are stored through `MediaStreamRecording.webm`/`OPByteStream`.

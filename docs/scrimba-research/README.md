@@ -27,9 +27,10 @@ The source material is minified production JavaScript. There are no JavaScript s
 8. Audio, captions, transcript editing, trim/cut/speedup cues, and timeline clips are first-class model concepts.
 9. Newer Scrimba workspaces use `SIWorkspace`/`SIFS` OP snapshots and deltas, while legacy scrims serialize `IDEFile`/`IDEFS` widgets.
 10. Modern workspace runtime state syncs through `HostWorkspace` providers, usually a per-scrim `WCWorkspace` from the global `SIWebContainer` singleton.
-11. The visible WebContainer bridge uses a hidden iframe on reserved port `8123`, OP msgpack packets, `OPDataUpdate` patches, and a bundled `.bootstrap.mjs` script whose source asset is referenced but missing locally.
-12. This repo's current architecture is materially different: it stores complete recording artifacts with keyframe/delta frame arrays, workspace/runtime snapshot events, and a separate WebContainer provider sync path.
-13. A default blank workspace snapshot is available in `tmp/scrim.blank.json.5TFCQ3DL.js`.
+11. The standalone preview tracker is locally available as `tmp/tracker.4FYFXZYK.iife.js` and is implemented around a `WebStreamWriter` that snapshots DOM state, mutations, assets, logs, focus/hover, and pointer events through parent callback messages.
+12. The visible WebContainer bridge still uses a hidden iframe on reserved port `8123`, OP msgpack packets, `OPDataUpdate` patches, and a bundled `.bootstrap.mjs` script whose source asset is still not present locally; the added headless/runtime files show this external path is a StackBlitz WebContainer environment embedded by Scrimba.
+13. This repo's current architecture is materially different: it stores complete recording artifacts with keyframe/delta frame arrays, workspace/runtime snapshot events, and a separate WebContainer provider sync path.
+14. A default blank workspace snapshot is available in `tmp/scrim.blank.json.5TFCQ3DL.js`.
 
 ## Important Evidence Anchors
 
@@ -46,6 +47,8 @@ The source material is minified production JavaScript. There are no JavaScript s
 - WebContainer bridge/client protocol: `SIWebContainer` around `tmp/chunks/ide.36BDFLCO.js` character offsets `1159200-1165200`; OP msgpack helpers and `OPDataUpdate` in `tmp/app.UK3DL7B2.js` character offsets `452600-454620` and `674500-676000`.
 - Host save/diff persistence after `HostWorkspace.$changed`: `tmp/app.UK3DL7B2.js` character offsets `3701850-3704620`, `616969-620198`, and `1165200-1175200`.
 - Service-worker/request routing: `ServiceWorkerFrame`, `ide-sw-container`, `runner-frame`, `player-frame`, and `scrim-view.oncontainermessage` in `tmp/chunks/ide.36BDFLCO.js`.
+- Standalone preview tracker: `tmp/tracker.4FYFXZYK.iife.js`, especially lines `431-904` and `923-987`.
+- Headless runtime shell: `tmp/headless.html`, `tmp/headless-siO4QJGT.js`, `tmp/webcontainer.5162ecc8.js`, and `tmp/iframe.main.5162ecc8.js`.
 - Scrim content model: `Scrim`, `ScrimStream`, `ScrimRec`, `ScrimClip`, `ScrimPractice`, `ScrimPreview` in `tmp/app.UK3DL7B2.js`.
 - Nested route/path behavior: `scrim-view.sync/open` in `tmp/chunks/ide.36BDFLCO.js` character offsets `2917200-2920200`, plus URL helpers in `Scrim`, `ScrimPractice`, and `IDEStream`.
 - Blank workspace snapshot: `tmp/scrim.blank.json.5TFCQ3DL.js`.
@@ -56,9 +59,11 @@ Start with `progress.md`, then read `findings.md` and `action-protocol.md`. If d
 
 Recommended next research tasks:
 
-1. For record/replay, start with `record-replay.md`; the local bundle-side architecture is complete except for explicitly missing external/server artifacts.
+1. For record/replay, start with `record-replay.md`; the local bundle-side architecture plus the standalone tracker path is complete except for explicitly missing service-worker/bootstrap/server artifacts.
+   - Practical-completion verdict: complete if the goal is to grasp how record/replay works.
+   - Exact-completion verdict: not complete yet under the strict standard "can exactly tell how recording and replay are implemented".
 2. De-minify only targeted class regions, not whole bundles.
 3. Trace host-side implementations hidden behind RPC/bridge actions such as `load_from_prod`, `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir` only if new host/bootstrap/server artifacts become available.
-4. Locate or reconstruct standalone service-worker/tracker/bootstrap artifacts (`/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`, `/assets/tracker.4FYFXZYK.iife.js`, and `/assets/webcontainer.RMFWBHQ3.mjs?file`) if they are available outside this bundle.
+4. Locate or reconstruct standalone service-worker artifacts (`/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`) and the missing `/assets/webcontainer.RMFWBHQ3.mjs?file` bootstrap-side implementation if they are available outside this bundle; the standalone tracker and StackBlitz headless client shell are now present locally.
 5. Continue commit research only if server-side artifacts or another client bundle are available; the visible `ScrimCommit`/`ide-commit-dialog` client path has been traced.
 6. If product parity is the goal, decide whether Next Editor should emulate Scrimba's action stream/branch cursor or keep its existing frame/delta recording model.

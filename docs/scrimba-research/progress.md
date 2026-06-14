@@ -4,9 +4,33 @@ Last updated: 2026-06-15
 
 ## Current Status
 
-This is a bundle-level research pass. It identifies the major architecture, action protocol, client-side stream persistence path, capture/branch behavior, nested route behavior, the legacy-vs-modern workspace split, the modern workspace host/provider path, runtime request routing, WebContainer OP bridge shape, host save/diff persistence path, and key differences from this repo's current recording architecture. The local bundle-side record/replay architecture is now covered in `record-replay.md`; remaining record/replay unknowns are explicitly tied to missing tracker/service-worker/bootstrap/server artifacts.
+This is a bundle-level research pass. It identifies the major architecture, action protocol, client-side stream persistence path, capture/branch behavior, nested route behavior, the legacy-vs-modern workspace split, the modern workspace host/provider path, runtime request routing, WebContainer OP bridge shape, host save/diff persistence path, and key differences from this repo's current recording architecture. The local bundle-side record/replay architecture is now covered in `record-replay.md`; remaining record/replay unknowns are narrowed to missing `__sw__*` service-worker artifacts, the bootstrap-side `/assets/webcontainer.RMFWBHQ3.mjs?file` implementation, and backend/server behavior. The standalone tracker and StackBlitz headless runtime shells are now locally available.
 
 Overall status: partial, usable handoff.
+
+Completion-criteria verdict:
+
+There are two reasonable completion standards here.
+
+Practical architecture standard: complete.
+
+The current docs are sufficient to grasp how Scrimba record/replay works at a system-design level:
+
+- recording is an append-only timed action stream, not video;
+- Monaco, browser preview, pointer, workspace, and media paths feed that stream or adjacent byte streams;
+- playback uses reversible actions plus a branch-aware cursor;
+- browser replay uses serialized DOM/page state through `BrowserPage`;
+- timeline/audio/branch UI sit on top of that core stream model.
+
+Strict exact-implementation standard: not complete.
+
+The current docs do not yet satisfy the stricter criterion "can exactly tell how recording and replay are implemented" end to end, because some source-side and server-side pieces remain unobserved.
+
+The main blockers to an exact completion claim are:
+
+- The visible standalone tracker path does not explain whether the missing `/__sw__tracker.js` service-worker path adds selection or active-state capture, or whether it emits the older `actions`/`DOM_*` protocol directly.
+- The browser/runtime shell is visible, but the mounted `/assets/webcontainer.RMFWBHQ3.mjs?file` bootstrap program is still missing, so bootstrap-side runtime behavior remains indirect.
+- Stream persistence and backfill are still incomplete without server-side implementations for `/legacy/files/<id>`, `/op/stream/<id>`, `OPBinaryChunk`, and `ScrimStream.load_from_prod()`.
 
 Progress tracking rule: every completed source area must be recorded with file spans. Because the Scrimba bundles are minified into very long lines, line spans are written as `line:column` and character spans are the reliable skip markers. Character offsets below are zero-based half-open ranges unless a row says otherwise.
 
@@ -16,6 +40,12 @@ Progress tracking rule: every completed source area must be recorded with file s
 | ----------------------------------- | -----: | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tmp/app.UK3DL7B2.js`               | 3.8 MB | Partially researched                   | Main platform/app bundle. Contains `Scrim*` content models, course/app/routing UI, AI provider/model objects, archivers, captions/audio models.                                                 |
 | `tmp/chunks/ide.36BDFLCO.js`        | 2.8 MB | Partially researched, highest priority | IDE/player/runtime bundle. Contains action protocol, stream cursor, branches, timeline, Monaco-facing editor models, browser DOM replay, WebContainer runtime, workspace, AI workspace actions. |
+| `tmp/tracker.4FYFXZYK.iife.js`      |  37 KB | Researched                             | Standalone preview tracker. `WebStreamWriter` emits DOM snapshot/mutation, prop/attr sync, hover/focus, logs, asset resolution, and pointer callback messages.                                  |
+| `tmp/headless-siO4QJGT.js`          | 4.5 KB | Researched                             | StackBlitz headless bootstrap. Builds embedder app id, refreshes token, and boots `WebContainerAPIServer` against `window.parent`.                                                              |
+| `tmp/headless.html`                 | 1.8 KB | Researched                             | Headless StackBlitz entry HTML. Loads external WebContainer assets and provides Scrimba embedder context JSON.                                                                                  |
+| `tmp/iframe.main.5162ecc8.js`       | 604 KB | Lightly classified                     | StackBlitz iframe runtime/bridge bundle with Comlink, process, network, and service-worker plumbing.                                                                                            |
+| `tmp/webcontainer.5162ecc8.js`      | 456 KB | Lightly classified                     | StackBlitz WebContainer runtime shell handling headless iframe initialization and preview API server wiring.                                                                                    |
+| `tmp/semver-Zyv2pDaP.js`            |  19 KB | Lightly classified                     | Semver helpers imported by the headless bootstrap.                                                                                                                                              |
 | `tmp/scrim.blank.json.5TFCQ3DL.js`  |   2 KB | Researched                             | Default blank workspace layout/state snapshot.                                                                                                                                                  |
 | `tmp/index.ZRFBPBWE.css`            | 1.1 MB | Not deeply researched                  | CSS for app/IDE. Has a `sourceMappingURL` to a missing CSS map. Useful later for UI class mapping.                                                                                              |
 | `tmp/chunks/chunk.L47Z5YT6.js`      | 1.8 MB | Lightly classified                     | Monaco/editor infrastructure. Contains VS Code/Monaco code and language/editor behavior.                                                                                                        |
@@ -40,8 +70,11 @@ Progress tracking rule: every completed source area must be recorded with file s
 - Extracted partial stream framing behavior from `IDEStream.parsedValue`, `syncBuffer`, and `write`.
 - Extracted client-side stream persistence behavior from `IDEStream.load`, `ScrimStream`, `OPDataStream`, `OPByteStream`, `OPBufferChunks`, `OPBinaryChunk`, and `OPBinaryChunkRequest`.
 - Extracted capture paths for Monaco text edits/selections/scroll state, browser tracker action messages, pointer tracking, and modern audio recording.
+- Inspected standalone `tmp/tracker.4FYFXZYK.iife.js` and traced `WebStreamWriter` init/start packets, mutation/property/attribute/log/hover/focus capture, pointer event bridging, key-combo forwarding, asset resolution, and parent `postMessage` contract.
+- Inspected `tmp/headless.html`, `tmp/headless-siO4QJGT.js`, `tmp/webcontainer.5162ecc8.js`, `tmp/iframe.main.5162ecc8.js`, and `tmp/semver-Zyv2pDaP.js`; confirmed Scrimba's external runtime provider is a StackBlitz headless WebContainer environment embedded through `window.parent`.
 - Extracted pointer replay/rendering path through `IDEPointerUpdateAction`, `PointerUpdateGroup`, `ide-pointer-widget`, `pointer-wave`, and `PointerFrame`.
 - Extracted DOM mutation subprotocol.
+- Clarified the preview capture boundary: the standalone tracker posts named callback actions (`append`, `event`, `resolveAsset`, `keycombo`), while the older/service-worker path still handles `actions` arrays of real stream opcodes.
 - Extracted branch/editing/recording behavior from `IDEStream`.
 - Extracted branch ancestry, fork creation, cursor route traversal, and exercise solution branch creation.
 - Extracted `IDEStreamCursor` apply/revert/branch-route behavior with exact evidence span.
@@ -55,7 +88,7 @@ Progress tracking rule: every completed source area must be recorded with file s
 - Deepened host save persistence after `HostWorkspace.$changed`: visible client code throttles inherited `save()`, `OPObject.$save()` delegates to the object's `$$store`, and the server-backed common store sends an `OPStorePush` diff.
 - Extracted commit/marker UI semantics around `ScrimCommit`, `scrim-commit-marker`, `ide-commit-dialog`, and `IDEStream.segments`; no active registered `COMMIT=220` action class was found in the inspected client bundle.
 - Extracted media persistence semantics around `ScrimRec.byte_offset`, `AudioRecording`, `MediaStreamRecording`, and `MSR_*`; `MSR_CHUNK=242` appears only in the opcode enum in this bundle.
-- Confirmed that `/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`, `/assets/tracker.4FYFXZYK.iife.js`, and `/assets/webcontainer.RMFWBHQ3.mjs?file` are referenced by the bundle but not present as standalone artifact files under `tmp/` or elsewhere in this repo. Only bundle/documentation/source-code string references were found.
+- Confirmed that `/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`, and `/assets/webcontainer.RMFWBHQ3.mjs?file` remain missing as standalone local artifacts. The newly added `tmp/tracker.4FYFXZYK.iife.js` covers the standalone tracker, while `tmp/webcontainer.5162ecc8.js` is a separate StackBlitz runtime shell rather than the missing `.bootstrap.mjs` asset.
 - Confirmed by string/offset scan that `LCSCROLL` has no producer in the local artifacts outside the opcode enum and `TextScrollAction` class, and `MSR_CHUNK` has no local occurrence outside the opcode enum.
 - Compared Scrimba's action stream architecture with this repo's frame/delta recording, workspace/runtime snapshot, storage codec, and WebContainer provider approach.
 - Inspected `scrim.blank.json` manually.
@@ -207,6 +240,15 @@ Coverage note: these ranges have been inspected and summarized for architecture/
 | `SIAIChat.create_scribble`         | `ka`            | `462:3183-462:3883`       | `991000-991700`   | AI chat path creates/awaits a scribble branch before focused input.                    |
 | `scrim-view.sync/open`             | n/a             | `5659:23038-5659:26038`   | `2917200-2920200` | Route synchronization, branch loading, solution-branch open/create behavior.           |
 | `scrim-view` runtime handler       | n/a             | `5659:28657-5659:30580`   | `2922819-2924742` | `/__sw__tracker.js`, `getState`, `request`, `resolveFile` handling.                    |
+
+### Standalone Added Artifacts
+
+| Area                     | File                           | Completed source span | Character span | Notes                                                                                                               |
+| ------------------------ | ------------------------------ | --------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `WebStreamWriter` core   | `tmp/tracker.4FYFXZYK.iife.js` | `431-904`             | `n/a`          | DOM init/start packets, listeners, mutation serialization, prop/attr sync, hover/focus, logs, and asset collection. |
+| Tracker bridge/bootstrap | `tmp/tracker.4FYFXZYK.iife.js` | `923-987`             | `n/a`          | Parent/Electron callback bridge, key combos, asset-resolution round-trip, and startup.                              |
+| Headless entry HTML      | `tmp/headless.html`            | `1-37`                | `n/a`          | Scrimba embedder context and external StackBlitz asset loading.                                                     |
+| Headless bootstrap       | `tmp/headless-siO4QJGT.js`     | `1`                   | `n/a`          | `WebContainerAPIServer` bootstrap against `window.parent`, token refresh, and app-id flow.                          |
 
 ## Key Classes Already Summarized
 
@@ -460,7 +502,7 @@ PY
    - `ScrimRec.byte_offset` is defined as a numeric field, but no client assignment was found beyond the model definition; continue only if another bundle/server artifact is available.
 
 2. Trace capture paths:
-   - Deeply inspect the external tracker bundle if it becomes available; the local bundle references `/assets/tracker.4FYFXZYK.iife.js` but the file is not present under `tmp/` or elsewhere in this repo.
+   - Standalone tracker capture is now traced; the remaining browser-capture question is where `DOM_SELECTION` and `DOM_ACTIVE*` are produced, because the standalone tracker registers `select`/`selectionchange` but emits no packets and no explicit active-state producer is visible there.
    - `LCSCROLL` has no producer in the local artifacts outside the enum/action-class references; only another bundle revision or source artifact can determine whether it is legacy-only.
    - `MSR_CHUNK` has no producer in the local artifacts; only another bundle revision, tracker artifact, or server/source artifact can determine whether it is legacy/reserved.
    - Pointer rendering is traced at the client-architecture level; only CSS/visual polish details remain if needed.
@@ -476,12 +518,13 @@ PY
 
 5. Trace runtime request routing:
    - Locate or reconstruct the standalone `/__sw__.html`, `/__sw__blank.html`, and `/__sw__tracker.js` artifacts if they exist outside the inspected bundle; they are not present as standalone artifact files under `tmp/` or elsewhere in this repo.
-   - Locate or reconstruct `/assets/webcontainer.RMFWBHQ3.mjs?file`; the client bridge around `.bootstrap.mjs`, reserved port `8123`, and OP-packed `ArrayBuffer` messages is traced, but bootstrap-side RPC implementations are missing.
-   - Trace external tracker bundle behavior if `/assets/tracker.4FYFXZYK.iife.js` becomes available.
+   - Determine how the missing `/assets/webcontainer.RMFWBHQ3.mjs?file` bootstrap-side implementation relates to the added StackBlitz headless shell files; the shell/runtime provider is now visible, but the `.bootstrap.mjs` text mounted by `SIWebContainer` is still not.
 
 6. Record/replay local completion:
    - The local bundle-side record/replay architecture is summarized in `record-replay.md`.
-   - Remaining record/replay unknowns are blocked by missing standalone tracker/service-worker/bootstrap artifacts or backend/server implementations, not by uninspected local bundle spans currently known to be relevant.
+   - Remaining record/replay unknowns are blocked by missing service-worker/bootstrap artifacts or backend/server implementations, not by uninspected local bundle spans currently known to be relevant.
+   - Under the practical criterion "can basically grasp how recording and replay work", research is complete.
+   - Under the strict criterion "can exactly tell how recording and replay are implemented", research is not complete yet.
 
 7. Product architecture follow-up:
    - Decide whether Next Editor should pursue Scrimba-compatible reversible action streams or keep its existing frame/delta recording artifact model.

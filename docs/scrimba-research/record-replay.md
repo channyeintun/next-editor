@@ -26,6 +26,20 @@ The record/replay stack has five main layers:
 4. `IDEStreamCursor` replay traversal, including branch-aware compare/apply/revert.
 5. Timeline, audio, browser iframe, and pointer renderers that expose play/pause/seek UI over the action cursor.
 
+Completion verdict:
+
+Practical understanding: complete.
+
+This document is enough to explain how Scrimba record/replay works in practice and how its main parts fit together.
+
+Exact end-to-end implementation: not complete.
+
+The remaining gaps are not broad exploration gaps. They are specific missing implementation surfaces:
+
+- the service-worker tracker path behind `/__sw__tracker.js`, especially for selection and active-state capture;
+- the exact bootstrap-side logic from `/assets/webcontainer.RMFWBHQ3.mjs?file`;
+- backend implementations for stream persistence, chunk serving, and `load_from_prod()`.
+
 ## Stream Format And Storage
 
 High confidence:
@@ -53,7 +67,11 @@ High confidence:
 
 - Text capture lives in `TextModel.setupMonaco()`. It wraps Monaco `model.applyEdits`, turns simple inserts into `LCINSERT`, simple deletes into `LCDELETE`, complex edits into `LCEDIT`, and captures selection changes through `LCSELECTION` or by attaching selection data to the preceding text action.
 - Monaco scroll changes are observed, but the visible producer writes `scrollTop`/`scrollLeft` widget state. `LCSCROLL` exists as an opcode and `TextScrollAction`, but a local string/offset scan found no producer outside enum/action-class references.
-- Browser preview capture flows through `runner-frame.handle(...)`: tracker-provided `actions` arrays become stream actions; location/history/pageload/loader messages update browser/page state; console logs are redacted when configured before being pushed.
+- `tmp/tracker.4FYFXZYK.iife.js` is the standalone preview tracker. Its `WebStreamWriter` initializes with `[9, pvn, serialize($doc), serialize($location)]`, starts with `[1, serialize(root)]`, and posts callback messages to `window.parent` or `OP_ELECTRON_TRACKER`.
+- The standalone tracker serializes child-list mutations as `[2, target, previousSibling, removed[], added[]]`, text mutations as `[3, target, text]`, property sync as `[4, node, prop, value]`, attribute sync as `[5, node, attr, value]`, focus changes as `[6]/[7]`, asset or stylesheet resolution as `[8, kind, url, payload]`, hover sync as `[10, node]`, and console logs as `[11, level, serializedArgs]`.
+- The standalone tracker monkeypatches form-control setters and history methods, intercepts console/error/unhandledrejection, and listens to `input`, `focus`, `blur`, `scroll`, `hashchange`, `popstate`, `pointermove`, `pointerdown`, and `pointerup`.
+- `select` and `selectionchange` listeners are present in the standalone tracker but currently no-op, and no explicit active-state producer is visible there.
+- Browser preview capture still flows through `runner-frame.handle(...)`, but two input shapes are visible locally: standalone tracker callback actions (`append`, `event`, `resolveAsset`, and generic `on${action}` dispatch such as `keycombo`) and older/service-worker `actions` arrays of real stream opcodes plus location/history/pageload/loader messages.
 - Pointer capture is handled by `pointer-tracker`, which listens for pointer, keyboard, and browser preview `browserevent` messages. It stamps coordinates, flags, hover target, layout, and previous frame, then pushes `IDEPointerUpdateAction` while recording or debugging outside workspace mode.
 - Modern workspace capture uses `SIWorkspace.sync()`, which compares `$stream` and `$plain`, pushes an initial `OPSNAPSHOT` when needed, and emits `OPDELTA` for subsequent diffs.
 - Modern microphone capture uses `AudioRecording` and browser `MediaRecorder`; WebM bytes are assembled and appended to `MediaStreamRecording.webm`, an embedded `OPByteStream`. These bytes are not stored in the main action stream.
@@ -63,8 +81,8 @@ High confidence:
 
 Blocked locally:
 
-- The external tracker implementation at `/assets/tracker.4FYFXZYK.iife.js` is referenced but not present as a standalone artifact file under `tmp/` or elsewhere in this repo.
 - `/__sw__tracker.js` is referenced by the service-worker/container path but not present as a standalone artifact file.
+- The added `headless.html`, `headless-siO4QJGT.js`, `webcontainer.5162ecc8.js`, `iframe.main.5162ecc8.js`, and `semver-Zyv2pDaP.js` identify the external StackBlitz runtime shell, but the bundle-mounted `/assets/webcontainer.RMFWBHQ3.mjs?file` bootstrap text and backend implementations are still not visible locally.
 
 ## Replay And Seeking
 
@@ -154,9 +172,12 @@ High confidence:
 
 The local bundle-side record/replay architecture is now traced across storage, capture, action protocol, action replay, cursor seeking, timeline/audio controls, browser replay, pointer replay, workspace OP replay, and branch replay.
 
+Under a practical bundle-research criterion, this is complete.
+
+Under the stricter criterion "can exactly tell how recording and replay are implemented", it is not complete yet, because the remaining missing pieces are still part of the real implementation rather than optional background context.
+
 The remaining unknowns require artifacts or server code that are not present locally:
 
-- `/assets/tracker.4FYFXZYK.iife.js`
 - `/assets/webcontainer.RMFWBHQ3.mjs?file`
 - `/__sw__.html`
 - `/__sw__blank.html`
@@ -165,41 +186,45 @@ The remaining unknowns require artifacts or server code that are not present loc
 
 Local searches that support the blocker statement:
 
-- Filename search for `*__sw__*`, `*tracker*`, `*.bootstrap.mjs`, `*bootstrap.mjs`, and `*webcontainer*` found no Scrimba standalone artifact files outside the bundles and docs.
-- String/offset search found references to those URLs only inside `tmp/chunks/ide.36BDFLCO.js` and documentation, not standalone artifact files.
+- `tmp/tracker.4FYFXZYK.iife.js`, `tmp/headless.html`, `tmp/headless-siO4QJGT.js`, `tmp/webcontainer.5162ecc8.js`, `tmp/iframe.main.5162ecc8.js`, and `tmp/semver-Zyv2pDaP.js` are now present locally and cover the standalone tracker plus the StackBlitz headless runtime shell.
+- Filename and string/offset search still find no standalone `/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`, or `/assets/webcontainer.RMFWBHQ3.mjs?file` source text outside bundle references.
 
 ## Key Evidence Spans
 
 Character offsets are zero-based half-open ranges.
 
-| Area                                     | File                         | Source span               | Character span    |
-| ---------------------------------------- | ---------------------------- | ------------------------- | ----------------- |
-| `IDEStreamAction` base                   | `tmp/chunks/ide.36BDFLCO.js` | `5338:11338-5338:14763`   | `2293464-2296889` |
-| Widget/state action cluster              | `tmp/chunks/ide.36BDFLCO.js` | `5338:15013-5338:20378`   | `2297139-2302504` |
-| Text action cluster                      | `tmp/chunks/ide.36BDFLCO.js` | `5338:20610-5338:23580`   | `2302736-2305706` |
-| Layout/console/page action cluster       | `tmp/chunks/ide.36BDFLCO.js` | `5338:23752-5338:37049`   | `2305878-2319175` |
-| DOM replay action cluster                | `tmp/chunks/ide.36BDFLCO.js` | `5338:38425-5338:41529`   | `2320551-2323655` |
-| Media/recording action cluster           | `tmp/chunks/ide.36BDFLCO.js` | `5338:41722-5338:42798`   | `2323848-2324924` |
-| Layout/widget/view/misc action cluster   | `tmp/chunks/ide.36BDFLCO.js` | `5338:43204-5338:49476`   | `2325330-2331602` |
-| Workspace OP action cluster              | `tmp/chunks/ide.36BDFLCO.js` | `5338:49586-5338:51905`   | `2331712-2334031` |
-| `AudioRecording`                         | `tmp/chunks/ide.36BDFLCO.js` | `5338:76886-5338:82911`   | `2359012-2365037` |
-| `IDEStreamCursor`                        | `tmp/chunks/ide.36BDFLCO.js` | `5338:83074-5338:87274`   | `2365200-2369400` |
-| `IDEStream`                              | `tmp/chunks/ide.36BDFLCO.js` | `5340:4212-5340:68750`    | `2382265-2446803` |
-| `TextModel`                              | `tmp/chunks/ide.36BDFLCO.js` | `5340:90312-5341:748`     | `2468365-2472551` |
-| `BrowserPage`                            | `tmp/chunks/ide.36BDFLCO.js` | `5653:613-5653:13553`     | `2493739-2506679` |
-| `runner-frame`                           | `tmp/chunks/ide.36BDFLCO.js` | `5653:18554-5653:21731`   | `2511680-2514857` |
-| `player-frame`                           | `tmp/chunks/ide.36BDFLCO.js` | `5653:22104-5653:23413`   | `2515230-2516539` |
-| `editor-widget`                          | `tmp/chunks/ide.36BDFLCO.js` | `5653:52509-5653:65135`   | `2545635-2558261` |
-| `ide-pointer-widget`                     | `tmp/chunks/ide.36BDFLCO.js` | `5653:90262-5653:97681`   | `2583388-2590807` |
-| `pointer-tracker`                        | `tmp/chunks/ide.36BDFLCO.js` | `5655:76081-5655:80641`   | `2712579-2717139` |
-| `BaseTimeline`                           | `tmp/chunks/ide.36BDFLCO.js` | `5655:23143-5655:28095`   | `2659641-2664593` |
-| `ClipTimeline`                           | `tmp/chunks/ide.36BDFLCO.js` | `5655:28430-5655:30775`   | `2664928-2667273` |
-| `IDEBranchTimeline` seek/play core       | `tmp/chunks/ide.36BDFLCO.js` | `5655:186516-5655:194852` | `2823014-2831350` |
-| `scrim-play-controls`                    | `tmp/chunks/ide.36BDFLCO.js` | `5655:132398-5655:140061` | `2768896-2776559` |
-| `ide-scrim-control` clip editor playback | `tmp/chunks/ide.36BDFLCO.js` | `5655:239930-5655:257485` | `2876428-2893983` |
-| `SIWorkspace`                            | `tmp/chunks/ide.36BDFLCO.js` | `516:35244-520:8874`      | `1122747-1143225` |
-| `SIWebContainer` bridge                  | `tmp/chunks/ide.36BDFLCO.js` | `521:4018-523:1180`       | `1159200-1165200` |
-| `ScrimStream`                            | `tmp/app.UK3DL7B2.js`        | `738:940-738:2463`        | `2872606-2874129` |
-| `ScrimRec`                               | `tmp/app.UK3DL7B2.js`        | `739:43206-739:48806`     | `2934102-2939702` |
-| `MediaStreamRecording`                   | `tmp/app.UK3DL7B2.js`        | `827:47367-827:50218`     | `3292226-3295077` |
-| `OPDataStream`/byte stream storage       | `tmp/app.UK3DL7B2.js`        | `129:205977-129:224711`   | `876046-894780`   |
+| Area                                     | File                           | Source span               | Character span    |
+| ---------------------------------------- | ------------------------------ | ------------------------- | ----------------- |
+| `IDEStreamAction` base                   | `tmp/chunks/ide.36BDFLCO.js`   | `5338:11338-5338:14763`   | `2293464-2296889` |
+| Widget/state action cluster              | `tmp/chunks/ide.36BDFLCO.js`   | `5338:15013-5338:20378`   | `2297139-2302504` |
+| Text action cluster                      | `tmp/chunks/ide.36BDFLCO.js`   | `5338:20610-5338:23580`   | `2302736-2305706` |
+| Layout/console/page action cluster       | `tmp/chunks/ide.36BDFLCO.js`   | `5338:23752-5338:37049`   | `2305878-2319175` |
+| DOM replay action cluster                | `tmp/chunks/ide.36BDFLCO.js`   | `5338:38425-5338:41529`   | `2320551-2323655` |
+| Media/recording action cluster           | `tmp/chunks/ide.36BDFLCO.js`   | `5338:41722-5338:42798`   | `2323848-2324924` |
+| Layout/widget/view/misc action cluster   | `tmp/chunks/ide.36BDFLCO.js`   | `5338:43204-5338:49476`   | `2325330-2331602` |
+| Workspace OP action cluster              | `tmp/chunks/ide.36BDFLCO.js`   | `5338:49586-5338:51905`   | `2331712-2334031` |
+| `AudioRecording`                         | `tmp/chunks/ide.36BDFLCO.js`   | `5338:76886-5338:82911`   | `2359012-2365037` |
+| `IDEStreamCursor`                        | `tmp/chunks/ide.36BDFLCO.js`   | `5338:83074-5338:87274`   | `2365200-2369400` |
+| `IDEStream`                              | `tmp/chunks/ide.36BDFLCO.js`   | `5340:4212-5340:68750`    | `2382265-2446803` |
+| `TextModel`                              | `tmp/chunks/ide.36BDFLCO.js`   | `5340:90312-5341:748`     | `2468365-2472551` |
+| `BrowserPage`                            | `tmp/chunks/ide.36BDFLCO.js`   | `5653:613-5653:13553`     | `2493739-2506679` |
+| `runner-frame`                           | `tmp/chunks/ide.36BDFLCO.js`   | `5653:18554-5653:21731`   | `2511680-2514857` |
+| `player-frame`                           | `tmp/chunks/ide.36BDFLCO.js`   | `5653:22104-5653:23413`   | `2515230-2516539` |
+| Standalone tracker core                  | `tmp/tracker.4FYFXZYK.iife.js` | `431-904`                 | `n/a`             |
+| Standalone tracker bridge/bootstrap      | `tmp/tracker.4FYFXZYK.iife.js` | `923-987`                 | `n/a`             |
+| Headless runtime entry                   | `tmp/headless.html`            | `1-37`                    | `n/a`             |
+| Headless runtime bootstrap               | `tmp/headless-siO4QJGT.js`     | `1`                       | `n/a`             |
+| `editor-widget`                          | `tmp/chunks/ide.36BDFLCO.js`   | `5653:52509-5653:65135`   | `2545635-2558261` |
+| `ide-pointer-widget`                     | `tmp/chunks/ide.36BDFLCO.js`   | `5653:90262-5653:97681`   | `2583388-2590807` |
+| `pointer-tracker`                        | `tmp/chunks/ide.36BDFLCO.js`   | `5655:76081-5655:80641`   | `2712579-2717139` |
+| `BaseTimeline`                           | `tmp/chunks/ide.36BDFLCO.js`   | `5655:23143-5655:28095`   | `2659641-2664593` |
+| `ClipTimeline`                           | `tmp/chunks/ide.36BDFLCO.js`   | `5655:28430-5655:30775`   | `2664928-2667273` |
+| `IDEBranchTimeline` seek/play core       | `tmp/chunks/ide.36BDFLCO.js`   | `5655:186516-5655:194852` | `2823014-2831350` |
+| `scrim-play-controls`                    | `tmp/chunks/ide.36BDFLCO.js`   | `5655:132398-5655:140061` | `2768896-2776559` |
+| `ide-scrim-control` clip editor playback | `tmp/chunks/ide.36BDFLCO.js`   | `5655:239930-5655:257485` | `2876428-2893983` |
+| `SIWorkspace`                            | `tmp/chunks/ide.36BDFLCO.js`   | `516:35244-520:8874`      | `1122747-1143225` |
+| `SIWebContainer` bridge                  | `tmp/chunks/ide.36BDFLCO.js`   | `521:4018-523:1180`       | `1159200-1165200` |
+| `ScrimStream`                            | `tmp/app.UK3DL7B2.js`          | `738:940-738:2463`        | `2872606-2874129` |
+| `ScrimRec`                               | `tmp/app.UK3DL7B2.js`          | `739:43206-739:48806`     | `2934102-2939702` |
+| `MediaStreamRecording`                   | `tmp/app.UK3DL7B2.js`          | `827:47367-827:50218`     | `3292226-3295077` |
+| `OPDataStream`/byte stream storage       | `tmp/app.UK3DL7B2.js`          | `129:205977-129:224711`   | `876046-894780`   |

@@ -295,13 +295,33 @@ Producer notes:
 
 `DOMSelectionAction`, `DOMScrollAction`, `DOMFocusInAction`, `DOMHoverInAction`, and `DOMActiveInAction` update page selection/scroll/focus/hover/active state and revert to prior state.
 
+Standalone tracker notes:
+
+The standalone `tmp/tracker.4FYFXZYK.iife.js` uses a separate packet vocabulary for `append` callback messages. These packets are not direct stream opcodes.
+
+| Packet | Meaning                                      |
+| -----: | -------------------------------------------- |
+|      1 | root snapshot (`start()`)                    |
+|      2 | child-list mutation                          |
+|      3 | character-data mutation                      |
+|      4 | property sync                                |
+|      5 | attribute sync                               |
+|      6 | focus or active-element sync                 |
+|      7 | blur or focus-out sync                       |
+|      8 | asset or stylesheet resolution               |
+|      9 | init metadata snapshot (`$doc`, `$location`) |
+|     10 | hover target sync                            |
+|     11 | console log                                  |
+
 Producer notes:
 
-- `runner-frame.handle(...)` receives tracker messages from the preview iframe.
-- Tracker messages of type `actions` contain action pairs shaped like `[opcode, params]`; each pair is passed to `browser-widget.push_(opcode, params)` when the IDE is editing.
+- `runner-frame.handle(...)` receives preview iframe traffic.
+- Two preview input shapes are visible locally. The standalone tracker posts parent callback messages such as `append`, `event`, `resolveAsset`, and `keycombo`; `append` is handed to the current `BrowserPage` document model, `event` becomes `browserevent` for pointer tracking, `resolveAsset` round-trips asset rewrites, and generic `on${action}` dispatch handles callbacks like `keycombo`.
+- An older/service-worker path still handles tracker messages of type `actions` as `[opcode, params]` pairs and passes them to `browser-widget.push_(opcode, params)` when the IDE is editing.
 - Focus/hover/active DOM actions are ignored unless pointer tracking is enabled.
 - `DOM_MUTATE` actions are skipped for local browser pages.
 - `PAGE_LOG` values are optionally redacted before being pushed.
+- The standalone tracker registers `select` and `selectionchange` listeners but currently emits nothing there, and no explicit active-state producer is visible in that file. This leaves `DOM_SELECTION` and `DOM_ACTIVE*` tied to another preview path or legacy bundle behavior.
 - `ide-sw-container` forwards service-worker/container messages into `scrim-view.oncontainermessage(...)`.
 - `scrim-view.oncontainermessage(...)` serves `getState`, preview `request`, `resolveImportMap`, and `resolveFile` messages for the runner/player infrastructure.
 - Preview `request` responses include the browser history state and tracker URL `${origin}/__sw__tracker.js`.
@@ -328,6 +348,7 @@ High confidence:
 Blocked locally:
 
 - The bootstrap file itself is not present as a standalone local artifact, so the bridge-side implementations of `WCWorkspace.merge`, `install`, `webfetch`, and `serializeDir` are not visible.
+- The added `tmp/headless.html` and `tmp/headless-siO4QJGT.js` show the surrounding StackBlitz shell and `window.parent` endpoint handshake, but not the specific `.bootstrap.mjs` contents mounted by `SIWebContainer`.
 
 ### Pointer Actions
 
