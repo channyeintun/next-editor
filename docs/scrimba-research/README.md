@@ -10,6 +10,7 @@ The source material is minified production JavaScript. There are no JavaScript s
 
 ## Research Packet
 
+- `record-replay.md` - focused record/replay architecture and completion status.
 - `findings.md` - current architecture findings and behavioral model.
 - `action-protocol.md` - stream/action opcode map and action semantics found so far.
 - `progress.md` - file-by-file research status, exact completed source spans, summaries, and remaining work.
@@ -36,7 +37,9 @@ The source material is minified production JavaScript. There are no JavaScript s
 - Action opcode table: `tmp/chunks/ide.36BDFLCO.js`, character offset `567982` for the `COMMIT`/`MSR` area and `566697` for the broader enum section.
 - Action registration helper `Ve(...)`: `tmp/chunks/ide.36BDFLCO.js`, near character offset `569461`.
 - Base action class `IDEStreamAction`: `tmp/chunks/ide.36BDFLCO.js`, near character offset `2293694`.
-- Stream cursor apply/revert logic: `IDEStreamCursor` in `tmp/chunks/ide.36BDFLCO.js`.
+- Stream cursor apply/revert logic: `IDEStreamCursor` in `tmp/chunks/ide.36BDFLCO.js`, character offsets `2365200-2369400`.
+- Focused record/replay action coverage: `tmp/chunks/ide.36BDFLCO.js`, character offsets `2297139-2334031`.
+- Timeline/playback controls: `BaseTimeline`, `ClipTimeline`, `IDEBranchTimeline`, and `scrim-play-controls` in `tmp/chunks/ide.36BDFLCO.js`, character offsets `2659641-2667273`, `2768896-2776559`, and `2823014-2831350`.
 - DOM replay engine: `BrowserPage` in `tmp/chunks/ide.36BDFLCO.js`.
 - Modern workspace state: `SIWorkspace`, `SIFS`, `SIFile`, `SIDir`, `IDEOPSnapshotAction`, and `IDEOPDeltaAction` in `tmp/chunks/ide.36BDFLCO.js`.
 - WebContainer/runtime host path: `SIWebContainer` in `tmp/chunks/ide.36BDFLCO.js`; `HostWorkspace`, `LocalWorkspace`, and `WCWorkspace` in `tmp/app.UK3DL7B2.js`.
@@ -53,8 +56,9 @@ Start with `progress.md`, then read `findings.md` and `action-protocol.md`. If d
 
 Recommended next research tasks:
 
-1. De-minify only targeted class regions, not whole bundles.
-2. Trace host-side implementations hidden behind RPC/bridge actions such as `load_from_prod`, `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir`.
-3. Locate or reconstruct standalone service-worker/tracker/bootstrap artifacts (`/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`, `/assets/tracker.4FYFXZYK.iife.js`, and `/assets/webcontainer.RMFWBHQ3.mjs?file`) if they are available outside this bundle.
-4. Continue commit research only if server-side artifacts or another client bundle are available; the visible `ScrimCommit`/`ide-commit-dialog` client path has been traced.
-5. If product parity is the goal, decide whether Next Editor should emulate Scrimba's action stream/branch cursor or keep its existing frame/delta recording model.
+1. For record/replay, start with `record-replay.md`; the local bundle-side architecture is complete except for explicitly missing external/server artifacts.
+2. De-minify only targeted class regions, not whole bundles.
+3. Trace host-side implementations hidden behind RPC/bridge actions such as `load_from_prod`, `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir` only if new host/bootstrap/server artifacts become available.
+4. Locate or reconstruct standalone service-worker/tracker/bootstrap artifacts (`/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`, `/assets/tracker.4FYFXZYK.iife.js`, and `/assets/webcontainer.RMFWBHQ3.mjs?file`) if they are available outside this bundle.
+5. Continue commit research only if server-side artifacts or another client bundle are available; the visible `ScrimCommit`/`ide-commit-dialog` client path has been traced.
+6. If product parity is the goal, decide whether Next Editor should emulate Scrimba's action stream/branch cursor or keep its existing frame/delta recording model.

@@ -89,6 +89,18 @@ High confidence:
 - `pushAction(...)` starts editing if possible, or creates a forked branch when editing is not available. Significant actions mark the `Scrim` edited and can trigger autosave-like behavior after repeated changes.
 - `newFork(...)` creates a new `Scrim` with `kind: "scribble"` by default, records `origin`, `via_lesson`, `origin_offset`, `origin_index`, and `origin_snapshot`, then seeds it with a snapshot action.
 - `trimToAction(...)` rolls the branch back to an action, removes later recordings/commits, and trims the stream buffer to the target byte end.
+- `IDEStreamCursor` is the replay coordinator. It tracks current action, current branch, current target, apply/revert stack, and branch path.
+- `IDEStreamCursor.sync(...)` can:
+  - apply the first trunk action on initial sync;
+  - apply a direct next action;
+  - revert to a shared point;
+  - step forward on the same branch;
+  - cross branch routes by applying the first action of child branches.
+- When replay passes beyond an editable branch tip, the cursor stops editing for that branch.
+- Actions mark affected targets during commit/revert; after sync the cursor calls `synced_` on marked targets.
+- Replay action domains now traced locally include widget creation/removal, generic set/patch/sync, file/layout/view state, console actions, page actions, DOM reset/mutate/selection/scroll/focus/hover/active, pointer frames, workspace OP snapshot/delta/rollback, save markers, and timeline markers.
+- `BaseTimeline`, `ClipTimeline`, `IDEBranchTimeline`, and `scrim-play-controls` form the visible playback surface: time/offset conversion, audio play/pause, seek/skip, playback-rate changes, and hotkeys.
+- `scrim-play-controls` maps the spacebar to timeline toggle, left/right to rewind/skip, and shift+comma / shift+period to playback speed changes when the branch is not editing.
 
 Medium confidence:
 
@@ -269,6 +281,10 @@ High confidence:
 - Rewrites inline styles and stylesheet URLs.
 - Applies pseudo-state classes for focus/hover/active.
 - Applies selection to normal text nodes and to `input`/`textarea` selection ranges.
+- `DOMAction` subclasses attach themselves to the last `BrowserPage` during stream parsing, and only commit/revert while the page is syncing.
+- `DOMResetAction` clears/rebuilds the replay document root and reindexes nodes.
+- `DOMSelectionAction`, `DOMScrollAction`, `DOMFocusInAction`, `DOMHoverInAction`, and `DOMActiveInAction` store previous page/node state and restore it on revert.
+- `PageRequestAction`, `PageLoadAction`, `PageLoadedAction`, and `PageHistoryAction` create/select `BrowserPage` instances and update browser URL/status/initial state during replay.
 
 Medium confidence:
 
@@ -517,6 +533,7 @@ Medium confidence:
 
 ## Known Unknowns
 
+- Record/replay local bundle research is summarized in `record-replay.md`.
 - Exact server-side storage implementation for `OPBinaryChunk` persistence is not visible in the local bundle.
 - Exact `load_from_prod` RPC behavior and production backfill endpoint are not visible in the local bundle.
 - Exact external browser tracker implementation is not visible because `/assets/tracker.4FYFXZYK.iife.js` is referenced but not present as a standalone artifact file under `tmp/` or elsewhere in this repo.

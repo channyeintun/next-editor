@@ -281,13 +281,19 @@ Producer notes:
 
 `PageLoadAction` (`PAGE_LOAD=28`) creates or selects a `BrowserPage`, assigns HTTP status and URL, updates `IDEBrowser.page`, and clears the console.
 
+`PageRequestAction` (`PAGE_REQUEST=31`) creates/selects a `BrowserPage` for the requested URL and points the browser at it.
+
 `PageLoadedAction` (`PAGE_LOADED=29`) uses `dedupe` strategy and sets the page initial state when first applied.
+
+`PageHistoryAction` (`PAGE_HISTORY=32`) updates browser URL from history payload data.
 
 `PageLogAction` (`PAGE_LOG=30`) also uses `dedupe`. It pushes/pops console log entries and suppresses the in-browser Babel transformer warning.
 
+`DOMResetAction` (`DOM_RESET=207`) clears the replay document root, focus/active/hover/selection state, and node index, while retaining the prior root children for revert.
+
 `DOMMutateAction` (`DOM_MUTATE=21`) calls `BrowserPage.applyMutations` and records errors on the target page.
 
-`DOMSelectionAction`, `DOMFocusInAction`, `DOMHoverInAction`, and `DOMActiveInAction` update page selection/focus/hover/active state and revert to prior state.
+`DOMSelectionAction`, `DOMScrollAction`, `DOMFocusInAction`, `DOMHoverInAction`, and `DOMActiveInAction` update page selection/scroll/focus/hover/active state and revert to prior state.
 
 Producer notes:
 
@@ -349,6 +355,20 @@ Current client evidence:
 
 ### File/View Actions
 
+`CreateWidgetAction` (`WIDGET_CREATE=3`) creates a legacy widget from serialized config, commits/reverts add state, and marks the target for refresh.
+
+`RemoveWidgetAction` (`WIDGET_REMOVE=129`) commits/reverts legacy widget deletion.
+
+`ConfigSetAction` (`SET=1`) updates widget data or modern `SIObject` state, records the prior value, and updates stream read state during parsing.
+
+`PatchAction` (`PATCH=2`) merges patch data into widget data and stores previous state for revert.
+
+`SyncAction` (`SYNC=13`) is a no-op synchronization boundary.
+
+`LayoutAction` (`LAYOUT=8`), `BrowserLayoutAction` (`BROWSER_LAYOUT=9`), and `NodeLayoutAction` (`NODE_LAYOUT=10`) update layout state and restore prior layout values on revert.
+
+`FSRenameAction` (`FS_RENAME=110`) renames a legacy filesystem entry, and can call the target remote rename path for local trunk changes.
+
 `FSMoveAction` (`FS_MOVE=112`) moves an entry between parent directories and reverts by restoring the previous parent.
 
 `FSRemoveAction` (`FS_REMOVE=111`) removes a target entry.
@@ -357,7 +377,11 @@ Current client evidence:
 
 `ViewCloseAction` (`VIEW_CLOSE=251`) removes a widget/file from the group and reopens the previous active view when appropriate.
 
+`ViewMoveAction` (`VIEW_MOVE=252`) and `ViewPinAction` (`VIEW_PIN=253`) are registered but minimal in the inspected bundle.
+
 `SaveAction` (`SAVE=221`) records the target's `lastSave`, stores current contents into the target body, and has a `scrim-save-marker`.
+
+`ConsoleClearAction`, `ConsoleLogAction`, and `ConsoleValExpandAction` delegate commit/revert to `IDEConsole.apply(...)` and `IDEConsole.revert(...)`.
 
 ### Commit/Marker Actions
 
@@ -386,6 +410,28 @@ Current client evidence:
 - branch path for cross-branch routing
 
 To seek, it compares the current action and target action, reverts to the nearest shared point, then applies actions forward. If a route crosses branches, it follows branch-specific first/next action links. After sync, marked targets receive `synced_` callbacks if present.
+
+Additional local evidence:
+
+- If the cursor has not applied the trunk seed yet, sync applies trunk action zero first.
+- If the target action is the direct next action, sync commits it without a full compare route.
+- `compare(...)` returns `{ revertTo }`, `{ stepTo }`, or `{ revertTo, route }` depending on same-branch ordering or shared branch ancestry.
+- `apply(action, previous)` reverts back to the expected previous action if the requested action is not adjacent, pushes the action onto the stack, commits it, and sets the branch `currentAction`.
+- `revert(action)` pushes the action onto the stack, runs `revertWithCursor`, clears reverting state, and returns `action.prev`.
+- If replay leaves an editing branch with later actions available, the cursor calls `currentBranch.stopEditing()`.
+
+### Timeline Playback
+
+High confidence:
+
+- `BaseTimeline` provides time/offset conversion, clamping, duration/progress, current offset/time, and schedule/unschedule audio hooks.
+- `ClipTimeline` preloads audio, sets audio playback rate from `ide.pbr`, plays/pauses the audio element, responds to seeking/seeked/pause events, and unschedules audio when leaving playback.
+- `IDEBranchTimeline.seekToOffset(offset, ...)` maps the stream offset to timeline time, calls `seekTo(time, ...)`, and unschedules current playback.
+- `IDEBranchTimeline.seekTo(time, ...)` clamps time to timeline duration, anchors the timeline clock, and updates the underlying animation current time.
+- `IDEBranchTimeline.skipΞforward/backward` jumps by 10 seconds or to nearby keyframes/clip boundaries.
+- `IDEBranchTimeline.playbackRate` updates the underlying animation or simple clip audio playback rate, pausing/resuming as needed.
+- `scrim-play-controls` maps play button and spacebar to timeline toggle, left/right to skip backward/forward, and shift+comma / shift+period to playback speed changes.
+- `ide-scrim-control` is a separate clip-editor playback path that schedules audio slices and selection ranges; it is not the normal lesson/player replay path.
 
 Branch details:
 
