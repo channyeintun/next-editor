@@ -488,8 +488,8 @@ const EditorHeader = memo(function EditorHeader({ showImportExport }: EditorHead
         )}
         <div className="h-4 w-px bg-slate-700 mx-1" />
         <div className="flex items-center gap-2">
-          <PreviewHeaderButton />
           {showImportExport ? <SlidesButton /> : null}
+          <PreviewHeaderButton />
         </div>
       </div>
     </div>
