@@ -6,16 +6,16 @@ Date: 2026-06-15
 
 - [x] Phase 1: Types and recording storage.
 - [x] Phase 2: Injected patch recorder.
-- [ ] Phase 3: Parent message handling.
+- [x] Phase 3: Parent message handling.
 - [ ] Phase 4: Patch apply utilities.
 - [ ] Phase 5: Replay integration.
 - [ ] Phase 6: Prefer patch path for new recordings.
 
 ## Current Evaluation
 
-- Phase 2 is complete, validated, and committed.
-- The injected runtime support script now emits an initial preview document and RAF-batched DOM patch batches while keeping the existing full snapshot path active.
-- Next task: Phase 3, validate and append patch messages in the parent bridge without changing preview event semantics.
+- Phase 3 is complete, validated, and committed.
+- Runtime initial document and patch batch messages are validated in the parent bridge and appended to the new recording streams without becoming semantic preview events.
+- Next task: Phase 4, add DOM patch apply utilities for direct in-place preview mutations.
 
 ## Completed Tasks
 
@@ -38,3 +38,14 @@ Date: 2026-06-15
 - Generated recorder script syntax check passed by evaluating the helper and compiling the returned script string.
 - Validation passed with `bun run format`, `bun run lint`, `bun run check`, and `bun run build`.
 - Committed with message `Emit runtime preview patch batches`.
+
+### 3. Parent Message Handling
+
+- Added shared runtime initial document and patch batch message constants.
+- Added editor machine events for preview initial documents and DOM patch batches.
+- Exposed stable editor actions for recording preview initial documents and patch batches.
+- Wired the preview controller and bridge to record validated patch messages separately from semantic preview events.
+- Cached the latest runtime initial document so recordings that start after the preview has loaded can still seed the patch stream.
+- Normalized initial document HTML through the existing replayable runtime preview helper before recording.
+- Validation passed with `bun run check --fix`, `bun run format`, `bun run lint`, `bun run check`, and `bun run build`.
+- Committed with message `Record preview patch messages`.

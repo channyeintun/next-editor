@@ -2,7 +2,12 @@ import { createContext, type RefObject } from "react";
 import type { Recording } from "../core/src/types";
 import type { TimelineActorRef } from "../core/src/machine/timelineMachine";
 import type { EditorActorRef } from "../core/src/useNextEditor";
-import type { SlideEvent, PreviewEvent } from "../types/slides";
+import type {
+  PreviewDomPatchBatch,
+  PreviewEvent,
+  PreviewInitialDocument,
+  SlideEvent,
+} from "../types/slides";
 import type * as monaco from "monaco-editor";
 
 export type { TimelineActorRef, EditorActorRef };
@@ -24,6 +29,8 @@ export interface NextEditorActions {
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
+  handlePreviewInitialDocument: (document: PreviewInitialDocument) => void;
+  handlePreviewPatchBatch: (batch: PreviewDomPatchBatch) => void;
   handleWorkspaceEvent: (event?: { sidebarWidthDelta?: number }) => void;
   handleRuntimeEvent: () => void;
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;

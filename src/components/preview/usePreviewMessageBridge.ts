@@ -1,5 +1,15 @@
 import { useEffect, type RefObject } from "react";
-import type { IframeInteractionEvent, PreviewEvent, PreviewSize } from "../../types/slides";
+import {
+  PREVIEW_DOM_PATCH_FORMAT_VERSION,
+  type IframeInteractionEvent,
+  type PreviewDomPatchBatch,
+  type PreviewDomPatchOp,
+  type PreviewEvent,
+  type PreviewInitialDocument,
+  type PreviewNodeRef,
+  type PreviewSize,
+  type SerializedPreviewNode,
+} from "../../types/slides";
 import {
   IFRAME_CONSOLE_MESSAGE_TYPE,
   isIframeConsoleMethod,
@@ -8,6 +18,8 @@ import {
 import {
   createReplayableRuntimePreviewFromHtml,
   type PreviewScrollPosition,
+  RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
+  RUNTIME_PATCH_BATCH_MESSAGE_TYPE,
   RUNTIME_SNAPSHOT_MESSAGE_TYPE,
 } from "./previewIframeUtils";
 
@@ -16,6 +28,10 @@ interface UsePreviewMessageBridgeOptions {
   effectiveRuntimePreviewUrl: string | null;
   isRecordingRef: RefObject<boolean>;
   handlePreviewEventRef: RefObject<((event: PreviewEvent) => void) | null>;
+  handlePreviewInitialDocumentRef: RefObject<((document: PreviewInitialDocument) => void) | null>;
+  handlePreviewPatchBatchRef: RefObject<((batch: PreviewDomPatchBatch) => void) | null>;
+  lastPreviewInitialDocumentRef: RefObject<PreviewInitialDocument | null>;
+  recordedPreviewInitialDocumentIdRef: RefObject<string | null>;
   lastRuntimeSnapshotRef: RefObject<string>;
   scrollPositionRef: RefObject<PreviewScrollPosition>;
   userScrollTimeoutRef: RefObject<NodeJS.Timeout | null>;
@@ -46,11 +62,207 @@ function formatPreviewConsoleMessage(payload: unknown): string | null {
   return `[preview:${consolePayload.method}]${location} ${message}`.trim();
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === "string";
+}
+
+function isOptionalNamespace(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === "string";
+}
+
+function isPreviewNodeRef(value: unknown): value is PreviewNodeRef {
+  if (!isRecord(value) || !Array.isArray(value.path)) {
+    return false;
+  }
+
+  return (
+    (value.id === undefined || typeof value.id === "string") &&
+    value.path.every((part) => typeof part === "number" && Number.isInteger(part) && part >= 0)
+  );
+}
+
+function isSerializedPreviewNode(value: unknown): value is SerializedPreviewNode {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (
+    value.kind !== "element" &&
+    value.kind !== "text" &&
+    value.kind !== "comment" &&
+    value.kind !== "doctype"
+  ) {
+    return false;
+  }
+
+  if (value.tagName !== undefined && typeof value.tagName !== "string") {
+    return false;
+  }
+
+  if (!isOptionalNamespace(value.namespaceURI)) {
+    return false;
+  }
+
+  if (value.text !== undefined && typeof value.text !== "string") {
+    return false;
+  }
+
+  if (
+    value.attributes !== undefined &&
+    (!Array.isArray(value.attributes) ||
+      !value.attributes.every(
+        (attribute) =>
+          Array.isArray(attribute) &&
+          attribute.length === 2 &&
+          typeof attribute[0] === "string" &&
+          typeof attribute[1] === "string",
+      ))
+  ) {
+    return false;
+  }
+
+  return (
+    value.children === undefined ||
+    (Array.isArray(value.children) && value.children.every(isSerializedPreviewNode))
+  );
+}
+
+function isPreviewDomPatchOp(value: unknown): value is PreviewDomPatchOp {
+  if (!isRecord(value) || typeof value.op !== "string") {
+    return false;
+  }
+
+  switch (value.op) {
+    case "set_text":
+      return isPreviewNodeRef(value.target) && typeof value.text === "string";
+    case "set_attribute":
+      return (
+        isPreviewNodeRef(value.target) &&
+        typeof value.name === "string" &&
+        typeof value.value === "string" &&
+        isOptionalNamespace(value.namespaceURI)
+      );
+    case "remove_attribute":
+      return (
+        isPreviewNodeRef(value.target) &&
+        typeof value.name === "string" &&
+        isOptionalNamespace(value.namespaceURI)
+      );
+    case "insert_node":
+      return (
+        isPreviewNodeRef(value.parent) &&
+        isFiniteNumber(value.index) &&
+        Number.isInteger(value.index) &&
+        value.index >= 0 &&
+        isSerializedPreviewNode(value.node)
+      );
+    case "remove_node":
+      return isPreviewNodeRef(value.target);
+    case "move_node":
+      return (
+        isPreviewNodeRef(value.target) &&
+        isPreviewNodeRef(value.parent) &&
+        isFiniteNumber(value.index) &&
+        Number.isInteger(value.index) &&
+        value.index >= 0
+      );
+    case "replace_subtree":
+      return (
+        isPreviewNodeRef(value.target) &&
+        typeof value.html === "string" &&
+        (value.mode === "children" || value.mode === "node")
+      );
+    case "set_property":
+      return (
+        isPreviewNodeRef(value.target) &&
+        (value.name === "value" || value.name === "checked" || value.name === "selected") &&
+        (typeof value.value === "string" || typeof value.value === "boolean")
+      );
+    default:
+      return false;
+  }
+}
+
+function createValidatedInitialDocument(
+  payload: unknown,
+  effectiveRuntimePreviewUrl: string | null,
+): PreviewInitialDocument | null {
+  if (!isRecord(payload) || !effectiveRuntimePreviewUrl) {
+    return null;
+  }
+
+  if (
+    payload.version !== PREVIEW_DOM_PATCH_FORMAT_VERSION ||
+    !isFiniteNumber(payload.time) ||
+    typeof payload.documentId !== "string" ||
+    !isOptionalString(payload.route) ||
+    typeof payload.html !== "string"
+  ) {
+    return null;
+  }
+
+  const html = createReplayableRuntimePreviewFromHtml(payload.html, effectiveRuntimePreviewUrl);
+  if (!html) {
+    return null;
+  }
+
+  return {
+    version: PREVIEW_DOM_PATCH_FORMAT_VERSION,
+    time: payload.time,
+    documentId: payload.documentId,
+    route: payload.route,
+    html,
+  };
+}
+
+function createValidatedPatchBatch(payload: unknown): PreviewDomPatchBatch | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  if (
+    payload.version !== PREVIEW_DOM_PATCH_FORMAT_VERSION ||
+    !isFiniteNumber(payload.time) ||
+    (payload.source !== "runtime-preview" && payload.source !== "static-preview") ||
+    typeof payload.documentId !== "string" ||
+    !isFiniteNumber(payload.baseRevision) ||
+    !isFiniteNumber(payload.revision) ||
+    !isOptionalString(payload.route) ||
+    !Array.isArray(payload.ops) ||
+    !payload.ops.every(isPreviewDomPatchOp)
+  ) {
+    return null;
+  }
+
+  return {
+    version: PREVIEW_DOM_PATCH_FORMAT_VERSION,
+    time: payload.time,
+    source: payload.source,
+    documentId: payload.documentId,
+    baseRevision: payload.baseRevision,
+    revision: payload.revision,
+    route: payload.route,
+    ops: payload.ops,
+  };
+}
+
 export function usePreviewMessageBridge({
   iframeRef,
   effectiveRuntimePreviewUrl,
   isRecordingRef,
   handlePreviewEventRef,
+  handlePreviewInitialDocumentRef,
+  handlePreviewPatchBatchRef,
+  lastPreviewInitialDocumentRef,
+  recordedPreviewInitialDocumentIdRef,
   lastRuntimeSnapshotRef,
   scrollPositionRef,
   userScrollTimeoutRef,
@@ -73,6 +285,36 @@ export function usePreviewMessageBridge({
 
         if (message) {
           onConsoleMessage(message);
+        }
+
+        return;
+      }
+
+      if (type === RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE) {
+        const initialDocument = createValidatedInitialDocument(payload, effectiveRuntimePreviewUrl);
+        if (!initialDocument) {
+          return;
+        }
+
+        lastPreviewInitialDocumentRef.current = initialDocument;
+
+        if (
+          isRecordingRef.current &&
+          handlePreviewInitialDocumentRef.current &&
+          initialDocument.documentId !== recordedPreviewInitialDocumentIdRef.current
+        ) {
+          handlePreviewInitialDocumentRef.current(initialDocument);
+          recordedPreviewInitialDocumentIdRef.current = initialDocument.documentId;
+        }
+
+        return;
+      }
+
+      if (type === RUNTIME_PATCH_BATCH_MESSAGE_TYPE) {
+        const patchBatch = createValidatedPatchBatch(payload);
+
+        if (patchBatch && isRecordingRef.current && handlePreviewPatchBatchRef.current) {
+          handlePreviewPatchBatchRef.current(patchBatch);
         }
 
         return;
@@ -203,14 +445,18 @@ export function usePreviewMessageBridge({
     return () => window.removeEventListener("message", handleMessage);
   }, [
     effectiveRuntimePreviewUrl,
+    handlePreviewInitialDocumentRef,
     handlePreviewEventRef,
+    handlePreviewPatchBatchRef,
     iframeRef,
     isRecordingRef,
     isUserScrollingRef,
     lastRuntimeSnapshotRef,
+    lastPreviewInitialDocumentRef,
     onConsoleMessage,
     onRouteChange,
     pendingInteractionRef,
+    recordedPreviewInitialDocumentIdRef,
     scrollPositionRef,
     sizeRef,
     targetScrollRef,

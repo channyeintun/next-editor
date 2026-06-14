@@ -56,6 +56,8 @@ import {
   resolveReplayTime,
 } from "./replayState";
 import {
+  appendPreviewInitialDocument,
+  appendPreviewPatchBatch,
   appendPreviewRecordingEvent,
   appendRuntimeRecordingEvent,
   appendSlideRecordingEvent,
@@ -1886,6 +1888,24 @@ export const editorMachine = setup({
             "capturePreviewRefreshFrame",
             "notifyFrame",
           ],
+        },
+        PREVIEW_INITIAL_DOCUMENT: {
+          actions: assign(({ context, event }) => {
+            if (!context.session) return {};
+
+            return {
+              session: appendPreviewInitialDocument(context.session, event.document),
+            };
+          }),
+        },
+        PREVIEW_PATCH_BATCH: {
+          actions: assign(({ context, event }) => {
+            if (!context.session) return {};
+
+            return {
+              session: appendPreviewPatchBatch(context.session, event.batch),
+            };
+          }),
         },
         WORKSPACE_EVENT: {
           actions: [

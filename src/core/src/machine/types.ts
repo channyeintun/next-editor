@@ -341,6 +341,18 @@ export type PreviewEventOccurred = {
   event: PreviewEvent;
 };
 
+/** Initial preview document recorded */
+export type PreviewInitialDocumentOccurred = {
+  type: "PREVIEW_INITIAL_DOCUMENT";
+  document: PreviewInitialDocument;
+};
+
+/** Preview DOM patch batch recorded */
+export type PreviewPatchBatchOccurred = {
+  type: "PREVIEW_PATCH_BATCH";
+  batch: PreviewDomPatchBatch;
+};
+
 /** Workspace event occurred */
 export type WorkspaceEventOccurred = {
   type: "WORKSPACE_EVENT";
@@ -381,6 +393,8 @@ export type EditorMachineEvent =
   | SetEditorRefEvent
   | SlideEventOccurred
   | PreviewEventOccurred
+  | PreviewInitialDocumentOccurred
+  | PreviewPatchBatchOccurred
   | WorkspaceEventOccurred
   | RuntimeEventOccurred
   | AudioChunkEvent

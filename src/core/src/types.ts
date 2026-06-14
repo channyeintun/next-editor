@@ -250,6 +250,8 @@ export interface UseNextEditorReturn {
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
+  handlePreviewInitialDocument: (document: PreviewInitialDocument) => void;
+  handlePreviewPatchBatch: (batch: PreviewDomPatchBatch) => void;
   handleWorkspaceEvent: (event?: { sidebarWidthDelta?: number }) => void;
   handleRuntimeEvent: () => void;
 
