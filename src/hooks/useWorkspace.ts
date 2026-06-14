@@ -1,5 +1,5 @@
-import { useContext, useMemo } from "react";
-import { useAtom } from "@xstate/store-react";
+import { useContext } from "react";
+import { useSelector } from "@xstate/store-react";
 import {
   WorkspaceActionsContext,
   type WorkspaceActions,
@@ -37,11 +37,8 @@ function useWorkspaceStore(hookName: string) {
 
 function useWorkspaceSelector<T>(hookName: string, selector: (context: WorkspaceState) => T): T {
   const store = useWorkspaceStore(hookName);
-  const selectedAtom = useMemo(() => store.select(selector), [store, selector]);
 
-  // Derive one atom per slice so replay snapshot loads notify the exact
-  // workspace field that changed instead of re-subscribing to the full store.
-  return useAtom(selectedAtom);
+  return useSelector(store, (snapshot) => selector(snapshot.context));
 }
 
 export const useWorkspaceActions = (): WorkspaceActions => {
