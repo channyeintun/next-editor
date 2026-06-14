@@ -8,14 +8,14 @@ Date: 2026-06-15
 - [x] Phase 2: Injected patch recorder.
 - [x] Phase 3: Parent message handling.
 - [x] Phase 4: Patch apply utilities.
-- [ ] Phase 5: Replay integration.
+- [x] Phase 5: Replay integration.
 - [ ] Phase 6: Prefer patch path for new recordings.
 
 ## Current Evaluation
 
-- Phase 4 is complete, validated, and committed.
-- Preview DOM patch batches can now be applied into an existing iframe document with direct DOM operations and morphdom-backed subtree replacement.
-- Next task: Phase 5, integrate patch application into replay cursor behavior.
+- Phase 5 is complete, validated, and committed.
+- Replay now invokes a dedicated preview patch replay adapter during tick/seek and applies patch batches into the persistent preview iframe when patch data exists.
+- Next task: Phase 6, prefer patch replay for new recordings while keeping snapshot fallback for compatibility and recovery.
 
 ## Completed Tasks
 
@@ -59,3 +59,14 @@ Date: 2026-06-15
 - Added iframe helpers for applying initial preview documents and DOM patch batches with soft failure results.
 - Validation passed with `bun run check --fix`, `bun run format`, `bun run lint`, `bun run check`, and `bun run build`.
 - Committed with message `Add preview DOM patch applier`.
+
+### 5. Replay Integration
+
+- Added a preview patch replay callback to the preview domain adapter and editor machine config.
+- Added a preview patch replay cursor to the editor machine and reset it alongside other replay cursors.
+- Applied patch replay during shared tick/seek replay actions before semantic preview event replay.
+- Registered an iframe-side patch replay cursor that seeds from the nearest initial document and applies patch batches forward by time.
+- Kept semantic preview replay active for route, scroll, focus, and interaction state while skipping full snapshot content writes when patch replay is healthy.
+- Falls back to the existing snapshot content path if patch replay cannot seed or apply a batch.
+- Validation passed with `bun run check --fix`, `bun run format`, `bun run lint`, `bun run check`, and `bun run build`.
+- Committed with message `Integrate preview patch replay`.

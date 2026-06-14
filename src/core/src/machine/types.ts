@@ -16,6 +16,7 @@ import type {
   EditorSelection,
   EditorPosition,
   RecordingAudioSource,
+  PreviewPatchReplayInput,
 } from "../types";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
@@ -152,6 +153,8 @@ export interface EditorMachineContext {
   applySlides?: (slides: Slide[]) => void;
   /** Callback to apply preview state during playback */
   applyPreviewState?: (previewState: PreviewState) => void;
+  /** Callback to apply preview DOM patches during playback */
+  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;
   /** Callback to get slide state during recording */
   getSlideState?: () => {
     previewState: SlidePreviewState;
@@ -173,6 +176,8 @@ export interface EditorMachineContext {
   lastAppliedFrameIndex: number;
   /** Index of the last applied preview event during playback */
   lastAppliedPreviewEventIndex: number;
+  /** Index of the last applied preview patch batch during playback */
+  lastAppliedPreviewPatchBatchIndex: number;
   /** Index of the last applied slide event during playback */
   lastAppliedSlideEventIndex: number;
   /** Index of the last applied workspace event during playback */
@@ -443,6 +448,7 @@ export interface EditorMachineInput {
   onPreviewEvent?: (event: PreviewEvent) => void;
   getPreviewState?: () => PreviewState | null;
   applyPreviewState?: (previewState: PreviewState) => void;
+  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;
   getWorkspaceSnapshot?: () => WorkspaceRecordingSnapshot | null;
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
@@ -495,6 +501,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   lastCallbackFrameTimestamp: undefined,
   lastAppliedFrameIndex: -1,
   lastAppliedPreviewEventIndex: -1,
+  lastAppliedPreviewPatchBatchIndex: -1,
   lastAppliedSlideEventIndex: -1,
   lastAppliedWorkspaceEventIndex: -1,
   lastAppliedRuntimeEventIndex: -1,
@@ -504,6 +511,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   getSlideState: input.getSlideState,
   getSlides: input.getSlides,
   applyPreviewState: input.applyPreviewState,
+  applyPreviewPatchReplay: input.applyPreviewPatchReplay,
   getPreviewState: input.getPreviewState,
   getWorkspaceSnapshot: input.getWorkspaceSnapshot,
   applyWorkspaceSnapshot: input.applyWorkspaceSnapshot,

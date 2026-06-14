@@ -478,6 +478,10 @@ export function usePreviewController(): PreviewController {
     lessonType,
     usesPlaybackModel,
   });
+  const hasPreviewPatchReplay = Boolean(
+    currentRecording?.previewInitialDocuments?.length &&
+    currentRecording.previewPatchBatches?.length,
+  );
   const isRuntimePlaybackPreviewActive = lessonType === "node.js" && isPlaybackPreviewActive;
   const recordedRuntimeSnapshot = isRuntimePlaybackPreviewActive
     ? (currentRecording?.runtimeSnapshot ?? null)
@@ -870,6 +874,7 @@ export function usePreviewController(): PreviewController {
     isPlaybackPreviewActive,
     isRuntimePreviewActive,
     isLiveRuntimePreviewActive,
+    hasPreviewPatchReplay,
     pendingInteractionRef,
     lastRuntimeSnapshotRef,
     lastContentRef,

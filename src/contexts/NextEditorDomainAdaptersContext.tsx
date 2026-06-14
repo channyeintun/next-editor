@@ -1,5 +1,11 @@
 import { createContext, useContext, useState, type PropsWithChildren } from "react";
-import type { PreviewState, Slide, SlidePreviewState } from "../types/slides";
+import type {
+  PreviewDomPatchBatch,
+  PreviewInitialDocument,
+  PreviewState,
+  Slide,
+  SlidePreviewState,
+} from "../types/slides";
 import type { RuntimePanelRecordingState, RuntimeRecordingSnapshot } from "../types/runtime";
 
 export interface SlideStateSnapshot {
@@ -25,8 +31,19 @@ export interface SlidesDomainAdapter {
 export interface PreviewDomainAdapter {
   getSnapshot: () => PreviewState | null;
   applySnapshot: (previewState: PreviewState) => void;
+  applyPatchReplay: (input: PreviewPatchReplayInput) => number;
   setSnapshotGetter: (getter: () => PreviewState | null) => void;
   setSnapshotApplier: (applier: (previewState: PreviewState) => void) => void;
+  setPatchReplayApplier: (applier: (input: PreviewPatchReplayInput) => number) => void;
+}
+
+export interface PreviewPatchReplayInput {
+  recordingId: string;
+  currentTime: number;
+  isSeeking: boolean;
+  initialDocuments: PreviewInitialDocument[];
+  patchBatches: PreviewDomPatchBatch[];
+  lastAppliedPatchBatchIndex: number;
 }
 
 export interface RuntimePanelDomainAdapter {
@@ -81,15 +98,21 @@ function createSlidesDomainAdapter(): SlidesDomainAdapter {
 function createPreviewDomainAdapter(): PreviewDomainAdapter {
   let getSnapshot: () => PreviewState | null = () => null;
   let applySnapshot: (previewState: PreviewState) => void = () => undefined;
+  let applyPatchReplay: (input: PreviewPatchReplayInput) => number = (input) =>
+    input.lastAppliedPatchBatchIndex;
 
   return {
     getSnapshot: () => getSnapshot(),
     applySnapshot: (previewState) => applySnapshot(previewState),
+    applyPatchReplay: (input) => applyPatchReplay(input),
     setSnapshotGetter: (getter) => {
       getSnapshot = getter;
     },
     setSnapshotApplier: (applier) => {
       applySnapshot = applier;
+    },
+    setPatchReplayApplier: (applier) => {
+      applyPatchReplay = applier;
     },
   };
 }

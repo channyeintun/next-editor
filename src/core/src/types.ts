@@ -181,6 +181,7 @@ export interface UseNextEditorConfig {
   onPreviewEvent?: (event: PreviewEvent) => void;
   getPreviewState?: () => PreviewState | null;
   applyPreviewState?: (previewState: PreviewState) => void;
+  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;
 
   // Slides data callbacks
   getSlides?: () => Slide[];
@@ -191,6 +192,15 @@ export interface UseNextEditorConfig {
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
   applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
+}
+
+export interface PreviewPatchReplayInput {
+  recordingId: string;
+  currentTime: number;
+  isSeeking: boolean;
+  initialDocuments: PreviewInitialDocument[];
+  patchBatches: PreviewDomPatchBatch[];
+  lastAppliedPatchBatchIndex: number;
 }
 
 /**

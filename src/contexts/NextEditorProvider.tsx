@@ -214,6 +214,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
 
       getPreviewState: () => preview.getSnapshot(),
       applyPreviewState: (previewState) => preview.applySnapshot(previewState),
+      applyPreviewPatchReplay: (input) => preview.applyPatchReplay(input),
 
       getSlides: () => slides.getSlides(),
       applySlides: (nextSlides) => slides.applySlides(nextSlides),
