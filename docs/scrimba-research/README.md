@@ -24,7 +24,10 @@ The source material is minified production JavaScript. There are no JavaScript s
 6. Browser preview replay is DOM-state based: a `BrowserPage` stores HTML, attributes, logs, status, URL, and applies/reverts DOM mutation actions.
 7. Runtime execution uses a WebContainer path (`SIWebContainer`) plus service-worker/iframe helpers, with a static/browser DOM replay path for preview state.
 8. Audio, captions, transcript editing, trim/cut/speedup cues, and timeline clips are first-class model concepts.
-9. A default blank workspace snapshot is available in `tmp/scrim.blank.json.5TFCQ3DL.js`.
+9. Newer Scrimba workspaces use `SIWorkspace`/`SIFS` OP snapshots and deltas, while legacy scrims serialize `IDEFile`/`IDEFS` widgets.
+10. Modern workspace runtime state syncs through `HostWorkspace` providers, usually a per-scrim `WCWorkspace` from the global `SIWebContainer` singleton.
+11. This repo's current architecture is materially different: it stores complete recording artifacts with keyframe/delta frame arrays, workspace/runtime snapshot events, and a separate WebContainer provider sync path.
+12. A default blank workspace snapshot is available in `tmp/scrim.blank.json.5TFCQ3DL.js`.
 
 ## Important Evidence Anchors
 
@@ -33,7 +36,9 @@ The source material is minified production JavaScript. There are no JavaScript s
 - Base action class `IDEStreamAction`: `tmp/chunks/ide.36BDFLCO.js`, near character offset `2293694`.
 - Stream cursor apply/revert logic: `IDEStreamCursor` in `tmp/chunks/ide.36BDFLCO.js`.
 - DOM replay engine: `BrowserPage` in `tmp/chunks/ide.36BDFLCO.js`.
-- WebContainer runtime: `SIWebContainer` in `tmp/chunks/ide.36BDFLCO.js`.
+- Modern workspace state: `SIWorkspace`, `SIFS`, `SIFile`, `SIDir`, `IDEOPSnapshotAction`, and `IDEOPDeltaAction` in `tmp/chunks/ide.36BDFLCO.js`.
+- WebContainer/runtime host path: `SIWebContainer` in `tmp/chunks/ide.36BDFLCO.js`; `HostWorkspace`, `LocalWorkspace`, and `WCWorkspace` in `tmp/app.UK3DL7B2.js`.
+- Service-worker/request routing: `ServiceWorkerFrame`, `ide-sw-container`, `runner-frame`, `player-frame`, and `scrim-view.oncontainermessage` in `tmp/chunks/ide.36BDFLCO.js`.
 - Scrim content model: `Scrim`, `ScrimStream`, `ScrimRec`, `ScrimClip`, `ScrimPractice`, `ScrimPreview` in `tmp/app.UK3DL7B2.js`.
 - Blank workspace snapshot: `tmp/scrim.blank.json.5TFCQ3DL.js`.
 
@@ -44,7 +49,7 @@ Start with `progress.md`, then read `findings.md` and `action-protocol.md`. If d
 Recommended next research tasks:
 
 1. De-minify only targeted class regions, not whole bundles.
-2. Trace `IDEBranch.load`, `IDEStream` deserialization, and branch creation.
-3. Trace local recording capture sources for Monaco, DOM tracker, pointer tracker, and media chunks.
-4. Trace server persistence of `ScrimStream` and legacy `/legacy/files/` loading.
-5. Compare these findings with Next Editor's `src/core` architecture if the goal is product parity.
+2. Trace host-side implementations hidden behind RPC/bridge actions such as `load_from_prod`, `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir`.
+3. Locate or reconstruct standalone service-worker/tracker artifacts (`/__sw__.html`, `/__sw__blank.html`, `/__sw__tracker.js`, and `/assets/tracker.4FYFXZYK.iife.js`) if they are available outside this bundle.
+4. Deepen commit/marker behavior around `COMMIT=220`, `ScrimCommit`, and `ide-commit-dialog`.
+5. If product parity is the goal, decide whether Next Editor should emulate Scrimba's action stream/branch cursor or keep its existing frame/delta recording model.

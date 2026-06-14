@@ -4,7 +4,7 @@ Last updated: 2026-06-14
 
 ## Current Status
 
-This is an initial bundle-level research pass. It identifies the major architecture and action protocol but does not fully de-minify every class.
+This is a bundle-level research pass. It identifies the major architecture, action protocol, client-side stream persistence path, capture/branch behavior, the legacy-vs-modern workspace split, the modern workspace host/provider path, runtime request routing, and key differences from this repo's current recording architecture, but does not fully de-minify every class or server RPC boundary.
 
 Overall status: partial, usable handoff.
 
@@ -35,8 +35,15 @@ Overall status: partial, usable handoff.
 - Extracted class-local method summaries for key Scrim and IDE classes.
 - Extracted action opcode table and target IDs.
 - Extracted partial stream framing behavior from `IDEStream.parsedValue`, `syncBuffer`, and `write`.
+- Extracted client-side stream persistence behavior from `IDEStream.load`, `ScrimStream`, `OPDataStream`, `OPByteStream`, `OPBufferChunks`, `OPBinaryChunk`, and `OPBinaryChunkRequest`.
+- Extracted capture paths for Monaco text edits/selections/scroll state, browser tracker action messages, pointer tracking, and modern audio recording.
 - Extracted DOM mutation subprotocol.
 - Extracted branch/editing/recording behavior from `IDEStream`.
+- Extracted branch ancestry, fork creation, cursor route traversal, and exercise solution branch creation.
+- Extracted workspace split between legacy `IDEFile`/`IDEFS` widget state and modern `SIWorkspace`/`SIFS` OP-diff state.
+- Extracted host/provider sync path through `HostWorkspace`, `LocalWorkspace`, `WCWorkspace`, `HostFile`/`HostDir`, `SIWorkspace.host`, and `SIWebContainer`.
+- Extracted runtime request routing through `ide-sw-container`, `ServiceWorkerFrame`, `runner-frame`, `player-frame`, `scrim-view.oncontainermessage`, and `SIWebContainer` bridge handling.
+- Compared Scrimba's action stream architecture with this repo's frame/delta recording, workspace/runtime snapshot, storage codec, and WebContainer provider approach.
 - Inspected `scrim.blank.json` manually.
 - Wrote durable research docs:
   - `README.md`
@@ -60,6 +67,18 @@ Researched enough for a high-level summary:
 - `ScrimPreview`
 - `ScrimAudio`
 - `ScrimAudioTrack`
+- `OPDataStream`
+- `OPByteStream`
+- `OPBufferChunks`
+- `OPBinaryChunk`
+- `OPBinaryChunkRequest`
+- `HostFSEntry`
+- `HostFile`
+- `HostDir`
+- `HostFSRoot`
+- `HostWorkspace`
+- `LocalWorkspace`
+- `WCWorkspace`
 - `Caption`
 - `Captions`
 - `ScrimArchiver`
@@ -87,12 +106,24 @@ Researched enough for a high-level summary:
 - `IDEBrowser`
 - `BrowserPage`
 - `IDEBrowserHistory`
+- `ServiceWorkerFrame`
+- `ide-sw-container`
+- `runner-frame`
+- `player-frame`
+- `browser-widget`
 - `IDEConsole`
 - `IDEPointer`
+- `SIObject`
+- `SIFSEntry`
+- `SIFile`
+- `SIDir`
 - `SIWorkspace`
 - `SIFS`
 - `SIBrowser`
 - `SIWebContainer`
+- `SIWebContainerPort`
+- `SIRunner`
+- `SITerminal`
 - `SIWebConsole`
 
 Action classes directly inspected:
@@ -114,6 +145,19 @@ Action classes directly inspected:
 - `MarkerAction`
 - `RecStartAction`
 - `RecStopAction`
+- `IDEPointerUpdateAction`
+- `PointerUpdateGroup`
+- `AudioRecording`
+- `MediaStreamAction`
+- `MediaStreamStartAction`
+- `MediaStreamEndAction`
+- `IDEOPSnapshotAction`
+- `IDEOPDeltaAction`
+- `ForkAction`
+- `BranchAction`
+- `SeedAction`
+- `TrimActionAction`
+- `SIRollbackAction`
 
 ## Commands Used
 
@@ -248,40 +292,36 @@ PY
 
 ## Next Recommended Tasks
 
-1. Decode stream persistence:
-   - Trace `IDEStream` load/deserialization methods.
-   - Trace `ScrimStream.httpUrl` and `/legacy/files/`.
-   - Extend the current msgpack framing notes with the actual backing stream object and server storage format.
+1. Continue stream persistence:
+   - Trace the server-facing `load_from_prod` RPC call site as far as possible from client metadata.
+   - Look for any client-visible backend route declarations for `/legacy/files/` and `/op/stream/`.
+   - Trace how `ScrimRec.byte_offset`, media chunks, and stream byte offsets relate.
 
 2. Trace capture paths:
-   - Monaco edit/selection/scroll event capture into `LC*` actions.
-   - Browser tracker script generation and DOM mutation capture.
-   - Pointer update capture and rendering.
-   - Media stream chunk capture (`MSR_START`, `MSR_CHUNK`, `MSR_END`).
+   - Deeply inspect the external tracker bundle if it becomes available; the local bundle references `/assets/tracker.4FYFXZYK.iife.js` but the file is not present under `tmp/`.
+   - Confirm whether `LCSCROLL` has a producer in another bundle revision or is legacy-only.
+   - Confirm whether `MSR_CHUNK` has a producer in another bundle revision or is legacy-only.
+   - Further trace pointer rendering in `IDEPointer`/`PointerFrame`.
 
 3. Trace branch semantics:
-   - `IDEBranch.load` and the exact `IDEStream.load` method body.
-   - branch path/routing
-   - `ForkAction`, `BranchAction`, `CommitAction`, `TrimActionAction`
-   - solution/exercise branch creation from `ScrimPractice`.
+   - Trace any server-side meaning exposed by `COMMIT=220`; no registered `CommitAction` class was found in this pass.
+   - Inspect commit creation UI/actions around `ScrimCommit` and `ide-commit-dialog`.
+   - Trace route/path behavior for nested scribbles and solutions beyond the creation path.
 
-4. Trace workspace split:
-   - legacy `IDEFile`/`IDEFS` widget model
-   - modern `SIWorkspace`/`SIFS` model
-   - conversion or compatibility paths.
+4. Deepen workspace host/provider sync:
+   - Trace host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir`.
+   - Trace how WebContainer bridge messages implement the RPC-facing `WCWorkspace` actions.
+   - Confirm where host diffs/save payloads are persisted after `HostWorkspace.$changed` throttles `save()`.
 
 5. Trace runtime request routing:
-   - `ide-sw-container`
-   - `ServiceWorkerFrame`
-   - `runner-frame`/`player-frame`
-   - `oncontainermessage`
-   - WebContainer preview messages.
+   - Locate or reconstruct the standalone `/__sw__.html`, `/__sw__blank.html`, and `/__sw__tracker.js` artifacts if they exist outside the inspected bundle.
+   - Deepen the WebContainer bridge protocol around `.bootstrap.mjs`, reserved bridge port handling, and OP-packed `ArrayBuffer` messages.
+   - Trace external tracker bundle behavior if `/assets/tracker.4FYFXZYK.iife.js` becomes available.
 
-6. Compare with this repo's implementation:
-   - `src/core`
-   - `docs/core.md`
-   - `docs/data-flow.md`
-   - `docs/state-machines.md`
+6. Product architecture follow-up:
+   - Decide whether Next Editor should pursue Scrimba-compatible reversible action streams or keep its existing frame/delta recording artifact model.
+   - If pursuing parity, map Scrimba `LC*`, DOM/page, pointer, media, and `OPSNAPSHOT`/`OPDELTA` concepts to concrete Next Editor modules.
+   - If keeping the current model, document which Scrimba capabilities are intentionally out of scope or need separate abstractions.
 
 ## Notes For Future Agents
 

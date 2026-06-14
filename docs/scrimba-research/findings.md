@@ -83,7 +83,7 @@ High confidence:
 - `IDEStream.parsedValue(...)` decodes payloads through the current action class, attaches byte offsets, adds actions to stream indexes, updates text-edit/significant-action caches, and calls `commitToStream`.
 - Some action classes implement compact encode/decode strategies. Example: `TextInsertAction` can encode repeated adjacent inserts as just a string when the parent insert's post-selection matches the next insert's start.
 - Some actions use a `dedupe` strategy, seen on `PAGE_LOADED` and `PAGE_LOG`.
-- `SnapshotAction` and `KeyframeAction` both deserialize widget/workspace snapshots; keyframes are specialized snapshots.
+- `SnapshotAction` and `KeyframeAction` both deserialize legacy widget snapshots; keyframes are specialized snapshots.
 - `SaveAction` updates a file's `lastSave` and persisted body, and has a `scrim-save-marker`.
 - Marker actions contribute visible timeline markers.
 - `pushAction(...)` starts editing if possible, or creates a forked branch when editing is not available. Significant actions mark the `Scrim` edited and can trigger autosave-like behavior after repeated changes.
@@ -94,6 +94,33 @@ Medium confidence:
 
 - The stream protocol is optimized around small, relative arrays. Text selection can encode only the changed suffix when the previous selection has the same prefix.
 - `SnapshotAction` is used for initial or recovery state, while normal playback applies incremental actions.
+
+## Stream Persistence And Byte Storage
+
+High confidence:
+
+- `Scrim.stream` is an embedded `ScrimStream`; `ScrimStream` extends `OPDataStream`.
+- `ScrimStream.httpUrl` overrides the generic stream URL and returns `${location.origin}/legacy/files/${this.id}`.
+- Generic `OPByteStream.httpUrl` returns `/op/stream/${this.id}`, so Scrim streams intentionally use a legacy file URL while other byte streams can use the generic endpoint.
+- `OPDataStream.push(...values)` serializes values with `OP.msgpack.packMultiple(...values)` and appends the resulting bytes to the byte stream.
+- `OPByteStream.append(bytes)` creates an `OPBinaryChunk` with `offset`, `bytes`, and `target`; the chunk handler loads it into `OPBufferChunks` and triggers cloud flush for locally authored data.
+- `OPByteStream` resolves its bytes by `fetch(this.httpUrl, { method: "GET" })`, reads `content-length` into `chunked.knownSize` and `verifiedSize`, then streams response-body chunks into `OPBinaryChunk` objects.
+- `OPBufferChunks` stores loaded bytes as linked chunks/fragments with `head`, `tail`, `fragments`, `writeOffset`, and `diskSize`.
+- `OPBufferChunks.readableSize` only exposes the contiguous readable prefix from byte offset zero. `IDEStream.syncBuffer` decodes only `stream.chunked.slice(previousReadableOffset, readableSize)`.
+- Missing byte ranges are represented by `OPMissingBinaryChunk`; `OPBinaryChunkRequest` can answer a request by slicing a loaded chunk and sending an `OPBinaryChunk` back through `OP.$send`.
+- `ScrimStream.trim(offset)` delegates to the normal saved-stream trim path when saved, but for unsaved streams trims the local buffer, clears the socket, and resends the retained prefix.
+- `IDEStream.load()` is the bridge from content model to action stream:
+  - It resolves the `Scrim`.
+  - For trunk streams, it awaits `scrim.stream`; if the stream is empty and the scrim exists it calls `stream.load_from_prod()`, then awaits the stream again.
+  - If the trunk stream is still empty and an `origin_snapshot` exists for an unsaved scrim, it seeds the stream with an `OPSNAPSHOT`.
+  - For non-trunk branches, it finds a parent branch from `origin`, `origin_index`, `origin_offset`, or `seed`; links the branch's first action to the parent seed action; and, if needed, writes a snapshot of the parent state into the child stream.
+  - It finishes by calling `syncBuffer()` and marking the branch loaded.
+
+Medium confidence:
+
+- Persisted Scrim stream storage is the raw msgpack multi-value byte stream, served from `/legacy/files/<stream-id>` and updated through `OPBinaryChunk` packets.
+- `load_from_prod` is an RPC action whose implementation is server-side and not present in the local bundle; it likely exists to backfill or migrate missing legacy stream bytes.
+- `verifiedSize` is a server-confirmed byte count, while `readableSize` is the currently contiguous locally available byte count.
 
 ## Editing, Branching, And Recording
 
@@ -107,10 +134,83 @@ High confidence:
 - `mark_progress`/`markΞprogress` persists progress and last offset on the `Scrim`; when the timeline is near the end it can mark finished and notify Coursera embed completion.
 - `check_solution`/`checkΞsolution` snapshots the current file system and calls an exercise wrapper's server-side solution checker.
 
+## Branch Semantics
+
+High confidence:
+
+- Branch identity is primarily stored on `Scrim` records, not only as stream actions.
+- `IDEStream.newFork(options)` captures the current IDE state as a snapshot and builds a new `Scrim` with:
+  - default `kind: "scribble"`
+  - `owner: OP.user`
+  - `origin: this.scrim`
+  - `via_lesson: this.lesson`
+  - `origin_offset: currentOffset`
+  - `origin_index: currentAction.index`
+  - `origin_snapshot: snapshot`
+  - `spiv: 100` for workspace mode, otherwise `4`
+- `newFork` seeds the new scrim stream with `OPSNAPSHOT` when the snapshot has `entries`, otherwise `SNAPSHOT`.
+- `IDEStream.createBranch(options)` wraps `newFork` and creates the in-memory branch object for the new scrim.
+- `IDEStream.createScribble(...)` forces `kind: "scribble"`, loads the branch, and opens the new scrim head.
+- `IDEStream.pushAction(...)` creates a branch automatically when an action is pushed while the current stream is not editable.
+- `IDEStream.load()` resolves child branch ancestry through:
+  - `scrim.origin` plus `origin_index`
+  - `scrim.origin` plus `origin_offset`
+  - `ScrimActionRef`
+  - `scrim.seed`
+- When a parent seed action is found, `IDEStream.load()` sets `parent`, `seed`, `tail`, and `first.prev`, then adds the child branch to the parent branch set.
+- `IDEStreamCursor.lineage(...)` walks from an action through branch seeds to build a branch ancestry list.
+- `IDEStreamCursor.compare(current, target)` finds a shared ancestor and returns a revert target plus an optional forward route across branches.
+- `IDEStreamCursor.sync(...)` reverts to the shared point, steps forward, and follows branch routes by applying the first action of the next branch when crossing a seed.
+- Opening a `ScrimPractice` without an existing solution creates a new solution branch with `{ exercise, kind: "solution" }`, loads it, saves the child scrim, and opens it.
+- `ScrimPractice.reset_solution` follows the same solution-branch creation pattern from the exercise offset, then reloads the page.
+- `ForkAction`, `BranchAction`, `SeedAction`, and `TrimActionAction` classes exist in the action bundle but are minimal in the inspected client code. The operational branch behavior above lives mostly in `IDEStream`, `IDEStreamCursor`, and `ScrimPractice`.
+
 Medium confidence:
 
 - Editing a non-current or non-editable stream is handled by creating a new branch/scribble and applying the action there.
 - Workspace-mode recording staging differs from legacy recording: workspace mode stages through `wsp.sync()` and `ScrimRec.stage().mount()`, while legacy mode enables pointer tracker directly.
+- `COMMIT=220` is assigned in the opcode table, but this pass did not find a registered `CommitAction` class; visible commit markers are represented by `ScrimCommit` content models.
+
+## Capture Paths
+
+High confidence:
+
+- Text capture is implemented in Scrimba's `TextModel`, not directly in the `IDEEditor` wrapper.
+- `TextModel.setupMonaco()` creates the Monaco model and overrides `model.applyEdits`.
+- The overridden `applyEdits`:
+  - blocks edits on readonly files.
+  - calls the native `applyEdits`.
+  - marks the batch as significant and preapplied when the IDE is not syncing.
+  - emits `LCINSERT` for a single text insertion whose range array has two items.
+  - emits `LCDELETE` for a single deletion.
+  - emits `LCEDIT` for multi-edit or complex edits.
+- `editor-widget` wires Monaco selection changes to `file.model.onDidChangeCursorSelection(...)`.
+- `TextModel.onDidChangeCursorSelection(...)` appends selection state to a preceding `LCINSERT`, `LCDELETE`, or `LCEDIT` when possible; otherwise it emits `LCSELECTION` while editing, or stores `file.localSel` while only viewing.
+- `TextModel.flushEvents()` sends one queued event through `file.push_(type, params, state)` or batches multiple events through `file.batch_(pairs, state)`.
+- Legacy/widget objects implement `push_(type, params, state)` by looking up the action class from the opcode table, building it, and handing it to `ide.cursor.pushAction(...)`.
+- Monaco scroll changes are observed in `editor-widget`. The current bundle writes `file.localScroll` and, while editing, assigns `file.scrollTop`/`file.scrollLeft`; those property setters go through widget attributes and can become normal `SET` actions. `TextScrollAction`/`LCSCROLL` exists, but a current producer was not found in this pass.
+- Browser preview capture flows through `runner-frame.handle(...)`.
+- For tracker messages of type `actions`, `runner-frame` iterates tracker-provided `[opcode, params]` arrays and pushes them through the browser widget with `this.data.push_(opcode, params)`.
+- Browser focus/hover/active actions are filtered out unless the pointer tracker is enabled.
+- `DOM_MUTATE` actions are dropped for locally initiated pages, avoiding recording local replay mutations as new capture events.
+- `PAGE_LOG` payloads can be redacted through `ME.env.redact(...)` before being pushed.
+- Other runner messages are converted directly into stream actions or browser state:
+  - `domevent` is emitted as an IDE `browserevent` for pointer tracking.
+  - `location` updates browser URL state.
+  - `history` writes `PAGE_HISTORY`.
+  - `pageload` writes `PAGE_LOAD`.
+  - `loader:busy`/`loader:done` update loading state.
+- The service-worker/container request path returns a tracker URL (`/__sw__tracker.js`) for preview requests.
+- WebContainer mode fetches `/assets/tracker.4FYFXZYK.iife.js` and installs it with `webcontainer.setPreviewScript(...)`.
+- Pointer capture is handled by the `pointer-tracker` custom element.
+- `pointer-tracker` listens globally for `pointermove`, `pointerup`, `pointerdown`, `keydown`, and custom `browserevent`.
+- `pointer-tracker.stamp(...)` records `{ x, y, flags, hover, time, targetLayout, prev }` and pushes an `IDEPointerUpdateAction` while recording or debugging outside workspace mode.
+- `IDEPointerUpdateAction` uses a schema of `["x", "y", "flags", "hover", "angle", "pressure"]`, delta-encodes coordinates relative to the previous pointer action, and groups pointer updates into `PointerUpdateGroup` segments.
+- Modern microphone recording uses `AudioRecording`, `MediaRecorder`, and `MediaStreamRecording`.
+- `AudioRecording.onrecdataavailable(...)` collects browser `MediaRecorder` blobs and writes them into a local WebM assembler.
+- `AudioRecording.onrecstart(...)` can create a `MediaStreamRecording`, appends WebM data to `model.webm`, and patches the final WebM stream through `OPBinaryChunk`.
+- `MediaStreamRecording.webm` is an embedded `OPByteStream`; its non-legacy URL is `/legacy/files/${this.id}.webm`.
+- `MSR_START`, `MSR_CHUNK`, and `MSR_END` opcodes exist, but this pass found only minimal `MediaStreamStartAction`/`MediaStreamEndAction` classes and did not find an active `MSR_CHUNK` producer in the bundled client.
 
 ## Browser Preview Replay
 
@@ -151,6 +251,114 @@ Medium confidence:
 - WebContainer hosts the running project, while `BrowserPage`/tracker infrastructure captures preview state and makes replay deterministic.
 - The service-worker frames isolate runner/player origins and route preview/browser requests through Scrimba-controlled message handlers.
 
+## Runtime Request Routing
+
+High confidence:
+
+- `ServiceWorkerFrame.send(message)` is a thin `contentWindow.postMessage(message, "*")` wrapper.
+- `ide-sw-container.setup()` creates `ready`, `player`, and `runner` promises, chooses a container id from local storage keys shaped like `sw:cwN`, locks that id for 24 hours, and refreshes the lock every 1.5 seconds.
+- `ide-sw-container.origin(suffix)` rewrites the current origin with a container subdomain of the form `<container-id>` or `<container-id>-<suffix>`.
+- `ide-sw-container.render()` creates:
+  - a runner service-worker iframe at `<container-origin>/__sw__.html?<container-id>`.
+  - a player service-worker iframe at `/__sw__.html?<container-id>`.
+  - global `message` and `unload` listeners.
+- `ide-sw-container.handleMessage(event)` accepts messages from the runner/player service-worker frames, resolves ready promises on `"ready"`, and forwards message payloads to `scrim-view.oncontainermessage(...)`.
+- The reply function created by `handleMessage` preserves request correlation by negating positive `ref` values before sending responses back to the originating frame.
+- `scrim-view.container` lazily creates the `ide-sw-container`.
+- `scrim-view.oncontainermessage(...)` handles service-worker/container request types:
+  - `getState`: returns `toContainerSnapshot()`.
+  - `request`: forwards to `browser-widget.oncontainermessage(...)` and returns browser history plus tracker URL `${origin}/__sw__tracker.js`.
+  - `resolveImportMap`: asks `IDEDependencies` to resolve imports from legacy `IDEFile` widgets.
+  - `resolveFile`: resolves files through `IDEFS`, handles `/_env_`, optional bundle generation, catchall paths, Imba compilation, JS/TS transform, and script response wrapping.
+- `browser-widget.oncontainermessage(...)` records the current request and pushes non-history-navigation request URLs into `IDEBrowserHistory`.
+- `runner-frame.go(url)` encodes non-HTTPS URLs through `IDEBrowser.encodeURI(...)` and forces a reload when only hash state changes.
+- `runner-frame.handle(event)` accepts messages from its preview iframe and routes:
+  - `actions` arrays into stream actions while editing.
+  - `domevent` into IDE `browserevent`.
+  - `location` into browser URL state.
+  - `history` into `PAGE_HISTORY` plus local history state.
+  - `pageload` into `PAGE_LOAD`.
+  - `loader:busy`/`loader:done` into browser loading state.
+- `player-frame` waits for `ide.container.player`, loads `/__sw__blank.html`, and renders replayed `BrowserPage` state into its iframe window.
+- `SIWebContainer.init()` creates a separate bridge path for WebContainer:
+  - boots WebContainer with `workdirName: "projects"`.
+  - listens for WebContainer `port` and `server-ready` events.
+  - calls `workspace.serverΞready(port, origin)` for normal ports.
+  - creates a bridge iframe for the reserved bridge port.
+  - accepts bridge `ArrayBuffer` messages, parses them through `OP.$parse(...)`, and applies `OPDataUpdate` patches or handles OP messages.
+
+Medium confidence:
+
+- There are two related but distinct runtime message paths: legacy service-worker/container requests for preview files and tracker injection, and WebContainer OP bridge messages for modern host/provider operations.
+- The exact source files for `/__sw__.html`, `/__sw__blank.html`, and `/__sw__tracker.js` are not present as standalone local artifacts in this research bundle.
+
+## Workspace Split And Snapshot Compatibility
+
+High confidence:
+
+- The main IDE shell is registered as `scrim-view` in `tmp/chunks/ide.36BDFLCO.js`; its class starts near character offset `2904227`.
+- `scrim-view.setup()` always installs the legacy widget set (`IDEFS`, `IDEBrowser`, `IDEEditor`, `IDEAgent`, `IDESlides`, `IDEPointer`, and others).
+- `SIWorkspace` is created only for non-legacy scrims: `this.scrim.legacyΦ || (this.workspace = SIWorkspace.new(), ...)`.
+- For fresh non-legacy scrims, setup calls `workspace.resetWithSnapshot(Scrim.BaseSnapshot)`. If a `host` query parameter resolves to an OP object, Scrimba stores it as `scrim.remote_workspace`, switches the scrim to `kind: "playground"`, and saves shortly after.
+- `scrim-view.toSnapshot(options)` is the compatibility boundary:
+  - if `this.workspace` exists, it delegates to `this.workspace.toSnapshot(options)`.
+  - otherwise it serializes legacy widgets into `{ seed, ref, spiv, widgets }`.
+- `scrim-view.get_fs_snapshot()` is another compatibility boundary:
+  - workspace scrims return `workspace.fs.get_snapshot()`.
+  - legacy scrims return `{ content, path }` objects from `IDEFile` widgets.
+- Legacy `SnapshotAction` (`SNAPSHOT`) deserializes widget snapshots in parent-before-child order and restores prior widget data on revert.
+- Workspace `IDEOPSnapshotAction` (`OPSNAPSHOT`) and `IDEOPDeltaAction` (`OPDELTA`) apply OP-style diffs into `SIWorkspace`.
+- `IDEOPSnapshotAction.commit()` creates `SIWorkspace.new()` if `this.wsp` does not exist yet, assigns `ide`, and commits the snapshot diff into the workspace.
+- `SIWorkspace.resetWithSnapshot(snapshot)` cleans a cloned snapshot, diffs current `$plain` state against it, preserves the local workspace id, and applies the diff to `$plain`.
+- `SIWorkspace.toSnapshot(options)` clones `$plain` with sanitization and passes it through `cleanSnapshot`.
+- `SIWorkspace.cleanSnapshot(...)` strips volatile ids/revisions and, depending on options, prunes template-only state, unmounted entries, slides, agent/dom state, and assistant-panel state.
+- `SIWorkspace` installs a `$plain.$changed` hook. Changes are added to `workspace.changes`; non-editing local changes set `has_local_changes`, file-buffer/name edits set `has_local_file_changes`, and file changes can force a scribble branch.
+- `SIWorkspace.sync()` processes `workspace.changes` by syncing changed `SIObject`s to their host providers, computing `$diff($stream, $plain)`, pushing an initial `IDEOPSnapshotAction` when the branch has no actions, then pushing `IDEOPDeltaAction` for incremental diffs.
+- `SIObject.syncΞtoΞhost()` compares a workspace object with its upstream/provider object, writes changed fields to the provider, stages the provider, and records the object in `workspace.pushables`.
+- `SIObject.syncΞfromΞhost()` copies provider fields back into the workspace object.
+- `SIFile` stores modern workspace file state with `body`, local `buffer`, optional `asset`, selection anchors, and language metadata.
+- `SIDir.get_snapshot()` returns Scrimba exercise-checker style file snapshots: `{ content: file.buffer || file.body, path: file.path }`.
+- `SIDir.toWCTree()` builds a WebContainer-compatible `{ directory: ... }` tree, while `SIFile.toWCTree()` returns `{ file: { contents } }`.
+- Legacy `IDEFile` remains a widget/action target. It serializes local scroll/selection state, edits content through `LCEDIT`, removes itself through `FS_REMOVE`, and moves through `FS_MOVE`.
+- Legacy `IDEDir.mkdir(...)`, `IDEDir.mk(...)`, and `IDEDir.mkfile(...)` create file-system entries as widgets through `ide.createWidget(...)`.
+
+Medium confidence:
+
+- `SIWorkspace` is the modern authoritative editable state for non-legacy scrims, while legacy widgets remain present for UI compatibility, routing, and older action streams.
+- `OPSNAPSHOT`/`OPDELTA` represent whole-workspace and incremental workspace state, replacing many legacy per-widget file-system operations for new scrims.
+- Runtime/container snapshots currently still have a legacy path through `scrim-view.toContainerSnapshot()`, which reads `IDEFile` widgets. Modern WebContainer state is likely mediated through `SIWorkspace` host/provider sync rather than this legacy helper.
+
+## Workspace Host/Provider Sync
+
+High confidence:
+
+- `SIWorkspace.host` and `SIWorkspace.remote` resolve to `branch.scrim.remote_workspace || SWC.workspaceForScrim(scrim)`.
+- `SWC` is a singleton `SIWebContainer` instance: `globalThis.SWC = SIWebContainer.new()`.
+- `SIWebContainer.workspaceForScrim(scrim)` returns a `WCWorkspace` keyed as `"wcws0" + scrim.id` inside the WebContainer OP store.
+- `Scrim.remote_workspace` is an OP reference to `HostWorkspace`; the new-scrim-from-folder path creates a `LocalWorkspace`, stores it on `remote_workspace`, and uses `Scrim.BaseSnapshot`.
+- `SIWorkspace.ready` awaits `host.boot(workspace)`, marks the host state pushable, merges `$plain` into `LocalWorkspace` hosts, pushes workspace state to the host when not already pushing, then calls `hostΞready`.
+- `SIWorkspace.pushΞtoΞhost` traverses `workspace.fs` and sends cloned file entries to `host.merge({ entries })` on first boot/push. Later pushes use host diff/save behavior.
+- `HostWorkspace` is a base host model. Its `$send` throws unless implemented by a subclass, and its `$changed` throttles `save()`.
+- `LocalWorkspace` extends `HostWorkspace`. It sends through a `SILocalHost` socket (or Electron store when available), has a no-op client-side `boot`, and exposes `merge` as an RPC action.
+- `WCWorkspace` extends `HostWorkspace`. It embeds a `HostFSRoot`, sends through `SWC.send(...)`, and exposes `boot`, `install`, `merge`, `webfetch`, and `serializeDir` as WebContainer/bridge-facing actions.
+- `WCWorkspace.boot` calls `SWC.boot(this, workspace)`, marks the host as booted, and then runs `install(...)` once.
+- `HostFSEntry` is the shared host file entry base; `HostFile` and `HostDir` persist to/read from a host filesystem.
+- `HostDir.pullFromDisk(...)` crawls the host directory, creates `HostFile`/`HostDir` entries for disk nodes, skips `.DS_Store`, records inode data, and recurses.
+- `HostDir.watch()` uses host `fs.watch(...)` and `onfsevent(...)` to mark removed nodes, create new host entries, or refresh changed file bodies.
+- `HostFile.syncFromDisk(...)` reads files under 2 MB from disk and stores either text `body` or binary data depending on content.
+- `HostFile.body_set`, `binary_set`, and `asset_set` write workspace/provider changes back to disk when the file has a path/inode.
+- `HostFile.read` calls `read_rpc`, then copies returned `body` into `$cloud.body` and `$plain.body`.
+- `SIWebContainer.init()` boots the WebContainer with `workdirName: "projects"`, mounts `.bootstrap.mjs`, spawns `node .bootstrap.mjs`, installs the preview tracker script, and creates a bridge iframe for OP-packed messages.
+- `SIWebContainer.spawn(...)` sets `PATH`, `WEBCONTAINER=true`, and `cwd=this.host.ns` before calling WebContainer `spawn`.
+- `SIRunner.run` waits for `workspace.ready`, saves all workspace files, optionally runs an init command once, then starts the configured run command through `SWC.spawn(...)`.
+- `SIRunner.fileΞsaved(...)` reruns or runs the runner when `run_on_save` is enabled.
+- `SITerminal.start` waits for `workspace.ready` and connects the remote host terminal; `SIWebContainer.newterm(...)` creates `/bin/jsh --osc` terminals.
+
+Medium confidence:
+
+- For modern scrims, the authoritative runtime file tree is the host/provider graph reached from `SIWorkspace.host`, not the legacy `scrim-view.toContainerSnapshot()` helper.
+- `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir` are RPC/bridge actions; their actual host-side implementations are not visible in the client bundle.
+
 ## Workspace And Default State
 
 High confidence:
@@ -165,6 +373,39 @@ High confidence:
 - `browser`: visible/floating with absolute geometry.
 - `fs`: excludes `node_modules`, `.DS_Store`, `package-lock.json`, hidden directories; groups config files.
 - `entries`: includes one main view, one browser view, and one terminal/console entry.
+
+## Comparison With This Repo
+
+High confidence from `docs/core.md`, `docs/data-flow.md`, `docs/state-machines.md`, and `src/`:
+
+- Next Editor currently records as structured `Recording` artifacts, not as Scrimba-compatible append-only action streams.
+- The local recording format is versioned (`2 | 3`) and stores `frames`, `keyframeInterval`, optional slide/preview/workspace/runtime/cursor event arrays, optional audio, and optional workspace/runtime snapshots.
+- Frame compression is array-based:
+  - first frame is always a keyframe.
+  - every configured keyframe interval can store a keyframe when content changed.
+  - intermediate frames store `FrameDelta` objects only when something changed.
+- Text deltas use `{ prefixLen, suffixLen, insert }`, backed by WASM common-affix helpers when available.
+- Position and selection deltas are numeric line/column deltas.
+- Optional frame fields include Monaco `viewState`, mouse cursor, slide state, current slide index, and preview state.
+- Playback reconstructs a frame by finding the nearest prior keyframe and applying deltas forward.
+- Timeline lookup uses a linear scan from the previous index with binary-search fallback, similar in spirit to Scrimba's seek optimization but over immutable frame arrays rather than reversible action objects.
+- Workspace recording in this repo stores full `WorkspaceRecordingSnapshot` objects in `workspaceEvents`, deduped by equality checks.
+- Runtime recording similarly stores full `RuntimeRecordingSnapshot` objects in `runtimeEvents`, also deduped by equality checks.
+- Repo storage uses `src/storage/recordingCodec.ts`: magic `"SCRM"`, binary format version `2`, compressed SuperJSON via `pako`, and concatenated audio data referenced by placeholders.
+- Repo WebContainer sync is React/provider driven:
+  - `useWebContainerWorkspaceSync` mounts a generated WebContainer tree from `WorkspaceProject`.
+  - subsequent project changes are queued through `syncWorkspaceProject(...)`.
+  - `WebContainerRuntimeProvider` can reverse-sync filesystem changes after terminal output or terminal input by reading the WebContainer project back into workspace state.
+- Repo runtime state is modeled as snapshots with status, preview port/url, terminal sessions, command state, console lines, and panel UI state.
+
+Implementation gap versus Scrimba:
+
+- Scrimba's core timeline is an append-only, msgpack-backed, reversible action stream with per-domain actions (`LC*`, DOM/page actions, pointer actions, workspace OP diffs, branch markers).
+- Next Editor's core timeline is a compressed sequence of full editor frames and timestamped snapshot/event arrays.
+- Scrimba has branch-aware stream cursors with apply/revert traversal across parent/child scrim branches; this repo has playback state machines but no equivalent branch lineage model.
+- Scrimba's modern workspace path records OP-style workspace snapshots/diffs (`OPSNAPSHOT`/`OPDELTA`) and syncs a host/provider graph; this repo records full workspace snapshots/events and syncs WebContainer from `WorkspaceProject`.
+- Scrimba stores streams as server-backed byte streams with `OPBinaryChunk`/`OPByteStream`; this repo stores/export recordings as complete binary artifacts with compressed JSON and concatenated audio.
+- Scrimba captures browser replay as deterministic DOM/page actions from tracker infrastructure; this repo has preview state/events and iframe interaction capture utilities, but not the same DOM mutation action protocol.
 
 ## Export/Download
 
@@ -217,8 +458,9 @@ Medium confidence:
 
 ## Known Unknowns
 
-- Exact binary/network format of persisted streams was not fully decoded.
-- Exact backend API endpoints for stream save/load were not fully traced.
-- Exact capture source for Monaco events and browser tracker events needs targeted de-minification.
-- Branch load/sync semantics need deeper tracing through `IDEBranch.load`, `IDEStream`, and `ScrimStream`.
-- The relation between legacy `IDE*` widgets and newer `SIWorkspace` objects needs a dedicated comparison.
+- Exact server-side storage implementation for `OPBinaryChunk` persistence is not visible in the local bundle.
+- Exact `load_from_prod` RPC behavior and production backfill endpoint are not visible in the local bundle.
+- Exact external browser tracker implementation is not visible because `/assets/tracker.4FYFXZYK.iife.js` is referenced but not present under `tmp/`.
+- `LCSCROLL` and `MSR_CHUNK` producers were not found in this bundle pass and may be legacy-only or produced by another artifact.
+- Commit/marker server semantics around `COMMIT=220`, `ScrimCommit`, and `ide-commit-dialog` still need targeted tracing.
+- Host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir` are not visible in the client class bodies.

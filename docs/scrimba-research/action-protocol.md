@@ -19,6 +19,12 @@ Evidence anchors:
 - `Ve(...)` helper starts near character offset `569461`.
 - `IDEStreamAction.deserialize` starts near character offset `2293694`.
 - `IDEStream.parsedValue`, `syncBuffer`, and `write` are in the `IDEStream` class, bundle segment offset around `2402588-2404862`.
+- `IDEStream.load` starts near character offset `2412495`.
+- `ScrimStream` starts near character offset `2872606` in `tmp/app.UK3DL7B2.js`.
+- `OPBufferChunks`, `OPByteStream`, and `OPDataStream` start near character offsets `880969`, `888236`, and `894263` in `tmp/app.UK3DL7B2.js`.
+- `SIWorkspace` starts near character offset `1122747` in `tmp/chunks/ide.36BDFLCO.js`; its registration is near `1143423`.
+- `scrim-view` starts near character offset `2904227` in `tmp/chunks/ide.36BDFLCO.js`.
+- `IDEFile`, `IDEDir`, and `IDEFS` register near character offsets `2479110`, `2486012`, and `2487898`.
 
 ## Stream Framing Found So Far
 
@@ -42,6 +48,28 @@ Medium confidence:
 
 - Persisted stream bytes are msgpack-framed sequences containing timing markers, type markers, and compact payload arrays.
 - Action offsets represent elapsed timeline time, while byte offsets represent stream byte positions used for trimming/rollback.
+
+## Backing Byte Stream
+
+High confidence from `tmp/app.UK3DL7B2.js`:
+
+- `ScrimStream` is the `Scrim.stream` embedded model and extends `OPDataStream`.
+- `ScrimStream.httpUrl` resolves to `${location.origin}/legacy/files/${this.id}`.
+- Generic `OPByteStream.httpUrl` resolves to `/op/stream/${this.id}`; Scrim streams override it.
+- `OPDataStream.push(...values)` calls `OP.msgpack.packMultiple(...values)` and appends the packed bytes.
+- `OPByteStream.append(bytes)` wraps appended bytes in `OPBinaryChunk` with an offset equal to the current known tail/disk size.
+- `OPBinaryChunk.$handle()` loads bytes into the target stream's `OPBufferChunks`, flushes authored chunks through `OP.$send`, and reconciles the root object.
+- `OPByteStream` fetches stream bytes with `window.fetch(this.httpUrl, { method: "GET" })`; each response-body chunk becomes an `OPBinaryChunk` loaded into the stream.
+- `OPBufferChunks.readableSize` is the contiguous prefix ending at `head.tail.end`; if the first loaded fragment does not start at zero, readable size is zero.
+- `OPBufferChunks.holes` creates `OPMissingBinaryChunk` records for missing ranges between loaded fragments.
+- `OPBinaryChunkRequest.$handle()` serves a requested range by slicing the target stream and sending an `OPBinaryChunk` back to the requester.
+
+High confidence from `IDEStream.load`:
+
+- Loading a trunk branch awaits `scrim.stream` and can call `stream.load_from_prod()` when the local stream verifies as zero bytes.
+- Loading a child branch resolves a parent branch and seed action from `origin_index`, `origin_offset`, `ScrimActionRef`, or `seed`.
+- If a child branch's stream is empty, Scrimba can seek the parent cursor to the seed action and write a `SNAPSHOT`/`OPSNAPSHOT` into the child stream.
+- Branch loading ends by calling `syncBuffer()`, so byte loading and action decoding are separate phases.
 
 ## Opcode Map
 
@@ -195,9 +223,18 @@ It can compact adjacent inserts by encoding only the inserted string when the pr
 
 `TextSelectionAction` (`LCSELECTION=7`) can compact repeated selections by storing only the changed suffix.
 
+Producer notes:
+
+- Scrimba's `TextModel.setupMonaco()` overrides Monaco `model.applyEdits`.
+- Single simple insertions become `LCINSERT`.
+- Single deletions become `LCDELETE`.
+- Multi-edit or complex edit arrays become `LCEDIT`.
+- Selection changes are either attached to the preceding text action or emitted as `LCSELECTION`.
+- `editor-widget` captures Monaco scroll changes, but the current producer found in this pass writes `scrollTop`/`scrollLeft` attributes rather than emitting `LCSCROLL`; `TextScrollAction` may be legacy or produced elsewhere.
+
 ### Snapshot And Keyframe
 
-`SnapshotAction` (`SNAPSHOT=36`) loads widget/workspace serialized state. It:
+`SnapshotAction` (`SNAPSHOT=36`) loads legacy widget serialized state. It:
 
 - assigns widget state into branch read state during stream commit.
 - deserializes widgets in parent-before-child order.
@@ -205,6 +242,33 @@ It can compact adjacent inserts by encoding only the inserted string when the pr
 - restores prior widget data on revert.
 
 `KeyframeAction` (`KEYFRAME=40`) subclasses `SnapshotAction`.
+
+### Workspace OP Actions
+
+`IDEOPSnapshotAction` (`OPSNAPSHOT=42`) applies a whole `SIWorkspace` snapshot. It:
+
+- treats its first parameter as the snapshot.
+- creates `SIWorkspace.new()` and assigns `ide` if no workspace exists yet.
+- calls `workspace.commitΞdiffΞfromΞstream(snapshot, action)` to apply the stream snapshot.
+- stores the previous workspace `$plain` state for revert bookkeeping.
+- reverts through `workspace.revertΞdiffΞfromΞstream(...)` when the snapshot contains a stored reverse diff.
+
+`IDEOPDeltaAction` (`OPDELTA=43`) applies an incremental workspace diff by calling `workspace.commitΞdiffΞfromΞstream(params, action)` and reverts through `workspace.revertΞdiffΞfromΞstream(params, action)`.
+
+`SIRollbackAction` (`OPROLLBACK=44`) computes a diff from `workspace.$stream` to a target snapshot and applies/reverts that diff.
+
+Producer notes:
+
+- `scrim-view.toSnapshot(...)` delegates to `workspace.toSnapshot(...)` when `SIWorkspace` exists; legacy scrims instead serialize widgets into `{ seed, ref, spiv, widgets }`.
+- `SIWorkspace.sync()` turns changed workspace objects into stream actions. If the branch has no actions, it first pushes `IDEOPSnapshotAction` with a sanitized clone of `$stream`.
+- The same sync pass computes `$diff($stream, $plain)` and pushes `IDEOPDeltaAction` when there is an incremental diff.
+- `SIWorkspace.resetWithSnapshot(...)` and `cleanSnapshot(...)` are the snapshot import/cleanup path for templates, fresh scrims, and reset-to-stream behavior.
+- Legacy `SNAPSHOT`/`KEYFRAME` actions hydrate widget state; workspace `OPSNAPSHOT`/`OPDELTA` hydrate `SIWorkspace` state.
+- `SIWorkspace.host` resolves to `scrim.remote_workspace` when present, otherwise a per-scrim `WCWorkspace` from the global `SWC` singleton.
+- `SIWorkspace.ready` boots the host/provider, merges local state for `LocalWorkspace`, pushes workspace file entries to the host, and emits `hostΞready`.
+- `SIWorkspace.pushΞtoΞhost` traverses `workspace.fs`, clones entries into a host `entries` payload, and calls `host.merge(...)` on first push.
+- Changed `SIObject`s sync to their upstream/provider objects through `syncΞtoΞhost`; provider changes can be staged and later pushed to the host.
+- `WCWorkspace.merge`, `install`, `webfetch`, and `serializeDir` are bridge/RPC-facing actions, so their concrete host-side effects are outside the visible client class bodies.
 
 ### Browser/Page Actions
 
@@ -217,6 +281,42 @@ It can compact adjacent inserts by encoding only the inserted string when the pr
 `DOMMutateAction` (`DOM_MUTATE=21`) calls `BrowserPage.applyMutations` and records errors on the target page.
 
 `DOMSelectionAction`, `DOMFocusInAction`, `DOMHoverInAction`, and `DOMActiveInAction` update page selection/focus/hover/active state and revert to prior state.
+
+Producer notes:
+
+- `runner-frame.handle(...)` receives tracker messages from the preview iframe.
+- Tracker messages of type `actions` contain action pairs shaped like `[opcode, params]`; each pair is passed to `browser-widget.push_(opcode, params)` when the IDE is editing.
+- Focus/hover/active DOM actions are ignored unless pointer tracking is enabled.
+- `DOM_MUTATE` actions are skipped for local browser pages.
+- `PAGE_LOG` values are optionally redacted before being pushed.
+- `ide-sw-container` forwards service-worker/container messages into `scrim-view.oncontainermessage(...)`.
+- `scrim-view.oncontainermessage(...)` serves `getState`, preview `request`, `resolveImportMap`, and `resolveFile` messages for the runner/player infrastructure.
+- Preview `request` responses include the browser history state and tracker URL `${origin}/__sw__tracker.js`.
+- The service-worker/container request handler exposes a tracker script URL at `/__sw__tracker.js`.
+- WebContainer preview mode installs `/assets/tracker.4FYFXZYK.iife.js` through `setPreviewScript(...)`.
+- WebContainer bridge messages are a separate OP-packed path handled by `SIWebContainer` through a bridge iframe and `OP.$parse(...)`.
+
+### Pointer Actions
+
+`IDEPointerUpdateAction` (`POINTER_UPDATE=12`) stores pointer coordinates, button/key flags, hover target, and optional angle/pressure data.
+
+Producer notes:
+
+- `pointer-tracker` listens for pointer events, keyboard events, and browser preview `browserevent` messages.
+- `pointer-tracker.stamp(...)` captures `x`, `y`, `flags`, `hover`, `time`, `targetLayout`, and a link to the previous pointer sample.
+- Pointer actions are pushed while recording or debugging outside workspace mode.
+- `IDEPointerUpdateAction` delta-encodes `x` and `y` against the previous pointer update and can group samples into `PointerUpdateGroup` segments.
+
+### Media Capture
+
+The protocol defines `MSR_START=241`, `MSR_CHUNK=242`, and `MSR_END=243`.
+
+Current client evidence:
+
+- `MediaStreamStartAction` and `MediaStreamEndAction` exist, but are minimal.
+- No active `MSR_CHUNK` producer was found in this pass.
+- Modern microphone capture uses `AudioRecording` plus browser `MediaRecorder`; chunks are assembled into WebM and appended to `MediaStreamRecording.webm`, an embedded `OPByteStream`.
+- `MediaStreamRecording.url` resolves non-legacy recordings to `/legacy/files/${this.id}.webm`.
 
 ### File/View Actions
 
@@ -242,6 +342,16 @@ It can compact adjacent inserts by encoding only the inserted string when the pr
 
 To seek, it compares the current action and target action, reverts to the nearest shared point, then applies actions forward. If a route crosses branches, it follows branch-specific first/next action links. After sync, marked targets receive `synced_` callbacks if present.
 
+Branch details:
+
+- `IDEStream.newFork(...)` creates a new `Scrim` with `origin`, `origin_index`, `origin_offset`, and `origin_snapshot` fields, then seeds its stream with a snapshot.
+- `IDEStream.load()` resolves branch parents from `origin_index`, `origin_offset`, `ScrimActionRef`, or `seed`.
+- A child branch's first action is linked to the parent seed action through `first.prev`.
+- `IDEStreamCursor.lineage(...)` walks seed links upward; `compare(...)` finds the shared branch ancestor.
+- `sync(...)` can revert on the current branch, apply forward on the same branch, and then cross into child branch action lists via the computed route.
+- Exercise solutions are normal branches with `kind: "solution"` and an `exercise` reference.
+- `ForkAction`, `BranchAction`, `SeedAction`, and `TrimActionAction` are present but minimal in the inspected client bundle; the durable branch relationship is mainly model metadata plus snapshot seeding.
+
 ## Implementation Implications
 
 For a Scrimba-like system, the core engine needs:
@@ -251,12 +361,14 @@ For a Scrimba-like system, the core engine needs:
 3. Periodic snapshots/keyframes for fast recovery and bounded seek cost.
 4. A cursor capable of branch-aware apply/revert traversal.
 5. Deterministic preview capture/replay, including DOM mutations and console logs.
-6. Separate media/caption timeline synchronization.
+6. A workspace-state diff protocol for modern scrims, separate from legacy widget snapshots.
+7. Separate media/caption timeline synchronization.
 
 ## Open Protocol Questions
 
-- What exact binary framing/compression wraps these action arrays in persisted stream files?
-- Where are action offsets and byte offsets serialized/deserialized?
+- What exact server-side store receives `OPBinaryChunk` packets?
+- What exactly does the `ScrimStream.load_from_prod` RPC do?
+- Are `/legacy/files/<id>` responses always raw msgpack stream bytes, or can they be transformed by the backend?
 - How are media stream chunks (`MSR_*`) stored and linked to `ScrimRec`/`ScrimClip`?
-- What server endpoints serve `ScrimStream.httpUrl` and `/legacy/files/`?
 - How are branch markers and commit offsets encoded in persisted `Scrim` records?
+- What are the host-side implementations of `LocalWorkspace.merge`, `WCWorkspace.merge`, `WCWorkspace.install`, and `WCWorkspace.serializeDir`?
