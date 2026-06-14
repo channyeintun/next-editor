@@ -1,5 +1,13 @@
 import type * as monaco from "monaco-editor";
-import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from "./slides";
+import type {
+  PreviewDomPatchBatch,
+  PreviewEvent,
+  PreviewInitialDocument,
+  PreviewState,
+  Slide,
+  SlideEvent,
+  SlidePreviewState,
+} from "./slides";
 import type { TimelineActorRef } from "./machine/timelineMachine";
 import type { EditorActorRef } from "./useNextEditor";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../types/runtime";
@@ -121,6 +129,8 @@ export interface Recording {
   keyframeInterval: number;
   slideEvents?: SlideEvent[];
   previewEvents?: PreviewEvent[];
+  previewInitialDocuments?: PreviewInitialDocument[];
+  previewPatchBatches?: PreviewDomPatchBatch[];
   workspaceEvents?: WorkspaceRecordingEvent[];
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];

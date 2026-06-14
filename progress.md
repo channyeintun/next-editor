@@ -1,40 +1,29 @@
-# Memory Leak Fix Progress
+# Preview Patch/Diff Record and Replay Progress
 
-Date: 2026-06-14
+Date: 2026-06-15
 
 ## Plan
 
-- [x] Fix recording mouse tracking cleanup across iframe document changes.
-- [x] Dispose Monaco playback models when playback/unmount no longer needs them.
-- [x] Add explicit cleanup for injected static iframe interaction listeners.
+- [x] Phase 1: Types and recording storage.
+- [ ] Phase 2: Injected patch recorder.
+- [ ] Phase 3: Parent message handling.
+- [ ] Phase 4: Patch apply utilities.
+- [ ] Phase 5: Replay integration.
+- [ ] Phase 6: Prefer patch path for new recordings.
 
 ## Current Evaluation
 
-- Plan is complete. All selected memory-leak review fixes are validated and committed.
-- Follow-up review found and fixed one remaining static iframe interaction cleanup edge case: parent cleanup now keeps the exact generated cleanup function from the injected iframe document instead of looking it up later through the current iframe window.
-- Follow-up validation passed with `bun run check`, `bun run lint`, targeted tests for `iframeInteractionCapture` and `editorModels`, and `bun run build`. Full `bun run test` still has an unrelated existing `FileSidebar` width expectation failure.
-- Runtime preview snapshot size and recording data retention are not changed because they are intentional replay data paths and need separate product tradeoff decisions.
-- The app-lifetime recording codec worker is not changed because the review rates it low severity and likely intentional for this app lifecycle.
+- Phase 1 is complete, validated, and committed.
+- The recording model can now represent initial preview document seeds and DOM patch batches without changing runtime or replay behavior.
+- Next task: Phase 2, emit normalized patch batches from the injected runtime preview recorder while keeping full snapshots active.
 
 ## Completed Tasks
 
-### 1. Recording iframe mouse tracking cleanup
+### 1. Types and Recording Storage
 
-- Stored the exact iframe document used for mouse listener attachment so cleanup removes listeners from the same document after iframe navigation.
-- Removed capture-phase listeners with the matching capture flag.
-- Replaced stale iframe window mappings when an iframe navigates and cleared the reverse window map during cleanup.
-- Validation passed with `bun run check --fix`, `bun run format`, `bun run lint`, `bun run check`, and `bun run build`.
-
-### 2. Monaco playback model cleanup
-
-- Added a playback-model disposal helper for Monaco models under the replay URI root.
-- Disposed stale playback models after the editor switches back to a normal workspace model and on editor unmount.
-- Kept the current playback model alive while playback still owns the active editor model.
-- Validation passed with `bun run check --fix`, `bun run format`, `bun run lint`, `bun run check`, and `bun run build`.
-
-### 3. Static iframe interaction capture cleanup
-
-- Added an injected cleanup function keyed by the setup marker so parent cleanup can remove iframe interaction listeners from the owning window/document.
-- Restored wrapped `history.pushState` and `history.replaceState` methods when cleanup runs.
-- Cancelled pending mouse and scroll animation frames so detached iframe documents do not keep event targets alive longer than needed.
-- Validation passed with `bun run check --fix`, `bun run format`, `bun run lint`, `bun run check`, `bun run build`, and a generated-script syntax check.
+- Added versioned preview DOM patch operation, batch, node reference, serialized node, and initial document seed types.
+- Added optional `previewInitialDocuments` and `previewPatchBatches` fields to persisted recordings.
+- Added recording-session storage arrays and append helpers for initial documents and patch batches.
+- Finalized recordings now carry the new arrays through without consuming them during replay.
+- Validation passed with `bun run format`, `bun run lint`, `bun run check`, and `bun run build`.
+- Committed as `cfaf626` with message `Add preview patch recording storage`.

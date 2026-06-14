@@ -1,5 +1,13 @@
 import type * as monaco from "monaco-editor";
-import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from "../slides";
+import type {
+  PreviewDomPatchBatch,
+  PreviewEvent,
+  PreviewInitialDocument,
+  PreviewState,
+  Slide,
+  SlideEvent,
+  SlidePreviewState,
+} from "../slides";
 import type {
   MouseCursorPosition,
   CursorRecordingEvent,
@@ -66,6 +74,10 @@ export interface RecordingSession {
   slideEvents: SlideEvent[];
   /** Collected preview events during recording */
   previewEvents: PreviewEvent[];
+  /** Collected initial preview documents during recording */
+  previewInitialDocuments: PreviewInitialDocument[];
+  /** Collected preview DOM patch batches during recording */
+  previewPatchBatches: PreviewDomPatchBatch[];
   /** Collected workspace events during recording */
   workspaceEvents: WorkspaceRecordingEvent[];
   /** Collected runtime events during recording */
