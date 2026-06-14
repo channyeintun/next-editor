@@ -1,0 +1,48 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">next-editor logo</title>
+  <desc id="desc">A dark rounded tile with a colorful N-shaped editor path and a playhead triangle.</desc>
+  <defs>
+    <linearGradient id="tile" x1="140" y1="116" x2="884" y2="908" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#171D28"/>
+      <stop offset="0.48" stop-color="#11141C"/>
+      <stop offset="1" stop-color="#080B11"/>
+    </linearGradient>
+    <radialGradient id="tileGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(294 230) rotate(48) scale(774)">
+      <stop stop-color="#4DE5D6" stop-opacity="0.26"/>
+      <stop offset="0.44" stop-color="#6D57FF" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#11141C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glyph" x1="246" y1="304" x2="780" y2="733" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4DE5D6"/>
+      <stop offset="0.47" stop-color="#FFD255"/>
+      <stop offset="1" stop-color="#6D57FF"/>
+    </linearGradient>
+    <linearGradient id="playStroke" x1="451" y1="430" x2="652" y2="594" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#4DE5D6"/>
+    </linearGradient>
+    <filter id="glyphShadow" x="134" y="210" width="756" height="604" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="22" stdDeviation="20" flood-color="#020617" flood-opacity="0.46"/>
+    </filter>
+  </defs>
+
+  <g>
+    <rect x="72" y="72" width="880" height="880" rx="224" fill="url(#tile)"/>
+    <rect x="72" y="72" width="880" height="880" rx="224" fill="url(#tileGlow)"/>
+    <rect x="94" y="94" width="836" height="836" rx="202" stroke="white" stroke-opacity="0.08" stroke-width="44"/>
+  </g>
+
+  <g opacity="0.34">
+    <path d="M244 278H780" stroke="white" stroke-opacity="0.16" stroke-width="24" stroke-linecap="round"/>
+    <path d="M244 746H780" stroke="white" stroke-opacity="0.11" stroke-width="24" stroke-linecap="round"/>
+    <path d="M244 390H364" stroke="#4DE5D6" stroke-opacity="0.28" stroke-width="20" stroke-linecap="round"/>
+    <path d="M660 634H780" stroke="#6D57FF" stroke-opacity="0.34" stroke-width="20" stroke-linecap="round"/>
+  </g>
+
+  <g filter="url(#glyphShadow)">
+    <path d="M280 704V320L744 704V320" stroke="url(#glyph)" stroke-width="118" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M488 413L660 512L488 611V413Z" fill="#11141C" stroke="url(#playStroke)" stroke-width="30" stroke-linejoin="round"/>
+    <circle cx="280" cy="320" r="25" fill="#FFFFFF" fill-opacity="0.92"/>
+    <circle cx="744" cy="704" r="25" fill="#FFFFFF" fill-opacity="0.92"/>
+  </g>
+</svg>

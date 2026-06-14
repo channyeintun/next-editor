@@ -292,7 +292,7 @@ const LandingPage = () => {
       <footer className="border-t border-slate-900 py-12 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="logo" className="object-contain size-6" />
+            <img src="/logo.svg" alt="logo" className="object-contain size-6" />
             <span className="font-machina tracking-tight">next-editor</span>
           </div>
           <div className="flex flex-col md:flex-row items-center gap-6">

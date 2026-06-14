@@ -1,7 +1,7 @@
 # Next Editor
 
 <div align="center">
-  <img src="public/logo.png" alt="Next Editor Logo" width="200" />
+  <img src="public/logo.svg" alt="Next Editor Logo" width="200" />
   <br />
   <h1>Interactive Code Recording For Real Workspaces</h1>
 </div>

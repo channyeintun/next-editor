@@ -6,7 +6,7 @@ const Navbar = () => {
       <div className="flex items-center gap-2">
         <Link to="/" className="flex items-center gap-2 group">
           <img
-            src="/logo.png"
+            src="/logo.svg"
             alt="next-editor logo"
             className="object-contain group-hover:scale-105 transition-transform size-9 sm:size-10"
           />
