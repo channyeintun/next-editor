@@ -46,6 +46,8 @@ describe("cursorCoordinates", () => {
       x: 300,
       y: 200,
       visible: true,
+      coordinateSpace: "viewport",
+      hover: "code-editor",
       target: {
         id: "code-editor",
         x: 200,
@@ -74,6 +76,44 @@ describe("cursorCoordinates", () => {
     expect(resolveCursorViewportPosition(recordedCursor)).toEqual({
       x: 420,
       y: 310,
+    });
+  });
+
+  it("records points relative to the app root when present", () => {
+    const app = document.createElement("div");
+    const target = document.createElement("div");
+    const child = document.createElement("button");
+
+    app.setAttribute("data-cursor-replay-target", "app");
+    target.setAttribute("data-cursor-replay-target", "code-editor");
+    target.appendChild(child);
+    app.appendChild(target);
+    document.body.appendChild(app);
+
+    mockRect(app, { left: 50, top: 25, width: 900, height: 600 });
+    mockRect(target, { left: 150, top: 75, width: 400, height: 300 });
+
+    const cursor = createCursorPositionFromClientPoint({
+      clientX: 300.75,
+      clientY: 200.25,
+      visible: true,
+      flags: 1,
+      eventTarget: child,
+    });
+
+    expect(cursor).toEqual({
+      x: 250,
+      y: 175,
+      visible: true,
+      coordinateSpace: "root",
+      flags: 1,
+      hover: "code-editor",
+      target: {
+        id: "code-editor",
+        x: 150,
+        y: 125,
+        rect: { left: 100, top: 50, width: 400, height: 300 },
+      },
     });
   });
 });

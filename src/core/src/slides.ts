@@ -68,6 +68,9 @@ export interface IframeInteractionData {
   clientX?: number;
   clientY?: number;
   button?: number;
+  buttons?: number;
+  windowWidth?: number;
+  windowHeight?: number;
   key?: string;
   code?: string;
   scrollTop?: number;

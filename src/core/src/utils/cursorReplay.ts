@@ -1,7 +1,8 @@
 import type {
   CursorRecordingEvent,
-  CursorTargetRect,
   CursorTargetSnapshot,
+  CursorTweenEndpoint,
+  CursorTweenSnapshot,
   MouseCursorPosition,
   Recording,
 } from "../types";
@@ -11,9 +12,6 @@ import { isKeyframe } from "./deltaTypes";
 import { areMouseCursorPositionsEqual } from "./cursorCoordinates";
 
 export type CursorReplaySample = CursorRecordingEvent;
-
-const STATIONARY_HOLD_GAP_MS = 120;
-const STATIONARY_HOLD_LEAD_MS = 16;
 
 export interface CursorReplayPositionResult {
   cursor: MouseCursorPosition;
@@ -40,41 +38,54 @@ const copyCursorTarget = (
       }
     : undefined;
 
-const copyCursorPosition = (cursor: MouseCursorPosition): MouseCursorPosition => ({
-  x: cursor.x,
-  y: cursor.y,
-  visible: cursor.visible,
-  target: copyCursorTarget(cursor.target),
-});
-
-const interpolateNumber = (start: number, end: number, progress: number): number =>
-  start + (end - start) * progress;
-
-const interpolateTargetRect = (
-  previous: CursorTargetRect,
-  next: CursorTargetRect,
-  progress: number,
-): CursorTargetRect => ({
-  left: interpolateNumber(previous.left, next.left, progress),
-  top: interpolateNumber(previous.top, next.top, progress),
-  width: interpolateNumber(previous.width, next.width, progress),
-  height: interpolateNumber(previous.height, next.height, progress),
-});
-
-const interpolateCursorTarget = (
-  previous: CursorTargetSnapshot | undefined,
-  next: CursorTargetSnapshot | undefined,
-  progress: number,
-): CursorTargetSnapshot | undefined => {
-  if (!previous || !next || previous.id !== next.id) {
-    return undefined;
-  }
+const copyCursorTweenEndpoint = (cursor: MouseCursorPosition): CursorTweenEndpoint => {
+  const target = copyCursorTarget(cursor.target);
 
   return {
-    id: previous.id,
-    x: interpolateNumber(previous.x, next.x, progress),
-    y: interpolateNumber(previous.y, next.y, progress),
-    rect: interpolateTargetRect(previous.rect, next.rect, progress),
+    x: cursor.x,
+    y: cursor.y,
+    visible: cursor.visible,
+    ...(cursor.coordinateSpace ? { coordinateSpace: cursor.coordinateSpace } : {}),
+    ...(target ? { target } : {}),
+  };
+};
+
+const copyCursorTween = (tween: CursorTweenSnapshot | undefined): CursorTweenSnapshot | undefined =>
+  tween
+    ? {
+        from: {
+          x: tween.from.x,
+          y: tween.from.y,
+          visible: tween.from.visible,
+          ...(tween.from.coordinateSpace ? { coordinateSpace: tween.from.coordinateSpace } : {}),
+          ...(tween.from.target ? { target: copyCursorTarget(tween.from.target) } : {}),
+        },
+        to: {
+          x: tween.to.x,
+          y: tween.to.y,
+          visible: tween.to.visible,
+          ...(tween.to.coordinateSpace ? { coordinateSpace: tween.to.coordinateSpace } : {}),
+          ...(tween.to.target ? { target: copyCursorTarget(tween.to.target) } : {}),
+        },
+        progress: tween.progress,
+      }
+    : undefined;
+
+const copyCursorPosition = (cursor: MouseCursorPosition): MouseCursorPosition => {
+  const target = copyCursorTarget(cursor.target);
+  const tween = copyCursorTween(cursor.tween);
+
+  return {
+    x: cursor.x,
+    y: cursor.y,
+    visible: cursor.visible,
+    ...(cursor.coordinateSpace ? { coordinateSpace: cursor.coordinateSpace } : {}),
+    ...(typeof cursor.flags === "number" ? { flags: cursor.flags } : {}),
+    ...(cursor.hover !== undefined ? { hover: cursor.hover } : {}),
+    ...(typeof cursor.angle === "number" ? { angle: cursor.angle } : {}),
+    ...(typeof cursor.pressure === "number" ? { pressure: cursor.pressure } : {}),
+    ...(target ? { target } : {}),
+    ...(tween ? { tween } : {}),
   };
 };
 
@@ -89,19 +100,6 @@ const appendCursorSample = (
     timestamp: Math.max(0, timestamp),
     ...copyCursorPosition(cursor),
   };
-  const previousSample = samples[samples.length - 1];
-
-  if (
-    previousSample &&
-    !areMouseCursorPositionsEqual(previousSample, sample) &&
-    sample.timestamp - previousSample.timestamp > STATIONARY_HOLD_GAP_MS
-  ) {
-    samples.push({
-      ...previousSample,
-      target: copyCursorTarget(previousSample.target),
-      timestamp: Math.max(previousSample.timestamp, sample.timestamp - STATIONARY_HOLD_LEAD_MS),
-    });
-  }
 
   if (areMouseCursorPositionsEqual(samples[samples.length - 1], sample)) {
     return;
@@ -187,7 +185,20 @@ export const getCursorPositionAtTime = (
       x: previous.x + (next.x - previous.x) * progress,
       y: previous.y + (next.y - previous.y) * progress,
       visible: true,
-      target: interpolateCursorTarget(previous.target, next.target, progress),
+      ...(previous.coordinateSpace === next.coordinateSpace && previous.coordinateSpace
+        ? { coordinateSpace: previous.coordinateSpace }
+        : {}),
+      ...(typeof next.flags === "number" ? { flags: next.flags } : {}),
+      ...((progress < 1 ? previous.hover : next.hover) !== undefined
+        ? { hover: progress < 1 ? previous.hover : next.hover }
+        : {}),
+      ...(typeof next.angle === "number" ? { angle: next.angle } : {}),
+      ...(typeof next.pressure === "number" ? { pressure: next.pressure } : {}),
+      tween: {
+        from: copyCursorTweenEndpoint(previous),
+        to: copyCursorTweenEndpoint(next),
+        progress,
+      },
     },
     index,
   };

@@ -77,10 +77,15 @@ function createCaptureHarness() {
       pathname: "/",
       search: "",
     },
+    innerHeight: 600,
+    innerWidth: 800,
     parent: {
       postMessage: parentPostMessage,
     },
-    requestAnimationFrame: vi.fn<(callback: FrameRequestCallback) => number>(() => 1),
+    requestAnimationFrame: vi.fn<(callback: FrameRequestCallback) => number>((callback) => {
+      callback(0);
+      return 1;
+    }),
   } as Record<string, unknown>;
 
   const install = new Function(
@@ -99,6 +104,14 @@ function createCaptureHarness() {
     "HTMLTextAreaElement",
     createIframeInteractionCaptureScript(SETUP_MARKER, { includeRouteChange: true }),
   );
+  const installWithMouseMoveCapture = new Function(
+    "window",
+    "document",
+    "Element",
+    "HTMLInputElement",
+    "HTMLTextAreaElement",
+    createIframeInteractionCaptureScript(SETUP_MARKER, { includeMouseMove: true }),
+  );
 
   const installArgs = [
     frameWindow,
@@ -114,6 +127,7 @@ function createCaptureHarness() {
     frameWindow,
     install: () => install(...installArgs),
     installWithRouteCapture: () => installWithRouteCapture(...installArgs),
+    installWithMouseMoveCapture: () => installWithMouseMoveCapture(...installArgs),
     parentPostMessage,
   };
 }
@@ -184,5 +198,35 @@ describe("createIframeInteractionCaptureScript", () => {
 
     expect(history.pushState).toBe(originalPushState);
     expect(history.replaceState).toBe(originalReplaceState);
+  });
+
+  it("emits mousemove coordinates with iframe viewport dimensions when enabled", () => {
+    const { button, documentTarget, installWithMouseMoveCapture, parentPostMessage } =
+      createCaptureHarness();
+
+    installWithMouseMoveCapture();
+    documentTarget.emit("mousemove", {
+      buttons: 1,
+      clientX: 200,
+      clientY: 150,
+      target: button,
+    });
+
+    expect(parentPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          data: expect.objectContaining({
+            buttons: 1,
+            clientX: 200,
+            clientY: 150,
+            windowHeight: 600,
+            windowWidth: 800,
+          }),
+          type: "mousemove",
+        }),
+        type: IFRAME_INTERACTION_MESSAGE_TYPE,
+      }),
+      "*",
+    );
   });
 });

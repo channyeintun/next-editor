@@ -48,14 +48,37 @@ export interface CursorTargetSnapshot {
   y: number;
 }
 
+export type CursorCoordinateSpace = "viewport" | "root";
+
+export interface CursorTweenEndpoint {
+  x: number;
+  y: number;
+  visible: boolean;
+  coordinateSpace?: CursorCoordinateSpace;
+  target?: CursorTargetSnapshot;
+}
+
+export interface CursorTweenSnapshot {
+  from: CursorTweenEndpoint;
+  to: CursorTweenEndpoint;
+  progress: number;
+}
+
 /**
- * Mouse cursor position in viewport pixels, with optional target-relative data.
+ * Mouse cursor position. New recordings use root-relative pixels; older
+ * recordings omit coordinateSpace and remain viewport-relative.
  */
 export interface MouseCursorPosition {
   x: number;
   y: number;
   visible: boolean; // Whether cursor is within editor bounds
+  coordinateSpace?: CursorCoordinateSpace;
+  flags?: number;
+  hover?: string | null;
+  angle?: number;
+  pressure?: number;
   target?: CursorTargetSnapshot;
+  tween?: CursorTweenSnapshot;
 }
 
 /**

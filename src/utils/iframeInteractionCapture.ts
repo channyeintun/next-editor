@@ -111,6 +111,15 @@ export function createIframeInteractionCaptureScript(
         };
       }
 
+      function getWindowSize() {
+        const documentElement = document.documentElement || {};
+
+        return {
+          windowWidth: window.innerWidth || documentElement.clientWidth || 0,
+          windowHeight: window.innerHeight || documentElement.clientHeight || 0,
+        };
+      }
+
       function emit(type, target, data) {
         if (!(target instanceof Element)) {
           return;
@@ -123,7 +132,7 @@ export function createIframeInteractionCaptureScript(
               type,
               target: getTargetInfo(target),
               targetTag: target.tagName,
-              data,
+              data: Object.assign({}, getWindowSize(), data),
             },
           },
           '*',
@@ -219,6 +228,7 @@ export function createIframeInteractionCaptureScript(
           emit('click', event.target, {
             clientX: event.clientX,
             clientY: event.clientY,
+            buttons: event.buttons,
             button: event.button,
           });
         },
@@ -250,6 +260,7 @@ export function createIframeInteractionCaptureScript(
           emit('mousemove', nextMouseMove.target, {
             clientX: nextMouseMove.clientX,
             clientY: nextMouseMove.clientY,
+            buttons: nextMouseMove.buttons,
           });
         };
 
@@ -264,6 +275,7 @@ export function createIframeInteractionCaptureScript(
               target: event.target,
               clientX: event.clientX,
               clientY: event.clientY,
+              buttons: event.buttons,
             };
 
             if (!mouseMoveFrame) {

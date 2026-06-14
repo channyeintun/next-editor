@@ -64,6 +64,8 @@ import {
 import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../../../utils/iframeInteractionCapture";
 import {
   areMouseCursorPositionsEqual,
+  CURSOR_REPLAY_ROOT_TARGET_ID,
+  CURSOR_REPLAY_TARGET_ATTRIBUTE,
   createCursorPositionFromClientPoint,
 } from "../utils/cursorCoordinates";
 
@@ -259,7 +261,6 @@ const RESET_AND_REATTACH_REPLAY_STATE_ACTIONS = [
 ] as const;
 
 const MOUSE_FRAME_INTERVAL_MS = 50;
-const CURSOR_EVENT_INTERVAL_MS = 8;
 
 const didCursorPositionChange = (
   previous: MouseCursorPosition | undefined,
@@ -276,12 +277,9 @@ const appendCursorEvent = (
   if (!mousePosition) return cursorEvents;
 
   const lastCursorEvent = cursorEvents[cursorEvents.length - 1];
-  const visibilityChanged = lastCursorEvent?.visible !== mousePosition.visible;
   const cursorChanged = didCursorPositionChange(lastCursorEvent, mousePosition);
-  const isCadenceDue =
-    !lastCursorEvent || timestamp - lastCursorEvent.timestamp >= CURSOR_EVENT_INTERVAL_MS;
 
-  if (!cursorChanged || (!visibilityChanged && !isCadenceDue)) {
+  if (!cursorChanged) {
     return cursorEvents;
   }
 
@@ -305,13 +303,48 @@ interface MouseTrackingInput {
 
 const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({ input }) => {
   let forceRecordedCursorHidden = false;
+  const supportsPointerEvents = typeof window !== "undefined" && "PointerEvent" in window;
 
-  const handleMouseMove = (e: MouseEvent) => {
+  const getRootElement = (): Element | null =>
+    document.querySelector(`[${CURSOR_REPLAY_TARGET_ATTRIBUTE}="${CURSOR_REPLAY_ROOT_TARGET_ID}"]`);
+
+  const shouldCaptureTarget = (target: EventTarget | null): boolean => {
+    const rootElement = getRootElement();
+    if (!rootElement || !(target instanceof Node)) return true;
+
+    return rootElement.contains(target);
+  };
+
+  const getPointerFlags = (event: MouseEvent): number =>
+    Number.isFinite(event.buttons) ? event.buttons : 0;
+
+  const getPointerAngle = (event: MouseEvent): number | undefined => {
+    const pointerEvent = event as Partial<PointerEvent>;
+    if (typeof pointerEvent.tiltX !== "number" || typeof pointerEvent.tiltY !== "number") {
+      return undefined;
+    }
+
+    return Math.atan2(pointerEvent.tiltY, pointerEvent.tiltX);
+  };
+
+  const getPointerPressure = (event: MouseEvent): number | undefined => {
+    const pressure = (event as Partial<PointerEvent>).pressure;
+    return typeof pressure === "number" ? pressure : undefined;
+  };
+
+  const handlePointerEvent = (e: MouseEvent) => {
+    if (!shouldCaptureTarget(e.target)) {
+      return;
+    }
+
     input.onMouseMove(
       createCursorPositionFromClientPoint({
         clientX: e.clientX,
         clientY: e.clientY,
         visible: !forceRecordedCursorHidden,
+        flags: getPointerFlags(e),
+        angle: getPointerAngle(e),
+        pressure: getPointerPressure(e),
         eventTarget: e.target,
       }),
     );
@@ -344,6 +377,8 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
   type IframeMouseListeners = {
     document: Document;
     move: (e: MouseEvent) => void;
+    down: (e: MouseEvent) => void;
+    up: (e: MouseEvent) => void;
     leave: () => void;
   };
 
@@ -354,8 +389,49 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
   const directlyTrackedIframes = new Set<HTMLIFrameElement>();
 
   const removeIframeDocumentListeners = (handlers: IframeMouseListeners) => {
-    handlers.document.removeEventListener("mousemove", handlers.move, true);
+    if (supportsPointerEvents) {
+      handlers.document.removeEventListener("pointermove", handlers.move, true);
+      handlers.document.removeEventListener("pointerdown", handlers.down, true);
+      handlers.document.removeEventListener("pointerup", handlers.up, true);
+    } else {
+      handlers.document.removeEventListener("mousemove", handlers.move, true);
+      handlers.document.removeEventListener("mousedown", handlers.down, true);
+      handlers.document.removeEventListener("mouseup", handlers.up, true);
+    }
+
     handlers.document.removeEventListener("mouseleave", handlers.leave, true);
+  };
+
+  const getIframeViewportSize = (iframe: HTMLIFrameElement): { width: number; height: number } => {
+    try {
+      const iframeWindow = iframe.contentWindow;
+      const iframeDocument = iframe.contentDocument || iframeWindow?.document;
+      const documentElement = iframeDocument?.documentElement;
+
+      return {
+        width: iframeWindow?.innerWidth || documentElement?.clientWidth || 0,
+        height: iframeWindow?.innerHeight || documentElement?.clientHeight || 0,
+      };
+    } catch {
+      return { width: 0, height: 0 };
+    }
+  };
+
+  const toParentClientPoint = (
+    iframe: HTMLIFrameElement,
+    clientX: number,
+    clientY: number,
+    viewportWidth?: number,
+    viewportHeight?: number,
+  ): { clientX: number; clientY: number } => {
+    const rect = iframe.getBoundingClientRect();
+    const width = viewportWidth && viewportWidth > 0 ? viewportWidth : rect.width;
+    const height = viewportHeight && viewportHeight > 0 ? viewportHeight : rect.height;
+
+    return {
+      clientX: rect.left + clientX * (rect.width / Math.max(width, 1)),
+      clientY: rect.top + clientY * (rect.height / Math.max(height, 1)),
+    };
   };
 
   const rememberIframeWindow = (iframe: HTMLIFrameElement) => {
@@ -387,13 +463,24 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
     removeIframeListeners(iframe);
     rememberIframeWindow(iframe);
 
-    const onIframeMouseMove = (e: MouseEvent) => {
-      const rect = iframe.getBoundingClientRect();
+    const onIframePointerEvent = (e: MouseEvent) => {
+      const viewport = getIframeViewportSize(iframe);
+      const point = toParentClientPoint(
+        iframe,
+        e.clientX,
+        e.clientY,
+        viewport.width,
+        viewport.height,
+      );
+
       input.onMouseMove(
         createCursorPositionFromClientPoint({
-          clientX: rect.left + e.clientX,
-          clientY: rect.top + e.clientY,
+          clientX: point.clientX,
+          clientY: point.clientY,
           visible: !forceRecordedCursorHidden,
+          flags: getPointerFlags(e),
+          angle: getPointerAngle(e),
+          pressure: getPointerPressure(e),
           targetElement: iframe,
         }),
       );
@@ -417,13 +504,24 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
           return;
         }
 
-        iframeDoc.addEventListener("mousemove", onIframeMouseMove, true);
+        if (supportsPointerEvents) {
+          iframeDoc.addEventListener("pointermove", onIframePointerEvent, true);
+          iframeDoc.addEventListener("pointerdown", onIframePointerEvent, true);
+          iframeDoc.addEventListener("pointerup", onIframePointerEvent, true);
+        } else {
+          iframeDoc.addEventListener("mousemove", onIframePointerEvent, true);
+          iframeDoc.addEventListener("mousedown", onIframePointerEvent, true);
+          iframeDoc.addEventListener("mouseup", onIframePointerEvent, true);
+        }
+
         iframeDoc.addEventListener("mouseleave", onIframeMouseLeave, true);
         directlyTrackedIframes.add(iframe);
 
         iframeListeners.set(iframe, {
           document: iframeDoc,
-          move: onIframeMouseMove,
+          move: onIframePointerEvent,
+          down: onIframePointerEvent,
+          up: onIframePointerEvent,
           leave: onIframeMouseLeave,
         });
       } catch (err) {
@@ -488,12 +586,20 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
       return;
     }
 
-    const rect = iframe.getBoundingClientRect();
+    const point = toParentClientPoint(
+      iframe,
+      payload.data.clientX,
+      payload.data.clientY,
+      typeof payload.data.windowWidth === "number" ? payload.data.windowWidth : undefined,
+      typeof payload.data.windowHeight === "number" ? payload.data.windowHeight : undefined,
+    );
+
     input.onMouseMove(
       createCursorPositionFromClientPoint({
-        clientX: rect.left + payload.data.clientX,
-        clientY: rect.top + payload.data.clientY,
+        clientX: point.clientX,
+        clientY: point.clientY,
         visible: !forceRecordedCursorHidden,
+        flags: typeof payload.data.buttons === "number" ? payload.data.buttons : 0,
         targetElement: iframe,
       }),
     );
@@ -534,14 +640,32 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
 
   // Initial setup
   document.querySelectorAll("iframe").forEach(setupIframeListeners);
-  document.addEventListener("mousemove", handleMouseMove, true);
+  if (supportsPointerEvents) {
+    document.addEventListener("pointermove", handlePointerEvent, true);
+    document.addEventListener("pointerdown", handlePointerEvent, true);
+    document.addEventListener("pointerup", handlePointerEvent, true);
+  } else {
+    document.addEventListener("mousemove", handlePointerEvent, true);
+    document.addEventListener("mousedown", handlePointerEvent, true);
+    document.addEventListener("mouseup", handlePointerEvent, true);
+  }
+
   document.addEventListener("mouseleave", handleMouseLeave, true);
   window.addEventListener(RECORDED_CURSOR_VISIBILITY_EVENT, handleRecordedCursorVisibility);
   window.addEventListener("message", handleIframeInteractionMessage);
 
   return () => {
     observer.disconnect();
-    document.removeEventListener("mousemove", handleMouseMove, true);
+    if (supportsPointerEvents) {
+      document.removeEventListener("pointermove", handlePointerEvent, true);
+      document.removeEventListener("pointerdown", handlePointerEvent, true);
+      document.removeEventListener("pointerup", handlePointerEvent, true);
+    } else {
+      document.removeEventListener("mousemove", handlePointerEvent, true);
+      document.removeEventListener("mousedown", handlePointerEvent, true);
+      document.removeEventListener("mouseup", handlePointerEvent, true);
+    }
+
     document.removeEventListener("mouseleave", handleMouseLeave, true);
     window.removeEventListener(RECORDED_CURSOR_VISIBILITY_EVENT, handleRecordedCursorVisibility);
     window.removeEventListener("message", handleIframeInteractionMessage);
@@ -1689,7 +1813,7 @@ export const editorMachine = setup({
         spawnChild("mouseTracking", {
           id: "mouseTracker",
           input: ({ self }) => ({
-            onMouseMove: (pos: { x: number; y: number; visible: boolean }) => {
+            onMouseMove: (pos: MouseCursorPosition) => {
               self.send({
                 type: "CAPTURE_FRAME",
                 isMouseMovement: true,

@@ -45,7 +45,16 @@ describe("cursorReplay", () => {
 
     const result = getCursorPositionAtTime(samples, 50);
 
-    expect(result?.cursor).toEqual({ x: 50, y: 25, visible: true });
+    expect(result?.cursor).toEqual({
+      x: 50,
+      y: 25,
+      visible: true,
+      tween: {
+        from: { x: 0, y: 0, visible: true },
+        to: { x: 100, y: 50, visible: true },
+        progress: 0.5,
+      },
+    });
   });
 
   it("interpolates target-relative cursor positions for the same target", () => {
@@ -82,11 +91,30 @@ describe("cursorReplay", () => {
       x: 50,
       y: 100,
       visible: true,
-      target: {
-        id: "code-editor",
-        x: 50,
-        y: 100,
-        rect: { left: 0, top: 0, width: 100, height: 200 },
+      tween: {
+        from: {
+          x: 10,
+          y: 20,
+          visible: true,
+          target: {
+            id: "code-editor",
+            x: 10,
+            y: 20,
+            rect: { left: 0, top: 0, width: 100, height: 200 },
+          },
+        },
+        to: {
+          x: 90,
+          y: 180,
+          visible: true,
+          target: {
+            id: "code-editor",
+            x: 90,
+            y: 180,
+            rect: { left: 0, top: 0, width: 100, height: 200 },
+          },
+        },
+        progress: 0.5,
       },
     });
   });
@@ -120,7 +148,7 @@ describe("cursorReplay", () => {
     expect(samples[1]).toEqual({ timestamp: 20, x: 20, y: 20, visible: true });
   });
 
-  it("holds a stationary cursor before movement resumes after a long pause", () => {
+  it("does not synthesize stationary hold samples between recorded positions", () => {
     const recording = createRecording([
       createFrame(0, { x: 0, y: 0, visible: true }),
       createFrame(600, { x: 100, y: 100, visible: true }),
@@ -134,7 +162,17 @@ describe("cursorReplay", () => {
     const samples = getCursorReplaySamples(recording);
     const result = getCursorPositionAtTime(samples, 300);
 
-    expect(result?.cursor).toEqual({ x: 0, y: 0, visible: true });
+    expect(samples).toHaveLength(2);
+    expect(result?.cursor).toEqual({
+      x: 50,
+      y: 50,
+      visible: true,
+      tween: {
+        from: { x: 0, y: 0, visible: true },
+        to: { x: 100, y: 100, visible: true },
+        progress: 0.5,
+      },
+    });
   });
 
   it("derives interpolated samples from frame-only recordings", () => {
@@ -147,6 +185,15 @@ describe("cursorReplay", () => {
     const result = getCursorPositionAtTime(samples, 75);
 
     expect(samples).toHaveLength(3);
-    expect(result?.cursor).toEqual({ x: 15, y: 30, visible: true });
+    expect(result?.cursor).toEqual({
+      x: 15,
+      y: 30,
+      visible: true,
+      tween: {
+        from: { x: 10, y: 20, visible: true },
+        to: { x: 20, y: 40, visible: true },
+        progress: 0.5,
+      },
+    });
   });
 });
