@@ -33,6 +33,7 @@
     "comlink": "^4.4.2",
     "jszip": "^3.10.1",
     "lucide-react": "^0.562.0",
+    "morphdom": "^2.7.8",
     "motion": "^12.26.2",
     "pako": "^2.1.0",
     "react": "^19.2.7",

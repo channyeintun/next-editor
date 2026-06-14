@@ -7,15 +7,15 @@ Date: 2026-06-15
 - [x] Phase 1: Types and recording storage.
 - [x] Phase 2: Injected patch recorder.
 - [x] Phase 3: Parent message handling.
-- [ ] Phase 4: Patch apply utilities.
+- [x] Phase 4: Patch apply utilities.
 - [ ] Phase 5: Replay integration.
 - [ ] Phase 6: Prefer patch path for new recordings.
 
 ## Current Evaluation
 
-- Phase 3 is complete, validated, and committed.
-- Runtime initial document and patch batch messages are validated in the parent bridge and appended to the new recording streams without becoming semantic preview events.
-- Next task: Phase 4, add DOM patch apply utilities for direct in-place preview mutations.
+- Phase 4 is complete, validated, and committed.
+- Preview DOM patch batches can now be applied into an existing iframe document with direct DOM operations and morphdom-backed subtree replacement.
+- Next task: Phase 5, integrate patch application into replay cursor behavior.
 
 ## Completed Tasks
 
@@ -49,3 +49,13 @@ Date: 2026-06-15
 - Normalized initial document HTML through the existing replayable runtime preview helper before recording.
 - Validation passed with `bun run check --fix`, `bun run format`, `bun run lint`, `bun run check`, and `bun run build`.
 - Committed with message `Record preview patch messages`.
+
+### 4. Patch Apply Utilities
+
+- Added `morphdom` as a runtime dependency for in-place subtree reconciliation.
+- Added preview node lookup by private replay marker id or path fallback.
+- Added serialized preview node deserialization with inert script reconstruction.
+- Added direct application for text, attribute, node insert/remove/move, subtree replacement, and form-property operations.
+- Added iframe helpers for applying initial preview documents and DOM patch batches with soft failure results.
+- Validation passed with `bun run check --fix`, `bun run format`, `bun run lint`, `bun run check`, and `bun run build`.
+- Committed with message `Add preview DOM patch applier`.
