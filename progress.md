@@ -9,13 +9,13 @@ Date: 2026-06-15
 - [x] Phase 3: Parent message handling.
 - [x] Phase 4: Patch apply utilities.
 - [x] Phase 5: Replay integration.
-- [ ] Phase 6: Prefer patch path for new recordings.
+- [x] Phase 6: Prefer patch path for new recordings.
 
 ## Current Evaluation
 
-- Phase 5 is complete, validated, and committed.
-- Replay now invokes a dedicated preview patch replay adapter during tick/seek and applies patch batches into the persistent preview iframe when patch data exists.
-- Next task: Phase 6, prefer patch replay for new recordings while keeping snapshot fallback for compatibility and recovery.
+- Phase 6 is complete, validated, and committed.
+- New runtime recordings no longer treat ordinary full HTML snapshot messages as preview refresh events; snapshots remain cached for explicit refresh fallback while patch batches become the normal DOM evolution path.
+- The implementation plan is complete.
 
 ## Completed Tasks
 
@@ -70,3 +70,11 @@ Date: 2026-06-15
 - Falls back to the existing snapshot content path if patch replay cannot seed or apply a batch.
 - Validation passed with `bun run check --fix`, `bun run format`, `bun run lint`, `bun run check`, and `bun run build`.
 - Committed with message `Integrate preview patch replay`.
+
+### 6. Prefer Patch Path for New Recordings
+
+- Stopped recording ordinary runtime snapshot messages as `preview_refresh` events.
+- Kept runtime snapshots cached in `lastRuntimeSnapshotRef` for explicit refresh boundaries and fallback recovery.
+- Left explicit preview refresh events intact for user-triggered refresh/save and static preview compatibility.
+- Validation passed with `bun run format`, `bun run lint`, `bun run check`, and `bun run build`.
+- Committed with message `Prefer preview patch recording path`.
