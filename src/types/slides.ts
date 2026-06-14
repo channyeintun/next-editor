@@ -100,6 +100,7 @@ export type PreviewDomPatchSource = "runtime-preview" | "static-preview";
 
 export interface PreviewNodeRef {
   id?: string;
+  anchorId?: string;
   path: number[];
 }
 

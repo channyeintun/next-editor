@@ -21,6 +21,13 @@ const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
 const PREVIEW_REPLAY_NODE_ID_ATTRIBUTE = "data-next-editor-preview-node-id";
 
+// Nodes resolved inside the preview iframe belong to the iframe's realm, so
+// `instanceof Element` (this module's realm) is false for them. Compare the
+// realm-agnostic nodeType instead.
+function isElement(node: Node | null | undefined): node is Element {
+  return node?.nodeType === ELEMENT_NODE;
+}
+
 export interface PreviewDomPatchApplyResult {
   ok: boolean;
   appliedOps: number;
@@ -176,6 +183,14 @@ function findNodeByPreviewRef(doc: Document, ref: PreviewNodeRef): Node | null {
 
   let current: Node | null = doc.documentElement;
 
+  if (ref.anchorId) {
+    current = doc.querySelector(`[${PREVIEW_REPLAY_NODE_ID_ATTRIBUTE}="${ref.anchorId}"]`);
+
+    if (!current) {
+      return null;
+    }
+  }
+
   for (const index of ref.path) {
     current = current?.childNodes[index] ?? null;
 
@@ -232,7 +247,7 @@ function setElementProperty(
   name: "value" | "checked" | "selected",
   value: string | boolean,
 ) {
-  if (!(target instanceof Element)) {
+  if (!isElement(target)) {
     return false;
   }
 
@@ -258,7 +273,7 @@ function createMorphdomOptions(mode: "children" | "node") {
   return {
     childrenOnly: mode === "children",
     getNodeKey(node: Node) {
-      if (!(node instanceof Element)) {
+      if (!isElement(node)) {
         return undefined;
       }
 
@@ -278,7 +293,7 @@ function createSubtreeReplacementNode(
   ownerDocument: Document,
 ): Node | null {
   if (mode === "children") {
-    if (!(target instanceof Element)) {
+    if (!isElement(target)) {
       return null;
     }
 
@@ -320,7 +335,7 @@ function applyPreviewDomPatchOp(
       target.nodeValue = op.text;
       return { ok: true };
     case "set_attribute":
-      if (!(target instanceof Element)) {
+      if (!isElement(target)) {
         return { ok: false, error: "Attribute target is not an element" };
       }
       if (op.namespaceURI) {
@@ -330,7 +345,7 @@ function applyPreviewDomPatchOp(
       }
       return { ok: true };
     case "remove_attribute":
-      if (!(target instanceof Element)) {
+      if (!isElement(target)) {
         return { ok: false, error: "Attribute target is not an element" };
       }
       if (op.namespaceURI) {

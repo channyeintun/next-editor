@@ -37,6 +37,10 @@ const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
 const RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_INITIAL_DOCUMENT";
 const RUNTIME_PATCH_BATCH_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_PATCH_BATCH";
 const PREVIEW_DOM_PATCH_FORMAT_VERSION = 1;
+// Private marker used to give recorded preview nodes a stable identity that
+// survives serialization. Must match PREVIEW_REPLAY_NODE_ID_ATTRIBUTE in
+// src/components/preview/previewIframeUtils.ts so replay can resolve refs by id.
+const PREVIEW_REPLAY_NODE_ID_ATTRIBUTE = "data-next-editor-preview-node-id";
 const RUNTIME_SNAPSHOT_SCRIPT_MARKER = "__NEXT_EDITOR_RUNTIME_SNAPSHOT__";
 const RUNTIME_CONSOLE_BRIDGE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_CONSOLE_BRIDGE__";
 const RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_INTERACTION_CAPTURE__";
@@ -127,12 +131,15 @@ export function sanitizeTerminalChunk(chunk: string): string {
   return normalized;
 }
 
-function createRuntimePatchRecorderScript(): string {
+// Exported so the preview patch replay round-trip can drive the real recorder
+// inside jsdom instead of a hand-written stand-in.
+export function createRuntimePatchRecorderScript(): string {
   return `
     (function() {
       const initialDocumentMessageType = ${JSON.stringify(RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE)};
       const patchBatchMessageType = ${JSON.stringify(RUNTIME_PATCH_BATCH_MESSAGE_TYPE)};
       const version = ${JSON.stringify(PREVIEW_DOM_PATCH_FORMAT_VERSION)};
+      const nodeIdAttribute = ${JSON.stringify(PREVIEW_REPLAY_NODE_ID_ATTRIBUTE)};
       const source = 'runtime-preview';
       const documentId = 'runtime-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
       const nodeIds = new WeakMap();
@@ -166,6 +173,7 @@ function createRuntimePatchRecorderScript(): string {
         }
 
         didPostInitialDocument = true;
+        tagElementTree(document.documentElement);
         postPreviewRecorderMessage(initialDocumentMessageType, {
           version,
           time: getMessageTime(),
@@ -173,6 +181,22 @@ function createRuntimePatchRecorderScript(): string {
           route: getRoute(),
           html: document.documentElement.outerHTML,
         });
+      }
+
+      function tagElementTree(root) {
+        if (!root) {
+          return;
+        }
+
+        if (root.nodeType === Node.ELEMENT_NODE) {
+          getNodeId(root);
+        }
+
+        const elements =
+          typeof root.querySelectorAll === 'function' ? root.querySelectorAll('*') : [];
+        for (let index = 0; index < elements.length; index++) {
+          getNodeId(elements[index]);
+        }
       }
 
       function getNodeId(node) {
@@ -187,6 +211,11 @@ function createRuntimePatchRecorderScript(): string {
 
         const nextId = 'n' + nextNodeId++;
         nodeIds.set(node, nextId);
+        if (node.nodeType === Node.ELEMENT_NODE && typeof node.setAttribute === 'function') {
+          try {
+            node.setAttribute(nodeIdAttribute, nextId);
+          } catch {}
+        }
         return nextId;
       }
 
@@ -217,15 +246,35 @@ function createRuntimePatchRecorderScript(): string {
       }
 
       function createNodeRef(node, fallbackParent, fallbackIndex) {
-        if (fallbackParent && typeof fallbackIndex === 'number') {
+        if (node && node.nodeType === Node.ELEMENT_NODE) {
           return {
             id: getNodeId(node),
-            path: getNodePath(fallbackParent).concat(fallbackIndex),
+            path: getNodePath(node),
+          };
+        }
+
+        const parent =
+          fallbackParent && typeof fallbackIndex === 'number'
+            ? fallbackParent
+            : node
+              ? node.parentNode
+              : null;
+        const index =
+          fallbackParent && typeof fallbackIndex === 'number'
+            ? fallbackIndex
+            : parent
+              ? Array.prototype.indexOf.call(parent.childNodes, node)
+              : -1;
+
+        if (parent && parent.nodeType === Node.ELEMENT_NODE && index >= 0) {
+          return {
+            anchorId: getNodeId(parent),
+            path: [index],
           };
         }
 
         return {
-          id: getNodeId(node),
+          id: node ? getNodeId(node) : undefined,
           path: getNodePath(node),
         };
       }
@@ -233,6 +282,7 @@ function createRuntimePatchRecorderScript(): string {
       function serializeNode(node) {
         if (node.nodeType === Node.ELEMENT_NODE) {
           const element = node;
+          getNodeId(element);
           return {
             kind: 'element',
             tagName: element.tagName.toLowerCase(),
@@ -311,7 +361,8 @@ function createRuntimePatchRecorderScript(): string {
       function getOperationKey(operation) {
         const target = operation.target || operation.parent;
         const pathKey = target && target.path ? target.path.join('.') : '';
-        const idKey = target && target.id ? target.id : pathKey;
+        const identity = target && (target.id || target.anchorId);
+        const idKey = identity ? identity + ':' + pathKey : pathKey;
 
         if (operation.op === 'set_text') {
           return operation.op + ':' + idKey;
@@ -346,6 +397,9 @@ function createRuntimePatchRecorderScript(): string {
           }
 
           if (record.type === 'attributes') {
+            if (record.attributeName === nodeIdAttribute) {
+              return;
+            }
             const operation = getAttributeOp(record);
             if (operation) {
               scalarOpsByKey.set(getOperationKey(operation), operation);
@@ -498,10 +552,23 @@ function createRuntimePatchRecorderScript(): string {
         patchFrame = window.requestAnimationFrame(flushPatchRecords);
       }
 
-      const root = document.documentElement;
-      if (root) {
+      let patchObserver = null;
+
+      function startRecording() {
+        if (!document.documentElement) {
+          return;
+        }
+
+        // Seed first so the initial document is complete; observe afterwards so
+        // every later mutation is captured as a patch relative to that seed.
         postInitialDocument();
-        new MutationObserver(schedulePatchFlush).observe(root, {
+
+        if (patchObserver) {
+          return;
+        }
+
+        patchObserver = new MutationObserver(schedulePatchFlush);
+        patchObserver.observe(document.documentElement, {
           subtree: true,
           childList: true,
           attributes: true,
@@ -511,8 +578,17 @@ function createRuntimePatchRecorderScript(): string {
         });
       }
 
-      window.addEventListener('load', postInitialDocument);
-      window.addEventListener('pageshow', postInitialDocument);
+      // Wait until the document has finished parsing before capturing the seed.
+      // A head-injected script runs before <body> exists, which would otherwise
+      // record a phantom <body> insert and duplicate the body on replay.
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startRecording, { once: true });
+      } else {
+        startRecording();
+      }
+
+      window.addEventListener('load', startRecording);
+      window.addEventListener('pageshow', startRecording);
     })();
   `;
 }
