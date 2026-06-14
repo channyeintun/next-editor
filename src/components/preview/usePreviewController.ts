@@ -24,7 +24,9 @@ import { IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE } from "../../utils/iframeIntera
 import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRuntimeContext";
 import type {
   IframeInteractionEvent,
+  PreviewDomPatchBatch,
   PreviewEvent,
+  PreviewInitialDocument,
   PreviewPanelMode,
   PreviewSize,
 } from "../../types/slides";
@@ -434,8 +436,15 @@ export function usePreviewController(): PreviewController {
 
   const isRecordingRef = useRef(false);
   const handlePreviewEventRef = useRef<((event: PreviewEvent) => void) | null>(null);
+  const handlePreviewInitialDocumentRef = useRef<
+    ((document: PreviewInitialDocument) => void) | null
+  >(null);
+  const handlePreviewPatchBatchRef = useRef<((batch: PreviewDomPatchBatch) => void) | null>(null);
+  const lastPreviewInitialDocumentRef = useRef<PreviewInitialDocument | null>(null);
+  const recordedPreviewInitialDocumentIdRef = useRef<string | null>(null);
 
-  const { editorRef, handlePreviewEvent } = useNextEditorActions();
+  const { editorRef, handlePreviewEvent, handlePreviewInitialDocument, handlePreviewPatchBatch } =
+    useNextEditorActions();
   const { preview, runtimePanel } = useNextEditorDomainAdapters();
   const {
     isOpen,
@@ -469,6 +478,10 @@ export function usePreviewController(): PreviewController {
     lessonType,
     usesPlaybackModel,
   });
+  const hasPreviewPatchReplay = Boolean(
+    currentRecording?.previewInitialDocuments?.length &&
+    currentRecording.previewPatchBatches?.length,
+  );
   const isRuntimePlaybackPreviewActive = lessonType === "node.js" && isPlaybackPreviewActive;
   const recordedRuntimeSnapshot = isRuntimePlaybackPreviewActive
     ? (currentRecording?.runtimeSnapshot ?? null)
@@ -520,6 +533,24 @@ export function usePreviewController(): PreviewController {
 
   isRecordingRef.current = isRecording;
   handlePreviewEventRef.current = handlePreviewEvent;
+  handlePreviewInitialDocumentRef.current = handlePreviewInitialDocument;
+  handlePreviewPatchBatchRef.current = handlePreviewPatchBatch;
+
+  useEffect(() => {
+    if (!isRecording) {
+      recordedPreviewInitialDocumentIdRef.current = null;
+      return;
+    }
+
+    const initialDocument = lastPreviewInitialDocumentRef.current;
+    if (
+      initialDocument &&
+      initialDocument.documentId !== recordedPreviewInitialDocumentIdRef.current
+    ) {
+      handlePreviewInitialDocument(initialDocument);
+      recordedPreviewInitialDocumentIdRef.current = initialDocument.documentId;
+    }
+  }, [handlePreviewInitialDocument, isRecording]);
 
   const sizeRef = useRef<PreviewSize>(size);
   sizeRef.current = size;
@@ -618,6 +649,10 @@ export function usePreviewController(): PreviewController {
     effectiveRuntimePreviewUrl,
     isRecordingRef,
     handlePreviewEventRef,
+    handlePreviewInitialDocumentRef,
+    handlePreviewPatchBatchRef,
+    lastPreviewInitialDocumentRef,
+    recordedPreviewInitialDocumentIdRef,
     lastRuntimeSnapshotRef,
     scrollPositionRef,
     userScrollTimeoutRef,
@@ -839,6 +874,7 @@ export function usePreviewController(): PreviewController {
     isPlaybackPreviewActive,
     isRuntimePreviewActive,
     isLiveRuntimePreviewActive,
+    hasPreviewPatchReplay,
     pendingInteractionRef,
     lastRuntimeSnapshotRef,
     lastContentRef,

@@ -55,6 +55,11 @@ export type {
   PreviewPanelMode,
   PreviewState,
   PreviewEvent,
+  PreviewDomPatchBatch,
+  PreviewDomPatchOp,
+  PreviewInitialDocument,
+  PreviewNodeRef,
+  SerializedPreviewNode,
 } from "./slides";
 
 // Re-export audio recording hook for advanced users

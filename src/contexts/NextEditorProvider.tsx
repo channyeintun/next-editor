@@ -51,6 +51,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handleEditorChange,
     handleSlideEvent,
     handlePreviewEvent,
+    handlePreviewInitialDocument,
+    handlePreviewPatchBatch,
     handleWorkspaceEvent: handleWorkspaceEventBase,
     handleRuntimeEvent,
   } = originalHook;
@@ -114,6 +116,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       handleEditorChange,
       handleSlideEvent,
       handlePreviewEvent,
+      handlePreviewInitialDocument,
+      handlePreviewPatchBatch,
       handleWorkspaceEvent,
       handleRuntimeEvent,
       clearRecording,
@@ -140,6 +144,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       handleEditorChange,
       handleSlideEvent,
       handlePreviewEvent,
+      handlePreviewInitialDocument,
+      handlePreviewPatchBatch,
       handleWorkspaceEvent,
       handleRuntimeEvent,
       clearRecording,
@@ -208,6 +214,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
 
       getPreviewState: () => preview.getSnapshot(),
       applyPreviewState: (previewState) => preview.applySnapshot(previewState),
+      applyPreviewPatchReplay: (input) => preview.applyPatchReplay(input),
 
       getSlides: () => slides.getSlides(),
       applySlides: (nextSlides) => slides.applySlides(nextSlides),

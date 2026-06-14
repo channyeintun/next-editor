@@ -10,7 +10,12 @@ import type {
   EditorFrame,
   Recording,
 } from "./types";
-import type { SlideEvent, PreviewEvent } from "./slides";
+import type {
+  PreviewDomPatchBatch,
+  PreviewEvent,
+  PreviewInitialDocument,
+  SlideEvent,
+} from "./slides";
 import { findFrameIndexAtTime, reconstructFrameAtIndex } from "./utils/frameDelta";
 import type { TimelineActorRef } from "./machine/timelineMachine";
 import type { SnapshotFrom } from "xstate";
@@ -272,6 +277,20 @@ export const useNextEditorActorBindings = (
     [actorRef],
   );
 
+  const handlePreviewInitialDocument = useCallback(
+    (document: PreviewInitialDocument) => {
+      actorRef.send({ type: "PREVIEW_INITIAL_DOCUMENT", document });
+    },
+    [actorRef],
+  );
+
+  const handlePreviewPatchBatch = useCallback(
+    (batch: PreviewDomPatchBatch) => {
+      actorRef.send({ type: "PREVIEW_PATCH_BATCH", batch });
+    },
+    [actorRef],
+  );
+
   const handleWorkspaceEvent = useCallback(
     (event?: { sidebarWidthDelta?: number }) => {
       actorRef.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: event?.sidebarWidthDelta });
@@ -347,6 +366,8 @@ export const useNextEditorActorBindings = (
     handleEditorChange,
     handleSlideEvent,
     handlePreviewEvent,
+    handlePreviewInitialDocument,
+    handlePreviewPatchBatch,
     handleWorkspaceEvent,
     handleRuntimeEvent,
 

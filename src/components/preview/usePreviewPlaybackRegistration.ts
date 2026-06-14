@@ -1,14 +1,30 @@
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
-import type { PreviewDomainAdapter } from "../../contexts/NextEditorDomainAdaptersContext";
+import type {
+  PreviewDomainAdapter,
+  PreviewPatchReplayInput,
+} from "../../contexts/NextEditorDomainAdaptersContext";
 import type {
   IframeInteractionEvent,
+  PreviewInitialDocument,
   PreviewPanelMode,
   PreviewSize,
   PreviewState,
 } from "../../types/slides";
 import { arePreviewSizesEqual } from "../../utils/equality";
-import { getElementByXPath, type PreviewScrollPosition } from "./previewIframeUtils";
+import {
+  applyPreviewDomPatchBatchToIframe,
+  applyPreviewInitialDocumentToIframe,
+  getElementByXPath,
+  type PreviewScrollPosition,
+} from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
+
+interface PreviewPatchReplayCursor {
+  recordingId: string | null;
+  documentId: string | null;
+  revision: number;
+  lastAppliedBatchIndex: number;
+}
 
 interface UsePreviewPlaybackRegistrationOptions {
   previewAdapter: PreviewDomainAdapter;
@@ -16,6 +32,7 @@ interface UsePreviewPlaybackRegistrationOptions {
   isPlaybackPreviewActive: boolean;
   isRuntimePreviewActive: boolean;
   isLiveRuntimePreviewActive: boolean;
+  hasPreviewPatchReplay: boolean;
   pendingInteractionRef: RefObject<IframeInteractionEvent | null>;
   lastRuntimeSnapshotRef: RefObject<string>;
   lastContentRef: RefObject<string>;
@@ -62,12 +79,37 @@ function getIframeDocumentAndWindow(iframe: HTMLIFrameElement): {
   }
 }
 
+function getLatestInitialDocument(
+  initialDocuments: PreviewInitialDocument[],
+  currentTime: number,
+  documentId?: string,
+): PreviewInitialDocument | null {
+  let latestDocument: PreviewInitialDocument | null = null;
+
+  for (const initialDocument of initialDocuments) {
+    if (initialDocument.time > currentTime) {
+      continue;
+    }
+
+    if (documentId && initialDocument.documentId !== documentId) {
+      continue;
+    }
+
+    if (!latestDocument || initialDocument.time >= latestDocument.time) {
+      latestDocument = initialDocument;
+    }
+  }
+
+  return latestDocument;
+}
+
 export function usePreviewPlaybackRegistration({
   previewAdapter,
   captureRuntimePreviewSnapshot,
   isPlaybackPreviewActive,
   isRuntimePreviewActive,
   isLiveRuntimePreviewActive,
+  hasPreviewPatchReplay,
   pendingInteractionRef,
   lastRuntimeSnapshotRef,
   lastContentRef,
@@ -90,6 +132,151 @@ export function usePreviewPlaybackRegistration({
   rafRef,
 }: UsePreviewPlaybackRegistrationOptions) {
   const targetScrollInteractionRef = useRef<IframeInteractionEvent | null>(null);
+  const patchReplayCursorRef = useRef<PreviewPatchReplayCursor>({
+    recordingId: null,
+    documentId: null,
+    revision: 0,
+    lastAppliedBatchIndex: -1,
+  });
+  const patchReplayFailedRef = useRef(false);
+
+  useEffect(() => {
+    if (hasPreviewPatchReplay) {
+      return;
+    }
+
+    patchReplayFailedRef.current = false;
+    patchReplayCursorRef.current = {
+      recordingId: null,
+      documentId: null,
+      revision: 0,
+      lastAppliedBatchIndex: -1,
+    };
+  }, [hasPreviewPatchReplay]);
+
+  useEffect(() => {
+    const applyInitialDocument = (
+      iframe: HTMLIFrameElement,
+      input: PreviewPatchReplayInput,
+      initialDocument: PreviewInitialDocument,
+    ) => {
+      if (!applyPreviewInitialDocumentToIframe(iframe, initialDocument)) {
+        patchReplayFailedRef.current = true;
+        return false;
+      }
+
+      lastContentRef.current = initialDocument.html;
+      patchReplayFailedRef.current = false;
+      patchReplayCursorRef.current = {
+        recordingId: input.recordingId,
+        documentId: initialDocument.documentId,
+        revision: 0,
+        lastAppliedBatchIndex: -1,
+      };
+      return true;
+    };
+
+    const ensureReplaySeed = (iframe: HTMLIFrameElement, input: PreviewPatchReplayInput) => {
+      const cursor = patchReplayCursorRef.current;
+      const needsSeed =
+        input.isSeeking ||
+        cursor.recordingId !== input.recordingId ||
+        cursor.documentId === null ||
+        input.lastAppliedPatchBatchIndex < cursor.lastAppliedBatchIndex;
+
+      if (!needsSeed) {
+        return true;
+      }
+
+      const initialDocument = getLatestInitialDocument(input.initialDocuments, input.currentTime);
+
+      if (!initialDocument) {
+        patchReplayFailedRef.current = true;
+        return false;
+      }
+
+      return applyInitialDocument(iframe, input, initialDocument);
+    };
+
+    previewAdapter.setPatchReplayApplier((input) => {
+      if (!hasPreviewPatchReplay || isLiveRuntimePreviewActive) {
+        return input.lastAppliedPatchBatchIndex;
+      }
+
+      const iframe = iframeRef.current;
+      if (!iframe || !ensureReplaySeed(iframe, input)) {
+        return -1;
+      }
+
+      let cursor = patchReplayCursorRef.current;
+
+      for (
+        let index = cursor.lastAppliedBatchIndex + 1;
+        index < input.patchBatches.length;
+        index++
+      ) {
+        const patchBatch = input.patchBatches[index];
+
+        if (patchBatch.time > input.currentTime) {
+          break;
+        }
+
+        if (patchBatch.documentId !== cursor.documentId) {
+          const initialDocument = getLatestInitialDocument(
+            input.initialDocuments,
+            input.currentTime,
+            patchBatch.documentId,
+          );
+
+          if (!initialDocument || !applyInitialDocument(iframe, input, initialDocument)) {
+            patchReplayFailedRef.current = true;
+            return cursor.lastAppliedBatchIndex;
+          }
+
+          cursor = patchReplayCursorRef.current;
+        }
+
+        if (patchBatch.baseRevision !== cursor.revision) {
+          console.warn("Preview patch replay revision mismatch", {
+            documentId: patchBatch.documentId,
+            expected: cursor.revision,
+            received: patchBatch.baseRevision,
+          });
+          patchReplayFailedRef.current = true;
+          return cursor.lastAppliedBatchIndex;
+        }
+
+        const result = applyPreviewDomPatchBatchToIframe(iframe, patchBatch);
+
+        if (!result.ok) {
+          console.warn("Preview patch replay failed", result);
+          patchReplayFailedRef.current = true;
+          return cursor.lastAppliedBatchIndex;
+        }
+
+        cursor = {
+          recordingId: input.recordingId,
+          documentId: patchBatch.documentId,
+          revision: patchBatch.revision,
+          lastAppliedBatchIndex: index,
+        };
+        patchReplayCursorRef.current = cursor;
+      }
+
+      patchReplayFailedRef.current = false;
+      return patchReplayCursorRef.current.lastAppliedBatchIndex;
+    });
+
+    return () => {
+      previewAdapter.setPatchReplayApplier((input) => input.lastAppliedPatchBatchIndex);
+    };
+  }, [
+    hasPreviewPatchReplay,
+    iframeRef,
+    isLiveRuntimePreviewActive,
+    lastContentRef,
+    previewAdapter,
+  ]);
 
   useEffect(() => {
     previewAdapter.setSnapshotGetter((): PreviewState | null => {
@@ -165,8 +352,9 @@ export function usePreviewPlaybackRegistration({
         previewState.refreshKey !== lastRefreshKeyRef.current;
 
       lastRefreshKeyRef.current = previewState.refreshKey;
+      const shouldApplySnapshotContent = !hasPreviewPatchReplay || patchReplayFailedRef.current;
 
-      if (didRefreshKeyChange) {
+      if (shouldApplySnapshotContent && didRefreshKeyChange) {
         if (previewState.content !== undefined) {
           updateIframeContent(previewState.content, {
             force: true,
@@ -179,6 +367,7 @@ export function usePreviewPlaybackRegistration({
           });
         }
       } else if (
+        shouldApplySnapshotContent &&
         previewState.content !== undefined &&
         previewState.content !== lastContentRef.current
       ) {
@@ -341,6 +530,7 @@ export function usePreviewPlaybackRegistration({
     applyPreviewPanelState,
     applyPreviewRoute,
     effectiveRuntimePreviewUrl,
+    hasPreviewPatchReplay,
     iframeRef,
     isPlaybackPreviewActive,
     isLiveRuntimePreviewActive,

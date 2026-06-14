@@ -1,5 +1,13 @@
 import type * as monaco from "monaco-editor";
-import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from "./slides";
+import type {
+  PreviewDomPatchBatch,
+  PreviewEvent,
+  PreviewInitialDocument,
+  PreviewState,
+  Slide,
+  SlideEvent,
+  SlidePreviewState,
+} from "./slides";
 import type { TimelineActorRef } from "./machine/timelineMachine";
 import type { EditorActorRef } from "./useNextEditor";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../types/runtime";
@@ -121,6 +129,8 @@ export interface Recording {
   keyframeInterval: number;
   slideEvents?: SlideEvent[];
   previewEvents?: PreviewEvent[];
+  previewInitialDocuments?: PreviewInitialDocument[];
+  previewPatchBatches?: PreviewDomPatchBatch[];
   workspaceEvents?: WorkspaceRecordingEvent[];
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];
@@ -171,6 +181,7 @@ export interface UseNextEditorConfig {
   onPreviewEvent?: (event: PreviewEvent) => void;
   getPreviewState?: () => PreviewState | null;
   applyPreviewState?: (previewState: PreviewState) => void;
+  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;
 
   // Slides data callbacks
   getSlides?: () => Slide[];
@@ -181,6 +192,15 @@ export interface UseNextEditorConfig {
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
   applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
+}
+
+export interface PreviewPatchReplayInput {
+  recordingId: string;
+  currentTime: number;
+  isSeeking: boolean;
+  initialDocuments: PreviewInitialDocument[];
+  patchBatches: PreviewDomPatchBatch[];
+  lastAppliedPatchBatchIndex: number;
 }
 
 /**
@@ -240,6 +260,8 @@ export interface UseNextEditorReturn {
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
+  handlePreviewInitialDocument: (document: PreviewInitialDocument) => void;
+  handlePreviewPatchBatch: (batch: PreviewDomPatchBatch) => void;
   handleWorkspaceEvent: (event?: { sidebarWidthDelta?: number }) => void;
   handleRuntimeEvent: () => void;
 

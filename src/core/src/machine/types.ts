@@ -1,5 +1,13 @@
 import type * as monaco from "monaco-editor";
-import type { SlideEvent, SlidePreviewState, PreviewEvent, PreviewState, Slide } from "../slides";
+import type {
+  PreviewDomPatchBatch,
+  PreviewEvent,
+  PreviewInitialDocument,
+  PreviewState,
+  Slide,
+  SlideEvent,
+  SlidePreviewState,
+} from "../slides";
 import type {
   MouseCursorPosition,
   CursorRecordingEvent,
@@ -8,6 +16,7 @@ import type {
   EditorSelection,
   EditorPosition,
   RecordingAudioSource,
+  PreviewPatchReplayInput,
 } from "../types";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
@@ -66,6 +75,10 @@ export interface RecordingSession {
   slideEvents: SlideEvent[];
   /** Collected preview events during recording */
   previewEvents: PreviewEvent[];
+  /** Collected initial preview documents during recording */
+  previewInitialDocuments: PreviewInitialDocument[];
+  /** Collected preview DOM patch batches during recording */
+  previewPatchBatches: PreviewDomPatchBatch[];
   /** Collected workspace events during recording */
   workspaceEvents: WorkspaceRecordingEvent[];
   /** Collected runtime events during recording */
@@ -140,6 +153,8 @@ export interface EditorMachineContext {
   applySlides?: (slides: Slide[]) => void;
   /** Callback to apply preview state during playback */
   applyPreviewState?: (previewState: PreviewState) => void;
+  /** Callback to apply preview DOM patches during playback */
+  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;
   /** Callback to get slide state during recording */
   getSlideState?: () => {
     previewState: SlidePreviewState;
@@ -161,6 +176,8 @@ export interface EditorMachineContext {
   lastAppliedFrameIndex: number;
   /** Index of the last applied preview event during playback */
   lastAppliedPreviewEventIndex: number;
+  /** Index of the last applied preview patch batch during playback */
+  lastAppliedPreviewPatchBatchIndex: number;
   /** Index of the last applied slide event during playback */
   lastAppliedSlideEventIndex: number;
   /** Index of the last applied workspace event during playback */
@@ -329,6 +346,18 @@ export type PreviewEventOccurred = {
   event: PreviewEvent;
 };
 
+/** Initial preview document recorded */
+export type PreviewInitialDocumentOccurred = {
+  type: "PREVIEW_INITIAL_DOCUMENT";
+  document: PreviewInitialDocument;
+};
+
+/** Preview DOM patch batch recorded */
+export type PreviewPatchBatchOccurred = {
+  type: "PREVIEW_PATCH_BATCH";
+  batch: PreviewDomPatchBatch;
+};
+
 /** Workspace event occurred */
 export type WorkspaceEventOccurred = {
   type: "WORKSPACE_EVENT";
@@ -369,6 +398,8 @@ export type EditorMachineEvent =
   | SetEditorRefEvent
   | SlideEventOccurred
   | PreviewEventOccurred
+  | PreviewInitialDocumentOccurred
+  | PreviewPatchBatchOccurred
   | WorkspaceEventOccurred
   | RuntimeEventOccurred
   | AudioChunkEvent
@@ -417,6 +448,7 @@ export interface EditorMachineInput {
   onPreviewEvent?: (event: PreviewEvent) => void;
   getPreviewState?: () => PreviewState | null;
   applyPreviewState?: (previewState: PreviewState) => void;
+  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;
   getWorkspaceSnapshot?: () => WorkspaceRecordingSnapshot | null;
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
@@ -469,6 +501,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   lastCallbackFrameTimestamp: undefined,
   lastAppliedFrameIndex: -1,
   lastAppliedPreviewEventIndex: -1,
+  lastAppliedPreviewPatchBatchIndex: -1,
   lastAppliedSlideEventIndex: -1,
   lastAppliedWorkspaceEventIndex: -1,
   lastAppliedRuntimeEventIndex: -1,
@@ -478,6 +511,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   getSlideState: input.getSlideState,
   getSlides: input.getSlides,
   applyPreviewState: input.applyPreviewState,
+  applyPreviewPatchReplay: input.applyPreviewPatchReplay,
   getPreviewState: input.getPreviewState,
   getWorkspaceSnapshot: input.getWorkspaceSnapshot,
   applyWorkspaceSnapshot: input.applyWorkspaceSnapshot,

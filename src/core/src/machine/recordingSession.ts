@@ -1,4 +1,9 @@
-import type { PreviewEvent, SlideEvent } from "../slides";
+import type {
+  PreviewDomPatchBatch,
+  PreviewEvent,
+  PreviewInitialDocument,
+  SlideEvent,
+} from "../slides";
 import type { RuntimeRecordingSnapshot } from "../../../types/runtime";
 import {
   areWorkspaceSnapshotsEqual,
@@ -39,6 +44,38 @@ export function appendPreviewRecordingEvent(
       {
         ...event,
         timestamp: getRecordingTimestamp(session),
+      },
+    ],
+  };
+}
+
+export function appendPreviewInitialDocument(
+  session: RecordingSession,
+  document: PreviewInitialDocument,
+): RecordingSession {
+  return {
+    ...session,
+    previewInitialDocuments: [
+      ...session.previewInitialDocuments,
+      {
+        ...document,
+        time: getRecordingTimestamp(session),
+      },
+    ],
+  };
+}
+
+export function appendPreviewPatchBatch(
+  session: RecordingSession,
+  batch: PreviewDomPatchBatch,
+): RecordingSession {
+  return {
+    ...session,
+    previewPatchBatches: [
+      ...session.previewPatchBatches,
+      {
+        ...batch,
+        time: getRecordingTimestamp(session),
       },
     ],
   };

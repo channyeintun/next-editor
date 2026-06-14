@@ -56,6 +56,8 @@ import {
   resolveReplayTime,
 } from "./replayState";
 import {
+  appendPreviewInitialDocument,
+  appendPreviewPatchBatch,
   appendPreviewRecordingEvent,
   appendRuntimeRecordingEvent,
   appendSlideRecordingEvent,
@@ -226,6 +228,7 @@ const APPLY_REPLAY_STATE_ACTIONS = [
   "applyWorkspaceEventsAtTime",
   "applyRuntimeEventsAtTime",
   "applyFrameAtTime",
+  "applyPreviewPatchBatchesAtTime",
   "applyPreviewEventsAtTime",
   "applySlideEventsAtTime",
 ] as const;
@@ -862,6 +865,8 @@ export const editorMachine = setup({
           frames: [],
           slideEvents,
           previewEvents,
+          previewInitialDocuments: [],
+          previewPatchBatches: [],
           workspaceEvents,
           runtimeEvents,
           cursorEvents: [{ timestamp: 0, ...initialMousePosition }],
@@ -1044,6 +1049,8 @@ export const editorMachine = setup({
         keyframeInterval: 120,
         slideEvents: context.session.slideEvents,
         previewEvents: context.session.previewEvents,
+        previewInitialDocuments: context.session.previewInitialDocuments,
+        previewPatchBatches: context.session.previewPatchBatches,
         workspaceEvents: context.session.workspaceEvents,
         runtimeEvents: context.session.runtimeEvents,
         cursorEvents: context.session.cursorEvents,
@@ -1071,6 +1078,7 @@ export const editorMachine = setup({
         },
         lastAppliedFrameIndex: -1,
         lastAppliedPreviewEventIndex: -1,
+        lastAppliedPreviewPatchBatchIndex: -1,
         lastAppliedSlideEventIndex: -1,
         lastAppliedWorkspaceEventIndex: -1,
         lastAppliedRuntimeEventIndex: -1,
@@ -1133,6 +1141,7 @@ export const editorMachine = setup({
         lastCallbackFrameTimestamp: undefined,
         lastAppliedFrameIndex: -1,
         lastAppliedPreviewEventIndex: -1,
+        lastAppliedPreviewPatchBatchIndex: -1,
         lastAppliedSlideEventIndex: -1,
         lastAppliedWorkspaceEventIndex: initialWorkspaceEvent ? 0 : -1,
         lastAppliedRuntimeEventIndex: initialRuntimeEvent ? 0 : -1,
@@ -1276,6 +1285,7 @@ export const editorMachine = setup({
         lastAppliedFrameIndex: -1,
         lastAppliedSlideEventIndex: -1,
         lastAppliedPreviewEventIndex: -1,
+        lastAppliedPreviewPatchBatchIndex: -1,
         lastAppliedWorkspaceEventIndex: -1,
         lastAppliedRuntimeEventIndex: -1,
       };
@@ -1400,6 +1410,7 @@ export const editorMachine = setup({
       lastCallbackFrameTimestamp: undefined,
       lastAppliedFrameIndex: -1,
       lastAppliedPreviewEventIndex: -1,
+      lastAppliedPreviewPatchBatchIndex: -1,
       lastAppliedSlideEventIndex: -1,
       lastAppliedWorkspaceEventIndex: -1,
       lastAppliedRuntimeEventIndex: -1,
@@ -1411,6 +1422,7 @@ export const editorMachine = setup({
       lastCallbackFrameTimestamp: undefined,
       lastAppliedFrameIndex: -1,
       lastAppliedPreviewEventIndex: -1,
+      lastAppliedPreviewPatchBatchIndex: -1,
       lastAppliedSlideEventIndex: -1,
       lastAppliedWorkspaceEventIndex: -1,
       lastAppliedRuntimeEventIndex: -1,
@@ -1423,6 +1435,7 @@ export const editorMachine = setup({
       currentFrame: null,
       lastAppliedFrameIndex: -1,
       lastAppliedPreviewEventIndex: -1,
+      lastAppliedPreviewPatchBatchIndex: -1,
       lastAppliedSlideEventIndex: -1,
       lastAppliedWorkspaceEventIndex: -1,
       lastAppliedRuntimeEventIndex: -1,
@@ -1454,6 +1467,7 @@ export const editorMachine = setup({
       lastCallbackFrameTimestamp: undefined,
       lastAppliedFrameIndex: -1,
       lastAppliedPreviewEventIndex: -1,
+      lastAppliedPreviewPatchBatchIndex: -1,
       lastAppliedSlideEventIndex: -1,
       lastAppliedWorkspaceEventIndex: -1,
       lastAppliedRuntimeEventIndex: -1,
@@ -1584,6 +1598,34 @@ export const editorMachine = setup({
         return {
           lastAppliedPreviewEventIndex: replayResult.nextIndex,
           lastAppliedPreviewState: replayResult.retainedState,
+        };
+      }
+
+      return {};
+    }),
+    applyPreviewPatchBatchesAtTime: assign(({ context, event }) => {
+      const { recording, applyPreviewPatchReplay, lastAppliedPreviewPatchBatchIndex } = context;
+
+      if (
+        !recording?.previewPatchBatches?.length ||
+        !recording.previewInitialDocuments?.length ||
+        !applyPreviewPatchReplay
+      ) {
+        return {};
+      }
+
+      const nextIndex = applyPreviewPatchReplay({
+        recordingId: recording.id,
+        currentTime: resolveReplayTime(event, context.timeline.currentTime),
+        isSeeking: isSeekReplayEvent(event),
+        initialDocuments: recording.previewInitialDocuments,
+        patchBatches: recording.previewPatchBatches,
+        lastAppliedPatchBatchIndex: lastAppliedPreviewPatchBatchIndex,
+      });
+
+      if (nextIndex !== lastAppliedPreviewPatchBatchIndex) {
+        return {
+          lastAppliedPreviewPatchBatchIndex: nextIndex,
         };
       }
 
@@ -1882,6 +1924,24 @@ export const editorMachine = setup({
             "capturePreviewRefreshFrame",
             "notifyFrame",
           ],
+        },
+        PREVIEW_INITIAL_DOCUMENT: {
+          actions: assign(({ context, event }) => {
+            if (!context.session) return {};
+
+            return {
+              session: appendPreviewInitialDocument(context.session, event.document),
+            };
+          }),
+        },
+        PREVIEW_PATCH_BATCH: {
+          actions: assign(({ context, event }) => {
+            if (!context.session) return {};
+
+            return {
+              session: appendPreviewPatchBatch(context.session, event.batch),
+            };
+          }),
         },
         WORKSPACE_EVENT: {
           actions: [
