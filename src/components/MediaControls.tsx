@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo, useRef } from "react";
-import { Circle, Square, Plus, FileMusic, Mic, X } from "lucide-react";
+import { Circle, Square, Plus, FileMusic, Mic, Video, VideoOff, X } from "lucide-react";
 import {
   useNextEditorActions,
   useNextEditorMetadata,
@@ -14,6 +14,7 @@ import PauseIcon from "./icon/Pause";
 import SettingIcon from "./icon/Setting";
 import ProgressBar from "./ProgressBar";
 import type { Recording } from "../core/src";
+import { CAMERA_OVERLAY_VISIBILITY_EVENT, CAMERA_OVERLAY_VISIBILITY_KEY } from "./CameraOverlay";
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -30,6 +31,11 @@ const formatTime = (milliseconds: number): string => {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+};
+
+const readCameraOverlayVisibility = (): boolean => {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(CAMERA_OVERLAY_VISIBILITY_KEY) !== "false";
 };
 
 const PlaybackProgress = memo(
@@ -102,8 +108,17 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
     const [recordingTime, setRecordingTime] = useState(0);
     const [recordingAudioSource, setRecordingAudioSource] =
       useState<RecordingAudioSourceOption>("microphone");
+    const [enableCameraForNextRecording, setEnableCameraForNextRecording] = useState(false);
+    const [isCameraSupported, setIsCameraSupported] = useState(false);
+    const [isCameraOverlayVisible, setIsCameraOverlayVisible] = useState(
+      readCameraOverlayVisibility,
+    );
     const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
     const audioFileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+      setIsCameraSupported(Boolean(navigator.mediaDevices?.getUserMedia));
+    }, []);
 
     // Update recording time every 100ms when recording
     useEffect(() => {
@@ -182,6 +197,21 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
       setRecordingAudioSource("microphone");
     }, []);
 
+    const handleToggleCameraForNextRecording = useCallback(() => {
+      setEnableCameraForNextRecording((current) => !current);
+    }, []);
+
+    const handleToggleCameraOverlay = useCallback(() => {
+      setIsCameraOverlayVisible((current) => {
+        const next = !current;
+        window.localStorage.setItem(CAMERA_OVERLAY_VISIBILITY_KEY, String(next));
+        window.dispatchEvent(
+          new CustomEvent(CAMERA_OVERLAY_VISIBILITY_EVENT, { detail: { visible: next } }),
+        );
+        return next;
+      });
+    }, []);
+
     const handleRecordButtonClick = useCallback(() => {
       if (isRecording) {
         stopRecording();
@@ -200,16 +230,20 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
           return;
         }
 
-        startRecording({ audioBlob: selectedAudioFile });
+        startRecording({
+          audioBlob: selectedAudioFile,
+          enableCamera: enableCameraForNextRecording,
+        });
         onRecord?.();
         return;
       }
 
-      startRecording();
+      startRecording({ enableCamera: enableCameraForNextRecording });
       onRecord?.();
     }, [
       clearRecording,
       currentRecording,
+      enableCameraForNextRecording,
       isRecording,
       onRecord,
       onStopRecording,
@@ -222,6 +256,7 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
     const duration = currentRecording?.duration || 0;
     const progressDuration = actualDuration > 0 ? actualDuration * 1000 : duration;
     const showAudioSourceControls = recordMode && !isRecording && !currentRecording && !isPlaying;
+    const hasCameraRecording = currentRecording?.cameraBlob instanceof Blob;
 
     if (!recordMode && !currentRecording && !isRecording) {
       return null;
@@ -313,6 +348,26 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
                 className="sr-only"
                 onChange={handleAudioFileChange}
               />
+              {isCameraSupported ? (
+                <button
+                  type="button"
+                  onClick={handleToggleCameraForNextRecording}
+                  aria-pressed={enableCameraForNextRecording}
+                  title={enableCameraForNextRecording ? "Record camera" : "Do not record camera"}
+                  className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold shadow-sm transition-colors ${
+                    enableCameraForNextRecording
+                      ? "border-pinata-cyan bg-pinata-cyan text-slate-950"
+                      : "border-slate-700 bg-slate-900/90 text-slate-400 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  {enableCameraForNextRecording ? (
+                    <Video size={13} aria-hidden="true" />
+                  ) : (
+                    <VideoOff size={13} aria-hidden="true" />
+                  )}
+                  <span className="hidden sm:inline">Camera</span>
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -326,6 +381,22 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
               </button>
 
               <PlaybackProgress progressDuration={progressDuration} onSeek={handleSeek} />
+
+              {hasCameraRecording ? (
+                <button
+                  type="button"
+                  onClick={handleToggleCameraOverlay}
+                  aria-pressed={isCameraOverlayVisible}
+                  title={isCameraOverlayVisible ? "Hide camera" : "Show camera"}
+                  className="flex w-6 items-center justify-center text-slate-300 transition-colors hover:text-white pointer-events-auto"
+                >
+                  {isCameraOverlayVisible ? (
+                    <Video size={16} aria-hidden="true" />
+                  ) : (
+                    <VideoOff size={16} aria-hidden="true" />
+                  )}
+                </button>
+              ) : null}
 
               <div className="relative pointer-events-auto">
                 <button

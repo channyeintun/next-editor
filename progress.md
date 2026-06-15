@@ -11,8 +11,11 @@
   - Added a circular camera replay overlay mounted beside the cursor overlay.
   - Synced video play, pause, seek, and speed against the existing playback timeline.
   - Added draggable viewer-side positioning with localStorage persistence.
+- Phase 3 - Recording and playback controls
+  - Added a feature-detected camera toggle to the pre-record controls.
+  - Passed per-recording camera enablement through `startRecording`.
+  - Added a replay camera show/hide control for recordings with camera media.
 
 ## Remaining
 
-- Phase 3 - Recording and playback controls.
 - Phase 4 - Docs and metadata polish.
