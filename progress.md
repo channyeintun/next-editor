@@ -80,6 +80,21 @@ fallback, magic dispatch, and IndexedDB `recording-payload` blob fallback).
       replaying real frames/events through the bridge recovers all records and a mid-stream
       prefix replays via `decodeRecordingPrefix`.
 
+- [x] **T10. Live audio streaming for both recording modes** — audio is now carried on the
+      recording session so the live sink streams it for both modes:
+  - `RecordingSession.audioChunks: Blob[]` (append-only); `initRecordingSession` seeds the
+    selected file immediately (external) or starts empty (mic).
+  - `editorMachine`: new `captureAudioChunk` action appends `CHUNK` blobs in both `recording`
+    and `stoppingRecording` (the latter captures the final post-stop microphone fragment); the
+    finalized `STOPPED` blob and local save/playback are unchanged.
+  - `RecordingStreamBridge`: reads audio blobs asynchronously through an ordered queue, appends
+    `audioChunk` segments, and serializes all sink writes through a write-chain; `finish()` is
+    async and awaits audio before the footer. `start()` takes the audio MIME for the header.
+  - `useRecordingStreamSink`: bridge lifecycle keyed on `context.session` (active through
+    `recording`+`stoppingRecording`, finalizes when the session is cleared) and passes the
+    audio MIME. Verified mic (incl. final fragment), file (whole file), and no-audio modes
+    reassemble byte-identical audio and replay partial prefixes.
+
 ## Layering note (T8)
 
 `core` cannot import `storage` (storage→core already), so the live-sink bridge lives in

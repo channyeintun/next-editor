@@ -89,6 +89,13 @@ export interface RecordingSession {
   runtimeEvents: RuntimeRecordingEvent[];
   /** High-cadence fake cursor samples during recording */
   cursorEvents: CursorRecordingEvent[];
+  /**
+   * Encoded audio captured during recording, append-only. For microphone recordings these are
+   * the `MediaRecorder` timeslice fragments; for a selected audio file it is the single file
+   * blob. Used to forward audio to an optional live recording sink — the saved recording's audio
+   * still comes from the finalized `context.audio.blob`.
+   */
+  audioChunks: Blob[];
   /** Last known mouse position */
   lastMousePosition: MouseCursorPosition;
 }

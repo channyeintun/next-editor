@@ -871,6 +871,10 @@ export const editorMachine = setup({
           workspaceEvents,
           runtimeEvents,
           cursorEvents: [{ timestamp: 0, ...initialMousePosition }],
+          // External (selected file) audio is fully known at start, so seed it as the single
+          // audio chunk. Microphone audio is appended later as timeslice CHUNK events arrive.
+          audioChunks:
+            context.audio.source === "external" && context.audio.blob ? [context.audio.blob] : [],
           lastMousePosition: initialMousePosition,
         },
         lastCallbackFrameTimestamp: undefined,
@@ -1563,6 +1567,18 @@ export const editorMachine = setup({
       };
     }),
 
+    // Append a live microphone timeslice fragment to the session's append-only audio stream so
+    // an optional live recording sink can forward it. The finalized blob (STOPPED) is unchanged.
+    captureAudioChunk: assign(({ context, event }) => {
+      if (event.type !== "CHUNK" || !context.session) return {};
+      return {
+        session: {
+          ...context.session,
+          audioChunks: [...context.session.audioChunks, event.chunk],
+        },
+      };
+    }),
+
     setEditorRef: assign(({ context, event }) => {
       if (event.type !== "SET_EDITOR_REF") {
         return {};
@@ -1879,6 +1895,9 @@ export const editorMachine = setup({
         CAPTURE_FRAME: {
           actions: ["captureFrame", "notifyFrame"],
         },
+        CHUNK: {
+          actions: "captureAudioChunk",
+        },
         READY: {
           actions: "storeExternalAudioDuration",
         },
@@ -2018,6 +2037,9 @@ export const editorMachine = setup({
       ],
       exit: [stopChild("audioRecorder")],
       on: {
+        CHUNK: {
+          actions: "captureAudioChunk",
+        },
         STOPPED: {
           target: "loading",
           actions: ["storeAudioBlob", "finalizeRecording", "notifyRecordingStop"],

@@ -15,6 +15,18 @@ import {
  */
 const EVENT_FLUSH_THRESHOLD = 32;
 
+async function blobToBytes(blob: Blob): Promise<Uint8Array> {
+  if (typeof blob.arrayBuffer === "function") {
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read audio blob"));
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
 interface StreamedCounts {
   frames: number;
   slide: number;
@@ -31,8 +43,10 @@ interface StreamedCounts {
  * newly-captured records to a live SCR3 writer and forwarding the drained bytes.
  *
  * Frame segments are flushed at keyframe boundaries (range-loadable) and event segments on a
- * small threshold, matching the SCR3 batching policy. The emitted bytes are the same SCR3
- * stream the exporter produces, so a remote consumer can replay them with `decodeRecordingPrefix`.
+ * small threshold, matching the SCR3 batching policy. Audio chunks (microphone timeslice
+ * fragments or a selected file) are read asynchronously and appended in arrival order. The
+ * emitted bytes are the same SCR3 stream the exporter produces, so a remote consumer can replay
+ * them with `decodeRecordingPrefix`.
  */
 export class RecordingStreamBridge {
   private readonly writer: StreamingRecordingWriter = createStreamingRecordingWriter();
@@ -46,6 +60,12 @@ export class RecordingStreamBridge {
     runtime: 0,
     cursor: 0,
   };
+  /** Number of audio chunks already scheduled for streaming. */
+  private audioCount = 0;
+  /** Serializes async audio reads/appends so chunks stay in arrival order. */
+  private audioQueue: Promise<void> = Promise.resolve();
+  /** Serializes sink writes so the consumer receives bytes in stream order. */
+  private writeChain: Promise<void> = Promise.resolve();
   private started = false;
   private lastSession: RecordingSession | null = null;
   private readonly sink: RecordingStreamSink;
@@ -54,8 +74,11 @@ export class RecordingStreamBridge {
     this.sink = sink;
   }
 
-  /** Writes the stream header and forwards it to the sink. */
-  start(session: RecordingSession): void {
+  /**
+   * Writes the stream header and forwards it to the sink. `audioType` is the MIME type the
+   * decoder should wrap the reassembled audio in (omit when the recording has no audio).
+   */
+  start(session: RecordingSession, audioType?: string): void {
     if (this.started) return;
     const meta: RecordingStreamMeta = {
       version: 3,
@@ -64,6 +87,7 @@ export class RecordingStreamBridge {
       keyframeInterval: DELTA_CONFIG.KEYFRAME_INTERVAL,
       createdAt: session.startedAt,
       duration: 0,
+      audioType,
     };
     this.writer.writeHeader(meta);
     this.started = true;
@@ -83,12 +107,13 @@ export class RecordingStreamBridge {
     this.flushEvents(SEGMENT_KIND.runtime, session.runtimeEvents, "runtime", false);
     this.flushEvents(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", false);
     this.flush();
+    this.queueAudio(session.audioChunks);
   }
 
   /** Flushes any buffered tail, finalizes the stream (footer), and closes the sink. */
-  finish(): void {
+  async finish(): Promise<void> {
     if (!this.started) {
-      void this.sink.close();
+      await this.closeSink();
       return;
     }
     if (this.lastSession) {
@@ -111,15 +136,19 @@ export class RecordingStreamBridge {
       this.flushEvents(SEGMENT_KIND.workspace, session.workspaceEvents, "workspace", true);
       this.flushEvents(SEGMENT_KIND.runtime, session.runtimeEvents, "runtime", true);
       this.flushEvents(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", true);
+      this.flush();
+      this.queueAudio(session.audioChunks);
     }
+    // All audio must be appended before the footer so the finalized stream is complete.
+    await this.audioQueue;
     this.writer.finalize();
     this.flush();
-    void this.sink.close();
+    await this.closeSink();
   }
 
   /** Closes the sink without finalizing (e.g. on unmount mid-recording). */
   abort(): void {
-    void this.sink.close();
+    void this.closeSink();
   }
 
   private flushFrames(frames: RecordingSession["frames"], final: boolean): void {
@@ -150,10 +179,28 @@ export class RecordingStreamBridge {
     this.counts[key] = records.length;
   }
 
+  private queueAudio(chunks: ReadonlyArray<Blob>): void {
+    while (this.audioCount < chunks.length) {
+      const blob = chunks[this.audioCount];
+      this.audioCount += 1;
+      // Append + flush run together inside one queued task so no other append interleaves
+      // between an audio chunk and its drain, keeping the emitted byte stream ordered.
+      this.audioQueue = this.audioQueue.then(async () => {
+        const bytes = await blobToBytes(blob);
+        this.writer.appendAudioChunk(bytes);
+        this.flush();
+      });
+    }
+  }
+
   private flush(): void {
     const bytes = this.writer.drainPending();
-    if (bytes.length > 0) {
-      void this.sink.write(bytes);
-    }
+    if (bytes.length === 0) return;
+    this.writeChain = this.writeChain.then(() => this.sink.write(bytes));
+  }
+
+  private async closeSink(): Promise<void> {
+    await this.writeChain;
+    await this.sink.close();
   }
 }
