@@ -18,10 +18,10 @@ stateDiagram-v2
     startingRecording --> idle : ERROR
     startingRecording --> idle : STOP_RECORDING
 
-    recording --> stoppingRecording : STOP_RECORDING [audioRecording]
-    recording --> loading : STOP_RECORDING [!audioRecording]
+    recording --> stoppingRecording : STOP_RECORDING [audioRecording || cameraRecording]
+    recording --> loading : STOP_RECORDING [!audioRecording && !cameraRecording]
 
-    stoppingRecording --> loading : STOPPED
+    stoppingRecording --> loading : STOPPED / CAMERA_STOPPED
     stoppingRecording --> loading : timeout(2s)
 
     loading --> playback : onDone
@@ -75,6 +75,7 @@ Actively capturing editor frames and ancillary state.
 **Entry Actions:**
 
 - Spawn `mouseTracking` actor for cursor position
+- Spawn `cameraRecording` actor when camera recording is enabled
 - Capture initial preview state (v3)
 
 **Events Handled:**
@@ -84,20 +85,24 @@ Actively capturing editor frames and ancillary state.
 - `PREVIEW_EVENT` - Records preview panel interaction and state
 - `WORKSPACE_EVENT` - Records file/folder changes (v3)
 - `RUNTIME_EVENT` - Records runtime/terminal output (v3)
+- `CAMERA_CHUNK` - Appends a live camera media fragment
+- `CAMERA_ERROR` - Disables camera capture without aborting the recording
 - `STOP_RECORDING` → `stoppingRecording` or `loading`
 
 ### stoppingRecording
 
-Waiting for audio recording to finalize.
+Waiting for audio and/or camera recording to finalize.
 
 **Entry Actions:**
 
 - Stop `mouseTracker` actor
-- Send `STOP` to `audioRecorder` actor
+- Send `STOP` to `audioRecorder` actor if microphone audio is active
+- Send `STOP` to `cameraRecorder` actor if camera recording is active
 
 **Transitions:**
 
-- `STOPPED` → `loading` (with audio blob)
+- `STOPPED` → `loading` after audio drains, unless camera is still draining
+- `CAMERA_STOPPED` → `loading` after camera drains, unless audio is still draining
 - Timeout (2s) → `loading` (fallback)
 
 ### loading
@@ -213,6 +218,32 @@ stateDiagram-v2
 - `STOPPED { blob }`
 - `ERROR { error }`
 
+### Camera Recording Actor
+
+```mermaid
+stateDiagram-v2
+    [*] --> idle
+
+    idle --> starting : START
+    starting --> recording : success
+    starting --> error : failure
+
+    recording --> stopping : STOP
+    stopping --> stopped : dataavailable
+
+    stopped --> [*]
+    error --> [*]
+```
+
+**Purpose:** Manages a video-only MediaRecorder for optional instructor camera capture
+
+**Events Sent to Parent:**
+
+- `CAMERA_STARTED { mimeType }`
+- `CAMERA_CHUNK { chunk }`
+- `CAMERA_STOPPED { blob }`
+- `CAMERA_ERROR { error }`
+
 ### Audio Playback Actor
 
 ```mermaid
@@ -253,7 +284,7 @@ stateDiagram-v2
 ```typescript
 type EditorMachineEvent =
   // Recording
-  | { type: "START_RECORDING" }
+  | { type: "START_RECORDING"; enableCamera?: boolean }
   | { type: "STOP_RECORDING" }
   | { type: "CAPTURE_FRAME"; mousePosition?: Position }
 

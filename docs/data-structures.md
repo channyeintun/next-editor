@@ -20,6 +20,7 @@ classDiagram
         +runtimeEvents?: RuntimeRecordingEvent[]
         +slides?: Slide[]
         +audioBlob?: Blob | AudioPlaceholder
+        +cameraBlob?: Blob | CameraPlaceholder
         +workspaceSnapshot?: WorkspaceRecordingSnapshot
         +runtimeSnapshot?: RuntimeRecordingSnapshot
         +duration: number
@@ -94,6 +95,9 @@ interface Recording {
   previewEvents?: PreviewEvent[]; // Preview panel events
   slides?: Slide[]; // Slide content data
   audioBlob?: Blob | AudioPlaceholder; // Audio recording
+  audioSource?: "microphone" | "external"; // Audio origin
+  cameraBlob?: Blob | CameraPlaceholder; // Optional instructor camera video
+  cameraSource?: "camera"; // Camera origin
 
   // Multi-file support (v3 only)
   workspaceEvents?: WorkspaceRecordingEvent[]; // File/folder changes
@@ -110,7 +114,7 @@ interface Recording {
 **Version Differences:**
 
 - **v2**: Single editor file recording; ideal for tutorials and code demonstrations
-- **v3**: Multi-file workspace recording; captures file changes, workspace state, and runtime/terminal output for full environment replay
+- **v3**: Multi-file workspace recording; captures file changes, workspace state, runtime/terminal output, optional audio, and optional instructor camera video for full environment replay
 
 ### EditorFrame
 
@@ -242,18 +246,21 @@ classDiagram
 
 ```mermaid
 flowchart LR
-    subgraph Header["Header (10 bytes)"]
-        M[Magic: SCRM]
-        V[Version: u16]
-        L[JSON Length: u32]
+    subgraph Header["SCR3 Header"]
+        M[Magic: SCR3]
+        V[Version + flags]
+        Meta[Deflated msgpack metadata]
     end
 
-    subgraph Data
-        J[Compressed JSON]
-        A[Audio Data]
+    subgraph Segments["Append-only segments"]
+        F[Frame segments]
+        E[Event segments]
+        A[Audio chunk]
+        C[Camera chunk]
     end
 
-    Header --> Data
+    Header --> Segments
+    Segments --> Footer[Footer index]
 ```
 
 ### AudioPlaceholder
@@ -265,6 +272,18 @@ interface AudioPlaceholder {
   __audio_offset: number; // Byte offset in binary data
   __audio_size: number; // Size in bytes
   __audio_type: string; // MIME type
+}
+```
+
+### CameraPlaceholder
+
+Used by storage layers that need to describe camera bytes without eagerly holding a Blob:
+
+```typescript
+interface CameraPlaceholder {
+  __camera_offset: number; // Byte offset in binary data
+  __camera_size: number; // Size in bytes
+  __camera_type: string; // MIME type
 }
 ```
 
@@ -283,8 +302,10 @@ interface EditorMachineContext {
   recording: Recording | null;
   currentFrame: EditorFrame | null;
   audio: AudioState;
+  camera: CameraState;
   editorRefs: EditorRefs;
   enableAudioRecording: boolean;
+  enableCameraRecording: boolean;
   pauseOnUserInteraction: boolean;
   animationFrameId: number | null;
   error: string | null;
@@ -316,6 +337,8 @@ interface RecordingSession {
   frames: EditorFrame[]; // Captured frames
   slideEvents: SlideEvent[]; // Slide events
   previewEvents: PreviewEvent[]; // Preview events
+  audioChunks: Blob[]; // Append-only audio chunks for SCR3/live streaming
+  cameraChunks: Blob[]; // Append-only camera chunks for SCR3/live streaming
   lastMousePosition: MouseCursorPosition;
 }
 ```

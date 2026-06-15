@@ -22,6 +22,7 @@ flowchart TB
             MachineTypes[types.ts]
             TimelineActor[timelineActor.ts]
             AudioActor[audioActor.ts]
+            CameraActor[cameraActor.ts]
         end
 
         subgraph Utils["utils/"]
@@ -60,6 +61,8 @@ export type {
   EditorState,
   MouseCursorPosition,
   AudioPlaceholder,
+  CameraPlaceholder,
+  RecordingCameraSource,
   EditorSelection,
   EditorPosition,
 };
@@ -95,6 +98,7 @@ classDiagram
         +runtimeEvents?: RuntimeRecordingEvent[]
         +slides?: Slide[]
         +audioBlob?: Blob|AudioPlaceholder
+        +cameraBlob?: Blob|CameraPlaceholder
         +workspaceSnapshot?: WorkspaceRecordingSnapshot
         +runtimeSnapshot?: RuntimeRecordingSnapshot
         +duration: number
@@ -129,7 +133,7 @@ classDiagram
 **Version Notes:**
 
 - **v2**: Single-file editor recording with slides/preview/audio support
-- **v3**: Multi-file workspace recording with workspace/runtime snapshots for full environment capture
+- **v3**: Multi-file workspace recording with workspace/runtime snapshots plus optional audio and instructor camera capture
 - v2 recordings remain supported on import for backward compatibility
 
 ### Delta Compression
@@ -275,7 +279,7 @@ stateDiagram-v2
     idle --> loading : LOAD_RECORDING
 
     startingRecording --> recording : STARTED
-    recording --> stoppingRecording : STOP_RECORDING
+    recording --> stoppingRecording : STOP_RECORDING [audio || camera]
     stoppingRecording --> loading : STOPPED
 
     loading --> playback : success
@@ -294,12 +298,13 @@ stateDiagram-v2
 
 ### Child Actors
 
-| Actor                 | Purpose                  | Events            |
-| --------------------- | ------------------------ | ----------------- |
-| `timelineActor`       | Playback timing via RAF  | TICK, FINISHED    |
-| `audioRecordingActor` | MediaRecorder management | STARTED, STOPPED  |
-| `audioPlaybackActor`  | HTMLAudioElement sync    | PLAY, PAUSE, SEEK |
-| `mouseTrackingActor`  | Cursor position capture  | CAPTURE_FRAME     |
+| Actor                  | Purpose                        | Events                         |
+| ---------------------- | ------------------------------ | ------------------------------ |
+| `timelineActor`        | Playback timing via RAF        | TICK, FINISHED                 |
+| `audioRecordingActor`  | MediaRecorder management       | STARTED, STOPPED               |
+| `cameraRecordingActor` | Video MediaRecorder management | CAMERA_STARTED, CAMERA_STOPPED |
+| `audioPlaybackActor`   | HTMLAudioElement sync          | PLAY, PAUSE, SEEK              |
+| `mouseTrackingActor`   | Cursor position capture        | CAPTURE_FRAME                  |
 
 ---
 

@@ -30,6 +30,7 @@ flowchart TB
     subgraph Actors["Child Actors"]
         Timeline[Timeline Actor]
         AudioRec[Audio Recording Actor]
+        CameraRec[Camera Recording Actor]
         AudioPlay[Audio Playback Actor]
         Mouse[Mouse Tracking Actor]
     end
@@ -53,6 +54,7 @@ flowchart TB
     Hook --> Machine
     Machine --> Timeline
     Machine --> AudioRec
+    Machine --> CameraRec
     Machine --> AudioPlay
     Machine --> Mouse
 
@@ -72,6 +74,7 @@ sequenceDiagram
     participant Context as NextEditorContext
     participant Machine as EditorMachine
     participant Audio as AudioActor
+    participant Camera as CameraActor
     participant Mouse as MouseActor
 
     User->>UI: Click Start Recording
@@ -87,6 +90,11 @@ sequenceDiagram
 
     Machine->>Machine: Enter recording state
     Machine->>Mouse: Spawn mouseTracking actor
+    opt Camera Recording Enabled
+        Machine->>Camera: Spawn cameraRecording actor
+        Machine->>Camera: START event
+        Camera-->>Machine: CAMERA_CHUNK events
+    end
     Machine->>Machine: initRecordingSession
     Machine->>Machine: captureInitialFrame
 
@@ -135,6 +143,13 @@ sequenceDiagram
         Machine->>Machine: storeAudioBlob
     end
 
+    alt Camera Recording Active
+        Machine->>Machine: Enter stoppingRecording
+        Machine->>Camera: STOP event
+        Camera-->>Machine: CAMERA_STOPPED with Blob
+        Machine->>Machine: storeCameraBlob
+    end
+
     Machine->>Machine: finalizeRecording
     Machine->>Machine: compressFrames (delta compression)
     Machine->>Machine: Enter loading state
@@ -153,6 +168,7 @@ sequenceDiagram
     participant Machine as EditorMachine
     participant Timeline as TimelineActor
     participant Audio as AudioPlaybackActor
+    participant Camera as CameraOverlay
     participant Editor as Monaco Editor
 
     User->>UI: Load Recording
@@ -164,6 +180,7 @@ sequenceDiagram
 
     Machine->>Timeline: Spawn timeline actor
     Machine->>Audio: Spawn audio playback actor
+    UI->>Camera: Mount camera overlay if cameraBlob exists
 
     User->>UI: Click Play
     UI->>Context: play()
@@ -186,6 +203,10 @@ sequenceDiagram
 
         opt Audio Sync (every 250ms)
             Machine->>Audio: SYNC event
+        end
+
+        opt Camera Sync
+            Camera->>Camera: Correct video drift from timeline.currentTime
         end
 
         opt Preview State Update
@@ -215,43 +236,42 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     subgraph Export["Export Flow"]
-        R1[Recording] --> E1[Extract Audio Data]
-        E1 --> E2[Replace with Placeholders]
-        E2 --> E3[SuperJSON Serialize]
-        E3 --> E4[Pako Compress]
-        E4 --> E5[Create Binary Header]
-        E5 --> E6[Concatenate Audio Data]
-        E6 --> E7[Base64 Encode]
-        E7 --> E8[Save to File/localStorage]
+        R1[Recording] --> E1[Normalize recording]
+        E1 --> E2[Write SCR3 header metadata]
+        E2 --> E3[Append frame/event segments]
+        E3 --> E4[Append audio chunk]
+        E4 --> E5[Append camera chunk]
+        E5 --> E6[Write footer index]
+        E6 --> E7[Base64 encode for .ne export]
     end
 
     subgraph Import["Import Flow"]
         I1[Read File/localStorage] --> I2[Base64 Decode]
-        I2 --> I3[Parse Binary Header]
-        I3 --> I4[Extract Compressed JSON]
-        I4 --> I5[Pako Inflate]
-        I5 --> I6[SuperJSON Parse]
-        I6 --> I7[Extract Audio Data]
-        I7 --> I8[Reconstruct Blobs]
-        I8 --> I9[Recording]
+        I2 --> I3[Parse SCR3 header]
+        I3 --> I4[Decode frame/event segments]
+        I4 --> I5[Reassemble audio Blob]
+        I5 --> I6[Reassemble camera Blob]
+        I6 --> I7[Normalize Recording]
     end
 ```
 
-### Binary File Format
+### SCR3 Binary File Format
 
 ```
 ┌─────────────────────────────────────────┐
-│ Magic Number: "SCRM" (4 bytes)          │
+│ Magic Number: "SCR3" (4 bytes)          │
 ├─────────────────────────────────────────┤
-│ Version: 2 (2 bytes, Uint16)            │
+│ Format version + flags                  │
 ├─────────────────────────────────────────┤
-│ JSON Length (4 bytes, Uint32)           │
+│ Deflated msgpack metadata               │
 ├─────────────────────────────────────────┤
-│ Compressed JSON Data                    │
-│ (variable length, deflate compressed)   │
+│ Frame and event segments                │
 ├─────────────────────────────────────────┤
-│ Audio Data                              │
-│ (raw binary, concatenated)              │
+│ Audio chunk segment (optional)          │
+├─────────────────────────────────────────┤
+│ Camera chunk segment (optional, last)   │
+├─────────────────────────────────────────┤
+│ Footer segment index                    │
 └─────────────────────────────────────────┘
 ```
 

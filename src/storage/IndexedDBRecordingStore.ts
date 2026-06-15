@@ -19,6 +19,7 @@ export interface StoredRecordingMetadata {
   createdAt: number;
   updatedAt: number;
   hasAudio: boolean;
+  hasCamera: boolean;
   payloadSize: number;
 }
 

@@ -15,7 +15,10 @@
   - Added a feature-detected camera toggle to the pre-record controls.
   - Passed per-recording camera enablement through `startRecording`.
   - Added a replay camera show/hide control for recordings with camera media.
+- Phase 4 - Docs and metadata polish
+  - Added `hasCamera` storage metadata for saved recordings.
+  - Documented camera recording fields, camera actor flow, SCR3 camera segments, and self-hosting camera permissions.
 
 ## Remaining
 
-- Phase 4 - Docs and metadata polish.
+- None. The camera recording plan is complete.

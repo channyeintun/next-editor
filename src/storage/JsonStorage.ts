@@ -55,6 +55,22 @@ export class JsonStorage {
     );
   }
 
+  private hasCameraPayload(recording: Recording): boolean {
+    const cameraBlob = recording.cameraBlob;
+
+    if (cameraBlob instanceof Blob) {
+      return cameraBlob.size > 0;
+    }
+
+    return (
+      !!cameraBlob &&
+      typeof cameraBlob === "object" &&
+      "__camera_size" in cameraBlob &&
+      typeof cameraBlob.__camera_size === "number" &&
+      cameraBlob.__camera_size > 0
+    );
+  }
+
   private createStoredMetadata(recording: Recording, payloadSize: number): StoredRecordingMetadata {
     return {
       id: recording.id,
@@ -64,6 +80,7 @@ export class JsonStorage {
       createdAt: recording.createdAt,
       updatedAt: Date.now(),
       hasAudio: this.hasAudioPayload(recording),
+      hasCamera: this.hasCameraPayload(recording),
       payloadSize,
     };
   }

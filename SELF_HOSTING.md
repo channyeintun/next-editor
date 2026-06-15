@@ -59,6 +59,7 @@ If you deploy without Docker, your host must reproduce the same behavior as `Cad
 - Rewrite application routes to `index.html`
 - Send `Cross-Origin-Embedder-Policy: require-corp` on app responses
 - Send `Cross-Origin-Opener-Policy: same-origin` on app responses
+- If embedding Next Editor inside another site, allow camera access from the parent frame with an appropriate `Permissions-Policy`/iframe `allow` value such as `camera`.
 
 Without those headers, the WebContainer-backed runtime features will not work correctly.
 
