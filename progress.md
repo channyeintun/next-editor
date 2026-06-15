@@ -23,8 +23,11 @@ Last updated: 2026-06-15
 
 ## Phase 2 — SCR3 container + segmented IndexedDB
 
-- [ ] **T2. SCR3 streaming codec module** — `src/storage/streamingRecordingCodec.ts`
-      (append-only segmented writer/reader, msgpack records, warm-dictionary deflate).
+- [x] **T2. SCR3 streaming codec module** — `src/storage/streamingRecordingCodec.ts`
+      (append-only segmented writer/reader, msgpack records, per-segment deflate at keyframe
+      boundaries). Added `@msgpack/msgpack`. Verified round-trip on `public/introduction.ne`:
+      semantically identical frames/cursor/preview/audio, prefix decode replays complete
+      segments, and SCR3 is ~9% smaller than legacy SCRM (non-audio data ~24% smaller).
 - [ ] **T3. Magic dispatch + worker/client streaming entry points** — `recordingCodec.ts`
       dispatch on `SCRM`/`SCR3`; worker + client streaming encode/decode.
 - [ ] **T4. Segmented IndexedDB store** — `IndexedDBRecordingStore.ts` segment store, DB
