@@ -90,3 +90,17 @@ config field is in core types so consumers can pass a sink; the provider hosts t
 
 - Phase 1 is shipped as a single commit because the `RecordingSession` type change requires
   all capture/finalize sites to update together for the build to stay green.
+- `JsonStorage.appendRecordingSegments` + `IndexedDBRecordingStore.appendSegments` provide the
+  crash-resilient incremental-persistence capability from plan §3.6, but recording does not
+  write them continuously by default (that would change behavior for every recording). Live
+  "stream while recording" is delivered via the opt-in `RecordingStreamSink` (T8); a consumer
+  can supply a sink that calls `appendRecordingSegments` if continuous local persistence is
+  wanted.
+- `tsgo` runs with `erasableSyntaxOnly`: no constructor parameter properties (TS1294). Lint and
+  tests can pass while the build fails, so the build is run after every task.
+
+## Completion
+
+All plan tasks (T1–T9) are implemented and committed; every change ran `vp check --fix`,
+`vp check`, `npm run build` (tsgo + vite), and the full `vp test` suite (65/65). Phases 1–3 of
+plan.md §8 are complete, with the §6 revision (SCR3-only, no backward compatibility) applied.
