@@ -32,8 +32,12 @@ Last updated: 2026-06-15
       `decompressBinaryToRecordings` now dispatches on magic (`SCR3` → streaming decode, else
       legacy `SCRM`); added `encodeRecordingToStream` / `encodeRecordingToBase64Stream`; worker + client expose the SCR3 encode entry points (heavy deflate stays off the main thread).
       Verified SCRM+SCR3 import both decode via dispatch.
-- [ ] **T4. Segmented IndexedDB store** — `IndexedDBRecordingStore.ts` segment store, DB
-      version bump, append + concat read, legacy blob read kept.
+- [x] **T4. Segmented IndexedDB store** — `IndexedDBRecordingStore.ts`: added
+      `recording-segments` store (composite key `[recordingId, seq]`), bumped DB version to 2,
+      `appendSegments` for incremental writes, `getEntry`/`getAllEntries` concat segments in seq
+      order with legacy `recording-payload` blob fallback, `putMany` replaces segments, `delete`
+      /`clear` cover all stores. (IndexedDB isn't runnable in node/bun; validated by build +
+      reasoning, browser smoke test in a later step.)
 - [ ] **T5. JsonStorage append + export via SCR3** — `appendRecordingSegments`, finalize/export.
 - [ ] **T6. Storage size validation** — one-off measurement script (no unit tests).
 
