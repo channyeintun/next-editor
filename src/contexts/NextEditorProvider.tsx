@@ -10,6 +10,7 @@ import {
   useWebContainerRuntimeSnapshotGetter,
 } from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
+import { useRecordingStreamSink } from "../hooks/useRecordingStreamSink";
 import { createJsonStorage } from "../storage/JsonStorage";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
 import type { WorkspaceRecordingSnapshot } from "../types/workspace";
@@ -35,6 +36,9 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
 }) => {
   const actorRef = NextEditorActorContext.useActorRef();
   const originalHook = useNextEditorActorBindings(actorRef, config);
+
+  // Opt-in: forward the live SCR3 recording stream to a configured sink (inert if absent).
+  useRecordingStreamSink(actorRef, config.recordingStreamSink);
 
   const {
     clearRecording: clearRecordingBase,

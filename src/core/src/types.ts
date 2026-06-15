@@ -144,6 +144,16 @@ export interface Recording {
 }
 
 /**
+ * Sink for the live SCR3 recording byte stream (WebSocket / fetch ReadableStream /
+ * callback). Receives append-only chunks as they are recorded and is closed when the
+ * recording ends. The bytes form a valid SCR3 stream replayable via `decodeRecordingPrefix`.
+ */
+export interface RecordingStreamSink {
+  write(bytes: Uint8Array): void | Promise<void>;
+  close(): void | Promise<void>;
+}
+
+/**
  * Configuration options for useNextEditor hook
  */
 export interface UseNextEditorConfig {
@@ -152,6 +162,13 @@ export interface UseNextEditorConfig {
 
   // Recording Options
   enableAudioRecording?: boolean;
+
+  /**
+   * Optional sink for live, stream-compatible recording. When provided, the SCR3 byte
+   * stream produced while recording is forwarded here as it is captured, so a remote
+   * consumer can tail and replay it with `decodeRecordingPrefix`. Inert when omitted.
+   */
+  recordingStreamSink?: RecordingStreamSink;
 
   // Playback Options
   pauseOnUserInteraction?: boolean;

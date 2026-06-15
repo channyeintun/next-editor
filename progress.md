@@ -70,7 +70,21 @@ fallback, magic dispatch, and IndexedDB `recording-payload` blob fallback).
       (1000ms) so `ondataavailable` fires periodically and the existing `CHUNK` emit forwards live
       audio data. The final assembled blob (`STOPPED`) and duration logic are unchanged; the
       `recording` state ignores `CHUNK` until the sink/store is wired in T8 (additive, no-op now).
-- [ ] **T8. Optional live sink + config wiring** — `recordingStreamSink.ts` + opt-in config.
+- [x] **T8. Optional live sink + config wiring** — `RecordingStreamSink` interface +
+      `UseNextEditorConfig.recordingStreamSink` in core types (exported from the core barrel);
+      `src/storage/recordingStreamSink.ts` (`RecordingStreamBridge`: keyframe-batched frame
+      segments + threshold-batched event segments → `drainPending` → sink); React bridge hook
+      `src/hooks/useRecordingStreamSink.ts` (subscribes to actor snapshots, inert when no sink);
+      wired opt-in in `NextEditorProvider`. Machine/actors unchanged — the bridge only observes
+      `session` growth (live audio not streamed; it stays in the finalized export). Verified:
+      replaying real frames/events through the bridge recovers all records and a mid-stream
+      prefix replays via `decodeRecordingPrefix`.
+
+## Layering note (T8)
+
+`core` cannot import `storage` (storage→core already), so the live-sink bridge lives in
+`storage` + `hooks` and is invoked from `NextEditorProvider`, not from `useNextEditor`. The
+config field is in core types so consumers can pass a sink; the provider hosts the effect.
 
 ## Notes / decisions
 
