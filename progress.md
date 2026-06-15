@@ -66,7 +66,10 @@ fallback, magic dispatch, and IndexedDB `recording-payload` blob fallback).
 
 ## Phase 3 — Live audio chunks + optional sink
 
-- [ ] **T7. Audio live timeslice chunks** — `audioActor.ts` timeslice `start()`, route `CHUNK`.
+- [x] **T7. Audio live timeslice chunks** — `audioActor.ts`: `mediaRecorder.start(AUDIO_TIMESLICE_MS)`
+      (1000ms) so `ondataavailable` fires periodically and the existing `CHUNK` emit forwards live
+      audio data. The final assembled blob (`STOPPED`) and duration logic are unchanged; the
+      `recording` state ignores `CHUNK` until the sink/store is wired in T8 (additive, no-op now).
 - [ ] **T8. Optional live sink + config wiring** — `recordingStreamSink.ts` + opt-in config.
 
 ## Notes / decisions

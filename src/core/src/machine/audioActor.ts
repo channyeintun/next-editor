@@ -2,6 +2,13 @@ import { fromCallback, type ActorRefFrom } from "xstate";
 
 const AUDIO_SYNC_DRIFT_THRESHOLD_SECONDS = 0.5;
 
+/**
+ * MediaRecorder timeslice (ms). Emitting `ondataavailable` on an interval produces
+ * live audio chunks (forwarded as `CHUNK`) for incremental persistence / streaming,
+ * while the final assembled blob is still emitted on stop exactly as before.
+ */
+const AUDIO_TIMESLICE_MS = 1000;
+
 // ============================================================================
 // Audio Actor Types
 // ============================================================================
@@ -158,7 +165,9 @@ export const audioRecordingActor = fromCallback<
         }
       };
 
-      mediaRecorder.start();
+      // Timeslice so audio data is delivered incrementally as `CHUNK` events; the
+      // final blob is still assembled from the same chunks on stop.
+      mediaRecorder.start(AUDIO_TIMESLICE_MS);
     } catch (error) {
       cleanupStream();
       if (!disposed) {
