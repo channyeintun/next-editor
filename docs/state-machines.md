@@ -1,8 +1,6 @@
 # State Machines Documentation
 
-This document describes the XState v5 state machine architecture used in Next Editor.
-
----
+This document describes the current XState v5 architecture used by Next Editor.
 
 ## Editor Machine Overview
 
@@ -10,28 +8,27 @@ This document describes the XState v5 state machine architecture used in Next Ed
 stateDiagram-v2
     [*] --> idle
 
-    idle --> startingRecording : START_RECORDING [audioEnabled]
-    idle --> recording : START_RECORDING [!audioEnabled]
+    idle --> startingRecording : START_RECORDING [microphone path]
+    idle --> recording : START_RECORDING [no microphone bootstrap needed]
     idle --> loading : LOAD_RECORDING
 
     startingRecording --> recording : STARTED
     startingRecording --> idle : ERROR
     startingRecording --> idle : STOP_RECORDING
 
-    recording --> stoppingRecording : STOP_RECORDING [audioRecording || cameraRecording]
-    recording --> loading : STOP_RECORDING [!audioRecording && !cameraRecording]
+    recording --> stoppingRecording : STOP_RECORDING [audio or camera draining]
+    recording --> loading : STOP_RECORDING [no async drain]
 
-    stoppingRecording --> loading : STOPPED / CAMERA_STOPPED
-    stoppingRecording --> loading : timeout(2s)
+    stoppingRecording --> loading : STOPPED / CAMERA_STOPPED / timeout(2s)
 
-    loading --> playback : onDone
+    loading --> playback.ready : onDone
     loading --> idle : onError
 
     state playback {
         [*] --> ready
-        ready --> playing : PLAY [canPlay]
+        ready --> playing : PLAY
         playing --> paused : PAUSE
-        playing --> paused : USER_INTERACTION [pauseOnInteraction]
+        playing --> paused : USER_INTERACTION
         playing --> ended : FINISHED
         paused --> playing : PLAY
         ended --> playing : PLAY
@@ -40,102 +37,63 @@ stateDiagram-v2
     playback --> idle : UNLOAD
 ```
 
----
+## Core States
 
-## State Descriptions
+### `idle`
 
-### idle
+No recording or playback is active.
 
-Initial state. No recording or playback active.
+- Accepts `START_RECORDING`
+- Accepts `LOAD_RECORDING`
+- Holds the current editor reference and default playback settings
 
-**Transitions:**
+### `startingRecording`
 
-- `START_RECORDING` → `startingRecording` (if audio enabled)
-- `START_RECORDING` → `recording` (if audio disabled)
-- `LOAD_RECORDING` → `loading`
+Used when microphone recording needs to bootstrap before the main recording session can begin.
 
-### startingRecording
+- Starts the audio recording actor
+- Waits for `STARTED`
+- Can abort back to `idle` on error or immediate stop
 
-Waiting for audio recording to initialize.
+### `recording`
 
-**Entry Actions:**
+The main capture state.
 
-- Spawn `audioRecording` actor
-- Send `START` to audio actor
+What happens here:
 
-**Transitions:**
+- a `RecordingSession` is initialized
+- the first frame is captured
+- cursor sampling is tracked
+- preview events, preview seed documents, and preview patch batches are collected
+- workspace and runtime events are appended
+- audio chunks and camera chunks are forwarded into the session for live SCR3 streaming
 
-- `STARTED` → `recording`
-- `ERROR` → `idle`
+### `stoppingRecording`
 
-### recording
+This is a drain state, not a second recording mode.
 
-Actively capturing editor frames and ancillary state.
+- microphone capture may still emit a final post-stop chunk
+- camera capture may stop before or after audio
+- the machine finalizes once the required blobs arrive or the safety timeout fires
 
-**Entry Actions:**
+This ordering matters because the live stream sink must preserve append-only SCR3 ordering even while the media recorders are draining.
 
-- Spawn `mouseTracking` actor for cursor position
-- Spawn `cameraRecording` actor when camera recording is enabled
-- Capture initial preview state (v3)
+### `loading`
 
-**Events Handled:**
+The machine normalizes a recording and prepares playback.
 
-- `CAPTURE_FRAME` - Captures current editor state
-- `SLIDE_EVENT` - Records slide interaction
-- `PREVIEW_EVENT` - Records preview panel interaction and state
-- `WORKSPACE_EVENT` - Records file/folder changes (v3)
-- `RUNTIME_EVENT` - Records runtime/terminal output (v3)
-- `CAMERA_CHUNK` - Appends a live camera media fragment
-- `CAMERA_ERROR` - Disables camera capture without aborting the recording
-- `STOP_RECORDING` → `stoppingRecording` or `loading`
+Current work done here includes:
 
-### stoppingRecording
+- restoring workspace/runtime snapshots
+- calculating effective playback duration
+- preparing preview replay inputs
+- preparing audio and camera playback metadata
 
-Waiting for audio and/or camera recording to finalize.
+### `playback`
 
-**Entry Actions:**
+Playback is a compound state with `ready`, `playing`, `paused`, and `ended` substates.
 
-- Stop `mouseTracker` actor
-- Send `STOP` to `audioRecorder` actor if microphone audio is active
-- Send `STOP` to `cameraRecorder` actor if camera recording is active
-
-**Transitions:**
-
-- `STOPPED` → `loading` after audio drains, unless camera is still draining
-- `CAMERA_STOPPED` → `loading` after camera drains, unless audio is still draining
-- Timeout (2s) → `loading` (fallback)
-
-### loading
-
-Processing and loading a recording for playback.
-
-**Invokes:** `loadRecording` promise actor
-
-- Calculates exact audio duration from blob
-- Normalizes recording data
-- Validates recording format (v2 or v3)
-
-**Transitions:**
-
-- `onDone` → `playback.ready`
-- `onError` → `idle`
-
-### playback (compound state)
-
-Playback mode with nested states for playing, paused, and ended.
-
-**Entry Actions:**
-
-- Spawn `timeline` actor
-- Spawn `audioPlayback` actor (if audio exists)
-- Restore initial preview state and workspace/runtime snapshots (v3)
-
-**Exit Actions:**
-
-- Stop all child actors
-- Clear cursor decorations
-
----
+The parent `playback` state also handles `EXTEND_RECORDING`, which is what makes progressive streaming possible without a full reload.
 
 ## Playback Substates
 
@@ -143,181 +101,101 @@ Playback mode with nested states for playing, paused, and ended.
 stateDiagram-v2
     state playback {
         [*] --> ready
-
         ready --> playing : PLAY
-
-        playing --> paused : PAUSE
-        playing --> paused : USER_INTERACTION
+        playing --> paused : PAUSE / USER_INTERACTION
         playing --> ended : FINISHED
-
         paused --> playing : PLAY
-
-        ended --> playing : PLAY [fromStart]
+        ended --> playing : PLAY
     }
-
-    note right of playing
-        Entry: Send START to timeline/audio
-        Exit: Send PAUSE to timeline/audio
-    end note
-
-    note right of ended
-        Playback position at duration
-        PLAY restarts from beginning
-    end note
 ```
 
----
+Important current behavior:
+
+- `SET_SPEED` is meaningful even while playback is paused or stopped.
+- `STOP` resets playback position without unloading the recording.
+- `PLAY` from `ended` restarts from the beginning.
 
 ## Child Actors
 
-### Timeline Actor
+### Timeline actor
+
+The timeline actor owns clock progression and emits `TICK` updates.
 
 ```mermaid
 stateDiagram-v2
     [*] --> idle
-
     idle --> running : START
     running --> idle : PAUSE
-    running --> running : TICK
-    running --> idle : FINISHED
-
     idle --> idle : SEEK
     running --> running : SEEK
     running --> running : SET_SPEED
+    running --> idle : FINISHED
 ```
 
-**Purpose:** Manages playback timing using `requestAnimationFrame`
+### Audio recording actor
 
-**Events Sent to Parent:**
+- Starts microphone capture
+- Emits `STARTED`, `STOPPED`, and `ERROR`
+- Produces timesliced chunks during recording so the live SCR3 bridge can stream them before finalization
 
-- `TICK { timestamp, currentTime }` - Every animation frame
-- `FINISHED` - When currentTime >= duration
+### Camera recording actor
 
-### Audio Recording Actor
+- Starts optional video-only capture
+- Emits `CAMERA_CHUNK` while recording and `CAMERA_STOPPED` on finalize
+- Tracks a warmup delay so the parent machine can persist `cameraStartOffsetMs`
 
-```mermaid
-stateDiagram-v2
-    [*] --> idle
+### Audio playback actor
 
-    idle --> starting : START
-    starting --> recording : success
-    starting --> error : failure
+- Manages synchronized audio playback when a finalized audio blob is available
+- Is spawned lazily in progressive-load scenarios when audio arrives later than the initial visual frames
 
-    recording --> stopping : STOP
-    stopping --> stopped : dataavailable
+## Replay Cursors In Context
 
-    stopped --> [*]
-    error --> [*]
-```
+The machine keeps replay progress in context so it can apply large recordings efficiently:
 
-**Purpose:** Manages MediaRecorder for audio capture
+- `lastAppliedFrameIndex`
+- `lastAppliedPreviewEventIndex`
+- `lastAppliedPreviewPatchBatchIndex`
+- `lastAppliedSlideEventIndex`
+- corresponding indices for workspace, runtime, and cursor event streams
 
-**Events Sent to Parent:**
+These indices are preserved across `EXTEND_RECORDING`, which is the critical detail for streaming playback.
 
-- `STARTED { mediaRecorder, mimeType }`
-- `STOPPED { blob }`
-- `ERROR { error }`
+## Key Events
 
-### Camera Recording Actor
+Representative machine events:
 
-```mermaid
-stateDiagram-v2
-    [*] --> idle
-
-    idle --> starting : START
-    starting --> recording : success
-    starting --> error : failure
-
-    recording --> stopping : STOP
-    stopping --> stopped : dataavailable
-
-    stopped --> [*]
-    error --> [*]
-```
-
-**Purpose:** Manages a video-only MediaRecorder for optional instructor camera capture
-
-**Events Sent to Parent:**
-
-- `CAMERA_STARTED { mimeType }`
-- `CAMERA_CHUNK { chunk }`
-- `CAMERA_STOPPED { blob }`
-- `CAMERA_ERROR { error }`
-
-### Audio Playback Actor
-
-```mermaid
-stateDiagram-v2
-    [*] --> loading
-
-    loading --> ready : loaded
-    loading --> error : failure
-
-    ready --> playing : PLAY
-    playing --> ready : PAUSE
-    playing --> playing : SEEK
-    playing --> playing : SET_VOLUME
-    playing --> playing : SET_PLAYBACK_RATE
-    playing --> playing : SYNC
-    ready --> ready : SEEK
-```
-
-**Purpose:** Manages HTMLAudioElement for synchronized audio playback
-
-### Mouse Tracking Actor
-
-**Purpose:** Captures mouse cursor position across document and iframes
-
-**Behavior:**
-
-- Listens to `mousemove` on document
-- Observes DOM for new iframes
-- Attaches listeners to iframe contentDocuments
-- Sends `CAPTURE_FRAME` with position to parent
-
----
-
-## Event Types
-
-### Machine Events
-
-```typescript
+```ts
 type EditorMachineEvent =
-  // Recording
   | { type: "START_RECORDING"; enableCamera?: boolean }
   | { type: "STOP_RECORDING" }
-  | { type: "CAPTURE_FRAME"; mousePosition?: Position }
-
-  // Loading
   | { type: "LOAD_RECORDING"; recording: Recording }
-  | { type: "RECORDING_LOADED"; recording: Recording; duration: number }
-  | { type: "LOAD_FAILED"; error: string }
-  | { type: "UNLOAD" }
-
-  // Playback
+  | { type: "EXTEND_RECORDING"; recording: Recording }
   | { type: "PLAY" }
   | { type: "PAUSE" }
   | { type: "STOP" }
   | { type: "SEEK"; time: number }
   | { type: "SET_SPEED"; speed: number }
   | { type: "SET_VOLUME"; volume: number }
-  | { type: "TICK"; timestamp: number; currentTime: number }
-  | { type: "FINISHED" }
-  | { type: "USER_INTERACTION" }
-
-  // Content
   | { type: "SLIDE_EVENT"; event: SlideEvent }
   | { type: "PREVIEW_EVENT"; event: PreviewEvent }
-  | { type: "WORKSPACE_EVENT"; event: WorkspaceRecordingEvent } // v3
-  | { type: "RUNTIME_EVENT"; event: RuntimeRecordingEvent } // v3
-
-  // Audio
+  | { type: "WORKSPACE_EVENT"; event: WorkspaceRecordingEvent }
+  | { type: "RUNTIME_EVENT"; event: RuntimeRecordingEvent }
   | { type: "STARTED"; mediaRecorder: MediaRecorder; mimeType: string }
   | { type: "STOPPED"; blob: Blob }
-
-  // Editor
-  | { type: "SET_EDITOR_REF"; editor: IStandaloneCodeEditor };
+  | { type: "CAMERA_CHUNK"; chunk: Blob }
+  | { type: "CAMERA_STOPPED"; blob: Blob };
 ```
+
+## Practical Summary
+
+The machine is optimized around three constraints:
+
+- capture must be able to write an append-only SCR3 stream while recording
+- playback must be able to restore editor, preview, workspace, runtime, audio, and camera state from one timeline
+- streamed playback must be able to swap in larger recording prefixes without resetting progress
+
+````
 
 ---
 
@@ -341,7 +219,7 @@ const guards = {
   isValidSeekTime: ({ context, event }) =>
     event.time >= 0 && event.time <= context.timeline.duration,
 };
-```
+````
 
 ---
 

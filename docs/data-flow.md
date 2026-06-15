@@ -1,279 +1,184 @@
 # Data Flow Documentation
 
-This document describes the data flow patterns in the Next Editor application.
-
----
+This document tracks the current data flow across the UI, core machine, runtime adapters, and SCR3 storage pipeline.
 
 ## High-Level Architecture
 
 ```mermaid
 flowchart TB
     subgraph UI["UI Layer"]
-        Editor[Monaco Editor]
+        Editor[Editor + Sidebar]
         Controls[Media Controls]
-        Preview[Preview Panel]
-        Slides[Slides Panel]
+        Preview[Preview Surface]
+        Slides[Slides UI]
+        Camera[Camera Overlay]
     end
 
-    subgraph Context["React Context Layer"]
-        NAC[NextEditorActionsContext]
-        NMC[NextEditorMetadataContext]
-        NPC[NextEditorPlaybackContext]
-        SC[SlidesContext]
+    subgraph Contexts["React Contexts + Providers"]
+        Actions[NextEditorActionsContext]
+        Actor[NextEditorActorContext]
+        Workspace[WorkspaceProvider]
+        Runtime[WebContainerRuntimeProvider]
+        SlidesCtx[SlidesProvider]
     end
 
-    subgraph Core["Core Layer"]
-        Hook[useNextEditor Hook]
-        Machine[XState Editor Machine]
+    subgraph Core["Core Recording Layer"]
+        Hook[useNextEditorActorBindings]
+        Machine[editorMachine]
+        Timeline[timelineMachine]
     end
 
-    subgraph Actors["Child Actors"]
-        Timeline[Timeline Actor]
-        AudioRec[Audio Recording Actor]
-        CameraRec[Camera Recording Actor]
-        AudioPlay[Audio Playback Actor]
-        Mouse[Mouse Tracking Actor]
+    subgraph Persistence["Storage + Transport"]
+        IndexedDB[IndexedDB recording store]
+        Codec[SCR3 codec worker]
+        Stream[recordingStreamSink]
+        Export[.ne file export/import]
     end
 
-    subgraph Storage["Storage Layer"]
-        JsonStorage[JsonStorage]
-        LocalStorage[(localStorage)]
-        FileSystem[(File System)]
-    end
-
-    Editor <--> NAC
-    Controls <--> NAC
-    Preview <--> NAC
-    Slides <--> SC
-
-    NAC --> Hook
-    NMC --> Hook
-    NPC --> Hook
-    SC --> NAC
-
+    UI --> Actions
+    UI --> Actor
+    Workspace --> Actions
+    Runtime --> Actions
+    SlidesCtx --> Actions
+    Actions --> Hook
     Hook --> Machine
     Machine --> Timeline
-    Machine --> AudioRec
-    Machine --> CameraRec
-    Machine --> AudioPlay
-    Machine --> Mouse
-
-    NAC --> JsonStorage
-    JsonStorage --> LocalStorage
-    JsonStorage --> FileSystem
+    Machine --> IndexedDB
+    Machine --> Stream
+    Export --> Codec
+    IndexedDB --> Codec
 ```
-
----
 
 ## Recording Flow
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant UI as UI Components
-    participant Context as NextEditorContext
-    participant Machine as EditorMachine
-    participant Audio as AudioActor
-    participant Camera as CameraActor
-    participant Mouse as MouseActor
+    participant UI
+    participant Provider as NextEditorProvider
+    participant Machine as editorMachine
+    participant Preview as Preview adapter
+    participant Runtime as Workspace/runtime adapters
+    participant Sink as recordingStreamSink
 
-    User->>UI: Click Start Recording
-    UI->>Context: startRecording()
-    Context->>Machine: START_RECORDING event
+    User->>UI: Start recording
+    UI->>Provider: startRecording(...)
+    Provider->>Machine: START_RECORDING
+    Machine->>Machine: init session + capture first frame
 
-    alt Audio Recording Enabled
-        Machine->>Machine: Enter startingRecording
-        Machine->>Audio: Spawn audioRecording actor
-        Machine->>Audio: START event
-        Audio-->>Machine: STARTED event
+    loop While recording
+        UI->>Provider: handleEditorChange()
+        Provider->>Machine: CAPTURE_FRAME
+        Preview-->>Machine: PREVIEW_EVENT / initial document / patch batch
+        Runtime-->>Machine: WORKSPACE_EVENT / RUNTIME_EVENT
+        Machine-->>Sink: append SCR3 bytes (optional)
     end
 
-    Machine->>Machine: Enter recording state
-    Machine->>Mouse: Spawn mouseTracking actor
-    opt Camera Recording Enabled
-        Machine->>Camera: Spawn cameraRecording actor
-        Machine->>Camera: START event
-        Camera-->>Machine: CAMERA_CHUNK events
-    end
-    Machine->>Machine: initRecordingSession
-    Machine->>Machine: captureInitialFrame
-
-    loop During Recording
-        User->>UI: Type in Editor
-        UI->>Context: handleEditorChange()
-        Context->>Machine: CAPTURE_FRAME event
-        Machine->>Machine: captureFrame action
-
-        Mouse-->>Machine: Mouse movement
-        Machine->>Machine: CAPTURE_FRAME with position
-
-        opt Slide Event
-            UI->>Context: handleSlideEvent()
-            Context->>Machine: SLIDE_EVENT
-            Machine->>Machine: Record slide event
-        end
-
-        opt Preview Event
-            UI->>Context: handlePreviewEvent()
-            Context->>Machine: PREVIEW_EVENT
-            Machine->>Machine: Record preview state + event
-        end
-
-        opt Workspace Changes (v3)
-            Runtime-->>Machine: File/folder change
-            Context->>Machine: WORKSPACE_EVENT
-            Machine->>Machine: Record workspace event
-        end
-
-        opt Runtime Events (v3)
-            Runtime-->>Machine: Terminal/process output
-            Context->>Machine: RUNTIME_EVENT
-            Machine->>Machine: Record runtime event
-        end
-    end
-
-    User->>UI: Click Stop Recording
-    UI->>Context: stopRecording()
-    Context->>Machine: STOP_RECORDING event
-
-    alt Audio Recording Active
-        Machine->>Machine: Enter stoppingRecording
-        Machine->>Audio: STOP event
-        Audio-->>Machine: STOPPED with Blob
-        Machine->>Machine: storeAudioBlob
-    end
-
-    alt Camera Recording Active
-        Machine->>Machine: Enter stoppingRecording
-        Machine->>Camera: STOP event
-        Camera-->>Machine: CAMERA_STOPPED with Blob
-        Machine->>Machine: storeCameraBlob
-    end
-
-    Machine->>Machine: finalizeRecording
-    Machine->>Machine: compressFrames (delta compression)
-    Machine->>Machine: Enter loading state
-    Machine->>Machine: Load recording for playback
+    User->>UI: Stop recording
+    UI->>Provider: stopRecording()
+    Provider->>Machine: STOP_RECORDING
+    Machine->>Machine: finalize frame/event/audio/camera data
+    Machine->>Provider: current recording ready
 ```
 
----
+Key points:
+
+- Frames are compressed incrementally during capture.
+- Preview replay data is captured as both a seed document and later DOM patch batches.
+- Workspace and runtime snapshots are captured alongside timed events so playback can restore the full lesson context.
+- If `recordingStreamSink` is configured, the provider forwards a live SCR3 stream while capture is in progress.
 
 ## Playback Flow
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant UI as UI Components
-    participant Context as NextEditorContext
-    participant Machine as EditorMachine
-    participant Timeline as TimelineActor
-    participant Audio as AudioPlaybackActor
-    participant Camera as CameraOverlay
-    participant Editor as Monaco Editor
+    participant Loader as URL/file/storage loader
+    participant Provider as NextEditorProvider
+    participant Machine as editorMachine
+    participant Timeline as timelineMachine
+    participant UI
 
-    User->>UI: Load Recording
-    UI->>Context: loadRecording(recording)
-    Context->>Machine: LOAD_RECORDING event
-    Machine->>Machine: Enter loading state
-    Machine->>Machine: Calculate audio duration
-    Machine->>Machine: Enter playback.ready
+    Loader->>Provider: loadRecording(recording)
+    Provider->>Machine: LOAD_RECORDING
+    Machine->>Machine: normalize + restore snapshots
+    Machine->>Timeline: spawn
 
-    Machine->>Timeline: Spawn timeline actor
-    Machine->>Audio: Spawn audio playback actor
-    UI->>Camera: Mount camera overlay if cameraBlob exists
-
-    User->>UI: Click Play
-    UI->>Context: play()
-    Context->>Machine: PLAY event
-    Machine->>Machine: Enter playback.playing
-    Machine->>Timeline: START event
-    Machine->>Audio: PLAY event
-
-    loop Animation Frame Loop
-        Timeline-->>Machine: TICK event (currentTime)
-        Machine->>Machine: updateTimelineFromTick
-        Machine->>Machine: applyFrameAtTime
-        Machine->>Editor: Apply content changes
-        Machine->>Editor: Apply selection/position
-        Machine->>Editor: Apply decorations
-        Machine->>Machine: applyPreviewEventsAtTime
-        Machine->>Machine: applySlideEventsAtTime
-        Machine->>Machine: applyWorkspaceEventsAtTime (v3)
-        Machine->>Machine: applyRuntimeEventsAtTime (v3)
-
-        opt Audio Sync (every 250ms)
-            Machine->>Audio: SYNC event
-        end
-
-        opt Camera Sync
-            Camera->>Camera: Correct video drift from timeline.currentTime
-        end
-
-        opt Preview State Update
-            Machine->>Machine: Restore preview state at checkpoint
-        end
+    alt Progressive download / live stream
+        Loader->>Provider: extendRecording(longerPrefix)
+        Provider->>Machine: EXTEND_RECORDING
+        Machine->>Machine: replace recording without resetting current time
     end
 
-    alt User Pauses
-        User->>UI: Click Pause / Press Space
-        UI->>Context: pause()
-        Context->>Machine: PAUSE / USER_INTERACTION
-        Machine->>Machine: Enter playback.paused
-        Machine->>Timeline: PAUSE event
-        Machine->>Audio: PAUSE event
-    end
+    UI->>Provider: play()
+    Provider->>Machine: PLAY
+    Machine->>Timeline: START
 
-    alt Playback Ends
-        Timeline-->>Machine: FINISHED event
-        Machine->>Machine: Enter playback.ended
+    loop Each tick
+        Timeline-->>Machine: TICK(currentTime)
+        Machine->>Machine: apply frame, cursor, preview, slides, workspace, runtime
+        Machine->>UI: update visible state
     end
 ```
 
----
+Current playback behavior:
+
+- The machine keeps replay cursors for each append-only event stream so `extendRecording` can continue from the current point efficiently.
+- Audio playback is lazy when a progressive load gains audio later in the stream.
+- Camera playback is rendered by `CameraOverlay`, which derives the correct video time from timeline time minus `cameraStartOffsetMs`.
 
 ## Storage Flow
 
 ```mermaid
-flowchart TB
-    subgraph Export["Export Flow"]
-        R1[Recording] --> E1[Normalize recording]
-        E1 --> E2[Write SCR3 header metadata]
-        E2 --> E3[Append frame/event segments]
-        E3 --> E4[Append audio chunk]
-        E4 --> E5[Append camera chunk]
-        E5 --> E6[Write footer index]
-        E6 --> E7[Base64 encode for .ne export]
-    end
-
-    subgraph Import["Import Flow"]
-        I1[Read File/localStorage] --> I2[Base64 Decode]
-        I2 --> I3[Parse SCR3 header]
-        I3 --> I4[Decode frame/event segments]
-        I4 --> I5[Reassemble audio Blob]
-        I5 --> I6[Reassemble camera Blob]
-        I6 --> I7[Normalize Recording]
-    end
+flowchart LR
+    Recording --> Normalize[Normalize recording]
+    Normalize --> Encode[Encode SCR3 stream]
+    Encode --> Base64[Base64 text for .ne file]
+    Encode --> IndexedDB[Persist binary SCR3 in IndexedDB]
+    Encode --> Live[Forward live bytes to sink]
+    Base64 --> Decode[Decode in worker]
+    IndexedDB --> Decode
+    Live --> PrefixDecode[Prefix decode for streaming]
+    Decode --> Load[loadRecording]
+    PrefixDecode --> Extend[extendRecording]
 ```
 
-### SCR3 Binary File Format
+Current storage rules:
 
-```
-┌─────────────────────────────────────────┐
-│ Magic Number: "SCR3" (4 bytes)          │
-├─────────────────────────────────────────┤
-│ Format version + flags                  │
-├─────────────────────────────────────────┤
-│ Deflated msgpack metadata               │
-├─────────────────────────────────────────┤
-│ Frame and event segments                │
-├─────────────────────────────────────────┤
-│ Audio chunk segment (optional)          │
-├─────────────────────────────────────────┤
-│ Camera chunk segment (optional, last)   │
-├─────────────────────────────────────────┤
-│ Footer segment index                    │
-└─────────────────────────────────────────┘
-```
+- The app stores and exports SCR3 recordings.
+- IndexedDB persists metadata plus append-only recording segments.
+- `.ne` files contain base64-encoded SCR3 bytes for import/export convenience.
+- Worker-backed decode keeps msgpack and deflate work off the main thread.
+
+## URL Loading Flow
+
+The shipped URL loader supports both same-origin and cross-origin recording URLs.
+
+- Same-origin files are fetched directly.
+- Cross-origin URLs try `/api/proxy?url=...` first and fall back to direct fetch if the proxy is missing.
+- When the response body is streamable, the loader decodes progressively and uses `extendRecording` for later prefixes.
+
+## Where To Look Next
+
+- `docs/data-structures.md` for concrete type shapes.
+- `docs/state-machines.md` for the event/state topology.
+- `docs/streaming-playback.md` for the partial-download behavior in detail.
+  ┌─────────────────────────────────────────┐
+  │ Magic Number: "SCR3" (4 bytes) │
+  ├─────────────────────────────────────────┤
+  │ Format version + flags │
+  ├─────────────────────────────────────────┤
+  │ Deflated msgpack metadata │
+  ├─────────────────────────────────────────┤
+  │ Frame and event segments │
+  ├─────────────────────────────────────────┤
+  │ Audio chunk segment (optional) │
+  ├─────────────────────────────────────────┤
+  │ Camera chunk segment (optional, last) │
+  ├─────────────────────────────────────────┤
+  │ Footer segment index │
+  └─────────────────────────────────────────┘
+
+````
 
 ---
 
@@ -310,7 +215,7 @@ flowchart LR
     Metadata --> MC
     Playback --> MC
     Playback --> CP
-```
+````
 
 This context splitting pattern prevents unnecessary re-renders:
 

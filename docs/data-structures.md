@@ -1,32 +1,79 @@
 # Data Structures Documentation
 
-This document describes the core data structures used in the Next Editor application.
+This document describes the current recording and playback data structures used by Next Editor.
 
----
-
-## Overview
+## Recording Overview
 
 ```mermaid
 classDiagram
     class Recording {
-        +version: 2|3
+        +version: 2 | 3
         +id: string
         +name: string
         +frames: DeltaFrame[]
         +keyframeInterval: number
         +slideEvents?: SlideEvent[]
         +previewEvents?: PreviewEvent[]
+        +previewInitialDocuments?: PreviewInitialDocument[]
+        +previewPatchBatches?: PreviewDomPatchBatch[]
         +workspaceEvents?: WorkspaceRecordingEvent[]
         +runtimeEvents?: RuntimeRecordingEvent[]
+        +cursorEvents?: CursorRecordingEvent[]
         +slides?: Slide[]
         +audioBlob?: Blob | AudioPlaceholder
+        +audioSource?: RecordingAudioSource
         +cameraBlob?: Blob | CameraPlaceholder
+        +cameraSource?: RecordingCameraSource
+        +cameraStartOffsetMs?: number
         +workspaceSnapshot?: WorkspaceRecordingSnapshot
         +runtimeSnapshot?: RuntimeRecordingSnapshot
         +duration: number
         +createdAt: number
     }
+```
 
+The shipped app creates version `3` recordings and stores them in SCR3. The type still accepts `2 | 3` because some normalization and compatibility code paths remain in the library surface, but current storage and export flows are SCR3-based.
+
+## The `Recording` Shape
+
+```ts
+interface Recording {
+  version: 2 | 3;
+  id: string;
+  name: string;
+  frames: DeltaFrame[];
+  keyframeInterval: number;
+  slideEvents?: SlideEvent[];
+  previewEvents?: PreviewEvent[];
+  previewInitialDocuments?: PreviewInitialDocument[];
+  previewPatchBatches?: PreviewDomPatchBatch[];
+  workspaceEvents?: WorkspaceRecordingEvent[];
+  runtimeEvents?: RuntimeRecordingEvent[];
+  cursorEvents?: CursorRecordingEvent[];
+  slides?: Slide[];
+  audioBlob?: Blob | AudioPlaceholder;
+  audioSource?: "microphone" | "external";
+  cameraBlob?: Blob | CameraPlaceholder;
+  cameraSource?: "camera";
+  cameraStartOffsetMs?: number;
+  workspaceSnapshot?: WorkspaceRecordingSnapshot;
+  runtimeSnapshot?: RuntimeRecordingSnapshot;
+  duration: number;
+  createdAt: number;
+}
+```
+
+Notable current fields:
+
+- `previewInitialDocuments` seeds preview replay.
+- `previewPatchBatches` replays DOM mutations after that seed.
+- `cursorEvents` gives higher-fidelity cursor playback than relying on frame snapshots alone.
+- `cameraStartOffsetMs` compensates for `getUserMedia` warmup so camera playback stays aligned.
+
+## Frame Data
+
+```mermaid
+classDiagram
     class EditorFrame {
         +timestamp: number
         +state: EditorState
@@ -42,226 +89,86 @@ classDiagram
         +currentSlideIndex?: number
         +previewState?: PreviewState
     }
-
-    class Slide {
-        +id: string
-        +content: string
-        +contentType: SlideContentType
-        +name?: string
-        +order: number
-    }
-
-    class SlidePreviewState {
-        +isOpen: boolean
-        +isMaximized?: boolean
-        +currentSlideId?: string | null
-        +indexv?: number
-        +currentInteraction?: IframeInteractionEvent
-    }
-
-    class PreviewState {
-        +size: PreviewSize
-        +content?: string
-        +scrollTop?: number
-        +scrollLeft?: number
-        +currentInteraction?: IframeInteractionEvent
-    }
-
-    Recording --> EditorFrame : contains
-    EditorFrame --> EditorState : has
-    Recording --> Slide : contains
-    EditorState --> SlidePreviewState : references
-    EditorState --> PreviewState : references
 ```
 
----
+`frames` is an array of delta-compressed `DeltaFrame` entries. Playback reconstructs the full `EditorFrame` from the nearest earlier keyframe plus subsequent deltas.
 
-## Core Types
+## Cursor Data
 
-### Recording
+Current recordings separate cursor sampling from editor text deltas.
 
-The main data structure for storing a recorded session.
-
-```typescript
-interface Recording {
-  version: 2 | 3; // Format version (v3 supports multi-file)
-  id: string; // Unique identifier
-  name: string; // Display name
-  frames: DeltaFrame[]; // Delta-compressed frames
-  keyframeInterval: number; // Keyframe interval (default: 120)
-
-  // Single-file support (v2 & v3)
-  slideEvents?: SlideEvent[]; // Slide-related events
-  previewEvents?: PreviewEvent[]; // Preview panel events
-  slides?: Slide[]; // Slide content data
-  audioBlob?: Blob | AudioPlaceholder; // Audio recording
-  audioSource?: "microphone" | "external"; // Audio origin
-  cameraBlob?: Blob | CameraPlaceholder; // Optional instructor camera video
-  cameraSource?: "camera"; // Camera origin
-
-  // Multi-file support (v3 only)
-  workspaceEvents?: WorkspaceRecordingEvent[]; // File/folder changes
-  runtimeEvents?: RuntimeRecordingEvent[]; // Runtime/terminal events
-  workspaceSnapshot?: WorkspaceRecordingSnapshot; // Workspace state snapshot
-  runtimeSnapshot?: RuntimeRecordingSnapshot; // Runtime state snapshot
-
-  // Metadata
-  duration: number; // Total duration in ms
-  createdAt: number; // Creation timestamp
-}
-```
-
-**Version Differences:**
-
-- **v2**: Single editor file recording; ideal for tutorials and code demonstrations
-- **v3**: Multi-file workspace recording; captures file changes, workspace state, runtime/terminal output, optional audio, and optional instructor camera video for full environment replay
-
-### EditorFrame
-
-Represents the complete editor state at a specific timestamp.
-
-```typescript
-interface EditorFrame {
+```ts
+interface CursorRecordingEvent extends MouseCursorPosition {
   timestamp: number;
-  state: {
-    content: string; // Editor text content
-    selection: EditorSelection; // Text selection
-    position: EditorPosition; // Cursor position
-    viewState: ICodeEditorViewState; // Monaco view state
-    mouseCursor?: MouseCursorPosition; // Mouse position
-    slideState?: SlidePreviewState; // Slide preview state
-    currentSlideIndex?: number; // Active slide index
-    previewState?: PreviewState; // Code preview state
-  };
 }
 ```
 
----
+`MouseCursorPosition` also carries richer layout-relative metadata than older viewport-only cursor samples:
 
-## Event Types
+- `coordinateSpace?: "viewport" | "root"`
+- `target?: CursorTargetSnapshot`
+- `tween?: CursorTweenSnapshot`
+- optional pressure, angle, hover, and flags metadata
 
-### SlideEvent
+That lets playback remap a recorded cursor onto the current UI layout more reliably.
 
-```mermaid
-classDiagram
-    class SlideEvent {
-        +type: SlideEventType
-        +timestamp: number
-        +slideId?: string
-        +isMaximized?: boolean
-        +indexv?: number
-        +interaction?: IframeInteractionEvent
-    }
+## Preview Replay Data
 
-    class SlideEventType {
-        <<enumeration>>
-        slide_open
-        slide_close
-        slide_change
-        slide_maximize
-        slide_minimize
-        slide_interaction
-    }
+Preview playback uses two structures together:
 
-    SlideEvent --> SlideEventType : has
+- `PreviewInitialDocument[]` captures a seeded DOM snapshot.
+- `PreviewDomPatchBatch[]` captures ordered DOM mutations over time.
+
+This is what allows preview playback to restore recorded DOM updates without requiring a fresh runtime rerun or a manual save point.
+
+## Audio And Camera Data
+
+```ts
+type RecordingAudioSource = "microphone" | "external";
+type RecordingCameraSource = "camera";
 ```
 
-### PreviewEvent
+- `audioBlob` stores finalized playback audio.
+- `cameraBlob` stores finalized instructor camera video.
+- During active capture, live `audioChunks` and `cameraChunks` are tracked in the machine session so an optional stream sink can forward SCR3 bytes before finalization.
 
-```mermaid
-classDiagram
-    class PreviewEvent {
-        +type: PreviewEventType
-        +timestamp: number
-        +size?: PreviewSize
-        +content?: string
-        +scrollTop?: number
-        +scrollLeft?: number
-        +interaction?: IframeInteractionEvent
-    }
+## Provider Context Shapes
 
-    class PreviewEventType {
-        <<enumeration>>
-        preview_open
-        preview_minimize
-        preview_maximize
-        preview_scroll
-        preview_interaction
-        preview_refresh
-        preview_resize
-    }
+The app splits editor access into a few focused surfaces:
 
-    PreviewEvent --> PreviewEventType : has
-```
+- `NextEditorActionsContext`: stable imperative controls and storage helpers.
+- `useNextEditorMetadata()`: coarse recording and playback flags.
+- `useNextEditorPlayback()`: timeline actor, playback speed, volume, and duration.
+- `useLiveTime()` and `useLiveCursor()`: high-frequency selectors for tick-driven UI.
 
----
+Important action methods now include:
 
-## Context Types
+- `loadRecording(recording)`
+- `extendRecording(recording)`
+- `handlePreviewInitialDocument(document)`
+- `handlePreviewPatchBatch(batch)`
+- `exportAsFile(recording, filename?)`
 
-The application uses three React contexts for state management:
+## SCR3 Metadata
 
-```mermaid
-classDiagram
-    class NextEditorActions {
-        +editorRef: RefObject
-        +startRecording(): void
-        +stopRecording(): void
-        +play(): void
-        +pause(): void
-        +stop(): void
-        +seekTo(time): void
-        +loadRecording(recording): void
-        +handleEditorChange(): void
-        +handleSlideEvent(event): void
-        +handlePreviewEvent(event): void
-    }
+At the container level, SCR3 metadata includes:
 
-    class NextEditorMetadata {
-        +isRecording: boolean
-        +isRecordingAudio: boolean
-        +isPlaying: boolean
-        +isPaused: boolean
-        +hasEnded: boolean
-        +currentRecording: Recording | null
-        +recordingStartTime: number | null
-    }
+- recording identity and timestamps
+- `version`
+- duration
+- audio and camera MIME hints
+- `cameraStartOffsetMs`
 
-    class NextEditorPlayback {
-        +currentTime: number
-        +playbackSpeed: number
-        +volume: number
-        +duration: number
-        +currentCursor: MouseCursorPosition | null
-    }
+Segments then carry append-only payloads for frames, events, audio, and camera data.
 
-    NextEditorActions <-- NextEditorMetadata : stable functions
-    NextEditorMetadata <-- NextEditorPlayback : flags & state
-```
+## Summary
 
----
-
-## Storage Types
-
-### JsonStorage Binary Format
-
-```mermaid
-flowchart LR
-    subgraph Header["SCR3 Header"]
-        M[Magic: SCR3]
-        V[Version + flags]
-        Meta[Deflated msgpack metadata]
-    end
-
-    subgraph Segments["Append-only segments"]
-        F[Frame segments]
-        E[Event segments]
-        A[Audio chunk]
-        C[Camera chunk]
-    end
+The important structural shift is that Next Editor now treats recordings as append-only timeline objects with richer preview, cursor, workspace, runtime, audio, and camera channels, rather than as a text-only capture with a few side fields.
 
     Header --> Segments
     Segments --> Footer[Footer index]
-```
+
+````
 
 ### AudioPlaceholder
 
@@ -273,7 +180,7 @@ interface AudioPlaceholder {
   __audio_size: number; // Size in bytes
   __audio_type: string; // MIME type
 }
-```
+````
 
 ### CameraPlaceholder
 
