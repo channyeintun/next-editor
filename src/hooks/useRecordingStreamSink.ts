@@ -29,8 +29,10 @@ export function useRecordingStreamSink(
         if (!bridge) {
           bridge = new RecordingStreamBridge(sink);
           const audio = snapshot.context.audio;
+          const camera = snapshot.context.camera;
           const audioType = audio.source ? audio.mimeType || "audio/webm" : undefined;
-          bridge.start(session, audioType);
+          const cameraType = camera.source ? camera.mimeType || "video/webm" : undefined;
+          bridge.start(session, audioType, cameraType);
         }
         bridge.sync(session);
       } else if (bridge) {

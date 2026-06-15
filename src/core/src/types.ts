@@ -23,6 +23,13 @@ export interface AudioPlaceholder {
 }
 
 export type RecordingAudioSource = "microphone" | "external";
+export type RecordingCameraSource = "camera";
+
+export interface CameraPlaceholder {
+  __camera_offset: number;
+  __camera_size: number;
+  __camera_type: string;
+}
 
 /**
  * Data-only type for monaco.Selection that includes both selection and range info.
@@ -137,6 +144,8 @@ export interface Recording {
   slides?: Slide[];
   audioBlob?: Blob | AudioPlaceholder;
   audioSource?: RecordingAudioSource;
+  cameraBlob?: Blob | CameraPlaceholder;
+  cameraSource?: RecordingCameraSource;
   workspaceSnapshot?: WorkspaceRecordingSnapshot;
   runtimeSnapshot?: RuntimeRecordingSnapshot;
   duration: number;
@@ -162,6 +171,7 @@ export interface UseNextEditorConfig {
 
   // Recording Options
   enableAudioRecording?: boolean;
+  enableCameraRecording?: boolean;
 
   /**
    * Optional sink for live, stream-compatible recording. When provided, the SCR3 byte
@@ -257,7 +267,7 @@ export interface UseNextEditorReturn {
   actualDuration: number;
 
   // Recording Controls
-  startRecording: (options?: { audioBlob?: Blob }) => void;
+  startRecording: (options?: { audioBlob?: Blob; enableCamera?: boolean }) => void;
   stopRecording: () => void;
 
   // Playback Controls

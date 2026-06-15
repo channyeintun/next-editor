@@ -30,6 +30,8 @@ export type {
   CursorRecordingEvent,
   EditorFrame,
   Recording,
+  RecordingCameraSource,
+  CameraPlaceholder,
   RecordingStreamSink,
   UseNextEditorConfig,
   UseNextEditorReturn,

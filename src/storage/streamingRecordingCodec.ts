@@ -1,7 +1,11 @@
 import { decode as msgpackDecode, encode as msgpackEncode } from "@msgpack/msgpack";
 import { deflate, inflate } from "pako";
 import type { Recording } from "../core/src";
-import type { CursorRecordingEvent, RecordingAudioSource } from "../core/src/types";
+import type {
+  CursorRecordingEvent,
+  RecordingAudioSource,
+  RecordingCameraSource,
+} from "../core/src/types";
 import type {
   PreviewDomPatchBatch,
   PreviewEvent,
@@ -38,6 +42,7 @@ const STREAM_MAGIC_BYTES = new Uint8Array([0x53, 0x43, 0x52, 0x33]); // "SCR3"
 const STREAM_FORMAT_VERSION = 1;
 
 const FLAG_HAS_AUDIO = 1 << 0;
+const FLAG_HAS_CAMERA = 1 << 1;
 
 const HEADER_PREFIX_SIZE = 12; // magic(4) + version(2) + flags(2) + metaLen(4)
 const SEGMENT_HEADER_SIZE = 14; // kind(1) + len(4) + ts(4) + idx(4) + keyframe(1)
@@ -55,6 +60,7 @@ export const SEGMENT_KIND = {
   runtime: 6,
   cursor: 7,
   audioChunk: 8,
+  cameraChunk: 9,
 } as const;
 
 export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
@@ -69,6 +75,8 @@ export interface RecordingStreamMeta {
   duration: number;
   audioType?: string;
   audioSource?: RecordingAudioSource;
+  cameraType?: string;
+  cameraSource?: RecordingCameraSource;
   slides?: Slide[];
   workspaceSnapshot?: WorkspaceRecordingSnapshot;
   runtimeSnapshot?: RuntimeRecordingSnapshot;
@@ -91,6 +99,7 @@ export interface StreamingRecordingWriter {
   appendFrameSegment(frames: DeltaFrame[]): void;
   appendEventSegment(kind: SegmentKind, records: ReadonlyArray<unknown>): void;
   appendAudioChunk(chunk: Uint8Array): void;
+  appendCameraChunk(chunk: Uint8Array): void;
   finalize(): Uint8Array;
   drainPending(): Uint8Array;
   isFinalized(): boolean;
@@ -223,7 +232,7 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   return {
     writeHeader(meta) {
       if (headerWritten) throw new Error("SCR3 header already written");
-      const flags = meta.audioType ? FLAG_HAS_AUDIO : 0;
+      const flags = (meta.audioType ? FLAG_HAS_AUDIO : 0) | (meta.cameraType ? FLAG_HAS_CAMERA : 0);
       pushChunk(buildHeaderChunk(meta, flags));
       headerWritten = true;
     },
@@ -248,6 +257,11 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
       ensureWritable();
       if (chunk.length === 0) return;
       appendSegment(SEGMENT_KIND.audioChunk, chunk, 0, -1, false);
+    },
+    appendCameraChunk(chunk) {
+      ensureWritable();
+      if (chunk.length === 0) return;
+      appendSegment(SEGMENT_KIND.cameraChunk, chunk, 0, -1, false);
     },
     finalize() {
       ensureWritable();
@@ -322,7 +336,7 @@ function* walkSegments(bytes: Uint8Array, start: number, end: number): Generator
     const byteLength = view.getUint32(offset + 1, true);
     const payloadStart = offset + SEGMENT_HEADER_SIZE;
     const payloadEnd = payloadStart + byteLength;
-    if (kind > SEGMENT_KIND.audioChunk || payloadEnd > end) {
+    if (kind > SEGMENT_KIND.cameraChunk || payloadEnd > end) {
       break; // unknown kind or truncated tail
     }
     yield { kind, payload: bytes.subarray(payloadStart, payloadEnd) };
@@ -343,6 +357,7 @@ function decodeSegments(bytes: Uint8Array): Recording {
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const cursorEvents: CursorRecordingEvent[] = [];
   const audioChunks: Uint8Array[] = [];
+  const cameraChunks: Uint8Array[] = [];
 
   for (const segment of walkSegments(bytes, headerEnd, segmentsEnd)) {
     switch (segment.kind) {
@@ -373,12 +388,19 @@ function decodeSegments(bytes: Uint8Array): Recording {
       case SEGMENT_KIND.audioChunk:
         audioChunks.push(segment.payload.slice());
         break;
+      case SEGMENT_KIND.cameraChunk:
+        cameraChunks.push(segment.payload.slice());
+        break;
     }
   }
 
   const audioBlob =
     audioChunks.length > 0
       ? new Blob([concatChunks(audioChunks)], { type: meta.audioType || "audio/webm" })
+      : undefined;
+  const cameraBlob =
+    cameraChunks.length > 0
+      ? new Blob([concatChunks(cameraChunks)], { type: meta.cameraType || "video/webm" })
       : undefined;
 
   const recording: Recording = {
@@ -400,6 +422,8 @@ function decodeSegments(bytes: Uint8Array): Recording {
     slides: meta.slides,
     audioBlob,
     audioSource: meta.audioSource,
+    cameraBlob,
+    cameraSource: meta.cameraSource,
     workspaceSnapshot: meta.workspaceSnapshot,
     runtimeSnapshot: meta.runtimeSnapshot,
   };
@@ -454,6 +478,17 @@ async function extractAudioBytes(
   return { audioBytes: null, audioType: "audio/webm" };
 }
 
+async function extractCameraBytes(
+  recording: Recording,
+): Promise<{ cameraBytes: Uint8Array | null; cameraType: string }> {
+  const blob = recording.cameraBlob;
+  if (blob instanceof Blob) {
+    const buffer = await readBlobAsArrayBuffer(blob);
+    return { cameraBytes: new Uint8Array(buffer), cameraType: blob.type || "video/webm" };
+  }
+  return { cameraBytes: null, cameraType: "video/webm" };
+}
+
 /** Splits the compressed frame array into batches that each start at a keyframe. */
 function batchFramesByKeyframe(frames: DeltaFrame[]): DeltaFrame[][] {
   const batches: DeltaFrame[][] = [];
@@ -473,6 +508,7 @@ function batchFramesByKeyframe(frames: DeltaFrame[]): DeltaFrame[][] {
 export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
   const normalized = normalizeRecordingData(recording);
   const { audioBytes, audioType } = await extractAudioBytes(normalized);
+  const { cameraBytes, cameraType } = await extractCameraBytes(normalized);
   const writer = createStreamingRecordingWriter();
 
   writer.writeHeader({
@@ -484,6 +520,8 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     duration: normalized.duration,
     audioType: audioBytes ? audioType : undefined,
     audioSource: normalized.audioSource,
+    cameraType: cameraBytes ? cameraType : undefined,
+    cameraSource: normalized.cameraSource,
     slides: normalized.slides,
     workspaceSnapshot: normalized.workspaceSnapshot,
     runtimeSnapshot: normalized.runtimeSnapshot,
@@ -517,6 +555,10 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
 
   if (audioBytes) {
     writer.appendAudioChunk(audioBytes);
+  }
+
+  if (cameraBytes) {
+    writer.appendCameraChunk(cameraBytes);
   }
 
   return writer.finalize();

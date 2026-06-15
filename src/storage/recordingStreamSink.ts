@@ -62,6 +62,8 @@ export class RecordingStreamBridge {
   };
   /** Number of audio chunks already scheduled for streaming. */
   private audioCount = 0;
+  /** Number of camera chunks already scheduled for streaming. */
+  private cameraCount = 0;
   /** Serializes async audio reads/appends so chunks stay in arrival order. */
   private audioQueue: Promise<void> = Promise.resolve();
   /** Serializes sink writes so the consumer receives bytes in stream order. */
@@ -75,10 +77,10 @@ export class RecordingStreamBridge {
   }
 
   /**
-   * Writes the stream header and forwards it to the sink. `audioType` is the MIME type the
-   * decoder should wrap the reassembled audio in (omit when the recording has no audio).
+   * Writes the stream header and forwards it to the sink. Media types are the MIME types the
+   * decoder should wrap reassembled blobs in (omit when the recording has no media).
    */
-  start(session: RecordingSession, audioType?: string): void {
+  start(session: RecordingSession, audioType?: string, cameraType?: string): void {
     if (this.started) return;
     const meta: RecordingStreamMeta = {
       version: 3,
@@ -88,6 +90,8 @@ export class RecordingStreamBridge {
       createdAt: session.startedAt,
       duration: 0,
       audioType,
+      cameraType,
+      cameraSource: cameraType ? "camera" : undefined,
     };
     this.writer.writeHeader(meta);
     this.started = true;
@@ -108,6 +112,7 @@ export class RecordingStreamBridge {
     this.flushEvents(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", false);
     this.flush();
     this.queueAudio(session.audioChunks);
+    this.queueCamera(session.cameraChunks);
   }
 
   /** Flushes any buffered tail, finalizes the stream (footer), and closes the sink. */
@@ -138,9 +143,11 @@ export class RecordingStreamBridge {
       this.flushEvents(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", true);
       this.flush();
       this.queueAudio(session.audioChunks);
+      this.queueCamera(session.cameraChunks);
     }
-    // All audio must be appended before the footer so the finalized stream is complete.
+    // All media must be appended before the footer so the finalized stream is complete.
     await this.audioQueue;
+    await this.cameraQueue;
     this.writer.finalize();
     this.flush();
     await this.closeSink();
@@ -188,6 +195,21 @@ export class RecordingStreamBridge {
       this.audioQueue = this.audioQueue.then(async () => {
         const bytes = await blobToBytes(blob);
         this.writer.appendAudioChunk(bytes);
+        this.flush();
+      });
+    }
+  }
+
+  /** Serializes async camera reads/appends so chunks stay in arrival order. */
+  private cameraQueue: Promise<void> = Promise.resolve();
+
+  private queueCamera(chunks: ReadonlyArray<Blob>): void {
+    while (this.cameraCount < chunks.length) {
+      const blob = chunks[this.cameraCount];
+      this.cameraCount += 1;
+      this.cameraQueue = this.cameraQueue.then(async () => {
+        const bytes = await blobToBytes(blob);
+        this.writer.appendCameraChunk(bytes);
         this.flush();
       });
     }

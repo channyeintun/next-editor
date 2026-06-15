@@ -149,8 +149,12 @@ export const useNextEditorActorBindings = (
 
   // Recording Controls
   const startRecording = useCallback(
-    (options?: { audioBlob?: Blob }) => {
-      actorRef.send({ type: "START_RECORDING", audioBlob: options?.audioBlob });
+    (options?: { audioBlob?: Blob; enableCamera?: boolean }) => {
+      actorRef.send({
+        type: "START_RECORDING",
+        audioBlob: options?.audioBlob,
+        enableCamera: options?.enableCamera,
+      });
     },
     [actorRef],
   );

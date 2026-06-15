@@ -16,6 +16,7 @@ import type {
   EditorSelection,
   EditorPosition,
   RecordingAudioSource,
+  RecordingCameraSource,
   PreviewPatchReplayInput,
 } from "../types";
 import type { DeltaFrame } from "../utils/deltaTypes";
@@ -96,6 +97,8 @@ export interface RecordingSession {
    * still comes from the finalized `context.audio.blob`.
    */
   audioChunks: Blob[];
+  /** Encoded camera video chunks captured during recording, append-only. */
+  cameraChunks: Blob[];
   /** Last known mouse position */
   lastMousePosition: MouseCursorPosition;
 }
@@ -123,6 +126,20 @@ export interface AudioState {
 }
 
 /**
+ * Camera state for instructor-face recording
+ */
+export interface CameraState {
+  /** Camera blob from recording */
+  blob: Blob | null;
+  /** Whether camera recording is active */
+  isRecording: boolean;
+  /** Detected MIME type */
+  mimeType: string;
+  /** Source used for the active or finalized camera video */
+  source: RecordingCameraSource | null;
+}
+
+/**
  * Editor references and decorations
  */
 export interface EditorRefs {
@@ -146,12 +163,16 @@ export interface EditorMachineContext {
   currentFrame: EditorFrame | null;
   /** Audio state */
   audio: AudioState;
+  /** Camera state */
+  camera: CameraState;
   /** Editor references */
   editorRefs: EditorRefs;
   /** Getter for the live Monaco editor instance */
   getEditorInstance: () => monaco.editor.IStandaloneCodeEditor | null;
   /** Whether audio recording is enabled */
   enableAudioRecording: boolean;
+  /** Whether camera recording is enabled */
+  enableCameraRecording: boolean;
   /** Whether to pause on user interaction */
   pauseOnUserInteraction: boolean;
   /** Animation frame ID for playback loop */
@@ -236,7 +257,11 @@ export interface EditorMachineContext {
 // ============================================================================
 
 /** Start recording event */
-export type StartRecordingEvent = { type: "START_RECORDING"; audioBlob?: Blob };
+export type StartRecordingEvent = {
+  type: "START_RECORDING";
+  audioBlob?: Blob;
+  enableCamera?: boolean;
+};
 
 /** Stop recording event */
 export type StopRecordingEvent = { type: "STOP_RECORDING" };
@@ -398,6 +423,18 @@ export type AudioChunkEvent = {
   chunk: Blob;
 };
 
+/** Camera actor started event */
+export type CameraActorStartedEvent = { type: "CAMERA_STARTED"; mimeType: string };
+
+/** Camera chunk received */
+export type CameraChunkEvent = { type: "CAMERA_CHUNK"; chunk: Blob };
+
+/** Camera actor stopped event */
+export type CameraActorStoppedEvent = { type: "CAMERA_STOPPED"; blob: Blob };
+
+/** Camera actor error event */
+export type CameraActorErrorEvent = { type: "CAMERA_ERROR"; error: string };
+
 /**
  * Union of all machine events
  */
@@ -427,6 +464,10 @@ export type EditorMachineEvent =
   | WorkspaceEventOccurred
   | RuntimeEventOccurred
   | AudioChunkEvent
+  | CameraActorStartedEvent
+  | CameraChunkEvent
+  | CameraActorStoppedEvent
+  | CameraActorErrorEvent
   | AudioPlaybackReadyEvent
   | AudioActorStoppedEvent
   | AudioActorStartedEvent
@@ -446,6 +487,8 @@ export interface EditorMachineInput {
   editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   /** Enable audio recording */
   enableAudioRecording?: boolean;
+  /** Enable camera recording */
+  enableCameraRecording?: boolean;
   /** Pause playback on user interaction */
   pauseOnUserInteraction?: boolean;
   /** Default playback speed */
@@ -511,12 +554,19 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     source: null,
     externalDurationMs: null,
   },
+  camera: {
+    blob: null,
+    isRecording: false,
+    mimeType: "",
+    source: null,
+  },
   editorRefs: {
     editor: input.editorRef.current,
     cursorDecorationsCollection: null,
   },
   getEditorInstance: () => input.editorRef.current,
   enableAudioRecording: input.enableAudioRecording ?? false,
+  enableCameraRecording: input.enableCameraRecording ?? false,
   pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
   animationFrameId: null,
   error: null,

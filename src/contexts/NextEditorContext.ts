@@ -16,7 +16,7 @@ export type { TimelineActorRef, EditorActorRef };
 export interface NextEditorActions {
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   syncEditorRef: (editor: monaco.editor.IStandaloneCodeEditor | null) => void;
-  startRecording: (options?: { audioBlob?: Blob }) => void;
+  startRecording: (options?: { audioBlob?: Blob; enableCamera?: boolean }) => void;
   stopRecording: () => void;
   play: () => void;
   pause: () => void;

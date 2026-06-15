@@ -27,6 +27,7 @@ import {
 import { createFrameStreamEncoder, pushFrame } from "../utils/frameStreamEncoder";
 import { timelineMachine } from "./timelineMachine";
 import { audioRecordingActor, audioPlaybackActor } from "./audioActor";
+import { cameraRecordingActor } from "./cameraActor";
 import {
   applyContentDiff,
   applyPositionDiff,
@@ -291,6 +292,9 @@ const appendCursorEvent = (
 
 const hasPlaybackAudio = (context: EditorMachineContext): boolean =>
   context.recording?.audioBlob instanceof Blob;
+
+const shouldRecordCamera = (context: EditorMachineContext): boolean =>
+  context.enableCameraRecording && context.camera.isRecording;
 
 /**
  * Find the appropriate frame for a given timestamp (optimized)
@@ -706,6 +710,7 @@ export const editorMachine = setup({
   actors: {
     timeline: timelineMachine,
     audioRecording: audioRecordingActor,
+    cameraRecording: cameraRecordingActor,
     audioPlayback: audioPlaybackActor,
     mouseTracking: mouseTrackingActor,
     loadRecording: fromPromise<
@@ -742,6 +747,7 @@ export const editorMachine = setup({
       context.audio.source === "microphone",
     isExternalAudioRecording: ({ context }) =>
       context.audio.isRecording && context.audio.source === "external",
+    isCameraRecording: ({ context }) => shouldRecordCamera(context),
     shouldPauseOnInteraction: ({ context }) => context.pauseOnUserInteraction,
     shouldSyncPlaybackEditorRef: ({ context, event }) =>
       event.type === "SET_EDITOR_REF" &&
@@ -757,6 +763,13 @@ export const editorMachine = setup({
   },
   actions: {
     // Recording actions
+    setCameraRecordingEnabled: assign(({ context, event }) => {
+      if (event.type !== "START_RECORDING") return {};
+      return {
+        enableCameraRecording: event.enableCamera ?? context.enableCameraRecording,
+      };
+    }),
+
     prepareExternalAudioRecording: assign(({ context, event }) => {
       if (event.type !== "START_RECORDING" || !(event.audioBlob instanceof Blob)) {
         return {};
@@ -803,6 +816,16 @@ export const editorMachine = setup({
         audio: {
           ...context.audio,
           externalDurationMs: Number.isFinite(event.duration) ? event.duration : null,
+        },
+      };
+    }),
+
+    stopExternalAudioRecording: assign(({ context }) => {
+      if (context.audio.source !== "external") return {};
+      return {
+        audio: {
+          ...context.audio,
+          isRecording: false,
         },
       };
     }),
@@ -875,6 +898,7 @@ export const editorMachine = setup({
           // audio chunk. Microphone audio is appended later as timeslice CHUNK events arrive.
           audioChunks:
             context.audio.source === "external" && context.audio.blob ? [context.audio.blob] : [],
+          cameraChunks: [],
           lastMousePosition: initialMousePosition,
         },
         lastCallbackFrameTimestamp: undefined,
@@ -1071,6 +1095,8 @@ export const editorMachine = setup({
         duration,
         audioBlob: context.audio.blob || undefined,
         audioSource: context.audio.source || undefined,
+        cameraBlob: context.camera.blob || undefined,
+        cameraSource: context.camera.source || undefined,
         workspaceSnapshot,
         runtimeSnapshot,
       };
@@ -1084,6 +1110,12 @@ export const editorMachine = setup({
           mediaRecorder: null,
           source: null,
           externalDurationMs: null,
+        },
+        camera: {
+          blob: null,
+          isRecording: false,
+          mimeType: "",
+          source: null,
         },
         timeline: {
           ...context.timeline,
@@ -1577,6 +1609,19 @@ export const editorMachine = setup({
       };
     }),
 
+    storeCameraBlob: assign(({ context, event }) => {
+      if (event.type !== "CAMERA_STOPPED") return {};
+      return {
+        camera: {
+          ...context.camera,
+          blob: event.blob,
+          isRecording: false,
+          mimeType: event.blob.type,
+          source: "camera" as const,
+        },
+      };
+    }),
+
     // Append a live microphone timeslice fragment to the session's append-only audio stream so
     // an optional live recording sink can forward it. The finalized blob (STOPPED) is unchanged.
     captureAudioChunk: assign(({ context, event }) => {
@@ -1585,6 +1630,39 @@ export const editorMachine = setup({
         session: {
           ...context.session,
           audioChunks: [...context.session.audioChunks, event.chunk],
+        },
+      };
+    }),
+
+    captureCameraChunk: assign(({ context, event }) => {
+      if (event.type !== "CAMERA_CHUNK" || !context.session) return {};
+      return {
+        session: {
+          ...context.session,
+          cameraChunks: [...context.session.cameraChunks, event.chunk],
+        },
+      };
+    }),
+
+    storeCameraStarted: assign(({ context, event }) => {
+      if (event.type !== "CAMERA_STARTED") return {};
+      return {
+        camera: {
+          ...context.camera,
+          mimeType: event.mimeType,
+        },
+      };
+    }),
+
+    handleCameraError: assign(({ context, event }) => {
+      if (event.type !== "CAMERA_ERROR") return {};
+      console.warn("Camera recording disabled:", event.error);
+      return {
+        camera: {
+          ...context.camera,
+          isRecording: false,
+          mimeType: "",
+          source: null,
         },
       };
     }),
@@ -1789,6 +1867,7 @@ export const editorMachine = setup({
             target: "recording",
             guard: "hasExternalAudioBlob",
             actions: [
+              "setCameraRecordingEnabled",
               "prepareExternalAudioRecording",
               "initRecordingSession",
               "captureInitialFrame",
@@ -1800,10 +1879,12 @@ export const editorMachine = setup({
           {
             target: "startingRecording",
             guard: ({ context }) => context.enableAudioRecording,
+            actions: "setCameraRecordingEnabled",
           },
           {
             target: "recording",
             actions: [
+              "setCameraRecordingEnabled",
               "initRecordingSession",
               "captureInitialFrame",
               "notifyRecordingStart",
@@ -1899,6 +1980,24 @@ export const editorMachine = setup({
             },
           }),
         }),
+        enqueueActions(({ context, enqueue }) => {
+          if (!context.enableCameraRecording) return;
+
+          enqueue.spawnChild("cameraRecording", {
+            id: "cameraRecorder",
+            input: {},
+          });
+          enqueue.sendTo("cameraRecorder", { type: "START" });
+          enqueue.assign({
+            camera: {
+              ...context.camera,
+              blob: null,
+              isRecording: true,
+              mimeType: "",
+              source: "camera" as const,
+            },
+          });
+        }),
       ],
       exit: [stopChild("mouseTracker"), stopChild("recordingAudioPlayer")],
       on: {
@@ -1908,17 +2007,36 @@ export const editorMachine = setup({
         CHUNK: {
           actions: "captureAudioChunk",
         },
+        CAMERA_STARTED: {
+          actions: "storeCameraStarted",
+        },
+        CAMERA_CHUNK: {
+          actions: "captureCameraChunk",
+        },
+        CAMERA_STOPPED: {
+          actions: "storeCameraBlob",
+        },
+        CAMERA_ERROR: {
+          actions: "handleCameraError",
+        },
         READY: {
           actions: "storeExternalAudioDuration",
         },
         STOPPED: {
           actions: "storeAudioBlob",
         },
-        FINISHED: {
-          target: "loading",
-          guard: "isExternalAudioRecording",
-          actions: ["finalizeRecording", "notifyRecordingStop"],
-        },
+        FINISHED: [
+          {
+            target: "stoppingRecording",
+            guard: "isCameraRecording",
+            actions: "stopExternalAudioRecording",
+          },
+          {
+            target: "loading",
+            guard: "isExternalAudioRecording",
+            actions: ["finalizeRecording", "notifyRecordingStop"],
+          },
+        ],
         ERROR: {
           target: "idle",
           guard: "isExternalAudioRecording",
@@ -2027,6 +2145,11 @@ export const editorMachine = setup({
             guard: "isMicrophoneAudioRecording",
           },
           {
+            target: "stoppingRecording",
+            guard: "isCameraRecording",
+            actions: "stopExternalAudioRecording",
+          },
+          {
             target: "loading",
             guard: "isExternalAudioRecording",
             actions: ["finalizeRecording", "notifyRecordingStop"],
@@ -2041,18 +2164,45 @@ export const editorMachine = setup({
 
     stoppingRecording: {
       entry: [
-        enqueueActions(({ enqueue }) => {
-          enqueue.sendTo("audioRecorder", { type: "STOP" });
+        enqueueActions(({ context, enqueue }) => {
+          if (context.audio.isRecording && context.audio.source === "microphone") {
+            enqueue.sendTo("audioRecorder", { type: "STOP" });
+          }
+          if (shouldRecordCamera(context)) {
+            enqueue.sendTo("cameraRecorder", { type: "STOP" });
+          }
         }),
       ],
-      exit: [stopChild("audioRecorder")],
+      exit: [stopChild("audioRecorder"), stopChild("cameraRecorder")],
       on: {
         CHUNK: {
           actions: "captureAudioChunk",
         },
-        STOPPED: {
-          target: "loading",
-          actions: ["storeAudioBlob", "finalizeRecording", "notifyRecordingStop"],
+        CAMERA_CHUNK: {
+          actions: "captureCameraChunk",
+        },
+        STOPPED: [
+          {
+            guard: "isCameraRecording",
+            actions: "storeAudioBlob",
+          },
+          {
+            target: "loading",
+            actions: ["storeAudioBlob", "finalizeRecording", "notifyRecordingStop"],
+          },
+        ],
+        CAMERA_STOPPED: [
+          {
+            target: "loading",
+            guard: ({ context }) => !context.audio.isRecording,
+            actions: ["storeCameraBlob", "finalizeRecording", "notifyRecordingStop"],
+          },
+          {
+            actions: "storeCameraBlob",
+          },
+        ],
+        CAMERA_ERROR: {
+          actions: "handleCameraError",
         },
       },
       after: {
