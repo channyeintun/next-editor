@@ -18,6 +18,8 @@ import type {
   RecordingAudioSource,
   PreviewPatchReplayInput,
 } from "../types";
+import type { DeltaFrame } from "../utils/deltaTypes";
+import type { FrameStreamEncoderState } from "../utils/frameStreamEncoder";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 
@@ -69,8 +71,10 @@ export interface TimelineState {
 export interface RecordingSession {
   /** When recording started (performance.now()) */
   startedAt: number;
-  /** Collected frames during recording */
-  frames: EditorFrame[];
+  /** Already-compressed frames built incrementally during capture (append-only) */
+  frames: DeltaFrame[];
+  /** Incremental encoder state (input count, last stored frame, last full frame) */
+  encoder: FrameStreamEncoderState;
   /** Collected slide events during recording */
   slideEvents: SlideEvent[];
   /** Collected preview events during recording */

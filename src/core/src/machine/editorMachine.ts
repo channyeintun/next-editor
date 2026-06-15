@@ -19,12 +19,12 @@ import {
   type WorkspaceRecordingEvent,
 } from "../../../types/workspace";
 import {
-  compressFrames,
   reconstructFrameAtIndex,
   applyFrameDelta,
   findFrameIndexAtTime,
   isKeyframe,
 } from "../utils/frameDelta";
+import { createFrameStreamEncoder, pushFrame } from "../utils/frameStreamEncoder";
 import { timelineMachine } from "./timelineMachine";
 import { audioRecordingActor, audioPlaybackActor } from "./audioActor";
 import {
@@ -863,6 +863,7 @@ export const editorMachine = setup({
         session: {
           startedAt,
           frames: [],
+          encoder: createFrameStreamEncoder(),
           slideEvents,
           previewEvents,
           previewInitialDocuments: [],
@@ -920,10 +921,13 @@ export const editorMachine = setup({
         };
       }
 
+      const { state: encoder, emitted } = pushFrame(session.encoder, initialFrame);
+
       return {
         session: {
           ...session,
-          frames: [initialFrame],
+          frames: emitted ? [emitted] : [],
+          encoder,
         },
         currentFrame: initialFrame,
       };
@@ -945,8 +949,7 @@ export const editorMachine = setup({
           : context.session.cursorEvents;
 
       if (event.type === "CAPTURE_FRAME" && event.isMouseMovement) {
-        const frames = context.session.frames;
-        const lastFrame = frames[frames.length - 1];
+        const lastFrame = context.session.encoder.lastFullFrame;
         const lastMousePosition = context.session.lastMousePosition;
         const visibilityChanged = lastMousePosition?.visible !== mousePosition?.visible;
 
@@ -973,10 +976,13 @@ export const editorMachine = setup({
         context.getPreviewState,
       );
 
+      const { state: encoder, emitted } = pushFrame(context.session.encoder, frame);
+
       return {
         session: {
           ...context.session,
-          frames: [...context.session.frames, frame],
+          frames: emitted ? [...context.session.frames, emitted] : context.session.frames,
+          encoder,
           cursorEvents,
           lastMousePosition: mousePosition,
         },
@@ -1010,10 +1016,13 @@ export const editorMachine = setup({
         };
       }
 
+      const { state: encoder, emitted } = pushFrame(context.session.encoder, frame);
+
       return {
         session: {
           ...context.session,
-          frames: [...context.session.frames, frame],
+          frames: emitted ? [...context.session.frames, emitted] : context.session.frames,
+          encoder,
         },
         currentFrame: frame,
       };
@@ -1037,8 +1046,8 @@ export const editorMachine = setup({
         : undefined;
       const runtimeSnapshot = context.getRuntimeSnapshot?.() || undefined;
 
-      // Compress frames into delta frames
-      const frames = compressFrames(context.session.frames);
+      // Frames were compressed incrementally during capture.
+      const frames = context.session.frames;
 
       const recording: Recording = {
         version: 3,
