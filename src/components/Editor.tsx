@@ -12,6 +12,7 @@ import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useWorkspaceLessonType } from "../hooks/useWorkspace";
 import { useUrlQuery } from "../hooks/useUrlQuery";
+import CameraOverlay from "./CameraOverlay";
 import CursorComponent from "./Cursor.tsx";
 import LoadingSpinner from "./LoadingSpinner";
 
@@ -47,6 +48,7 @@ export const EditorLayout = memo(function EditorLayout() {
           <CodeEditor showImportExport={!readOnly} />
         </Suspense>
         <CursorComponent />
+        <CameraOverlay />
         {lessonType === "node.js" ? (
           <Suspense fallback={null}>
             <TerminalPanel />
