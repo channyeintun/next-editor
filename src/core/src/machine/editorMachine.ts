@@ -1097,6 +1097,7 @@ export const editorMachine = setup({
         audioSource: context.audio.source || undefined,
         cameraBlob: context.camera.blob || undefined,
         cameraSource: context.camera.source || undefined,
+        cameraStartOffsetMs: context.camera.blob ? context.camera.startOffsetMs : undefined,
         workspaceSnapshot,
         runtimeSnapshot,
       };
@@ -1116,6 +1117,7 @@ export const editorMachine = setup({
           isRecording: false,
           mimeType: "",
           source: null,
+          startOffsetMs: 0,
         },
         timeline: {
           ...context.timeline,
@@ -1646,10 +1648,17 @@ export const editorMachine = setup({
 
     storeCameraStarted: assign(({ context, event }) => {
       if (event.type !== "CAMERA_STARTED") return {};
+      // The camera MediaRecorder only starts after getUserMedia resolves, which lags the
+      // recording-session origin (session.startedAt) by the camera warmup. Capture that offset so
+      // playback can shift the video back into sync; otherwise the face video runs ahead of audio.
+      const startOffsetMs = context.session
+        ? Math.max(0, Date.now() - context.session.startedAt)
+        : 0;
       return {
         camera: {
           ...context.camera,
           mimeType: event.mimeType,
+          startOffsetMs,
         },
       };
     }),
@@ -1663,6 +1672,7 @@ export const editorMachine = setup({
           isRecording: false,
           mimeType: "",
           source: null,
+          startOffsetMs: 0,
         },
       };
     }),
@@ -1995,6 +2005,7 @@ export const editorMachine = setup({
               isRecording: true,
               mimeType: "",
               source: "camera" as const,
+              startOffsetMs: 0,
             },
           });
         }),

@@ -146,6 +146,8 @@ export interface Recording {
   audioSource?: RecordingAudioSource;
   cameraBlob?: Blob | CameraPlaceholder;
   cameraSource?: RecordingCameraSource;
+  /** Camera warmup offset (ms) between the recording origin and the first camera frame. */
+  cameraStartOffsetMs?: number;
   workspaceSnapshot?: WorkspaceRecordingSnapshot;
   runtimeSnapshot?: RuntimeRecordingSnapshot;
   duration: number;

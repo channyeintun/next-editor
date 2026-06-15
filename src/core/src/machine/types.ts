@@ -137,6 +137,12 @@ export interface CameraState {
   mimeType: string;
   /** Source used for the active or finalized camera video */
   source: RecordingCameraSource | null;
+  /**
+   * Milliseconds between the recording-session origin (`session.startedAt`) and the moment the
+   * camera actually started capturing. The camera spawns after `getUserMedia` resolves, so its
+   * first frame lags the timeline origin by this warmup; playback subtracts it to stay in sync.
+   */
+  startOffsetMs: number;
 }
 
 /**
@@ -559,6 +565,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     isRecording: false,
     mimeType: "",
     source: null,
+    startOffsetMs: 0,
   },
   editorRefs: {
     editor: input.editorRef.current,

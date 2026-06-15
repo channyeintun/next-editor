@@ -1,20 +1,28 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
-import {
-  selectIsPlaying,
-  selectLiveTime,
-  selectPlaybackSpeed,
-  selectRecording,
-} from "../core/src/useNextEditor";
+import { selectIsPlaying, selectRecording } from "../core/src/useNextEditor";
 
 export const CAMERA_OVERLAY_VISIBILITY_KEY = "next-editor-camera-overlay-visible";
 export const CAMERA_OVERLAY_POSITION_KEY = "next-editor-camera-overlay-position";
+export const CAMERA_OVERLAY_MINIMIZED_KEY = "next-editor-camera-overlay-minimized";
 export const CAMERA_OVERLAY_VISIBILITY_EVENT = "next-editor-camera-overlay-visibility";
+/** Dispatched by MediaControls when the camera capture toggle flips, to drive the live preview. */
+export const CAMERA_OVERLAY_PREVIEW_EVENT = "next-editor-camera-overlay-preview";
 
 const OVERLAY_SIZE = 192;
 const EDGE_PADDING = 24;
 const MEDIA_CONTROLS_CLEARANCE = 88;
 const DRIFT_THRESHOLD_MS = 250;
+const MINIMIZED_HANDLE_HEIGHT = 56;
+
+/** Live-preview capture constraints; mirror the camera recorder so the framing matches. */
+const CAMERA_PREVIEW_CONSTRAINTS = {
+  width: { ideal: 480 },
+  height: { ideal: 480 },
+  frameRate: { ideal: 24, max: 30 },
+  facingMode: "user",
+} as const;
 
 interface OverlayPosition {
   x: number;
@@ -24,6 +32,11 @@ interface OverlayPosition {
 function readStoredVisibility(): boolean {
   if (typeof window === "undefined") return true;
   return window.localStorage.getItem(CAMERA_OVERLAY_VISIBILITY_KEY) !== "false";
+}
+
+function readStoredMinimized(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(CAMERA_OVERLAY_MINIMIZED_KEY) === "true";
 }
 
 function getDefaultPosition(): OverlayPosition {
@@ -70,19 +83,41 @@ function readStoredPosition(): OverlayPosition {
   return getDefaultPosition();
 }
 
+/** The screen edge the minimized handle docks to, based on which half the overlay sits in. */
+function getDockSide(position: OverlayPosition): "left" | "right" {
+  if (typeof window === "undefined") return "right";
+  return position.x + OVERLAY_SIZE / 2 < window.innerWidth / 2 ? "left" : "right";
+}
+
+/** Vertical offset for the minimized handle, centered on the overlay and clamped to the viewport. */
+function getMinimizedHandleTop(position: OverlayPosition): number {
+  const centeredTop = position.y + OVERLAY_SIZE / 2 - MINIMIZED_HANDLE_HEIGHT / 2;
+  if (typeof window === "undefined") return Math.max(centeredTop, EDGE_PADDING);
+  return Math.min(
+    Math.max(centeredTop, EDGE_PADDING),
+    window.innerHeight - MINIMIZED_HANDLE_HEIGHT - EDGE_PADDING,
+  );
+}
+
 const CameraOverlay: React.FC = () => {
   const actorRef = NextEditorActorContext.useActorRef();
   const recording = NextEditorActorContext.useSelector(selectRecording);
   const isPlaying = NextEditorActorContext.useSelector(selectIsPlaying);
-  const currentTime = NextEditorActorContext.useSelector(selectLiveTime);
-  const playbackSpeed = NextEditorActorContext.useSelector(selectPlaybackSpeed);
   const videoRef = useRef<HTMLVideoElement>(null);
   const dragOffsetRef = useRef<OverlayPosition>({ x: 0, y: 0 });
+  const previewStreamRef = useRef<MediaStream | null>(null);
   const [isVisible, setIsVisible] = useState(readStoredVisibility);
   const [position, setPosition] = useState(readStoredPosition);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [isMinimized, setIsMinimized] = useState(readStoredMinimized);
+  const [isPreviewEnabled, setIsPreviewEnabled] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
 
   const cameraBlob = recording?.cameraBlob instanceof Blob ? recording.cameraBlob : null;
+  const cameraStartOffsetMs = recording?.cameraStartOffsetMs ?? 0;
+  // Live preview takes over whenever the camera toggle is on and there is no recorded blob to
+  // replay (i.e. idle or actively recording); a loaded recording always wins and replays its blob.
+  const previewMode = isPreviewEnabled && !cameraBlob;
 
   useEffect(() => {
     if (!cameraBlob) {
@@ -114,6 +149,69 @@ const CameraOverlay: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const handlePreviewToggle = (event: Event) => {
+      if (!(event instanceof CustomEvent) || typeof event.detail?.enabled !== "boolean") {
+        return;
+      }
+
+      setIsPreviewEnabled(event.detail.enabled);
+    };
+
+    window.addEventListener(CAMERA_OVERLAY_PREVIEW_EVENT, handlePreviewToggle);
+    return () => {
+      window.removeEventListener(CAMERA_OVERLAY_PREVIEW_EVENT, handlePreviewToggle);
+    };
+  }, []);
+
+  // Acquire a live camera stream while in preview mode. The stream is kept in a ref so it survives
+  // minimize/restore (the <video> unmounts when minimized) without re-prompting for the camera.
+  useEffect(() => {
+    if (!previewMode) return;
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setPreviewError(true);
+      return;
+    }
+
+    const video = videoRef.current;
+    let cancelled = false;
+    navigator.mediaDevices
+      .getUserMedia({ video: CAMERA_PREVIEW_CONSTRAINTS, audio: false })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        previewStreamRef.current = stream;
+        if (video) {
+          video.srcObject = stream;
+          void video.play().catch(() => {});
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewError(true);
+      });
+
+    return () => {
+      cancelled = true;
+      previewStreamRef.current?.getTracks().forEach((track) => track.stop());
+      previewStreamRef.current = null;
+      if (video) video.srcObject = null;
+      setPreviewError(false);
+    };
+  }, [previewMode]);
+
+  // Reattach the live stream to the <video> when it remounts (e.g. after restoring from minimized).
+  useEffect(() => {
+    if (!previewMode || isMinimized) return;
+    const video = videoRef.current;
+    if (video && previewStreamRef.current && video.srcObject !== previewStreamRef.current) {
+      video.srcObject = previewStreamRef.current;
+      void video.play().catch(() => {});
+    }
+  }, [previewMode, isMinimized]);
+
+  useEffect(() => {
     const handleResize = () => {
       setPosition((current) => clampPosition(current));
     };
@@ -129,51 +227,60 @@ const CameraOverlay: React.FC = () => {
   }, [position]);
 
   useEffect(() => {
+    window.localStorage.setItem(CAMERA_OVERLAY_MINIMIZED_KEY, String(isMinimized));
+  }, [isMinimized]);
+
+  // Drive the <video> from the playback timeline. Mirrors CursorComponent: read
+  // `timeline.currentTime` directly from the actor snapshot inside a rAF loop so
+  // playback sync never forces a React re-render. While paused, subscribe
+  // imperatively so scrubbing still updates the visible frame.
+  useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoUrl) return;
 
-    video.playbackRate = playbackSpeed;
+    // Drop any leftover live-preview stream so the recorded blob `src` actually drives the element.
+    video.srcObject = null;
 
-    const targetSeconds = currentTime / 1000;
-    if (Number.isFinite(targetSeconds)) {
-      const driftMs = Math.abs(video.currentTime * 1000 - currentTime);
-      if (driftMs > DRIFT_THRESHOLD_MS) {
-        video.currentTime = targetSeconds;
-      }
-    }
-
-    if (isPlaying) {
-      void video.play().catch(() => {});
-    } else {
-      video.pause();
-    }
-  }, [currentTime, isPlaying, playbackSpeed, videoUrl]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !videoUrl || !isPlaying) return;
-
-    let animationFrameId = 0;
-
-    const syncVideo = () => {
-      const snapshot = actorRef.getSnapshot();
-      const targetMs = snapshot.context.timeline.currentTime;
-      const driftMs = Math.abs(video.currentTime * 1000 - targetMs);
-
-      video.playbackRate = snapshot.context.timeline.speed;
-      if (driftMs > DRIFT_THRESHOLD_MS) {
+    const applyTimeline = () => {
+      const { currentTime, speed } = actorRef.getSnapshot().context.timeline;
+      video.playbackRate = speed;
+      // The camera starts a beat after the recording origin (getUserMedia warmup), so shift the
+      // timeline back by that offset to keep the face video aligned with audio/typing.
+      const targetMs = Math.max(0, currentTime - cameraStartOffsetMs);
+      if (
+        Number.isFinite(targetMs) &&
+        Math.abs(video.currentTime * 1000 - targetMs) > DRIFT_THRESHOLD_MS
+      ) {
         video.currentTime = targetMs / 1000;
       }
-
-      animationFrameId = requestAnimationFrame(syncVideo);
     };
 
-    syncVideo();
+    if (!isPlaying) {
+      video.pause();
+      applyTimeline();
+      const subscription = actorRef.subscribe(() => {
+        if (selectIsPlaying(actorRef.getSnapshot())) return;
+        applyTimeline();
+      });
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+
+    applyTimeline();
+    void video.play().catch(() => {});
+
+    let animationFrameId = 0;
+    const syncVideo = () => {
+      applyTimeline();
+      animationFrameId = requestAnimationFrame(syncVideo);
+    };
+    animationFrameId = requestAnimationFrame(syncVideo);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [actorRef, isPlaying, videoUrl]);
+  }, [actorRef, cameraStartOffsetMs, isMinimized, isPlaying, videoUrl]);
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -197,26 +304,78 @@ const CameraOverlay: React.FC = () => {
     );
   }, []);
 
-  if (!cameraBlob || !videoUrl || !isVisible) {
+  // Minimize is a pure viewer-side convenience (independent of recording/playback): stop the
+  // pointer from starting a drag, then collapse to a side-docked handle.
+  const handleMinimizePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+  }, []);
+  const handleMinimize = useCallback(() => setIsMinimized(true), []);
+  const handleRestore = useCallback(() => setIsMinimized(false), []);
+
+  const showPlayback = Boolean(cameraBlob) && Boolean(videoUrl) && isVisible;
+  const showPreview = previewMode && !previewError;
+  if (!showPlayback && !showPreview) {
     return null;
+  }
+
+  const dockSide = getDockSide(position);
+
+  if (isMinimized) {
+    return (
+      <button
+        type="button"
+        onClick={handleRestore}
+        title="Show camera"
+        aria-label="Show camera"
+        className={`fixed top-0 z-44 flex h-14 w-7 cursor-pointer items-center justify-center bg-slate-950/90 text-white shadow-2xl shadow-slate-950/40 ring-2 ring-black/20 transition-colors hover:bg-slate-800 ${
+          dockSide === "left"
+            ? "left-0 rounded-r-full border border-l-0 border-white/25"
+            : "right-0 rounded-l-full border border-r-0 border-white/25"
+        }`}
+        style={{ transform: `translateY(${getMinimizedHandleTop(position)}px)` }}
+      >
+        {dockSide === "left" ? (
+          <ChevronRight size={18} aria-hidden="true" />
+        ) : (
+          <ChevronLeft size={18} aria-hidden="true" />
+        )}
+      </button>
+    );
   }
 
   return (
     <div
-      className="fixed left-0 top-0 z-44 size-48 cursor-grab touch-none overflow-hidden rounded-full border border-white/25 bg-slate-950 shadow-2xl shadow-slate-950/40 ring-2 ring-black/20 active:cursor-grabbing"
+      className="group fixed left-0 top-0 z-44 size-48 cursor-grab touch-none overflow-hidden rounded-full border border-white/25 bg-slate-950 shadow-2xl shadow-slate-950/40 ring-2 ring-black/20 active:cursor-grabbing"
       style={{ transform: `translate3d(${position.x}px, ${position.y}px, 0)` }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
     >
       <video
         ref={videoRef}
-        src={videoUrl}
+        src={showPlayback ? (videoUrl ?? undefined) : undefined}
         muted
+        autoPlay={showPreview}
         playsInline
         preload="auto"
         className="object-cover size-full"
-        aria-label="Camera recording"
+        aria-label={showPreview ? "Live camera preview" : "Camera recording"}
       />
+      <button
+        type="button"
+        onPointerDown={handleMinimizePointerDown}
+        onClick={handleMinimize}
+        title="Minimize camera"
+        aria-label="Minimize camera"
+        className={`absolute top-1/2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-slate-950/60 text-white opacity-0 transition-opacity hover:bg-slate-900 group-hover:opacity-100 ${
+          dockSide === "left" ? "left-1.5" : "right-1.5"
+        }`}
+      >
+        {dockSide === "left" ? (
+          <ChevronLeft size={18} aria-hidden="true" />
+        ) : (
+          <ChevronRight size={18} aria-hidden="true" />
+        )}
+      </button>
     </div>
   );
 };

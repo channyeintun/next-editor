@@ -41,6 +41,7 @@ export const cameraRecordingActor = fromCallback<
   let mimeType = "";
   let disposed = false;
   let starting = false;
+  let stopRequested = false;
 
   const cleanupStream = () => {
     if (stream) {
@@ -67,7 +68,7 @@ export const cameraRecordingActor = fromCallback<
         audio: false,
       });
 
-      if (disposed) {
+      if (disposed || stopRequested) {
         cleanupStream();
         return;
       }
@@ -125,6 +126,7 @@ export const cameraRecordingActor = fromCallback<
   };
 
   const stopRecording = () => {
+    stopRequested = true;
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
       mediaRecorder.stop();
     }

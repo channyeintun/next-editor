@@ -14,7 +14,11 @@ import PauseIcon from "./icon/Pause";
 import SettingIcon from "./icon/Setting";
 import ProgressBar from "./ProgressBar";
 import type { Recording } from "../core/src";
-import { CAMERA_OVERLAY_VISIBILITY_EVENT, CAMERA_OVERLAY_VISIBILITY_KEY } from "./CameraOverlay";
+import {
+  CAMERA_OVERLAY_PREVIEW_EVENT,
+  CAMERA_OVERLAY_VISIBILITY_EVENT,
+  CAMERA_OVERLAY_VISIBILITY_KEY,
+} from "./CameraOverlay";
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -198,7 +202,14 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
     }, []);
 
     const handleToggleCameraForNextRecording = useCallback(() => {
-      setEnableCameraForNextRecording((current) => !current);
+      setEnableCameraForNextRecording((current) => {
+        const next = !current;
+        // Drive the live camera preview overlay (independent of recording start/stop).
+        window.dispatchEvent(
+          new CustomEvent(CAMERA_OVERLAY_PREVIEW_EVENT, { detail: { enabled: next } }),
+        );
+        return next;
+      });
     }, []);
 
     const handleToggleCameraOverlay = useCallback(() => {
