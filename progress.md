@@ -40,7 +40,10 @@ Last updated: 2026-06-15
 - [x] **T5. JsonStorage append + export via SCR3** — `appendRecordingSegments` for incremental
       persistence; `createStoredEntry`/`exportAsFile` use SCR3 (`encodeRecordingToStream` /
       `encodeRecordingToBase64Stream`).
-- [ ] **T6. Storage size validation** — one-off measurement script (no unit tests).
+- [x] **T6. Storage size validation** — `scripts/measure-recording-size.mjs` (+ `measure:recording`
+      npm script): dependency-free walk of the SCR3 container reporting compressed bytes per
+      segment kind, header/footer/segment-header overhead, and audio vs non-audio split. On the
+      demo: 1.80 MB binary stream (vs ~2.08 MB SCRM baseline measured in T2), overhead ~7.8 KB.
 
 ## Direction change (2026-06-15) — no backward compatibility
 

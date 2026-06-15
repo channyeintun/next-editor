@@ -18,6 +18,7 @@
     "lint": "vp lint",
     "typecheck": "tsgo -b tsconfig.json",
     "benchmark:wasm": "node scripts/benchmark-wasm-diff.mjs",
+    "measure:recording": "node scripts/measure-recording-size.mjs",
     "preview": "vp preview",
     "prepare": "vp config --hooks-only"
   },
