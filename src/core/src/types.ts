@@ -270,6 +270,7 @@ export interface UseNextEditorReturn {
 
   // Recording Management
   loadRecording: (recording: Recording) => void;
+  extendRecording: (recording: Recording) => void;
   clearRecording: () => void;
 
   // Monaco Editor Integration

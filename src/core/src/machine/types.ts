@@ -205,6 +205,8 @@ export interface EditorMachineContext {
   hasManualWorkspaceOverride: boolean;
   /** Whether the next editor mount should resync playback state */
   pendingPlaybackEditorSync: boolean;
+  /** Whether the playback audio element has been spawned for the loaded recording */
+  playbackAudioSpawned: boolean;
   /** Last frame timestamp sent to granular callbacks */
   lastCallbackFrameTimestamp?: number;
   /** Callback invoked after recording starts */
@@ -249,6 +251,16 @@ export type CaptureFrameEvent = {
 /** Load a recording for playback */
 export type LoadRecordingEvent = {
   type: "LOAD_RECORDING";
+  recording: Recording;
+};
+
+/**
+ * Replace the loaded recording in place with a longer prefix of the same stream (streaming
+ * playback). The new recording must be an append-only superset of the current one, so already
+ * applied playback indices stay valid; the current time, timeline, and applied state are kept.
+ */
+export type ExtendRecordingEvent = {
+  type: "EXTEND_RECORDING";
   recording: Recording;
 };
 
@@ -394,6 +406,7 @@ export type EditorMachineEvent =
   | StopRecordingEvent
   | CaptureFrameEvent
   | LoadRecordingEvent
+  | ExtendRecordingEvent
   | RecordingLoadedEvent
   | LoadFailedEvent
   | UnloadEvent
@@ -509,6 +522,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   error: null,
   hasManualWorkspaceOverride: false,
   pendingPlaybackEditorSync: false,
+  playbackAudioSpawned: false,
   lastCallbackFrameTimestamp: undefined,
   lastAppliedFrameIndex: -1,
   lastAppliedPreviewEventIndex: -1,

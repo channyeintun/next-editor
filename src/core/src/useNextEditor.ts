@@ -200,6 +200,13 @@ export const useNextEditorActorBindings = (
     [actorRef],
   );
 
+  const extendRecording = useCallback(
+    (recording: Recording) => {
+      actorRef.send({ type: "EXTEND_RECORDING", recording });
+    },
+    [actorRef],
+  );
+
   const clearRecording = useCallback(() => {
     actorRef.send({ type: "UNLOAD" });
   }, [actorRef]);
@@ -359,6 +366,7 @@ export const useNextEditorActorBindings = (
     setPlaybackSpeed,
     setVolume,
     loadRecording,
+    extendRecording,
     clearRecording,
 
     // Integration

@@ -5,6 +5,10 @@ import { decodeBase64ToRecordings } from "../storage/recordingCodecClient";
 const SAME_ORIGIN_PROXY_PATH = "/api/proxy";
 const MISSING_PROXY_STATUS_CODES = new Set([404, 405, 501]);
 
+// Decode the accumulated stream into a (partial) recording roughly every this many bytes of
+// downloaded base64 text, so playback can start before the whole `.ne` file has arrived.
+const STREAM_DECODE_INTERVAL_BYTES = 512 * 1024;
+
 function buildSameOriginProxyUrl(targetUrl: string): string {
   const proxyUrl = new URL(SAME_ORIGIN_PROXY_PATH, window.location.origin);
   proxyUrl.searchParams.set("url", targetUrl);
@@ -35,7 +39,7 @@ async function fetchNextEditorUrl(url: string): Promise<Response> {
 
 export const useUrlLoader = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const { loadRecording } = useNextEditorActions();
+  const { loadRecording, extendRecording } = useNextEditorActions();
 
   const isNextEditorUrl = (url: string): boolean => {
     try {
@@ -83,6 +87,90 @@ export const useUrlLoader = () => {
     [loadRecording],
   );
 
+  const loadRecordingFromBase64Text = useCallback(
+    async (text: string) => {
+      const stripped = text.replace(/\s/g, "");
+      if (!stripped) {
+        throw new Error("File appears to be empty or corrupted");
+      }
+      const recordings = await decodeBase64ToRecordings(stripped);
+      if (recordings.length > 0) {
+        loadRecording(recordings[0]);
+      }
+    },
+    [loadRecording],
+  );
+
+  /**
+   * Streams a `.ne` response and progressively decodes ever-larger prefixes of the SCR3 stream,
+   * so playback can begin before the whole file has downloaded. The first decodable prefix is
+   * loaded; subsequent prefixes extend it in place (see `extendRecording`). Falls back to the
+   * caller for whole-file decoding when the body is not streamable.
+   */
+  const streamRecordingFromResponse = useCallback(
+    async (response: Response): Promise<boolean> => {
+      const body = response.body;
+      if (!body || typeof body.getReader !== "function") {
+        return false;
+      }
+
+      const reader = body.getReader();
+      const textDecoder = new TextDecoder();
+      let base64 = "";
+      let lastDecodeLength = 0;
+      let loadedOnce = false;
+
+      const decodeAndApply = async (final: boolean) => {
+        const stripped = base64.replace(/\s/g, "");
+        // Base64 decodes in 4-character groups; drop a partial trailing group until the end so
+        // we never feed a half-character to the decoder.
+        const aligned = final
+          ? stripped
+          : stripped.slice(0, stripped.length - (stripped.length % 4));
+        if (aligned.length === 0) return;
+
+        let recording;
+        try {
+          const recordings = await decodeBase64ToRecordings(aligned);
+          recording = recordings[0];
+        } catch {
+          // Not enough bytes for a valid prefix yet (e.g. header incomplete) — wait for more.
+          return;
+        }
+        if (!recording) return;
+
+        if (!loadedOnce) {
+          loadRecording(recording);
+          loadedOnce = true;
+        } else {
+          extendRecording(recording);
+        }
+      };
+
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          base64 += textDecoder.decode(value, { stream: true });
+          if (base64.length - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
+            lastDecodeLength = base64.length;
+            await decodeAndApply(false);
+          }
+        }
+        base64 += textDecoder.decode();
+        await decodeAndApply(true);
+      } finally {
+        reader.releaseLock();
+      }
+
+      if (!loadedOnce) {
+        throw new Error("No valid recording found in stream");
+      }
+      return true;
+    },
+    [loadRecording, extendRecording],
+  );
+
   const fetchNextEditorFile = useCallback(
     async (url: string) => {
       if (!isNextEditorUrl(url)) {
@@ -97,11 +185,12 @@ export const useUrlLoader = () => {
           throw new Error(`Failed to fetch file: ${response.statusText}`);
         }
 
-        const blob = await response.blob();
-        const file = new File([blob], url.split("/").pop() || "recording", {
-          type: blob.type,
-        });
-        await importNextEditorFile(file);
+        // Stream + progressively decode when the body is readable; otherwise decode the
+        // whole file at once.
+        const streamed = await streamRecordingFromResponse(response.clone()).catch(() => false);
+        if (!streamed) {
+          await loadRecordingFromBase64Text((await response.text()).trim());
+        }
       } catch (error) {
         console.error("Failed to load tutorial from URL:", error);
         alert(
@@ -112,7 +201,7 @@ export const useUrlLoader = () => {
         setIsLoading(false);
       }
     },
-    [importNextEditorFile],
+    [streamRecordingFromResponse, loadRecordingFromBase64Text],
   );
 
   return {

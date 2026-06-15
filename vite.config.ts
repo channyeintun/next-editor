@@ -88,7 +88,7 @@ export default defineConfig({
             },
             {
               name: "utils",
-              test: /[\\/]node_modules[\\/](pako|superjson)[\\/]/,
+              test: /[\\/]node_modules[\\/](pako|@msgpack)[\\/]/,
             },
           ],
         },

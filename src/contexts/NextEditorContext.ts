@@ -25,6 +25,7 @@ export interface NextEditorActions {
   setPlaybackSpeed: (speed: number) => void;
   setVolume: (volume: number) => void;
   loadRecording: (recording: Recording) => void;
+  extendRecording: (recording: Recording) => void;
   clearRecording: () => void;
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;

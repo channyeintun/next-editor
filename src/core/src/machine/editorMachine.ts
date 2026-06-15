@@ -1141,6 +1141,7 @@ export const editorMachine = setup({
         recording,
         hasManualWorkspaceOverride: false,
         pendingPlaybackEditorSync: false,
+        playbackAudioSpawned: false,
         timeline: {
           currentTime: 0,
           duration,
@@ -1160,6 +1161,15 @@ export const editorMachine = setup({
         lastAppliedRuntimeEventIndex: initialRuntimeEvent ? 0 : -1,
         lastAppliedPreviewState: undefined,
       };
+    }),
+
+    // Streaming playback: replace the loaded recording with a longer prefix of the same SCR3
+    // stream. Because the stream is append-only, the new recording is a superset of the current
+    // one, so the already-applied playback indices, current time, and timeline stay valid — we
+    // only swap in the larger frames/events arrays and let the replay cursors catch up.
+    extendRecording: assign(({ context, event }) => {
+      if (event.type !== "EXTEND_RECORDING" || !context.recording) return {};
+      return { recording: normalizeRecordingData(event.recording) };
     }),
 
     applyFrameAtTime: assign(({ context, event }) => {
@@ -2103,13 +2113,22 @@ export const editorMachine = setup({
                 startPositionMs: context.timeline.currentTime,
               },
             });
+            enqueue.assign({ playbackAudioSpawned: true });
           }
         }),
       ],
-      exit: [stopChild("timelineActor"), stopChild("audioPlayer"), "clearCursorDecorations"],
+      exit: [
+        stopChild("timelineActor"),
+        stopChild("audioPlayer"),
+        "clearCursorDecorations",
+        assign({ playbackAudioSpawned: false }),
+      ],
       on: {
         WORKSPACE_EVENT: {
           actions: ["detachPlaybackWorkspace"],
+        },
+        EXTEND_RECORDING: {
+          actions: ["extendRecording", ...APPLY_REPLAY_STATE_ACTIONS],
         },
         TICK: {
           actions: [
@@ -2223,6 +2242,23 @@ export const editorMachine = setup({
             enqueueActions(({ context, enqueue }) => {
               // Ensure actors are positioned before starting playback. Starting
               // audio first can briefly play stale audio at high speeds.
+
+              // Streaming playback: the audio may have arrived after the recording was first
+              // loaded (its bytes are at the end of the stream), so the playback-entry spawn
+              // saw no audio. Spawn the player lazily now that audio is available.
+              if (context.recording?.audioBlob instanceof Blob && !context.playbackAudioSpawned) {
+                enqueue.spawnChild("audioPlayback", {
+                  id: "audioPlayer",
+                  input: {
+                    blob: context.recording.audioBlob,
+                    volume: context.timeline.volume,
+                    playbackRate: context.timeline.speed,
+                    startPositionMs: context.timeline.currentTime,
+                  },
+                });
+                enqueue.assign({ playbackAudioSpawned: true });
+              }
+
               enqueue.sendTo("timelineActor", {
                 type: "SEEK",
                 time: context.timeline.currentTime,
