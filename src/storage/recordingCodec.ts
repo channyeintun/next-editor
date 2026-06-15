@@ -4,6 +4,13 @@ import { decodeBase64, encodeBase64 } from "../core/src/utils/base64";
 import { normalizeRecordingData } from "../core/src/utils/editorState";
 import { deflate, inflate } from "pako";
 import { superjson } from "./SuperJsonConfig";
+import {
+  decodeRecordingStream,
+  encodeRecordingToStream,
+  isStreamingRecording,
+} from "./streamingRecordingCodec";
+
+export { encodeRecordingToStream };
 
 const RECORDING_MAGIC_NUMBER = "SCRM";
 const RECORDING_BINARY_VERSION = 2;
@@ -111,6 +118,11 @@ export async function compressRecordingsToBinary(recordings: Recording[]): Promi
 }
 
 export async function decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
+  // New append-only streaming container holds a single recording per stream.
+  if (isStreamingRecording(binaryData)) {
+    return [decodeRecordingStream(binaryData)];
+  }
+
   let offset = 0;
   const magic = new TextDecoder().decode(binaryData.slice(offset, offset + 4));
   offset += 4;
@@ -171,4 +183,9 @@ export async function encodeRecordingsToBase64(recordings: Recording[]): Promise
 
 export async function decodeBase64ToRecordings(base64Data: string): Promise<Recording[]> {
   return decompressBinaryToRecordings(decodeBase64(base64Data));
+}
+
+/** Encodes a single recording to a base64-wrapped SCR3 stream (for `.ne` export). */
+export async function encodeRecordingToBase64Stream(recording: Recording): Promise<string> {
+  return encodeBase64(await encodeRecordingToStream(recording));
 }

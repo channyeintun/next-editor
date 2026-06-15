@@ -5,6 +5,8 @@ import {
   decodeBase64ToRecordings as decodeBase64ToRecordingsInProcess,
   decompressBinaryToRecordings as decompressBinaryToRecordingsInProcess,
   encodeRecordingsToBase64 as encodeRecordingsToBase64InProcess,
+  encodeRecordingToBase64Stream as encodeRecordingToBase64StreamInProcess,
+  encodeRecordingToStream as encodeRecordingToStreamInProcess,
   normalizeRecording,
 } from "./recordingCodec";
 import type { RecordingCodecWorkerApi } from "./recordingCodec.worker";
@@ -92,4 +94,24 @@ export async function decodeBase64ToRecordings(base64Data: string): Promise<Reco
   }
 
   return client.api.decodeBase64ToRecordings(base64Data);
+}
+
+export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
+  const client = getRecordingCodecWorkerClient();
+
+  if (!client) {
+    return encodeRecordingToStreamInProcess(recording);
+  }
+
+  return client.api.encodeRecordingToStream(recording);
+}
+
+export async function encodeRecordingToBase64Stream(recording: Recording): Promise<string> {
+  const client = getRecordingCodecWorkerClient();
+
+  if (!client) {
+    return encodeRecordingToBase64StreamInProcess(recording);
+  }
+
+  return client.api.encodeRecordingToBase64Stream(recording);
 }

@@ -5,6 +5,8 @@ import {
   decodeBase64ToRecordings,
   decompressBinaryToRecordings,
   encodeRecordingsToBase64,
+  encodeRecordingToBase64Stream,
+  encodeRecordingToStream,
 } from "./recordingCodec";
 
 const transferUint8Array = (data: Uint8Array): Uint8Array => {
@@ -23,6 +25,12 @@ const api = {
   },
   async decodeBase64ToRecordings(base64Data: string): Promise<Recording[]> {
     return decodeBase64ToRecordings(base64Data);
+  },
+  async encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
+    return transferUint8Array(await encodeRecordingToStream(recording));
+  },
+  async encodeRecordingToBase64Stream(recording: Recording): Promise<string> {
+    return encodeRecordingToBase64Stream(recording);
   },
 };
 
