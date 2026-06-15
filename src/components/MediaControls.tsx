@@ -13,7 +13,6 @@ import PlayIcon from "./icon/Play";
 import PauseIcon from "./icon/Pause";
 import SettingIcon from "./icon/Setting";
 import ProgressBar from "./ProgressBar";
-import RecordingEditor from "./RecordingEditor";
 import type { Recording } from "../core/src";
 
 interface MediaControlsProps {
@@ -92,7 +91,6 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
       seekTo,
       setPlaybackSpeed,
       setVolume,
-      loadRecording,
     } = useNextEditorActions();
 
     const { isRecording, isPlaying, currentRecording, hasEnded, recordingStartTime } =
@@ -102,7 +100,6 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
 
     const [showSettings, setShowSettings] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
-    const [showRecordingEditor, setShowRecordingEditor] = useState(false);
     const [recordingAudioSource, setRecordingAudioSource] =
       useState<RecordingAudioSourceOption>("microphone");
     const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
@@ -156,22 +153,6 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
       },
       [setVolume],
     );
-
-    const handleSaveRecording = useCallback(
-      async (editedRecording: Recording) => {
-        try {
-          loadRecording(editedRecording);
-          setShowRecordingEditor(false);
-        } catch (error) {
-          console.error("Save failed:", error);
-        }
-      },
-      [loadRecording],
-    );
-
-    const handleCancelExport = useCallback(() => {
-      setShowRecordingEditor(false);
-    }, []);
 
     const handleSelectMicrophoneAudio = useCallback(() => {
       setRecordingAudioSource("microphone");
@@ -409,18 +390,6 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
             />
           )}
         </div>
-
-        {currentRecording && (
-          <div className="pointer-events-auto">
-            <RecordingEditor
-              recording={currentRecording}
-              isVisible={showRecordingEditor}
-              mode="edit"
-              onSave={handleSaveRecording}
-              onCancel={handleCancelExport}
-            />
-          </div>
-        )}
       </div>
     );
   },
