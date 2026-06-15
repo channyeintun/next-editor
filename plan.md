@@ -79,16 +79,16 @@ event arrays) is untouched.
 
 ## 2. Scope of Change (what moves, what stays)
 
-| Layer                                                                         | Today                                         | After                                                            | Breaking?                     |
-| ----------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------- | ----------------------------- |
-| Capture (`captureFrame`)                                                      | pushes full `EditorFrame` to `session.frames` | folds frame into an incremental encoder → `DeltaFrame[]`         | No — identical output         |
-| Finalize (`compressFrames`)                                                   | compress whole buffer                         | concatenate already-built `DeltaFrame[]` (kept as fallback path) | No                            |
-| Frame replay                                                                  | `reconstructFrameAtIndex` forward             | unchanged                                                        | No                            |
-| Machines/actors (editor, audio, replay, preview, slides, workspace, timeline) | —                                             | unchanged shape                                                  | No                            |
-| On-disk codec                                                                 | SuperJSON→deflate(9) whole array, `SCRM` v2   | append-only segmented container, `SCR3`                          | Replaced (legacy import kept) |
-| IndexedDB store                                                               | one blob per recording                        | segment store, append per segment                                | Replaced (legacy read kept)   |
-| Audio                                                                         | final blob only                               | timesliced chunks appended live (final blob still produced)      | Additive                      |
-| Live emission                                                                 | none                                          | optional sink reusing the segment stream                         | Additive                      |
+| Layer                                                                         | Today                                         | After                                                            | Breaking?             |
+| ----------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------- | --------------------- |
+| Capture (`captureFrame`)                                                      | pushes full `EditorFrame` to `session.frames` | folds frame into an incremental encoder → `DeltaFrame[]`         | No — identical output |
+| Finalize (`compressFrames`)                                                   | compress whole buffer                         | concatenate already-built `DeltaFrame[]` (kept as fallback path) | No                    |
+| Frame replay                                                                  | `reconstructFrameAtIndex` forward             | unchanged                                                        | No                    |
+| Machines/actors (editor, audio, replay, preview, slides, workspace, timeline) | —                                             | unchanged shape                                                  | No                    |
+| On-disk codec                                                                 | SuperJSON→deflate(9) whole array, `SCRM` v2   | append-only segmented container, `SCR3`                          | Replaced              |
+| IndexedDB store                                                               | one blob per recording                        | segment store, append per segment                                | Replaced              |
+| Audio                                                                         | final blob only                               | timesliced chunks appended live (final blob still produced)      | Additive              |
+| Live emission                                                                 | none                                          | optional sink reusing the segment stream                         | Additive              |
 
 The delta format (`Keyframe`/`FrameDelta`/`ContentDelta`/`SelectionDelta`/`PositionDelta`),
 `DELTA_CONFIG.KEYFRAME_INTERVAL = 120`, and the `Recording` shape are all preserved.
@@ -213,15 +213,15 @@ export interface StreamingRecordingWriter {
 export function createStreamingRecordingWriter(): StreamingRecordingWriter;
 ```
 
-Reader API (legacy-aware):
+Reader API:
 
 ```ts
 export async function decodeRecordingStream(bytes: Uint8Array): Promise<Recording>; // SCR3
 export async function decodeRecordingPrefix(bytes: Uint8Array): Promise<Recording>; // partial / still-writing stream
 ```
 
-`recordingCodec.ts` keeps `decompressBinaryToRecordings` for **legacy `SCRM` v2** import. The
-top-level read path dispatches on magic (`SCRM` → legacy, `SCR3` → streaming).
+`recordingCodec.ts`'s `decompressBinaryToRecordings` decodes **`SCR3` only**. There is no
+legacy `SCRM` import path and no magic-byte dispatch.
 
 ### 3.4 Batching policy (this is the storage-size lever)
 
@@ -256,7 +256,6 @@ In [src/storage/IndexedDBRecordingStore.ts](src/storage/IndexedDBRecordingStore.
   incremental persistence while recording;
 - `getEntry` concatenates segments (in seq order) → the same `SCR3` byte layout the exporter
   produces, then feeds the existing decode path;
-- keep the legacy `recording-payload` (single blob) read path for old recordings;
 - bump `RECORDING_DATABASE_VERSION` and add the store in `onupgradeneeded`.
 
 `JsonStorage` ([src/storage/JsonStorage.ts](src/storage/JsonStorage.ts)) gains
@@ -305,7 +304,7 @@ This is opt-in via `UseNextEditorConfig` and does not affect local recording whe
 
 - `src/storage/streamingRecordingCodec.ts` — NEW `SCR3` writer/reader.
 - `src/storage/recordingStreamSink.ts` — NEW optional live sink interface.
-- `src/storage/recordingCodec.ts` — keep legacy `SCRM` v2 import; add magic dispatch.
+- `src/storage/recordingCodec.ts` — `SCR3` encode/decode only (no legacy import or dispatch).
 - `src/storage/recordingCodec.worker.ts` / `recordingCodecClient.ts` — streaming entry points.
 - `src/storage/IndexedDBRecordingStore.ts` — segment store + concat read; DB version bump.
 - `src/storage/JsonStorage.ts` — `appendRecordingSegments`, finalize/export via `SCR3`.
@@ -342,15 +341,18 @@ compare byte sizes; tune segment batching if any regression appears. Extend the 
 
 ---
 
-## 6. Backward Compatibility & Migration
+## 6. Storage Format (no backward compatibility)
 
-- **Reading old recordings:** `SCRM` v2 path is retained; magic-byte dispatch selects it.
-  Existing `.ne` files and IndexedDB blobs load unchanged.
-- **Writing:** new recordings use `SCR3`. No migration of old data required.
-- **Export/import:** `.ne` export becomes a single `SCR3` file (still one downloadable blob);
-  import accepts both magics.
+- **Old recordings are NOT retained.** There is no migration and no legacy/back-compat code.
+  The codebase keeps a **single** on-disk format (`SCR3`): no `SCRM` import path, no
+  magic-byte dispatch, and no legacy `recording-payload` single-blob read path.
+- **Writing & reading:** every recording is `SCR3`; the reader assumes `SCR3` only.
+- **Export/import:** `.ne` export is a single `SCR3` file (one downloadable blob); import
+  accepts `SCR3` only.
 - **Recording `version` field stays `3`** (schema unchanged); the on-disk container version is
   separate from the recording schema version.
+- **IndexedDB:** the segment store is the only payload store. Any pre-existing recordings in an
+  older database are discarded on upgrade rather than read through a compatibility path.
 
 ---
 
@@ -374,7 +376,7 @@ compare byte sizes; tune segment batching if any regression appears. Extend the 
    `session.frames` to `DeltaFrame[]`, finalize concatenates. Confirm output equals
    `compressFrames` over fixtures. Ship: same files, smaller memory, zero format change.
 2. **Phase 2 — `SCR3` container + segmented IndexedDB.** Add streaming codec + segment store +
-   legacy dispatch + size validation. Export/import on new format.
+   size validation. `SCR3` is the only format; export/import on `SCR3`.
 3. **Phase 3 — Live audio chunks + optional sink.** Timeslice audio; add
    `recordingStreamSink`; wire opt-in config for live upload/tail.
 
@@ -398,6 +400,6 @@ in Phase 2.
   needs no machine/actor redesign, and lowers memory. This is the critical green light.
 - **Blockers #2 and #3** (codec + store) are replaced with an append-only, seekable, range-
   loadable `SCR3` segment stream that stays size-comparable via msgpack + warm-dictionary
-  streaming deflate, with legacy import preserved.
+  streaming deflate. Only `SCR3` is supported; no legacy format is retained.
 - The result is genuinely stream-compatible (record-while-appending, partial replay, optional
   live emission) while preserving every delta construction, machine, and actor.

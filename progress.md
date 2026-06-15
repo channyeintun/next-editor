@@ -41,6 +41,23 @@ Last updated: 2026-06-15
 - [ ] **T5. JsonStorage append + export via SCR3** — `appendRecordingSegments`, finalize/export.
 - [ ] **T6. Storage size validation** — one-off measurement script (no unit tests).
 
+## Direction change (2026-06-15) — no backward compatibility
+
+User decided old recordings need not be retained; remove all legacy/back-compat code. plan.md
+section 6 rewritten accordingly. This supersedes the legacy bits of T3/T4 (the SCRM decode
+fallback, magic dispatch, and IndexedDB `recording-payload` blob fallback).
+
+- [ ] **T9. Remove legacy/back-compat code (SCR3-only)**
+  - `recordingCodec.ts`: SCR3-only decode (drop SCRM decode/dispatch); remove SCRM writer
+    (`compressRecordingsToBinary`/`encodeRecordingsToBase64`) and superjson usage.
+  - `recordingCodec.worker.ts` / `recordingCodecClient.ts`: drop SCRM entry points.
+  - `IndexedDBRecordingStore.ts`: remove `recording-payload` store + fallback + `getStoredPayload`;
+    segment store is the only payload; discard old DB data on upgrade.
+  - `JsonStorage.ts` + context/provider: remove `exportAllAsFile` (SCRM multi-recording only).
+  - Delete `SuperJsonConfig.ts`; drop `superjson` dependency.
+  - Regenerate `public/introduction.ne` as an SCR3 file so the demo loads without legacy decode.
+  - Update `recordingCodec.test.ts` to SCR3.
+
 ## Phase 3 — Live audio chunks + optional sink
 
 - [ ] **T7. Audio live timeslice chunks** — `audioActor.ts` timeslice `start()`, route `CHUNK`.
