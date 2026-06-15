@@ -3,13 +3,7 @@ import type { Recording } from "../core/src";
 const RECORDING_DATABASE_NAME = "next-editor-recordings-db";
 const RECORDING_DATABASE_VERSION = 2;
 const RECORDING_METADATA_STORE = "recording-metadata";
-const RECORDING_PAYLOAD_STORE = "recording-payload";
 const RECORDING_SEGMENTS_STORE = "recording-segments";
-
-interface StoredRecordingPayload {
-  id: string;
-  binaryData: ArrayBuffer;
-}
 
 interface StoredRecordingSegment {
   recordingId: string;
@@ -58,17 +52,21 @@ export class IndexedDBRecordingStore {
 
       request.onupgradeneeded = () => {
         const database = request.result;
+        const upgradeTransaction = request.transaction;
 
         if (!database.objectStoreNames.contains(RECORDING_METADATA_STORE)) {
           database.createObjectStore(RECORDING_METADATA_STORE, {
             keyPath: "id",
           });
+        } else if (upgradeTransaction) {
+          // Old recordings are not retained: their single-blob payloads are dropped
+          // below, so discard the dangling metadata too.
+          upgradeTransaction.objectStore(RECORDING_METADATA_STORE).clear();
         }
 
-        if (!database.objectStoreNames.contains(RECORDING_PAYLOAD_STORE)) {
-          database.createObjectStore(RECORDING_PAYLOAD_STORE, {
-            keyPath: "id",
-          });
+        // Drop the pre-2 single-blob payload store; the segment store is the only payload.
+        if (database.objectStoreNames.contains("recording-payload")) {
+          database.deleteObjectStore("recording-payload");
         }
 
         if (!database.objectStoreNames.contains(RECORDING_SEGMENTS_STORE)) {
@@ -125,14 +123,6 @@ export class IndexedDBRecordingStore {
     return copy.buffer;
   }
 
-  private fromStoredPayload(payload: StoredRecordingPayload | undefined): Uint8Array | null {
-    if (!payload) {
-      return null;
-    }
-
-    return new Uint8Array(payload.binaryData);
-  }
-
   private segmentRange(recordingId: string): IDBKeyRange {
     // Composite-key range covering every [recordingId, seq] segment for one recording.
     // An empty array sorts after any number, so it bounds the seq dimension above.
@@ -184,23 +174,21 @@ export class IndexedDBRecordingStore {
   async getEntry(id: string): Promise<StoredRecordingEntry | null> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_PAYLOAD_STORE, RECORDING_SEGMENTS_STORE],
+      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE],
       "readonly",
     );
     const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
-    const payloadStore = transaction.objectStore(RECORDING_PAYLOAD_STORE);
     const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
 
     const metadata = await this.requestToPromise(metadataStore.get(id));
     const segments = await this.requestToPromise(segmentsStore.getAll(this.segmentRange(id)));
-    const payload = await this.requestToPromise(payloadStore.get(id));
     await this.transactionToPromise(transaction);
 
     if (!metadata) {
       return null;
     }
 
-    const binaryData = this.concatSegments(segments) ?? this.fromStoredPayload(payload);
+    const binaryData = this.concatSegments(segments);
     if (!binaryData) {
       return null;
     }
@@ -211,21 +199,15 @@ export class IndexedDBRecordingStore {
   async getAllEntries(): Promise<StoredRecordingEntry[]> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_PAYLOAD_STORE, RECORDING_SEGMENTS_STORE],
+      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE],
       "readonly",
     );
     const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
-    const payloadStore = transaction.objectStore(RECORDING_PAYLOAD_STORE);
     const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
 
     const metadata = await this.requestToPromise(metadataStore.getAll());
-    const payloads = await this.requestToPromise(payloadStore.getAll());
     const segments = await this.requestToPromise(segmentsStore.getAll());
     await this.transactionToPromise(transaction);
-
-    const payloadById = new Map(
-      payloads.map((payload) => [payload.id, new Uint8Array(payload.binaryData)]),
-    );
 
     const segmentsById = new Map<string, StoredRecordingSegment[]>();
     for (const segment of segments) {
@@ -239,8 +221,7 @@ export class IndexedDBRecordingStore {
 
     const binaryById = new Map<string, Uint8Array>();
     for (const entry of metadata) {
-      const fromSegments = this.concatSegments(segmentsById.get(entry.id) ?? []);
-      const binaryData = fromSegments ?? payloadById.get(entry.id);
+      const binaryData = this.concatSegments(segmentsById.get(entry.id) ?? []);
       if (binaryData) {
         binaryById.set(entry.id, binaryData);
       }
@@ -324,11 +305,10 @@ export class IndexedDBRecordingStore {
   async delete(id: string): Promise<void> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_PAYLOAD_STORE, RECORDING_SEGMENTS_STORE],
+      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE],
       "readwrite",
     );
     transaction.objectStore(RECORDING_METADATA_STORE).delete(id);
-    transaction.objectStore(RECORDING_PAYLOAD_STORE).delete(id);
     transaction.objectStore(RECORDING_SEGMENTS_STORE).delete(this.segmentRange(id));
     await this.transactionToPromise(transaction);
   }
@@ -336,22 +316,12 @@ export class IndexedDBRecordingStore {
   async clear(): Promise<void> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_PAYLOAD_STORE, RECORDING_SEGMENTS_STORE],
+      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE],
       "readwrite",
     );
     transaction.objectStore(RECORDING_METADATA_STORE).clear();
-    transaction.objectStore(RECORDING_PAYLOAD_STORE).clear();
     transaction.objectStore(RECORDING_SEGMENTS_STORE).clear();
     await this.transactionToPromise(transaction);
-  }
-
-  async getStoredPayload(id: string): Promise<Uint8Array | null> {
-    const database = await this.getDatabase();
-    const transaction = database.transaction(RECORDING_PAYLOAD_STORE, "readonly");
-    const store = transaction.objectStore(RECORDING_PAYLOAD_STORE);
-    const payload = await this.requestToPromise(store.get(id));
-    await this.transactionToPromise(transaction);
-    return this.fromStoredPayload(payload);
   }
 }
 

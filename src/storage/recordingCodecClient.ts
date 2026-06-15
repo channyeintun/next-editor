@@ -1,10 +1,8 @@
 import { transfer, wrap, type Remote } from "comlink";
 import type { Recording } from "../core/src";
 import {
-  compressRecordingsToBinary as compressRecordingsToBinaryInProcess,
   decodeBase64ToRecordings as decodeBase64ToRecordingsInProcess,
   decompressBinaryToRecordings as decompressBinaryToRecordingsInProcess,
-  encodeRecordingsToBase64 as encodeRecordingsToBase64InProcess,
   encodeRecordingToBase64Stream as encodeRecordingToBase64StreamInProcess,
   encodeRecordingToStream as encodeRecordingToStreamInProcess,
   normalizeRecording,
@@ -56,16 +54,6 @@ function transferUint8Array(data: Uint8Array): Uint8Array {
 
 export { normalizeRecording };
 
-export async function compressRecordingsToBinary(recordings: Recording[]): Promise<Uint8Array> {
-  const client = getRecordingCodecWorkerClient();
-
-  if (!client) {
-    return compressRecordingsToBinaryInProcess(recordings);
-  }
-
-  return client.api.compressRecordingsToBinary(recordings);
-}
-
 export async function decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
   const client = getRecordingCodecWorkerClient();
 
@@ -74,16 +62,6 @@ export async function decompressBinaryToRecordings(binaryData: Uint8Array): Prom
   }
 
   return client.api.decompressBinaryToRecordings(transferUint8Array(binaryData));
-}
-
-export async function encodeRecordingsToBase64(recordings: Recording[]): Promise<string> {
-  const client = getRecordingCodecWorkerClient();
-
-  if (!client) {
-    return encodeRecordingsToBase64InProcess(recordings);
-  }
-
-  return client.api.encodeRecordingsToBase64(recordings);
 }
 
 export async function decodeBase64ToRecordings(base64Data: string): Promise<Recording[]> {

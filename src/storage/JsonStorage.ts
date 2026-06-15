@@ -5,10 +5,10 @@ import {
   type StoredRecordingMetadata,
 } from "./IndexedDBRecordingStore";
 import {
-  compressRecordingsToBinary,
   decodeBase64ToRecordings,
   decompressBinaryToRecordings,
-  encodeRecordingsToBase64,
+  encodeRecordingToBase64Stream,
+  encodeRecordingToStream,
   normalizeRecording,
 } from "./recordingCodecClient";
 
@@ -70,7 +70,7 @@ export class JsonStorage {
 
   private async createStoredEntry(recording: Recording): Promise<StoredRecordingEntry> {
     const normalizedRecording = normalizeRecording(recording);
-    const binaryData = await compressRecordingsToBinary([normalizedRecording]);
+    const binaryData = await encodeRecordingToStream(normalizedRecording);
 
     return {
       metadata: this.createStoredMetadata(normalizedRecording, binaryData.byteLength),
@@ -111,6 +111,14 @@ export class JsonStorage {
   }
 
   /**
+   * Append already-encoded SCR3 stream bytes as the next segment of a recording, for
+   * crash-resilient incremental persistence while recording.
+   */
+  async appendRecordingSegments(recordingId: string, bytes: Uint8Array): Promise<void> {
+    await this.indexedDBStore.appendSegments(recordingId, bytes);
+  }
+
+  /**
    * Load all recordings from IndexedDB.
    */
   async load(): Promise<Recording[]> {
@@ -140,11 +148,11 @@ export class JsonStorage {
   }
 
   /**
-   * Export recording as compressed file download using SuperJSON + pako
+   * Export recording as a compressed `.ne` file download using the SCR3 stream container.
    */
   async exportAsFile(recording: Recording, filename?: string): Promise<void> {
     try {
-      const base64Data = await encodeRecordingsToBase64([recording]);
+      const base64Data = await encodeRecordingToBase64Stream(recording);
 
       // Create blob with base64 data (will be decoded on import)
       const blob = new Blob([base64Data], { type: "application/octet-stream" });
@@ -164,37 +172,6 @@ export class JsonStorage {
     } catch (error) {
       throw new Error(
         `Failed to export recording: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-    }
-  }
-
-  /**
-   * Export all recordings as compressed file download using SuperJSON + pako
-   */
-  async exportAllAsFile(filename?: string): Promise<void> {
-    try {
-      const recordings = await this.load();
-      const base64Data = await encodeRecordingsToBase64(recordings);
-
-      // Create blob with base64 data (will be decoded on import)
-      const blob = new Blob([base64Data], { type: "application/octet-stream" });
-      const url = URL.createObjectURL(blob);
-
-      const link = document.createElement("a");
-      link.href = url;
-      // Use .ne extension to indicate new binary format
-      const baseFilename =
-        filename?.replace(/\.json$/, "") || `next-editor-recordings-${Date.now()}`;
-      link.download = `${baseFilename}.ne`;
-      document.body.appendChild(link);
-      link.click();
-
-      // Cleanup
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      throw new Error(
-        `Failed to export recordings: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
   }

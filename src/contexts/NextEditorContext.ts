@@ -34,7 +34,6 @@ export interface NextEditorActions {
   handleWorkspaceEvent: (event?: { sidebarWidthDelta?: number }) => void;
   handleRuntimeEvent: () => void;
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;
-  exportAllAsFile: (filename?: string) => Promise<void>;
   importFromFile: () => Promise<Recording[]>;
   clearStorage: () => Promise<void>;
   getStorageStats: () => Promise<{ count: number; totalSize: string }>;

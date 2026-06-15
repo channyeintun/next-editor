@@ -63,10 +63,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       jsonStorage.current.exportAsFile(recording, filename),
     [jsonStorage],
   );
-  const exportAllAsFile = useCallback(
-    (filename?: string) => jsonStorage.current.exportAllAsFile(filename),
-    [jsonStorage],
-  );
   const importFromFile = useCallback(() => jsonStorage.current.importFromFile(), [jsonStorage]);
   const clearStorage = useCallback(() => jsonStorage.current.clear(), [jsonStorage]);
   const getStorageStats = useCallback(() => jsonStorage.current.getStats(), [jsonStorage]);
@@ -122,7 +118,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       handleRuntimeEvent,
       clearRecording,
       exportAsFile,
-      exportAllAsFile,
       importFromFile,
       clearStorage,
       getStorageStats,
@@ -150,7 +145,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       handleRuntimeEvent,
       clearRecording,
       exportAsFile,
-      exportAllAsFile,
       importFromFile,
       clearStorage,
       getStorageStats,

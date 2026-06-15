@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Recording } from "../core/src";
-import { decodeBase64ToRecordings, encodeRecordingsToBase64 } from "./recordingCodec";
+import { decodeBase64ToRecordings, encodeRecordingToBase64Stream } from "./recordingCodec";
 
 function readBlobAsArray(blob: Blob): Promise<Uint8Array> {
   if (typeof blob.arrayBuffer === "function") {
@@ -67,7 +67,7 @@ describe("recordingCodec", () => {
     });
     const recording = createRecording({ audioBlob, audioSource: "external" });
 
-    const encoded = await encodeRecordingsToBase64([recording]);
+    const encoded = await encodeRecordingToBase64Stream(recording);
     const [decoded] = await decodeBase64ToRecordings(encoded);
 
     expect(decoded.id).toBe(recording.id);

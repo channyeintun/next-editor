@@ -28,17 +28,18 @@ Last updated: 2026-06-15
       boundaries). Added `@msgpack/msgpack`. Verified round-trip on `public/introduction.ne`:
       semantically identical frames/cursor/preview/audio, prefix decode replays complete
       segments, and SCR3 is ~9% smaller than legacy SCRM (non-audio data ~24% smaller).
-- [x] **T3. Magic dispatch + worker/client streaming entry points** — `recordingCodec.ts`
-      `decompressBinaryToRecordings` now dispatches on magic (`SCR3` → streaming decode, else
-      legacy `SCRM`); added `encodeRecordingToStream` / `encodeRecordingToBase64Stream`; worker + client expose the SCR3 encode entry points (heavy deflate stays off the main thread).
-      Verified SCRM+SCR3 import both decode via dispatch.
+- [x] **T3. Worker/client streaming entry points** — `recordingCodec.ts` adds
+      `encodeRecordingToStream` / `encodeRecordingToBase64Stream`; worker + client expose the
+      SCR3 encode entry points (heavy deflate stays off the main thread). (Magic dispatch was
+      added here then removed in T9 — SCR3 is now the only decode path.)
 - [x] **T4. Segmented IndexedDB store** — `IndexedDBRecordingStore.ts`: added
       `recording-segments` store (composite key `[recordingId, seq]`), bumped DB version to 2,
       `appendSegments` for incremental writes, `getEntry`/`getAllEntries` concat segments in seq
-      order with legacy `recording-payload` blob fallback, `putMany` replaces segments, `delete`
-      /`clear` cover all stores. (IndexedDB isn't runnable in node/bun; validated by build +
-      reasoning, browser smoke test in a later step.)
-- [ ] **T5. JsonStorage append + export via SCR3** — `appendRecordingSegments`, finalize/export.
+      order, `putMany` replaces segments, `delete`/`clear` cover all stores. (Legacy
+      `recording-payload` fallback was added here then removed in T9.)
+- [x] **T5. JsonStorage append + export via SCR3** — `appendRecordingSegments` for incremental
+      persistence; `createStoredEntry`/`exportAsFile` use SCR3 (`encodeRecordingToStream` /
+      `encodeRecordingToBase64Stream`).
 - [ ] **T6. Storage size validation** — one-off measurement script (no unit tests).
 
 ## Direction change (2026-06-15) — no backward compatibility
@@ -47,16 +48,18 @@ User decided old recordings need not be retained; remove all legacy/back-compat 
 section 6 rewritten accordingly. This supersedes the legacy bits of T3/T4 (the SCRM decode
 fallback, magic dispatch, and IndexedDB `recording-payload` blob fallback).
 
-- [ ] **T9. Remove legacy/back-compat code (SCR3-only)**
-  - `recordingCodec.ts`: SCR3-only decode (drop SCRM decode/dispatch); remove SCRM writer
+- [x] **T9. Remove legacy/back-compat code (SCR3-only)**
+  - `recordingCodec.ts`: SCR3-only decode (dropped SCRM decode/dispatch); removed SCRM writer
     (`compressRecordingsToBinary`/`encodeRecordingsToBase64`) and superjson usage.
-  - `recordingCodec.worker.ts` / `recordingCodecClient.ts`: drop SCRM entry points.
-  - `IndexedDBRecordingStore.ts`: remove `recording-payload` store + fallback + `getStoredPayload`;
-    segment store is the only payload; discard old DB data on upgrade.
-  - `JsonStorage.ts` + context/provider: remove `exportAllAsFile` (SCRM multi-recording only).
-  - Delete `SuperJsonConfig.ts`; drop `superjson` dependency.
-  - Regenerate `public/introduction.ne` as an SCR3 file so the demo loads without legacy decode.
-  - Update `recordingCodec.test.ts` to SCR3.
+  - `recordingCodec.worker.ts` / `recordingCodecClient.ts`: dropped SCRM entry points.
+  - `IndexedDBRecordingStore.ts`: removed `recording-payload` store + fallback + `getStoredPayload`;
+    segment store is the only payload; old DB data discarded on upgrade (delete legacy store +
+    clear dangling metadata).
+  - `JsonStorage.ts` + context/provider: removed `exportAllAsFile` (SCRM multi-recording only).
+  - Deleted `SuperJsonConfig.ts`; dropped `superjson` dependency.
+  - Regenerated `public/introduction.ne` as an SCR3 file (verified it decodes via the SCR3-only
+    path: 3228 frames, 3469 cursor events, 196 preview patch batches, audio intact).
+  - Updated `recordingCodec.test.ts` to SCR3. Validated: `vp check` clean, build green, 65/65 tests.
 
 ## Phase 3 — Live audio chunks + optional sink
 
