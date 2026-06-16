@@ -127,13 +127,18 @@ export const useUrlLoader = () => {
 
   const loadRecordingFromBase64Text = useCallback(
     async (text: string) => {
-      const stripped = text.replace(/\s/g, "");
-      if (!stripped) {
-        throw new Error("File appears to be empty or corrupted");
-      }
-      const recordings = await decodeBase64ToRecordings(stripped);
-      if (recordings.length > 0) {
-        loadRecording(recordings[0]);
+      try {
+        setIsLoading(true);
+        const stripped = text.replace(/\s/g, "");
+        if (!stripped) {
+          throw new Error("File appears to be empty or corrupted");
+        }
+        const recordings = await decodeBase64ToRecordings(stripped);
+        if (recordings.length > 0) {
+          loadRecording(recordings[0]);
+        }
+      } finally {
+        setIsLoading(false);
       }
     },
     [loadRecording],
@@ -141,13 +146,18 @@ export const useUrlLoader = () => {
 
   const loadRecordingFromBinaryBytes = useCallback(
     async (bytes: Uint8Array) => {
-      if (!startsWithScr3(bytes)) {
-        throw new Error("File does not contain a valid SCR3 recording stream");
-      }
+      try {
+        setIsLoading(true);
+        if (!startsWithScr3(bytes)) {
+          throw new Error("File does not contain a valid SCR3 recording stream");
+        }
 
-      const recordings = await decompressBinaryToRecordings(bytes);
-      if (recordings.length > 0) {
-        loadRecording(recordings[0]);
+        const recordings = await decompressBinaryToRecordings(bytes);
+        if (recordings.length > 0) {
+          loadRecording(recordings[0]);
+        }
+      } finally {
+        setIsLoading(false);
       }
     },
     [loadRecording],
