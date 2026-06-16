@@ -5,19 +5,22 @@ import type {
   CursorRecordingEvent,
   RecordingAudioSource,
   RecordingCameraSource,
+  RecordingClusterMeta,
+  RecordingMediaFragment,
+  RecordingTrackMeta,
 } from "../core/src/types";
 import type {
   PreviewDomPatchBatch,
   PreviewEvent,
   PreviewInitialDocument,
-  SlideEvent,
   Slide,
+  SlideEvent,
 } from "../core/src/slides";
-import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../types/runtime";
-import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../types/workspace";
 import type { DeltaFrame } from "../core/src/utils/deltaTypes";
 import { isKeyframe } from "../core/src/utils/deltaTypes";
 import { normalizeRecordingData } from "../core/src/utils/editorState";
+import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../types/runtime";
+import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../types/workspace";
 
 // ============================================================================
 // SCR3 — append-only, seekable, range-loadable recording stream container.
@@ -30,25 +33,32 @@ import { normalizeRecordingData } from "../core/src/utils/editorState";
 // Layout:
 //   Header:  "SCR3" | formatVersion u16 | flags u16 | metaLen u32 | meta bytes
 //            (meta bytes = deflate(msgpack(RecordingStreamMeta)))
-//   Segment: kind u8 | byteLength u32 | firstTimestampMs u32 |
-//            firstFrameIndex i32 | containsKeyframe u8 | payload (byteLength)
-//            (payload = deflate(msgpack(records[])); audio chunks are raw bytes)
+//   Segment v1: kind u8 | byteLength u32 | firstTimestampMs u32 |
+//               firstFrameIndex i32 | containsKeyframe u8 | payload (byteLength)
+//   Segment v2: kind u8 | byteLength u32 | startTimeMs u32 | endTimeMs u32 |
+//               firstFrameIndex i32 | clusterIndex u32 | flags u8 | payload
+//            (payload = deflate(msgpack(records[])); media fragments are raw bytes)
 //   Footer:  segmentCount u32 | index[count] | footerLen u32 | "SCR3"
 //            (index entry = kind u8 | byteOffset u32 | firstTs u32 | firstIdx i32)
 // ============================================================================
 
 export const STREAM_MAGIC = "SCR3";
-const STREAM_MAGIC_BYTES = new Uint8Array([0x53, 0x43, 0x52, 0x33]); // "SCR3"
-const STREAM_FORMAT_VERSION = 1;
+const STREAM_MAGIC_BYTES = new Uint8Array([0x53, 0x43, 0x52, 0x33]);
+const STREAM_FORMAT_VERSION = 2;
 
 const FLAG_HAS_AUDIO = 1 << 0;
 const FLAG_HAS_CAMERA = 1 << 1;
+const SEGMENT_FLAG_CONTAINS_KEYFRAME = 1 << 0;
+const SEGMENT_FLAG_IS_INIT = 1 << 1;
 
-const HEADER_PREFIX_SIZE = 12; // magic(4) + version(2) + flags(2) + metaLen(4)
-const SEGMENT_HEADER_SIZE = 14; // kind(1) + len(4) + ts(4) + idx(4) + keyframe(1)
-const INDEX_ENTRY_SIZE = 13; // kind(1) + offset(4) + ts(4) + idx(4)
-const FOOTER_TRAILER_SIZE = 8; // footerLen(4) + magic(4)
+const HEADER_PREFIX_SIZE = 12;
+const LEGACY_SEGMENT_HEADER_SIZE = 14;
+const SEGMENT_HEADER_SIZE = 22;
+const INDEX_ENTRY_SIZE = 13;
+const FOOTER_TRAILER_SIZE = 8;
 const U32_MAX = 0xffffffff;
+const DEFAULT_AUDIO_TRACK_ID = "audio";
+const DEFAULT_CAMERA_TRACK_ID = "camera";
 
 export const SEGMENT_KIND = {
   frames: 0,
@@ -65,7 +75,6 @@ export const SEGMENT_KIND = {
 
 export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
 
-/** Recording-level metadata carried in the stream header (everything but the streams). */
 export interface RecordingStreamMeta {
   version: 2 | 3;
   id: string;
@@ -73,6 +82,8 @@ export interface RecordingStreamMeta {
   keyframeInterval: number;
   createdAt: number;
   duration: number;
+  tracks?: RecordingTrackMeta[];
+  clusters?: RecordingClusterMeta[];
   audioType?: string;
   audioSource?: RecordingAudioSource;
   audioStartOffsetMs?: number;
@@ -91,32 +102,56 @@ interface SegmentIndexEntry {
   firstFrameIndex: number;
 }
 
-/**
- * Incremental writer for an SCR3 stream. Drives both the offline exporter and
- * (later) live append: `drainPending` hands out the bytes appended since the
- * previous drain so callers can persist/forward them as they are produced.
- */
+interface SegmentAppendOptions {
+  startTimeMs?: number;
+  endTimeMs?: number;
+  clusterIndex?: number;
+  firstFrameIndex?: number;
+  containsKeyframe?: boolean;
+  isInit?: boolean;
+}
+
+interface MaterializedMediaSegment extends RecordingMediaFragment {
+  bytes: Uint8Array;
+}
+
+interface SequencedMediaSegment extends MaterializedMediaSegment {
+  sequence: number;
+}
+
+interface DecodedSegment {
+  kind: number;
+  payload: Uint8Array;
+  startTimeMs: number;
+  endTimeMs: number;
+  firstFrameIndex: number;
+  clusterIndex: number;
+  containsKeyframe: boolean;
+  isInit: boolean;
+  sequence: number;
+}
+
 export interface StreamingRecordingWriter {
   writeHeader(meta: RecordingStreamMeta): void;
-  appendFrameSegment(frames: DeltaFrame[]): void;
-  appendEventSegment(kind: SegmentKind, records: ReadonlyArray<unknown>): void;
-  appendAudioChunk(chunk: Uint8Array): void;
-  appendCameraChunk(chunk: Uint8Array): void;
+  appendFrameSegment(frames: DeltaFrame[], options?: SegmentAppendOptions): void;
+  appendEventSegment(
+    kind: SegmentKind,
+    records: ReadonlyArray<unknown>,
+    options?: SegmentAppendOptions,
+  ): void;
+  appendAudioChunk(chunk: Uint8Array, options?: SegmentAppendOptions): void;
+  appendCameraChunk(chunk: Uint8Array, options?: SegmentAppendOptions): void;
   finalize(): Uint8Array;
   drainPending(): Uint8Array;
   isFinalized(): boolean;
 }
-
-// ----------------------------------------------------------------------------
-// Binary helpers
-// ----------------------------------------------------------------------------
 
 function clampU32(value: number): number {
   if (!Number.isFinite(value) || value < 0) return 0;
   return value > U32_MAX ? U32_MAX : Math.floor(value);
 }
 
-function concatChunks(parts: Uint8Array[], totalLength?: number): Uint8Array<ArrayBuffer> {
+function concatChunks(parts: Uint8Array[], totalLength?: number): Uint8Array {
   const total = totalLength ?? parts.reduce((sum, part) => sum + part.length, 0);
   const out = new Uint8Array(total);
   let offset = 0;
@@ -125,6 +160,12 @@ function concatChunks(parts: Uint8Array[], totalLength?: number): Uint8Array<Arr
     offset += part.length;
   }
   return out;
+}
+
+function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
 }
 
 function encodeRecords(records: ReadonlyArray<unknown>): Uint8Array {
@@ -145,6 +186,233 @@ function readRecordTimestamp(record: unknown): number {
   return 0;
 }
 
+function readLastRecordTimestamp(records: ReadonlyArray<unknown>): number {
+  return records.length > 0 ? readRecordTimestamp(records[records.length - 1]) : 0;
+}
+
+function resolveClusterIndexForTime(
+  clusters: ReadonlyArray<RecordingClusterMeta>,
+  timeMs: number,
+): number {
+  if (clusters.length === 0) {
+    return 0;
+  }
+
+  for (let index = clusters.length - 1; index >= 0; index -= 1) {
+    if (timeMs >= clusters[index].startTimeMs) {
+      return clusters[index].index;
+    }
+  }
+
+  return clusters[0].index;
+}
+
+function getTrackId(
+  tracks: ReadonlyArray<RecordingTrackMeta> | undefined,
+  kind: RecordingTrackMeta["kind"],
+  fallback: string,
+): string {
+  return tracks?.find((track) => track.kind === kind)?.id ?? fallback;
+}
+
+function buildClustersFromFrames(frames: DeltaFrame[], duration: number): RecordingClusterMeta[] {
+  if (frames.length === 0) {
+    return duration > 0
+      ? [{ index: 0, startTimeMs: 0, endTimeMs: duration, containsKeyframe: false }]
+      : [];
+  }
+
+  const clusters: RecordingClusterMeta[] = [];
+  let startIndex = 0;
+
+  while (startIndex < frames.length) {
+    let endIndex = startIndex + 1;
+    while (endIndex < frames.length && !isKeyframe(frames[endIndex])) {
+      endIndex += 1;
+    }
+
+    const startTimeMs = frames[startIndex]?.timestamp ?? 0;
+    const nextStartTimeMs = endIndex < frames.length ? frames[endIndex].timestamp : duration;
+    const lastFrameTimeMs = frames[endIndex - 1]?.timestamp ?? startTimeMs;
+
+    clusters.push({
+      index: clusters.length,
+      startTimeMs,
+      endTimeMs: Math.max(startTimeMs, nextStartTimeMs, lastFrameTimeMs),
+      containsKeyframe: isKeyframe(frames[startIndex]),
+    });
+
+    startIndex = endIndex;
+  }
+
+  const lastCluster = clusters[clusters.length - 1];
+  if (lastCluster) {
+    lastCluster.endTimeMs = Math.max(lastCluster.startTimeMs, lastCluster.endTimeMs, duration);
+  }
+
+  return clusters;
+}
+
+function buildClustersFromMediaFragments(
+  fragments: ReadonlyArray<RecordingMediaFragment>,
+  duration: number,
+): RecordingClusterMeta[] {
+  if (fragments.length === 0) {
+    return duration > 0
+      ? [{ index: 0, startTimeMs: 0, endTimeMs: duration, containsKeyframe: false }]
+      : [];
+  }
+
+  const clusterMap = new Map<number, RecordingClusterMeta>();
+
+  for (const fragment of fragments) {
+    const existing = clusterMap.get(fragment.clusterIndex);
+    if (existing) {
+      existing.startTimeMs = Math.min(existing.startTimeMs, fragment.startTimeMs);
+      existing.endTimeMs = Math.max(existing.endTimeMs, fragment.endTimeMs);
+      continue;
+    }
+
+    clusterMap.set(fragment.clusterIndex, {
+      index: fragment.clusterIndex,
+      startTimeMs: fragment.startTimeMs,
+      endTimeMs: fragment.endTimeMs,
+      containsKeyframe: false,
+    });
+  }
+
+  const clusters = Array.from(clusterMap.values()).sort((left, right) => left.index - right.index);
+  const lastCluster = clusters[clusters.length - 1];
+  if (lastCluster) {
+    lastCluster.endTimeMs = Math.max(lastCluster.endTimeMs, duration);
+  }
+  return clusters;
+}
+
+function deriveRecordingClusters(recording: Recording): RecordingClusterMeta[] {
+  if (recording.clusters && recording.clusters.length > 0) {
+    return [...recording.clusters]
+      .map((cluster) => ({
+        index: Math.max(0, Math.trunc(cluster.index)),
+        startTimeMs: clampU32(cluster.startTimeMs),
+        endTimeMs: Math.max(clampU32(cluster.startTimeMs), clampU32(cluster.endTimeMs)),
+        containsKeyframe: Boolean(cluster.containsKeyframe),
+      }))
+      .sort((left, right) => left.index - right.index);
+  }
+
+  if (recording.frames.length > 0) {
+    return buildClustersFromFrames(recording.frames, recording.duration);
+  }
+
+  return buildClustersFromMediaFragments(recording.mediaFragments ?? [], recording.duration);
+}
+
+function deriveRecordingTracks(recording: Recording): RecordingTrackMeta[] {
+  if (recording.tracks && recording.tracks.length > 0) {
+    return recording.tracks.map((track) => ({ ...track }));
+  }
+
+  const tracks: RecordingTrackMeta[] = [
+    { id: "editor", kind: "editor", durationMs: recording.duration },
+  ];
+
+  if (recording.slideEvents?.length) {
+    tracks.push({ id: "slide", kind: "slide", durationMs: recording.duration });
+  }
+  if (
+    recording.previewEvents?.length ||
+    recording.previewInitialDocuments?.length ||
+    recording.previewPatchBatches?.length
+  ) {
+    tracks.push({ id: "preview", kind: "preview", durationMs: recording.duration });
+  }
+  if (recording.workspaceEvents?.length) {
+    tracks.push({ id: "workspace", kind: "workspace", durationMs: recording.duration });
+  }
+  if (recording.runtimeEvents?.length) {
+    tracks.push({ id: "runtime", kind: "runtime", durationMs: recording.duration });
+  }
+  if (recording.cursorEvents?.length) {
+    tracks.push({ id: "cursor", kind: "cursor", durationMs: recording.duration });
+  }
+  if (recording.audioBlob instanceof Blob && recording.audioBlob.size > 0) {
+    const startOffsetMs = recording.audioStartOffsetMs ?? 0;
+    tracks.push({
+      id: DEFAULT_AUDIO_TRACK_ID,
+      kind: "audio",
+      mimeType: recording.audioBlob.type || undefined,
+      source: recording.audioSource,
+      startOffsetMs,
+      durationMs: Math.max(0, recording.duration - startOffsetMs),
+    });
+  }
+  if (recording.cameraBlob instanceof Blob && recording.cameraBlob.size > 0) {
+    const startOffsetMs = recording.cameraStartOffsetMs ?? 0;
+    tracks.push({
+      id: DEFAULT_CAMERA_TRACK_ID,
+      kind: "camera",
+      mimeType: recording.cameraBlob.type || undefined,
+      source: recording.cameraSource,
+      startOffsetMs,
+      durationMs: Math.max(0, recording.duration - startOffsetMs),
+    });
+  }
+
+  return tracks;
+}
+
+function deriveRecordingMediaFragments(
+  recording: Recording,
+  tracks: ReadonlyArray<RecordingTrackMeta>,
+  clusters: ReadonlyArray<RecordingClusterMeta>,
+): RecordingMediaFragment[] {
+  if (recording.mediaFragments && recording.mediaFragments.length > 0) {
+    return recording.mediaFragments
+      .map((fragment) => ({ ...fragment }))
+      .sort(
+        (left, right) =>
+          left.startTimeMs - right.startTimeMs || left.clusterIndex - right.clusterIndex,
+      );
+  }
+
+  const fragments: RecordingMediaFragment[] = [];
+
+  if (recording.audioBlob instanceof Blob && recording.audioBlob.size > 0) {
+    const startTimeMs = recording.audioStartOffsetMs ?? 0;
+    fragments.push({
+      trackId: getTrackId(tracks, "audio", DEFAULT_AUDIO_TRACK_ID),
+      clusterIndex: resolveClusterIndexForTime(clusters, startTimeMs),
+      startTimeMs,
+      endTimeMs: Math.max(startTimeMs, recording.duration),
+      byteLength: recording.audioBlob.size,
+      isInit: true,
+    });
+  }
+
+  if (recording.cameraBlob instanceof Blob && recording.cameraBlob.size > 0) {
+    const startTimeMs = recording.cameraStartOffsetMs ?? 0;
+    fragments.push({
+      trackId: getTrackId(tracks, "camera", DEFAULT_CAMERA_TRACK_ID),
+      clusterIndex: resolveClusterIndexForTime(clusters, startTimeMs),
+      startTimeMs,
+      endTimeMs: Math.max(startTimeMs, recording.duration),
+      byteLength: recording.cameraBlob.size,
+      isInit: true,
+    });
+  }
+
+  return fragments;
+}
+
+function sortMediaSegments<T extends { startTimeMs: number; sequence: number }>(
+  segments: T[],
+): T[] {
+  return segments.sort(
+    (left, right) => left.startTimeMs - right.startTimeMs || left.sequence - right.sequence,
+  );
+}
+
 function buildHeaderChunk(meta: RecordingStreamMeta, flags: number): Uint8Array {
   const metaBytes = deflate(msgpackEncode(meta, { ignoreUndefined: true }), { level: 9 });
   const chunk = new Uint8Array(HEADER_PREFIX_SIZE + metaBytes.length);
@@ -160,17 +428,25 @@ function buildHeaderChunk(meta: RecordingStreamMeta, flags: number): Uint8Array 
 function buildSegmentChunk(
   kind: number,
   payload: Uint8Array,
-  firstTimestampMs: number,
+  startTimeMs: number,
+  endTimeMs: number,
   firstFrameIndex: number,
+  clusterIndex: number,
   containsKeyframe: boolean,
+  isInit: boolean,
 ): Uint8Array {
   const chunk = new Uint8Array(SEGMENT_HEADER_SIZE + payload.length);
   const view = new DataView(chunk.buffer);
   view.setUint8(0, kind);
   view.setUint32(1, payload.length, true);
-  view.setUint32(5, clampU32(firstTimestampMs), true);
-  view.setInt32(9, firstFrameIndex, true);
-  view.setUint8(13, containsKeyframe ? 1 : 0);
+  view.setUint32(5, clampU32(startTimeMs), true);
+  view.setUint32(9, clampU32(Math.max(startTimeMs, endTimeMs)), true);
+  view.setInt32(13, firstFrameIndex, true);
+  view.setUint32(17, clampU32(clusterIndex), true);
+  view.setUint8(
+    21,
+    (containsKeyframe ? SEGMENT_FLAG_CONTAINS_KEYFRAME : 0) | (isInit ? SEGMENT_FLAG_IS_INIT : 0),
+  );
   chunk.set(payload, SEGMENT_HEADER_SIZE);
   return chunk;
 }
@@ -194,10 +470,6 @@ function buildFooterChunk(index: SegmentIndexEntry[]): Uint8Array {
   return chunk;
 }
 
-// ----------------------------------------------------------------------------
-// Writer
-// ----------------------------------------------------------------------------
-
 export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   const chunks: Uint8Array[] = [];
   const index: SegmentIndexEntry[] = [];
@@ -206,6 +478,8 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   let headerWritten = false;
   let finalized = false;
   let frameCount = 0;
+  let nextFrameClusterIndex = 0;
+  let headerMeta: RecordingStreamMeta | null = null;
 
   const pushChunk = (bytes: Uint8Array): void => {
     chunks.push(bytes);
@@ -217,18 +491,52 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     if (finalized) throw new Error("SCR3 stream already finalized");
   };
 
+  const resolveClusterIndex = (
+    startTimeMs: number,
+    kind: number,
+    providedClusterIndex?: number,
+  ): number => {
+    if (typeof providedClusterIndex === "number" && Number.isFinite(providedClusterIndex)) {
+      return Math.max(0, Math.trunc(providedClusterIndex));
+    }
+
+    if (headerMeta?.clusters?.length) {
+      return resolveClusterIndexForTime(headerMeta.clusters, startTimeMs);
+    }
+
+    return kind === SEGMENT_KIND.frames ? nextFrameClusterIndex : 0;
+  };
+
   const appendSegment = (
     kind: number,
     payload: Uint8Array,
-    firstTimestampMs: number,
-    firstFrameIndex: number,
-    containsKeyframe: boolean,
+    options: SegmentAppendOptions,
   ): void => {
+    const startTimeMs = clampU32(options.startTimeMs ?? 0);
+    const endTimeMs = clampU32(Math.max(startTimeMs, options.endTimeMs ?? startTimeMs));
+    const firstFrameIndex = options.firstFrameIndex ?? -1;
+    const containsKeyframe = Boolean(options.containsKeyframe);
+    const clusterIndex = resolveClusterIndex(startTimeMs, kind, options.clusterIndex);
     const byteOffset = length;
+
     pushChunk(
-      buildSegmentChunk(kind, payload, firstTimestampMs, firstFrameIndex, containsKeyframe),
+      buildSegmentChunk(
+        kind,
+        payload,
+        startTimeMs,
+        endTimeMs,
+        firstFrameIndex,
+        clusterIndex,
+        containsKeyframe,
+        Boolean(options.isInit),
+      ),
     );
-    index.push({ kind, byteOffset, firstTimestampMs, firstFrameIndex });
+
+    index.push({ kind, byteOffset, firstTimestampMs: startTimeMs, firstFrameIndex });
+
+    if (kind === SEGMENT_KIND.frames) {
+      nextFrameClusterIndex = Math.max(nextFrameClusterIndex, clusterIndex + 1);
+    }
   };
 
   return {
@@ -236,34 +544,57 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
       if (headerWritten) throw new Error("SCR3 header already written");
       const flags = (meta.audioType ? FLAG_HAS_AUDIO : 0) | (meta.cameraType ? FLAG_HAS_CAMERA : 0);
       pushChunk(buildHeaderChunk(meta, flags));
+      headerMeta = meta;
       headerWritten = true;
     },
-    appendFrameSegment(frames) {
+    appendFrameSegment(frames, options) {
       ensureWritable();
       if (frames.length === 0) return;
-      appendSegment(
-        SEGMENT_KIND.frames,
-        encodeRecords(frames),
-        frames[0].timestamp,
-        frameCount,
-        frames.some(isKeyframe),
-      );
+      appendSegment(SEGMENT_KIND.frames, encodeRecords(frames), {
+        startTimeMs: options?.startTimeMs ?? frames[0].timestamp,
+        endTimeMs: options?.endTimeMs ?? readLastRecordTimestamp(frames),
+        firstFrameIndex: options?.firstFrameIndex ?? frameCount,
+        clusterIndex: options?.clusterIndex,
+        containsKeyframe: options?.containsKeyframe ?? frames.some(isKeyframe),
+        isInit: options?.isInit,
+      });
       frameCount += frames.length;
     },
-    appendEventSegment(kind, records) {
+    appendEventSegment(kind, records, options) {
       ensureWritable();
       if (records.length === 0) return;
-      appendSegment(kind, encodeRecords(records), readRecordTimestamp(records[0]), -1, false);
+      appendSegment(kind, encodeRecords(records), {
+        startTimeMs: options?.startTimeMs ?? readRecordTimestamp(records[0]),
+        endTimeMs: options?.endTimeMs ?? readLastRecordTimestamp(records),
+        firstFrameIndex: options?.firstFrameIndex ?? -1,
+        clusterIndex: options?.clusterIndex,
+        containsKeyframe: options?.containsKeyframe,
+        isInit: options?.isInit,
+      });
     },
-    appendAudioChunk(chunk) {
+    appendAudioChunk(chunk, options) {
       ensureWritable();
       if (chunk.length === 0) return;
-      appendSegment(SEGMENT_KIND.audioChunk, chunk, 0, -1, false);
+      const startTimeMs = options?.startTimeMs ?? headerMeta?.audioStartOffsetMs ?? 0;
+      appendSegment(SEGMENT_KIND.audioChunk, chunk, {
+        startTimeMs,
+        endTimeMs: options?.endTimeMs ?? startTimeMs,
+        firstFrameIndex: options?.firstFrameIndex ?? -1,
+        clusterIndex: options?.clusterIndex,
+        isInit: options?.isInit,
+      });
     },
-    appendCameraChunk(chunk) {
+    appendCameraChunk(chunk, options) {
       ensureWritable();
       if (chunk.length === 0) return;
-      appendSegment(SEGMENT_KIND.cameraChunk, chunk, 0, -1, false);
+      const startTimeMs = options?.startTimeMs ?? headerMeta?.cameraStartOffsetMs ?? 0;
+      appendSegment(SEGMENT_KIND.cameraChunk, chunk, {
+        startTimeMs,
+        endTimeMs: options?.endTimeMs ?? startTimeMs,
+        firstFrameIndex: options?.firstFrameIndex ?? -1,
+        clusterIndex: options?.clusterIndex,
+        isInit: options?.isInit,
+      });
     },
     finalize() {
       ensureWritable();
@@ -282,10 +613,6 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   };
 }
 
-// ----------------------------------------------------------------------------
-// Reader
-// ----------------------------------------------------------------------------
-
 function hasMagicAt(bytes: Uint8Array, offset: number): boolean {
   return (
     bytes[offset] === STREAM_MAGIC_BYTES[0] &&
@@ -295,16 +622,20 @@ function hasMagicAt(bytes: Uint8Array, offset: number): boolean {
   );
 }
 
-/** Returns true when the bytes start with the SCR3 magic. */
 export function isStreamingRecording(bytes: Uint8Array): boolean {
   return bytes.length >= 4 && hasMagicAt(bytes, 0);
 }
 
-function parseHeader(bytes: Uint8Array): { meta: RecordingStreamMeta; headerEnd: number } {
+function parseHeader(bytes: Uint8Array): {
+  meta: RecordingStreamMeta;
+  headerEnd: number;
+  formatVersion: number;
+} {
   if (!isStreamingRecording(bytes)) {
     throw new Error("Invalid SCR3 stream: bad magic number");
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const formatVersion = view.getUint16(4, true);
   const metaLength = view.getUint32(8, true);
   const metaStart = HEADER_PREFIX_SIZE;
   const metaEnd = metaStart + metaLength;
@@ -312,7 +643,7 @@ function parseHeader(bytes: Uint8Array): { meta: RecordingStreamMeta; headerEnd:
     throw new Error("Invalid SCR3 stream: bad header length");
   }
   const meta = msgpackDecode(inflate(bytes.subarray(metaStart, metaEnd))) as RecordingStreamMeta;
-  return { meta, headerEnd: metaEnd };
+  return { meta, headerEnd: metaEnd, formatVersion };
 }
 
 function findSegmentsEnd(bytes: Uint8Array, headerEnd: number): number {
@@ -325,29 +656,54 @@ function findSegmentsEnd(bytes: Uint8Array, headerEnd: number): number {
   return footerStart >= headerEnd ? footerStart : bytes.length;
 }
 
-interface DecodedSegment {
-  kind: number;
-  payload: Uint8Array;
-}
-
-function* walkSegments(bytes: Uint8Array, start: number, end: number): Generator<DecodedSegment> {
+function* walkSegments(
+  bytes: Uint8Array,
+  start: number,
+  end: number,
+  formatVersion: number,
+): Generator<DecodedSegment> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const isLegacy = formatVersion < 2;
+  const headerSize = isLegacy ? LEGACY_SEGMENT_HEADER_SIZE : SEGMENT_HEADER_SIZE;
   let offset = start;
-  while (offset + SEGMENT_HEADER_SIZE <= end) {
+  let sequence = 0;
+
+  while (offset + headerSize <= end) {
     const kind = view.getUint8(offset);
     const byteLength = view.getUint32(offset + 1, true);
-    const payloadStart = offset + SEGMENT_HEADER_SIZE;
+    const startTimeMs = view.getUint32(offset + 5, true);
+    const endTimeMs = isLegacy ? startTimeMs : view.getUint32(offset + 9, true);
+    const firstFrameIndex = isLegacy
+      ? view.getInt32(offset + 9, true)
+      : view.getInt32(offset + 13, true);
+    const clusterIndex = isLegacy ? 0 : view.getUint32(offset + 17, true);
+    const flags = isLegacy ? view.getUint8(offset + 13) : view.getUint8(offset + 21);
+    const payloadStart = offset + headerSize;
     const payloadEnd = payloadStart + byteLength;
+
     if (kind > SEGMENT_KIND.cameraChunk || payloadEnd > end) {
-      break; // unknown kind or truncated tail
+      break;
     }
-    yield { kind, payload: bytes.subarray(payloadStart, payloadEnd) };
+
+    yield {
+      kind,
+      payload: bytes.subarray(payloadStart, payloadEnd),
+      startTimeMs,
+      endTimeMs,
+      firstFrameIndex,
+      clusterIndex,
+      containsKeyframe: isLegacy ? flags === 1 : Boolean(flags & SEGMENT_FLAG_CONTAINS_KEYFRAME),
+      isInit: !isLegacy && Boolean(flags & SEGMENT_FLAG_IS_INIT),
+      sequence,
+    };
+
     offset = payloadEnd;
+    sequence += 1;
   }
 }
 
 function decodeSegments(bytes: Uint8Array): Recording {
-  const { meta, headerEnd } = parseHeader(bytes);
+  const { meta, headerEnd, formatVersion } = parseHeader(bytes);
   const segmentsEnd = findSegmentsEnd(bytes, headerEnd);
 
   const frames: DeltaFrame[] = [];
@@ -358,10 +714,12 @@ function decodeSegments(bytes: Uint8Array): Recording {
   const workspaceEvents: WorkspaceRecordingEvent[] = [];
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const cursorEvents: CursorRecordingEvent[] = [];
-  const audioChunks: Uint8Array[] = [];
-  const cameraChunks: Uint8Array[] = [];
+  const audioSegments: SequencedMediaSegment[] = [];
+  const cameraSegments: SequencedMediaSegment[] = [];
+  const decodedSegments: DecodedSegment[] = [];
 
-  for (const segment of walkSegments(bytes, headerEnd, segmentsEnd)) {
+  for (const segment of walkSegments(bytes, headerEnd, segmentsEnd, formatVersion)) {
+    decodedSegments.push(segment);
     switch (segment.kind) {
       case SEGMENT_KIND.frames:
         frames.push(...decodeRecords<DeltaFrame>(segment.payload));
@@ -388,24 +746,60 @@ function decodeSegments(bytes: Uint8Array): Recording {
         cursorEvents.push(...decodeRecords<CursorRecordingEvent>(segment.payload));
         break;
       case SEGMENT_KIND.audioChunk:
-        audioChunks.push(segment.payload.slice());
+        audioSegments.push({
+          trackId: getTrackId(meta.tracks, "audio", DEFAULT_AUDIO_TRACK_ID),
+          clusterIndex: segment.clusterIndex,
+          startTimeMs: segment.startTimeMs,
+          endTimeMs: segment.endTimeMs,
+          byteLength: segment.payload.length,
+          bytes: segment.payload.slice(),
+          isInit: segment.isInit,
+          sequence: segment.sequence,
+        });
         break;
       case SEGMENT_KIND.cameraChunk:
-        cameraChunks.push(segment.payload.slice());
+        cameraSegments.push({
+          trackId: getTrackId(meta.tracks, "camera", DEFAULT_CAMERA_TRACK_ID),
+          clusterIndex: segment.clusterIndex,
+          startTimeMs: segment.startTimeMs,
+          endTimeMs: segment.endTimeMs,
+          byteLength: segment.payload.length,
+          bytes: segment.payload.slice(),
+          isInit: segment.isInit,
+          sequence: segment.sequence,
+        });
         break;
     }
   }
 
+  frames.sort((left, right) => left.timestamp - right.timestamp);
+  slideEvents.sort((left, right) => left.timestamp - right.timestamp);
+  previewEvents.sort((left, right) => left.timestamp - right.timestamp);
+  previewInitialDocuments.sort((left, right) => left.time - right.time);
+  previewPatchBatches.sort((left, right) => left.time - right.time);
+  workspaceEvents.sort((left, right) => left.timestamp - right.timestamp);
+  runtimeEvents.sort((left, right) => left.timestamp - right.timestamp);
+  cursorEvents.sort((left, right) => left.timestamp - right.timestamp);
+
+  const sortedAudioSegments = sortMediaSegments(audioSegments);
+  const sortedCameraSegments = sortMediaSegments(cameraSegments);
+
   const audioBlob =
-    audioChunks.length > 0
-      ? new Blob([concatChunks(audioChunks)], { type: meta.audioType || "audio/webm" })
+    sortedAudioSegments.length > 0
+      ? new Blob(
+          [copyToArrayBuffer(concatChunks(sortedAudioSegments.map((segment) => segment.bytes)))],
+          { type: meta.audioType || "audio/webm" },
+        )
       : undefined;
   const cameraBlob =
-    cameraChunks.length > 0
-      ? new Blob([concatChunks(cameraChunks)], { type: meta.cameraType || "video/webm" })
+    sortedCameraSegments.length > 0
+      ? new Blob(
+          [copyToArrayBuffer(concatChunks(sortedCameraSegments.map((segment) => segment.bytes)))],
+          { type: meta.cameraType || "video/webm" },
+        )
       : undefined;
 
-  const recording: Recording = {
+  const provisionalRecording: Recording = {
     version: meta.version,
     id: meta.id,
     name: meta.name,
@@ -432,26 +826,69 @@ function decodeSegments(bytes: Uint8Array): Recording {
     runtimeSnapshot: meta.runtimeSnapshot,
   };
 
-  return normalizeRecordingData(recording);
+  const clusters =
+    meta.clusters && meta.clusters.length > 0
+      ? meta.clusters
+          .map((cluster) => ({ ...cluster }))
+          .sort((left, right) => left.index - right.index)
+      : formatVersion >= 2 && decodedSegments.length > 0
+        ? Array.from(
+            decodedSegments.reduce((map, segment) => {
+              const existing = map.get(segment.clusterIndex);
+              if (existing) {
+                existing.startTimeMs = Math.min(existing.startTimeMs, segment.startTimeMs);
+                existing.endTimeMs = Math.max(existing.endTimeMs, segment.endTimeMs);
+                existing.containsKeyframe = existing.containsKeyframe || segment.containsKeyframe;
+                return map;
+              }
+              map.set(segment.clusterIndex, {
+                index: segment.clusterIndex,
+                startTimeMs: segment.startTimeMs,
+                endTimeMs: segment.endTimeMs,
+                containsKeyframe: segment.containsKeyframe,
+              });
+              return map;
+            }, new Map<number, RecordingClusterMeta>()),
+          )
+            .map(([, cluster]) => cluster)
+            .sort((left, right) => left.index - right.index)
+        : deriveRecordingClusters(provisionalRecording);
+
+  const tracks =
+    meta.tracks && meta.tracks.length > 0
+      ? meta.tracks.map((track) => ({ ...track }))
+      : deriveRecordingTracks(provisionalRecording);
+
+  const mediaFragments =
+    sortedAudioSegments.length > 0 || sortedCameraSegments.length > 0
+      ? [
+          ...sortedAudioSegments.map(
+            ({ bytes: _bytes, sequence: _sequence, ...fragment }) => fragment,
+          ),
+          ...sortedCameraSegments.map(
+            ({ bytes: _bytes, sequence: _sequence, ...fragment }) => fragment,
+          ),
+        ].sort(
+          (left, right) =>
+            left.startTimeMs - right.startTimeMs || left.clusterIndex - right.clusterIndex,
+        )
+      : deriveRecordingMediaFragments(provisionalRecording, tracks, clusters);
+
+  return normalizeRecordingData({
+    ...provisionalRecording,
+    tracks: tracks.length > 0 ? tracks : undefined,
+    clusters: clusters.length > 0 ? clusters : undefined,
+    mediaFragments: mediaFragments.length > 0 ? mediaFragments : undefined,
+  });
 }
 
-/** Decodes a complete (finalized) SCR3 stream into a Recording. */
 export function decodeRecordingStream(bytes: Uint8Array): Recording {
   return decodeSegments(bytes);
 }
 
-/**
- * Decodes a partial or still-writing SCR3 stream into a Recording. Tolerates a
- * missing footer and a truncated trailing segment by replaying every complete
- * segment captured so far.
- */
 export function decodeRecordingPrefix(bytes: Uint8Array): Recording {
   return decodeSegments(bytes);
 }
-
-// ----------------------------------------------------------------------------
-// Offline encode (whole recording -> finalized stream)
-// ----------------------------------------------------------------------------
 
 function readBlobAsArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   if (typeof blob.arrayBuffer === "function") {
@@ -464,36 +901,99 @@ function readBlobAsArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
         resolve(reader.result);
         return;
       }
-      reject(new Error("Failed to read audio blob as ArrayBuffer"));
+      reject(new Error("Failed to read media blob as ArrayBuffer"));
     };
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read audio blob"));
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read media blob"));
     reader.readAsArrayBuffer(blob);
   });
 }
 
-async function extractAudioBytes(
+async function materializeMediaSegments(
   recording: Recording,
-): Promise<{ audioBytes: Uint8Array | null; audioType: string }> {
-  const blob = recording.audioBlob;
-  if (blob instanceof Blob) {
-    const buffer = await readBlobAsArrayBuffer(blob);
-    return { audioBytes: new Uint8Array(buffer), audioType: blob.type || "audio/webm" };
+  kind: "audio" | "camera",
+  tracks: ReadonlyArray<RecordingTrackMeta>,
+  clusters: ReadonlyArray<RecordingClusterMeta>,
+): Promise<MaterializedMediaSegment[]> {
+  const blob = kind === "audio" ? recording.audioBlob : recording.cameraBlob;
+  const defaultTrackId = kind === "audio" ? DEFAULT_AUDIO_TRACK_ID : DEFAULT_CAMERA_TRACK_ID;
+  const trackKind = kind === "audio" ? "audio" : "camera";
+  const startOffsetMs =
+    kind === "audio" ? (recording.audioStartOffsetMs ?? 0) : (recording.cameraStartOffsetMs ?? 0);
+  const trackId = getTrackId(tracks, trackKind, defaultTrackId);
+
+  const metadata = deriveRecordingMediaFragments(recording, tracks, clusters)
+    .filter((fragment) => fragment.trackId === trackId)
+    .sort(
+      (left, right) =>
+        left.startTimeMs - right.startTimeMs || left.clusterIndex - right.clusterIndex,
+    );
+
+  if (metadata.length > 0 && metadata.every((fragment) => fragment.bytes instanceof Uint8Array)) {
+    return metadata.map((fragment) => ({
+      ...fragment,
+      bytes: (fragment.bytes as Uint8Array).slice(),
+      byteLength: fragment.byteLength ?? (fragment.bytes as Uint8Array).length,
+    }));
   }
-  return { audioBytes: null, audioType: "audio/webm" };
+
+  if (!(blob instanceof Blob) || blob.size === 0) {
+    return [];
+  }
+
+  const bytes = new Uint8Array(await readBlobAsArrayBuffer(blob));
+  const fallbackMetadata =
+    metadata.length > 0
+      ? metadata
+      : [
+          {
+            trackId,
+            clusterIndex: resolveClusterIndexForTime(clusters, startOffsetMs),
+            startTimeMs: startOffsetMs,
+            endTimeMs: Math.max(startOffsetMs, recording.duration),
+            byteLength: bytes.length,
+            isInit: true,
+          },
+        ];
+
+  let offset = 0;
+  return fallbackMetadata
+    .map((fragment, index) => {
+      const remaining = Math.max(0, bytes.length - offset);
+      const expectedLength =
+        typeof fragment.byteLength === "number" && Number.isFinite(fragment.byteLength)
+          ? Math.max(0, Math.trunc(fragment.byteLength))
+          : remaining;
+      const takeLength =
+        index === fallbackMetadata.length - 1 ? remaining : Math.min(remaining, expectedLength);
+      const fragmentBytes = bytes.subarray(offset, offset + takeLength).slice();
+      offset += takeLength;
+      return {
+        ...fragment,
+        bytes: fragmentBytes,
+        byteLength: fragmentBytes.length,
+        isInit: fragment.isInit ?? index === 0,
+      };
+    })
+    .filter((fragment) => fragment.bytes.length > 0);
 }
 
-async function extractCameraBytes(
-  recording: Recording,
-): Promise<{ cameraBytes: Uint8Array | null; cameraType: string }> {
-  const blob = recording.cameraBlob;
-  if (blob instanceof Blob) {
-    const buffer = await readBlobAsArrayBuffer(blob);
-    return { cameraBytes: new Uint8Array(buffer), cameraType: blob.type || "video/webm" };
+function groupRecordsByCluster<T>(
+  records: ReadonlyArray<T>,
+  clusters: ReadonlyArray<RecordingClusterMeta>,
+): Map<number, T[]> {
+  const grouped = new Map<number, T[]>();
+  for (const record of records) {
+    const clusterIndex = resolveClusterIndexForTime(clusters, readRecordTimestamp(record));
+    const existing = grouped.get(clusterIndex);
+    if (existing) {
+      existing.push(record);
+      continue;
+    }
+    grouped.set(clusterIndex, [record]);
   }
-  return { cameraBytes: null, cameraType: "video/webm" };
+  return grouped;
 }
 
-/** Splits the compressed frame array into batches that each start at a keyframe. */
 function batchFramesByKeyframe(frames: DeltaFrame[]): DeltaFrame[][] {
   const batches: DeltaFrame[][] = [];
   let index = 0;
@@ -508,11 +1008,14 @@ function batchFramesByKeyframe(frames: DeltaFrame[]): DeltaFrame[][] {
   return batches;
 }
 
-/** Encodes a Recording into a complete, finalized SCR3 stream. */
 export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
   const normalized = normalizeRecordingData(recording);
-  const { audioBytes, audioType } = await extractAudioBytes(normalized);
-  const { cameraBytes, cameraType } = await extractCameraBytes(normalized);
+  const tracks = deriveRecordingTracks(normalized);
+  const clusters = deriveRecordingClusters(normalized);
+  const audioFragments = await materializeMediaSegments(normalized, "audio", tracks, clusters);
+  const cameraFragments = await materializeMediaSegments(normalized, "camera", tracks, clusters);
+  const audioTrack = tracks.find((track) => track.kind === "audio");
+  const cameraTrack = tracks.find((track) => track.kind === "camera");
   const writer = createStreamingRecordingWriter();
 
   writer.writeHeader({
@@ -522,50 +1025,130 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     keyframeInterval: normalized.keyframeInterval,
     createdAt: normalized.createdAt,
     duration: normalized.duration,
-    audioType: audioBytes ? audioType : undefined,
-    audioSource: normalized.audioSource,
-    audioStartOffsetMs: audioBytes ? normalized.audioStartOffsetMs : undefined,
-    cameraType: cameraBytes ? cameraType : undefined,
-    cameraSource: normalized.cameraSource,
-    cameraStartOffsetMs: cameraBytes ? normalized.cameraStartOffsetMs : undefined,
+    tracks,
+    clusters,
+    audioType: audioFragments.length > 0 ? audioTrack?.mimeType || "audio/webm" : undefined,
+    audioSource: audioFragments.length > 0 ? normalized.audioSource : undefined,
+    audioStartOffsetMs: audioFragments.length > 0 ? normalized.audioStartOffsetMs : undefined,
+    cameraType: cameraFragments.length > 0 ? cameraTrack?.mimeType || "video/webm" : undefined,
+    cameraSource: cameraFragments.length > 0 ? normalized.cameraSource : undefined,
+    cameraStartOffsetMs: cameraFragments.length > 0 ? normalized.cameraStartOffsetMs : undefined,
     slides: normalized.slides,
     workspaceSnapshot: normalized.workspaceSnapshot,
     runtimeSnapshot: normalized.runtimeSnapshot,
   });
 
-  for (const batch of batchFramesByKeyframe(normalized.frames)) {
-    writer.appendFrameSegment(batch);
-  }
+  const pendingSegments: Array<{
+    clusterIndex: number;
+    startTimeMs: number;
+    priority: number;
+    write: () => void;
+  }> = [];
 
-  if (normalized.slideEvents?.length) {
-    writer.appendEventSegment(SEGMENT_KIND.slide, normalized.slideEvents);
-  }
-  if (normalized.previewEvents?.length) {
-    writer.appendEventSegment(SEGMENT_KIND.preview, normalized.previewEvents);
-  }
-  if (normalized.previewInitialDocuments?.length) {
-    writer.appendEventSegment(SEGMENT_KIND.previewDoc, normalized.previewInitialDocuments);
-  }
-  if (normalized.previewPatchBatches?.length) {
-    writer.appendEventSegment(SEGMENT_KIND.previewPatch, normalized.previewPatchBatches);
-  }
-  if (normalized.workspaceEvents?.length) {
-    writer.appendEventSegment(SEGMENT_KIND.workspace, normalized.workspaceEvents);
-  }
-  if (normalized.runtimeEvents?.length) {
-    writer.appendEventSegment(SEGMENT_KIND.runtime, normalized.runtimeEvents);
-  }
-  if (normalized.cursorEvents?.length) {
-    writer.appendEventSegment(SEGMENT_KIND.cursor, normalized.cursorEvents);
-  }
+  const frameBatches = batchFramesByKeyframe(normalized.frames);
+  frameBatches.forEach((batch, batchIndex) => {
+    const clusterIndex = resolveClusterIndexForTime(clusters, batch[0]?.timestamp ?? 0);
+    const cluster =
+      clusters.find((candidate) => candidate.index === clusterIndex) ??
+      ({
+        index: batchIndex,
+        startTimeMs: batch[0]?.timestamp ?? 0,
+        endTimeMs: Math.max(batch[batch.length - 1]?.timestamp ?? 0, normalized.duration),
+        containsKeyframe: batch.some(isKeyframe),
+      } as RecordingClusterMeta);
 
-  if (audioBytes) {
-    writer.appendAudioChunk(audioBytes);
-  }
+    pendingSegments.push({
+      clusterIndex,
+      startTimeMs: cluster.startTimeMs,
+      priority: 0,
+      write: () =>
+        writer.appendFrameSegment(batch, {
+          startTimeMs: cluster.startTimeMs,
+          endTimeMs: cluster.endTimeMs,
+          clusterIndex,
+          containsKeyframe: cluster.containsKeyframe,
+        }),
+    });
+  });
 
-  if (cameraBytes) {
-    writer.appendCameraChunk(cameraBytes);
-  }
+  const queueClusteredEventSegments = (
+    kind: SegmentKind,
+    records: ReadonlyArray<unknown> | undefined,
+    priority: number,
+  ): void => {
+    if (!records || records.length === 0) return;
+    for (const [clusterIndex, grouped] of groupRecordsByCluster(records, clusters)) {
+      const cluster =
+        clusters.find((candidate) => candidate.index === clusterIndex) ??
+        ({
+          index: clusterIndex,
+          startTimeMs: readRecordTimestamp(grouped[0]),
+          endTimeMs: readLastRecordTimestamp(grouped),
+          containsKeyframe: false,
+        } as RecordingClusterMeta);
+
+      pendingSegments.push({
+        clusterIndex,
+        startTimeMs: readRecordTimestamp(grouped[0]),
+        priority,
+        write: () =>
+          writer.appendEventSegment(kind, grouped, {
+            startTimeMs: readRecordTimestamp(grouped[0]),
+            endTimeMs: Math.max(readLastRecordTimestamp(grouped), cluster.endTimeMs),
+            clusterIndex,
+          }),
+      });
+    }
+  };
+
+  queueClusteredEventSegments(SEGMENT_KIND.slide, normalized.slideEvents, 1);
+  queueClusteredEventSegments(SEGMENT_KIND.preview, normalized.previewEvents, 1);
+  queueClusteredEventSegments(SEGMENT_KIND.previewDoc, normalized.previewInitialDocuments, 1);
+  queueClusteredEventSegments(SEGMENT_KIND.previewPatch, normalized.previewPatchBatches, 1);
+  queueClusteredEventSegments(SEGMENT_KIND.workspace, normalized.workspaceEvents, 1);
+  queueClusteredEventSegments(SEGMENT_KIND.runtime, normalized.runtimeEvents, 1);
+  queueClusteredEventSegments(SEGMENT_KIND.cursor, normalized.cursorEvents, 1);
+
+  audioFragments.forEach((fragment, index) => {
+    pendingSegments.push({
+      clusterIndex: fragment.clusterIndex,
+      startTimeMs: fragment.startTimeMs,
+      priority: 2,
+      write: () =>
+        writer.appendAudioChunk(fragment.bytes, {
+          startTimeMs: fragment.startTimeMs,
+          endTimeMs: fragment.endTimeMs,
+          clusterIndex: fragment.clusterIndex,
+          isInit: fragment.isInit ?? index === 0,
+        }),
+    });
+  });
+
+  cameraFragments.forEach((fragment, index) => {
+    pendingSegments.push({
+      clusterIndex: fragment.clusterIndex,
+      startTimeMs: fragment.startTimeMs,
+      priority: 3,
+      write: () =>
+        writer.appendCameraChunk(fragment.bytes, {
+          startTimeMs: fragment.startTimeMs,
+          endTimeMs: fragment.endTimeMs,
+          clusterIndex: fragment.clusterIndex,
+          isInit: fragment.isInit ?? index === 0,
+        }),
+    });
+  });
+
+  pendingSegments
+    .sort(
+      (left, right) =>
+        left.clusterIndex - right.clusterIndex ||
+        left.startTimeMs - right.startTimeMs ||
+        left.priority - right.priority,
+    )
+    .forEach((segment) => {
+      segment.write();
+    });
 
   return writer.finalize();
 }

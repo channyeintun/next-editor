@@ -38,6 +38,15 @@ interface StreamedCounts {
   cursor: number;
 }
 
+interface RecordingStreamBridgeStartOptions {
+  audioType?: string;
+  audioSource?: RecordingStreamMeta["audioSource"];
+  audioStartOffsetMs?: number;
+  cameraType?: string;
+  cameraSource?: RecordingStreamMeta["cameraSource"];
+  cameraStartOffsetMs?: number;
+}
+
 /**
  * Bridges an in-progress `RecordingSession` to a {@link RecordingStreamSink} by appending
  * newly-captured records to a live SCR3 writer and forwarding the drained bytes.
@@ -79,7 +88,7 @@ export class RecordingStreamBridge {
    * Writes the stream header and forwards it to the sink. Media types are the MIME types the
    * decoder should wrap reassembled blobs in (omit when the recording has no media).
    */
-  start(session: RecordingSession, audioType?: string, cameraType?: string): void {
+  start(session: RecordingSession, options: RecordingStreamBridgeStartOptions = {}): void {
     if (this.started) return;
     const meta: RecordingStreamMeta = {
       version: 3,
@@ -88,9 +97,12 @@ export class RecordingStreamBridge {
       keyframeInterval: DELTA_CONFIG.KEYFRAME_INTERVAL,
       createdAt: session.startedAt,
       duration: 0,
-      audioType,
-      cameraType,
-      cameraSource: cameraType ? "camera" : undefined,
+      audioType: options.audioType,
+      audioSource: options.audioSource,
+      audioStartOffsetMs: options.audioStartOffsetMs,
+      cameraType: options.cameraType,
+      cameraSource: options.cameraSource,
+      cameraStartOffsetMs: options.cameraStartOffsetMs,
     };
     this.writer.writeHeader(meta);
     this.started = true;
@@ -193,7 +205,10 @@ export class RecordingStreamBridge {
       // between a fragment and its drain, keeping the emitted byte stream ordered.
       this.audioQueue = this.audioQueue.then(async () => {
         const bytes = await blobToBytes(fragment.blob);
-        this.writer.appendAudioChunk(bytes);
+        this.writer.appendAudioChunk(bytes, {
+          startTimeMs: fragment.startTimeMs,
+          endTimeMs: fragment.endTimeMs,
+        });
         this.flush();
       });
     }
@@ -208,7 +223,10 @@ export class RecordingStreamBridge {
       this.cameraCount += 1;
       this.cameraQueue = this.cameraQueue.then(async () => {
         const bytes = await blobToBytes(fragment.blob);
-        this.writer.appendCameraChunk(bytes);
+        this.writer.appendCameraChunk(bytes, {
+          startTimeMs: fragment.startTimeMs,
+          endTimeMs: fragment.endTimeMs,
+        });
         this.flush();
       });
     }

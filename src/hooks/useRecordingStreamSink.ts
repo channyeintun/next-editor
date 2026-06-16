@@ -30,9 +30,14 @@ export function useRecordingStreamSink(
           bridge = new RecordingStreamBridge(sink);
           const audio = snapshot.context.audio;
           const camera = snapshot.context.camera;
-          const audioType = audio.source ? audio.mimeType || "audio/webm" : undefined;
-          const cameraType = camera.source ? camera.mimeType || "video/webm" : undefined;
-          bridge.start(session, audioType, cameraType);
+          bridge.start(session, {
+            audioType: audio.source ? audio.mimeType || "audio/webm" : undefined,
+            audioSource: audio.source ?? undefined,
+            audioStartOffsetMs: audio.source ? audio.startOffsetMs : undefined,
+            cameraType: camera.source ? camera.mimeType || "video/webm" : undefined,
+            cameraSource: camera.source ?? undefined,
+            cameraStartOffsetMs: camera.startOffsetMs > 0 ? camera.startOffsetMs : undefined,
+          });
         }
         bridge.sync(session);
       } else if (bridge) {
