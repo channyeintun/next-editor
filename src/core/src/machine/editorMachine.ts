@@ -9,9 +9,22 @@ import {
 } from "xstate";
 import type * as monaco from "monaco-editor";
 import type { SlideEvent, PreviewEvent } from "../slides";
-import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
+import type {
+  EditorMachineContext,
+  EditorMachineEvent,
+  EditorMachineInput,
+  RecordingSessionMediaFragment,
+} from "./types";
 import { createInitialContext } from "./types";
-import type { CursorRecordingEvent, EditorFrame, MouseCursorPosition, Recording } from "../types";
+import type {
+  CursorRecordingEvent,
+  EditorFrame,
+  MouseCursorPosition,
+  Recording,
+  RecordingClusterMeta,
+  RecordingMediaFragment,
+  RecordingTrackMeta,
+} from "../types";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
 import {
   areWorkspaceSnapshotsEqual,
@@ -75,6 +88,168 @@ import {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+const EDITOR_TRACK_ID = "editor";
+const SLIDE_TRACK_ID = "slide";
+const PREVIEW_TRACK_ID = "preview";
+const WORKSPACE_TRACK_ID = "workspace";
+const RUNTIME_TRACK_ID = "runtime";
+const CURSOR_TRACK_ID = "cursor";
+const AUDIO_TRACK_ID = "audio";
+const CAMERA_TRACK_ID = "camera";
+
+const buildRecordingClusters = (
+  frames: Recording["frames"],
+  durationMs: number,
+): RecordingClusterMeta[] => {
+  if (frames.length === 0) {
+    return durationMs > 0
+      ? [{ index: 0, startTimeMs: 0, endTimeMs: durationMs, containsKeyframe: false }]
+      : [];
+  }
+
+  const clusters: RecordingClusterMeta[] = [];
+  let startIndex = 0;
+
+  while (startIndex < frames.length) {
+    let endIndex = startIndex + 1;
+    while (endIndex < frames.length && !isKeyframe(frames[endIndex])) {
+      endIndex += 1;
+    }
+
+    const startTimeMs = frames[startIndex]?.timestamp ?? 0;
+    const nextStartTimeMs = endIndex < frames.length ? frames[endIndex].timestamp : durationMs;
+    const lastFrameTimeMs = frames[endIndex - 1]?.timestamp ?? startTimeMs;
+
+    clusters.push({
+      index: clusters.length,
+      startTimeMs,
+      endTimeMs: Math.max(startTimeMs, nextStartTimeMs, lastFrameTimeMs),
+      containsKeyframe: isKeyframe(frames[startIndex]),
+    });
+
+    startIndex = endIndex;
+  }
+
+  const lastCluster = clusters[clusters.length - 1];
+  if (lastCluster) {
+    lastCluster.endTimeMs = Math.max(lastCluster.startTimeMs, lastCluster.endTimeMs, durationMs);
+  }
+
+  return clusters;
+};
+
+const resolveClusterIndex = (
+  clusters: ReadonlyArray<RecordingClusterMeta>,
+  timeMs: number,
+): number => {
+  if (clusters.length === 0) {
+    return 0;
+  }
+
+  for (let index = clusters.length - 1; index >= 0; index -= 1) {
+    if (timeMs >= clusters[index].startTimeMs) {
+      return clusters[index].index;
+    }
+  }
+
+  return clusters[0].index;
+};
+
+const buildTrackMetadata = ({
+  durationMs,
+  hasSlideEvents,
+  hasPreviewEvents,
+  hasWorkspaceEvents,
+  hasRuntimeEvents,
+  hasCursorEvents,
+  audioMimeType,
+  audioSource,
+  audioStartOffsetMs,
+  hasAudio,
+  cameraMimeType,
+  cameraSource,
+  cameraStartOffsetMs,
+  hasCamera,
+}: {
+  durationMs: number;
+  hasSlideEvents: boolean;
+  hasPreviewEvents: boolean;
+  hasWorkspaceEvents: boolean;
+  hasRuntimeEvents: boolean;
+  hasCursorEvents: boolean;
+  audioMimeType?: string;
+  audioSource?: Recording["audioSource"];
+  audioStartOffsetMs: number;
+  hasAudio: boolean;
+  cameraMimeType?: string;
+  cameraSource?: Recording["cameraSource"];
+  cameraStartOffsetMs: number;
+  hasCamera: boolean;
+}): RecordingTrackMeta[] => {
+  const tracks: RecordingTrackMeta[] = [
+    {
+      id: EDITOR_TRACK_ID,
+      kind: "editor",
+      durationMs,
+    },
+  ];
+
+  if (hasSlideEvents) {
+    tracks.push({ id: SLIDE_TRACK_ID, kind: "slide", durationMs });
+  }
+  if (hasPreviewEvents) {
+    tracks.push({ id: PREVIEW_TRACK_ID, kind: "preview", durationMs });
+  }
+  if (hasWorkspaceEvents) {
+    tracks.push({ id: WORKSPACE_TRACK_ID, kind: "workspace", durationMs });
+  }
+  if (hasRuntimeEvents) {
+    tracks.push({ id: RUNTIME_TRACK_ID, kind: "runtime", durationMs });
+  }
+  if (hasCursorEvents) {
+    tracks.push({ id: CURSOR_TRACK_ID, kind: "cursor", durationMs });
+  }
+  if (hasAudio) {
+    tracks.push({
+      id: AUDIO_TRACK_ID,
+      kind: "audio",
+      mimeType: audioMimeType || undefined,
+      source: audioSource,
+      startOffsetMs: audioStartOffsetMs,
+      durationMs: Math.max(0, durationMs - audioStartOffsetMs),
+    });
+  }
+  if (hasCamera) {
+    tracks.push({
+      id: CAMERA_TRACK_ID,
+      kind: "camera",
+      mimeType: cameraMimeType || undefined,
+      source: cameraSource,
+      startOffsetMs: cameraStartOffsetMs,
+      durationMs: Math.max(0, durationMs - cameraStartOffsetMs),
+    });
+  }
+
+  return tracks;
+};
+
+const buildMediaFragmentMetadata = (
+  fragments: ReadonlyArray<RecordingSessionMediaFragment>,
+  clusters: ReadonlyArray<RecordingClusterMeta>,
+  finalEndTimeMs?: number,
+): RecordingMediaFragment[] =>
+  fragments.map((fragment, index) => ({
+    trackId: fragment.trackId,
+    clusterIndex: resolveClusterIndex(clusters, fragment.startTimeMs),
+    startTimeMs: fragment.startTimeMs,
+    endTimeMs: Math.max(
+      fragment.startTimeMs,
+      typeof finalEndTimeMs === "number" ? finalEndTimeMs : fragment.endTimeMs,
+    ),
+    byteLength: fragment.blob.size,
+    isInit: index === 0,
+  }));
 
 /**
  * Apply editor state from a frame
@@ -815,10 +990,28 @@ export const editorMachine = setup({
         return {};
       }
 
+      const externalDurationMs = Number.isFinite(event.duration) ? event.duration : null;
+
+      const session =
+        context.session && externalDurationMs !== null && context.session.audioFragments.length > 0
+          ? {
+              ...context.session,
+              audioFragments: context.session.audioFragments.map((fragment, index) =>
+                index === 0
+                  ? {
+                      ...fragment,
+                      endTimeMs: context.audio.startOffsetMs + externalDurationMs,
+                    }
+                  : fragment,
+              ),
+            }
+          : context.session;
+
       return {
+        session,
         audio: {
           ...context.audio,
-          externalDurationMs: Number.isFinite(event.duration) ? event.duration : null,
+          externalDurationMs,
         },
       };
     }),
@@ -833,13 +1026,32 @@ export const editorMachine = setup({
       };
     }),
 
-    initRecordingSession: assign(({ context }) => {
-      const startedAt = Date.now();
+    initRecordingSession: assign(({ context, event }) => {
+      const startedAt =
+        event.type === "STARTED" && Number.isFinite(event.startedAtMs)
+          ? event.startedAtMs
+          : Date.now();
       const slideEvents: SlideEvent[] = [];
       const previewEvents: PreviewEvent[] = [];
       const workspaceEvents: WorkspaceRecordingEvent[] = [];
       const runtimeEvents: RuntimeRecordingEvent[] = [];
       const initialMousePosition: MouseCursorPosition = { x: 0, y: 0, visible: false };
+      const externalAudioFragment =
+        context.audio.source === "external" && context.audio.blob
+          ? [
+              {
+                trackId: AUDIO_TRACK_ID,
+                startTimeMs: context.audio.startOffsetMs,
+                endTimeMs:
+                  typeof context.audio.externalDurationMs === "number" &&
+                  Number.isFinite(context.audio.externalDurationMs)
+                    ? context.audio.startOffsetMs + context.audio.externalDurationMs
+                    : context.audio.startOffsetMs,
+                blob: context.audio.blob,
+                mimeType: context.audio.mimeType || context.audio.blob.type || "audio/webm",
+              },
+            ]
+          : [];
 
       // Capture initial slide state if open
       const initialSlideState = context.getSlideState?.();
@@ -898,10 +1110,9 @@ export const editorMachine = setup({
           runtimeEvents,
           cursorEvents: [{ timestamp: 0, ...initialMousePosition }],
           // External (selected file) audio is fully known at start, so seed it as the single
-          // audio chunk. Microphone audio is appended later as timeslice CHUNK events arrive.
-          audioChunks:
-            context.audio.source === "external" && context.audio.blob ? [context.audio.blob] : [],
-          cameraChunks: [],
+          // audio fragment. Microphone and camera fragments are appended as timeslice events.
+          audioFragments: externalAudioFragment,
+          cameraFragments: [],
           lastMousePosition: initialMousePosition,
         },
         lastCallbackFrameTimestamp: undefined,
@@ -1079,6 +1290,34 @@ export const editorMachine = setup({
 
       // Frames were compressed incrementally during capture.
       const frames = context.session.frames;
+      const clusters = buildRecordingClusters(frames, duration);
+      const tracks = buildTrackMetadata({
+        durationMs: duration,
+        hasSlideEvents: context.session.slideEvents.length > 0,
+        hasPreviewEvents:
+          context.session.previewEvents.length > 0 ||
+          context.session.previewInitialDocuments.length > 0 ||
+          context.session.previewPatchBatches.length > 0,
+        hasWorkspaceEvents: context.session.workspaceEvents.length > 0,
+        hasRuntimeEvents: context.session.runtimeEvents.length > 0,
+        hasCursorEvents: context.session.cursorEvents.length > 0,
+        audioMimeType: context.audio.mimeType || context.audio.blob?.type,
+        audioSource: context.audio.source || undefined,
+        audioStartOffsetMs: context.audio.startOffsetMs,
+        hasAudio: context.session.audioFragments.length > 0 || Boolean(context.audio.blob),
+        cameraMimeType: context.camera.mimeType || context.camera.blob?.type,
+        cameraSource: context.camera.source || undefined,
+        cameraStartOffsetMs: context.camera.startOffsetMs,
+        hasCamera: context.session.cameraFragments.length > 0 || Boolean(context.camera.blob),
+      });
+      const mediaFragments = [
+        ...buildMediaFragmentMetadata(
+          context.session.audioFragments,
+          clusters,
+          context.audio.source === "external" ? duration : undefined,
+        ),
+        ...buildMediaFragmentMetadata(context.session.cameraFragments, clusters),
+      ];
 
       const recording: Recording = {
         version: 3,
@@ -1095,9 +1334,13 @@ export const editorMachine = setup({
         runtimeEvents: context.session.runtimeEvents,
         cursorEvents: context.session.cursorEvents,
         slides: slides,
+        tracks,
+        clusters: clusters.length > 0 ? clusters : undefined,
+        mediaFragments: mediaFragments.length > 0 ? mediaFragments : undefined,
         duration,
         audioBlob: context.audio.blob || undefined,
         audioSource: context.audio.source || undefined,
+        audioStartOffsetMs: context.audio.blob ? context.audio.startOffsetMs : undefined,
         cameraBlob: context.camera.blob || undefined,
         cameraSource: context.camera.source || undefined,
         cameraStartOffsetMs: context.camera.blob ? context.camera.startOffsetMs : undefined,
@@ -1113,6 +1356,7 @@ export const editorMachine = setup({
           isRecording: false,
           mediaRecorder: null,
           source: null,
+          startOffsetMs: 0,
           externalDurationMs: null,
         },
         camera: {
@@ -1609,7 +1853,20 @@ export const editorMachine = setup({
           chunks: [],
           mimeType: event.blob.type,
           source: "microphone" as const,
+          startOffsetMs: 0,
           externalDurationMs: null,
+        },
+      };
+    }),
+
+    storeAudioStarted: assign(({ context, event }) => {
+      if (event.type !== "STARTED") return {};
+      return {
+        audio: {
+          ...context.audio,
+          mediaRecorder: event.mediaRecorder,
+          mimeType: event.mimeType,
+          startOffsetMs: 0,
         },
       };
     }),
@@ -1631,20 +1888,34 @@ export const editorMachine = setup({
     // an optional live recording sink can forward it. The finalized blob (STOPPED) is unchanged.
     captureAudioChunk: assign(({ context, event }) => {
       if (event.type !== "CHUNK" || !context.session) return {};
+      const fragment: RecordingSessionMediaFragment = {
+        trackId: AUDIO_TRACK_ID,
+        startTimeMs: context.audio.startOffsetMs + event.startTimeMs,
+        endTimeMs: context.audio.startOffsetMs + event.endTimeMs,
+        blob: event.chunk,
+        mimeType: event.chunk.type || context.audio.mimeType || "audio/webm",
+      };
       return {
         session: {
           ...context.session,
-          audioChunks: [...context.session.audioChunks, event.chunk],
+          audioFragments: [...context.session.audioFragments, fragment],
         },
       };
     }),
 
     captureCameraChunk: assign(({ context, event }) => {
       if (event.type !== "CAMERA_CHUNK" || !context.session) return {};
+      const fragment: RecordingSessionMediaFragment = {
+        trackId: CAMERA_TRACK_ID,
+        startTimeMs: context.camera.startOffsetMs + event.startTimeMs,
+        endTimeMs: context.camera.startOffsetMs + event.endTimeMs,
+        blob: event.chunk,
+        mimeType: event.chunk.type || context.camera.mimeType || "video/webm",
+      };
       return {
         session: {
           ...context.session,
-          cameraChunks: [...context.session.cameraChunks, event.chunk],
+          cameraFragments: [...context.session.cameraFragments, fragment],
         },
       };
     }),
@@ -1655,7 +1926,7 @@ export const editorMachine = setup({
       // recording-session origin (session.startedAt) by the camera warmup. Capture that offset so
       // playback can shift the video back into sync; otherwise the face video runs ahead of audio.
       const startOffsetMs = context.session
-        ? Math.max(0, Date.now() - context.session.startedAt)
+        ? Math.max(0, event.startedAtMs - context.session.startedAt)
         : 0;
       return {
         camera: {
@@ -1931,6 +2202,7 @@ export const editorMachine = setup({
               chunks: [],
               mimeType: "",
               source: "microphone" as const,
+              startOffsetMs: 0,
               externalDurationMs: null,
             },
           });
@@ -1940,6 +2212,7 @@ export const editorMachine = setup({
         STARTED: {
           target: "recording",
           actions: [
+            "storeAudioStarted",
             "initRecordingSession",
             "captureInitialFrame",
             "notifyRecordingStart",
@@ -1958,6 +2231,7 @@ export const editorMachine = setup({
                 isRecording: false,
                 mediaRecorder: null,
                 source: null,
+                startOffsetMs: 0,
               }),
             }),
             "notifyError",
@@ -1972,6 +2246,7 @@ export const editorMachine = setup({
                 ...context.audio,
                 isRecording: false,
                 source: null,
+                startOffsetMs: 0,
               }),
             }),
           ],

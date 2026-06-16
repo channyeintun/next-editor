@@ -75,6 +75,7 @@ export interface RecordingStreamMeta {
   duration: number;
   audioType?: string;
   audioSource?: RecordingAudioSource;
+  audioStartOffsetMs?: number;
   cameraType?: string;
   cameraSource?: RecordingCameraSource;
   cameraStartOffsetMs?: number;
@@ -423,6 +424,7 @@ function decodeSegments(bytes: Uint8Array): Recording {
     slides: meta.slides,
     audioBlob,
     audioSource: meta.audioSource,
+    audioStartOffsetMs: meta.audioStartOffsetMs,
     cameraBlob,
     cameraSource: meta.cameraSource,
     cameraStartOffsetMs: meta.cameraStartOffsetMs,
@@ -522,6 +524,7 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     duration: normalized.duration,
     audioType: audioBytes ? audioType : undefined,
     audioSource: normalized.audioSource,
+    audioStartOffsetMs: audioBytes ? normalized.audioStartOffsetMs : undefined,
     cameraType: cameraBytes ? cameraType : undefined,
     cameraSource: normalized.cameraSource,
     cameraStartOffsetMs: cameraBytes ? normalized.cameraStartOffsetMs : undefined,

@@ -25,6 +25,44 @@ export interface AudioPlaceholder {
 export type RecordingAudioSource = "microphone" | "external";
 export type RecordingCameraSource = "camera";
 
+export type RecordingTrackKind =
+  | "editor"
+  | "audio"
+  | "camera"
+  | "cursor"
+  | "preview"
+  | "workspace"
+  | "runtime"
+  | "slide";
+
+export interface RecordingTrackMeta {
+  id: string;
+  kind: RecordingTrackKind;
+  mimeType?: string;
+  codec?: string;
+  source?: RecordingAudioSource | RecordingCameraSource;
+  startOffsetMs?: number;
+  durationMs?: number;
+}
+
+export interface RecordingClusterMeta {
+  index: number;
+  startTimeMs: number;
+  endTimeMs: number;
+  containsKeyframe: boolean;
+}
+
+export interface RecordingMediaFragment {
+  trackId: string;
+  clusterIndex: number;
+  startTimeMs: number;
+  endTimeMs: number;
+  bytes?: Uint8Array;
+  byteLength?: number;
+  isInit?: boolean;
+  isKeyframe?: boolean;
+}
+
 export interface CameraPlaceholder {
   __camera_offset: number;
   __camera_size: number;
@@ -142,8 +180,13 @@ export interface Recording {
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];
   slides?: Slide[];
+  tracks?: RecordingTrackMeta[];
+  clusters?: RecordingClusterMeta[];
+  mediaFragments?: RecordingMediaFragment[];
   audioBlob?: Blob | AudioPlaceholder;
   audioSource?: RecordingAudioSource;
+  /** Audio start offset (ms) between the recording origin and the first decodable audio byte. */
+  audioStartOffsetMs?: number;
   cameraBlob?: Blob | CameraPlaceholder;
   cameraSource?: RecordingCameraSource;
   /** Camera warmup offset (ms) between the recording origin and the first camera frame. */

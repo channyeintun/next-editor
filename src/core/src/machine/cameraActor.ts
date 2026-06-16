@@ -9,8 +9,8 @@ export interface CameraRecordingInput {
 export type CameraRecordingEvent = { type: "START" } | { type: "STOP" };
 
 export type CameraRecordingEmit =
-  | { type: "CAMERA_STARTED"; mimeType: string }
-  | { type: "CAMERA_CHUNK"; chunk: Blob }
+  | { type: "CAMERA_STARTED"; mimeType: string; startedAtMs: number }
+  | { type: "CAMERA_CHUNK"; chunk: Blob; startTimeMs: number; endTimeMs: number }
   | { type: "CAMERA_STOPPED"; blob: Blob }
   | { type: "CAMERA_ERROR"; error: string };
 
@@ -42,6 +42,8 @@ export const cameraRecordingActor = fromCallback<
   let disposed = false;
   let starting = false;
   let stopRequested = false;
+  let startedAtMs = 0;
+  let nextChunkStartTimeMs = 0;
 
   const cleanupStream = () => {
     if (stream) {
@@ -91,8 +93,18 @@ export const cameraRecordingActor = fromCallback<
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
+          const endTimeMs =
+            startedAtMs > 0
+              ? Math.max(nextChunkStartTimeMs, Date.now() - startedAtMs)
+              : nextChunkStartTimeMs;
           chunks.push(event.data);
-          sendBack({ type: "CAMERA_CHUNK", chunk: event.data });
+          sendBack({
+            type: "CAMERA_CHUNK",
+            chunk: event.data,
+            startTimeMs: nextChunkStartTimeMs,
+            endTimeMs,
+          });
+          nextChunkStartTimeMs = endTimeMs;
         }
       };
 
@@ -107,7 +119,9 @@ export const cameraRecordingActor = fromCallback<
 
       mediaRecorder.onstart = () => {
         if (!disposed) {
-          sendBack({ type: "CAMERA_STARTED", mimeType });
+          startedAtMs = Date.now();
+          nextChunkStartTimeMs = 0;
+          sendBack({ type: "CAMERA_STARTED", mimeType, startedAtMs });
         }
       };
 

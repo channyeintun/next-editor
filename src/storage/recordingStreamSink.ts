@@ -43,10 +43,9 @@ interface StreamedCounts {
  * newly-captured records to a live SCR3 writer and forwarding the drained bytes.
  *
  * Frame segments are flushed at keyframe boundaries (range-loadable) and event segments on a
- * small threshold, matching the SCR3 batching policy. Audio chunks (microphone timeslice
- * fragments or a selected file) are read asynchronously and appended in arrival order. The
- * emitted bytes are the same SCR3 stream the exporter produces, so a remote consumer can replay
- * them with `decodeRecordingPrefix`.
+ * small threshold, matching the SCR3 batching policy. Audio and camera fragments are read
+ * asynchronously and appended in capture order. The emitted bytes are the same SCR3 stream the
+ * exporter produces, so a remote consumer can replay them with `decodeRecordingPrefix`.
  */
 export class RecordingStreamBridge {
   private readonly writer: StreamingRecordingWriter = createStreamingRecordingWriter();
@@ -60,11 +59,11 @@ export class RecordingStreamBridge {
     runtime: 0,
     cursor: 0,
   };
-  /** Number of audio chunks already scheduled for streaming. */
+  /** Number of audio fragments already scheduled for streaming. */
   private audioCount = 0;
-  /** Number of camera chunks already scheduled for streaming. */
+  /** Number of camera fragments already scheduled for streaming. */
   private cameraCount = 0;
-  /** Serializes async audio reads/appends so chunks stay in arrival order. */
+  /** Serializes async audio reads/appends so fragments stay in arrival order. */
   private audioQueue: Promise<void> = Promise.resolve();
   /** Serializes sink writes so the consumer receives bytes in stream order. */
   private writeChain: Promise<void> = Promise.resolve();
@@ -111,8 +110,8 @@ export class RecordingStreamBridge {
     this.flushEvents(SEGMENT_KIND.runtime, session.runtimeEvents, "runtime", false);
     this.flushEvents(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", false);
     this.flush();
-    this.queueAudio(session.audioChunks);
-    this.queueCamera(session.cameraChunks);
+    this.queueAudio(session.audioFragments);
+    this.queueCamera(session.cameraFragments);
   }
 
   /** Flushes any buffered tail, finalizes the stream (footer), and closes the sink. */
@@ -142,8 +141,8 @@ export class RecordingStreamBridge {
       this.flushEvents(SEGMENT_KIND.runtime, session.runtimeEvents, "runtime", true);
       this.flushEvents(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", true);
       this.flush();
-      this.queueAudio(session.audioChunks);
-      this.queueCamera(session.cameraChunks);
+      this.queueAudio(session.audioFragments);
+      this.queueCamera(session.cameraFragments);
     }
     // All media must be appended before the footer so the finalized stream is complete.
     await this.audioQueue;
@@ -186,29 +185,29 @@ export class RecordingStreamBridge {
     this.counts[key] = records.length;
   }
 
-  private queueAudio(chunks: ReadonlyArray<Blob>): void {
-    while (this.audioCount < chunks.length) {
-      const blob = chunks[this.audioCount];
+  private queueAudio(fragments: RecordingSession["audioFragments"]): void {
+    while (this.audioCount < fragments.length) {
+      const fragment = fragments[this.audioCount];
       this.audioCount += 1;
       // Append + flush run together inside one queued task so no other append interleaves
-      // between an audio chunk and its drain, keeping the emitted byte stream ordered.
+      // between a fragment and its drain, keeping the emitted byte stream ordered.
       this.audioQueue = this.audioQueue.then(async () => {
-        const bytes = await blobToBytes(blob);
+        const bytes = await blobToBytes(fragment.blob);
         this.writer.appendAudioChunk(bytes);
         this.flush();
       });
     }
   }
 
-  /** Serializes async camera reads/appends so chunks stay in arrival order. */
+  /** Serializes async camera reads/appends so fragments stay in arrival order. */
   private cameraQueue: Promise<void> = Promise.resolve();
 
-  private queueCamera(chunks: ReadonlyArray<Blob>): void {
-    while (this.cameraCount < chunks.length) {
-      const blob = chunks[this.cameraCount];
+  private queueCamera(fragments: RecordingSession["cameraFragments"]): void {
+    while (this.cameraCount < fragments.length) {
+      const fragment = fragments[this.cameraCount];
       this.cameraCount += 1;
       this.cameraQueue = this.cameraQueue.then(async () => {
-        const bytes = await blobToBytes(blob);
+        const bytes = await blobToBytes(fragment.blob);
         this.writer.appendCameraChunk(bytes);
         this.flush();
       });

@@ -17,6 +17,9 @@ import type {
   EditorPosition,
   RecordingAudioSource,
   RecordingCameraSource,
+  RecordingClusterMeta,
+  RecordingMediaFragment,
+  RecordingTrackMeta,
   PreviewPatchReplayInput,
 } from "../types";
 import type { DeltaFrame } from "../utils/deltaTypes";
@@ -67,6 +70,18 @@ export interface TimelineState {
 }
 
 /**
+ * Timeline-aware media fragment captured during recording. The blob is retained only
+ * until the recording is finalized or streamed to a sink.
+ */
+export interface RecordingSessionMediaFragment {
+  trackId: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  blob: Blob;
+  mimeType: string;
+}
+
+/**
  * Recording session state
  */
 export interface RecordingSession {
@@ -91,14 +106,12 @@ export interface RecordingSession {
   /** High-cadence fake cursor samples during recording */
   cursorEvents: CursorRecordingEvent[];
   /**
-   * Encoded audio captured during recording, append-only. For microphone recordings these are
-   * the `MediaRecorder` timeslice fragments; for a selected audio file it is the single file
-   * blob. Used to forward audio to an optional live recording sink — the saved recording's audio
-   * still comes from the finalized `context.audio.blob`.
+   * Timeline-aware audio fragments captured during recording. For microphone recordings these are
+   * `MediaRecorder` timeslice fragments; for a selected audio file it is the single file blob.
    */
-  audioChunks: Blob[];
-  /** Encoded camera video chunks captured during recording, append-only. */
-  cameraChunks: Blob[];
+  audioFragments: RecordingSessionMediaFragment[];
+  /** Timeline-aware camera fragments captured during recording, append-only. */
+  cameraFragments: RecordingSessionMediaFragment[];
   /** Last known mouse position */
   lastMousePosition: MouseCursorPosition;
 }
@@ -121,6 +134,8 @@ export interface AudioState {
   mimeType: string;
   /** Source used for the active or finalized recording audio */
   source: RecordingAudioSource | null;
+  /** Offset between the recording origin and the first audio sample on the editor timeline. */
+  startOffsetMs: number;
   /** Known duration for external audio, in milliseconds */
   externalDurationMs: number | null;
 }
@@ -165,6 +180,12 @@ export interface EditorMachineContext {
   session: RecordingSession | null;
   /** Loaded recording data */
   recording: Recording | null;
+  /** Stream-oriented track metadata for the finalized recording facade. */
+  tracks?: RecordingTrackMeta[];
+  /** Stream-oriented cluster metadata for the finalized recording facade. */
+  clusters?: RecordingClusterMeta[];
+  /** Stream-oriented media fragment metadata for the finalized recording facade. */
+  mediaFragments?: RecordingMediaFragment[];
   /** Current frame being displayed */
   currentFrame: EditorFrame | null;
   /** Audio state */
@@ -365,6 +386,7 @@ export type AudioActorStartedEvent = {
   type: "STARTED";
   mediaRecorder: MediaRecorder;
   mimeType: string;
+  startedAtMs: number;
 };
 
 /** Audio actor error event */
@@ -427,13 +449,24 @@ export type RuntimeEventOccurred = {
 export type AudioChunkEvent = {
   type: "CHUNK";
   chunk: Blob;
+  startTimeMs: number;
+  endTimeMs: number;
 };
 
 /** Camera actor started event */
-export type CameraActorStartedEvent = { type: "CAMERA_STARTED"; mimeType: string };
+export type CameraActorStartedEvent = {
+  type: "CAMERA_STARTED";
+  mimeType: string;
+  startedAtMs: number;
+};
 
 /** Camera chunk received */
-export type CameraChunkEvent = { type: "CAMERA_CHUNK"; chunk: Blob };
+export type CameraChunkEvent = {
+  type: "CAMERA_CHUNK";
+  chunk: Blob;
+  startTimeMs: number;
+  endTimeMs: number;
+};
 
 /** Camera actor stopped event */
 export type CameraActorStoppedEvent = { type: "CAMERA_STOPPED"; blob: Blob };
@@ -558,6 +591,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     chunks: [],
     mimeType: "",
     source: null,
+    startOffsetMs: 0,
     externalDurationMs: null,
   },
   camera: {
