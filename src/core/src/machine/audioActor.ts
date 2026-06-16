@@ -1,6 +1,7 @@
 import { fromCallback, type ActorRefFrom } from "xstate";
 
-const AUDIO_SYNC_DRIFT_THRESHOLD_SECONDS = 0.5;
+const AUDIO_SYNC_DRIFT_THRESHOLD_MS = 500;
+const STREAM_BUFFER_SWITCH_LOOKAHEAD_MS = 1000;
 
 /**
  * MediaRecorder timeslice (ms). Emitting `ondataavailable` on an interval produces
@@ -243,42 +244,80 @@ export const audioPlaybackActor = fromCallback<
   AudioPlaybackInput,
   AudioPlaybackEmit
 >(({ sendBack, receive, input }) => {
-  let audio: HTMLAudioElement | null = null;
-  let audioUrl: string | null = null;
   let activeBlob = input.blob;
+  let audioContext: AudioContext | null = null;
+  let gainNode: GainNode | null = null;
+  let sourceNode: AudioBufferSourceNode | null = null;
+  let activeBuffer: AudioBuffer | null = null;
+  let pendingBuffer: AudioBuffer | null = null;
+  let pendingBufferLoadedUntilMs = input.loadedUntilMs ?? Number.POSITIVE_INFINITY;
   let targetTimeMs = input.startPositionMs;
   let requestedPlay = false;
   let volume = input.volume;
   let playbackRate = input.playbackRate;
   const streamMode = input.mode === "stream";
   let loadedUntilMs = input.loadedUntilMs ?? Number.POSITIVE_INFINITY;
+  let activeBufferLoadedUntilMs = loadedUntilMs;
   let startOffsetMs = input.startOffsetMs ?? 0;
   let finalized = input.finalized ?? !streamMode;
   let lastReadyDurationMs = -1;
+  let playStartedAtContextTime = 0;
+  let playStartedAtTimelineMs = targetTimeMs;
+  let decodeSerial = 0;
+  let disposed = false;
 
   const cleanup = () => {
-    if (audio) {
-      audio.oncanplaythrough = null;
-      audio.onended = null;
-      audio.onerror = null;
-      audio.pause();
-      audio.src = "";
-      audio.load();
-      audio = null;
-    }
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-      audioUrl = null;
+    disposed = true;
+    stopSource();
+    gainNode?.disconnect();
+    gainNode = null;
+    if (audioContext) {
+      void audioContext.close().catch(() => {});
+      audioContext = null;
     }
   };
 
-  const getElementTargetSeconds = (): number => {
-    const effectiveTimelineMs =
-      streamMode && !finalized ? Math.min(targetTimeMs, loadedUntilMs) : targetTimeMs;
-    return Math.max(0, effectiveTimelineMs - startOffsetMs) / 1000;
+  const getAudioContext = (): AudioContext | null => {
+    if (audioContext) {
+      return audioContext;
+    }
+
+    const AudioContextCtor =
+      globalThis.AudioContext ??
+      (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioContextCtor) {
+      sendBack({ type: "ERROR", error: "Web Audio is not supported" });
+      return null;
+    }
+
+    audioContext = new AudioContextCtor();
+    gainNode = audioContext.createGain();
+    gainNode.gain.value = volume;
+    gainNode.connect(audioContext.destination);
+    return audioContext;
+  };
+
+  const getTargetOffsetSeconds = (): number => {
+    return Math.max(0, targetTimeMs - startOffsetMs) / 1000;
+  };
+
+  const getSourceTimelineTime = (): number => {
+    if (!audioContext || !sourceNode) {
+      return targetTimeMs;
+    }
+
+    return (
+      playStartedAtTimelineMs +
+      (audioContext.currentTime - playStartedAtContextTime) * playbackRate * 1000
+    );
   };
 
   const canPlayRequestedTime = (): boolean => {
+    if (!activeBuffer) {
+      return false;
+    }
+
     if (!streamMode) {
       return true;
     }
@@ -287,47 +326,53 @@ export const audioPlaybackActor = fromCallback<
       return false;
     }
 
-    return finalized || loadedUntilMs >= targetTimeMs;
+    return finalized || activeBufferLoadedUntilMs >= targetTimeMs;
   };
 
-  const applyTargetTime = (force = false) => {
-    if (!audio) return;
-
-    const targetSeconds = getElementTargetSeconds();
-    if (
-      force ||
-      Math.abs(audio.currentTime - targetSeconds) >= AUDIO_SYNC_DRIFT_THRESHOLD_SECONDS
-    ) {
-      audio.currentTime = targetSeconds;
-    }
-  };
-
-  const maybePlay = () => {
-    if (!audio) return;
-
-    if (!requestedPlay) {
-      audio.pause();
+  const stopSource = () => {
+    if (!sourceNode) {
       return;
     }
 
-    if (!canPlayRequestedTime()) {
-      audio.pause();
-      return;
+    const source = sourceNode;
+    sourceNode = null;
+    source.onended = null;
+    try {
+      source.stop();
+    } catch {
+      // Already stopped.
+    }
+  };
+
+  const shouldActivatePendingBuffer = (force = false): boolean => {
+    if (!pendingBuffer) {
+      return false;
     }
 
-    if (audio.paused) {
-      audio.play().catch((err) => {
-        console.warn("[AudioActor] Play failed:", err);
-      });
+    if (!activeBuffer || force || finalized) {
+      return true;
     }
+
+    return targetTimeMs >= activeBufferLoadedUntilMs - STREAM_BUFFER_SWITCH_LOOKAHEAD_MS;
+  };
+
+  const activatePendingBuffer = (force = false): boolean => {
+    if (!shouldActivatePendingBuffer(force) || !pendingBuffer) {
+      return false;
+    }
+
+    activeBuffer = pendingBuffer;
+    activeBufferLoadedUntilMs = pendingBufferLoadedUntilMs;
+    pendingBuffer = null;
+    return true;
   };
 
   const reportReady = () => {
-    if (!audio) return;
+    if (!activeBuffer) return;
 
     const durationMs = streamMode
-      ? Math.max(loadedUntilMs, startOffsetMs + audio.duration * 1000)
-      : audio.duration * 1000;
+      ? Math.max(activeBufferLoadedUntilMs, startOffsetMs + activeBuffer.duration * 1000)
+      : activeBuffer.duration * 1000;
 
     if (!Number.isFinite(durationMs) || durationMs <= 0) {
       return;
@@ -341,38 +386,131 @@ export const audioPlaybackActor = fromCallback<
     sendBack({ type: "READY", duration: durationMs });
   };
 
-  const attachBlob = (blob: Blob) => {
+  const startSource = () => {
+    const context = getAudioContext();
+    if (!context || !gainNode || !activeBuffer || !canPlayRequestedTime()) {
+      return;
+    }
+
+    const offsetSeconds = getTargetOffsetSeconds();
+    if (offsetSeconds >= activeBuffer.duration) {
+      return;
+    }
+
+    stopSource();
+
+    const source = context.createBufferSource();
+    source.buffer = activeBuffer;
+    source.playbackRate.value = playbackRate;
+    source.connect(gainNode);
+    source.onended = () => {
+      if (sourceNode !== source) {
+        return;
+      }
+      sourceNode = null;
+
+      if (streamMode && activatePendingBuffer(true)) {
+        startSource();
+        return;
+      }
+
+      if (streamMode && !finalized) {
+        return;
+      }
+
+      sendBack({ type: "FINISHED" });
+    };
+
+    playStartedAtTimelineMs = targetTimeMs;
+    playStartedAtContextTime = context.currentTime;
+    sourceNode = source;
+    source.start(0, offsetSeconds);
+  };
+
+  const maybePlay = () => {
+    const context = getAudioContext();
+    if (!context) return;
+
+    if (!requestedPlay) {
+      stopSource();
+      return;
+    }
+
+    activatePendingBuffer();
+
+    if (!canPlayRequestedTime()) {
+      stopSource();
+      return;
+    }
+
+    void context.resume().catch((err) => {
+      console.warn("[AudioActor] AudioContext resume failed:", err);
+    });
+
+    if (!sourceNode) {
+      startSource();
+    }
+  };
+
+  const applyTargetTime = (force = false) => {
+    if (!sourceNode) {
+      return;
+    }
+
+    const currentTimelineMs = getSourceTimelineTime();
+    const driftMs = Math.abs(currentTimelineMs - targetTimeMs);
+
+    if (force || driftMs >= AUDIO_SYNC_DRIFT_THRESHOLD_MS) {
+      startSource();
+    }
+  };
+
+  const decodeBlob = (blob: Blob, nextLoadedUntilMs: number, forceActivate = false) => {
     try {
-      cleanup();
-
       activeBlob = blob;
-      audioUrl = URL.createObjectURL(blob);
-      audio = new Audio(audioUrl);
-      audio.volume = volume;
-      audio.playbackRate = playbackRate;
-      audio.currentTime = getElementTargetSeconds();
+      const context = getAudioContext();
+      if (!context) {
+        return;
+      }
+      const serial = ++decodeSerial;
 
-      audio.oncanplaythrough = () => {
-        applyTargetTime(true);
-        reportReady();
-        maybePlay();
-      };
+      void blob
+        .arrayBuffer()
+        .then((arrayBuffer) => context.decodeAudioData(arrayBuffer.slice(0)))
+        .then((buffer) => {
+          if (disposed || serial !== decodeSerial) {
+            return;
+          }
 
-      audio.onended = () => {
-        if (streamMode && !finalized) {
-          audio?.pause();
-          return;
-        }
-        sendBack({ type: "FINISHED" });
-      };
+          pendingBuffer = buffer;
+          pendingBufferLoadedUntilMs = nextLoadedUntilMs;
 
-      audio.onerror = () => {
-        if (streamMode && !finalized) {
-          return;
-        }
-        sendBack({ type: "ERROR", error: "Audio playback error" });
-      };
+          if (activatePendingBuffer(forceActivate)) {
+            reportReady();
+            if (requestedPlay) {
+              startSource();
+            }
+            return;
+          }
+
+          reportReady();
+          maybePlay();
+        })
+        .catch((error) => {
+          if (disposed || (streamMode && !finalized)) {
+            return;
+          }
+
+          sendBack({
+            type: "ERROR",
+            error: error instanceof Error ? error.message : "Audio decode failed",
+          });
+        });
     } catch (error) {
+      if (streamMode && !finalized) {
+        return;
+      }
+
       sendBack({
         type: "ERROR",
         error: error instanceof Error ? error.message : "Failed to initialize audio",
@@ -380,49 +518,63 @@ export const audioPlaybackActor = fromCallback<
     }
   };
 
+  const updatePlaybackRate = (rate: number) => {
+    playbackRate = Number.isFinite(rate) && rate > 0 ? rate : 1;
+    if (sourceNode) {
+      playStartedAtTimelineMs = getSourceTimelineTime();
+      playStartedAtContextTime = audioContext?.currentTime ?? 0;
+      sourceNode.playbackRate.value = playbackRate;
+    }
+  };
+
+  const updateVolume = (nextVolume: number) => {
+    volume = Math.max(0, Math.min(1, nextVolume));
+    if (gainNode) {
+      gainNode.gain.value = volume;
+    }
+  };
+
+  const seekTo = (timeMs: number, forceBuffer = false) => {
+    targetTimeMs = timeMs;
+    activatePendingBuffer(forceBuffer || targetTimeMs > activeBufferLoadedUntilMs);
+    if (requestedPlay) {
+      startSource();
+    }
+  };
+
   const init = () => {
-    attachBlob(activeBlob);
+    decodeBlob(activeBlob, loadedUntilMs, true);
   };
 
   init();
 
   receive((event) => {
-    if (!audio) return;
-
     switch (event.type) {
       case "PLAY":
         requestedPlay = true;
-        applyTargetTime(true);
         maybePlay();
         break;
 
       case "PAUSE":
         requestedPlay = false;
-        audio.pause();
+        stopSource();
         break;
 
       case "SEEK":
-        targetTimeMs = event.timeMs;
-        applyTargetTime(true);
-        maybePlay();
+        seekTo(event.timeMs, true);
         break;
 
       case "SET_VOLUME":
-        volume = Math.max(0, Math.min(1, event.volume));
-        audio.volume = volume;
+        updateVolume(event.volume);
         break;
 
       case "SET_PLAYBACK_RATE":
-        playbackRate = Number.isFinite(event.rate) && event.rate > 0 ? event.rate : 1;
-        audio.playbackRate = playbackRate;
+        updatePlaybackRate(event.rate);
         break;
 
       case "SYNC": {
         targetTimeMs = event.timeMs;
-
-        // Let the media element own small playback drift. Periodic timer-driven
-        // nudges can send audio backward at higher speeds, but larger drift
-        // still needs correction after tab throttling or seek races.
+        activatePendingBuffer();
         applyTargetTime();
         maybePlay();
 
@@ -434,12 +586,12 @@ export const audioPlaybackActor = fromCallback<
           break;
         }
 
-        activeBlob = event.blob;
         loadedUntilMs = Math.max(loadedUntilMs, event.loadedUntilMs);
         if (typeof event.finalized === "boolean") {
           finalized = event.finalized;
         }
-        attachBlob(activeBlob);
+
+        decodeBlob(event.blob, loadedUntilMs, event.finalized || !activeBuffer);
         break;
 
       case "FINALIZE_STREAM":
@@ -448,6 +600,7 @@ export const audioPlaybackActor = fromCallback<
         }
 
         finalized = true;
+        activatePendingBuffer(true);
         reportReady();
         maybePlay();
         break;

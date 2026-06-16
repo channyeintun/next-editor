@@ -27,6 +27,15 @@ async function blobToBytes(blob: Blob): Promise<Uint8Array> {
   });
 }
 
+function readRecordTimestamp(record: unknown): number {
+  if (record && typeof record === "object") {
+    const value = record as { timestamp?: unknown; time?: unknown };
+    if (typeof value.timestamp === "number") return value.timestamp;
+    if (typeof value.time === "number") return value.time;
+  }
+  return 0;
+}
+
 interface StreamedCounts {
   frames: number;
   slide: number;
@@ -45,6 +54,13 @@ interface RecordingStreamBridgeStartOptions {
   cameraType?: string;
   cameraSource?: RecordingStreamMeta["cameraSource"];
   cameraStartOffsetMs?: number;
+}
+
+interface PendingStreamSegment {
+  clusterIndex: number;
+  startTimeMs: number;
+  priority: number;
+  write: () => void | Promise<void>;
 }
 
 /**
@@ -72,8 +88,10 @@ export class RecordingStreamBridge {
   private audioCount = 0;
   /** Number of camera fragments already scheduled for streaming. */
   private cameraCount = 0;
-  /** Serializes async audio reads/appends so fragments stay in arrival order. */
-  private audioQueue: Promise<void> = Promise.resolve();
+  /** Timeline starts for SCR3 cluster indices known to the live bridge. */
+  private readonly clusterStarts: number[] = [];
+  /** Serializes segment appends so async media reads cannot reorder the SCR3 stream. */
+  private appendQueue: Promise<void> = Promise.resolve();
   /** Serializes sink writes so the consumer receives bytes in stream order. */
   private writeChain: Promise<void> = Promise.resolve();
   private started = false;
@@ -113,17 +131,7 @@ export class RecordingStreamBridge {
   sync(session: RecordingSession): void {
     if (!this.started) return;
     this.lastSession = session;
-    this.flushFrames(session.frames, false);
-    this.flushEvents(SEGMENT_KIND.slide, session.slideEvents, "slide", false);
-    this.flushEvents(SEGMENT_KIND.preview, session.previewEvents, "preview", false);
-    this.flushEvents(SEGMENT_KIND.previewDoc, session.previewInitialDocuments, "previewDoc", false);
-    this.flushEvents(SEGMENT_KIND.previewPatch, session.previewPatchBatches, "previewPatch", false);
-    this.flushEvents(SEGMENT_KIND.workspace, session.workspaceEvents, "workspace", false);
-    this.flushEvents(SEGMENT_KIND.runtime, session.runtimeEvents, "runtime", false);
-    this.flushEvents(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", false);
-    this.flush();
-    this.queueAudio(session.audioFragments);
-    this.queueCamera(session.cameraFragments);
+    this.enqueueSegments(this.collectSessionSegments(session, false));
   }
 
   /** Flushes any buffered tail, finalizes the stream (footer), and closes the sink. */
@@ -133,32 +141,10 @@ export class RecordingStreamBridge {
       return;
     }
     if (this.lastSession) {
-      const session = this.lastSession;
-      this.flushFrames(session.frames, true);
-      this.flushEvents(SEGMENT_KIND.slide, session.slideEvents, "slide", true);
-      this.flushEvents(SEGMENT_KIND.preview, session.previewEvents, "preview", true);
-      this.flushEvents(
-        SEGMENT_KIND.previewDoc,
-        session.previewInitialDocuments,
-        "previewDoc",
-        true,
-      );
-      this.flushEvents(
-        SEGMENT_KIND.previewPatch,
-        session.previewPatchBatches,
-        "previewPatch",
-        true,
-      );
-      this.flushEvents(SEGMENT_KIND.workspace, session.workspaceEvents, "workspace", true);
-      this.flushEvents(SEGMENT_KIND.runtime, session.runtimeEvents, "runtime", true);
-      this.flushEvents(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", true);
-      this.flush();
-      this.queueAudio(session.audioFragments);
-      this.queueCamera(session.cameraFragments);
+      this.enqueueSegments(this.collectSessionSegments(this.lastSession, true));
     }
     // All media must be appended before the footer so the finalized stream is complete.
-    await this.audioQueue;
-    await this.cameraQueue;
+    await this.appendQueue;
     this.writer.finalize();
     this.flush();
     await this.closeSink();
@@ -169,67 +155,215 @@ export class RecordingStreamBridge {
     void this.closeSink();
   }
 
-  private flushFrames(frames: RecordingSession["frames"], final: boolean): void {
+  private collectSessionSegments(
+    session: RecordingSession,
+    final: boolean,
+  ): PendingStreamSegment[] {
+    return [
+      ...this.collectFrameSegments(session.frames, final),
+      ...this.collectEventSegments(SEGMENT_KIND.slide, session.slideEvents, "slide", final),
+      ...this.collectEventSegments(SEGMENT_KIND.preview, session.previewEvents, "preview", final),
+      ...this.collectEventSegments(
+        SEGMENT_KIND.previewDoc,
+        session.previewInitialDocuments,
+        "previewDoc",
+        final,
+      ),
+      ...this.collectEventSegments(
+        SEGMENT_KIND.previewPatch,
+        session.previewPatchBatches,
+        "previewPatch",
+        final,
+      ),
+      ...this.collectEventSegments(
+        SEGMENT_KIND.workspace,
+        session.workspaceEvents,
+        "workspace",
+        final,
+      ),
+      ...this.collectEventSegments(SEGMENT_KIND.runtime, session.runtimeEvents, "runtime", final),
+      ...this.collectEventSegments(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", final),
+      ...this.collectAudioSegments(session.audioFragments),
+      ...this.collectCameraSegments(session.cameraFragments),
+    ];
+  }
+
+  private enqueueSegments(segments: PendingStreamSegment[]): void {
+    if (segments.length === 0) return;
+    const orderedSegments = [...segments].sort(
+      (left, right) =>
+        left.clusterIndex - right.clusterIndex ||
+        left.startTimeMs - right.startTimeMs ||
+        left.priority - right.priority,
+    );
+
+    this.appendQueue = this.appendQueue.then(async () => {
+      for (const segment of orderedSegments) {
+        await segment.write();
+        this.flush();
+      }
+    });
+  }
+
+  private collectFrameSegments(
+    frames: RecordingSession["frames"],
+    final: boolean,
+  ): PendingStreamSegment[] {
+    const segments: PendingStreamSegment[] = [];
     // Emit a segment for each completed keyframe-bounded run; keep the trailing run
     // buffered until its next keyframe arrives (or until finish).
     for (let index = this.counts.frames + 1; index < frames.length; index++) {
       if (isKeyframe(frames[index])) {
-        this.writer.appendFrameSegment(frames.slice(this.counts.frames, index));
+        const batch = frames.slice(this.counts.frames, index);
+        const segment = this.createFrameSegment(batch, frames[index].timestamp);
+        segments.push(segment);
+        const clusterIndex = segment.clusterIndex;
+        this.ensureClusterStart(clusterIndex + 1, frames[index].timestamp);
         this.counts.frames = index;
       }
     }
     if (final && this.counts.frames < frames.length) {
-      this.writer.appendFrameSegment(frames.slice(this.counts.frames));
+      const batch = frames.slice(this.counts.frames);
+      segments.push(this.createFrameSegment(batch, batch[batch.length - 1]?.timestamp ?? 0));
       this.counts.frames = frames.length;
     }
+    return segments;
   }
 
-  private flushEvents(
+  private createFrameSegment(
+    frames: RecordingSession["frames"],
+    endTimeMs: number,
+  ): PendingStreamSegment {
+    const startTimeMs = frames[0]?.timestamp ?? 0;
+    const clusterIndex = this.resolveClusterIndex(startTimeMs);
+    this.ensureClusterStart(clusterIndex, startTimeMs);
+    return {
+      clusterIndex,
+      startTimeMs,
+      priority: 0,
+      write: () =>
+        this.writer.appendFrameSegment(frames, {
+          startTimeMs,
+          endTimeMs: Math.max(startTimeMs, endTimeMs),
+          clusterIndex,
+          containsKeyframe: frames.some(isKeyframe),
+        }),
+    };
+  }
+
+  private ensureClusterStart(clusterIndex: number, startTimeMs: number): void {
+    if (clusterIndex < 0) return;
+    const current = this.clusterStarts[clusterIndex];
+    if (typeof current === "number") {
+      this.clusterStarts[clusterIndex] = Math.min(current, startTimeMs);
+      return;
+    }
+    this.clusterStarts[clusterIndex] = startTimeMs;
+  }
+
+  private resolveClusterIndex(timeMs: number): number {
+    for (let index = this.clusterStarts.length - 1; index >= 0; index -= 1) {
+      const startTimeMs = this.clusterStarts[index];
+      if (typeof startTimeMs === "number" && timeMs >= startTimeMs) {
+        return index;
+      }
+    }
+    return 0;
+  }
+
+  private collectEventSegments(
     kind: (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND],
     records: ReadonlyArray<unknown>,
     key: keyof StreamedCounts,
     final: boolean,
-  ): void {
+  ): PendingStreamSegment[] {
     const pending = records.length - this.counts[key];
-    if (pending <= 0) return;
-    if (!final && pending < EVENT_FLUSH_THRESHOLD) return;
-    this.writer.appendEventSegment(kind, records.slice(this.counts[key]));
+    if (pending <= 0) return [];
+    if (!final && pending < EVENT_FLUSH_THRESHOLD) return [];
+    const pendingRecords = records.slice(this.counts[key]);
+    const segments: PendingStreamSegment[] = [];
+    let groupStart = 0;
+    while (groupStart < pendingRecords.length) {
+      const firstTimestamp = readRecordTimestamp(pendingRecords[groupStart]);
+      const clusterIndex = this.resolveClusterIndex(firstTimestamp);
+      let groupEnd = groupStart + 1;
+      while (
+        groupEnd < pendingRecords.length &&
+        this.resolveClusterIndex(readRecordTimestamp(pendingRecords[groupEnd])) === clusterIndex
+      ) {
+        groupEnd += 1;
+      }
+
+      const group = pendingRecords.slice(groupStart, groupEnd);
+      segments.push({
+        clusterIndex,
+        startTimeMs: firstTimestamp,
+        priority: 1,
+        write: () =>
+          this.writer.appendEventSegment(kind, group, {
+            startTimeMs: firstTimestamp,
+            endTimeMs: readRecordTimestamp(group[group.length - 1]),
+            clusterIndex,
+          }),
+      });
+      groupStart = groupEnd;
+    }
     this.counts[key] = records.length;
+    return segments;
   }
 
-  private queueAudio(fragments: RecordingSession["audioFragments"]): void {
+  private collectAudioSegments(
+    fragments: RecordingSession["audioFragments"],
+  ): PendingStreamSegment[] {
+    const segments: PendingStreamSegment[] = [];
     while (this.audioCount < fragments.length) {
       const fragment = fragments[this.audioCount];
+      const fragmentIndex = this.audioCount;
       this.audioCount += 1;
-      // Append + flush run together inside one queued task so no other append interleaves
-      // between a fragment and its drain, keeping the emitted byte stream ordered.
-      this.audioQueue = this.audioQueue.then(async () => {
-        const bytes = await blobToBytes(fragment.blob);
-        this.writer.appendAudioChunk(bytes, {
-          startTimeMs: fragment.startTimeMs,
-          endTimeMs: fragment.endTimeMs,
-        });
-        this.flush();
+      const clusterIndex = this.resolveClusterIndex(fragment.startTimeMs);
+      segments.push({
+        clusterIndex,
+        startTimeMs: fragment.startTimeMs,
+        priority: 2,
+        write: async () => {
+          const bytes = await blobToBytes(fragment.blob);
+          this.writer.appendAudioChunk(bytes, {
+            startTimeMs: fragment.startTimeMs,
+            endTimeMs: fragment.endTimeMs,
+            clusterIndex,
+            isInit: fragmentIndex === 0,
+          });
+        },
       });
     }
+    return segments;
   }
 
-  /** Serializes async camera reads/appends so fragments stay in arrival order. */
-  private cameraQueue: Promise<void> = Promise.resolve();
-
-  private queueCamera(fragments: RecordingSession["cameraFragments"]): void {
+  private collectCameraSegments(
+    fragments: RecordingSession["cameraFragments"],
+  ): PendingStreamSegment[] {
+    const segments: PendingStreamSegment[] = [];
     while (this.cameraCount < fragments.length) {
       const fragment = fragments[this.cameraCount];
+      const fragmentIndex = this.cameraCount;
       this.cameraCount += 1;
-      this.cameraQueue = this.cameraQueue.then(async () => {
-        const bytes = await blobToBytes(fragment.blob);
-        this.writer.appendCameraChunk(bytes, {
-          startTimeMs: fragment.startTimeMs,
-          endTimeMs: fragment.endTimeMs,
-        });
-        this.flush();
+      const clusterIndex = this.resolveClusterIndex(fragment.startTimeMs);
+      segments.push({
+        clusterIndex,
+        startTimeMs: fragment.startTimeMs,
+        priority: 3,
+        write: async () => {
+          const bytes = await blobToBytes(fragment.blob);
+          this.writer.appendCameraChunk(bytes, {
+            startTimeMs: fragment.startTimeMs,
+            endTimeMs: fragment.endTimeMs,
+            clusterIndex,
+            isInit: fragmentIndex === 0,
+          });
+        },
       });
     }
+    return segments;
   }
 
   private flush(): void {

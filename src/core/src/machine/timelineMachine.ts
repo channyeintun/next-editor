@@ -14,6 +14,7 @@ export type TimelineEvent =
   | { type: "PAUSE" }
   | { type: "TICK"; currentTime: number }
   | { type: "SEEK"; time: number }
+  | { type: "SET_DURATION"; duration: number }
   | { type: "SET_SPEED"; speed: number };
 
 export const timelineMachine = setup({
@@ -60,6 +61,11 @@ export const timelineMachine = setup({
             accumulatedTime: event.time,
           })),
         },
+        SET_DURATION: {
+          actions: assign(({ context, event }) => ({
+            duration: Math.max(context.currentTime, event.duration),
+          })),
+        },
         SET_SPEED: {
           actions: assign(({ event }) => ({
             speed: event.speed,
@@ -101,6 +107,11 @@ export const timelineMachine = setup({
             startedAt: performance.now(),
           })),
         },
+        SET_DURATION: {
+          actions: assign(({ context, event }) => ({
+            duration: Math.max(context.currentTime, event.duration),
+          })),
+        },
         SET_SPEED: {
           actions: assign(({ context, event }) => ({
             speed: event.speed,
@@ -121,6 +132,11 @@ export const timelineMachine = setup({
           actions: assign(({ event }) => ({
             currentTime: event.time,
             accumulatedTime: event.time,
+          })),
+        },
+        SET_DURATION: {
+          actions: assign(({ context, event }) => ({
+            duration: Math.max(context.currentTime, event.duration),
           })),
         },
         SET_SPEED: {

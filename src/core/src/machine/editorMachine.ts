@@ -519,7 +519,7 @@ const getPlaybackAudioState = (recording: Recording | null): PlaybackAudioState 
     blob: audioBlob,
     loadedUntilMs: latestAudioEndTime,
     startOffsetMs,
-    finalized: latestAudioEndTime >= recording.duration - 1,
+    finalized: recording.streamFinalized ?? latestAudioEndTime >= recording.duration - 1,
     streamMode: true,
   };
 };
@@ -1403,6 +1403,7 @@ export const editorMachine = setup({
         cameraBlob: context.camera.blob || undefined,
         cameraSource: context.camera.source || undefined,
         cameraStartOffsetMs: context.camera.blob ? context.camera.startOffsetMs : undefined,
+        streamFinalized: true,
         workspaceSnapshot,
         runtimeSnapshot,
       };
@@ -1509,7 +1510,14 @@ export const editorMachine = setup({
     // only swap in the larger frames/events arrays and let the replay cursors catch up.
     extendRecording: assign(({ context, event }) => {
       if (event.type !== "EXTEND_RECORDING" || !context.recording) return {};
-      return { recording: normalizeRecordingData(event.recording) };
+      const recording = normalizeRecordingData(event.recording);
+      return {
+        recording,
+        timeline: {
+          ...context.timeline,
+          duration: Math.max(context.timeline.currentTime, recording.duration),
+        },
+      };
     }),
 
     applyFrameAtTime: assign(({ context, event }) => {
@@ -2637,6 +2645,11 @@ export const editorMachine = setup({
               if (event.type !== "EXTEND_RECORDING") {
                 return;
               }
+
+              enqueue.sendTo("timelineActor", {
+                type: "SET_DURATION",
+                duration: Math.max(context.timeline.currentTime, event.recording.duration),
+              });
 
               const audioState = getPlaybackAudioState(event.recording);
               if (!audioState) {

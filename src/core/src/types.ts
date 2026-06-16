@@ -191,6 +191,8 @@ export interface Recording {
   cameraSource?: RecordingCameraSource;
   /** Camera warmup offset (ms) between the recording origin and the first camera frame. */
   cameraStartOffsetMs?: number;
+  /** True when a decoded SCR3 stream included its footer; false for a still-growing prefix. */
+  streamFinalized?: boolean;
   workspaceSnapshot?: WorkspaceRecordingSnapshot;
   runtimeSnapshot?: RuntimeRecordingSnapshot;
   duration: number;

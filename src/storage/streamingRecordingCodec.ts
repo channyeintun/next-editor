@@ -646,14 +646,14 @@ function parseHeader(bytes: Uint8Array): {
   return { meta, headerEnd: metaEnd, formatVersion };
 }
 
-function findSegmentsEnd(bytes: Uint8Array, headerEnd: number): number {
+function findFooterStart(bytes: Uint8Array, headerEnd: number): number | null {
   if (bytes.length < FOOTER_TRAILER_SIZE || !hasMagicAt(bytes, bytes.length - 4)) {
-    return bytes.length;
+    return null;
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const footerLength = view.getUint32(bytes.length - FOOTER_TRAILER_SIZE, true);
   const footerStart = bytes.length - FOOTER_TRAILER_SIZE - footerLength;
-  return footerStart >= headerEnd ? footerStart : bytes.length;
+  return footerStart >= headerEnd ? footerStart : null;
 }
 
 function* walkSegments(
@@ -704,7 +704,9 @@ function* walkSegments(
 
 function decodeSegments(bytes: Uint8Array): Recording {
   const { meta, headerEnd, formatVersion } = parseHeader(bytes);
-  const segmentsEnd = findSegmentsEnd(bytes, headerEnd);
+  const footerStart = findFooterStart(bytes, headerEnd);
+  const segmentsEnd = footerStart ?? bytes.length;
+  const streamFinalized = footerStart !== null;
 
   const frames: DeltaFrame[] = [];
   const slideEvents: SlideEvent[] = [];
@@ -783,6 +785,14 @@ function decodeSegments(bytes: Uint8Array): Recording {
 
   const sortedAudioSegments = sortMediaSegments(audioSegments);
   const sortedCameraSegments = sortMediaSegments(cameraSegments);
+  const decodedDuration = decodedSegments.reduce(
+    (duration, segment) => Math.max(duration, segment.startTimeMs, segment.endTimeMs),
+    meta.duration,
+  );
+  const audioStartOffsetMs =
+    meta.audioStartOffsetMs ?? sortedAudioSegments[0]?.startTimeMs ?? undefined;
+  const cameraStartOffsetMs =
+    meta.cameraStartOffsetMs ?? sortedCameraSegments[0]?.startTimeMs ?? undefined;
 
   const audioBlob =
     sortedAudioSegments.length > 0
@@ -805,7 +815,7 @@ function decodeSegments(bytes: Uint8Array): Recording {
     name: meta.name,
     keyframeInterval: meta.keyframeInterval,
     createdAt: meta.createdAt,
-    duration: meta.duration,
+    duration: decodedDuration,
     frames,
     slideEvents: slideEvents.length > 0 ? slideEvents : undefined,
     previewEvents: previewEvents.length > 0 ? previewEvents : undefined,
@@ -818,10 +828,11 @@ function decodeSegments(bytes: Uint8Array): Recording {
     slides: meta.slides,
     audioBlob,
     audioSource: meta.audioSource,
-    audioStartOffsetMs: meta.audioStartOffsetMs,
+    audioStartOffsetMs,
     cameraBlob,
     cameraSource: meta.cameraSource,
-    cameraStartOffsetMs: meta.cameraStartOffsetMs,
+    cameraStartOffsetMs,
+    streamFinalized,
     workspaceSnapshot: meta.workspaceSnapshot,
     runtimeSnapshot: meta.runtimeSnapshot,
   };
