@@ -46,20 +46,31 @@ The stream-oriented model should promote media chunks from transient session imp
 
 ## Compatibility Principle
 
-Audio playback should remain `HTMLAudioElement`-first.
+Audio playback should remain `HTMLAudioElement`-first. The playback surface is always an `HTMLAudioElement`; only the way bytes are fed into it changes. This keeps browser-native codec handling, output routing, autoplay policy, playback rate, volume, and media-controls behavior.
 
-The safe browser-compatibility stack is:
+### The progressive-audio reality (read before choosing MSE)
+
+MediaSource is the obvious "feed it progressively" mechanism, but it does not drop in cleanly here, so the plan treats it as an enhancement rather than the baseline:
+
+- `MediaRecorder.start(timeslice)` does **not** emit independently appendable fragments. Only the **first** `ondataavailable` Blob carries the WebM/EBML init segment; later blobs are media-only and are **not guaranteed to start on a cluster boundary**, so they cannot be appended to a `SourceBuffer` as-is without a demux/remux step.
+- Safari does not support classic `MediaSource` on iOS and is weak for audio-only MSE; the newer path is `ManagedMediaSource` (Safari 17+). Capability must be detected, not assumed.
+- `MediaSource.isTypeSupported(mime)` can differ from what `HTMLAudioElement` can play and from what `MediaRecorder` produced.
+
+Because the editor timeline is the master clock (the audio element only needs to start near `currentTime` and be drift-corrected by `SYNC`), the plan does **not** require MSE for correctness. It ranks three mechanisms by reliability:
 
 ```text
-audioPlaybackActor
-  blob mode:   HTMLAudioElement + object URL from complete Blob
-  stream mode: HTMLAudioElement + MediaSource + SourceBuffer when supported
-  fallback:    accumulate fragments, then use complete Blob mode
+audioPlaybackActor (HTMLAudioElement surface)
+  tier 1 (baseline, reliable): contiguous-region Blob
+    accumulate decoded audio fragments into a growing Blob for each contiguous
+    decodable region; (re)attach element.src and seek to currentTime when enough
+    audio has arrived. This generalizes today's whole-blob behavior.
+  tier 2 (enhancement, gated): MediaSource / ManagedMediaSource append
+    only when MSE exists, the MIME is supported, AND fragments are verified
+    cluster-aligned (native or after a remux step).
+  tier 3 (final): complete Blob once finalized
 ```
 
-This keeps browser-native codec handling, output routing, autoplay policy, playback rate, volume, and media controls behavior. MediaSource is only the progressive feeding mechanism; the playback surface remains an `HTMLAudioElement`.
-
-Important constraint: do not assume every `MediaRecorder.ondataavailable` Blob is directly appendable to a `SourceBuffer`. The plan must verify whether microphone WebM chunks contain a usable initialization segment and appendable media fragments in the target browsers. If not, add a remux/fragmentation step or fall back to complete Blob playback for that MIME type.
+The milestone target is tier 1 working from a single `.ne` prefix; tier 2 is opportunistic and must degrade to tier 1 on any append failure instead of crashing playback.
 
 ## Proposed Data Model
 
@@ -152,6 +163,8 @@ Every segment that participates in progressive playback should carry at least:
 - payload length
 - keyframe/init flags where relevant
 
+Keep the current compression split: frame and event payloads stay `deflate(msgpack(records))`, but media fragments (audio/camera) are stored as **raw bytes** with no deflate, exactly as audio chunks are today. Re-compressing already-compressed Opus/WebM wastes CPU and rarely shrinks bytes.
+
 The footer remains useful for finalized seek/range loading, but playback must not require it.
 
 ## Recording Capture Changes
@@ -167,6 +180,16 @@ Required changes:
 - Preserve original external audio format when selected-file audio is used, but mark it as complete-blob fallback unless it can be fragmented safely.
 
 The finalized recording should no longer be built by reading one final `audioBlob` and appending it at the end. It should be finalized from the same stream fragments that live capture produced.
+
+### Timeline alignment and A/V sync
+
+Fragment timestamps must be expressed on the editor timeline, not on each media element's own clock. Today only camera compensates for capture warmup: `camera.startOffsetMs = Date.now() - session.startedAt` is persisted as `cameraStartOffsetMs` and `CameraOverlay` plays at `currentTime - cameraStartOffsetMs`. Audio has **no** equivalent offset today; it implicitly assumes the audio blob starts at timeline `0`, which is only approximately true because the microphone recorder also spawns after a `getUserMedia` warmup.
+
+The clustered model makes this gap matter, because each audio fragment needs a correct `startTimeMs`/`endTimeMs`. So:
+
+- Capture an `audioStartOffsetMs` analogous to `cameraStartOffsetMs` and persist it in the SCR3 header meta (alongside `cameraStartOffsetMs`).
+- Assign fragment timestamps as `offsetWithinTrack + trackStartOffsetMs` so audio, camera, and editor frames share one origin.
+- Have the audio actor seek to `currentTime - audioStartOffsetMs` (clamped at 0), mirroring the camera path.
 
 ## Playback Architecture Changes
 
@@ -242,15 +265,17 @@ type AudioPlaybackEvent =
   | { type: "SYNC"; timeMs: number };
 ```
 
-Stream mode should attempt:
+In `stream` mode the actor receives `APPEND_FRAGMENT` events and feeds whichever tier (see Compatibility Principle) it can support, hiding that choice from the parent:
 
 ```text
-new Audio()
-MediaSource
-SourceBuffer.appendBuffer(fragment)
+stream mode internals (HTMLAudioElement surface):
+  tier 1: append fragment bytes into a growing contiguous-region Blob;
+          (re)attach element.src + seek to currentTime - audioStartOffsetMs
+  tier 2: if MediaSource/ManagedMediaSource is available and the MIME +
+          fragments are appendable, SourceBuffer.appendBuffer(fragment)
 ```
 
-If unsupported or if append fails for the MIME type, the actor should switch to fallback accumulation and report a degraded state to the parent rather than crashing playback.
+The actor should start at tier 1 (reliable everywhere) and only upgrade to tier 2 when capability detection and an actual append succeed. Any append failure must degrade back to tier 1 and report a degraded (not fatal) state to the parent rather than crashing playback. `blob` mode remains the path for finalized recordings and external selected-file audio that cannot be fragmented safely.
 
 ## Camera Playback Direction
 
@@ -290,6 +315,14 @@ The decoder should:
 - emit only newly decoded frames/events/fragments
 - preserve a path to assemble a full `Recording` for existing UI/storage APIs during migration
 
+### Worker boundary
+
+Decoding already runs off the main thread in a comlink Web Worker ([recordingCodecClient.ts](src/storage/recordingCodecClient.ts)), and results come back as **transferred** `Uint8Array`s (`transfer(data, [data.buffer])`). That constrains the incremental design:
+
+- The incremental decoder **state lives in the worker**; the main thread holds only an opaque handle/session id, since transferring detaches buffers and a per-call re-parse of the whole prefix is what we are trying to avoid.
+- Media fragment bytes must be **transferred, not copied**, to the main thread and then handed straight to the media actor. The worker must not retain a transferred buffer.
+- Do **not** retain fragment bytes in `editorMachine` context; route them through to the audio/camera actors and drop the reference, or long recordings will accumulate the entire media stream in memory (the same trap as the earlier `JSON.stringify`-the-whole-recording regression).
+
 ## Migration Strategy
 
 Phase 1 should be additive.
@@ -313,8 +346,10 @@ Phase 3 can simplify old compatibility code if the product no longer needs to cr
 
 - Define track metadata, cluster metadata, and media fragment types.
 - Add SCR3 segment metadata for track id, cluster index, start/end timestamps, and init/keyframe flags.
+- Add `audioStartOffsetMs` to capture state and SCR3 header meta, paralleling `cameraStartOffsetMs`.
 - Implement time-clustered writer output without changing the player yet.
 - Add an assembler that can still produce the existing `Recording` shape from the new stream.
+- Leave the existing visual playback path untouched in this phase: the whole-prefix `extendRecording` flow keeps working, so the container change ships behind validation before any actor rewrite.
 
 ### Phase 2 - Incremental Prefix Decode
 
@@ -376,8 +411,8 @@ Milestone output:
 
 - New SCR3 writer can emit time-clustered audio fragments.
 - New decoder can emit incremental audio fragment deltas.
-- `audioPlaybackActor` can run in `HTMLAudioElement` blob mode or stream mode.
-- Current finalized Blob audio remains the fallback.
+- `audioPlaybackActor` can run in `HTMLAudioElement` blob mode or tier-1 contiguous-region stream mode.
+- Current finalized Blob audio remains the fallback (`blob` mode).
 - Existing editor frame playback and `EXTEND_RECORDING` cursor preservation stay intact.
 
 After audio is stable, apply the same model to camera.
