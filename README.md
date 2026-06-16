@@ -3,7 +3,7 @@
 <div align="center">
   <img src="public/logo.svg" alt="Next Editor Logo" width="200" />
   <br />
-  <h1>Interactive Code Recording For Real Workspaces</h1>
+  <h1>Interactive Code Recording & Replay</h1>
 </div>
 
 Next Editor is a browser-based lesson editor and replay engine for real coding projects. It combines a Monaco editor, a multi-file workspace, WebContainer-backed runtime playback for Node lessons, static preview for HTML/CSS lessons, synchronized slides, optional instructor camera capture, and streamed `.ne` recordings that can begin playback before the full file has downloaded.
