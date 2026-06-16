@@ -193,24 +193,17 @@ const ExportButton = memo(function ExportButton() {
   );
 });
 
-interface ImportButtonProps {
-  onImportLoadingChange?: (isLoading: boolean) => void;
-}
-
-const ImportButton = memo(function ImportButton({ onImportLoadingChange }: ImportButtonProps) {
+const ImportButton = memo(function ImportButton() {
   const { importFromFile, loadRecording } = useNextEditorActions();
 
   const handleImport = async () => {
     try {
-      onImportLoadingChange?.(true);
       const importedRecordings = await importFromFile();
       if (importedRecordings.length > 0) {
         loadRecording(importedRecordings[0]);
       }
     } catch (error) {
       console.error("Import failed:", error);
-    } finally {
-      onImportLoadingChange?.(false);
     }
   };
 
@@ -478,13 +471,9 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
 
 interface EditorHeaderProps {
   showImportExport: boolean;
-  onImportLoadingChange?: (isLoading: boolean) => void;
 }
 
-const EditorHeader = memo(function EditorHeader({
-  showImportExport,
-  onImportLoadingChange,
-}: EditorHeaderProps) {
+const EditorHeader = memo(function EditorHeader({ showImportExport }: EditorHeaderProps) {
   return (
     <div className="bg-[#11141c] px-4 py-1.5 flex items-center justify-between">
       <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
@@ -492,7 +481,7 @@ const EditorHeader = memo(function EditorHeader({
         <SaveAndRerunControls />
         {showImportExport && (
           <>
-            <ImportButton onImportLoadingChange={onImportLoadingChange} />
+            <ImportButton />
             <ExportButton />
             <WorkspaceSettingsButton />
           </>

@@ -24,7 +24,6 @@ interface CodeEditorProps {
   language?: string;
   theme?: string;
   showImportExport?: boolean;
-  onImportLoadingChange?: (isLoading: boolean) => void;
 }
 
 interface WorkspaceEventRecorderProps {
@@ -182,7 +181,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   language,
   theme = "next-editor-dark",
   showImportExport = false,
-  onImportLoadingChange,
 }) => {
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
@@ -564,10 +562,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         handleWorkspaceEvent={handleWorkspaceEvent}
         shouldTrackWorkspaceChanges={isRecording || Boolean(currentRecording)}
       />
-      <EditorHeader
-        showImportExport={showImportExport}
-        onImportLoadingChange={onImportLoadingChange}
-      />
+      <EditorHeader showImportExport={showImportExport} />
       <div
         className="flex min-h-0 flex-1 overflow-hidden"
         data-cursor-replay-target="workspace-body"

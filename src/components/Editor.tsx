@@ -1,4 +1,4 @@
-import { lazy, memo, useState } from "react";
+import { lazy, memo } from "react";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
@@ -21,8 +21,7 @@ const TerminalPanel = lazy(() => import("./TerminalPanel"));
 
 export const EditorLayout = memo(function EditorLayout() {
   const { isLoading: urlLoading } = useUrlQuery();
-  const { isDragging, isLoading: dragDropLoading } = useDragAndDropUrl();
-  const [isHeaderImportLoading, setIsHeaderImportLoading] = useState(false);
+  const { isDragging } = useDragAndDropUrl();
   const lessonType = useWorkspaceLessonType();
 
   // Check URL for showImportExport parameter (defaults to true if not specified)
@@ -35,7 +34,7 @@ export const EditorLayout = memo(function EditorLayout() {
       data-cursor-replay-target="app"
     >
       <div className="flex-1 relative overflow-hidden" data-cursor-replay-target="editor-surface">
-        <CodeEditor showImportExport={!readOnly} onImportLoadingChange={setIsHeaderImportLoading} />
+        <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
         <CameraOverlay />
         {lessonType === "node.js" ? <TerminalPanel /> : null}
@@ -46,7 +45,7 @@ export const EditorLayout = memo(function EditorLayout() {
 
       <DragDropOverlay isDragging={isDragging} />
 
-      {urlLoading || dragDropLoading || isHeaderImportLoading ? (
+      {urlLoading ? (
         <LoadingSpinner className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
       ) : (
         <FloatingPlayButton />
