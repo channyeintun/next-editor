@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense } from "react";
+import { lazy, memo } from "react";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
@@ -14,25 +14,15 @@ import { useWorkspaceLessonType } from "../hooks/useWorkspace";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import CameraOverlay from "./CameraOverlay";
 import CursorComponent from "./Cursor.tsx";
-import LoadingSpinner from "./LoadingSpinner";
+import LoadingSpinner from "./LoadingSpinner.tsx";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
 const TerminalPanel = lazy(() => import("./TerminalPanel"));
 
-function EditorSurfaceFallback() {
-  return (
-    <div className="h-full flex items-center justify-center bg-slate-950">
-      <LoadingSpinner />
-    </div>
-  );
-}
-
 export const EditorLayout = memo(function EditorLayout() {
-  const { isDragging, isLoading: dragLoading } = useDragAndDropUrl();
   const { isLoading: urlLoading } = useUrlQuery();
+  const { isDragging } = useDragAndDropUrl();
   const lessonType = useWorkspaceLessonType();
-
-  const isLoading = dragLoading || urlLoading;
 
   // Check URL for showImportExport parameter (defaults to true if not specified)
   const urlParams = new URLSearchParams(window.location.search);
@@ -44,24 +34,22 @@ export const EditorLayout = memo(function EditorLayout() {
       data-cursor-replay-target="app"
     >
       <div className="flex-1 relative overflow-hidden" data-cursor-replay-target="editor-surface">
-        <Suspense fallback={<EditorSurfaceFallback />}>
-          <CodeEditor showImportExport={!readOnly} />
-        </Suspense>
+        <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
         <CameraOverlay />
-        {lessonType === "node.js" ? (
-          <Suspense fallback={null}>
-            <TerminalPanel />
-          </Suspense>
-        ) : null}
+        {lessonType === "node.js" ? <TerminalPanel /> : null}
         <SlidePanel />
       </div>
 
       <MediaControls recordMode={!readOnly} />
 
-      <DragDropOverlay isDragging={isDragging} isLoading={isLoading} />
+      <DragDropOverlay isDragging={isDragging} />
 
-      <FloatingPlayButton />
+      {urlLoading ? (
+        <LoadingSpinner className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+      ) : (
+        <FloatingPlayButton />
+      )}
     </div>
   );
 });
