@@ -293,6 +293,9 @@ const appendCursorEvent = (
 const hasPlaybackAudio = (context: EditorMachineContext): boolean =>
   context.recording?.audioBlob instanceof Blob;
 
+const hasSpawnedPlaybackAudio = (context: EditorMachineContext): boolean =>
+  context.playbackAudioSpawned;
+
 const shouldRecordCamera = (context: EditorMachineContext): boolean =>
   context.enableCameraRecording && context.camera.isRecording;
 
@@ -2289,7 +2292,47 @@ export const editorMachine = setup({
           actions: ["detachPlaybackWorkspace"],
         },
         EXTEND_RECORDING: {
-          actions: ["extendRecording", ...APPLY_REPLAY_STATE_ACTIONS],
+          actions: [
+            "extendRecording",
+            ...APPLY_REPLAY_STATE_ACTIONS,
+            enqueueActions(({ context, event, enqueue, self }) => {
+              if (event.type !== "EXTEND_RECORDING") {
+                return;
+              }
+
+              const audioBlob = event.recording.audioBlob;
+              if (!(audioBlob instanceof Blob) || context.playbackAudioSpawned) {
+                return;
+              }
+
+              enqueue.spawnChild("audioPlayback", {
+                id: "audioPlayer",
+                input: {
+                  blob: audioBlob,
+                  volume: context.timeline.volume,
+                  playbackRate: context.timeline.speed,
+                  startPositionMs: context.timeline.currentTime,
+                },
+              });
+              enqueue.assign({ playbackAudioSpawned: true });
+              enqueue.sendTo("audioPlayer", {
+                type: "SEEK",
+                timeMs: context.timeline.currentTime,
+              });
+              enqueue.sendTo("audioPlayer", {
+                type: "SET_PLAYBACK_RATE",
+                rate: context.timeline.speed,
+              });
+              enqueue.sendTo("audioPlayer", {
+                type: "SET_VOLUME",
+                volume: context.timeline.volume,
+              });
+
+              if (self.getSnapshot().matches({ playback: "playing" })) {
+                enqueue.sendTo("audioPlayer", { type: "PLAY" });
+              }
+            }),
+          ],
         },
         TICK: {
           actions: [
@@ -2309,7 +2352,7 @@ export const editorMachine = setup({
               // Sync audio to timeline every 250ms or on seek
               const lastSync = context.lastSyncTime || 0;
               const now = performance.now();
-              if (hasPlaybackAudio(context) && now - lastSync > 250) {
+              if (hasSpawnedPlaybackAudio(context) && now - lastSync > 250) {
                 enqueue.sendTo("audioPlayer", {
                   type: "SYNC",
                   timeMs: event.currentTime,
@@ -2330,7 +2373,7 @@ export const editorMachine = setup({
             enqueueActions(({ context, event, enqueue }) => {
               const time = event.type === "SEEK" ? event.time : 0;
               enqueue.sendTo("timelineActor", { type: "SEEK", time });
-              if (hasPlaybackAudio(context)) {
+              if (hasSpawnedPlaybackAudio(context)) {
                 enqueue.sendTo("audioPlayer", {
                   type: "SEEK",
                   timeMs: time,
@@ -2345,7 +2388,7 @@ export const editorMachine = setup({
             enqueueActions(({ context, event, enqueue }) => {
               const speed = event.type === "SET_SPEED" ? event.speed : 1;
               enqueue.sendTo("timelineActor", { type: "SET_SPEED", speed });
-              if (hasPlaybackAudio(context)) {
+              if (hasSpawnedPlaybackAudio(context)) {
                 enqueue.sendTo("audioPlayer", {
                   type: "SET_PLAYBACK_RATE",
                   rate: speed,
@@ -2358,7 +2401,7 @@ export const editorMachine = setup({
           actions: [
             "setVolume",
             enqueueActions(({ context, event, enqueue }) => {
-              if (context.recording?.audioBlob instanceof Blob) {
+              if (hasSpawnedPlaybackAudio(context)) {
                 enqueue.sendTo("audioPlayer", {
                   type: "SET_VOLUME",
                   volume: event.type === "SET_VOLUME" ? event.volume : 1,
@@ -2374,7 +2417,7 @@ export const editorMachine = setup({
             "notifyPlaybackUpdate",
             enqueueActions(({ context, enqueue }) => {
               enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
-              if (hasPlaybackAudio(context)) {
+              if (hasSpawnedPlaybackAudio(context)) {
                 enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: 0 });
               }
             }),
@@ -2403,15 +2446,20 @@ export const editorMachine = setup({
             enqueueActions(({ context, enqueue }) => {
               // Ensure actors are positioned before starting playback. Starting
               // audio first can briefly play stale audio at high speeds.
+              const audioBlob = context.recording?.audioBlob;
+              const shouldSpawnPlaybackAudio =
+                audioBlob instanceof Blob && !context.playbackAudioSpawned;
+              const shouldControlPlaybackAudio =
+                context.playbackAudioSpawned || audioBlob instanceof Blob;
 
               // Streaming playback: the audio may have arrived after the recording was first
               // loaded (its bytes are at the end of the stream), so the playback-entry spawn
               // saw no audio. Spawn the player lazily now that audio is available.
-              if (context.recording?.audioBlob instanceof Blob && !context.playbackAudioSpawned) {
+              if (shouldSpawnPlaybackAudio) {
                 enqueue.spawnChild("audioPlayback", {
                   id: "audioPlayer",
                   input: {
-                    blob: context.recording.audioBlob,
+                    blob: audioBlob,
                     volume: context.timeline.volume,
                     playbackRate: context.timeline.speed,
                     startPositionMs: context.timeline.currentTime,
@@ -2424,7 +2472,7 @@ export const editorMachine = setup({
                 type: "SEEK",
                 time: context.timeline.currentTime,
               });
-              if (hasPlaybackAudio(context)) {
+              if (shouldControlPlaybackAudio) {
                 enqueue.sendTo("audioPlayer", {
                   type: "SEEK",
                   timeMs: context.timeline.currentTime,
@@ -2435,7 +2483,7 @@ export const editorMachine = setup({
                 });
               }
               enqueue.sendTo("timelineActor", { type: "START" });
-              if (hasPlaybackAudio(context)) {
+              if (shouldControlPlaybackAudio) {
                 enqueue.sendTo("audioPlayer", { type: "PLAY" });
               }
             }),
@@ -2444,7 +2492,7 @@ export const editorMachine = setup({
           ],
           exit: enqueueActions(({ context, enqueue }) => {
             enqueue.sendTo("timelineActor", { type: "PAUSE" });
-            if (hasPlaybackAudio(context)) {
+            if (hasSpawnedPlaybackAudio(context)) {
               enqueue.sendTo("audioPlayer", { type: "PAUSE" });
             }
           }),
@@ -2495,7 +2543,7 @@ export const editorMachine = setup({
                 enqueueActions(({ context, event, enqueue }) => {
                   const time = event.type === "SEEK" ? event.time : 0;
                   enqueue.sendTo("timelineActor", { type: "SEEK", time });
-                  if (hasPlaybackAudio(context)) {
+                  if (hasSpawnedPlaybackAudio(context)) {
                     enqueue.sendTo("audioPlayer", {
                       type: "SEEK",
                       timeMs: time,
@@ -2525,7 +2573,7 @@ export const editorMachine = setup({
                   "notifyPlaybackUpdate",
                   enqueueActions(({ context, enqueue }) => {
                     enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
-                    if (hasPlaybackAudio(context)) {
+                    if (hasSpawnedPlaybackAudio(context)) {
                       enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: 0 });
                     }
                   }),

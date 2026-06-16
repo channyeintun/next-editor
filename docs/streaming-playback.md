@@ -222,12 +222,14 @@ effective duration in your UI.
   workspace state all replay from a prefix with no waiting.
 - **Audio sits at the end of a finalized file**, so the picture plays while audio finishes
   downloading. When the audio bytes finally arrive, `extendRecording` swaps in the recording
-  **with** its audio blob; the player **spawns the audio element lazily the next time playback
-  starts** (the `playing` state checks for newly-available audio). So in the common flow — load
-  the intro, let it finish downloading, then press play — audio plays normally.
+  **with** its audio blob. If playback is already in `playing`, the machine now spawns,
+  synchronizes, and starts `audioPlayer` immediately; otherwise the usual `playing` entry path
+  spawns it lazily the next time playback starts. So both flows work: press play early and let
+  audio join later, or wait until the download finishes and press play once.
 - **Microphone audio is WebM/Opus**, only fully decodable once its byte sequence is complete, so
   mid-stream scrubbing of a partial WebM is not supported by the browser. Audio that arrives
-  while already actively playing starts on the next pause→play.
+  while already actively playing can begin once the full audio blob has arrived in a later
+  prefix.
 - **Selected-file audio** (an `.mp3`/`.m4a` the user picked) is one chunk, also near the end —
   same "available once received" behavior.
 - The **saved recording and local playback are unaffected**: they always use the finalized audio
@@ -264,8 +266,12 @@ If you need audio that starts before the visuals finish, fetch/seed the audio so
   `timeline.currentTime` is untouched.
 - The replay actions (`applyFrameAtTime`, `applyPreviewEventsAtTime`, …) then run so any
   newly-available frames/events at the current time are applied immediately.
-- Audio is spawned lazily on the next `playing` entry (guarded by `playbackAudioSpawned`), which
-  covers audio that arrives after the first prefix loaded.
+- If `EXTEND_RECORDING` is the first moment the prefix includes `audioBlob`, the machine spawns
+  `audioPlayer` at that transition. When the current substate is `playing`, it immediately seeks,
+  reapplies rate/volume, and sends `PLAY`; otherwise the next `playing` entry will do that.
+- Later playback control sends (`SYNC`, `SEEK`, `SET_SPEED`, `SET_VOLUME`, `PAUSE`) are guarded by
+  `playbackAudioSpawned`, not just `recording.audioBlob`, so a partially-downloaded recording can
+  play safely before the audio actor exists.
 
 This is purely additive — no delta, codec, or actor redesign — because the replay cursors already
 operate on growing arrays.

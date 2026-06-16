@@ -142,6 +142,7 @@ export const useUrlLoader = () => {
         if (!loadedOnce) {
           loadRecording(recording);
           loadedOnce = true;
+          setIsLoading(false);
         } else {
           extendRecording(recording);
         }
