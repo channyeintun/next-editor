@@ -116,7 +116,9 @@ const CameraOverlay: React.FC = () => {
   const cameraBlob = recording?.cameraBlob instanceof Blob ? recording.cameraBlob : null;
   const cameraStartOffsetMs = recording?.cameraStartOffsetMs ?? 0;
   // Live preview takes over whenever the camera toggle is on and there is no recorded blob to
-  // replay (i.e. idle or actively recording); a loaded recording always wins and replays its blob.
+  // replay (i.e. idle or actively recording). During playback, the loaded recording wins and
+  // replays the latest reassembled camera blob snapshot, which can grow across `extendRecording`
+  // calls as streamed camera fragments arrive.
   const previewMode = isPreviewEnabled && !cameraBlob;
 
   useEffect(() => {
@@ -125,6 +127,9 @@ const CameraOverlay: React.FC = () => {
       return;
     }
 
+    // Prefix decoding rebuilds `cameraBlob` from whatever camera fragments are currently
+    // available. Replacing the object URL here lets the overlay follow those growing snapshots
+    // without changing its React/UI boundary.
     const nextUrl = URL.createObjectURL(cameraBlob);
     setVideoUrl(nextUrl);
 

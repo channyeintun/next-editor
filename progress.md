@@ -9,7 +9,7 @@ Updated: 2026-06-17
 - [x] T3 Rewrite SCR3 encode/decode around time-clustered, media-aware segments.
 - [x] T4 Update decode and playback plumbing for the new stream model.
 - [x] T5 Add stream-aware audio playback actor behavior.
-- [ ] T6 Apply the same stream-aware playback treatment to camera where needed.
+- [x] T6 Apply the same stream-aware playback treatment to camera where needed.
 - [ ] T7 Refresh docs, finalize cleanup, and verify the completed plan.
 
 ## Current Assessment
@@ -19,8 +19,9 @@ Updated: 2026-06-17
 - SCR3 now writes and reads time-clustered media-aware segments in both offline export and live-stream writer paths, while preserving the assembled `Recording` facade.
 - The loader now handles both binary SCR3 prefixes and legacy base64 text `.ne` files, and playback only treats blob audio as ready when the stream metadata says the track is complete.
 - The audio playback actor now has a stream-aware path that can reattach a growing contiguous blob snapshot and keep syncing against the editor timeline while new audio bytes arrive.
-- The remaining implementation gap is camera playback: the UI still relies on the finalized blob path rather than progressive streamed video updates.
+- Camera playback already follows the same progressive pattern through `CameraOverlay`: prefix decode rebuilds a larger `cameraBlob`, and the overlay reattaches that growing blob snapshot while keeping the same React/UI boundary.
+- The remaining work is documentation and final cleanup so the shipped docs describe the new clustered SCR3 layout and streaming behavior accurately.
 
 ## Next Task
 
-- T6 Apply the same stream-aware playback treatment to camera where it materially improves streamed playback, while preserving the current overlay UI behavior.
+- T7 Refresh docs, finalize cleanup, and verify the completed plan.
