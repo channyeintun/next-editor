@@ -465,8 +465,40 @@ const appendCursorEvent = (
   return [...cursorEvents, { timestamp, ...mousePosition }];
 };
 
+const getReadyPlaybackAudioBlob = (recording: Recording | null): Blob | null => {
+  if (!recording) {
+    return null;
+  }
+
+  const audioBlob = recording.audioBlob;
+  if (!(audioBlob instanceof Blob) || audioBlob.size === 0) {
+    return null;
+  }
+
+  const audioTrackId =
+    recording.tracks?.find((track) => track.kind === "audio")?.id ??
+    (recording.mediaFragments?.some((fragment) => fragment.trackId === "audio") ? "audio" : null);
+
+  if (!audioTrackId || !recording.mediaFragments?.length) {
+    return audioBlob;
+  }
+
+  const latestAudioEndTime = recording.mediaFragments.reduce((latest, fragment) => {
+    if (fragment.trackId !== audioTrackId) {
+      return latest;
+    }
+    return Math.max(latest, fragment.endTimeMs);
+  }, -1);
+
+  if (latestAudioEndTime < 0) {
+    return audioBlob;
+  }
+
+  return latestAudioEndTime >= recording.duration - 1 ? audioBlob : null;
+};
+
 const hasPlaybackAudio = (context: EditorMachineContext): boolean =>
-  context.recording?.audioBlob instanceof Blob;
+  getReadyPlaybackAudioBlob(context.recording) instanceof Blob;
 
 const hasSpawnedPlaybackAudio = (context: EditorMachineContext): boolean =>
   context.playbackAudioSpawned;
@@ -2541,8 +2573,8 @@ export const editorMachine = setup({
             },
           });
 
-          const audioBlob = context.recording?.audioBlob;
-          if (audioBlob instanceof Blob) {
+          const audioBlob = getReadyPlaybackAudioBlob(context.recording);
+          if (audioBlob) {
             enqueue.spawnChild("audioPlayback", {
               id: "audioPlayer",
               input: {
@@ -2575,8 +2607,8 @@ export const editorMachine = setup({
                 return;
               }
 
-              const audioBlob = event.recording.audioBlob;
-              if (!(audioBlob instanceof Blob) || context.playbackAudioSpawned) {
+              const audioBlob = getReadyPlaybackAudioBlob(event.recording);
+              if (!audioBlob || context.playbackAudioSpawned) {
                 return;
               }
 
@@ -2721,7 +2753,7 @@ export const editorMachine = setup({
             enqueueActions(({ context, enqueue }) => {
               // Ensure actors are positioned before starting playback. Starting
               // audio first can briefly play stale audio at high speeds.
-              const audioBlob = context.recording?.audioBlob;
+              const audioBlob = getReadyPlaybackAudioBlob(context.recording);
               const shouldSpawnPlaybackAudio =
                 audioBlob instanceof Blob && !context.playbackAudioSpawned;
               const shouldControlPlaybackAudio =
@@ -2730,7 +2762,7 @@ export const editorMachine = setup({
               // Streaming playback: the audio may have arrived after the recording was first
               // loaded (its bytes are at the end of the stream), so the playback-entry spawn
               // saw no audio. Spawn the player lazily now that audio is available.
-              if (shouldSpawnPlaybackAudio) {
+              if (shouldSpawnPlaybackAudio && audioBlob) {
                 enqueue.spawnChild("audioPlayback", {
                   id: "audioPlayer",
                   input: {

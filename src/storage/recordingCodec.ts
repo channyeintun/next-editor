@@ -2,7 +2,7 @@ import type { Recording } from "../core/src";
 import { decodeBase64, encodeBase64 } from "../core/src/utils/base64";
 import { normalizeRecordingData } from "../core/src/utils/editorState";
 import {
-  decodeRecordingStream,
+  decodeRecordingPrefix,
   encodeRecordingToStream,
   isStreamingRecording,
 } from "./streamingRecordingCodec";
@@ -24,8 +24,10 @@ export async function decompressBinaryToRecordings(binaryData: Uint8Array): Prom
     throw new Error("Invalid recording format: expected an SCR3 stream");
   }
 
-  // The SCR3 container holds a single recording per stream.
-  return [decodeRecordingStream(binaryData)];
+  // The SCR3 container holds a single recording per stream. Prefix decoding is
+  // tolerant of an in-progress footer or truncated trailing segment, so callers
+  // can progressively decode larger binary prefixes during download.
+  return [decodeRecordingPrefix(binaryData)];
 }
 
 export async function decodeBase64ToRecordings(base64Data: string): Promise<Recording[]> {

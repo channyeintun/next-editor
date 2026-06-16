@@ -1,13 +1,37 @@
 import { useCallback, useState } from "react";
 import { useNextEditorActions } from "./useNextEditorContext";
-import { decodeBase64ToRecordings } from "../storage/recordingCodecClient";
+import {
+  decodeBase64ToRecordings,
+  decompressBinaryToRecordings,
+} from "../storage/recordingCodecClient";
 
 const SAME_ORIGIN_PROXY_PATH = "/api/proxy";
 const MISSING_PROXY_STATUS_CODES = new Set([404, 405, 501]);
 
 // Decode the accumulated stream into a (partial) recording roughly every this many bytes of
-// downloaded base64 text, so playback can start before the whole `.ne` file has arrived.
+// downloaded bytes, so playback can start before the whole `.ne` file has arrived.
 const STREAM_DECODE_INTERVAL_BYTES = 512 * 1024;
+const SCR3_MAGIC_BYTES = new Uint8Array([0x53, 0x43, 0x52, 0x33]);
+
+function concatByteChunks(parts: Uint8Array[], totalLength?: number): Uint8Array {
+  const total = totalLength ?? parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+
+  return out;
+}
+
+function startsWithScr3(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= SCR3_MAGIC_BYTES.length &&
+    SCR3_MAGIC_BYTES.every((value, index) => bytes[index] === value)
+  );
+}
 
 function buildSameOriginProxyUrl(targetUrl: string): string {
   const proxyUrl = new URL(SAME_ORIGIN_PROXY_PATH, window.location.origin);
@@ -56,10 +80,24 @@ export const useUrlLoader = () => {
       try {
         setIsLoading(true);
         if (file.name.endsWith(".ne")) {
-          const text = await file.text();
+          const bytes = new Uint8Array(await file.arrayBuffer());
+
+          if (bytes.length === 0) {
+            throw new Error("File appears to be empty or corrupted");
+          }
+
+          if (startsWithScr3(bytes)) {
+            const recordings = await decompressBinaryToRecordings(bytes);
+            if (recordings.length > 0) {
+              loadRecording(recordings[0]);
+            }
+            return;
+          }
+
+          const text = new TextDecoder().decode(bytes);
           const trimmedText = text.trim();
 
-          if (!trimmedText || trimmedText.length === 0) {
+          if (!trimmedText) {
             throw new Error("File appears to be empty or corrupted");
           }
 
@@ -101,6 +139,20 @@ export const useUrlLoader = () => {
     [loadRecording],
   );
 
+  const loadRecordingFromBinaryBytes = useCallback(
+    async (bytes: Uint8Array) => {
+      if (!startsWithScr3(bytes)) {
+        throw new Error("File does not contain a valid SCR3 recording stream");
+      }
+
+      const recordings = await decompressBinaryToRecordings(bytes);
+      if (recordings.length > 0) {
+        loadRecording(recordings[0]);
+      }
+    },
+    [loadRecording],
+  );
+
   /**
    * Streams a `.ne` response and progressively decodes ever-larger prefixes of the SCR3 stream,
    * so playback can begin before the whole file has downloaded. The first decodable prefix is
@@ -116,11 +168,32 @@ export const useUrlLoader = () => {
 
       const reader = body.getReader();
       const textDecoder = new TextDecoder();
+      const sniffParts: Uint8Array[] = [];
+      let sniffLength = 0;
       let base64 = "";
+      let binaryChunks: Uint8Array[] = [];
+      let binaryLength = 0;
       let lastDecodeLength = 0;
       let loadedOnce = false;
 
-      const decodeAndApply = async (final: boolean) => {
+      const applyRecording = (
+        recording: Awaited<ReturnType<typeof decodeBase64ToRecordings>>[0],
+      ) => {
+        if (!recording) {
+          return;
+        }
+
+        if (!loadedOnce) {
+          loadRecording(recording);
+          loadedOnce = true;
+          setIsLoading(false);
+          return;
+        }
+
+        extendRecording(recording);
+      };
+
+      const decodeAndApplyText = async (final: boolean) => {
         const stripped = base64.replace(/\s/g, "");
         // Base64 decodes in 4-character groups; drop a partial trailing group until the end so
         // we never feed a half-character to the decoder.
@@ -129,37 +202,94 @@ export const useUrlLoader = () => {
           : stripped.slice(0, stripped.length - (stripped.length % 4));
         if (aligned.length === 0) return;
 
-        let recording;
         try {
           const recordings = await decodeBase64ToRecordings(aligned);
-          recording = recordings[0];
+          applyRecording(recordings[0]);
         } catch {
           // Not enough bytes for a valid prefix yet (e.g. header incomplete) — wait for more.
           return;
         }
-        if (!recording) return;
+      };
 
-        if (!loadedOnce) {
-          loadRecording(recording);
-          loadedOnce = true;
-          setIsLoading(false);
-        } else {
-          extendRecording(recording);
+      const decodeAndApplyBinary = async () => {
+        if (binaryLength === 0) return;
+
+        try {
+          const recordings = await decompressBinaryToRecordings(
+            concatByteChunks(binaryChunks, binaryLength),
+          );
+          applyRecording(recordings[0]);
+        } catch {
+          // Not enough bytes for a valid prefix yet (e.g. header incomplete) — wait for more.
         }
       };
 
       try {
+        let streamMode: "binary" | "text" | null = null;
+
         for (;;) {
           const { value, done } = await reader.read();
           if (done) break;
-          base64 += textDecoder.decode(value, { stream: true });
-          if (base64.length - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
-            lastDecodeLength = base64.length;
-            await decodeAndApply(false);
+
+          if (!value || value.length === 0) {
+            continue;
+          }
+
+          if (streamMode === null) {
+            sniffParts.push(value);
+            sniffLength += value.length;
+            if (sniffLength < SCR3_MAGIC_BYTES.length) {
+              continue;
+            }
+
+            const sniffBytes = concatByteChunks(sniffParts, sniffLength);
+            streamMode = startsWithScr3(sniffBytes) ? "binary" : "text";
+
+            if (streamMode === "binary") {
+              binaryChunks = [sniffBytes];
+              binaryLength = sniffBytes.length;
+            } else {
+              base64 += textDecoder.decode(sniffBytes, { stream: true });
+            }
+            sniffParts.length = 0;
+            sniffLength = 0;
+          } else if (streamMode === "binary") {
+            binaryChunks.push(value);
+            binaryLength += value.length;
+          } else {
+            base64 += textDecoder.decode(value, { stream: true });
+          }
+
+          if (streamMode === "binary") {
+            if (binaryLength - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
+              lastDecodeLength = binaryLength;
+              await decodeAndApplyBinary();
+            }
+          } else if (streamMode === "text") {
+            if (base64.length - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
+              lastDecodeLength = base64.length;
+              await decodeAndApplyText(false);
+            }
           }
         }
-        base64 += textDecoder.decode();
-        await decodeAndApply(true);
+
+        if (streamMode === null && sniffLength > 0) {
+          const sniffBytes = concatByteChunks(sniffParts, sniffLength);
+          streamMode = startsWithScr3(sniffBytes) ? "binary" : "text";
+          if (streamMode === "binary") {
+            binaryChunks = [sniffBytes];
+            binaryLength = sniffBytes.length;
+          } else {
+            base64 += textDecoder.decode(sniffBytes, { stream: true });
+          }
+        }
+
+        if (streamMode === "binary") {
+          await decodeAndApplyBinary();
+        } else {
+          base64 += textDecoder.decode();
+          await decodeAndApplyText(true);
+        }
       } finally {
         reader.releaseLock();
       }
@@ -190,7 +320,12 @@ export const useUrlLoader = () => {
         // whole file at once.
         const streamed = await streamRecordingFromResponse(response.clone()).catch(() => false);
         if (!streamed) {
-          await loadRecordingFromBase64Text((await response.text()).trim());
+          const bytes = new Uint8Array(await response.arrayBuffer());
+          if (startsWithScr3(bytes)) {
+            await loadRecordingFromBinaryBytes(bytes);
+          } else {
+            await loadRecordingFromBase64Text(new TextDecoder().decode(bytes).trim());
+          }
         }
       } catch (error) {
         console.error("Failed to load tutorial from URL:", error);
@@ -202,7 +337,7 @@ export const useUrlLoader = () => {
         setIsLoading(false);
       }
     },
-    [streamRecordingFromResponse, loadRecordingFromBase64Text],
+    [streamRecordingFromResponse, loadRecordingFromBase64Text, loadRecordingFromBinaryBytes],
   );
 
   return {
