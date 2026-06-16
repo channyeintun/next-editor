@@ -465,7 +465,15 @@ const appendCursorEvent = (
   return [...cursorEvents, { timestamp, ...mousePosition }];
 };
 
-const getReadyPlaybackAudioBlob = (recording: Recording | null): Blob | null => {
+interface PlaybackAudioState {
+  blob: Blob;
+  loadedUntilMs: number;
+  startOffsetMs: number;
+  finalized: boolean;
+  streamMode: boolean;
+}
+
+const getPlaybackAudioState = (recording: Recording | null): PlaybackAudioState | null => {
   if (!recording) {
     return null;
   }
@@ -478,9 +486,16 @@ const getReadyPlaybackAudioBlob = (recording: Recording | null): Blob | null => 
   const audioTrackId =
     recording.tracks?.find((track) => track.kind === "audio")?.id ??
     (recording.mediaFragments?.some((fragment) => fragment.trackId === "audio") ? "audio" : null);
+  const startOffsetMs = recording.audioStartOffsetMs ?? 0;
 
   if (!audioTrackId || !recording.mediaFragments?.length) {
-    return audioBlob;
+    return {
+      blob: audioBlob,
+      loadedUntilMs: recording.duration,
+      startOffsetMs,
+      finalized: true,
+      streamMode: false,
+    };
   }
 
   const latestAudioEndTime = recording.mediaFragments.reduce((latest, fragment) => {
@@ -491,14 +506,26 @@ const getReadyPlaybackAudioBlob = (recording: Recording | null): Blob | null => 
   }, -1);
 
   if (latestAudioEndTime < 0) {
-    return audioBlob;
+    return {
+      blob: audioBlob,
+      loadedUntilMs: recording.duration,
+      startOffsetMs,
+      finalized: true,
+      streamMode: false,
+    };
   }
 
-  return latestAudioEndTime >= recording.duration - 1 ? audioBlob : null;
+  return {
+    blob: audioBlob,
+    loadedUntilMs: latestAudioEndTime,
+    startOffsetMs,
+    finalized: latestAudioEndTime >= recording.duration - 1,
+    streamMode: true,
+  };
 };
 
 const hasPlaybackAudio = (context: EditorMachineContext): boolean =>
-  getReadyPlaybackAudioBlob(context.recording) instanceof Blob;
+  getPlaybackAudioState(context.recording) !== null;
 
 const hasSpawnedPlaybackAudio = (context: EditorMachineContext): boolean =>
   context.playbackAudioSpawned;
@@ -929,10 +956,10 @@ export const editorMachine = setup({
     >(async ({ input }) => {
       let duration = input.recording.duration;
 
-      const audioBlob = input.recording.audioBlob;
-      if (audioBlob instanceof Blob && input.recording.audioSource !== "external") {
+      const playbackAudioState = getPlaybackAudioState(input.recording);
+      if (playbackAudioState?.finalized && input.recording.audioSource !== "external") {
         try {
-          const exactDuration = await calculateDurationFromFileReader(audioBlob);
+          const exactDuration = await calculateDurationFromFileReader(playbackAudioState.blob);
           // Use audio duration as the source of truth if it exists
           // This prevents trailing silence from wall-clock overhead
           duration = exactDuration * 1000;
@@ -2573,12 +2600,16 @@ export const editorMachine = setup({
             },
           });
 
-          const audioBlob = getReadyPlaybackAudioBlob(context.recording);
-          if (audioBlob) {
+          const audioState = getPlaybackAudioState(context.recording);
+          if (audioState) {
             enqueue.spawnChild("audioPlayback", {
               id: "audioPlayer",
               input: {
-                blob: audioBlob,
+                blob: audioState.blob,
+                mode: audioState.streamMode ? "stream" : "blob",
+                loadedUntilMs: audioState.loadedUntilMs,
+                startOffsetMs: audioState.startOffsetMs,
+                finalized: audioState.finalized,
                 volume: context.timeline.volume,
                 playbackRate: context.timeline.speed,
                 startPositionMs: context.timeline.currentTime,
@@ -2607,21 +2638,38 @@ export const editorMachine = setup({
                 return;
               }
 
-              const audioBlob = getReadyPlaybackAudioBlob(event.recording);
-              if (!audioBlob || context.playbackAudioSpawned) {
+              const audioState = getPlaybackAudioState(event.recording);
+              if (!audioState) {
                 return;
               }
 
-              enqueue.spawnChild("audioPlayback", {
-                id: "audioPlayer",
-                input: {
-                  blob: audioBlob,
-                  volume: context.timeline.volume,
-                  playbackRate: context.timeline.speed,
-                  startPositionMs: context.timeline.currentTime,
-                },
-              });
-              enqueue.assign({ playbackAudioSpawned: true });
+              if (!context.playbackAudioSpawned) {
+                enqueue.spawnChild("audioPlayback", {
+                  id: "audioPlayer",
+                  input: {
+                    blob: audioState.blob,
+                    mode: audioState.streamMode ? "stream" : "blob",
+                    loadedUntilMs: audioState.loadedUntilMs,
+                    startOffsetMs: audioState.startOffsetMs,
+                    finalized: audioState.finalized,
+                    volume: context.timeline.volume,
+                    playbackRate: context.timeline.speed,
+                    startPositionMs: context.timeline.currentTime,
+                  },
+                });
+                enqueue.assign({ playbackAudioSpawned: true });
+              } else if (audioState.streamMode) {
+                enqueue.sendTo("audioPlayer", {
+                  type: "APPEND_FRAGMENT",
+                  blob: audioState.blob,
+                  loadedUntilMs: audioState.loadedUntilMs,
+                  finalized: audioState.finalized,
+                });
+                if (audioState.finalized) {
+                  enqueue.sendTo("audioPlayer", { type: "FINALIZE_STREAM" });
+                }
+              }
+
               enqueue.sendTo("audioPlayer", {
                 type: "SEEK",
                 timeMs: context.timeline.currentTime,
@@ -2753,26 +2801,39 @@ export const editorMachine = setup({
             enqueueActions(({ context, enqueue }) => {
               // Ensure actors are positioned before starting playback. Starting
               // audio first can briefly play stale audio at high speeds.
-              const audioBlob = getReadyPlaybackAudioBlob(context.recording);
-              const shouldSpawnPlaybackAudio =
-                audioBlob instanceof Blob && !context.playbackAudioSpawned;
+              const audioState = getPlaybackAudioState(context.recording);
+              const shouldSpawnPlaybackAudio = Boolean(audioState) && !context.playbackAudioSpawned;
               const shouldControlPlaybackAudio =
-                context.playbackAudioSpawned || audioBlob instanceof Blob;
+                context.playbackAudioSpawned || Boolean(audioState);
 
               // Streaming playback: the audio may have arrived after the recording was first
               // loaded (its bytes are at the end of the stream), so the playback-entry spawn
               // saw no audio. Spawn the player lazily now that audio is available.
-              if (shouldSpawnPlaybackAudio && audioBlob) {
+              if (shouldSpawnPlaybackAudio && audioState) {
                 enqueue.spawnChild("audioPlayback", {
                   id: "audioPlayer",
                   input: {
-                    blob: audioBlob,
+                    blob: audioState.blob,
+                    mode: audioState.streamMode ? "stream" : "blob",
+                    loadedUntilMs: audioState.loadedUntilMs,
+                    startOffsetMs: audioState.startOffsetMs,
+                    finalized: audioState.finalized,
                     volume: context.timeline.volume,
                     playbackRate: context.timeline.speed,
                     startPositionMs: context.timeline.currentTime,
                   },
                 });
                 enqueue.assign({ playbackAudioSpawned: true });
+              } else if (shouldControlPlaybackAudio && audioState?.streamMode) {
+                enqueue.sendTo("audioPlayer", {
+                  type: "APPEND_FRAGMENT",
+                  blob: audioState.blob,
+                  loadedUntilMs: audioState.loadedUntilMs,
+                  finalized: audioState.finalized,
+                });
+                if (audioState.finalized) {
+                  enqueue.sendTo("audioPlayer", { type: "FINALIZE_STREAM" });
+                }
               }
 
               enqueue.sendTo("timelineActor", {

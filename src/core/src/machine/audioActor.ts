@@ -19,7 +19,7 @@ export interface AudioRecordingInput {
 }
 
 export interface AudioPlaybackInput {
-  /** Audio blob to play */
+  /** Audio blob to play or the current contiguous stream snapshot */
   blob: Blob;
   /** Initial volume (0-1) */
   volume: number;
@@ -27,6 +27,14 @@ export interface AudioPlaybackInput {
   playbackRate: number;
   /** Starting position in milliseconds */
   startPositionMs: number;
+  /** Playback mode. Blob mode is the legacy/full-file path; stream mode updates the blob over time. */
+  mode?: "blob" | "stream";
+  /** Stream mode: end of the currently appended audio region on the editor timeline. */
+  loadedUntilMs?: number;
+  /** Stream mode: offset between the editor timeline origin and audio time 0. */
+  startOffsetMs?: number;
+  /** Stream mode: whether no more audio bytes will arrive. */
+  finalized?: boolean;
 }
 
 export type AudioRecordingEvent = { type: "START" } | { type: "STOP" };
@@ -37,7 +45,9 @@ export type AudioPlaybackEvent =
   | { type: "SEEK"; timeMs: number }
   | { type: "SET_VOLUME"; volume: number }
   | { type: "SET_PLAYBACK_RATE"; rate: number }
-  | { type: "SYNC"; timeMs: number };
+  | { type: "SYNC"; timeMs: number }
+  | { type: "APPEND_FRAGMENT"; blob: Blob; loadedUntilMs: number; finalized?: boolean }
+  | { type: "FINALIZE_STREAM" };
 
 export type AudioRecordingEmit =
   | { type: "STARTED"; mediaRecorder: MediaRecorder; mimeType: string; startedAtMs: number }
@@ -235,6 +245,16 @@ export const audioPlaybackActor = fromCallback<
 >(({ sendBack, receive, input }) => {
   let audio: HTMLAudioElement | null = null;
   let audioUrl: string | null = null;
+  let activeBlob = input.blob;
+  let targetTimeMs = input.startPositionMs;
+  let requestedPlay = false;
+  let volume = input.volume;
+  let playbackRate = input.playbackRate;
+  const streamMode = input.mode === "stream";
+  let loadedUntilMs = input.loadedUntilMs ?? Number.POSITIVE_INFINITY;
+  let startOffsetMs = input.startOffsetMs ?? 0;
+  let finalized = input.finalized ?? !streamMode;
+  let lastReadyDurationMs = -1;
 
   const cleanup = () => {
     if (audio) {
@@ -252,36 +272,116 @@ export const audioPlaybackActor = fromCallback<
     }
   };
 
-  const init = () => {
+  const getElementTargetSeconds = (): number => {
+    const effectiveTimelineMs =
+      streamMode && !finalized ? Math.min(targetTimeMs, loadedUntilMs) : targetTimeMs;
+    return Math.max(0, effectiveTimelineMs - startOffsetMs) / 1000;
+  };
+
+  const canPlayRequestedTime = (): boolean => {
+    if (!streamMode) {
+      return true;
+    }
+
+    if (targetTimeMs < startOffsetMs) {
+      return false;
+    }
+
+    return finalized || loadedUntilMs >= targetTimeMs;
+  };
+
+  const applyTargetTime = (force = false) => {
+    if (!audio) return;
+
+    const targetSeconds = getElementTargetSeconds();
+    if (
+      force ||
+      Math.abs(audio.currentTime - targetSeconds) >= AUDIO_SYNC_DRIFT_THRESHOLD_SECONDS
+    ) {
+      audio.currentTime = targetSeconds;
+    }
+  };
+
+  const maybePlay = () => {
+    if (!audio) return;
+
+    if (!requestedPlay) {
+      audio.pause();
+      return;
+    }
+
+    if (!canPlayRequestedTime()) {
+      audio.pause();
+      return;
+    }
+
+    if (audio.paused) {
+      audio.play().catch((err) => {
+        console.warn("[AudioActor] Play failed:", err);
+      });
+    }
+  };
+
+  const reportReady = () => {
+    if (!audio) return;
+
+    const durationMs = streamMode
+      ? Math.max(loadedUntilMs, startOffsetMs + audio.duration * 1000)
+      : audio.duration * 1000;
+
+    if (!Number.isFinite(durationMs) || durationMs <= 0) {
+      return;
+    }
+
+    if (Math.abs(durationMs - lastReadyDurationMs) < 1) {
+      return;
+    }
+
+    lastReadyDurationMs = durationMs;
+    sendBack({ type: "READY", duration: durationMs });
+  };
+
+  const attachBlob = (blob: Blob) => {
     try {
-      audioUrl = URL.createObjectURL(input.blob);
+      cleanup();
+
+      activeBlob = blob;
+      audioUrl = URL.createObjectURL(blob);
       audio = new Audio(audioUrl);
-      audio.volume = input.volume;
-      audio.playbackRate = input.playbackRate;
-      audio.currentTime = input.startPositionMs / 1000;
+      audio.volume = volume;
+      audio.playbackRate = playbackRate;
+      audio.currentTime = getElementTargetSeconds();
 
       audio.oncanplaythrough = () => {
-        if (audio) {
-          sendBack({ type: "READY", duration: audio.duration * 1000 });
-        }
+        applyTargetTime(true);
+        reportReady();
+        maybePlay();
       };
 
       audio.onended = () => {
+        if (streamMode && !finalized) {
+          audio?.pause();
+          return;
+        }
         sendBack({ type: "FINISHED" });
       };
 
       audio.onerror = () => {
+        if (streamMode && !finalized) {
+          return;
+        }
         sendBack({ type: "ERROR", error: "Audio playback error" });
       };
-
-      // For iOS, we might need a user gesture to start,
-      // but the machine handles PLAY event on user gesture.
     } catch (error) {
       sendBack({
         type: "ERROR",
         error: error instanceof Error ? error.message : "Failed to initialize audio",
       });
     }
+  };
+
+  const init = () => {
+    attachBlob(activeBlob);
   };
 
   init();
@@ -291,43 +391,66 @@ export const audioPlaybackActor = fromCallback<
 
     switch (event.type) {
       case "PLAY":
-        if (audio.paused) {
-          audio.play().catch((err) => {
-            // On some browsers, play() might fail if not triggered by user gesture
-            // even if the AudioContext was unlocked.
-            console.warn("[AudioActor] Play failed:", err);
-          });
-        }
+        requestedPlay = true;
+        applyTargetTime(true);
+        maybePlay();
         break;
 
       case "PAUSE":
+        requestedPlay = false;
         audio.pause();
         break;
 
       case "SEEK":
-        audio.currentTime = event.timeMs / 1000;
+        targetTimeMs = event.timeMs;
+        applyTargetTime(true);
+        maybePlay();
         break;
 
       case "SET_VOLUME":
-        audio.volume = Math.max(0, Math.min(1, event.volume));
+        volume = Math.max(0, Math.min(1, event.volume));
+        audio.volume = volume;
         break;
 
       case "SET_PLAYBACK_RATE":
-        audio.playbackRate = Number.isFinite(event.rate) && event.rate > 0 ? event.rate : 1;
+        playbackRate = Number.isFinite(event.rate) && event.rate > 0 ? event.rate : 1;
+        audio.playbackRate = playbackRate;
         break;
 
       case "SYNC": {
+        targetTimeMs = event.timeMs;
+
         // Let the media element own small playback drift. Periodic timer-driven
         // nudges can send audio backward at higher speeds, but larger drift
         // still needs correction after tab throttling or seek races.
-        const targetTime = event.timeMs / 1000;
-
-        if (Math.abs(audio.currentTime - targetTime) >= AUDIO_SYNC_DRIFT_THRESHOLD_SECONDS) {
-          audio.currentTime = targetTime;
-        }
+        applyTargetTime();
+        maybePlay();
 
         break;
       }
+
+      case "APPEND_FRAGMENT":
+        if (!streamMode) {
+          break;
+        }
+
+        activeBlob = event.blob;
+        loadedUntilMs = Math.max(loadedUntilMs, event.loadedUntilMs);
+        if (typeof event.finalized === "boolean") {
+          finalized = event.finalized;
+        }
+        attachBlob(activeBlob);
+        break;
+
+      case "FINALIZE_STREAM":
+        if (!streamMode) {
+          break;
+        }
+
+        finalized = true;
+        reportReady();
+        maybePlay();
+        break;
     }
   });
 
