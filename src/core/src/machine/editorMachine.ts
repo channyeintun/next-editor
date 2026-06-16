@@ -487,13 +487,14 @@ const getPlaybackAudioState = (recording: Recording | null): PlaybackAudioState 
     recording.tracks?.find((track) => track.kind === "audio")?.id ??
     (recording.mediaFragments?.some((fragment) => fragment.trackId === "audio") ? "audio" : null);
   const startOffsetMs = recording.audioStartOffsetMs ?? 0;
+  const streamFinalized = recording.streamFinalized ?? true;
 
-  if (!audioTrackId || !recording.mediaFragments?.length) {
+  if (streamFinalized || !audioTrackId || !recording.mediaFragments?.length) {
     return {
       blob: audioBlob,
       loadedUntilMs: recording.duration,
       startOffsetMs,
-      finalized: true,
+      finalized: streamFinalized,
       streamMode: false,
     };
   }
@@ -519,7 +520,7 @@ const getPlaybackAudioState = (recording: Recording | null): PlaybackAudioState 
     blob: audioBlob,
     loadedUntilMs: latestAudioEndTime,
     startOffsetMs,
-    finalized: recording.streamFinalized ?? latestAudioEndTime >= recording.duration - 1,
+    finalized: streamFinalized,
     streamMode: true,
   };
 };
