@@ -146,8 +146,9 @@ stateDiagram-v2
 
 ### Audio playback actor
 
-- Manages synchronized audio playback when a finalized audio blob is available
-- Is spawned lazily in progressive-load scenarios when audio arrives later than the initial visual frames
+- Manages synchronized `HTMLAudioElement` playback in blob or stream mode
+- Accepts progressive audio updates by reattaching a growing blob snapshot when later prefixes extend the audio track
+- Is spawned lazily in progressive-load scenarios when audio first becomes usable for the current prefix
 
 ## Replay Cursors In Context
 

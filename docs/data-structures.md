@@ -128,9 +128,9 @@ type RecordingAudioSource = "microphone" | "external";
 type RecordingCameraSource = "camera";
 ```
 
-- `audioBlob` stores finalized playback audio.
-- `cameraBlob` stores finalized instructor camera video.
-- During active capture, live `audioChunks` and `cameraChunks` are tracked in the machine session so an optional stream sink can forward SCR3 bytes before finalization.
+- `audioBlob` and `cameraBlob` remain the assembled playback facades that UI surfaces consume.
+- `tracks`, `clusters`, and `mediaFragments` describe the stream-oriented container layout: time-clustered segments, per-track metadata, and timeline-aligned media coverage.
+- During active capture, the machine session tracks `audioFragments` and `cameraFragments` with `startTimeMs` / `endTimeMs` so the live SCR3 stream and the finalized recording are built from the same timeline-aware media model.
 
 ## Provider Context Shapes
 
@@ -156,10 +156,12 @@ At the container level, SCR3 metadata includes:
 - recording identity and timestamps
 - `version`
 - duration
+- stream-oriented `tracks` and `clusters`
 - audio and camera MIME hints
+- `audioStartOffsetMs`
 - `cameraStartOffsetMs`
 
-Segments then carry append-only payloads for frames, events, audio, and camera data.
+Segments then carry append-only, time-clustered payloads for frames, events, audio, and camera data.
 
 ## Summary
 

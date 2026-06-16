@@ -72,16 +72,18 @@ flowchart LR
   Slides[Slide events] --> Recording
   Workspace[Workspace events + snapshot] --> Recording
   Runtime[Runtime events + snapshot] --> Recording
-  Audio[Audio blob / chunks] --> Recording
-  Camera[Optional camera video] --> Recording
+  Audio[Audio track / fragments] --> Recording
+  Camera[Optional camera track / fragments] --> Recording
 ```
 
 Important current details:
 
 - Frames are delta-compressed during capture, not as a final batch-only step.
 - The current app emits version `3` recordings and stores them in the SCR3 stream container.
+- The public `Recording` facade now carries stream-oriented metadata through `tracks`, `clusters`, and `mediaFragments` in addition to the assembled playback blobs.
 - `previewInitialDocuments` and `previewPatchBatches` are first-class parts of the recording and are used to replay preview DOM updates without requiring a rerun.
 - `cursorEvents` are stored separately from frame deltas for smoother fake-cursor playback.
+- `audioStartOffsetMs` and `cameraStartOffsetMs` align media tracks to the editor timeline.
 - `cameraStartOffsetMs` aligns instructor camera playback with the recording timeline.
 
 ## Delta Encoding
@@ -109,6 +111,8 @@ The playback side is intentionally append-friendly.
 - `loadRecording(recording)` sets up an initial timeline.
 - `extendRecording(recording)` swaps in a longer append-only prefix of the same SCR3 recording without resetting playback position.
 - The machine keeps replay cursors such as `lastAppliedFrameIndex` and `lastAppliedPreviewPatchBatchIndex` so it can continue forward efficiently.
+- Progressive audio uses the same `HTMLAudioElement` surface in blob or stream mode; when later prefixes extend the audio track, the actor reattaches the growing blob snapshot and stays synchronized to the editor timeline.
+- Progressive camera playback stays in the React `CameraOverlay` boundary: `extendRecording` replaces `cameraBlob` with a larger reassembled snapshot, and the overlay reattaches that blob while continuing to derive video time from the timeline.
 
 That design is what makes partial-download playback and live stream replay possible.
 

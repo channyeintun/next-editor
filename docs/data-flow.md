@@ -123,7 +123,7 @@ sequenceDiagram
 Current playback behavior:
 
 - The machine keeps replay cursors for each append-only event stream so `extendRecording` can continue from the current point efficiently.
-- Audio playback is lazy when a progressive load gains audio later in the stream.
+- Audio playback is lazy when a progressive load first gains usable audio, then stays in sync by updating the same `HTMLAudioElement` with larger contiguous blob snapshots as more fragments arrive.
 - Camera playback is rendered by `CameraOverlay`, which derives the correct video time from timeline time minus `cameraStartOffsetMs`.
 
 ## Storage Flow
@@ -146,7 +146,7 @@ Current storage rules:
 
 - The app stores and exports SCR3 recordings.
 - IndexedDB persists metadata plus append-only recording segments.
-- `.ne` files contain base64-encoded SCR3 bytes for import/export convenience.
+- Exported `.ne` files contain base64-wrapped SCR3 bytes for portability, and the runtime loader also accepts raw SCR3 byte streams.
 - Worker-backed decode keeps msgpack and deflate work off the main thread.
 
 ## URL Loading Flow
@@ -155,7 +155,7 @@ The shipped URL loader supports both same-origin and cross-origin recording URLs
 
 - Same-origin files are fetched directly.
 - Cross-origin URLs try `/api/proxy?url=...` first and fall back to direct fetch if the proxy is missing.
-- When the response body is streamable, the loader decodes progressively and uses `extendRecording` for later prefixes.
+- When the response body is streamable, the loader sniffs raw SCR3 bytes vs base64 text, decodes progressively, and uses `extendRecording` for later prefixes.
 
 ## Where To Look Next
 

@@ -33,8 +33,8 @@ Both are exposed from the actions hook (`useNextEditorActions`) and used by the 
 ## Why it works
 
 1. **Append-only, prefix-decodable container.** `SCR3` is `header → segments… → footer`. Each
-   segment (a keyframe-bounded batch of frames, an event batch, or an audio chunk) is
-   independently deflate-compressed.
+   segment is time-clustered and track-aware: frame/event batches stay deflate-compressed while
+   audio and camera fragments are stored as raw media bytes.
    [`decodeRecordingPrefix`](../src/storage/streamingRecordingCodec.ts) tolerates a **missing
    footer** (still-writing stream) and a **truncated trailing segment** (mid-download), decoding
    every complete segment seen so far (`walkSegments` / `findSegmentsEnd`).
@@ -59,79 +59,49 @@ Both are exposed from the actions hook (`useNextEditorActions`) and used by the 
 
 ## Byte layout: file vs. live (read this first)
 
-How the bytes are ordered determines what a prefix contains.
+Both finalized exports and live broadcasts now use the same stream-oriented layout idea:
 
 - **Finalized export / saved file**
-  ([`encodeRecordingToStream`](../src/storage/streamingRecordingCodec.ts)):
-  `header → all frame segments → event segments (slide, preview, cursor, …) → audio last`.
-  A progressive download therefore yields **all visual frames early**, then cursor/preview
-  events, then audio. Great for "watch the typing immediately while audio finishes loading."
+  ([`encodeRecordingToStream`](../src/storage/streamingRecordingCodec.ts)) writes `SCR3` in
+  **time-cluster order**: each cluster can contain frame batches, event batches, audio
+  fragments, and camera fragments for that slice of the timeline.
 
-- **Live broadcast** ([`RecordingStreamBridge`](../src/storage/recordingStreamSink.ts)):
-  segments are written **in capture-time order** (frames and events interleaved, audio chunks as
-  they arrive). A prefix is a clean "everything up to time _T_" slice — ideal for
-  play-as-it-arrives.
+- **Live broadcast** ([`RecordingStreamBridge`](../src/storage/recordingStreamSink.ts)) writes
+  the same segment types as capture progresses, so a prefix is still a clean "everything up to
+  time _T_" slice.
 
 Both are valid `SCR3` and both decode with the same `decodeRecordingPrefix`.
 
 ---
 
-## Scenario A — Play a finalized `.ne` while it downloads (what `introduction.ne` does)
+### Scenario A — Play a finalized `.ne` while it downloads (what `introduction.ne` does)
 
 Stream the bytes with `fetch`, decode the accumulated prefix every so often, and feed the player
-`loadRecording` (first) then `extendRecording` (each larger prefix). This is exactly the shipped
-[useUrlLoader.ts](../src/hooks/useUrlLoader.ts) `streamRecordingFromResponse`; the condensed
-shape:
+`loadRecording` (first) then `extendRecording` (each larger prefix). The shipped
+[useUrlLoader.ts](../src/hooks/useUrlLoader.ts) now auto-detects **raw SCR3 bytes vs base64 text**
+before choosing the decode path.
 
 ```ts
-import { decodeBase64ToRecordings } from "../src/storage/recordingCodecClient"; // worker-backed
+import {
+  decodeBase64ToRecordings,
+  decompressBinaryToRecordings,
+} from "../src/storage/recordingCodecClient";
 
-async function streamPlay(
-  url: string,
-  loadRecording: (r: Recording) => void,
-  extendRecording: (r: Recording) => void,
-  { intervalBytes = 512 * 1024 } = {},
-) {
-  const res = await fetch(url);
-  const reader = res.body!.getReader();
-  const textDecoder = new TextDecoder();
-  let base64 = "";
-  let lastDecoded = 0;
-  let loadedOnce = false;
+const SCR3_MAGIC = new Uint8Array([0x53, 0x43, 0x52, 0x33]);
 
-  const apply = async (final: boolean) => {
-    const s = base64.replace(/\s/g, "");
-    // base64 decodes in 4-char groups; drop a partial trailing group until the end.
-    const aligned = final ? s : s.slice(0, s.length - (s.length % 4));
-    if (!aligned) return;
-    let recording: Recording | undefined;
-    try {
-      [recording] = await decodeBase64ToRecordings(aligned);
-    } catch {
-      return; // header not complete yet — wait for more bytes
-    }
-    if (!recording) return;
-    if (!loadedOnce) {
-      loadRecording(recording); // first prefix → set up the timeline
-      loadedOnce = true;
-    } else {
-      extendRecording(recording); // later prefixes → extend in place
-    }
-  };
+function isScr3(bytes: Uint8Array) {
+  return bytes.length >= 4 && SCR3_MAGIC.every((byte, index) => bytes[index] === byte);
+}
 
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    base64 += textDecoder.decode(value, { stream: true });
-    if (base64.length - lastDecoded >= intervalBytes) {
-      lastDecoded = base64.length;
-      await apply(false);
-    }
-  }
-  base64 += textDecoder.decode();
-  await apply(true); // final, complete decode (footer + audio)
+async function decodePrefix(prefix: Uint8Array | string) {
+  return typeof prefix === "string"
+    ? decodeBase64ToRecordings(prefix)
+    : decompressBinaryToRecordings(prefix);
 }
 ```
+
+The rest of the flow stays the same: decode a growing prefix, call `loadRecording` for the first
+playable result, then `extendRecording` for every larger prefix.
 
 ### Wiring into React
 
@@ -216,27 +186,22 @@ effective duration in your UI.
 
 ---
 
-## Audio behavior (important)
+## Audio and camera behavior (important)
 
-- **Visual playback streams immediately.** Frames, cursor, preview DOM patches, slides, and
-  workspace state all replay from a prefix with no waiting.
-- **Audio sits at the end of a finalized file**, so the picture plays while audio finishes
-  downloading. When the audio bytes finally arrive, `extendRecording` swaps in the recording
-  **with** its audio blob. If playback is already in `playing`, the machine now spawns,
-  synchronizes, and starts `audioPlayer` immediately; otherwise the usual `playing` entry path
-  spawns it lazily the next time playback starts. So both flows work: press play early and let
-  audio join later, or wait until the download finishes and press play once.
-- **Microphone audio is WebM/Opus**, only fully decodable once its byte sequence is complete, so
-  mid-stream scrubbing of a partial WebM is not supported by the browser. Audio that arrives
-  while already actively playing can begin once the full audio blob has arrived in a later
-  prefix.
-- **Selected-file audio** (an `.mp3`/`.m4a` the user picked) is one chunk, also near the end —
-  same "available once received" behavior.
-- The **saved recording and local playback are unaffected**: they always use the finalized audio
-  blob. The streamed audio chunks exist purely to carry audio to a live viewer.
-
-If you need audio that starts before the visuals finish, fetch/seed the audio source separately
-(its own URL) and let the editor play frames from the streamed prefix in parallel.
+- **Visual playback still streams immediately.** Frames, cursor, preview DOM patches, slides, and
+  workspace/runtime state replay from any decodable prefix.
+- **Audio now rides the same clustered stream model.** Later prefixes extend the recording's
+  audio coverage and rebuild a larger contiguous blob snapshot. The `audioPlaybackActor` keeps
+  using `HTMLAudioElement`, but in stream mode it can reattach that growing blob, seek back to the
+  current editor time, and continue playback without resetting the lesson timeline.
+- **Microphone audio is still browser-decoded media.** For WebM/Opus specifically, a prefix is
+  only useful once the bytes up to the current playback point are decodable as one contiguous
+  region, so stream mode improves availability but does not magically make arbitrary partial WebM
+  seeks free.
+- **Selected-file audio** remains a valid track source and follows the same playback surface.
+- **Camera follows the same progressive pattern through `CameraOverlay`.** Prefix decode rebuilds a
+  larger `cameraBlob`, and the overlay swaps to the new object URL while still deriving video time
+  from `timeline.currentTime - cameraStartOffsetMs`.
 
 ---
 
@@ -266,9 +231,9 @@ If you need audio that starts before the visuals finish, fetch/seed the audio so
   `timeline.currentTime` is untouched.
 - The replay actions (`applyFrameAtTime`, `applyPreviewEventsAtTime`, …) then run so any
   newly-available frames/events at the current time are applied immediately.
-- If `EXTEND_RECORDING` is the first moment the prefix includes `audioBlob`, the machine spawns
-  `audioPlayer` at that transition. When the current substate is `playing`, it immediately seeks,
-  reapplies rate/volume, and sends `PLAY`; otherwise the next `playing` entry will do that.
+- `EXTEND_RECORDING` also updates media playback. The machine spawns `audioPlayer` when the first
+  usable audio prefix appears, and later `EXTEND_RECORDING` events append larger blob snapshots to
+  the same actor while preserving time/rate/volume.
 - Later playback control sends (`SYNC`, `SEEK`, `SET_SPEED`, `SET_VOLUME`, `PAUSE`) are guarded by
   `playbackAudioSpawned`, not just `recording.audioBlob`, so a partially-downloaded recording can
   play safely before the audio actor exists.
