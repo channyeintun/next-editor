@@ -16,6 +16,7 @@ import {
   type IframeConsoleMessagePayload,
 } from "../../utils/iframeConsoleBridge";
 import {
+  createPatchReplaySeedFromHtml,
   createReplayableRuntimePreviewFromHtml,
   type PreviewScrollPosition,
   RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
@@ -209,7 +210,7 @@ function createValidatedInitialDocument(
     return null;
   }
 
-  const html = createReplayableRuntimePreviewFromHtml(payload.html, effectiveRuntimePreviewUrl);
+  const html = createPatchReplaySeedFromHtml(payload.html, effectiveRuntimePreviewUrl);
   if (!html) {
     return null;
   }

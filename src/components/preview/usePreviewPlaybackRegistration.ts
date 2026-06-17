@@ -139,6 +139,10 @@ export function usePreviewPlaybackRegistration({
     lastAppliedBatchIndex: -1,
   });
   const patchReplayFailedRef = useRef(false);
+  // Deduplicates desync logging: a persistent desync should warn once, not once
+  // per timeline tick. Cleared whenever patch replay reaches a healthy state so
+  // a later, distinct desync warns again.
+  const patchReplayDesyncLoggedRef = useRef(false);
 
   useEffect(() => {
     if (hasPreviewPatchReplay) {
@@ -146,6 +150,7 @@ export function usePreviewPlaybackRegistration({
     }
 
     patchReplayFailedRef.current = false;
+    patchReplayDesyncLoggedRef.current = false;
     patchReplayCursorRef.current = {
       recordingId: null,
       documentId: null,
@@ -167,6 +172,8 @@ export function usePreviewPlaybackRegistration({
 
       lastContentRef.current = initialDocument.html;
       patchReplayFailedRef.current = false;
+      // A fresh seed is a clean slate: re-enable one-shot desync logging.
+      patchReplayDesyncLoggedRef.current = false;
       patchReplayCursorRef.current = {
         recordingId: input.recordingId,
         documentId: initialDocument.documentId,
@@ -180,6 +187,9 @@ export function usePreviewPlaybackRegistration({
       const cursor = patchReplayCursorRef.current;
       const needsSeed =
         input.isSeeking ||
+        // After a desync, re-seed from the nearest initial document and replay
+        // forward instead of looping on the same failing batch forever.
+        patchReplayFailedRef.current ||
         cursor.recordingId !== input.recordingId ||
         cursor.documentId === null ||
         input.lastAppliedPatchBatchIndex < cursor.lastAppliedBatchIndex;
@@ -237,11 +247,14 @@ export function usePreviewPlaybackRegistration({
         }
 
         if (patchBatch.baseRevision !== cursor.revision) {
-          console.warn("Preview patch replay revision mismatch", {
-            documentId: patchBatch.documentId,
-            expected: cursor.revision,
-            received: patchBatch.baseRevision,
-          });
+          if (!patchReplayDesyncLoggedRef.current) {
+            console.warn("Preview patch replay revision mismatch", {
+              documentId: patchBatch.documentId,
+              expected: cursor.revision,
+              received: patchBatch.baseRevision,
+            });
+            patchReplayDesyncLoggedRef.current = true;
+          }
           patchReplayFailedRef.current = true;
           return cursor.lastAppliedBatchIndex;
         }
@@ -249,11 +262,31 @@ export function usePreviewPlaybackRegistration({
         const result = applyPreviewDomPatchBatchToIframe(iframe, patchBatch);
 
         if (!result.ok) {
-          console.warn("Preview patch replay failed", result);
+          // Only a fatal condition (iframe document missing / cross-origin)
+          // halts replay. Re-seed next tick and let snapshot content take over.
+          if (!patchReplayDesyncLoggedRef.current) {
+            console.warn(
+              `Preview patch replay halted: ${result.error ?? "unknown"} ` +
+                `(batch=${index}, documentId=${patchBatch.documentId})`,
+            );
+            patchReplayDesyncLoggedRef.current = true;
+          }
           patchReplayFailedRef.current = true;
           return cursor.lastAppliedBatchIndex;
         }
 
+        if (result.failedOps > 0 && !patchReplayDesyncLoggedRef.current) {
+          const failedOp = patchBatch.ops[result.firstFailedOpIndex ?? -1]?.op ?? "?";
+          console.warn(
+            `Preview patch replay skipped ${result.failedOps} op(s): ${result.error ?? "unknown"} ` +
+              `(op=${failedOp}, batch=${index}, opIndex=${result.firstFailedOpIndex}, ` +
+              `documentId=${patchBatch.documentId})`,
+          );
+          patchReplayDesyncLoggedRef.current = true;
+        }
+
+        // Advance even when some ops were skipped: a single unresolved node must
+        // not freeze the whole preview.
         cursor = {
           recordingId: input.recordingId,
           documentId: patchBatch.documentId,

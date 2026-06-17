@@ -1,4 +1,3 @@
-import morphdom from "morphdom";
 import type {
   PreviewDomPatchBatch,
   PreviewDomPatchOp,
@@ -20,6 +19,11 @@ const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
 const PREVIEW_REPLAY_NODE_ID_ATTRIBUTE = "data-next-editor-preview-node-id";
+// Unknown script type the browser refuses to execute. Used to neutralize
+// scripts both when deserializing inserted nodes and when building the patch
+// replay seed, so script elements stay in the tree (preserving child indices
+// and marker ids) without ever running.
+const INERT_SCRIPT_TYPE = "application/x-next-editor-inert-script";
 
 // Nodes resolved inside the preview iframe belong to the iframe's realm, so
 // `instanceof Element` (this module's realm) is false for them. Compare the
@@ -29,9 +33,15 @@ function isElement(node: Node | null | undefined): node is Element {
 }
 
 export interface PreviewDomPatchApplyResult {
+  // `false` only when the iframe document itself is unusable (missing or
+  // cross-origin). Individual op failures do NOT make a batch fail: they are
+  // counted in `failedOps` and skipped, so one unresolved node can never freeze
+  // playback. The plan's "fail soft, do not break playback" contract.
   ok: boolean;
   appliedOps: number;
+  failedOps: number;
   error?: string;
+  firstFailedOpIndex?: number;
 }
 
 export function getElementByXPath(doc: Document, xpath: string): Element | null {
@@ -173,12 +183,12 @@ function replaceDocumentElement(currentDocument: Document, nextDocument: Documen
 }
 
 function findNodeByPreviewRef(doc: Document, ref: PreviewNodeRef): Node | null {
+  // Element refs carry a stable marker id. Resolve strictly by it: a miss means
+  // the replay DOM has drifted from the recording, which must surface as a
+  // desync (handled by the caller's recovery) rather than silently falling back
+  // to a `documentElement` path that encodes the recording-time structure.
   if (ref.id) {
-    const markerElement = doc.querySelector(`[${PREVIEW_REPLAY_NODE_ID_ATTRIBUTE}="${ref.id}"]`);
-
-    if (markerElement) {
-      return markerElement;
-    }
+    return doc.querySelector(`[${PREVIEW_REPLAY_NODE_ID_ATTRIBUTE}="${ref.id}"]`);
   }
 
   let current: Node | null = doc.documentElement;
@@ -224,7 +234,7 @@ function deserializePreviewNode(
     : ownerDocument.createElement(tagName);
 
   if (tagName.toLowerCase() === "script") {
-    element.setAttribute("type", "application/x-next-editor-inert-script");
+    element.setAttribute("type", INERT_SCRIPT_TYPE);
   }
 
   for (const [name, value] of serializedNode.attributes ?? []) {
@@ -267,23 +277,6 @@ function setElementProperty(
   }
 
   return false;
-}
-
-function createMorphdomOptions(mode: "children" | "node") {
-  return {
-    childrenOnly: mode === "children",
-    getNodeKey(node: Node) {
-      if (!isElement(node)) {
-        return undefined;
-      }
-
-      return node.getAttribute(PREVIEW_REPLAY_NODE_ID_ATTRIBUTE) || node.id || undefined;
-    },
-    onBeforeElUpdated(fromEl: HTMLElement, toEl: HTMLElement) {
-      syncElementState(fromEl, toEl);
-      return true;
-    },
-  };
 }
 
 function createSubtreeReplacementNode(
@@ -378,7 +371,16 @@ function applyPreviewDomPatchOp(
         return { ok: false, error: "Invalid subtree replacement" };
       }
 
-      morphdom(target, replacementNode, createMorphdomOptions(op.mode));
+      // Reconcile in place with the realm-safe (importNode-based) patcher rather
+      // than morphdom: the replacement node and target both live in the iframe
+      // realm, but morphdom's internal helpers reach for the parent-realm
+      // `document`, which corrupts replay. The replacement HTML carries marker
+      // ids, so reconciled children stay resolvable by later ops.
+      if (op.mode === "children") {
+        patchChildNodes(target, replacementNode, doc);
+      } else {
+        patchNode(target, replacementNode, doc);
+      }
       return { ok: true };
     }
     case "set_property":
@@ -401,33 +403,54 @@ export function applyPreviewDomPatchBatchToIframe(
   iframe: HTMLIFrameElement,
   batch: PreviewDomPatchBatch,
 ): PreviewDomPatchApplyResult {
+  let iframeDocument: Document | null | undefined;
   try {
-    const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
+    iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
+  } catch {
+    iframeDocument = null;
+  }
 
-    if (!iframeDocument?.documentElement) {
-      return { ok: false, appliedOps: 0, error: "Missing iframe document" };
-    }
-
-    for (let index = 0; index < batch.ops.length; index++) {
-      const result = applyPreviewDomPatchOp(iframeDocument, batch.ops[index]);
-
-      if (!result.ok) {
-        return {
-          ok: false,
-          appliedOps: index,
-          error: result.error,
-        };
-      }
-    }
-
-    return { ok: true, appliedOps: batch.ops.length };
-  } catch (error) {
+  if (!iframeDocument?.documentElement) {
     return {
       ok: false,
       appliedOps: 0,
-      error: error instanceof Error ? error.message : "Unknown patch apply error",
+      failedOps: batch.ops.length,
+      error: "Missing iframe document",
     };
   }
+
+  let appliedOps = 0;
+  let failedOps = 0;
+  let firstError: string | undefined;
+  let firstFailedOpIndex: number | undefined;
+
+  // Apply every op best-effort. A single op that cannot resolve its node (or
+  // throws) is skipped rather than aborting the batch, so the rest of this and
+  // every later batch still apply and the preview keeps tracking.
+  for (let index = 0; index < batch.ops.length; index++) {
+    let result: { ok: boolean; error?: string };
+    try {
+      result = applyPreviewDomPatchOp(iframeDocument, batch.ops[index]);
+    } catch (error) {
+      result = {
+        ok: false,
+        error: error instanceof Error ? error.message : "Unknown patch apply error",
+      };
+    }
+
+    if (result.ok) {
+      appliedOps += 1;
+      continue;
+    }
+
+    failedOps += 1;
+    if (firstError === undefined) {
+      firstError = result.error;
+      firstFailedOpIndex = index;
+    }
+  }
+
+  return { ok: true, appliedOps, failedOps, error: firstError, firstFailedOpIndex };
 }
 
 export function patchIframeContentFromHtml(
@@ -481,6 +504,56 @@ export function createReplayableRuntimePreview(
       iframeDocument.documentElement.outerHTML,
       baseUrl,
     );
+  } catch {
+    return null;
+  }
+}
+
+// Prepares a recorded runtime seed for patch replay. Unlike
+// `createReplayableRuntimePreviewFromHtml` (used for full-snapshot replacement,
+// where dropping scripts is fine), this MUST preserve the exact node structure
+// the recorder measured its patch refs against: scripts are neutralized in
+// place instead of removed, and the resource `<base>` is added without shifting
+// any existing child index. Marker ids are preserved by `cloneNode`.
+export function createPatchReplaySeedFromHtml(htmlContent: string, baseUrl: string): string | null {
+  try {
+    const parser = new DOMParser();
+    const parsedDocument = parser.parseFromString(htmlContent, "text/html");
+
+    if (!parsedDocument?.documentElement) {
+      return null;
+    }
+
+    const html = parsedDocument.documentElement.cloneNode(true);
+
+    if (!(html instanceof HTMLElement)) {
+      return null;
+    }
+
+    // Keep every script element (so child indices and marker ids stay valid),
+    // but make it non-executable and prevent any network fetch.
+    html.querySelectorAll("script").forEach((script) => {
+      script.setAttribute("type", INERT_SCRIPT_TYPE);
+      script.removeAttribute("src");
+    });
+
+    const head = html.querySelector("head");
+
+    if (head) {
+      const existingBase = head.querySelector("base");
+
+      if (existingBase) {
+        // Update in place: same element, same index, no structural change.
+        existingBase.setAttribute("href", baseUrl);
+      } else {
+        // Append as the last head child so existing children keep indices.
+        const base = head.ownerDocument.createElement("base");
+        base.setAttribute("href", baseUrl);
+        head.append(base);
+      }
+    }
+
+    return `<!doctype html>\n${html.outerHTML}`;
   } catch {
     return null;
   }

@@ -413,6 +413,11 @@ export function createRuntimePatchRecorderScript(): string {
 
           const childMutationCount = record.addedNodes.length + record.removedNodes.length;
           if (childMutationCount > 20 && record.target instanceof Element) {
+            // Tag the whole subtree before snapshotting its HTML so the captured
+            // markup carries marker ids. Without this, replayed children have no
+            // marker, and a later op that references one (by an id assigned on
+            // the live node afterwards) cannot resolve it on replay.
+            tagElementTree(record.target);
             replaceSubtreeOps.push({
               op: 'replace_subtree',
               target: createNodeRef(record.target),

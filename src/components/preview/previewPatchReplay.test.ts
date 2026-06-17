@@ -5,6 +5,7 @@ import { createRuntimePatchRecorderScript } from "../../contexts/webContainerRun
 import {
   applyPreviewDomPatchBatchToIframe,
   applyPreviewInitialDocumentToIframe,
+  createPatchReplaySeedFromHtml,
   RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
   RUNTIME_PATCH_BATCH_MESSAGE_TYPE,
 } from "./previewIframeUtils";
@@ -20,7 +21,16 @@ import type {
 // engine. Kept local on purpose: the test fails loudly if either side renames it.
 const PREVIEW_REPLAY_NODE_ID_ATTRIBUTE = "data-next-editor-preview-node-id";
 
-const SEED_HTML = "<!DOCTYPE html><html><head><title>App</title></head><body></body></html>";
+// Base the production bridge injects into every seed for resource resolution.
+const REPLAY_BASE_URL = "https://preview.example/";
+
+// Mirrors a real node.js runtime page: an empty mount point plus a module
+// script in <body>. These are exactly the structures the production seed
+// transform must preserve (script kept + neutralized, base added without
+// shifting indices) so recorded refs still resolve on replay.
+const SEED_HTML =
+  "<!DOCTYPE html><html><head><title>App</title></head>" +
+  '<body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>';
 
 interface RecorderMessage {
   type: string;
@@ -56,11 +66,18 @@ function waitForLoad(targetWindow: DOMWindow): Promise<void> {
 }
 
 function normalizeHtml(html: string): string {
-  return html
-    .replaceAll(/\s+data-next-editor-preview-node-id="[^"]*"/g, "")
-    .replaceAll(/\s+type="application\/x-next-editor-inert-script"/g, "")
-    .replaceAll(/>\s+</g, "><")
-    .trim();
+  return (
+    html
+      .replaceAll(/\s+data-next-editor-preview-node-id="[^"]*"/g, "")
+      // Script execution attributes differ between the live (executable) DOM and
+      // the inert replay seed; the structure they live in is what matters here.
+      .replaceAll(/(<script\b[^>]*?)\s+type="[^"]*"/g, "$1")
+      .replaceAll(/(<script\b[^>]*?)\s+src="[^"]*"/g, "$1")
+      // The seed transform injects a resource <base> the live DOM never had.
+      .replaceAll(/<base\b[^>]*>/g, "")
+      .replaceAll(/>\s+</g, "><")
+      .trim()
+  );
 }
 
 // Drives the genuine production recorder over a realistic mutation sequence and
@@ -103,14 +120,19 @@ async function recordScenario(): Promise<RecordedScenario> {
   recorderDocument.body.before(recorderDocument.createTextNode("\n"));
   await flush();
 
-  // Step 2: build and mount a subtree (mirrors a framework's first render).
+  // Step 2: build and mount a subtree into the existing #root (mirrors a
+  // framework's first render after the module script in <body>).
+  const root = recorderDocument.getElementById("root");
+  if (!root) {
+    throw new Error("Scenario seed is missing #root");
+  }
   const main = recorderDocument.createElement("main");
   const heading = recorderDocument.createElement("h1");
   heading.textContent = "Trending 0";
   const paragraph = recorderDocument.createElement("p");
   paragraph.textContent = "count: 0";
   main.append(heading, paragraph);
-  recorderDocument.body.append(main);
+  root.append(main);
   await flush();
 
   // Step 3: deep text updates resolved through a parent anchor id.
@@ -132,6 +154,37 @@ async function recordScenario(): Promise<RecordedScenario> {
 
   // Step 6: remove an element.
   heading.remove();
+  await flush();
+
+  // Step 7: append a body-level node *after* the module script. Its recorded
+  // index only stays valid on replay if the seed keeps the script in place.
+  const footer = recorderDocument.createElement("footer");
+  footer.textContent = "Footer";
+  recorderDocument.body.append(footer);
+  await flush();
+
+  // Step 8: bulk-insert enough children in a single mutation (>20) to trip the
+  // recorder's `replace_subtree` coalescing, exercising the realm-safe subtree
+  // reconciliation on replay (the path that previously used cross-realm morphdom).
+  const list = recorderDocument.createElement("ul");
+  recorderDocument.body.append(list);
+  await flush();
+
+  const fragment = recorderDocument.createDocumentFragment();
+  for (let item = 0; item < 25; item++) {
+    const listItem = recorderDocument.createElement("li");
+    listItem.textContent = "item " + item;
+    fragment.append(listItem);
+  }
+  list.append(fragment);
+  await flush();
+
+  // Step 9: mutate a child created by the bulk insert. Its ref resolves on
+  // replay only if the replace_subtree HTML captured marker ids for the subtree.
+  const firstItem = list.firstChild;
+  if (firstItem?.firstChild) {
+    firstItem.firstChild.nodeValue = "item updated";
+  }
   await flush();
 
   const liveHtml = recorderDocument.documentElement.outerHTML;
@@ -160,6 +213,9 @@ describe("preview patch replay", () => {
     const scenario = await recordScenario();
 
     expect(scenario.batches.length).toBeGreaterThan(0);
+    // Guard that the bulk-insert step actually produced a replace_subtree op, so
+    // this test genuinely covers the realm-safe subtree reconciliation path.
+    expect(scenario.ops.some((op) => op.op === "replace_subtree")).toBe(true);
 
     const iframe = document.createElement("iframe");
     document.body.append(iframe);
@@ -169,7 +225,15 @@ describe("preview patch replay", () => {
       throw new Error("iframe has no content document");
     }
 
-    expect(applyPreviewInitialDocumentToIframe(iframe, scenario.seed)).toBe(true);
+    // Replay the seed exactly as production does: through the bridge's
+    // structure-preserving transform, not the raw recorder output.
+    const seedHtml = createPatchReplaySeedFromHtml(scenario.seed.html, REPLAY_BASE_URL);
+    if (!seedHtml) {
+      throw new Error("Seed transform returned null");
+    }
+    const transformedSeed = { ...scenario.seed, html: seedHtml };
+
+    expect(applyPreviewInitialDocumentToIframe(iframe, transformedSeed)).toBe(true);
 
     for (const batch of scenario.batches) {
       const result = applyPreviewDomPatchBatchToIframe(iframe, batch);
