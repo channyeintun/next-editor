@@ -143,6 +143,15 @@ export function usePreviewPlaybackRegistration({
   // per timeline tick. Cleared whenever patch replay reaches a healthy state so
   // a later, distinct desync warns again.
   const patchReplayDesyncLoggedRef = useRef(false);
+  // O(1) marker-id -> element cache for the active replay document, passed into
+  // the apply engine so ref lookups don't re-scan the DOM each op. Cleared on
+  // every (re)seed because it replaces the document.
+  const patchReplayNodeIndexRef = useRef<Map<string, Element>>(new Map());
+  // One-shot drift recovery: when best-effort apply skips ops, re-seed and
+  // fast-forward once to restore the canonical DOM for the current time.
+  // `resyncAttempted` bounds it so a deterministic skip can't reseed every tick.
+  const patchReplayDriftRef = useRef(false);
+  const patchReplayResyncAttemptedRef = useRef(false);
 
   useEffect(() => {
     if (hasPreviewPatchReplay) {
@@ -151,6 +160,9 @@ export function usePreviewPlaybackRegistration({
 
     patchReplayFailedRef.current = false;
     patchReplayDesyncLoggedRef.current = false;
+    patchReplayDriftRef.current = false;
+    patchReplayResyncAttemptedRef.current = false;
+    patchReplayNodeIndexRef.current.clear();
     patchReplayCursorRef.current = {
       recordingId: null,
       documentId: null,
@@ -172,8 +184,10 @@ export function usePreviewPlaybackRegistration({
 
       lastContentRef.current = initialDocument.html;
       patchReplayFailedRef.current = false;
-      // A fresh seed is a clean slate: re-enable one-shot desync logging.
+      // A fresh seed is a clean slate: re-enable one-shot desync logging and
+      // drop the stale node-id cache (the document was just replaced).
       patchReplayDesyncLoggedRef.current = false;
+      patchReplayNodeIndexRef.current.clear();
       patchReplayCursorRef.current = {
         recordingId: input.recordingId,
         documentId: initialDocument.documentId,
@@ -184,18 +198,34 @@ export function usePreviewPlaybackRegistration({
     };
 
     const ensureReplaySeed = (iframe: HTMLIFrameElement, input: PreviewPatchReplayInput) => {
+      // A seek starts a fresh drift episode: allow a recovery attempt again.
+      if (input.isSeeking) {
+        patchReplayResyncAttemptedRef.current = false;
+      }
+
+      const driftResync = patchReplayDriftRef.current;
       const cursor = patchReplayCursorRef.current;
       const needsSeed =
         input.isSeeking ||
         // After a desync, re-seed from the nearest initial document and replay
         // forward instead of looping on the same failing batch forever.
         patchReplayFailedRef.current ||
+        // Best-effort apply skipped ops last pass: re-seed + fast-forward once to
+        // restore the canonical DOM (bounded by `resyncAttempted`).
+        driftResync ||
         cursor.recordingId !== input.recordingId ||
         cursor.documentId === null ||
         input.lastAppliedPatchBatchIndex < cursor.lastAppliedBatchIndex;
 
       if (!needsSeed) {
         return true;
+      }
+
+      if (driftResync) {
+        // Consume the one-shot so a still-failing fast-forward can't reseed every
+        // tick; it re-arms only after a fully clean pass (or a seek).
+        patchReplayDriftRef.current = false;
+        patchReplayResyncAttemptedRef.current = true;
       }
 
       const initialDocument = getLatestInitialDocument(input.initialDocuments, input.currentTime);
@@ -219,6 +249,7 @@ export function usePreviewPlaybackRegistration({
       }
 
       let cursor = patchReplayCursorRef.current;
+      let passSkippedOps = false;
 
       for (
         let index = cursor.lastAppliedBatchIndex + 1;
@@ -259,7 +290,11 @@ export function usePreviewPlaybackRegistration({
           return cursor.lastAppliedBatchIndex;
         }
 
-        const result = applyPreviewDomPatchBatchToIframe(iframe, patchBatch);
+        const result = applyPreviewDomPatchBatchToIframe(
+          iframe,
+          patchBatch,
+          patchReplayNodeIndexRef.current,
+        );
 
         if (!result.ok) {
           // Only a fatal condition (iframe document missing / cross-origin)
@@ -275,14 +310,18 @@ export function usePreviewPlaybackRegistration({
           return cursor.lastAppliedBatchIndex;
         }
 
-        if (result.failedOps > 0 && !patchReplayDesyncLoggedRef.current) {
-          const failedOp = patchBatch.ops[result.firstFailedOpIndex ?? -1]?.op ?? "?";
-          console.warn(
-            `Preview patch replay skipped ${result.failedOps} op(s): ${result.error ?? "unknown"} ` +
-              `(op=${failedOp}, batch=${index}, opIndex=${result.firstFailedOpIndex}, ` +
-              `documentId=${patchBatch.documentId})`,
-          );
-          patchReplayDesyncLoggedRef.current = true;
+        if (result.failedOps > 0) {
+          passSkippedOps = true;
+
+          if (!patchReplayDesyncLoggedRef.current) {
+            const failedOp = patchBatch.ops[result.firstFailedOpIndex ?? -1]?.op ?? "?";
+            console.warn(
+              `Preview patch replay skipped ${result.failedOps} op(s): ${result.error ?? "unknown"} ` +
+                `(op=${failedOp}, batch=${index}, opIndex=${result.firstFailedOpIndex}, ` +
+                `documentId=${patchBatch.documentId})`,
+            );
+            patchReplayDesyncLoggedRef.current = true;
+          }
         }
 
         // Advance even when some ops were skipped: a single unresolved node must
@@ -294,6 +333,19 @@ export function usePreviewPlaybackRegistration({
           lastAppliedBatchIndex: index,
         };
         patchReplayCursorRef.current = cursor;
+      }
+
+      if (passSkippedOps) {
+        // Arm a single re-seed + fast-forward next tick to restore the canonical
+        // DOM. Skipped only if we already tried this episode (avoids a per-tick
+        // reseed loop on a deterministic skip).
+        if (!patchReplayResyncAttemptedRef.current) {
+          patchReplayDriftRef.current = true;
+        }
+      } else {
+        // Clean pass: healthy again, so re-arm drift recovery for the future.
+        patchReplayDriftRef.current = false;
+        patchReplayResyncAttemptedRef.current = false;
       }
 
       patchReplayFailedRef.current = false;

@@ -782,9 +782,13 @@ const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(({
           leave: onIframeMouseLeave,
         });
       } catch (err) {
-        // Likely cross-origin
+        // Cross-origin iframes can't be accessed directly; this is expected.
+        // They are tracked instead via postMessage (see handleIframeInteractionMessage),
+        // so swallow the SecurityError silently and only surface unexpected errors.
         directlyTrackedIframes.delete(iframe);
-        console.error("Cannot track mouse in iframe (cross-origin):", err);
+        if (!(err instanceof DOMException && err.name === "SecurityError")) {
+          console.error("Cannot track mouse in iframe:", err);
+        }
       }
     };
 

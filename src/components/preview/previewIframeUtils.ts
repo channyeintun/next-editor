@@ -215,19 +215,62 @@ function replaceDocumentElement(currentDocument: Document, nextDocument: Documen
   return true;
 }
 
-function findNodeByPreviewRef(doc: Document, ref: PreviewNodeRef): Node | null {
+// Per-document cache of marker id -> element, so repeated ref lookups across a
+// long replay are O(1) instead of an O(n) `querySelector` scan each time. Marker
+// ids are monotonic and never reused within a document session, so a cached node
+// is always correct as long as it is still connected and still carries the id.
+export type PreviewReplayNodeIndex = Map<string, Element>;
+
+function escapeMarkerId(id: string): string {
+  return typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(id) : id;
+}
+
+function resolveMarkerElement(
+  doc: Document,
+  id: string,
+  nodeIndex?: PreviewReplayNodeIndex,
+): Element | null {
+  const cached = nodeIndex?.get(id);
+  if (
+    cached &&
+    cached.isConnected &&
+    cached.getAttribute(PREVIEW_REPLAY_NODE_ID_ATTRIBUTE) === id
+  ) {
+    return cached;
+  }
+
+  const element = doc.querySelector(
+    `[${PREVIEW_REPLAY_NODE_ID_ATTRIBUTE}="${escapeMarkerId(id)}"]`,
+  );
+
+  if (nodeIndex) {
+    if (element) {
+      nodeIndex.set(id, element);
+    } else {
+      nodeIndex.delete(id);
+    }
+  }
+
+  return element;
+}
+
+function findNodeByPreviewRef(
+  doc: Document,
+  ref: PreviewNodeRef,
+  nodeIndex?: PreviewReplayNodeIndex,
+): Node | null {
   // Element refs carry a stable marker id. Resolve strictly by it: a miss means
   // the replay DOM has drifted from the recording, which must surface as a
   // desync (handled by the caller's recovery) rather than silently falling back
   // to a `documentElement` path that encodes the recording-time structure.
   if (ref.id) {
-    return doc.querySelector(`[${PREVIEW_REPLAY_NODE_ID_ATTRIBUTE}="${ref.id}"]`);
+    return resolveMarkerElement(doc, ref.id, nodeIndex);
   }
 
   let current: Node | null = doc.documentElement;
 
   if (ref.anchorId) {
-    current = doc.querySelector(`[${PREVIEW_REPLAY_NODE_ID_ATTRIBUTE}="${ref.anchorId}"]`);
+    current = resolveMarkerElement(doc, ref.anchorId, nodeIndex);
 
     if (!current) {
       return null;
@@ -343,9 +386,10 @@ function createSubtreeReplacementNode(
 function applyPreviewDomPatchOp(
   doc: Document,
   op: PreviewDomPatchOp,
+  nodeIndex?: PreviewReplayNodeIndex,
 ): { ok: boolean; error?: string } {
   if (op.op === "insert_node") {
-    const parent = findNodeByPreviewRef(doc, op.parent);
+    const parent = findNodeByPreviewRef(doc, op.parent, nodeIndex);
 
     if (!parent) {
       return { ok: false, error: "Missing insert parent" };
@@ -360,7 +404,7 @@ function applyPreviewDomPatchOp(
     return { ok: true };
   }
 
-  const target = findNodeByPreviewRef(doc, op.target);
+  const target = findNodeByPreviewRef(doc, op.target, nodeIndex);
 
   if (!target) {
     return { ok: false, error: "Missing target node" };
@@ -397,7 +441,7 @@ function applyPreviewDomPatchOp(
       target.parentNode.removeChild(target);
       return { ok: true };
     case "move_node": {
-      const parent = findNodeByPreviewRef(doc, op.parent);
+      const parent = findNodeByPreviewRef(doc, op.parent, nodeIndex);
 
       if (!parent) {
         return { ok: false, error: "Missing move parent" };
@@ -445,6 +489,7 @@ export function applyPreviewInitialDocumentToIframe(
 export function applyPreviewDomPatchBatchToIframe(
   iframe: HTMLIFrameElement,
   batch: PreviewDomPatchBatch,
+  nodeIndex?: PreviewReplayNodeIndex,
 ): PreviewDomPatchApplyResult {
   let iframeDocument: Document | null | undefined;
   try {
@@ -473,7 +518,7 @@ export function applyPreviewDomPatchBatchToIframe(
   for (let index = 0; index < batch.ops.length; index++) {
     let result: { ok: boolean; error?: string };
     try {
-      result = applyPreviewDomPatchOp(iframeDocument, batch.ops[index]);
+      result = applyPreviewDomPatchOp(iframeDocument, batch.ops[index], nodeIndex);
     } catch (error) {
       result = {
         ok: false,

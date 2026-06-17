@@ -461,4 +461,66 @@ describe("preview patch apply", () => {
 
     iframe.remove();
   });
+
+  it("reuses a node-index cache across batches and drops stale entries", () => {
+    const iframe = seedIframe(
+      `<div ${PREVIEW_REPLAY_NODE_ID_ATTRIBUTE}="a">A</div>` +
+        `<div ${PREVIEW_REPLAY_NODE_ID_ATTRIBUTE}="b">B</div>`,
+    );
+    const doc = getDoc(iframe);
+    const nodeIndex = new Map<string, Element>();
+
+    // Batch 1 populates the cache for "a".
+    applyPreviewDomPatchBatchToIframe(
+      iframe,
+      makeBatch([
+        {
+          op: "set_attribute",
+          target: { id: "a", path: [] },
+          name: "data-v",
+          value: "1",
+          namespaceURI: null,
+        },
+      ]),
+      nodeIndex,
+    );
+    expect(nodeIndex.get("a")).toBe(doc.querySelector(markerSelector("a")));
+
+    // Batch 2 removes "a"; the cache still holds a now-detached entry.
+    applyPreviewDomPatchBatchToIframe(
+      iframe,
+      makeBatch([{ op: "remove_node", target: { id: "a", path: [] } }]),
+      nodeIndex,
+    );
+
+    // Batch 3: the stale "a" entry self-heals (resolves to null, entry dropped),
+    // while "b" still resolves through the cache.
+    const result = applyPreviewDomPatchBatchToIframe(
+      iframe,
+      makeBatch([
+        {
+          op: "set_attribute",
+          target: { id: "a", path: [] },
+          name: "data-v",
+          value: "2",
+          namespaceURI: null,
+        },
+        {
+          op: "set_attribute",
+          target: { id: "b", path: [] },
+          name: "data-v",
+          value: "3",
+          namespaceURI: null,
+        },
+      ]),
+      nodeIndex,
+    );
+
+    expect(result.appliedOps).toBe(1);
+    expect(result.failedOps).toBe(1);
+    expect(nodeIndex.has("a")).toBe(false);
+    expect(doc.querySelector(markerSelector("b"))?.getAttribute("data-v")).toBe("3");
+
+    iframe.remove();
+  });
 });
