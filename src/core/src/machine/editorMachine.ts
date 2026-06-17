@@ -488,6 +488,11 @@ const getPlaybackAudioState = (recording: Recording | null): PlaybackAudioState 
     (recording.mediaFragments?.some((fragment) => fragment.trackId === "audio") ? "audio" : null);
   const startOffsetMs = recording.audioStartOffsetMs ?? 0;
   const streamFinalized = recording.streamFinalized ?? true;
+  const audioTrack = recording.tracks?.find((track) => track.id === audioTrackId);
+  const audioTrackEndTimeMs =
+    audioTrack && typeof audioTrack.durationMs === "number"
+      ? (audioTrack.startOffsetMs ?? startOffsetMs) + audioTrack.durationMs
+      : recording.duration;
 
   if (streamFinalized || !audioTrackId || !recording.mediaFragments?.length) {
     return {
@@ -503,7 +508,14 @@ const getPlaybackAudioState = (recording: Recording | null): PlaybackAudioState 
     if (fragment.trackId !== audioTrackId) {
       return latest;
     }
-    return Math.max(latest, fragment.endTimeMs);
+    const endTimeMs =
+      fragment.endTimeMs > fragment.startTimeMs
+        ? fragment.endTimeMs
+        : recording.audioSource === "external" && (fragment.byteLength ?? 0) > 0
+          ? Math.max(fragment.startTimeMs, audioTrackEndTimeMs, recording.duration)
+          : fragment.endTimeMs;
+
+    return Math.max(latest, endTimeMs);
   }, -1);
 
   if (latestAudioEndTime < 0) {
@@ -2672,7 +2684,7 @@ export const editorMachine = setup({
                   },
                 });
                 enqueue.assign({ playbackAudioSpawned: true });
-              } else if (audioState.streamMode) {
+              } else {
                 enqueue.sendTo("audioPlayer", {
                   type: "APPEND_FRAGMENT",
                   blob: audioState.blob,
@@ -2838,7 +2850,7 @@ export const editorMachine = setup({
                   },
                 });
                 enqueue.assign({ playbackAudioSpawned: true });
-              } else if (shouldControlPlaybackAudio && audioState?.streamMode) {
+              } else if (shouldControlPlaybackAudio && audioState) {
                 enqueue.sendTo("audioPlayer", {
                   type: "APPEND_FRAGMENT",
                   blob: audioState.blob,
