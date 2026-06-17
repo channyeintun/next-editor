@@ -32,6 +32,39 @@ function isElement(node: Node | null | undefined): node is Element {
   return node?.nodeType === ELEMENT_NODE;
 }
 
+// Attributes that carry URLs we must sanitize for `javascript:` payloads.
+const REPLAY_URL_ATTRIBUTE_NAMES = new Set(["href", "xlink:href", "src", "action", "formaction"]);
+
+// Replay runs in a same-origin iframe with `allow-scripts`, so recorded markup
+// must not carry executable hooks. `<script>` is already inert via type, but
+// inline event handlers (onclick/onerror/onload/...) and `javascript:` URLs
+// would still run on load or interaction. Strip them in place — replay is
+// visual-only, so neutralizing them changes nothing the viewer should see.
+function neutralizeReplayElement(element: Element) {
+  for (const attribute of Array.from(element.attributes)) {
+    const name = attribute.name.toLowerCase();
+
+    if (name.startsWith("on")) {
+      element.removeAttribute(attribute.name);
+      continue;
+    }
+
+    if (REPLAY_URL_ATTRIBUTE_NAMES.has(name) && /^\s*javascript:/i.test(attribute.value)) {
+      element.removeAttribute(attribute.name);
+    }
+  }
+
+  if (element.tagName.toLowerCase() === "script") {
+    element.setAttribute("type", INERT_SCRIPT_TYPE);
+    element.removeAttribute("src");
+  }
+}
+
+function neutralizeReplaySubtree(root: Element) {
+  neutralizeReplayElement(root);
+  root.querySelectorAll("*").forEach((element) => neutralizeReplayElement(element));
+}
+
 export interface PreviewDomPatchApplyResult {
   // `false` only when the iframe document itself is unusable (missing or
   // cross-origin). Individual op failures do NOT make a batch fail: they are
@@ -292,13 +325,19 @@ function createSubtreeReplacementNode(
 
     const wrapper = target.cloneNode(false) as Element;
     wrapper.innerHTML = html;
+    neutralizeReplaySubtree(wrapper);
     return wrapper;
   }
 
   const template = ownerDocument.createElement("template");
   template.innerHTML = html.trim();
 
-  return template.content.firstChild;
+  const node = template.content.firstChild;
+  if (isElement(node)) {
+    neutralizeReplaySubtree(node);
+  }
+
+  return node;
 }
 
 function applyPreviewDomPatchOp(
@@ -313,7 +352,11 @@ function applyPreviewDomPatchOp(
     }
 
     const nextSibling = parent.childNodes[op.index] ?? null;
-    parent.insertBefore(deserializePreviewNode(op.node, doc), nextSibling);
+    const newNode = deserializePreviewNode(op.node, doc);
+    if (isElement(newNode)) {
+      neutralizeReplaySubtree(newNode);
+    }
+    parent.insertBefore(newNode, nextSibling);
     return { ok: true };
   }
 
@@ -530,12 +573,10 @@ export function createPatchReplaySeedFromHtml(htmlContent: string, baseUrl: stri
       return null;
     }
 
-    // Keep every script element (so child indices and marker ids stay valid),
-    // but make it non-executable and prevent any network fetch.
-    html.querySelectorAll("script").forEach((script) => {
-      script.setAttribute("type", INERT_SCRIPT_TYPE);
-      script.removeAttribute("src");
-    });
+    // Keep every element (so child indices and marker ids stay valid), but
+    // strip everything executable: inert scripts, inline handlers, javascript:
+    // URLs.
+    neutralizeReplaySubtree(html);
 
     const head = html.querySelector("head");
 
