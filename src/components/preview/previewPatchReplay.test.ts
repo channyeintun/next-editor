@@ -208,6 +208,142 @@ async function recordScenario(): Promise<RecordedScenario> {
   };
 }
 
+interface CustomScenario {
+  seed: PreviewInitialDocument;
+  batches: PreviewDomPatchBatch[];
+  liveHtml: string;
+}
+
+// Generalized recorder harness: seeds `seedHtml`, runs the production recorder,
+// then drives `mutate` against the live document, flushing one patch batch per
+// `flush()` the caller invokes. Mirrors `recordScenario` but lets each test pick
+// its own DOM mutations.
+async function recordCustomScenario(
+  seedHtml: string,
+  mutate: (doc: Document, flush: () => Promise<void>) => Promise<void>,
+): Promise<CustomScenario> {
+  const dom = new JSDOM(seedHtml, { runScripts: "outside-only" });
+  const recorderWindow = dom.window;
+  const recorderDocument = recorderWindow.document;
+
+  const messages: RecorderMessage[] = [];
+  recorderWindow.postMessage = ((message: RecorderMessage) => {
+    messages.push(message);
+  }) as unknown as typeof recorderWindow.postMessage;
+
+  const frameCallbacks: FrameRequestCallback[] = [];
+  recorderWindow.requestAnimationFrame = (callback: FrameRequestCallback): number => {
+    frameCallbacks.push(callback);
+    return frameCallbacks.length;
+  };
+  recorderWindow.cancelAnimationFrame = (): void => {};
+
+  const flush = async (): Promise<void> => {
+    await nextMacrotask();
+    const callbacks = frameCallbacks.splice(0, frameCallbacks.length);
+    for (const callback of callbacks) {
+      callback(0);
+    }
+  };
+
+  await waitForLoad(recorderWindow);
+  (recorderWindow as unknown as Evaluable).eval(createRuntimePatchRecorderScript());
+
+  await mutate(recorderDocument, flush);
+
+  const liveHtml = recorderDocument.documentElement.outerHTML;
+  const seed = messages.find((message) => message.type === RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE)
+    ?.payload as PreviewInitialDocument | undefined;
+
+  if (!seed) {
+    throw new Error("Recorder did not emit an initial document");
+  }
+
+  const batches = messages
+    .filter((message) => message.type === RUNTIME_PATCH_BATCH_MESSAGE_TYPE)
+    .map((message) => message.payload as PreviewDomPatchBatch);
+
+  return { seed, batches, liveHtml };
+}
+
+function replayCustomScenario(scenario: CustomScenario): {
+  html: string;
+  failedOps: number;
+  firstError?: string;
+} {
+  const iframe = document.createElement("iframe");
+  document.body.append(iframe);
+
+  const seedHtml = createPatchReplaySeedFromHtml(scenario.seed.html, REPLAY_BASE_URL);
+  if (!seedHtml) {
+    throw new Error("Seed transform returned null");
+  }
+
+  applyPreviewInitialDocumentToIframe(iframe, { ...scenario.seed, html: seedHtml });
+
+  let failedOps = 0;
+  let firstError: string | undefined;
+  for (const batch of scenario.batches) {
+    const result = applyPreviewDomPatchBatchToIframe(iframe, batch);
+    failedOps += result.failedOps;
+    if (firstError === undefined && result.error !== undefined) {
+      firstError = result.error;
+    }
+  }
+
+  const html = iframe.contentDocument?.documentElement.outerHTML ?? "";
+  iframe.remove();
+  return { html, failedOps, firstError };
+}
+
+describe("preview patch replay — non-element node removal", () => {
+  it("removes a seed text node and a seed comment node without drift", async () => {
+    const scenario = await recordCustomScenario(
+      "<!DOCTYPE html><html><head><title>App</title></head>" +
+        '<body><div id="root">keep<!--marker-->drop<span>x</span></div></body></html>',
+      async (doc, flush) => {
+        const root = doc.getElementById("root");
+        if (!root) {
+          throw new Error("missing #root");
+        }
+        // childNodes: [text("keep"), comment, text("drop"), span]
+        const comment = root.childNodes[1];
+        const dropText = root.childNodes[2];
+        root.removeChild(comment);
+        root.removeChild(dropText);
+        await flush();
+      },
+    );
+
+    const replay = replayCustomScenario(scenario);
+
+    expect(replay.failedOps).toBe(0);
+    expect(normalizeHtml(replay.html)).toBe(normalizeHtml(scenario.liveHtml));
+  });
+
+  it("removes whitespace text nodes between body-level elements", async () => {
+    const scenario = await recordCustomScenario(
+      "<!DOCTYPE html><html><head><title>App</title></head>" +
+        '<body>\n  <div id="root"></div>\n  <span id="tail">x</span>\n</body></html>',
+      async (doc, flush) => {
+        const body = doc.body;
+        // Remove the whitespace text node between #root and #tail.
+        const tail = doc.getElementById("tail");
+        const ws = tail?.previousSibling;
+        if (ws && ws.nodeType === doc.TEXT_NODE) {
+          body.removeChild(ws);
+        }
+        await flush();
+      },
+    );
+
+    const replay = replayCustomScenario(scenario);
+
+    expect(replay.failedOps).toBe(0);
+    expect(normalizeHtml(replay.html)).toBe(normalizeHtml(scenario.liveHtml));
+  });
+});
+
 describe("preview patch replay", () => {
   it("replays a recorded runtime session into an identical DOM", async () => {
     const scenario = await recordScenario();

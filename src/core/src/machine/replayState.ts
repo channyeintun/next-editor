@@ -227,14 +227,24 @@ function mergePreviewEventState(
   previousState?: PreviewState,
 ): { appliedState: PreviewState; retainedState: PreviewState } {
   const isCloseEvent = previewEvent.type === "preview_close";
+  // Float/unfloat change the iframe's width, so its content reflows. The browser
+  // already preserves the scroll position across that reflow (which is why it looks
+  // correct during live recording). Re-applying a recorded scroll on the mode-change
+  // event during playback instead jumps the content out of view — the iframe looks
+  // empty until the next scroll event corrects it. So we carry the scroll forward
+  // for continuity/seeking, but don't re-assert it on the mode change itself.
+  const isModeChangeEvent =
+    previewEvent.type === "preview_float" || previewEvent.type === "preview_unfloat";
   const nextIsOpen = previewEvent.isOpen ?? (isCloseEvent ? false : previousState?.isOpen);
   const nextMode = previewEvent.mode ?? previousState?.mode;
+  const carriedScrollTop = previewEvent.scrollTop ?? previousState?.scrollTop;
+  const carriedScrollLeft = previewEvent.scrollLeft ?? previousState?.scrollLeft;
   const appliedState: PreviewState = {
     size: previewEvent.size ?? previousState?.size ?? "small",
     content: previewEvent.content ?? previousState?.content,
     route: previewEvent.route ?? previousState?.route,
-    scrollTop: previewEvent.scrollTop ?? previousState?.scrollTop,
-    scrollLeft: previewEvent.scrollLeft ?? previousState?.scrollLeft,
+    scrollTop: isModeChangeEvent ? undefined : carriedScrollTop,
+    scrollLeft: isModeChangeEvent ? undefined : carriedScrollLeft,
     refreshKey:
       previewEvent.type === "preview_refresh" ? previewEvent.timestamp : previousState?.refreshKey,
     currentInteraction: previewEvent.interaction,
@@ -252,6 +262,10 @@ function mergePreviewEventState(
     appliedState,
     retainedState: {
       ...appliedState,
+      // Continuity state keeps the scroll so later events and seeks resolve from
+      // the true position even though the mode-change event itself didn't apply it.
+      scrollTop: carriedScrollTop,
+      scrollLeft: carriedScrollLeft,
       currentInteraction: undefined,
     },
   };

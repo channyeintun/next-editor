@@ -1431,13 +1431,55 @@ export function usePreviewController(): PreviewController {
     [setDockWidth],
   );
 
+  const forceIframeRepaint = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) {
+      return;
+    }
+
+    // A cross-origin runtime iframe (e.g. the :PORT runtime preview) can paint
+    // blank inside the floating panel's clipped/composited container — it is
+    // `position: fixed` with `rounded-xl`, `overflow-hidden`, a box-shadow and a
+    // transform/opacity transition, none of which the docked panel has. Chromium
+    // leaves the frame unpainted until something forces a repaint, which is why a
+    // manual scroll "revives" it. Toggling a compositor-only transform nudges that
+    // repaint without reloading the frame (changing src/srcdoc/display would
+    // reload a cross-origin frame and lose its state instead).
+    iframe.style.transform = "translateZ(0)";
+    requestAnimationFrame(() => {
+      const current = iframeRef.current;
+      if (current) {
+        current.style.transform = "";
+      }
+    });
+  }, []);
+
   const handleTransitionStart = useCallback(() => {
     setIsTransitioning(true);
   }, []);
 
   const handleTransitionComplete = useCallback(() => {
     setIsTransitioning(false);
-  }, []);
+    forceIframeRepaint();
+  }, [forceIframeRepaint]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    // `transitionend` isn't guaranteed (reduced motion, an interrupted or absent
+    // transition), so also force the repaint on the next frame and once more after
+    // the 150ms panel transition would have finished. Safe to over-fire: the nudge
+    // is idempotent and a no-op for same-origin previews.
+    const raf = requestAnimationFrame(forceIframeRepaint);
+    const timer = window.setTimeout(forceIframeRepaint, 220);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [panelMode, isOpen, forceIframeRepaint]);
 
   return {
     containerRef,
