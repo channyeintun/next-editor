@@ -4,6 +4,10 @@ import {
   decodeBase64ToRecordings,
   decompressBinaryToRecordings,
 } from "../storage/recordingCodecClient";
+import {
+  createStreamingRecordingReader,
+  type StreamingRecordingReader,
+} from "../storage/streamingRecordingCodec";
 
 const SAME_ORIGIN_PROXY_PATH = "/api/proxy";
 const MISSING_PROXY_STATUS_CODES = new Set([404, 405, 501]);
@@ -171,13 +175,12 @@ export const useUrlLoader = () => {
       const sniffParts: Uint8Array[] = [];
       let sniffLength = 0;
       let base64 = "";
-      let binaryChunks: Uint8Array[] = [];
-      let binaryLength = 0;
+      let streamReader: StreamingRecordingReader | null = null;
       let lastDecodeLength = 0;
       let loadedOnce = false;
 
       const applyRecording = (
-        recording: Awaited<ReturnType<typeof decodeBase64ToRecordings>>[0],
+        recording: Awaited<ReturnType<typeof decodeBase64ToRecordings>>[0] | null | undefined,
       ) => {
         if (!recording) {
           return;
@@ -211,17 +214,11 @@ export const useUrlLoader = () => {
         }
       };
 
-      const decodeAndApplyBinary = async () => {
-        if (binaryLength === 0) return;
-
-        try {
-          const recordings = await decompressBinaryToRecordings(
-            concatByteChunks(binaryChunks, binaryLength),
-          );
-          applyRecording(recordings[0]);
-        } catch {
-          // Not enough bytes for a valid prefix yet (e.g. header incomplete) — wait for more.
-        }
+      // The incremental reader decodes only the newly-arrived segments on each push, so a
+      // prefix that isn't decodable yet simply yields `null` (no throw). A thrown error means
+      // genuine corruption/desync and is allowed to propagate to the whole-file fallback.
+      const applyStreamedBinary = () => {
+        applyRecording(streamReader?.getRecording());
       };
 
       try {
@@ -246,24 +243,24 @@ export const useUrlLoader = () => {
             streamMode = startsWithScr3(sniffBytes) ? "binary" : "text";
 
             if (streamMode === "binary") {
-              binaryChunks = [sniffBytes];
-              binaryLength = sniffBytes.length;
+              streamReader = createStreamingRecordingReader();
+              streamReader.push(sniffBytes);
             } else {
               base64 += textDecoder.decode(sniffBytes, { stream: true });
             }
             sniffParts.length = 0;
             sniffLength = 0;
           } else if (streamMode === "binary") {
-            binaryChunks.push(value);
-            binaryLength += value.length;
+            streamReader?.push(value);
           } else {
             base64 += textDecoder.decode(value, { stream: true });
           }
 
           if (streamMode === "binary") {
-            if (binaryLength - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
-              lastDecodeLength = binaryLength;
-              await decodeAndApplyBinary();
+            const downloaded = streamReader?.byteLength() ?? 0;
+            if (downloaded - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
+              lastDecodeLength = downloaded;
+              applyStreamedBinary();
             }
           } else if (streamMode === "text") {
             if (base64.length - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
@@ -277,15 +274,15 @@ export const useUrlLoader = () => {
           const sniffBytes = concatByteChunks(sniffParts, sniffLength);
           streamMode = startsWithScr3(sniffBytes) ? "binary" : "text";
           if (streamMode === "binary") {
-            binaryChunks = [sniffBytes];
-            binaryLength = sniffBytes.length;
+            streamReader = createStreamingRecordingReader();
+            streamReader.push(sniffBytes);
           } else {
             base64 += textDecoder.decode(sniffBytes, { stream: true });
           }
         }
 
         if (streamMode === "binary") {
-          await decodeAndApplyBinary();
+          applyStreamedBinary();
         } else {
           base64 += textDecoder.decode();
           await decodeAndApplyText(true);

@@ -30,6 +30,13 @@ import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../typ
 // exported in one shot, so a still-recording prefix is replayable and a
 // finalized file is seekable via its footer index.
 //
+// Three independent "version" numbers exist; do not conflate them:
+//   * STREAM_MAGIC ("SCR3")     — container family marker (the file magic).
+//   * STREAM_FORMAT_VERSION (2) — on-wire byte layout of the segment headers.
+//                                 v1 used a 14-byte header; v2 uses 22 bytes.
+//   * meta.version (2 | 3)      — the Recording *schema* version carried inside
+//                                 the metadata, unrelated to the byte layout.
+//
 // Layout:
 //   Header:  "SCR3" | formatVersion u16 | flags u16 | metaLen u32 | meta bytes
 //            (meta bytes = deflate(msgpack(RecordingStreamMeta)))
@@ -40,6 +47,11 @@ import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../typ
 //            (payload = deflate(msgpack(records[])); media fragments are raw bytes)
 //   Footer:  segmentCount u32 | index[count] | footerLen u32 | "SCR3"
 //            (index entry = kind u8 | byteOffset u32 | firstTs u32 | firstIdx i32)
+//
+// Every segment is self-delimiting (carries its own byteLength), so a reader can
+// skip an unknown future segment kind instead of aborting, and a stateful reader
+// (`createStreamingRecordingReader`) can decode only newly-arrived segments for
+// O(n) progressive playback rather than re-decoding the whole prefix each tick.
 // ============================================================================
 
 export const STREAM_MAGIC = "SCR3";
@@ -458,8 +470,15 @@ function buildFooterChunk(index: SegmentIndexEntry[]): Uint8Array {
   view.setUint32(0, index.length, true);
   let offset = 4;
   for (const entry of index) {
+    // Byte offsets are stored as u32, so the footer index cannot address past 4 GiB.
+    // Clamping would silently corrupt seeks, so fail loudly instead.
+    if (entry.byteOffset > U32_MAX) {
+      throw new Error(
+        `SCR3 stream exceeds the 4 GiB addressable limit (segment offset ${entry.byteOffset})`,
+      );
+    }
     view.setUint8(offset, entry.kind);
-    view.setUint32(offset + 1, clampU32(entry.byteOffset), true);
+    view.setUint32(offset + 1, entry.byteOffset, true);
     view.setUint32(offset + 5, clampU32(entry.firstTimestampMs), true);
     view.setInt32(offset + 9, entry.firstFrameIndex, true);
     offset += INDEX_ENTRY_SIZE;
@@ -653,7 +672,66 @@ function findFooterStart(bytes: Uint8Array, headerEnd: number): number | null {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const footerLength = view.getUint32(bytes.length - FOOTER_TRAILER_SIZE, true);
   const footerStart = bytes.length - FOOTER_TRAILER_SIZE - footerLength;
-  return footerStart >= headerEnd ? footerStart : null;
+  if (footerStart < headerEnd) {
+    return null;
+  }
+
+  // A still-downloading prefix can coincidentally end in the magic bytes. Confirm the
+  // candidate footer is internally consistent (the body is exactly the segment-count
+  // word plus a whole number of index entries) before trusting it; otherwise treat the
+  // bytes as ordinary stream content and keep waiting for the real footer.
+  const segmentCount = view.getUint32(footerStart, true);
+  if (4 + segmentCount * INDEX_ENTRY_SIZE !== footerLength) {
+    return null;
+  }
+
+  return footerStart;
+}
+
+interface SegmentHeaderFields {
+  kind: number;
+  byteLength: number;
+  startTimeMs: number;
+  endTimeMs: number;
+  firstFrameIndex: number;
+  clusterIndex: number;
+  containsKeyframe: boolean;
+  isInit: boolean;
+}
+
+function segmentHeaderSize(formatVersion: number): number {
+  return formatVersion < 2 ? LEGACY_SEGMENT_HEADER_SIZE : SEGMENT_HEADER_SIZE;
+}
+
+function readSegmentHeader(
+  view: DataView,
+  offset: number,
+  formatVersion: number,
+): SegmentHeaderFields {
+  const isLegacy = formatVersion < 2;
+  const kind = view.getUint8(offset);
+  const byteLength = view.getUint32(offset + 1, true);
+  const startTimeMs = view.getUint32(offset + 5, true);
+  const endTimeMs = isLegacy ? startTimeMs : view.getUint32(offset + 9, true);
+  const firstFrameIndex = isLegacy
+    ? view.getInt32(offset + 9, true)
+    : view.getInt32(offset + 13, true);
+  const clusterIndex = isLegacy ? 0 : view.getUint32(offset + 17, true);
+  const flags = isLegacy ? view.getUint8(offset + 13) : view.getUint8(offset + 21);
+  return {
+    kind,
+    byteLength,
+    startTimeMs,
+    endTimeMs,
+    firstFrameIndex,
+    clusterIndex,
+    containsKeyframe: isLegacy ? flags === 1 : Boolean(flags & SEGMENT_FLAG_CONTAINS_KEYFRAME),
+    isInit: !isLegacy && Boolean(flags & SEGMENT_FLAG_IS_INIT),
+  };
+}
+
+function isKnownSegmentKind(kind: number): boolean {
+  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.cameraChunk;
 }
 
 function* walkSegments(
@@ -663,43 +741,179 @@ function* walkSegments(
   formatVersion: number,
 ): Generator<DecodedSegment> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const isLegacy = formatVersion < 2;
-  const headerSize = isLegacy ? LEGACY_SEGMENT_HEADER_SIZE : SEGMENT_HEADER_SIZE;
+  const headerSize = segmentHeaderSize(formatVersion);
   let offset = start;
   let sequence = 0;
 
   while (offset + headerSize <= end) {
-    const kind = view.getUint8(offset);
-    const byteLength = view.getUint32(offset + 1, true);
-    const startTimeMs = view.getUint32(offset + 5, true);
-    const endTimeMs = isLegacy ? startTimeMs : view.getUint32(offset + 9, true);
-    const firstFrameIndex = isLegacy
-      ? view.getInt32(offset + 9, true)
-      : view.getInt32(offset + 13, true);
-    const clusterIndex = isLegacy ? 0 : view.getUint32(offset + 17, true);
-    const flags = isLegacy ? view.getUint8(offset + 13) : view.getUint8(offset + 21);
+    const header = readSegmentHeader(view, offset, formatVersion);
     const payloadStart = offset + headerSize;
-    const payloadEnd = payloadStart + byteLength;
+    const payloadEnd = payloadStart + header.byteLength;
 
-    if (kind > SEGMENT_KIND.cameraChunk || payloadEnd > end) {
+    // A segment that runs past the known end is a truncated tail — stop and wait.
+    if (payloadEnd > end) {
       break;
     }
 
+    // Unknown (future) segment kinds are self-delimiting, so skip them rather than
+    // aborting the walk and silently dropping every later segment plus the footer.
+    if (!isKnownSegmentKind(header.kind)) {
+      offset = payloadEnd;
+      sequence += 1;
+      continue;
+    }
+
     yield {
-      kind,
+      kind: header.kind,
       payload: bytes.subarray(payloadStart, payloadEnd),
-      startTimeMs,
-      endTimeMs,
-      firstFrameIndex,
-      clusterIndex,
-      containsKeyframe: isLegacy ? flags === 1 : Boolean(flags & SEGMENT_FLAG_CONTAINS_KEYFRAME),
-      isInit: !isLegacy && Boolean(flags & SEGMENT_FLAG_IS_INIT),
+      startTimeMs: header.startTimeMs,
+      endTimeMs: header.endTimeMs,
+      firstFrameIndex: header.firstFrameIndex,
+      clusterIndex: header.clusterIndex,
+      containsKeyframe: header.containsKeyframe,
+      isInit: header.isInit,
       sequence,
     };
 
     offset = payloadEnd;
     sequence += 1;
   }
+}
+
+/**
+ * Decoded-stream accumulators shared by the one-shot decoder and the incremental
+ * reader. Record arrays are expected in stream (timeline) order; media blobs are
+ * pre-assembled and {@link RecordingMediaFragment} metadata carries no bytes.
+ */
+interface DecodedStreamState {
+  meta: RecordingStreamMeta;
+  formatVersion: number;
+  streamFinalized: boolean;
+  hasSegments: boolean;
+  maxSegmentTimeMs: number;
+  frames: DeltaFrame[];
+  slideEvents: SlideEvent[];
+  previewEvents: PreviewEvent[];
+  previewInitialDocuments: PreviewInitialDocument[];
+  previewPatchBatches: PreviewDomPatchBatch[];
+  workspaceEvents: WorkspaceRecordingEvent[];
+  runtimeEvents: RuntimeRecordingEvent[];
+  cursorEvents: CursorRecordingEvent[];
+  audioBlob?: Blob;
+  cameraBlob?: Blob;
+  audioFragments: RecordingMediaFragment[];
+  cameraFragments: RecordingMediaFragment[];
+  clusterSummaries: RecordingClusterMeta[];
+}
+
+/**
+ * Builds a {@link Recording} from accumulated stream state. The single source of
+ * truth for both `decodeSegments` (whole buffer) and the incremental reader, so a
+ * progressively-decoded prefix and a one-shot decode of the same bytes match.
+ */
+function assembleRecording(state: DecodedStreamState): Recording {
+  const { meta, formatVersion, streamFinalized } = state;
+
+  const decodedDuration = Math.max(meta.duration, state.maxSegmentTimeMs);
+  const audioStartOffsetMs =
+    meta.audioStartOffsetMs ?? state.audioFragments[0]?.startTimeMs ?? undefined;
+  const cameraStartOffsetMs =
+    meta.cameraStartOffsetMs ?? state.cameraFragments[0]?.startTimeMs ?? undefined;
+
+  const provisionalRecording: Recording = {
+    version: meta.version,
+    id: meta.id,
+    name: meta.name,
+    keyframeInterval: meta.keyframeInterval,
+    createdAt: meta.createdAt,
+    duration: decodedDuration,
+    frames: state.frames,
+    slideEvents: state.slideEvents.length > 0 ? state.slideEvents : undefined,
+    previewEvents: state.previewEvents.length > 0 ? state.previewEvents : undefined,
+    previewInitialDocuments:
+      state.previewInitialDocuments.length > 0 ? state.previewInitialDocuments : undefined,
+    previewPatchBatches:
+      state.previewPatchBatches.length > 0 ? state.previewPatchBatches : undefined,
+    workspaceEvents: state.workspaceEvents.length > 0 ? state.workspaceEvents : undefined,
+    runtimeEvents: state.runtimeEvents.length > 0 ? state.runtimeEvents : undefined,
+    cursorEvents: state.cursorEvents.length > 0 ? state.cursorEvents : undefined,
+    slides: meta.slides,
+    audioBlob: state.audioBlob,
+    audioSource: meta.audioSource,
+    audioStartOffsetMs,
+    cameraBlob: state.cameraBlob,
+    cameraSource: meta.cameraSource,
+    cameraStartOffsetMs,
+    streamFinalized,
+    workspaceSnapshot: meta.workspaceSnapshot,
+    runtimeSnapshot: meta.runtimeSnapshot,
+  };
+
+  const clusters =
+    meta.clusters && meta.clusters.length > 0
+      ? meta.clusters
+          .map((cluster) => ({ ...cluster }))
+          .sort((left, right) => left.index - right.index)
+      : formatVersion >= 2 && state.hasSegments
+        ? [...state.clusterSummaries].sort((left, right) => left.index - right.index)
+        : deriveRecordingClusters(provisionalRecording);
+
+  const tracks =
+    meta.tracks && meta.tracks.length > 0
+      ? meta.tracks.map((track) => ({ ...track }))
+      : deriveRecordingTracks(provisionalRecording);
+
+  const mediaFragments =
+    state.audioFragments.length > 0 || state.cameraFragments.length > 0
+      ? [...state.audioFragments, ...state.cameraFragments].sort(
+          (left, right) =>
+            left.startTimeMs - right.startTimeMs || left.clusterIndex - right.clusterIndex,
+        )
+      : deriveRecordingMediaFragments(provisionalRecording, tracks, clusters);
+
+  return normalizeRecordingData({
+    ...provisionalRecording,
+    tracks: tracks.length > 0 ? tracks : undefined,
+    clusters: clusters.length > 0 ? clusters : undefined,
+    mediaFragments: mediaFragments.length > 0 ? mediaFragments : undefined,
+  });
+}
+
+function mergeClusterSummary(
+  map: Map<number, RecordingClusterMeta>,
+  clusterIndex: number,
+  startTimeMs: number,
+  endTimeMs: number,
+  containsKeyframe: boolean,
+): void {
+  const existing = map.get(clusterIndex);
+  if (existing) {
+    existing.startTimeMs = Math.min(existing.startTimeMs, startTimeMs);
+    existing.endTimeMs = Math.max(existing.endTimeMs, endTimeMs);
+    existing.containsKeyframe = existing.containsKeyframe || containsKeyframe;
+    return;
+  }
+  map.set(clusterIndex, { index: clusterIndex, startTimeMs, endTimeMs, containsKeyframe });
+}
+
+function mediaFragmentFromSegment(
+  meta: RecordingStreamMeta,
+  kind: "audio" | "camera",
+  header: Pick<SegmentHeaderFields, "clusterIndex" | "startTimeMs" | "endTimeMs" | "isInit">,
+  byteLength: number,
+): RecordingMediaFragment {
+  return {
+    trackId: getTrackId(
+      meta.tracks,
+      kind,
+      kind === "audio" ? DEFAULT_AUDIO_TRACK_ID : DEFAULT_CAMERA_TRACK_ID,
+    ),
+    clusterIndex: header.clusterIndex,
+    startTimeMs: header.startTimeMs,
+    endTimeMs: header.endTimeMs,
+    byteLength,
+    isInit: header.isInit,
+  };
 }
 
 function decodeSegments(bytes: Uint8Array): Recording {
@@ -718,10 +932,20 @@ function decodeSegments(bytes: Uint8Array): Recording {
   const cursorEvents: CursorRecordingEvent[] = [];
   const audioSegments: SequencedMediaSegment[] = [];
   const cameraSegments: SequencedMediaSegment[] = [];
-  const decodedSegments: DecodedSegment[] = [];
+  const clusterMap = new Map<number, RecordingClusterMeta>();
+  let hasSegments = false;
+  let maxSegmentTimeMs = meta.duration;
 
   for (const segment of walkSegments(bytes, headerEnd, segmentsEnd, formatVersion)) {
-    decodedSegments.push(segment);
+    hasSegments = true;
+    maxSegmentTimeMs = Math.max(maxSegmentTimeMs, segment.startTimeMs, segment.endTimeMs);
+    mergeClusterSummary(
+      clusterMap,
+      segment.clusterIndex,
+      segment.startTimeMs,
+      segment.endTimeMs,
+      segment.containsKeyframe,
+    );
     switch (segment.kind) {
       case SEGMENT_KIND.frames:
         frames.push(...decodeRecords<DeltaFrame>(segment.payload));
@@ -785,14 +1009,6 @@ function decodeSegments(bytes: Uint8Array): Recording {
 
   const sortedAudioSegments = sortMediaSegments(audioSegments);
   const sortedCameraSegments = sortMediaSegments(cameraSegments);
-  const decodedDuration = decodedSegments.reduce(
-    (duration, segment) => Math.max(duration, segment.startTimeMs, segment.endTimeMs),
-    meta.duration,
-  );
-  const audioStartOffsetMs =
-    meta.audioStartOffsetMs ?? sortedAudioSegments[0]?.startTimeMs ?? undefined;
-  const cameraStartOffsetMs =
-    meta.cameraStartOffsetMs ?? sortedCameraSegments[0]?.startTimeMs ?? undefined;
 
   const audioBlob =
     sortedAudioSegments.length > 0
@@ -809,87 +1025,29 @@ function decodeSegments(bytes: Uint8Array): Recording {
         )
       : undefined;
 
-  const provisionalRecording: Recording = {
-    version: meta.version,
-    id: meta.id,
-    name: meta.name,
-    keyframeInterval: meta.keyframeInterval,
-    createdAt: meta.createdAt,
-    duration: decodedDuration,
-    frames,
-    slideEvents: slideEvents.length > 0 ? slideEvents : undefined,
-    previewEvents: previewEvents.length > 0 ? previewEvents : undefined,
-    previewInitialDocuments:
-      previewInitialDocuments.length > 0 ? previewInitialDocuments : undefined,
-    previewPatchBatches: previewPatchBatches.length > 0 ? previewPatchBatches : undefined,
-    workspaceEvents: workspaceEvents.length > 0 ? workspaceEvents : undefined,
-    runtimeEvents: runtimeEvents.length > 0 ? runtimeEvents : undefined,
-    cursorEvents: cursorEvents.length > 0 ? cursorEvents : undefined,
-    slides: meta.slides,
-    audioBlob,
-    audioSource: meta.audioSource,
-    audioStartOffsetMs,
-    cameraBlob,
-    cameraSource: meta.cameraSource,
-    cameraStartOffsetMs,
+  return assembleRecording({
+    meta,
+    formatVersion,
     streamFinalized,
-    workspaceSnapshot: meta.workspaceSnapshot,
-    runtimeSnapshot: meta.runtimeSnapshot,
-  };
-
-  const clusters =
-    meta.clusters && meta.clusters.length > 0
-      ? meta.clusters
-          .map((cluster) => ({ ...cluster }))
-          .sort((left, right) => left.index - right.index)
-      : formatVersion >= 2 && decodedSegments.length > 0
-        ? Array.from(
-            decodedSegments.reduce((map, segment) => {
-              const existing = map.get(segment.clusterIndex);
-              if (existing) {
-                existing.startTimeMs = Math.min(existing.startTimeMs, segment.startTimeMs);
-                existing.endTimeMs = Math.max(existing.endTimeMs, segment.endTimeMs);
-                existing.containsKeyframe = existing.containsKeyframe || segment.containsKeyframe;
-                return map;
-              }
-              map.set(segment.clusterIndex, {
-                index: segment.clusterIndex,
-                startTimeMs: segment.startTimeMs,
-                endTimeMs: segment.endTimeMs,
-                containsKeyframe: segment.containsKeyframe,
-              });
-              return map;
-            }, new Map<number, RecordingClusterMeta>()),
-          )
-            .map(([, cluster]) => cluster)
-            .sort((left, right) => left.index - right.index)
-        : deriveRecordingClusters(provisionalRecording);
-
-  const tracks =
-    meta.tracks && meta.tracks.length > 0
-      ? meta.tracks.map((track) => ({ ...track }))
-      : deriveRecordingTracks(provisionalRecording);
-
-  const mediaFragments =
-    sortedAudioSegments.length > 0 || sortedCameraSegments.length > 0
-      ? [
-          ...sortedAudioSegments.map(
-            ({ bytes: _bytes, sequence: _sequence, ...fragment }) => fragment,
-          ),
-          ...sortedCameraSegments.map(
-            ({ bytes: _bytes, sequence: _sequence, ...fragment }) => fragment,
-          ),
-        ].sort(
-          (left, right) =>
-            left.startTimeMs - right.startTimeMs || left.clusterIndex - right.clusterIndex,
-        )
-      : deriveRecordingMediaFragments(provisionalRecording, tracks, clusters);
-
-  return normalizeRecordingData({
-    ...provisionalRecording,
-    tracks: tracks.length > 0 ? tracks : undefined,
-    clusters: clusters.length > 0 ? clusters : undefined,
-    mediaFragments: mediaFragments.length > 0 ? mediaFragments : undefined,
+    hasSegments,
+    maxSegmentTimeMs,
+    frames,
+    slideEvents,
+    previewEvents,
+    previewInitialDocuments,
+    previewPatchBatches,
+    workspaceEvents,
+    runtimeEvents,
+    cursorEvents,
+    audioBlob,
+    cameraBlob,
+    audioFragments: sortedAudioSegments.map(
+      ({ bytes: _bytes, sequence: _sequence, ...fragment }) => fragment,
+    ),
+    cameraFragments: sortedCameraSegments.map(
+      ({ bytes: _bytes, sequence: _sequence, ...fragment }) => fragment,
+    ),
+    clusterSummaries: Array.from(clusterMap.values()),
   });
 }
 
@@ -899,6 +1057,274 @@ export function decodeRecordingStream(bytes: Uint8Array): Recording {
 
 export function decodeRecordingPrefix(bytes: Uint8Array): Recording {
   return decodeSegments(bytes);
+}
+
+// ============================================================================
+// Incremental streaming reader
+//
+// Feed network chunks with `push()` and read the current `Recording` with
+// `getRecording()`. Only newly-completed segments are decoded on each push (the
+// header is parsed once, segment payloads are inflated once), so progressive
+// playback cost is O(total bytes) instead of the O(n²) of re-decoding the whole
+// prefix every interval. Media blobs grow by reference (`new Blob([prev, next])`)
+// rather than being re-concatenated from scratch each time.
+//
+// Stream bytes are written in timeline (cluster/time) order, so accumulators stay
+// sorted by arrival and need no re-sort. Output matches a one-shot
+// `decodeRecordingStream` of the same bytes.
+// ============================================================================
+
+export interface StreamingRecordingReader {
+  /** Appends freshly-downloaded bytes and decodes any whole segments now available. */
+  push(bytes: Uint8Array): void;
+  /** Current decoded recording, or `null` until the header has fully arrived. */
+  getRecording(): Recording | null;
+  /** True once the footer has been parsed (the stream is complete). */
+  isFinalized(): boolean;
+  /** Total number of bytes fed so far. */
+  byteLength(): number;
+}
+
+const STREAMING_READER_INITIAL_CAPACITY = 64 * 1024;
+
+export function createStreamingRecordingReader(): StreamingRecordingReader {
+  let buffer = new Uint8Array(0);
+  let length = 0;
+
+  let headerParsed = false;
+  let meta: RecordingStreamMeta | null = null;
+  let headerEnd = 0;
+  let formatVersion = STREAM_FORMAT_VERSION;
+  let cursor = 0;
+  let finalized = false;
+
+  const frames: DeltaFrame[] = [];
+  const slideEvents: SlideEvent[] = [];
+  const previewEvents: PreviewEvent[] = [];
+  const previewInitialDocuments: PreviewInitialDocument[] = [];
+  const previewPatchBatches: PreviewDomPatchBatch[] = [];
+  const workspaceEvents: WorkspaceRecordingEvent[] = [];
+  const runtimeEvents: RuntimeRecordingEvent[] = [];
+  const cursorEvents: CursorRecordingEvent[] = [];
+  const audioFragments: RecordingMediaFragment[] = [];
+  const cameraFragments: RecordingMediaFragment[] = [];
+  const clusterMap = new Map<number, RecordingClusterMeta>();
+
+  let audioBlob: Blob | undefined;
+  let cameraBlob: Blob | undefined;
+  let segmentCount = 0;
+  let maxSegmentTimeMs = 0;
+
+  const grow = (incoming: Uint8Array): void => {
+    if (length + incoming.length > buffer.length) {
+      let capacity = buffer.length || STREAMING_READER_INITIAL_CAPACITY;
+      while (capacity < length + incoming.length) {
+        capacity *= 2;
+      }
+      const next = new Uint8Array(capacity);
+      next.set(buffer.subarray(0, length), 0);
+      buffer = next;
+    }
+    buffer.set(incoming, length);
+    length += incoming.length;
+  };
+
+  const tryParseHeader = (): void => {
+    if (headerParsed || length < HEADER_PREFIX_SIZE) return;
+    if (!hasMagicAt(buffer, 0)) {
+      throw new Error("Invalid SCR3 stream: bad magic number");
+    }
+    const view = new DataView(buffer.buffer, 0, length);
+    const metaLength = view.getUint32(8, true);
+    if (metaLength === 0) {
+      throw new Error("Invalid SCR3 stream: bad header length");
+    }
+    const metaEnd = HEADER_PREFIX_SIZE + metaLength;
+    if (metaEnd > length) return; // header not fully downloaded yet
+
+    formatVersion = view.getUint16(4, true);
+    meta = msgpackDecode(
+      inflate(buffer.subarray(HEADER_PREFIX_SIZE, metaEnd)),
+    ) as RecordingStreamMeta;
+    headerEnd = metaEnd;
+    cursor = metaEnd;
+    headerParsed = true;
+  };
+
+  // Decodes the payload *before* mutating any accumulator so that a throw (a partial
+  // footer misparsed as a segment, or genuine corruption) leaves the reader's state and
+  // cursor untouched and the parse can be safely retried or rolled back.
+  const ingestSegment = (header: SegmentHeaderFields, payload: Uint8Array): void => {
+    if (!meta) return;
+
+    let commit: () => void;
+    switch (header.kind) {
+      case SEGMENT_KIND.frames: {
+        const records = decodeRecords<DeltaFrame>(payload);
+        commit = () => frames.push(...records);
+        break;
+      }
+      case SEGMENT_KIND.slide: {
+        const records = decodeRecords<SlideEvent>(payload);
+        commit = () => slideEvents.push(...records);
+        break;
+      }
+      case SEGMENT_KIND.preview: {
+        const records = decodeRecords<PreviewEvent>(payload);
+        commit = () => previewEvents.push(...records);
+        break;
+      }
+      case SEGMENT_KIND.previewDoc: {
+        const records = decodeRecords<PreviewInitialDocument>(payload);
+        commit = () => previewInitialDocuments.push(...records);
+        break;
+      }
+      case SEGMENT_KIND.previewPatch: {
+        const records = decodeRecords<PreviewDomPatchBatch>(payload);
+        commit = () => previewPatchBatches.push(...records);
+        break;
+      }
+      case SEGMENT_KIND.workspace: {
+        const records = decodeRecords<WorkspaceRecordingEvent>(payload);
+        commit = () => workspaceEvents.push(...records);
+        break;
+      }
+      case SEGMENT_KIND.runtime: {
+        const records = decodeRecords<RuntimeRecordingEvent>(payload);
+        commit = () => runtimeEvents.push(...records);
+        break;
+      }
+      case SEGMENT_KIND.cursor: {
+        const records = decodeRecords<CursorRecordingEvent>(payload);
+        commit = () => cursorEvents.push(...records);
+        break;
+      }
+      case SEGMENT_KIND.audioChunk: {
+        // Copy out of the growable buffer (it may be reallocated on the next push).
+        const chunk = payload.slice();
+        const type = meta.audioType || "audio/webm";
+        const mediaMeta = meta;
+        commit = () => {
+          audioBlob = audioBlob
+            ? new Blob([audioBlob, chunk], { type })
+            : new Blob([chunk], { type });
+          audioFragments.push(mediaFragmentFromSegment(mediaMeta, "audio", header, chunk.length));
+        };
+        break;
+      }
+      case SEGMENT_KIND.cameraChunk: {
+        const chunk = payload.slice();
+        const type = meta.cameraType || "video/webm";
+        const mediaMeta = meta;
+        commit = () => {
+          cameraBlob = cameraBlob
+            ? new Blob([cameraBlob, chunk], { type })
+            : new Blob([chunk], { type });
+          cameraFragments.push(mediaFragmentFromSegment(mediaMeta, "camera", header, chunk.length));
+        };
+        break;
+      }
+      default:
+        commit = () => {};
+    }
+
+    segmentCount += 1;
+    maxSegmentTimeMs = Math.max(maxSegmentTimeMs, header.startTimeMs, header.endTimeMs);
+    mergeClusterSummary(
+      clusterMap,
+      header.clusterIndex,
+      header.startTimeMs,
+      header.endTimeMs,
+      header.containsKeyframe,
+    );
+    commit();
+  };
+
+  const parseSegments = (): void => {
+    if (!headerParsed) return;
+
+    const footerStart = findFooterStart(buffer.subarray(0, length), headerEnd);
+    if (footerStart !== null) {
+      finalized = true;
+      // A confirmed footer that sits behind the cursor means an earlier push parsed
+      // footer bytes as a segment — the reader is desynchronized and must not be
+      // trusted. Surface it so the caller can fall back to a one-shot decode.
+      if (cursor > footerStart) {
+        throw new Error("SCR3 streaming reader desynchronized past footer");
+      }
+    }
+    const segmentsEnd = footerStart ?? length;
+    const view = new DataView(buffer.buffer, 0, length);
+    const headerSize = segmentHeaderSize(formatVersion);
+
+    while (cursor + headerSize <= segmentsEnd) {
+      const header = readSegmentHeader(view, cursor, formatVersion);
+      const payloadStart = cursor + headerSize;
+      const payloadEnd = payloadStart + header.byteLength;
+
+      if (payloadEnd > segmentsEnd) {
+        break; // segment not fully downloaded yet
+      }
+      if (!isKnownSegmentKind(header.kind)) {
+        // Until the footer is confirmed these bytes might be a partial footer rather
+        // than a real segment, so wait. Once finalized, an unknown kind is a genuine
+        // future segment that is safe to skip past.
+        if (!finalized) break;
+        cursor = payloadEnd;
+        continue;
+      }
+
+      try {
+        ingestSegment(header, buffer.subarray(payloadStart, payloadEnd));
+      } catch (error) {
+        // Inside the segment region (footer already seen) this is real corruption.
+        // Otherwise these are most likely partial-footer bytes that happen to read as
+        // a known kind — leave the cursor put and wait for the footer to complete.
+        if (finalized) throw error;
+        break;
+      }
+      cursor = payloadEnd;
+    }
+  };
+
+  return {
+    push(bytes) {
+      if (bytes.length > 0) {
+        grow(bytes);
+      }
+      tryParseHeader();
+      parseSegments();
+    },
+    getRecording() {
+      if (!headerParsed || !meta) return null;
+      return assembleRecording({
+        meta,
+        formatVersion,
+        streamFinalized: finalized,
+        hasSegments: segmentCount > 0,
+        maxSegmentTimeMs: Math.max(meta.duration, maxSegmentTimeMs),
+        frames,
+        slideEvents,
+        previewEvents,
+        previewInitialDocuments,
+        previewPatchBatches,
+        workspaceEvents,
+        runtimeEvents,
+        cursorEvents,
+        audioBlob,
+        cameraBlob,
+        audioFragments,
+        cameraFragments,
+        clusterSummaries: Array.from(clusterMap.values()),
+      });
+    },
+    isFinalized() {
+      return finalized;
+    },
+    byteLength() {
+      return length;
+    },
+  };
 }
 
 function readBlobAsArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
