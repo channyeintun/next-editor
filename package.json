@@ -52,7 +52,7 @@
     "@types/node": "^25.0.9",
     "@types/react": "^19.2.9",
     "@types/react-dom": "^19.2.3",
-    "@typescript/native-preview": "7.0.0-dev.20260512.1",
+    "@typescript/native-preview": "^7.0.0-dev.20260618.1",
     "@vitejs/plugin-react": "^6.0.2",
     "asbuild": "^0.2.0",
     "assemblyscript": "^0.28.9",
