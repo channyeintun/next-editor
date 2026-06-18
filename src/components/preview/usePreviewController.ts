@@ -36,6 +36,7 @@ import {
   patchIframeContentFromHtml,
   type PreviewScrollPosition,
 } from "./previewIframeUtils";
+import { hasRrwebPreviewEvents } from "./rrwebPreview";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
 import { usePreviewMessageBridge } from "./usePreviewMessageBridge";
 import { usePreviewPlaybackRegistration } from "./usePreviewPlaybackRegistration";
@@ -365,6 +366,8 @@ function createRuntimePreviewPlaceholder(
 export interface PreviewController {
   containerRef: RefObject<HTMLDivElement | null>;
   iframeRef: RefObject<HTMLIFrameElement | null>;
+  replayContainerRef: RefObject<HTMLDivElement | null>;
+  isRrwebReplayActive: boolean;
   size: PreviewSize;
   isOpen: boolean;
   panelMode: PreviewPanelMode;
@@ -418,6 +421,7 @@ export function usePreviewController(): PreviewController {
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const replayContainerRef = useRef<HTMLDivElement>(null);
 
   const lastContentRef = useRef("");
   const lastRuntimeSnapshotRef = useRef("");
@@ -483,6 +487,15 @@ export function usePreviewController(): PreviewController {
     currentRecording.previewPatchBatches?.length,
   );
   const isRuntimePlaybackPreviewActive = lessonType === "node.js" && isPlaybackPreviewActive;
+  // The rrweb replay preview is shown ONLY while the recording is actively playing.
+  // When paused/ended (or never started) — even with a recording loaded — the live
+  // runtime preview is shown instead (see `isLiveRuntimePreviewActive`).
+  const isRrwebReplayActive =
+    isRuntimePlaybackPreviewActive &&
+    hasRrwebPreviewEvents(
+      currentRecording?.previewInitialDocuments,
+      currentRecording?.previewPatchBatches,
+    );
   const recordedRuntimeSnapshot = isRuntimePlaybackPreviewActive
     ? (currentRecording?.runtimeSnapshot ?? null)
     : null;
@@ -895,6 +908,7 @@ export function usePreviewController(): PreviewController {
     isUserScrollingRef,
     targetScrollRef,
     rafRef,
+    replayContainerRef,
   });
 
   usePreviewInteractionCapture({
@@ -1431,17 +1445,61 @@ export function usePreviewController(): PreviewController {
     [setDockWidth],
   );
 
+  const forceIframeRepaint = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) {
+      return;
+    }
+
+    // A cross-origin runtime iframe (e.g. the :PORT runtime preview) can paint
+    // blank inside the floating panel's clipped/composited container — it is
+    // `position: fixed` with `rounded-xl`, `overflow-hidden`, a box-shadow and a
+    // transform/opacity transition, none of which the docked panel has. Chromium
+    // leaves the frame unpainted until something forces a repaint, which is why a
+    // manual scroll "revives" it. Toggling a compositor-only transform nudges that
+    // repaint without reloading the frame (changing src/srcdoc/display would
+    // reload a cross-origin frame and lose its state instead).
+    iframe.style.transform = "translateZ(0)";
+    requestAnimationFrame(() => {
+      const current = iframeRef.current;
+      if (current) {
+        current.style.transform = "";
+      }
+    });
+  }, []);
+
   const handleTransitionStart = useCallback(() => {
     setIsTransitioning(true);
   }, []);
 
   const handleTransitionComplete = useCallback(() => {
     setIsTransitioning(false);
-  }, []);
+    forceIframeRepaint();
+  }, [forceIframeRepaint]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    // `transitionend` isn't guaranteed (reduced motion, an interrupted or absent
+    // transition), so also force the repaint on the next frame and once more after
+    // the 150ms panel transition would have finished. Safe to over-fire: the nudge
+    // is idempotent and a no-op for same-origin previews.
+    const raf = requestAnimationFrame(forceIframeRepaint);
+    const timer = window.setTimeout(forceIframeRepaint, 220);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [panelMode, isOpen, forceIframeRepaint]);
 
   return {
     containerRef,
     iframeRef,
+    replayContainerRef,
+    isRrwebReplayActive,
     size,
     isOpen,
     panelMode,

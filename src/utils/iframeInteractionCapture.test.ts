@@ -8,14 +8,16 @@ const SETUP_MARKER = "__TEST_INTERACTION_CAPTURE__";
 const CLEANUP_MARKER = `${SETUP_MARKER}:cleanup`;
 
 class FakeElement {
+  readonly tagName: string;
+  readonly id: string;
   children: FakeElement[] = [];
   className = "";
   parentElement: FakeElement | null = null;
 
-  constructor(
-    readonly tagName: string,
-    readonly id = "",
-  ) {}
+  constructor(tagName: string, id = "") {
+    this.tagName = tagName;
+    this.id = id;
+  }
 }
 
 class FakeInputElement extends FakeElement {

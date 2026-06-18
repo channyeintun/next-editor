@@ -54,9 +54,9 @@ describe("patchIframeContentFromHtml", () => {
     expect(iframeDocument.querySelector("#app")).toBe(app);
     expect(iframeDocument.querySelector("button")).toBe(button);
     expect(iframeDocument.title).toBe("Loaded");
-    expect(app).toHaveAttribute("data-ready", "true");
-    expect(button).not.toHaveAttribute("disabled");
-    expect(iframeDocument.querySelector("h1")).toHaveTextContent("Loaded");
+    expect(app?.getAttribute("data-ready")).toBe("true");
+    expect(button?.hasAttribute("disabled")).toBe(false);
+    expect(iframeDocument.querySelector("h1")?.textContent).toContain("Loaded");
     expect(Array.from(iframeDocument.querySelectorAll("li")).map((li) => li.textContent)).toEqual([
       "New",
       "Another",
@@ -87,7 +87,7 @@ describe("patchIframeContentFromHtml", () => {
     expect(didPatch).toBe(true);
     expect(newSlot).not.toBe(oldSlot);
     expect(newSlot?.tagName).toBe("SECTION");
-    expect(newSlot).toHaveTextContent("New");
+    expect(newSlot?.textContent).toContain("New");
   });
 
   it("patches an initially blank iframe without replacing the document", () => {
@@ -106,6 +106,6 @@ describe("patchIframeContentFromHtml", () => {
     expect(didPatch).toBe(true);
     expect(iframe.contentDocument).toBe(iframeDocument);
     expect(iframeDocument.title).toBe("Replay");
-    expect(iframeDocument.querySelector("#app")).toHaveTextContent("Snapshot");
+    expect(iframeDocument.querySelector("#app")?.textContent).toContain("Snapshot");
   });
 });

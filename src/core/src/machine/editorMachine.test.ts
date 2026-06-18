@@ -101,7 +101,11 @@ function createTwoFileWorkspaceSnapshot(
 }
 
 class MockTextModel {
-  constructor(private content: string) {}
+  private content: string;
+
+  constructor(content: string) {
+    this.content = content;
+  }
 
   getValue() {
     return this.content;
@@ -144,8 +148,11 @@ class MockTextModel {
 class MockEditor {
   private position: monaco.IPosition = { lineNumber: 1, column: 1 };
   private editorSelection: monaco.Selection = selection as monaco.Selection;
+  private model: MockTextModel;
 
-  constructor(private model: MockTextModel) {}
+  constructor(model: MockTextModel) {
+    this.model = model;
+  }
 
   getModel() {
     return this.model as unknown as monaco.editor.ITextModel;
@@ -219,14 +226,16 @@ describe("editorMachine actor lifecycle", () => {
 
   it("stops mouse tracking on the no-audio recording path and emits callbacks", async () => {
     const events: string[] = [];
-    let stoppedRecording: Recording | null = null;
+    // Held in an object so the assignment inside the callback doesn't make
+    // control-flow analysis narrow the variable to `never` at the read site.
+    const stoppedRecording: { value: Recording | null } = { value: null };
     const actor = createActor(editorMachine, {
       input: {
         editorRef: { current: null },
         onRecordingStart: () => events.push("recording:start"),
         onRecordingStop: (recording) => {
           events.push("recording:stop");
-          stoppedRecording = recording;
+          stoppedRecording.value = recording;
         },
       },
     }).start();
@@ -241,7 +250,7 @@ describe("editorMachine actor lifecycle", () => {
 
     expect(actor.getSnapshot().children.mouseTracker).toBeUndefined();
     expect(events).toEqual(["recording:start", "recording:stop"]);
-    expect(stoppedRecording?.frames.length).toBeGreaterThan(0);
+    expect(stoppedRecording.value?.frames.length).toBeGreaterThan(0);
 
     actor.stop();
   });
@@ -494,7 +503,9 @@ describe("editorMachine external audio recording", () => {
     URL.revokeObjectURL = () => undefined;
 
     const events: string[] = [];
-    let stoppedRecording: Recording | null = null;
+    // Held in an object so the assignment inside the callback doesn't make
+    // control-flow analysis narrow the variable to `never` at the read sites.
+    const stoppedRecording: { value: Recording | null } = { value: null };
     const audioBlob = new Blob(["external audio"], { type: "audio/webm" });
     const actor = createActor(editorMachine, {
       input: {
@@ -502,7 +513,7 @@ describe("editorMachine external audio recording", () => {
         onRecordingStart: () => events.push("recording:start"),
         onRecordingStop: (recording) => {
           events.push("recording:stop");
-          stoppedRecording = recording;
+          stoppedRecording.value = recording;
         },
       },
     }).start();
@@ -519,9 +530,9 @@ describe("editorMachine external audio recording", () => {
     await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
 
     expect(events).toEqual(["recording:start", "recording:stop"]);
-    expect(stoppedRecording?.audioBlob).toBe(audioBlob);
-    expect(stoppedRecording?.audioSource).toBe("external");
-    expect(stoppedRecording?.duration).toBe(60_000);
+    expect(stoppedRecording.value?.audioBlob).toBe(audioBlob);
+    expect(stoppedRecording.value?.audioSource).toBe("external");
+    expect(stoppedRecording.value?.duration).toBe(60_000);
     expect(actor.getSnapshot().children.recordingAudioPlayer).toBeUndefined();
 
     actor.stop();

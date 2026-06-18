@@ -72,7 +72,8 @@ describe("createIframeConsoleBridgeScript", () => {
         pathname: "/",
       },
     });
-    expect(postMessage.mock.calls[0][0].payload.args[0]).toContain("Boom");
+    const firstMessage = postMessage.mock.calls[0][0] as { payload: { args: string[] } };
+    expect(firstMessage.payload.args[0]).toContain("Boom");
   });
 
   it("does not wrap console methods more than once for the same marker", () => {

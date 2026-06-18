@@ -93,102 +93,36 @@ export const PREVIEW_DOM_PATCH_FORMAT_VERSION = 1;
 
 export type PreviewDomPatchSource = "runtime-preview" | "static-preview";
 
-export interface PreviewNodeRef {
-  id?: string;
-  anchorId?: string;
-  path: number[];
+/**
+ * A single recorded rrweb event, carried verbatim through the recording engine.
+ * Structurally compatible with rrweb's `eventWithTime` so it can be cast in the
+ * preview area without the engine ever depending on rrweb. The engine treats it
+ * as opaque JSON and only ever reads the envelope `time`/`documentId`.
+ */
+export interface PreviewRecordedEvent {
+  type: number;
+  data: unknown;
+  timestamp: number;
+  delay?: number;
 }
-
-export interface SerializedPreviewNode {
-  kind: "element" | "text" | "comment" | "doctype";
-  tagName?: string;
-  namespaceURI?: string | null;
-  attributes?: Array<[string, string]>;
-  text?: string;
-  children?: SerializedPreviewNode[];
-}
-
-export interface PreviewSetTextOp {
-  op: "set_text";
-  target: PreviewNodeRef;
-  text: string;
-}
-
-export interface PreviewSetAttributeOp {
-  op: "set_attribute";
-  target: PreviewNodeRef;
-  name: string;
-  value: string;
-  namespaceURI?: string | null;
-}
-
-export interface PreviewRemoveAttributeOp {
-  op: "remove_attribute";
-  target: PreviewNodeRef;
-  name: string;
-  namespaceURI?: string | null;
-}
-
-export interface PreviewInsertNodeOp {
-  op: "insert_node";
-  parent: PreviewNodeRef;
-  index: number;
-  node: SerializedPreviewNode;
-}
-
-export interface PreviewRemoveNodeOp {
-  op: "remove_node";
-  target: PreviewNodeRef;
-}
-
-export interface PreviewMoveNodeOp {
-  op: "move_node";
-  target: PreviewNodeRef;
-  parent: PreviewNodeRef;
-  index: number;
-}
-
-export interface PreviewReplaceSubtreeOp {
-  op: "replace_subtree";
-  target: PreviewNodeRef;
-  html: string;
-  mode: "children" | "node";
-}
-
-export interface PreviewSetPropertyOp {
-  op: "set_property";
-  target: PreviewNodeRef;
-  name: "value" | "checked" | "selected";
-  value: string | boolean;
-}
-
-export type PreviewDomPatchOp =
-  | PreviewSetTextOp
-  | PreviewSetAttributeOp
-  | PreviewRemoveAttributeOp
-  | PreviewInsertNodeOp
-  | PreviewRemoveNodeOp
-  | PreviewMoveNodeOp
-  | PreviewReplaceSubtreeOp
-  | PreviewSetPropertyOp;
 
 export interface PreviewInitialDocument {
-  version: typeof PREVIEW_DOM_PATCH_FORMAT_VERSION;
+  version: number;
   time: number;
   documentId: string;
   route?: string;
-  html: string;
+  // rrweb Meta + FullSnapshot events that seed replay.
+  events?: PreviewRecordedEvent[];
 }
 
 export interface PreviewDomPatchBatch {
-  version: typeof PREVIEW_DOM_PATCH_FORMAT_VERSION;
+  version: number;
   time: number;
   source: PreviewDomPatchSource;
   documentId: string;
-  baseRevision: number;
-  revision: number;
   route?: string;
-  ops: PreviewDomPatchOp[];
+  // rrweb incremental events for this frame.
+  events?: PreviewRecordedEvent[];
 }
 
 export interface PreviewState {

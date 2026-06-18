@@ -21,20 +21,25 @@ const project: WorkspaceProject = {
 };
 
 function renderWorkspaceSyncHook() {
-  let hook: ReturnType<typeof useWebContainerWorkspaceSync> | null = null;
+  // Captured via an object so control-flow analysis keeps the declared union type
+  // at each access (a captured `let` reassigned inside the Harness closure narrows
+  // to `never` after the non-null check).
+  const captured: { hook: ReturnType<typeof useWebContainerWorkspaceSync> | null } = {
+    hook: null,
+  };
 
   function Harness() {
-    hook = useWebContainerWorkspaceSync();
+    captured.hook = useWebContainerWorkspaceSync();
     return null;
   }
 
   render(<Harness />);
 
-  if (!hook) {
+  if (!captured.hook) {
     throw new Error("Expected workspace sync hook to render");
   }
 
-  return hook;
+  return captured.hook;
 }
 
 describe("useWebContainerWorkspaceSync", () => {
