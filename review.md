@@ -16,25 +16,29 @@ before the whole file is downloaded, and ideally seek without fetching everythin
 
 ## Implementation status (2026-06-19)
 
-| Finding                                 | Status      | Notes                                                                                                                        |
-| --------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **C1** Incremental decode               | ✅ Done     | `createStreamingRecordingReader` decodes only new segments; wired into `useUrlLoader` binary path. Covers **L1** and **M4**. |
-| **H2** Skip unknown kinds               | ✅ Done     | `walkSegments` skips self-delimiting unknown kinds; reader waits at an ambiguous tail.                                       |
-| **M1** u32 offset overflow              | ✅ Done     | `buildFooterChunk` throws past 4 GiB instead of silently clamping.                                                           |
-| **M2** Footer false-positive            | ✅ Done     | `findFooterStart` validates `footerLen == 4 + count·13`.                                                                     |
-| **L3** Version-number clarity           | ✅ Done     | Documented in the codec header comment.                                                                                      |
-| **S1** Loader `response.clone()`        | ✅ Done     | Removed the stream tee that buffered the whole file in memory on the success path; body is streamed directly.                |
-| **C2** MSE for media                    | ⏳ Deferred | Large; needs capture-side fragmentation verification (see below).                                                            |
-| **H1** Range-seek client + footer index | ⏳ Deferred | Additive format change; C1 is the enabling prerequisite, now in place.                                                       |
-| **M3** Snapshots out of header          | ⏳ Deferred | Format change; lower priority.                                                                                               |
-| **L2** Live deflate level               | ⏳ Deferred | Minor; changes output sizes — skipped to avoid churn.                                                                        |
+| Finding                                 | Status      | Notes                                                                                                                                                                       |
+| --------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **C1** Incremental decode               | ✅ Done     | `createStreamingRecordingReader` decodes only new segments; wired into `useUrlLoader` binary path. Covers **L1** and **M4**.                                                |
+| **H2** Skip unknown kinds               | ✅ Done     | `walkSegments` skips self-delimiting unknown kinds; reader waits at an ambiguous tail.                                                                                      |
+| **M1** u32 offset overflow              | ✅ Done     | `buildFooterChunk` throws past 4 GiB instead of silently clamping.                                                                                                          |
+| **M2** Footer false-positive            | ✅ Done     | `findFooterStart` validates `footerLen == 4 + count·13`.                                                                                                                    |
+| **L3** Version-number clarity           | ✅ Done     | Documented in the codec header comment.                                                                                                                                     |
+| **S1** Loader `response.clone()`        | ✅ Done     | Removed the stream tee that buffered the whole file in memory on the success path; body is streamed directly.                                                               |
+| **S2** Base64 path was still O(n²)      | ✅ Done     | Shipped `.ne` files are base64-wrapped, so they took the text path that re-decoded the whole prefix each tick. Both binary and base64 now feed the same incremental reader. |
+| **C2** MSE for media (efficiency)       | ⏳ Deferred | Media already plays from a prefix; MSE removes the per-tick whole-blob re-decode. Not a streaming gap.                                                                      |
+| **H1** Range-seek client + footer index | ⏳ Deferred | Additive format change; C1 is the enabling prerequisite, now in place.                                                                                                      |
+| **M3** Snapshots out of header          | ⏳ Deferred | Format change; lower priority.                                                                                                                                              |
+| **L2** Live deflate level               | ⏳ Deferred | Minor; changes output sizes — skipped to avoid churn.                                                                                                                       |
 
-Verification: `tsgo` typecheck clean, `vp lint` clean, and the codec tests pass — including two
-new ones asserting (a) the incremental reader matches a one-shot `decodeRecordingStream` of the
-same bytes (frames/clusters/tracks/mediaFragments/cursor + audio & camera blob bytes), and (b) a
-footer-less prefix decodes as a replayable `streamFinalized: false` recording that flips to
-finalized once the footer lands. (The repo's wider suite has 12 pre-existing test-runner
-collection failures unrelated to these changes — identical on a clean tree.)
+Verification: `tsgo` typecheck clean, `vp lint` clean, and the codec tests pass — including
+three new ones asserting (a) the incremental reader matches a one-shot `decodeRecordingStream`
+of the same bytes (frames/clusters/tracks/mediaFragments/cursor + audio & camera blob bytes),
+(b) a footer-less prefix decodes as a replayable `streamFinalized: false` recording that flips
+to finalized once the footer lands, and (c) audio becomes available fragment-by-fragment with a
+monotonically-advancing loaded edge (`[400, 800, 1200]` ms) well before the footer arrives —
+the exact contract the player gates streamed audio on. (The repo's wider suite has 12
+pre-existing test-runner collection failures unrelated to these changes — identical on a clean
+tree.)
 
 ### S1 — Loader teed the response stream (found in the follow-up pass)
 
@@ -48,11 +52,12 @@ fallback instead of relying on a buffered copy.
 
 ### What still limits true "play like video" (the deferred items)
 
-- **C2 is the remaining media bottleneck.** `extendRecording` still hands the audio actor a
-  growing blob that `decodeAudioData` re-decodes whole each tick, and `CameraOverlay` still swaps
-  the `<video>` object URL whenever new camera bytes arrive. C1 made the editor/event/frame path
-  O(n); media playback needs MSE to follow. First step is confirming the recorder emits
-  independently-appendable fragments (the SCR3 `isInit` flag is already in place for it).
+- **C2 is an efficiency ceiling, not a streaming gap.** Media already plays from a prefix.
+  But `extendRecording` still hands the audio actor a growing blob that `decodeAudioData`
+  re-decodes whole each tick, and `CameraOverlay` re-attaches the `<video>` object URL whenever
+  new camera bytes arrive. C1 made the editor/event/frame path O(n); MSE would do the same for
+  media (append init once + segments as they arrive). First step is confirming the recorder
+  emits independently-appendable fragments (the SCR3 `isInit` flag is already in place for it).
 - **H1 (network scrub-seek) is now unblocked** by the stateful reader but still unimplemented.
 
 ## Verdict
@@ -115,10 +120,16 @@ self-delimiting and append-only, this is a clean addition. Then `extendRecording
 receives a small delta rather than a full re-decode. Consider doing the decode in
 a worker so deflate/msgpack never blocks paint.
 
-### C2. Media is fully reassembled and re-decoded — not streamed
+### C2. Media plays from a prefix, but is re-decoded whole each tick instead of fed incrementally
 
-Audio and camera are never streamed; they are concatenated into a single growing
-`Blob` per track ([streamingRecordingCodec.ts:797–:810](src/storage/streamingRecordingCodec.ts:797)) and then:
+**Correction:** an earlier draft said media "doesn't stream." That is wrong. Audio **does**
+play from a prefix — the audio actor runs in `mode: "stream"`, gates playback at the loaded
+edge (`loadedUntilMs`), and waits there until more arrives
+([audioActor.ts:404](src/core/src/machine/audioActor.ts:404),
+[:728](src/core/src/machine/audioActor.ts:728), [:536](src/core/src/machine/audioActor.ts:536));
+camera plays the growing blob from a prefix too. The real problem is **efficiency**, not
+capability: media is reassembled into a single growing `Blob` per track and re-processed whole
+on every tick ([streamingRecordingCodec.ts:797–:810](src/storage/streamingRecordingCodec.ts:797)):
 
 - **Audio:** `audioPlaybackActor.decodeBlob` runs `context.decodeAudioData` on the
   **entire** accumulated blob on every `APPEND_FRAGMENT`
@@ -132,9 +143,11 @@ Audio and camera are never streamed; they are concatenated into a single growing
   a `<video>` `src` to a new growing blob URL resets the element — visible stutter
   every cycle during playback.
 
-**Impact:** media cannot begin until enough has arrived to form a valid container,
-and the re-decode/re-attach cost grows with length. This is the core reason it
-doesn't "play like video."
+**Impact:** playback starts early and is correct, but the per-tick re-decode/re-attach cost
+grows with recording length (audio decode is O(S²) and holds the whole decoded PCM in RAM), and
+audio progressiveness depends on the browser tolerating a partial WebM in `decodeAudioData`.
+This is the efficiency ceiling on "play a long recording smoothly like video," not a streaming
+gap.
 
 **Fix:** drive media through **Media Source Extensions (MSE)**. Append the init
 segment once to a `SourceBuffer`, then append each media segment as it arrives —
