@@ -19,7 +19,7 @@ browser verification** with the running app — flagged per task where it applie
 | 3   | Replay: rrweb `Replayer` applier driven by the existing seek machine; mount into preview panel               | DONE   | typecheck+test (+browser) |
 | 4   | Scroll/viewport: retire decoupled runtime scroll path; responsive replay iframe; float/unfloat fidelity      | DONE   | typecheck+test (+browser) |
 | 5   | Delete custom path: recorder, apply engine, seed-patch transforms, op types, validators                      | DONE   | typecheck+test            |
-| 6   | Tests: rrweb round-trip (virtual-list churn + scroll/float-unfloat)                                          | TODO   | test                      |
+| 6   | Tests: rrweb round-trip (virtual-list churn + scroll/float-unfloat)                                          | DONE   | test                      |
 
 ## Notes / decisions
 
@@ -73,7 +73,28 @@ browser verification** with the running app — flagged per task where it applie
   slides copies; updated `core/src/index.ts` re-exports and bridge constructors.
   Deleted `previewPatchReplay.test.ts`. Verified zero dangling refs.
   Green: typecheck ok; full suite 71 pass / 2 pre-existing audio fails (no preview regress).
-- T4: Decoupled runtime scroll path is **retired by construction** — during rrweb
+- T6: New `rrwebRoundTrip.test.ts` — records a **virtual-list scroll churn** (drop top
+  row, append rows with translateY, grow spacer) via real `rrweb.record`, reassembles
+  with `buildRrwebReplayEvents`, replays, and asserts the replayed iframe has the exact
+  6 final rows + spacer (no drift, NOT empty) — the precise failure the legacy path had.
+  Note: the test drives `Replayer` directly with `UNSAFE_replayCanvas:true` to bypass
+  rrweb 2.x's sandboxed-rebuild guard, which jsdom can't satisfy (unstable sandboxed
+  contentDocument identity). Production keeps the safe default sandboxed iframe — that
+  path only works in a real browser, hence the remaining browser-verify items below.
+  Green: typecheck ok; full suite 72 pass / 2 pre-existing audio fails.
+
+## Status: all 6 tasks DONE (unit/typecheck green)
+
+### Still requires real-browser verification (jsdom can't render rrweb Replayer)
+
+- Live rrweb recording into a running WebContainer node.js preview produces seed +
+  incremental segments.
+- Replay renders into the panel, seeks/scrubs correctly, and the virtual list is
+  populated (not empty) at every offset.
+- Float/unfloat during playback keeps the preview correct (panel size replays via
+  `previewEvents`; rrweb iframe fills the panel).
+- The rrweb default sandboxed iframe becomes visible (`display:inherit` on the Meta
+  event) and reads same-origin in the host. Decoupled runtime scroll path is **retired by construction** — during rrweb
   replay `RuntimePreviewRenderer` mounts the replay container (not the iframe), so
   `iframeRef` is null and the snapshot applier's scroll/`scrollTo` + content blocks
   return early; only panel size/mode (float/unfloat) still applies, which is what we
