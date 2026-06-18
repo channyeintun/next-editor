@@ -13,17 +13,7 @@ export default defineConfig({
     "*": "vp check --fix",
   },
   plugins: lazyPlugins(async () => {
-    const [{ default: react }, { default: checker }] = await Promise.all([
-      import("@vitejs/plugin-react"),
-      import("vite-plugin-checker"),
-    ]);
-
-    return [
-      ...react(),
-      checker({
-        typescript: true,
-      }),
-    ] as unknown as PluginOption[];
+    return [...(await import("@vitejs/plugin-react")).default()] as unknown as PluginOption[];
   }),
   test: {
     globals: true,
