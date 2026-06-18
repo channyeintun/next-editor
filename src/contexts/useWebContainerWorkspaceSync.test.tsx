@@ -7,7 +7,7 @@ import type { WorkspaceProject } from "../types/workspace";
 const project: WorkspaceProject = {
   id: "project-1",
   name: "Project",
-  lessonType: "node.js",
+  lessonType: "react",
   entryFilePath: "index.html",
   folders: [],
   files: {

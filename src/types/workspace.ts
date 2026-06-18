@@ -5,17 +5,32 @@ export interface WorkspaceFile {
   content: string;
 }
 
-export type WorkspaceLessonType = "node.js" | "html-css";
+export type WorkspaceLessonType =
+  | "html-css"
+  | "react"
+  | "vue"
+  | "solid"
+  | "svelte"
+  | "htmx-express";
 
 /**
- * Every lesson type is served by its own dev server inside the WebContainer
- * (node.js via its app's dev server, html-css via Vite). This predicate keeps
- * the runtime/preview code from special-casing individual lesson types, and is
- * the single place to update when new templates (React, Vue, Express, …) are
- * added.
+ * Every lesson type is served by its own dev server inside the WebContainer:
+ * the Vite-based SPAs (react, vue, solid, svelte) and html-css run a Vite dev
+ * server, while htmx-express runs an Express server. This predicate keeps the
+ * runtime/preview code from special-casing individual lesson types, and is the
+ * single place to update when new templates are added.
  */
+const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
+  "html-css",
+  "react",
+  "vue",
+  "solid",
+  "svelte",
+  "htmx-express",
+]);
+
 export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boolean {
-  return lessonType === "node.js" || lessonType === "html-css";
+  return WEB_CONTAINER_LESSON_TYPES.has(lessonType);
 }
 
 export interface WorkspaceProject {
@@ -287,6 +302,12 @@ export function inferLanguageFromPath(path: string): string {
   }
 
   if (normalizedPath.endsWith(".html")) {
+    return "html";
+  }
+
+  // Monaco has no dedicated Vue/Svelte single-file-component mode; HTML gives
+  // the closest highlighting for their template-heavy markup.
+  if (normalizedPath.endsWith(".vue") || normalizedPath.endsWith(".svelte")) {
     return "html";
   }
 
@@ -1050,7 +1071,7 @@ img {
   return {
     id: "starter-workspace",
     name: "Next Editor Trending Statuses",
-    lessonType: "node.js",
+    lessonType: "react",
     entryFilePath: DEFAULT_WORKSPACE_APP_PATH,
     folders: collectWorkspaceFolders(Object.keys(files)),
     files,
@@ -1138,6 +1159,395 @@ code {
     name: "HTML/CSS Lesson",
     lessonType: "html-css",
     entryFilePath: DEFAULT_WORKSPACE_ENTRY_PATH,
+    folders: collectWorkspaceFolders(Object.keys(files)),
+    files,
+  };
+}
+
+/**
+ * Shared, editable page styles for the minimal framework starters so each
+ * "hello world" lesson looks consistent while staying self-contained.
+ */
+function createMinimalLessonStyles(accentColor: string): string {
+  return `:root {
+  color-scheme: light dark;
+  --accent: ${accentColor};
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+  line-height: 1.6;
+}
+
+h1 {
+  margin: 0 0 0.75rem;
+  font-size: 2.5rem;
+}
+
+code {
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.35rem;
+  background: rgba(127, 127, 127, 0.18);
+}
+
+button {
+  margin-top: 1rem;
+  padding: 0.55rem 1.1rem;
+  font: inherit;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.05);
+}
+`;
+}
+
+function createViteSpaPackageJson(
+  name: string,
+  dependencies: Record<string, string>,
+  devDependencies: Record<string, string>,
+): string {
+  return JSON.stringify(
+    {
+      name,
+      private: true,
+      version: "0.0.0",
+      type: "module",
+      scripts: {
+        dev: "vite --host 0.0.0.0 --port 4173",
+        build: "vite build",
+        preview: "vite preview --host 0.0.0.0 --port 4173",
+      },
+      dependencies,
+      devDependencies: {
+        vite: "^7.0.0",
+        ...devDependencies,
+      },
+    },
+    null,
+    2,
+  );
+}
+
+export function createStarterVueWorkspace(): WorkspaceProject {
+  const files = {
+    "package.json": createWorkspaceFile(
+      "package.json",
+      createViteSpaPackageJson("vue-lesson", { vue: "^3.5.0" }, { "@vitejs/plugin-vue": "^6.0.0" }),
+    ),
+    "vite.config.js": createWorkspaceFile(
+      "vite.config.js",
+      `import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+
+export default defineConfig({
+  plugins: [vue()],
+});
+`,
+    ),
+    "index.html": createWorkspaceFile(
+      "index.html",
+      `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vue Lesson</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
+`,
+    ),
+    "src/main.js": createWorkspaceFile(
+      "src/main.js",
+      `import { createApp } from "vue";
+import App from "./App.vue";
+import "./style.css";
+
+createApp(App).mount("#app");
+`,
+    ),
+    "src/App.vue": createWorkspaceFile(
+      "src/App.vue",
+      `<script setup>
+import { ref } from "vue";
+
+const count = ref(0);
+</script>
+
+<template>
+  <main class="page">
+    <h1>Hello Vue</h1>
+    <p>Edit <code>src/App.vue</code> to get started.</p>
+    <button type="button" @click="count++">Count is {{ count }}</button>
+  </main>
+</template>
+`,
+    ),
+    "src/style.css": createWorkspaceFile("src/style.css", createMinimalLessonStyles("#42b883")),
+  };
+
+  return {
+    id: "vue-workspace",
+    name: "Vue Lesson",
+    lessonType: "vue",
+    entryFilePath: "src/App.vue",
+    folders: collectWorkspaceFolders(Object.keys(files)),
+    files,
+  };
+}
+
+export function createStarterSolidWorkspace(): WorkspaceProject {
+  const files = {
+    "package.json": createWorkspaceFile(
+      "package.json",
+      createViteSpaPackageJson(
+        "solid-lesson",
+        { "solid-js": "^1.9.0" },
+        { "vite-plugin-solid": "^2.11.0" },
+      ),
+    ),
+    "vite.config.js": createWorkspaceFile(
+      "vite.config.js",
+      `import { defineConfig } from "vite";
+import solid from "vite-plugin-solid";
+
+export default defineConfig({
+  plugins: [solid()],
+});
+`,
+    ),
+    "index.html": createWorkspaceFile(
+      "index.html",
+      `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solid Lesson</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/index.jsx"></script>
+  </body>
+</html>
+`,
+    ),
+    "src/index.jsx": createWorkspaceFile(
+      "src/index.jsx",
+      `import { render } from "solid-js/web";
+import App from "./App.jsx";
+import "./style.css";
+
+render(() => <App />, document.getElementById("root"));
+`,
+    ),
+    "src/App.jsx": createWorkspaceFile(
+      "src/App.jsx",
+      `import { createSignal } from "solid-js";
+
+export default function App() {
+  const [count, setCount] = createSignal(0);
+
+  return (
+    <main class="page">
+      <h1>Hello Solid</h1>
+      <p>Edit <code>src/App.jsx</code> to get started.</p>
+      <button type="button" onClick={() => setCount(count() + 1)}>
+        Count is {count()}
+      </button>
+    </main>
+  );
+}
+`,
+    ),
+    "src/style.css": createWorkspaceFile("src/style.css", createMinimalLessonStyles("#2c4f7c")),
+  };
+
+  return {
+    id: "solid-workspace",
+    name: "Solid Lesson",
+    lessonType: "solid",
+    entryFilePath: "src/App.jsx",
+    folders: collectWorkspaceFolders(Object.keys(files)),
+    files,
+  };
+}
+
+export function createStarterSvelteWorkspace(): WorkspaceProject {
+  const files = {
+    "package.json": createWorkspaceFile(
+      "package.json",
+      createViteSpaPackageJson(
+        "svelte-lesson",
+        {},
+        { "@sveltejs/vite-plugin-svelte": "^6.0.0", svelte: "^5.0.0" },
+      ),
+    ),
+    "svelte.config.js": createWorkspaceFile(
+      "svelte.config.js",
+      `import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
+
+export default {
+  preprocess: vitePreprocess(),
+};
+`,
+    ),
+    "vite.config.js": createWorkspaceFile(
+      "vite.config.js",
+      `import { defineConfig } from "vite";
+import { svelte } from "@sveltejs/vite-plugin-svelte";
+
+export default defineConfig({
+  plugins: [svelte()],
+});
+`,
+    ),
+    "index.html": createWorkspaceFile(
+      "index.html",
+      `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Svelte Lesson</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
+`,
+    ),
+    "src/main.js": createWorkspaceFile(
+      "src/main.js",
+      `import { mount } from "svelte";
+import App from "./App.svelte";
+import "./style.css";
+
+const app = mount(App, { target: document.getElementById("app") });
+
+export default app;
+`,
+    ),
+    "src/App.svelte": createWorkspaceFile(
+      "src/App.svelte",
+      `<script>
+  let count = $state(0);
+</script>
+
+<main class="page">
+  <h1>Hello Svelte</h1>
+  <p>Edit <code>src/App.svelte</code> to get started.</p>
+  <button type="button" onclick={() => count++}>Count is {count}</button>
+</main>
+`,
+    ),
+    "src/style.css": createWorkspaceFile("src/style.css", createMinimalLessonStyles("#ff3e00")),
+  };
+
+  return {
+    id: "svelte-workspace",
+    name: "Svelte Lesson",
+    lessonType: "svelte",
+    entryFilePath: "src/App.svelte",
+    folders: collectWorkspaceFolders(Object.keys(files)),
+    files,
+  };
+}
+
+export function createStarterHtmxExpressWorkspace(): WorkspaceProject {
+  const files = {
+    "package.json": createWorkspaceFile(
+      "package.json",
+      JSON.stringify(
+        {
+          name: "htmx-express-lesson",
+          private: true,
+          version: "0.0.0",
+          type: "module",
+          scripts: {
+            dev: "node server.js",
+            start: "node server.js",
+          },
+          dependencies: {
+            express: "^5.1.0",
+          },
+        },
+        null,
+        2,
+      ),
+    ),
+    "server.js": createWorkspaceFile(
+      "server.js",
+      `import express from "express";
+
+const app = express();
+const port = 3000;
+
+// Serve the static HTML/CSS from the public/ folder.
+app.use(express.static("public"));
+
+// HTMX swaps this HTML fragment into the page when the button is clicked.
+app.get("/api/time", (req, res) => {
+  res.send(\`<p>Server time: \${new Date().toLocaleTimeString()}</p>\`);
+});
+
+app.listen(port, "0.0.0.0", () => {
+  console.log(\`Server running on http://localhost:\${port}\`);
+});
+`,
+    ),
+    "public/index.html": createWorkspaceFile(
+      "public/index.html",
+      `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <title>HTMX + Express Lesson</title>
+  </head>
+  <body>
+    <main class="page">
+      <h1>Hello HTMX</h1>
+      <p>This button asks the Express server for the current time.</p>
+      <button type="button" hx-get="/api/time" hx-target="#result" hx-swap="innerHTML">
+        Get server time
+      </button>
+      <div id="result"></div>
+    </main>
+  </body>
+</html>
+`,
+    ),
+    "public/styles.css": createWorkspaceFile(
+      "public/styles.css",
+      createMinimalLessonStyles("#3d72d7"),
+    ),
+  };
+
+  return {
+    id: "htmx-express-workspace",
+    name: "HTMX + Express Lesson",
+    lessonType: "htmx-express",
+    entryFilePath: "public/index.html",
     folders: collectWorkspaceFolders(Object.keys(files)),
     files,
   };

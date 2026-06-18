@@ -137,20 +137,25 @@ function remapCollapsedFolders(
   );
 }
 
+const KNOWN_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
+  "html-css",
+  "react",
+  "vue",
+  "solid",
+  "svelte",
+  "htmx-express",
+]);
+
 function inferWorkspaceLessonType(
   project: Pick<WorkspaceProject, "files"> & {
     lessonType?: string;
   },
 ): WorkspaceLessonType {
-  if (project.lessonType === "html-css") {
-    return "html-css";
+  if (project.lessonType && KNOWN_LESSON_TYPES.has(project.lessonType as WorkspaceLessonType)) {
+    return project.lessonType as WorkspaceLessonType;
   }
 
-  if (project.lessonType === "node.js") {
-    return "node.js";
-  }
-
-  return project.files["package.json"] || project.files["vite.config.js"] ? "node.js" : "html-css";
+  return project.files["package.json"] || project.files["vite.config.js"] ? "react" : "html-css";
 }
 
 export function normalizeProject(project: WorkspaceProject): WorkspaceProject {

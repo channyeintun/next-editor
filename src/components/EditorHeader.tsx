@@ -13,20 +13,53 @@ import {
   useWorkspaceFileCount,
   useWorkspaceLessonType,
 } from "../hooks/useWorkspace";
-import { lessonRunsInWebContainer, type WorkspaceLessonType } from "../types/workspace";
+import {
+  createStarterHtmlCssWorkspace,
+  createStarterHtmxExpressWorkspace,
+  createStarterSolidWorkspace,
+  createStarterSvelteWorkspace,
+  createStarterVueWorkspace,
+  createStarterWorkspaceProject,
+  lessonRunsInWebContainer,
+  type WorkspaceLessonType,
+  type WorkspaceProject,
+} from "../types/workspace";
 import SlidesButton from "./SlidesButton";
 
 const LESSON_TYPE_OPTIONS: Array<{
   value: WorkspaceLessonType;
   label: string;
+  createStarter: () => WorkspaceProject;
 }> = [
   {
-    value: "node.js",
-    label: "Node.js Lesson",
+    value: "html-css",
+    label: "HTML / CSS",
+    createStarter: createStarterHtmlCssWorkspace,
   },
   {
-    value: "html-css",
-    label: "HTML/CSS Lesson",
+    value: "react",
+    label: "React",
+    createStarter: createStarterWorkspaceProject,
+  },
+  {
+    value: "vue",
+    label: "Vue",
+    createStarter: createStarterVueWorkspace,
+  },
+  {
+    value: "solid",
+    label: "Solid",
+    createStarter: createStarterSolidWorkspace,
+  },
+  {
+    value: "svelte",
+    label: "Svelte",
+    createStarter: createStarterSvelteWorkspace,
+  },
+  {
+    value: "htmx-express",
+    label: "HTMX + Express",
+    createStarter: createStarterHtmxExpressWorkspace,
   },
 ];
 
@@ -222,10 +255,10 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { rerunRunner, updateEnvironmentVariables, updateRunnerConfig } =
+  const { rerunRunner, resetRuntime, updateEnvironmentVariables, updateRunnerConfig } =
     useWebContainerRuntimeActions();
   const { environmentVariables, runnerConfig, status } = useWebContainerRuntimeMetadata();
-  const { createNewEditor, getProject, resetProject, saveProject } = useWorkspaceActions();
+  const { createNewEditor, getProject, loadProject, saveProject } = useWorkspaceActions();
   const fileCount = useWorkspaceFileCount();
   const lessonType = useWorkspaceLessonType();
   const { hasUnsavedChanges } = useWorkspaceDirtyState();
@@ -289,12 +322,18 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
       return;
     }
 
-    const nextLessonLabel =
-      nextLessonType === "node.js" ? "a fresh Node.js lesson" : "a fresh HTML/CSS lesson";
+    const nextOption = LESSON_TYPE_OPTIONS.find((option) => option.value === nextLessonType);
+
+    if (!nextOption) {
+      setIsMenuOpen(false);
+      return;
+    }
+
+    const nextLessonLabel = `a fresh ${nextOption.label} project`;
     const confirmMessage = hasUnsavedChanges
-      ? `Discard the current workspace and unsaved changes? Switching lesson type will replace it with ${nextLessonLabel}.`
+      ? `Discard the current workspace and unsaved changes? Switching will replace it with ${nextLessonLabel}.`
       : fileCount > 0
-        ? `Discard the current workspace? Switching lesson type will replace it with ${nextLessonLabel}.`
+        ? `Discard the current workspace? Switching will replace it with ${nextLessonLabel}.`
         : `Switch to ${nextLessonLabel}?`;
 
     setIsMenuOpen(false);
@@ -303,14 +342,12 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
       return;
     }
 
-    if (nextLessonType === "node.js") {
-      resetProject();
-    } else {
-      createNewEditor();
-    }
-
+    loadProject(nextOption.createStarter());
     saveProject();
     updateRunnerConfig({ enabled: true });
+    // Each framework ships different dependencies, so tear the runtime down to
+    // force a fresh mount + `npm install` for the new project on next start.
+    resetRuntime();
   };
 
   const handleSave = () => {

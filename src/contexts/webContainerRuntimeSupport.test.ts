@@ -6,7 +6,7 @@ function nodeProject(htmlContent: string): WorkspaceProject {
   return {
     id: "project-1",
     name: "Project",
-    lessonType: "node.js",
+    lessonType: "react",
     entryFilePath: "index.html",
     folders: [],
     files: {
