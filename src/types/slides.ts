@@ -191,7 +191,7 @@ export type PreviewDomPatchOp =
   | PreviewSetPropertyOp;
 
 export interface PreviewInitialDocument {
-  version: typeof PREVIEW_DOM_PATCH_FORMAT_VERSION;
+  version: number;
   time: number;
   documentId: string;
   route?: string;
@@ -201,7 +201,7 @@ export interface PreviewInitialDocument {
 }
 
 export interface PreviewDomPatchBatch {
-  version: typeof PREVIEW_DOM_PATCH_FORMAT_VERSION;
+  version: number;
   time: number;
   source: PreviewDomPatchSource;
   documentId: string;

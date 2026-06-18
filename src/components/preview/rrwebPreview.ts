@@ -115,16 +115,29 @@ export function createRrwebPreviewRecorderScript({
         schedule();
       }
 
-      try {
-        window.rrweb.record({
-          emit: emit,
-          recordCanvas: false,
-          collectFonts: false,
-          inlineStylesheet: true,
-          // Replay is visual-only; do not capture input values that may be secret.
-          maskAllInputs: false,
-        });
-      } catch (e) {}
+      function startRecording() {
+        try {
+          window.rrweb.record({
+            emit: emit,
+            recordCanvas: false,
+            collectFonts: false,
+            inlineStylesheet: true,
+            // Replay is visual-only; do not capture input values that may be secret.
+            maskAllInputs: false,
+            // Scripts never execute in replay and our own injected scripts must not
+            // bloat the snapshot; comments are noise. Drop both.
+            slimDOMOptions: { script: true, comment: true },
+          });
+        } catch (e) {}
+      }
+
+      // Snapshot a fully-parsed document so the FullSnapshot is complete; later
+      // mutations stream as incremental events.
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startRecording, { once: true });
+      } else {
+        startRecording();
+      }
     })();
   `;
 

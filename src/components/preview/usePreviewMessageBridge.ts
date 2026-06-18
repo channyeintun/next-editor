@@ -1,14 +1,11 @@
 import { useEffect, type RefObject } from "react";
 import {
-  PREVIEW_DOM_PATCH_FORMAT_VERSION,
   type IframeInteractionEvent,
   type PreviewDomPatchBatch,
-  type PreviewDomPatchOp,
   type PreviewEvent,
   type PreviewInitialDocument,
-  type PreviewNodeRef,
+  type PreviewRecordedEvent,
   type PreviewSize,
-  type SerializedPreviewNode,
 } from "../../types/slides";
 import {
   IFRAME_CONSOLE_MESSAGE_TYPE,
@@ -16,13 +13,15 @@ import {
   type IframeConsoleMessagePayload,
 } from "../../utils/iframeConsoleBridge";
 import {
-  createPatchReplaySeedFromHtml,
   createReplayableRuntimePreviewFromHtml,
   type PreviewScrollPosition,
-  RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
-  RUNTIME_PATCH_BATCH_MESSAGE_TYPE,
   RUNTIME_SNAPSHOT_MESSAGE_TYPE,
 } from "./previewIframeUtils";
+import {
+  PREVIEW_RRWEB_FORMAT_VERSION,
+  RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
+  RUNTIME_PATCH_BATCH_MESSAGE_TYPE,
+} from "./rrwebPreview";
 
 interface UsePreviewMessageBridgeOptions {
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -75,121 +74,17 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
 }
 
-function isOptionalNamespace(value: unknown): value is string | null | undefined {
-  return value === undefined || value === null || typeof value === "string";
-}
-
-function isPreviewNodeRef(value: unknown): value is PreviewNodeRef {
-  if (!isRecord(value) || !Array.isArray(value.path)) {
-    return false;
-  }
-
+function isPreviewRecordedEvent(value: unknown): value is PreviewRecordedEvent {
   return (
-    (value.id === undefined || typeof value.id === "string") &&
-    value.path.every((part) => typeof part === "number" && Number.isInteger(part) && part >= 0)
+    isRecord(value) &&
+    typeof value.type === "number" &&
+    isFiniteNumber(value.timestamp) &&
+    "data" in value
   );
 }
 
-function isSerializedPreviewNode(value: unknown): value is SerializedPreviewNode {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  if (
-    value.kind !== "element" &&
-    value.kind !== "text" &&
-    value.kind !== "comment" &&
-    value.kind !== "doctype"
-  ) {
-    return false;
-  }
-
-  if (value.tagName !== undefined && typeof value.tagName !== "string") {
-    return false;
-  }
-
-  if (!isOptionalNamespace(value.namespaceURI)) {
-    return false;
-  }
-
-  if (value.text !== undefined && typeof value.text !== "string") {
-    return false;
-  }
-
-  if (
-    value.attributes !== undefined &&
-    (!Array.isArray(value.attributes) ||
-      !value.attributes.every(
-        (attribute) =>
-          Array.isArray(attribute) &&
-          attribute.length === 2 &&
-          typeof attribute[0] === "string" &&
-          typeof attribute[1] === "string",
-      ))
-  ) {
-    return false;
-  }
-
-  return (
-    value.children === undefined ||
-    (Array.isArray(value.children) && value.children.every(isSerializedPreviewNode))
-  );
-}
-
-function isPreviewDomPatchOp(value: unknown): value is PreviewDomPatchOp {
-  if (!isRecord(value) || typeof value.op !== "string") {
-    return false;
-  }
-
-  switch (value.op) {
-    case "set_text":
-      return isPreviewNodeRef(value.target) && typeof value.text === "string";
-    case "set_attribute":
-      return (
-        isPreviewNodeRef(value.target) &&
-        typeof value.name === "string" &&
-        typeof value.value === "string" &&
-        isOptionalNamespace(value.namespaceURI)
-      );
-    case "remove_attribute":
-      return (
-        isPreviewNodeRef(value.target) &&
-        typeof value.name === "string" &&
-        isOptionalNamespace(value.namespaceURI)
-      );
-    case "insert_node":
-      return (
-        isPreviewNodeRef(value.parent) &&
-        isFiniteNumber(value.index) &&
-        Number.isInteger(value.index) &&
-        value.index >= 0 &&
-        isSerializedPreviewNode(value.node)
-      );
-    case "remove_node":
-      return isPreviewNodeRef(value.target);
-    case "move_node":
-      return (
-        isPreviewNodeRef(value.target) &&
-        isPreviewNodeRef(value.parent) &&
-        isFiniteNumber(value.index) &&
-        Number.isInteger(value.index) &&
-        value.index >= 0
-      );
-    case "replace_subtree":
-      return (
-        isPreviewNodeRef(value.target) &&
-        typeof value.html === "string" &&
-        (value.mode === "children" || value.mode === "node")
-      );
-    case "set_property":
-      return (
-        isPreviewNodeRef(value.target) &&
-        (value.name === "value" || value.name === "checked" || value.name === "selected") &&
-        (typeof value.value === "string" || typeof value.value === "boolean")
-      );
-    default:
-      return false;
-  }
+function isPreviewRecordedEventArray(value: unknown): value is PreviewRecordedEvent[] {
+  return Array.isArray(value) && value.every(isPreviewRecordedEvent);
 }
 
 function createValidatedInitialDocument(
@@ -201,26 +96,24 @@ function createValidatedInitialDocument(
   }
 
   if (
-    payload.version !== PREVIEW_DOM_PATCH_FORMAT_VERSION ||
+    payload.version !== PREVIEW_RRWEB_FORMAT_VERSION ||
     !isFiniteNumber(payload.time) ||
     typeof payload.documentId !== "string" ||
     !isOptionalString(payload.route) ||
-    typeof payload.html !== "string"
+    !isPreviewRecordedEventArray(payload.events)
   ) {
     return null;
   }
 
-  const html = createPatchReplaySeedFromHtml(payload.html, effectiveRuntimePreviewUrl);
-  if (!html) {
-    return null;
-  }
-
   return {
-    version: PREVIEW_DOM_PATCH_FORMAT_VERSION,
+    version: PREVIEW_RRWEB_FORMAT_VERSION,
     time: payload.time,
     documentId: payload.documentId,
     route: payload.route,
-    html,
+    // rrweb replay is driven entirely by `events`; `html` is retained on the type
+    // only for the (now-unused) legacy seed path and is left empty.
+    html: "",
+    events: payload.events,
   };
 }
 
@@ -230,28 +123,27 @@ function createValidatedPatchBatch(payload: unknown): PreviewDomPatchBatch | nul
   }
 
   if (
-    payload.version !== PREVIEW_DOM_PATCH_FORMAT_VERSION ||
+    payload.version !== PREVIEW_RRWEB_FORMAT_VERSION ||
     !isFiniteNumber(payload.time) ||
     (payload.source !== "runtime-preview" && payload.source !== "static-preview") ||
     typeof payload.documentId !== "string" ||
-    !isFiniteNumber(payload.baseRevision) ||
-    !isFiniteNumber(payload.revision) ||
     !isOptionalString(payload.route) ||
-    !Array.isArray(payload.ops) ||
-    !payload.ops.every(isPreviewDomPatchOp)
+    !isPreviewRecordedEventArray(payload.events)
   ) {
     return null;
   }
 
   return {
-    version: PREVIEW_DOM_PATCH_FORMAT_VERSION,
+    version: PREVIEW_RRWEB_FORMAT_VERSION,
     time: payload.time,
     source: payload.source,
     documentId: payload.documentId,
-    baseRevision: payload.baseRevision,
-    revision: payload.revision,
     route: payload.route,
-    ops: payload.ops,
+    // Legacy custom-op fields retained on the type for now; unused by rrweb replay.
+    baseRevision: 0,
+    revision: 0,
+    ops: [],
+    events: payload.events,
   };
 }
 

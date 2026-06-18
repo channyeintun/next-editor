@@ -13,6 +13,7 @@ import {
   type WorkspaceFile,
   type WorkspaceProject,
 } from "../types/workspace";
+import { createRrwebPreviewRecorderScript } from "../components/preview/rrwebPreview";
 import { createIframeConsoleBridgeScript } from "../utils/iframeConsoleBridge";
 import { createIframeInteractionCaptureScript } from "../utils/iframeInteractionCapture";
 
@@ -44,6 +45,7 @@ const PREVIEW_REPLAY_NODE_ID_ATTRIBUTE = "data-next-editor-preview-node-id";
 const RUNTIME_SNAPSHOT_SCRIPT_MARKER = "__NEXT_EDITOR_RUNTIME_SNAPSHOT__";
 const RUNTIME_CONSOLE_BRIDGE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_CONSOLE_BRIDGE__";
 const RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_INTERACTION_CAPTURE__";
+const RUNTIME_RRWEB_RECORD_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_RRWEB_RECORD__";
 const RUNTIME_IMPORT_IGNORED_ROOTS = new Set([".git", "node_modules"]);
 
 const sharedWebContainerState: {
@@ -622,23 +624,31 @@ function injectRuntimeSnapshotScript(
     { includeMouseMove: true, includeRouteChange: true },
   );
   const consoleBridgeScript = createIframeConsoleBridgeScript(RUNTIME_CONSOLE_BRIDGE_SETUP_MARKER);
-  const runtimePatchRecorderScript = createRuntimePatchRecorderScript();
+
+  // rrweb records the live DOM (+ inner scroll/input/mouse) for replay. It lives
+  // in its own script tag (large vendored bundle) so it stays cleanly strippable
+  // and so `slimDOMOptions.script` can drop it from its own snapshot.
+  const rrwebRecordScript = `<script data-next-editor-rrweb-record>${createRrwebPreviewRecorderScript(
+    { setupMarker: RUNTIME_RRWEB_RECORD_SETUP_MARKER },
+  )}</script>`;
 
   const snapshotScript = `<script data-next-editor-runtime-snapshot>(function(){const marker=${JSON.stringify(
     RUNTIME_SNAPSHOT_SCRIPT_MARKER,
   )};if(window[marker])return;window[marker]=true;const messageType=${JSON.stringify(
     RUNTIME_SNAPSHOT_MESSAGE_TYPE,
-  )};${consoleBridgeScript}${interactionCaptureScript}${runtimePatchRecorderScript}const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();</script>`;
+  )};${consoleBridgeScript}${interactionCaptureScript}const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();</script>`;
+
+  const injectedScripts = `${rrwebRecordScript}\n${snapshotScript}`;
 
   if (content.includes("</head>")) {
-    return content.replace("</head>", `${snapshotScript}\n</head>`);
+    return content.replace("</head>", `${injectedScripts}\n</head>`);
   }
 
   if (content.includes("</body>")) {
-    return content.replace("</body>", `${snapshotScript}\n</body>`);
+    return content.replace("</body>", `${injectedScripts}\n</body>`);
   }
 
-  return `${content}\n${snapshotScript}`;
+  return `${content}\n${injectedScripts}`;
 }
 
 function getNormalizedProjectFiles(project: WorkspaceProject | null): Map<string, WorkspaceFile> {
@@ -655,10 +665,9 @@ function getNormalizedProjectFiles(project: WorkspaceProject | null): Map<string
 }
 
 function stripRuntimeSnapshotScript(content: string): string {
-  return content.replace(
-    /\s*<script data-next-editor-runtime-snapshot>[\s\S]*?<\/script>\s*/g,
-    "\n",
-  );
+  return content
+    .replace(/\s*<script data-next-editor-rrweb-record>[\s\S]*?<\/script>\s*/g, "\n")
+    .replace(/\s*<script data-next-editor-runtime-snapshot>[\s\S]*?<\/script>\s*/g, "\n");
 }
 
 function shouldIgnoreRuntimeImportPath(path: string): boolean {
