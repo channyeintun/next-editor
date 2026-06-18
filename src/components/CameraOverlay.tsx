@@ -362,7 +362,9 @@ const CameraOverlay: React.FC = () => {
         autoPlay={showPreview}
         playsInline
         preload="auto"
-        className="object-cover size-full"
+        // Mirror the self-facing camera horizontally so the overlay reads like a mirror
+        // (matching the recorder's expectation) instead of the reversed "how others see you" view.
+        className="object-cover size-full -scale-x-100"
         aria-label={showPreview ? "Live camera preview" : "Camera recording"}
       />
       <button
