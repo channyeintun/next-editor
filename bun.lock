@@ -8,6 +8,7 @@
         "@monaco-editor/react": "^4.7.0",
         "@msgpack/msgpack": "^3.1.3",
         "@revealjs/react": "^0.2.1",
+        "@soundtouchjs/audio-worklet": "^2.0.4",
         "@types/pako": "^2.0.4",
         "@webcontainer/api": "^1.6.4",
         "@xstate/react": "^6.1.0",
@@ -382,6 +383,14 @@
     "@rrweb/types": ["@rrweb/types@2.0.1", "", {}, "sha512-x8cNaKFxdvS0/5IfKOj1xG8Htnw1fUwqoPqgP61bOaWqZL6t9UtRPpO9ZlMB2z+FiTxg9zlFFL+Da4ZpFuhoiA=="],
 
     "@rrweb/utils": ["@rrweb/utils@2.0.1", "", {}, "sha512-t+b+4rB23/e4EpoGMdPUr6cKtDsFuOb3LxA9IHE8e3A/Xo0nMUfH0bkwqdpUNa/VGDOdiGeG3bhHjuO9zWX54g=="],
+
+    "@soundtouchjs/audio-worklet": ["@soundtouchjs/audio-worklet@2.0.4", "", { "dependencies": { "@soundtouchjs/core": "2.0.4", "@soundtouchjs/interpolation-strategy-lanczos": "2.0.4", "@soundtouchjs/worklet-base": "2.0.4" } }, "sha512-Qfj0wjo3sG5vLsgEeepvs0xo9KjhpicYB1JOMEqnLyy79/DPleNE3x2qwVTdb7ATl0NVFtSyGJggLmY1M40viA=="],
+
+    "@soundtouchjs/core": ["@soundtouchjs/core@2.0.4", "", { "dependencies": { "@soundtouchjs/interpolation-strategy-lanczos": "2.0.4" } }, "sha512-QVCEtyyVPPFGA4WW9NAXKZb/ujLpUGZeMexkuqJYwh0lVZ5fV+iWQHfI86xLpBSo676E0M+5cskBd6gecV8pUA=="],
+
+    "@soundtouchjs/interpolation-strategy-lanczos": ["@soundtouchjs/interpolation-strategy-lanczos@2.0.4", "", {}, "sha512-yjmKTFqxcfZbR34gVybaMjrYJETvYk6gKzgRpZ1NQsIdQdLJnbFnvn88H2HH7NUUZgcUTtC+y9fsQWFurw755w=="],
+
+    "@soundtouchjs/worklet-base": ["@soundtouchjs/worklet-base@2.0.4", "", { "dependencies": { "@soundtouchjs/core": "2.0.4" } }, "sha512-2gj49iFxrsvxuecFYIfeJFcgnMp6y5lSHCa5kykBPFOsnmSIfTVJYJCNrFNn4m6hWhobBQbdS/TfHptKehaBLg=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 

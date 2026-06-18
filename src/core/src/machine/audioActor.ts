@@ -1,5 +1,48 @@
 import { fromCallback, type ActorRefFrom } from "xstate";
 
+/**
+ * SoundTouch (WSOLA) is loaded lazily and only used to preserve pitch when audio
+ * plays off-speed. An `AudioBufferSourceNode` resamples on `playbackRate`, which
+ * couples tempo and pitch (2x speed = +1 octave); SoundTouch cancels that
+ * tempo-induced pitch shift. Module load and per-`AudioContext` registration are
+ * cached so repeated playback actors share the work.
+ */
+type SoundTouchNodeCtor = typeof import("@soundtouchjs/audio-worklet").SoundTouchNode;
+
+let soundTouchLoader: Promise<{
+  SoundTouchNode: SoundTouchNodeCtor;
+  processorUrl: string;
+}> | null = null;
+const soundTouchRegistrations = new WeakMap<BaseAudioContext, Promise<SoundTouchNodeCtor>>();
+
+const loadSoundTouch = () => {
+  if (!soundTouchLoader) {
+    soundTouchLoader = Promise.all([
+      import("@soundtouchjs/audio-worklet"),
+      import("@soundtouchjs/audio-worklet/processor?url"),
+    ]).then(([module, processor]) => ({
+      SoundTouchNode: module.SoundTouchNode,
+      processorUrl: processor.default,
+    }));
+  }
+
+  return soundTouchLoader;
+};
+
+const registerSoundTouch = (context: BaseAudioContext): Promise<SoundTouchNodeCtor> => {
+  let registration = soundTouchRegistrations.get(context);
+
+  if (!registration) {
+    registration = loadSoundTouch().then(async ({ SoundTouchNode, processorUrl }) => {
+      await SoundTouchNode.register(context, processorUrl);
+      return SoundTouchNode;
+    });
+    soundTouchRegistrations.set(context, registration);
+  }
+
+  return registration;
+};
+
 const AUDIO_SYNC_DRIFT_THRESHOLD_MS = 500;
 const STREAM_BUFFER_SWITCH_LOOKAHEAD_MS = 1000;
 
@@ -248,6 +291,8 @@ export const audioPlaybackActor = fromCallback<
   let audioContext: AudioContext | null = null;
   let gainNode: GainNode | null = null;
   let sourceNode: AudioBufferSourceNode | null = null;
+  let pitchShiftNode: InstanceType<SoundTouchNodeCtor> | null = null;
+  let soundTouchNodeCtor: SoundTouchNodeCtor | null = null;
   let activeBuffer: AudioBuffer | null = null;
   let pendingBuffer: AudioBuffer | null = null;
   let pendingBufferLoadedUntilMs = input.loadedUntilMs ?? Number.POSITIVE_INFINITY;
@@ -295,7 +340,37 @@ export const audioPlaybackActor = fromCallback<
     gainNode = audioContext.createGain();
     gainNode.gain.value = volume;
     gainNode.connect(audioContext.destination);
+    ensurePitchShifter(audioContext);
     return audioContext;
+  };
+
+  /**
+   * Loads + registers the SoundTouch worklet used for pitch preservation. Runs in
+   * the background; until it resolves, off-speed audio plays without pitch
+   * correction (native resampled behavior) and is upgraded in place the moment the
+   * node becomes available. A no-op when Web Audio worklets are unavailable.
+   */
+  const ensurePitchShifter = (context: AudioContext) => {
+    if (soundTouchNodeCtor || typeof AudioWorkletNode === "undefined" || !context.audioWorklet) {
+      return;
+    }
+
+    void registerSoundTouch(context)
+      .then((Ctor) => {
+        if (disposed) {
+          return;
+        }
+        soundTouchNodeCtor = Ctor;
+        // Registration finished after playback already began off-speed: rebuild the
+        // source from its current position so the pitch is corrected from here on.
+        if (requestedPlay && sourceNode && playbackRate !== 1 && !pitchShiftNode) {
+          targetTimeMs = getSourceTimelineTime();
+          startSource();
+        }
+      })
+      .catch((error) => {
+        console.warn("[AudioActor] Pitch preservation unavailable:", error);
+      });
   };
 
   const getTargetOffsetSeconds = (): number => {
@@ -330,6 +405,17 @@ export const audioPlaybackActor = fromCallback<
   };
 
   const stopSource = () => {
+    // Discard the per-source pitch shifter so its WSOLA buffer can't replay stale
+    // samples after a seek/restart (the cause of the previous echo).
+    if (pitchShiftNode) {
+      try {
+        pitchShiftNode.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      pitchShiftNode = null;
+    }
+
     if (!sourceNode) {
       return;
     }
@@ -341,6 +427,11 @@ export const audioPlaybackActor = fromCallback<
       source.stop();
     } catch {
       // Already stopped.
+    }
+    try {
+      source.disconnect();
+    } catch {
+      // Already disconnected.
     }
   };
 
@@ -402,7 +493,35 @@ export const audioPlaybackActor = fromCallback<
     const source = context.createBufferSource();
     source.buffer = activeBuffer;
     source.playbackRate.value = playbackRate;
-    source.connect(gainNode);
+
+    // Pitch preservation: `AudioBufferSourceNode.playbackRate` resamples, shifting
+    // pitch along with tempo (2x speed raises pitch an octave). When off-speed,
+    // route through a SoundTouch node whose `playbackRate` is set to the same value
+    // so it cancels exactly that tempo-induced pitch shift, leaving voices natural.
+    // A fresh node per source start means no stale samples survive a seek. At 1x we
+    // bypass it so the normal path stays byte-for-byte native.
+    let tail: AudioNode = source;
+    if (playbackRate !== 1 && soundTouchNodeCtor) {
+      try {
+        const PitchShifter = soundTouchNodeCtor;
+        const shifter = new PitchShifter({
+          context,
+          outputChannelCount: activeBuffer.numberOfChannels >= 2 ? 2 : 1,
+        });
+        shifter.playbackRate.value = playbackRate;
+        shifter.pitch.value = 1;
+        shifter.pitchSemitones.value = 0;
+        source.connect(shifter);
+        pitchShiftNode = shifter;
+        tail = shifter;
+      } catch (error) {
+        console.warn("[AudioActor] Pitch shifter init failed, using native playback:", error);
+        pitchShiftNode = null;
+        tail = source;
+      }
+    }
+
+    tail.connect(gainNode);
     source.onended = () => {
       if (sourceNode !== source) {
         return;
@@ -519,11 +638,36 @@ export const audioPlaybackActor = fromCallback<
   };
 
   const updatePlaybackRate = (rate: number) => {
-    playbackRate = Number.isFinite(rate) && rate > 0 ? rate : 1;
+    const nextRate = Number.isFinite(rate) && rate > 0 ? rate : 1;
+    const prevRate = playbackRate;
+
+    if (nextRate === prevRate) {
+      return;
+    }
+
+    // Crossing the 1x boundary changes the graph topology (the pitch shifter only
+    // exists off-speed), so rebuild the source from its current position. Any other
+    // change just updates the live AudioParams for a smooth, gap-free speed change.
+    const crossesBypassBoundary = (prevRate === 1) !== (nextRate === 1);
+
+    if (sourceNode && crossesBypassBoundary) {
+      targetTimeMs = getSourceTimelineTime();
+      playbackRate = nextRate;
+      startSource();
+      return;
+    }
+
     if (sourceNode) {
       playStartedAtTimelineMs = getSourceTimelineTime();
       playStartedAtContextTime = audioContext?.currentTime ?? 0;
-      sourceNode.playbackRate.value = playbackRate;
+    }
+    playbackRate = nextRate;
+    if (sourceNode) {
+      sourceNode.playbackRate.value = nextRate;
+      // Keep the pitch compensation locked to the source's tempo.
+      if (pitchShiftNode) {
+        pitchShiftNode.playbackRate.value = nextRate;
+      }
     }
   };
 
