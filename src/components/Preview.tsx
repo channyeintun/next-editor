@@ -15,6 +15,8 @@ const Preview = memo(function Preview() {
     controller.rendererKind === "runtime" ? (
       <RuntimePreviewRenderer
         iframeRef={controller.iframeRef}
+        replayContainerRef={controller.replayContainerRef}
+        isRrwebReplayActive={controller.isRrwebReplayActive}
         disablePointerEvents={controller.disablePointerEvents}
       />
     ) : (

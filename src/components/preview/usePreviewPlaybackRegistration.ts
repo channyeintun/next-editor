@@ -18,6 +18,8 @@ import {
   type PreviewScrollPosition,
 } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
+import { buildRrwebReplayEvents, hasRrwebPreviewEvents } from "./rrwebPreview";
+import { RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
 interface PreviewPatchReplayCursor {
   recordingId: string | null;
@@ -56,6 +58,7 @@ interface UsePreviewPlaybackRegistrationOptions {
   isUserScrollingRef: RefObject<boolean>;
   targetScrollRef: RefObject<PreviewScrollPosition | null>;
   rafRef: RefObject<number | null>;
+  replayContainerRef: RefObject<HTMLDivElement | null>;
 }
 
 function getIframeDocumentAndWindow(iframe: HTMLIFrameElement): {
@@ -130,8 +133,13 @@ export function usePreviewPlaybackRegistration({
   isUserScrollingRef,
   targetScrollRef,
   rafRef,
+  replayContainerRef,
 }: UsePreviewPlaybackRegistrationOptions) {
   const targetScrollInteractionRef = useRef<IframeInteractionEvent | null>(null);
+  // rrweb replay: the Replayer owns the recorded DOM + scroll + input in one
+  // ordered stream, driven by `currentTime`. Rebuilt when the recording changes.
+  const rrwebReplayerRef = useRef<RrwebPreviewReplayer | null>(null);
+  const rrwebReplayRecordingIdRef = useRef<string | null>(null);
   const patchReplayCursorRef = useRef<PreviewPatchReplayCursor>({
     recordingId: null,
     documentId: null,
@@ -169,7 +177,21 @@ export function usePreviewPlaybackRegistration({
       revision: 0,
       lastAppliedBatchIndex: -1,
     };
+
+    rrwebReplayerRef.current?.destroy();
+    rrwebReplayerRef.current = null;
+    rrwebReplayRecordingIdRef.current = null;
   }, [hasPreviewPatchReplay]);
+
+  // Tear down the rrweb Replayer when the preview unmounts.
+  useEffect(
+    () => () => {
+      rrwebReplayerRef.current?.destroy();
+      rrwebReplayerRef.current = null;
+      rrwebReplayRecordingIdRef.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     const applyInitialDocument = (
@@ -238,9 +260,57 @@ export function usePreviewPlaybackRegistration({
       return applyInitialDocument(iframe, input, initialDocument);
     };
 
+    const applyRrwebReplay = (input: PreviewPatchReplayInput): number => {
+      const container = replayContainerRef.current;
+      if (!container) {
+        // Container not mounted yet; retry on the next tick.
+        return -1;
+      }
+
+      if (!rrwebReplayerRef.current || rrwebReplayRecordingIdRef.current !== input.recordingId) {
+        rrwebReplayerRef.current?.destroy();
+        rrwebReplayerRef.current = null;
+        rrwebReplayRecordingIdRef.current = input.recordingId;
+
+        const events = buildRrwebReplayEvents(input.initialDocuments, input.patchBatches);
+        const baseTime = input.initialDocuments[0]?.time ?? 0;
+
+        // rrweb needs at least a Meta + FullSnapshot to build the document.
+        if (events.length >= 2) {
+          try {
+            rrwebReplayerRef.current = new RrwebPreviewReplayer({
+              root: container,
+              events,
+              baseTime,
+            });
+          } catch (error) {
+            console.warn("Failed to initialize rrweb preview replayer", error);
+            rrwebReplayerRef.current = null;
+          }
+        }
+      }
+
+      rrwebReplayerRef.current?.seekToRecordingTime(input.currentTime);
+
+      // Report the last batch at/before currentTime so the machine's change
+      // detection keeps advancing the cursor.
+      let cursor = -1;
+      for (let index = 0; index < input.patchBatches.length; index++) {
+        if (input.patchBatches[index].time > input.currentTime) {
+          break;
+        }
+        cursor = index;
+      }
+      return cursor;
+    };
+
     previewAdapter.setPatchReplayApplier((input) => {
       if (!hasPreviewPatchReplay || isLiveRuntimePreviewActive) {
         return input.lastAppliedPatchBatchIndex;
+      }
+
+      if (hasRrwebPreviewEvents(input.initialDocuments, input.patchBatches)) {
+        return applyRrwebReplay(input);
       }
 
       const iframe = iframeRef.current;
@@ -361,6 +431,7 @@ export function usePreviewPlaybackRegistration({
     isLiveRuntimePreviewActive,
     lastContentRef,
     previewAdapter,
+    replayContainerRef,
   ]);
 
   useEffect(() => {

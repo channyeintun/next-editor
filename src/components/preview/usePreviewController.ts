@@ -36,6 +36,7 @@ import {
   patchIframeContentFromHtml,
   type PreviewScrollPosition,
 } from "./previewIframeUtils";
+import { hasRrwebPreviewEvents } from "./rrwebPreview";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
 import { usePreviewMessageBridge } from "./usePreviewMessageBridge";
 import { usePreviewPlaybackRegistration } from "./usePreviewPlaybackRegistration";
@@ -365,6 +366,8 @@ function createRuntimePreviewPlaceholder(
 export interface PreviewController {
   containerRef: RefObject<HTMLDivElement | null>;
   iframeRef: RefObject<HTMLIFrameElement | null>;
+  replayContainerRef: RefObject<HTMLDivElement | null>;
+  isRrwebReplayActive: boolean;
   size: PreviewSize;
   isOpen: boolean;
   panelMode: PreviewPanelMode;
@@ -418,6 +421,7 @@ export function usePreviewController(): PreviewController {
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const replayContainerRef = useRef<HTMLDivElement>(null);
 
   const lastContentRef = useRef("");
   const lastRuntimeSnapshotRef = useRef("");
@@ -483,6 +487,12 @@ export function usePreviewController(): PreviewController {
     currentRecording.previewPatchBatches?.length,
   );
   const isRuntimePlaybackPreviewActive = lessonType === "node.js" && isPlaybackPreviewActive;
+  const isRrwebReplayActive =
+    isRuntimePlaybackPreviewActive &&
+    hasRrwebPreviewEvents(
+      currentRecording?.previewInitialDocuments,
+      currentRecording?.previewPatchBatches,
+    );
   const recordedRuntimeSnapshot = isRuntimePlaybackPreviewActive
     ? (currentRecording?.runtimeSnapshot ?? null)
     : null;
@@ -895,6 +905,7 @@ export function usePreviewController(): PreviewController {
     isUserScrollingRef,
     targetScrollRef,
     rafRef,
+    replayContainerRef,
   });
 
   usePreviewInteractionCapture({
@@ -1484,6 +1495,8 @@ export function usePreviewController(): PreviewController {
   return {
     containerRef,
     iframeRef,
+    replayContainerRef,
+    isRrwebReplayActive,
     size,
     isOpen,
     panelMode,

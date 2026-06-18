@@ -16,7 +16,7 @@ browser verification** with the running app — flagged per task where it applie
 | 0   | Add rrweb dep; baseline; progress.md                                                                         | DONE   | install ok                |
 | 1   | Foundation: vendored UMD bundle, rrweb event types (both slides copies), shared message/event module         | DONE   | typecheck+test            |
 | 2   | Recording: replace injected custom recorder with rrweb `record`; update message bridge to carry rrweb events | DONE   | typecheck+test (+browser) |
-| 3   | Replay: rrweb `Replayer` applier driven by the existing seek machine; mount into preview panel               | TODO   | typecheck+test (+browser) |
+| 3   | Replay: rrweb `Replayer` applier driven by the existing seek machine; mount into preview panel               | DONE   | typecheck+test (+browser) |
 | 4   | Scroll/viewport: retire decoupled runtime scroll path; responsive replay iframe; float/unfloat fidelity      | TODO   | typecheck+test (+browser) |
 | 5   | Delete custom path: recorder, apply engine, seed-patch transforms, op types, validators                      | TODO   | typecheck+test            |
 | 6   | Tests: rrweb round-trip (virtual-list churn + scroll/float-unfloat)                                          | TODO   | test                      |
@@ -51,3 +51,14 @@ browser verification** with the running app — flagged per task where it applie
   includes the 265KB tag, host strips scripts) — revisit perf in Task 4.
   Browser-verify pending: actual rrweb recording into the segments.
   Green: typecheck ok; full suite 76 pass / 2 pre-existing audio fails.
+- T3: New `rrwebPreviewReplayer.ts` (`RrwebPreviewReplayer` wraps rrweb `Replayer`,
+  driven by `pause(currentTime - baseTime)`; fills panel; `computeRrwebOffsetMs`
+  pure helper). `usePreviewPlaybackRegistration` applier branches to rrweb when
+  `hasRrwebPreviewEvents`, rebuilds Replayer on recordingId change, tears down on
+  reset/unmount. Controller exposes `replayContainerRef` + `isRrwebReplayActive`;
+  `RuntimePreviewRenderer` mounts the replay container (vs live iframe) during rrweb
+  playback, keeping `data-cursor-replay-target`. Clock alignment: envelope `.time`
+  is rebased to recording-relative in `recordingSession.append*`, so
+  `offset = currentTime - initialDocuments[0].time`.
+  Browser-verify pending: Replayer DOM/scroll/seek fidelity (jsdom can't render it).
+  Green: typecheck ok; 33 preview tests; full suite 79 pass / 2 pre-existing audio fails.
