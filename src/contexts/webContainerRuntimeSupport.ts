@@ -636,7 +636,7 @@ function injectRuntimeSnapshotScript(
     RUNTIME_SNAPSHOT_SCRIPT_MARKER,
   )};if(window[marker])return;window[marker]=true;const messageType=${JSON.stringify(
     RUNTIME_SNAPSHOT_MESSAGE_TYPE,
-  )};${consoleBridgeScript}${interactionCaptureScript}const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();</script>`;
+  )};${consoleBridgeScript}${interactionCaptureScript}const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML.replace(/<script[\\s\\S]*?<\\/script>/gi,"")}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();</script>`;
 
   const injectedScripts = `${rrwebRecordScript}\n${snapshotScript}`;
 

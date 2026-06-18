@@ -17,7 +17,7 @@ browser verification** with the running app — flagged per task where it applie
 | 1   | Foundation: vendored UMD bundle, rrweb event types (both slides copies), shared message/event module         | DONE   | typecheck+test            |
 | 2   | Recording: replace injected custom recorder with rrweb `record`; update message bridge to carry rrweb events | DONE   | typecheck+test (+browser) |
 | 3   | Replay: rrweb `Replayer` applier driven by the existing seek machine; mount into preview panel               | DONE   | typecheck+test (+browser) |
-| 4   | Scroll/viewport: retire decoupled runtime scroll path; responsive replay iframe; float/unfloat fidelity      | TODO   | typecheck+test (+browser) |
+| 4   | Scroll/viewport: retire decoupled runtime scroll path; responsive replay iframe; float/unfloat fidelity      | DONE   | typecheck+test (+browser) |
 | 5   | Delete custom path: recorder, apply engine, seed-patch transforms, op types, validators                      | TODO   | typecheck+test            |
 | 6   | Tests: rrweb round-trip (virtual-list churn + scroll/float-unfloat)                                          | TODO   | test                      |
 
@@ -62,3 +62,17 @@ browser verification** with the running app — flagged per task where it applie
   `offset = currentTime - initialDocuments[0].time`.
   Browser-verify pending: Replayer DOM/scroll/seek fidelity (jsdom can't render it).
   Green: typecheck ok; 33 preview tests; full suite 79 pass / 2 pre-existing audio fails.
+- T4: Decoupled runtime scroll path is **retired by construction** — during rrweb
+  replay `RuntimePreviewRenderer` mounts the replay container (not the iframe), so
+  `iframeRef` is null and the snapshot applier's scroll/`scrollTo` + content blocks
+  return early; only panel size/mode (float/unfloat) still applies, which is what we
+  want. Responsive replay iframe done in T3 (`makeResponsive` 100%/100%). Scroll now
+  lives in the rrweb stream, coupled to DOM. Snapshot poster now strips `<script>`
+  from the posted outerHTML (kills the 265KB postMessage bloat from T2). Verified the
+  vendored bundle has zero literal `</script>` (safe to inline). New
+  `webContainerRuntimeSupport.test.ts` (3 tests: injection present, exactly 2 closing
+  tags, no injection for non-runtime).
+  Decision/deviation: kept `forceIframeRepaint` (plan suggested dropping it). It only
+  touches the live cross-origin `:PORT` iframe (its real purpose) and is inert during
+  rrweb replay (iframeRef null); removing it risks regressing live float repaint.
+  Green: typecheck ok; full suite 82 pass / 2 pre-existing audio fails.
