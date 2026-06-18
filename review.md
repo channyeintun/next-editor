@@ -23,6 +23,7 @@ before the whole file is downloaded, and ideally seek without fetching everythin
 | **M1** u32 offset overflow              | ✅ Done     | `buildFooterChunk` throws past 4 GiB instead of silently clamping.                                                           |
 | **M2** Footer false-positive            | ✅ Done     | `findFooterStart` validates `footerLen == 4 + count·13`.                                                                     |
 | **L3** Version-number clarity           | ✅ Done     | Documented in the codec header comment.                                                                                      |
+| **S1** Loader `response.clone()`        | ✅ Done     | Removed the stream tee that buffered the whole file in memory on the success path; body is streamed directly.                |
 | **C2** MSE for media                    | ⏳ Deferred | Large; needs capture-side fragmentation verification (see below).                                                            |
 | **H1** Range-seek client + footer index | ⏳ Deferred | Additive format change; C1 is the enabling prerequisite, now in place.                                                       |
 | **M3** Snapshots out of header          | ⏳ Deferred | Format change; lower priority.                                                                                               |
@@ -34,6 +35,16 @@ same bytes (frames/clusters/tracks/mediaFragments/cursor + audio & camera blob b
 footer-less prefix decodes as a replayable `streamFinalized: false` recording that flips to
 finalized once the footer lands. (The repo's wider suite has 12 pre-existing test-runner
 collection failures unrelated to these changes — identical on a clean tree.)
+
+### S1 — Loader teed the response stream (found in the follow-up pass)
+
+`fetchNextEditorFile` decoded `streamRecordingFromResponse(response.clone())`. Cloning a
+`Response` tees its body: every chunk is delivered to both branches, and the unread branch
+queues chunks until they are read. On the normal success path only the clone was consumed, so
+the original branch buffered the **entire file** in memory — peak memory grew to the whole file
+even though playback started early, which directly contradicts the streaming goal. The body is
+now consumed directly; the rare post-read failure path re-fetches the URL for the one-shot
+fallback instead of relying on a buffered copy.
 
 ### What still limits true "play like video" (the deferred items)
 

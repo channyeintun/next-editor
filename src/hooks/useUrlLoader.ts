@@ -313,11 +313,23 @@ export const useUrlLoader = () => {
           throw new Error(`Failed to fetch file: ${response.statusText}`);
         }
 
-        // Stream + progressively decode when the body is readable; otherwise decode the
-        // whole file at once.
-        const streamed = await streamRecordingFromResponse(response.clone()).catch(() => false);
+        // Stream + progressively decode straight from the response body. Cloning the
+        // response here would tee the stream and buffer the *entire* file in the unread
+        // branch — defeating streaming — so the body is consumed directly. The reader
+        // only returns `false` before touching the body (not a readable stream); any
+        // failure after it starts reading throws, in which case the body is already
+        // drained and the whole-file fallback re-fetches the URL.
+        let streamed = false;
+        let bodyConsumed = false;
+        try {
+          streamed = await streamRecordingFromResponse(response);
+        } catch {
+          bodyConsumed = true;
+        }
+
         if (!streamed) {
-          const bytes = new Uint8Array(await response.arrayBuffer());
+          const source = bodyConsumed ? await fetchNextEditorUrl(url) : response;
+          const bytes = new Uint8Array(await source.arrayBuffer());
           if (startsWithScr3(bytes)) {
             await loadRecordingFromBinaryBytes(bytes);
           } else {
