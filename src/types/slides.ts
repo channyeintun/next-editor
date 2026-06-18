@@ -98,6 +98,19 @@ export const PREVIEW_DOM_PATCH_FORMAT_VERSION = 1;
 
 export type PreviewDomPatchSource = "runtime-preview" | "static-preview";
 
+/**
+ * A single recorded rrweb event, carried verbatim through the recording engine.
+ * Structurally compatible with rrweb's `eventWithTime` so it can be cast in the
+ * preview area without the engine ever depending on rrweb. The engine treats it
+ * as opaque JSON and only ever reads the envelope `time`/`documentId`.
+ */
+export interface PreviewRecordedEvent {
+  type: number;
+  data: unknown;
+  timestamp: number;
+  delay?: number;
+}
+
 export interface PreviewNodeRef {
   id?: string;
   anchorId?: string;
@@ -183,6 +196,8 @@ export interface PreviewInitialDocument {
   documentId: string;
   route?: string;
   html: string;
+  // rrweb Meta + FullSnapshot events that seed replay (new format).
+  events?: PreviewRecordedEvent[];
 }
 
 export interface PreviewDomPatchBatch {
@@ -194,6 +209,8 @@ export interface PreviewDomPatchBatch {
   revision: number;
   route?: string;
   ops: PreviewDomPatchOp[];
+  // rrweb incremental events for this frame (new format).
+  events?: PreviewRecordedEvent[];
 }
 
 export interface PreviewState {
