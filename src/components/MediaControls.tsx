@@ -355,7 +355,7 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
               <input
                 ref={audioFileInputRef}
                 type="file"
-                accept="audio/*,.webm,.ogg,.mp3,.wav,.m4a,.mp4,.aac"
+                accept="audio/*,.webm,.ogg,.opus,.mp3,.wav,.m4a,.mp4,.aac"
                 className="sr-only"
                 onChange={handleAudioFileChange}
               />
