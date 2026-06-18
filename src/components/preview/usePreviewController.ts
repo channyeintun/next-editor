@@ -487,8 +487,15 @@ export function usePreviewController(): PreviewController {
     currentRecording.previewPatchBatches?.length,
   );
   const isRuntimePlaybackPreviewActive = lessonType === "node.js" && isPlaybackPreviewActive;
+  // True for the whole runtime-recording playback session — playing, paused, seeking,
+  // or ended — unlike `isRuntimePlaybackPreviewActive` which requires `isPlaying`. The
+  // rrweb replay container must stay mounted across pause/seek (a remount orphans the
+  // Replayer's iframe → blank on seek), and the live iframe must stay suppressed so
+  // the patch applier keeps driving the Replayer while paused.
+  const isRuntimeRecordingPlayback =
+    lessonType === "node.js" && !isRecording && usesPlaybackModel && Boolean(currentRecording);
   const isRrwebReplayActive =
-    isRuntimePlaybackPreviewActive &&
+    isRuntimeRecordingPlayback &&
     hasRrwebPreviewEvents(
       currentRecording?.previewInitialDocuments,
       currentRecording?.previewPatchBatches,
@@ -511,6 +518,7 @@ export function usePreviewController(): PreviewController {
   const isLiveRuntimePreviewActive =
     lessonType === "node.js" &&
     !isRuntimePlaybackPreviewActive &&
+    !isRuntimeRecordingPlayback &&
     runtimeStatus === "ready" &&
     Boolean(runtimePreviewUrl);
   const isRuntimePreviewActive =

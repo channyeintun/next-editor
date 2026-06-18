@@ -83,6 +83,38 @@ browser verification** with the running app — flagged per task where it applie
   path only works in a real browser, hence the remaining browser-verify items below.
   Green: typecheck ok; full suite 72 pass / 2 pre-existing audio fails.
 
+## Post-implementation browser fixes (round 1)
+
+User browser-tested and found two issues; both rooted in the replay container being
+gated on `isPlaying`:
+
+1. **Stale elements accumulate** (old rows kept while new rows appended).
+2. **Seek shows a blank white preview** — only worked when playing from the start.
+
+Root cause: `isRrwebReplayActive` derived from `isPlaybackPreviewActive`, which
+requires `isPlaying`. Pausing to seek flipped `isPlaying` false → the replay
+container unmounted (orphaning the rrweb Replayer's iframe → blank) and/or the live
+iframe showed; resuming rebuilt churned state. A characterization test
+(`rrwebSeekDriving.test.ts`) proved rrweb's per-tick `pause(offset)` itself applies
+removes correctly **forward and backward** on a _stable_ Replayer — so the bug was
+the mount churn, not the driving.
+
+Fix:
+
+- New `isRuntimeRecordingPlayback` flag (node.js + `usesPlaybackModel` + recording +
+  !recording), independent of `isPlaying` (true while playing/paused/seeking/ended).
+  `isRrwebReplayActive` now uses it, so the container stays mounted across pause/seek.
+- `isLiveRuntimePreviewActive` now also requires `!isRuntimeRecordingPlayback`, so the
+  live iframe never shows during playback and the patch applier keeps driving while
+  paused/seeking.
+- `usePreviewPlaybackRegistration`: rebuild the Replayer when the container element
+  changes (remount), and `container.replaceChildren()` before rebuild so a rebuild can
+  never stack two iframes (defends against stale accumulation).
+- New `rrwebSeekDriving.test.ts` (forward + backward removes on one Replayer).
+
+Green: typecheck; lint 0/0; full suite 73 pass / 2 pre-existing audio fails.
+Needs re-verification in the browser.
+
 ## Status: all 6 tasks DONE (unit/typecheck green)
 
 ### Still requires real-browser verification (jsdom can't render rrweb Replayer)

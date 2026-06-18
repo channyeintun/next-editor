@@ -103,6 +103,10 @@ export function usePreviewPlaybackRegistration({
   // ordered stream, driven by `currentTime`. Rebuilt when the recording changes.
   const rrwebReplayerRef = useRef<RrwebPreviewReplayer | null>(null);
   const rrwebReplayRecordingIdRef = useRef<string | null>(null);
+  // The element the current Replayer is mounted in. If it changes (React remounted
+  // the replay container), the old Replayer's iframe is orphaned and we must rebuild
+  // into the new element.
+  const rrwebReplayContainerElRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (hasPreviewPatchReplay) {
@@ -112,6 +116,7 @@ export function usePreviewPlaybackRegistration({
     rrwebReplayerRef.current?.destroy();
     rrwebReplayerRef.current = null;
     rrwebReplayRecordingIdRef.current = null;
+    rrwebReplayContainerElRef.current = null;
   }, [hasPreviewPatchReplay]);
 
   // Tear down the rrweb Replayer when the preview unmounts.
@@ -120,6 +125,7 @@ export function usePreviewPlaybackRegistration({
       rrwebReplayerRef.current?.destroy();
       rrwebReplayerRef.current = null;
       rrwebReplayRecordingIdRef.current = null;
+      rrwebReplayContainerElRef.current = null;
     },
     [],
   );
@@ -132,10 +138,19 @@ export function usePreviewPlaybackRegistration({
         return -1;
       }
 
-      if (!rrwebReplayerRef.current || rrwebReplayRecordingIdRef.current !== input.recordingId) {
+      const needsRebuild =
+        !rrwebReplayerRef.current ||
+        rrwebReplayRecordingIdRef.current !== input.recordingId ||
+        rrwebReplayContainerElRef.current !== container;
+
+      if (needsRebuild) {
         rrwebReplayerRef.current?.destroy();
         rrwebReplayerRef.current = null;
         rrwebReplayRecordingIdRef.current = input.recordingId;
+        rrwebReplayContainerElRef.current = container;
+        // Drop any orphaned wrapper (e.g. from a Replayer whose ref was lost) so a
+        // rebuild can never leave two iframes stacked in the container.
+        container.replaceChildren();
 
         const events = buildRrwebReplayEvents(input.initialDocuments, input.patchBatches);
         const baseTime = input.initialDocuments[0]?.time ?? 0;
