@@ -977,7 +977,10 @@ export function usePreviewController(): PreviewController {
     }
 
     if (isStaticWorkspacePreview) {
-      updateIframeContent(staticWorkspacePreview);
+      // Reconcile the static document in place (patchIframeContentFromHtml) instead
+      // of swapping `srcdoc`, so edits don't reload the iframe and flash on every
+      // keystroke. The first paint (empty iframe) falls back to a srcdoc load.
+      updateIframeContent(staticWorkspacePreview, { preserveDocument: true });
 
       return;
     }

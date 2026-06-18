@@ -801,6 +801,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
               },
             },
           },
+          previewVersion: context.previewVersion + 1,
           syncVersion: context.syncVersion + 1,
         });
       },
