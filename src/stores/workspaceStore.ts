@@ -7,10 +7,9 @@ import type {
 } from "../contexts/WorkspaceContext";
 import {
   collectWorkspaceFolders,
-  createSingleFileWorkspace,
+  createStarterHtmlCssWorkspace,
   createStarterWorkspaceProject,
   DEFAULT_WORKSPACE_ENTRY_PATH,
-  DEFAULT_WORKSPACE_FILE_CONTENT,
   getWorkspaceBaseName,
   inferLanguageFromPath,
   normalizeWorkspaceFolderPath,
@@ -94,7 +93,7 @@ function getDefaultFile(project: WorkspaceProject): WorkspaceFile {
       path: DEFAULT_WORKSPACE_ENTRY_PATH,
       name: "index.html",
       language: "html",
-      content: DEFAULT_WORKSPACE_FILE_CONTENT,
+      content: "",
     }
   );
 }
@@ -155,7 +154,7 @@ function inferWorkspaceLessonType(
 }
 
 export function normalizeProject(project: WorkspaceProject): WorkspaceProject {
-  const fallbackProject = createSingleFileWorkspace();
+  const fallbackProject = createStarterHtmlCssWorkspace();
   const files = Object.keys(project.files).length > 0 ? project.files : fallbackProject.files;
   const defaultFile = getDefaultFile({ ...project, files });
   const lessonType = inferWorkspaceLessonType({ ...project, files });
@@ -686,7 +685,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
         delete nextFiles[normalizedPath];
 
         if (Object.keys(nextFiles).length === 0) {
-          const fallbackProject = createSingleFileWorkspace();
+          const fallbackProject = createStarterHtmlCssWorkspace();
 
           return withDirtyState(
             withRefreshedWorkspaceSlices({
@@ -734,7 +733,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
         ) as Record<string, WorkspaceFile>;
 
         if (Object.keys(nextFiles).length === 0) {
-          const fallbackProject = createSingleFileWorkspace();
+          const fallbackProject = createStarterHtmlCssWorkspace();
 
           return withDirtyState(
             withRefreshedWorkspaceSlices({

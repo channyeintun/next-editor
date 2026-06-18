@@ -7,6 +7,17 @@ export interface WorkspaceFile {
 
 export type WorkspaceLessonType = "node.js" | "html-css";
 
+/**
+ * Every lesson type is served by its own dev server inside the WebContainer
+ * (node.js via its app's dev server, html-css via Vite). This predicate keeps
+ * the runtime/preview code from special-casing individual lesson types, and is
+ * the single place to update when new templates (React, Vue, Express, …) are
+ * added.
+ */
+export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boolean {
+  return lessonType === "node.js" || lessonType === "html-css";
+}
+
 export interface WorkspaceProject {
   id: string;
   name: string;
@@ -132,9 +143,26 @@ export function toSidebarWidthDeltaSnapshot(
 export const DEFAULT_WORKSPACE_ENTRY_PATH = "index.html";
 export const DEFAULT_WORKSPACE_APP_PATH = "src/App.tsx";
 
-export const DEFAULT_WORKSPACE_FILE_CONTENT = `<html>
-  <h1>Hello world</h1>
-</html>`;
+export function createHtmlCssLessonPackageJson(): string {
+  return JSON.stringify(
+    {
+      name: "html-css-lesson",
+      private: true,
+      version: "0.0.0",
+      type: "module",
+      scripts: {
+        dev: "vite --host 0.0.0.0 --port 4173",
+        build: "vite build",
+        preview: "vite preview --host 0.0.0.0 --port 4173",
+      },
+      devDependencies: {
+        vite: "^7.0.0",
+      },
+    },
+    null,
+    2,
+  );
+}
 
 const STARTER_FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><rect width="64" height="64" rx="18" fill="#121826"/><path d="M20 44 30 20h4l10 24h-5.1l-2-5.2H27.1L25 44H20Zm8.6-9.3h6.8L32 25.6l-3.4 9.1Z" fill="#7dd3fc"/><path d="m41 19 4.6 8-4.6 8h-5.4l4.6-8-4.6-8H41Z" fill="#f59e0b"/></svg>`;
 
@@ -1029,17 +1057,88 @@ img {
   };
 }
 
-export function createSingleFileWorkspace(
-  content = DEFAULT_WORKSPACE_FILE_CONTENT,
-): WorkspaceProject {
+export function createStarterHtmlCssWorkspace(): WorkspaceProject {
+  const files = {
+    "package.json": createWorkspaceFile("package.json", createHtmlCssLessonPackageJson()),
+    "index.html": createWorkspaceFile(
+      "index.html",
+      `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/styles.css" />
+    <title>HTML/CSS Lesson</title>
+  </head>
+  <body>
+    <main class="page">
+      <h1>Hello world</h1>
+      <p>Edit <code>index.html</code> and <code>styles.css</code> to get started.</p>
+      <p><a href="/about.html">Go to the About page &rarr;</a></p>
+    </main>
+  </body>
+</html>`,
+    ),
+    "about.html": createWorkspaceFile(
+      "about.html",
+      `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/styles.css" />
+    <title>About &middot; HTML/CSS Lesson</title>
+  </head>
+  <body>
+    <main class="page">
+      <h1>About</h1>
+      <p>This page is served by Vite inside the WebContainer, so links between pages work.</p>
+      <p><a href="/">&larr; Back home</a></p>
+    </main>
+  </body>
+</html>`,
+    ),
+    "styles.css": createWorkspaceFile(
+      "styles.css",
+      `:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+  line-height: 1.6;
+}
+
+h1 {
+  font-size: 2.5rem;
+  margin: 0 0 0.75rem;
+}
+
+a {
+  color: #2563eb;
+}
+
+code {
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.35rem;
+  background: rgba(127, 127, 127, 0.18);
+}`,
+    ),
+  };
+
   return {
-    id: "default-workspace",
-    name: "Next Editor Workspace",
+    id: "html-css-workspace",
+    name: "HTML/CSS Lesson",
     lessonType: "html-css",
     entryFilePath: DEFAULT_WORKSPACE_ENTRY_PATH,
-    folders: collectWorkspaceFolders([DEFAULT_WORKSPACE_ENTRY_PATH]),
-    files: {
-      [DEFAULT_WORKSPACE_ENTRY_PATH]: createWorkspaceFile(DEFAULT_WORKSPACE_ENTRY_PATH, content),
-    },
+    folders: collectWorkspaceFolders(Object.keys(files)),
+    files,
   };
 }

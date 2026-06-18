@@ -10,7 +10,6 @@ describe("shouldUsePlaybackPreview", () => {
         currentRecording,
         isPlaying: true,
         isRecording: false,
-        lessonType: "node.js",
         usesPlaybackModel: true,
       }),
     ).toBe(true);
@@ -20,7 +19,16 @@ describe("shouldUsePlaybackPreview", () => {
         currentRecording,
         isPlaying: false,
         isRecording: false,
-        lessonType: "node.js",
+        usesPlaybackModel: true,
+      }),
+    ).toBe(false);
+
+    // No loaded recording: the live runtime preview keeps the iframe.
+    expect(
+      shouldUsePlaybackPreview({
+        currentRecording: null,
+        isPlaying: true,
+        isRecording: false,
         usesPlaybackModel: true,
       }),
     ).toBe(false);
@@ -32,7 +40,6 @@ describe("shouldUsePlaybackPreview", () => {
         currentRecording: { id: "recording-1" },
         isPlaying: true,
         isRecording: false,
-        lessonType: "node.js",
         usesPlaybackModel: false,
       }),
     ).toBe(false);
@@ -42,7 +49,6 @@ describe("shouldUsePlaybackPreview", () => {
         currentRecording: { id: "recording-1" },
         isPlaying: true,
         isRecording: true,
-        lessonType: "html-css",
         usesPlaybackModel: true,
       }),
     ).toBe(false);

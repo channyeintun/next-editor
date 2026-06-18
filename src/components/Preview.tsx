@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { PreviewChrome } from "./preview/PreviewChrome";
 import { RuntimePreviewRenderer } from "./preview/RuntimePreviewRenderer";
-import { StaticPreviewRenderer } from "./preview/StaticPreviewRenderer";
 import { usePreviewController } from "./preview/usePreviewController";
 
 const Preview = memo(function Preview() {
@@ -11,20 +10,14 @@ const Preview = memo(function Preview() {
     return null;
   }
 
-  const previewRenderer =
-    controller.rendererKind === "runtime" ? (
-      <RuntimePreviewRenderer
-        iframeRef={controller.iframeRef}
-        replayContainerRef={controller.replayContainerRef}
-        isRrwebReplayActive={controller.isRrwebReplayActive}
-        disablePointerEvents={controller.disablePointerEvents}
-      />
-    ) : (
-      <StaticPreviewRenderer
-        iframeRef={controller.iframeRef}
-        disablePointerEvents={controller.disablePointerEvents}
-      />
-    );
+  const previewRenderer = (
+    <RuntimePreviewRenderer
+      iframeRef={controller.iframeRef}
+      replayContainerRef={controller.replayContainerRef}
+      isRrwebReplayActive={controller.isRrwebReplayActive}
+      disablePointerEvents={controller.disablePointerEvents}
+    />
+  );
 
   const previewChrome = (
     <PreviewChrome

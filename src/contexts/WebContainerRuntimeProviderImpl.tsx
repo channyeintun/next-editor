@@ -28,7 +28,7 @@ import {
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
 import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";
-import { areWorkspaceProjectsEqual } from "../types/workspace";
+import { areWorkspaceProjectsEqual, lessonRunsInWebContainer } from "../types/workspace";
 
 interface WebContainerRuntimeProviderProps {
   children: React.ReactNode;
@@ -105,7 +105,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
         reverseSyncTimeoutRef.current = null;
 
         void (async () => {
-          if (lessonTypeRef.current !== "node.js") {
+          if (!lessonRunsInWebContainer(lessonTypeRef.current)) {
             return;
           }
 
@@ -218,7 +218,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   ]);
 
   const startRuntime = useCallback(async () => {
-    if (lessonType !== "node.js") {
+    if (!lessonRunsInWebContainer(lessonType)) {
       resetRuntime();
       return;
     }
@@ -276,7 +276,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   ]);
 
   const rerunRunner = useCallback(async () => {
-    if (lessonType !== "node.js") {
+    if (!lessonRunsInWebContainer(lessonType)) {
       resetRuntime();
       return;
     }
@@ -325,7 +325,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   rerunRunnerRef.current = rerunRunner;
 
   const startTerminalSession = useCallback(async () => {
-    if (lessonType !== "node.js") {
+    if (!lessonRunsInWebContainer(lessonType)) {
       return;
     }
 
@@ -353,7 +353,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   ]);
 
   const createTerminalSession = useCallback(async () => {
-    if (lessonType !== "node.js") {
+    if (!lessonRunsInWebContainer(lessonType)) {
       return;
     }
 
@@ -382,7 +382,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   const sendTerminalInput = useCallback(
     async (input: string) => {
-      if (lessonType !== "node.js") {
+      if (!lessonRunsInWebContainer(lessonType)) {
         return;
       }
 
@@ -463,7 +463,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   );
 
   const saveWorkspace = useCallback(async () => {
-    if (lessonTypeRef.current !== "node.js") {
+    if (!lessonRunsInWebContainer(lessonTypeRef.current)) {
       return;
     }
 
@@ -517,14 +517,14 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   useEffect(() => {
     hasAutoStartedRef.current = false;
 
-    if (lessonType === "html-css") {
+    if (!lessonRunsInWebContainer(lessonType)) {
       resetRuntime();
     }
   }, [lessonType, resetRuntime]);
 
   useEffect(() => {
     if (
-      lessonType !== "node.js" ||
+      !lessonRunsInWebContainer(lessonType) ||
       !isSupported ||
       hasAutoStartedRef.current ||
       !runnerConfig.enabled ||

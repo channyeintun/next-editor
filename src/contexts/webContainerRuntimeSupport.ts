@@ -8,6 +8,7 @@ import {
   collectWorkspaceFolders,
   getWorkspaceBaseName,
   inferLanguageFromPath,
+  lessonRunsInWebContainer,
   normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
   type WorkspaceFile,
@@ -132,14 +133,13 @@ function injectRuntimeSnapshotScript(
   content: string,
 ): string {
   const normalizedFilePath = normalizeWorkspacePath(filePath);
-  const normalizedEntryFilePath = normalizeWorkspacePath(project.entryFilePath);
-  const isRuntimeHtmlBootstrap =
-    normalizedFilePath.toLowerCase().endsWith(".html") &&
-    (normalizedFilePath === "index.html" || normalizedFilePath === normalizedEntryFilePath);
+  // Instrument every served HTML page (not just the entry) so the preview keeps
+  // recording across multi-page navigation within an html-css lesson.
+  const isHtmlPage = normalizedFilePath.toLowerCase().endsWith(".html");
 
   if (
-    project.lessonType !== "node.js" ||
-    !isRuntimeHtmlBootstrap ||
+    !lessonRunsInWebContainer(project.lessonType) ||
+    !isHtmlPage ||
     content.includes(RUNTIME_SNAPSHOT_SCRIPT_MARKER)
   ) {
     return content;

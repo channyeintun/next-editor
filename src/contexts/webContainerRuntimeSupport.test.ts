@@ -55,13 +55,37 @@ describe("createWorkspaceTree rrweb injection", () => {
     expect(closings).toBe(2);
   });
 
-  it("does not inject into non-runtime projects", () => {
+  it("instruments html-css lessons too (served by Vite in the WebContainer)", () => {
     const project = nodeProject("<html><head></head><body>Hi</body></html>");
     project.lessonType = "html-css";
 
     const html = getIndexHtml(createWorkspaceTree(project));
 
-    expect(html).not.toContain("data-next-editor-rrweb-record");
-    expect(html).not.toContain("data-next-editor-runtime-snapshot");
+    expect(html).toContain("data-next-editor-rrweb-record");
+    expect(html).toContain("data-next-editor-runtime-snapshot");
+  });
+
+  it("instruments every html page, not just the entry, for multi-page recording", () => {
+    const project = nodeProject("<html><head></head><body>Home</body></html>");
+    project.lessonType = "html-css";
+    project.files["about.html"] = {
+      path: "about.html",
+      name: "about.html",
+      language: "html",
+      content: "<html><head></head><body>About</body></html>",
+    };
+
+    const tree = createWorkspaceTree(project);
+    const about = tree["about.html"];
+    if (!about || !("file" in about) || !("contents" in about.file)) {
+      throw new Error("about.html not found in workspace tree");
+    }
+    const aboutContents = about.file.contents;
+    if (typeof aboutContents !== "string") {
+      throw new Error("Expected about.html contents to be a string");
+    }
+
+    expect(aboutContents).toContain("data-next-editor-rrweb-record");
+    expect(aboutContents).toContain("data-next-editor-runtime-snapshot");
   });
 });

@@ -30,7 +30,7 @@ import type {
   PreviewPanelMode,
   PreviewSize,
 } from "../../types/slides";
-import { useCompiledStaticWorkspacePreview } from "./useCompiledStaticWorkspacePreview";
+import { lessonRunsInWebContainer } from "../../types/workspace";
 import {
   createReplayableRuntimePreview,
   patchIframeContentFromHtml,
@@ -376,7 +376,6 @@ export interface PreviewController {
   isResizing: boolean;
   isTransitioning: boolean;
   disablePointerEvents: boolean;
-  rendererKind: "runtime" | "static";
   previewAddressLabel: string;
   previewAddressTitle: string;
   handleClose: () => void;
@@ -396,20 +395,18 @@ export function shouldUsePlaybackPreview({
   currentRecording,
   isPlaying,
   isRecording,
-  lessonType,
   usesPlaybackModel,
 }: {
   currentRecording: unknown;
   isPlaying: boolean;
   isRecording: boolean;
-  lessonType: string;
   usesPlaybackModel: boolean;
 }) {
   const isPlaybackModelActive = isPlaying && usesPlaybackModel && !isRecording;
 
-  return lessonType === "node.js"
-    ? Boolean(currentRecording) && isPlaybackModelActive
-    : isPlaybackModelActive;
+  // Every lesson is replayed from its recorded runtime preview, so a loaded
+  // recording is required to take over the iframe.
+  return Boolean(currentRecording) && isPlaybackModelActive;
 }
 
 export function usePreviewController(): PreviewController {
@@ -434,7 +431,6 @@ export function usePreviewController(): PreviewController {
 
   const targetScrollRef = useRef<PreviewScrollPosition | null>(null);
   const rafRef = useRef<number | null>(null);
-  const editorBootstrapPollTimeoutRef = useRef<number | null>(null);
   const isUserScrollingRef = useRef(false);
   const userScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -447,7 +443,7 @@ export function usePreviewController(): PreviewController {
   const lastPreviewInitialDocumentRef = useRef<PreviewInitialDocument | null>(null);
   const recordedPreviewInitialDocumentIdRef = useRef<string | null>(null);
 
-  const { editorRef, handlePreviewEvent, handlePreviewInitialDocument, handlePreviewPatchBatch } =
+  const { handlePreviewEvent, handlePreviewInitialDocument, handlePreviewPatchBatch } =
     useNextEditorActions();
   const { preview, runtimePanel } = useNextEditorDomainAdapters();
   const {
@@ -474,19 +470,18 @@ export function usePreviewController(): PreviewController {
   } = useWebContainerRuntimeMetadata();
 
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
-  const staticWorkspacePreview = useCompiledStaticWorkspacePreview();
   const isPlaybackPreviewActive = shouldUsePlaybackPreview({
     currentRecording,
     isPlaying,
     isRecording,
-    lessonType,
     usesPlaybackModel,
   });
   const hasPreviewPatchReplay = Boolean(
     currentRecording?.previewInitialDocuments?.length &&
     currentRecording.previewPatchBatches?.length,
   );
-  const isRuntimePlaybackPreviewActive = lessonType === "node.js" && isPlaybackPreviewActive;
+  const isRuntimePlaybackPreviewActive =
+    lessonRunsInWebContainer(lessonType) && isPlaybackPreviewActive;
   // The rrweb replay preview is shown ONLY while the recording is actively playing.
   // When paused/ended (or never started) — even with a recording loaded — the live
   // runtime preview is shown instead (see `isLiveRuntimePreviewActive`).
@@ -510,17 +505,16 @@ export function usePreviewController(): PreviewController {
     runtimePreviewPort ?? recordedRuntimeSnapshot?.previewPort ?? null;
   const effectiveRuntimeErrorMessage =
     runtimeErrorMessage || recordedRuntimeSnapshot?.errorMessage || null;
-  const isStaticWorkspacePreview = lessonType === "html-css";
   const isLiveRuntimePreviewActive =
-    lessonType === "node.js" &&
+    lessonRunsInWebContainer(lessonType) &&
     !isRuntimePlaybackPreviewActive &&
     runtimeStatus === "ready" &&
     Boolean(runtimePreviewUrl);
   const isRuntimePreviewActive =
-    lessonType === "node.js" &&
+    lessonRunsInWebContainer(lessonType) &&
     effectiveRuntimeStatus === "ready" &&
     Boolean(effectiveRuntimePreviewUrl);
-  const isRuntimeManagedPreview = lessonType === "node.js" && runnerConfig.enabled;
+  const isRuntimeManagedPreview = lessonRunsInWebContainer(lessonType) && runnerConfig.enabled;
   const runtimePreviewState = useMemo(
     () =>
       getRuntimePreviewState(
@@ -774,7 +768,7 @@ export function usePreviewController(): PreviewController {
           didFinalize = true;
           cleanupRuntimeRefresh();
 
-          const resolvedContent = content || staticWorkspacePreview || undefined;
+          const resolvedContent = content || undefined;
 
           emitPreviewEvent(
             "preview_refresh",
@@ -836,47 +830,15 @@ export function usePreviewController(): PreviewController {
         return;
       }
 
-      if (isStaticWorkspacePreview) {
-        lastContentRef.current = "";
-        updateIframeContent(staticWorkspacePreview, { force: true });
-
-        if (options?.emitEvent) {
-          emitPreviewEvent("preview_refresh", {
-            content: staticWorkspacePreview,
-          });
-        }
-
-        finishRefresh();
-        return;
-      }
-
-      const editor = editorRef.current;
-
-      if (!editor) {
-        finishRefresh();
-        return;
-      }
-
-      const content = editor.getValue();
-      lastContentRef.current = "";
-      updateIframeContent(content, { force: true });
-
-      if (options?.emitEvent) {
-        emitPreviewEvent("preview_refresh", { content });
-      }
-
       finishRefresh();
     },
     [
-      editorRef,
       captureRuntimePreviewSnapshot,
       emitPreviewEvent,
       isRuntimeManagedPreview,
       isRuntimePreviewActive,
-      isStaticWorkspacePreview,
       effectiveRuntimePreviewUrl,
       runtimePreviewPlaceholder,
-      staticWorkspacePreview,
       updateIframeContent,
     ],
   );
@@ -896,8 +858,6 @@ export function usePreviewController(): PreviewController {
     sizeRef,
     isOpenRef,
     modeRef: panelModeRef,
-    effectiveRuntimePreviewUrl,
-    staticWorkspacePreview,
     updateIframeContent,
     iframeRef,
     setSize,
@@ -954,7 +914,7 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
-    if (lessonType === "node.js" && runtimePreviewUrl) {
+    if (lessonRunsInWebContainer(lessonType) && runtimePreviewUrl) {
       captureRuntimePreviewSnapshot();
       if (iframe.getAttribute("srcdoc") !== null || iframe.src !== runtimePreviewUrl) {
         iframe.removeAttribute("srcdoc");
@@ -972,35 +932,16 @@ export function usePreviewController(): PreviewController {
       lastContentRef.current = runtimePreviewPlaceholder;
       iframe.removeAttribute("src");
       iframe.srcdoc = runtimePreviewPlaceholder;
-
-      return;
-    }
-
-    if (isStaticWorkspacePreview) {
-      // Reconcile the static document in place (patchIframeContentFromHtml) instead
-      // of swapping `srcdoc`, so edits don't reload the iframe and flash on every
-      // keystroke. The first paint (empty iframe) falls back to a srcdoc load.
-      updateIframeContent(staticWorkspacePreview, { preserveDocument: true });
-
-      return;
-    }
-
-    const editor = editorRef.current;
-    if (editor && !lastContentRef.current) {
-      updateIframeContent(editor.getValue());
     }
   }, [
-    editorRef,
     isOpen,
     isPlaybackPreviewActive,
-    isStaticWorkspacePreview,
     isRuntimeManagedPreview,
     lessonType,
     panelMode,
     previewVersion,
     runtimePreviewPlaceholder,
     runtimePreviewUrl,
-    staticWorkspacePreview,
     updateIframeContent,
     captureRuntimePreviewSnapshot,
   ]);
@@ -1034,91 +975,6 @@ export function usePreviewController(): PreviewController {
   ]);
 
   useEffect(() => {
-    if (
-      isPlaybackPreviewActive ||
-      runtimePreviewUrl ||
-      isRuntimeManagedPreview ||
-      isStaticWorkspacePreview
-    ) {
-      return;
-    }
-
-    let isCancelled = false;
-
-    const checkForEditor = () => {
-      if (isCancelled) {
-        return;
-      }
-
-      const editor = editorRef.current;
-      if (!editor) {
-        editorBootstrapPollTimeoutRef.current = window.setTimeout(checkForEditor, 100);
-        return;
-      }
-
-      editorBootstrapPollTimeoutRef.current = null;
-
-      if (!lastContentRef.current) {
-        updateIframeContent(editor.getValue());
-      }
-    };
-
-    checkForEditor();
-
-    return () => {
-      isCancelled = true;
-
-      if (editorBootstrapPollTimeoutRef.current !== null) {
-        window.clearTimeout(editorBootstrapPollTimeoutRef.current);
-        editorBootstrapPollTimeoutRef.current = null;
-      }
-    };
-  }, [
-    editorRef,
-    isPlaybackPreviewActive,
-    isRuntimeManagedPreview,
-    isStaticWorkspacePreview,
-    runtimePreviewUrl,
-    updateIframeContent,
-  ]);
-
-  useEffect(() => {
-    if (
-      isPlaybackPreviewActive ||
-      runtimePreviewUrl ||
-      isRuntimeManagedPreview ||
-      isStaticWorkspacePreview
-    ) {
-      return;
-    }
-
-    const iframe = iframeRef.current;
-    if (!iframe) {
-      return;
-    }
-
-    const handleIframeLoad = () => {
-      const editor = editorRef.current;
-      if (editor) {
-        updateIframeContent(editor.getValue());
-      }
-    };
-
-    iframe.addEventListener("load", handleIframeLoad);
-
-    return () => {
-      iframe.removeEventListener("load", handleIframeLoad);
-    };
-  }, [
-    editorRef,
-    isPlaybackPreviewActive,
-    isStaticWorkspacePreview,
-    isRuntimeManagedPreview,
-    runtimePreviewUrl,
-    updateIframeContent,
-  ]);
-
-  useEffect(() => {
     const previousPanelState = previousPanelStateRef.current;
     previousPanelStateRef.current = { isOpen, panelMode };
 
@@ -1145,7 +1001,7 @@ export function usePreviewController(): PreviewController {
     }
 
     if (
-      lessonType !== "node.js" ||
+      !lessonRunsInWebContainer(lessonType) ||
       isPlaybackPreviewActive ||
       !isRuntimeSupported ||
       !runnerConfig.enabled ||
@@ -1247,13 +1103,6 @@ export function usePreviewController(): PreviewController {
   }, [runtimePanel]);
 
   const previewAddress = useMemo(() => {
-    if (lessonType !== "node.js") {
-      return {
-        label: "Static preview",
-        title: "Static preview",
-      };
-    }
-
     const location = applyRouteToRuntimePreviewLocation(
       createRuntimePreviewLocationFromUrl(effectiveRuntimePreviewUrl, effectiveRuntimePreviewPort),
       previewRoute,
@@ -1263,7 +1112,7 @@ export function usePreviewController(): PreviewController {
       label: formatPreviewAddressLabel(location),
       title: location?.href ?? effectiveRuntimePreviewUrl ?? "Preview",
     };
-  }, [effectiveRuntimePreviewPort, effectiveRuntimePreviewUrl, lessonType, previewRoute]);
+  }, [effectiveRuntimePreviewPort, effectiveRuntimePreviewUrl, previewRoute]);
 
   useEffect(() => {
     const clampCurrentCustomSize = () => {
@@ -1511,7 +1360,6 @@ export function usePreviewController(): PreviewController {
     isResizing,
     isTransitioning,
     disablePointerEvents: isTransitioning || isResizing,
-    rendererKind: lessonType === "node.js" ? "runtime" : "static",
     previewAddressLabel: previewAddress.label,
     previewAddressTitle: previewAddress.title,
     handleClose,

@@ -30,8 +30,6 @@ interface UsePreviewPlaybackRegistrationOptions {
   sizeRef: RefObject<PreviewSize>;
   isOpenRef: RefObject<boolean>;
   modeRef: RefObject<PreviewPanelMode>;
-  effectiveRuntimePreviewUrl: string | null;
-  staticWorkspacePreview: string;
   updateIframeContent: (
     content: string,
     options?: { force?: boolean; preserveDocument?: boolean },
@@ -84,8 +82,6 @@ export function usePreviewPlaybackRegistration({
   sizeRef,
   isOpenRef,
   modeRef,
-  effectiveRuntimePreviewUrl,
-  staticWorkspacePreview,
   updateIframeContent,
   iframeRef,
   setSize,
@@ -287,11 +283,6 @@ export function usePreviewPlaybackRegistration({
             force: true,
             preserveDocument: true,
           });
-        } else if (effectiveRuntimePreviewUrl && staticWorkspacePreview) {
-          updateIframeContent(staticWorkspacePreview, {
-            force: true,
-            preserveDocument: true,
-          });
         }
       } else if (
         shouldApplySnapshotContent &&
@@ -456,7 +447,6 @@ export function usePreviewPlaybackRegistration({
   }, [
     applyPreviewPanelState,
     applyPreviewRoute,
-    effectiveRuntimePreviewUrl,
     hasPreviewPatchReplay,
     iframeRef,
     isPlaybackPreviewActive,
@@ -469,7 +459,6 @@ export function usePreviewPlaybackRegistration({
     previewAdapter,
     setSize,
     sizeRef,
-    staticWorkspacePreview,
     targetScrollRef,
     updateIframeContent,
   ]);

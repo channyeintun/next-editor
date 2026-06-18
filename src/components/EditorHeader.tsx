@@ -13,7 +13,7 @@ import {
   useWorkspaceFileCount,
   useWorkspaceLessonType,
 } from "../hooks/useWorkspace";
-import type { WorkspaceLessonType } from "../types/workspace";
+import { lessonRunsInWebContainer, type WorkspaceLessonType } from "../types/workspace";
 import SlidesButton from "./SlidesButton";
 
 const LESSON_TYPE_OPTIONS: Array<{
@@ -124,7 +124,7 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
         {saveShortcutLabel}
         <RotateCw size={11} strokeWidth={2.25} aria-hidden="true" />
       </span>
-      {lessonType === "node.js" ? (
+      {lessonRunsInWebContainer(lessonType) ? (
         <button
           type="button"
           onClick={() => {
@@ -310,7 +310,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
     }
 
     saveProject();
-    updateRunnerConfig({ enabled: nextLessonType === "node.js" });
+    updateRunnerConfig({ enabled: true });
   };
 
   const handleSave = () => {
@@ -389,7 +389,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
 
               <div className="my-1 h-px bg-slate-700" />
 
-              {lessonType === "node.js" ? (
+              {lessonRunsInWebContainer(lessonType) ? (
                 <button
                   type="button"
                   role="menuitem"

@@ -10,7 +10,7 @@ import {
   type StoredWorkspaceSnapshot,
 } from "../stores/workspaceStore";
 import {
-  createSingleFileWorkspace,
+  createStarterHtmlCssWorkspace,
   createStarterWorkspaceProject,
   normalizeWorkspacePath,
   type WorkspaceLessonType,
@@ -149,7 +149,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   );
 
   const createNewEditor = useCallback(() => {
-    loadProject(createSingleFileWorkspace());
+    loadProject(createStarterHtmlCssWorkspace());
   }, [loadProject]);
 
   const resetProject = useCallback(() => {
