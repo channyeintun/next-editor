@@ -115,6 +115,24 @@ Fix:
 Green: typecheck; lint 0/0; full suite 73 pass / 2 pre-existing audio fails.
 Needs re-verification in the browser.
 
+## Post-implementation browser fixes (round 2)
+
+User confirmed round-1 issues fixed, then refined the desired behaviour:
+**rrweb replay must show ONLY while the recording is actively playing.** When paused
+or ended (even with a recording loaded, and not recording), the preview must be the
+real live runtime preview, not the rrweb replay.
+
+Fix: reverted the round-1 `isPlaying`-independent mounting. `isRrwebReplayActive` is
+again gated on `isRuntimePlaybackPreviewActive` (`isPlaying` === playbackState
+"playing"), and `isLiveRuntimePreviewActive` no longer excludes the playback session.
+So: playing → rrweb replay container; paused/ended → live runtime iframe. The
+container-rebuild hardening from round 1 (rebuild on container-element change +
+`replaceChildren()`) is kept, so resuming play cleanly rebuilds the Replayer and seeks
+to the current time. (`isPlaying` is strictly the "playing" state per
+`selectIsPlaying`.)
+
+Green: typecheck; lint 0/0; full suite 73 pass / 2 pre-existing audio fails.
+
 ## Status: all 6 tasks DONE (unit/typecheck green)
 
 ### Still requires real-browser verification (jsdom can't render rrweb Replayer)
