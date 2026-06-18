@@ -1,4 +1,3 @@
-import { lazy, Suspense } from "react";
 import {
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
@@ -10,17 +9,11 @@ import {
   type WebContainerRuntimeRecordingSnapshot,
 } from "./WebContainerRuntimeContext";
 import { useWorkspaceLessonType } from "../hooks/useWorkspace";
-import LoadingSpinner from "../components/LoadingSpinner";
+import { WebContainerRuntimeProvider as WebContainerRuntimeProviderContainer } from "./WebContainerRuntimeProviderImpl";
 
 interface WebContainerRuntimeProviderProps {
   children: React.ReactNode;
 }
-
-const LazyWebContainerRuntimeProvider = lazy(() =>
-  import("./WebContainerRuntimeProviderImpl").then(({ WebContainerRuntimeProvider }) => ({
-    default: WebContainerRuntimeProvider,
-  })),
-);
 
 const fallbackRunnerConfig: RunnerConfig = {
   enabled: true,
@@ -98,14 +91,6 @@ function StaticWebContainerRuntimeProvider({ children }: WebContainerRuntimeProv
   );
 }
 
-function RuntimeProviderFallback() {
-  return (
-    <div className="h-dvh flex items-center justify-center bg-slate-950 text-white">
-      <LoadingSpinner />
-    </div>
-  );
-}
-
 export function WebContainerRuntimeProvider({ children }: WebContainerRuntimeProviderProps) {
   const lessonType = useWorkspaceLessonType();
 
@@ -113,9 +98,5 @@ export function WebContainerRuntimeProvider({ children }: WebContainerRuntimePro
     return <StaticWebContainerRuntimeProvider>{children}</StaticWebContainerRuntimeProvider>;
   }
 
-  return (
-    <Suspense fallback={<RuntimeProviderFallback />}>
-      <LazyWebContainerRuntimeProvider>{children}</LazyWebContainerRuntimeProvider>
-    </Suspense>
-  );
+  return <WebContainerRuntimeProviderContainer>{children}</WebContainerRuntimeProviderContainer>;
 }

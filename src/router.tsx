@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { createBrowserRouter, isRouteErrorResponse, useRouteError } from "react-router-dom";
+import LoadingSpinner from "./components/LoadingSpinner";
 
 const DYNAMIC_IMPORT_RECOVERY_PARAM = "__route_reload";
 const DYNAMIC_IMPORT_ERROR_PATTERN =
@@ -142,8 +143,8 @@ function RouteErrorBoundary() {
 
 function RouteHydrateFallback() {
   return (
-    <div className="min-h-dvh flex items-center justify-center bg-slate-950 px-6 text-white">
-      <div className="size-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+    <div className="h-dvh flex items-center justify-center bg-[#11141c] text-white">
+      <LoadingSpinner />
     </div>
   );
 }

@@ -29,10 +29,7 @@ export const EditorLayout = memo(function EditorLayout() {
   const readOnly = urlParams.get("readOnly") === "true";
 
   return (
-    <div
-      className="h-dvh flex flex-col bg-slate-950 text-white overflow-hidden"
-      data-cursor-replay-target="app"
-    >
+    <div className="h-dvh flex flex-col text-white overflow-hidden" data-cursor-replay-target="app">
       <div className="flex-1 relative overflow-hidden" data-cursor-replay-target="editor-surface">
         <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
