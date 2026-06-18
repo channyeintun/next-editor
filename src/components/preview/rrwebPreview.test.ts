@@ -17,23 +17,19 @@ function event(type: number, timestamp: number): PreviewRecordedEvent {
 
 function initialDocument(events: PreviewRecordedEvent[]): PreviewInitialDocument {
   return {
-    version: 1,
+    version: 2,
     time: events[0]?.timestamp ?? 0,
     documentId: "doc-1",
-    html: "",
     events,
   };
 }
 
 function patchBatch(events: PreviewRecordedEvent[]): PreviewDomPatchBatch {
   return {
-    version: 1,
+    version: 2,
     time: events[0]?.timestamp ?? 0,
     source: "runtime-preview",
     documentId: "doc-1",
-    baseRevision: 0,
-    revision: 1,
-    ops: [],
     events,
   };
 }
@@ -51,10 +47,9 @@ describe("buildRrwebReplayEvents", () => {
 
   it("tolerates records without events", () => {
     const bare: PreviewInitialDocument = {
-      version: 1,
+      version: 2,
       time: 0,
       documentId: "doc-1",
-      html: "<html></html>",
     };
 
     expect(buildRrwebReplayEvents([bare], [])).toEqual([]);
@@ -69,10 +64,9 @@ describe("hasRrwebPreviewEvents", () => {
 
   it("returns false for legacy records and empty input", () => {
     const legacy: PreviewInitialDocument = {
-      version: 1,
+      version: 2,
       time: 0,
       documentId: "doc-1",
-      html: "<html></html>",
     };
 
     expect(hasRrwebPreviewEvents([legacy], [])).toBe(false);

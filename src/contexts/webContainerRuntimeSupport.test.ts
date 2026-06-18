@@ -22,10 +22,14 @@ function nodeProject(htmlContent: string): WorkspaceProject {
 
 function getIndexHtml(tree: ReturnType<typeof createWorkspaceTree>): string {
   const entry = tree["index.html"];
-  if (!entry || !("file" in entry)) {
+  if (!entry || !("file" in entry) || !("contents" in entry.file)) {
     throw new Error("index.html not found in workspace tree");
   }
-  return entry.file.contents as string;
+  const { contents } = entry.file;
+  if (typeof contents !== "string") {
+    throw new Error("Expected index.html contents to be a string");
+  }
+  return contents;
 }
 
 describe("createWorkspaceTree rrweb injection", () => {
