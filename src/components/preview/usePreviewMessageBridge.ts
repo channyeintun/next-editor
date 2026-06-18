@@ -110,9 +110,6 @@ function createValidatedInitialDocument(
     time: payload.time,
     documentId: payload.documentId,
     route: payload.route,
-    // rrweb replay is driven entirely by `events`; `html` is retained on the type
-    // only for the (now-unused) legacy seed path and is left empty.
-    html: "",
     events: payload.events,
   };
 }
@@ -139,10 +136,6 @@ function createValidatedPatchBatch(payload: unknown): PreviewDomPatchBatch | nul
     source: payload.source,
     documentId: payload.documentId,
     route: payload.route,
-    // Legacy custom-op fields retained on the type for now; unused by rrweb replay.
-    baseRevision: 0,
-    revision: 0,
-    ops: [],
     events: payload.events,
   };
 }

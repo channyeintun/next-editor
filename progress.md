@@ -18,7 +18,7 @@ browser verification** with the running app — flagged per task where it applie
 | 2   | Recording: replace injected custom recorder with rrweb `record`; update message bridge to carry rrweb events | DONE   | typecheck+test (+browser) |
 | 3   | Replay: rrweb `Replayer` applier driven by the existing seek machine; mount into preview panel               | DONE   | typecheck+test (+browser) |
 | 4   | Scroll/viewport: retire decoupled runtime scroll path; responsive replay iframe; float/unfloat fidelity      | DONE   | typecheck+test (+browser) |
-| 5   | Delete custom path: recorder, apply engine, seed-patch transforms, op types, validators                      | TODO   | typecheck+test            |
+| 5   | Delete custom path: recorder, apply engine, seed-patch transforms, op types, validators                      | DONE   | typecheck+test            |
 | 6   | Tests: rrweb round-trip (virtual-list churn + scroll/float-unfloat)                                          | TODO   | test                      |
 
 ## Notes / decisions
@@ -62,6 +62,17 @@ browser verification** with the running app — flagged per task where it applie
   `offset = currentTime - initialDocuments[0].time`.
   Browser-verify pending: Replayer DOM/scroll/seek fidelity (jsdom can't render it).
   Green: typecheck ok; 33 preview tests; full suite 79 pass / 2 pre-existing audio fails.
+- T5: Deleted the whole custom path. `previewIframeUtils.ts` rewritten to keepers only
+  (`patchIframeContentFromHtml` + helpers, `createReplayableRuntimePreview*`,
+  `getElementByXPath`, `RUNTIME_SNAPSHOT_MESSAGE_TYPE`). Removed the legacy applier +
+  drift/resync refs + `getLatestInitialDocument` from `usePreviewPlaybackRegistration`
+  (applier is now rrweb-only; non-rrweb runtime returns -1). Deleted
+  `createRuntimePatchRecorderScript` + unused consts from webContainerRuntimeSupport.
+  Deleted op types (`PreviewDomPatchOp`/`PreviewNodeRef`/`SerializedPreviewNode` + all
+  op interfaces) and legacy fields (`html`/`ops`/`baseRevision`/`revision`) from BOTH
+  slides copies; updated `core/src/index.ts` re-exports and bridge constructors.
+  Deleted `previewPatchReplay.test.ts`. Verified zero dangling refs.
+  Green: typecheck ok; full suite 71 pass / 2 pre-existing audio fails (no preview regress).
 - T4: Decoupled runtime scroll path is **retired by construction** — during rrweb
   replay `RuntimePreviewRenderer` mounts the replay container (not the iframe), so
   `iframeRef` is null and the snapshot applier's scroll/`scrollTo` + content blocks

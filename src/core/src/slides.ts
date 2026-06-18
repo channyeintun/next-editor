@@ -106,92 +106,12 @@ export interface PreviewRecordedEvent {
   delay?: number;
 }
 
-export interface PreviewNodeRef {
-  id?: string;
-  anchorId?: string;
-  path: number[];
-}
-
-export interface SerializedPreviewNode {
-  kind: "element" | "text" | "comment" | "doctype";
-  tagName?: string;
-  namespaceURI?: string | null;
-  attributes?: Array<[string, string]>;
-  text?: string;
-  children?: SerializedPreviewNode[];
-}
-
-export interface PreviewSetTextOp {
-  op: "set_text";
-  target: PreviewNodeRef;
-  text: string;
-}
-
-export interface PreviewSetAttributeOp {
-  op: "set_attribute";
-  target: PreviewNodeRef;
-  name: string;
-  value: string;
-  namespaceURI?: string | null;
-}
-
-export interface PreviewRemoveAttributeOp {
-  op: "remove_attribute";
-  target: PreviewNodeRef;
-  name: string;
-  namespaceURI?: string | null;
-}
-
-export interface PreviewInsertNodeOp {
-  op: "insert_node";
-  parent: PreviewNodeRef;
-  index: number;
-  node: SerializedPreviewNode;
-}
-
-export interface PreviewRemoveNodeOp {
-  op: "remove_node";
-  target: PreviewNodeRef;
-}
-
-export interface PreviewMoveNodeOp {
-  op: "move_node";
-  target: PreviewNodeRef;
-  parent: PreviewNodeRef;
-  index: number;
-}
-
-export interface PreviewReplaceSubtreeOp {
-  op: "replace_subtree";
-  target: PreviewNodeRef;
-  html: string;
-  mode: "children" | "node";
-}
-
-export interface PreviewSetPropertyOp {
-  op: "set_property";
-  target: PreviewNodeRef;
-  name: "value" | "checked" | "selected";
-  value: string | boolean;
-}
-
-export type PreviewDomPatchOp =
-  | PreviewSetTextOp
-  | PreviewSetAttributeOp
-  | PreviewRemoveAttributeOp
-  | PreviewInsertNodeOp
-  | PreviewRemoveNodeOp
-  | PreviewMoveNodeOp
-  | PreviewReplaceSubtreeOp
-  | PreviewSetPropertyOp;
-
 export interface PreviewInitialDocument {
   version: number;
   time: number;
   documentId: string;
   route?: string;
-  html: string;
-  // rrweb Meta + FullSnapshot events that seed replay (new format).
+  // rrweb Meta + FullSnapshot events that seed replay.
   events?: PreviewRecordedEvent[];
 }
 
@@ -200,11 +120,8 @@ export interface PreviewDomPatchBatch {
   time: number;
   source: PreviewDomPatchSource;
   documentId: string;
-  baseRevision: number;
-  revision: number;
   route?: string;
-  ops: PreviewDomPatchOp[];
-  // rrweb incremental events for this frame (new format).
+  // rrweb incremental events for this frame.
   events?: PreviewRecordedEvent[];
 }
 
