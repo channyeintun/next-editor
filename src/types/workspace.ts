@@ -1713,6 +1713,13 @@ app.listen(port, "0.0.0.0", () => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script>
+      // The live preview injects a bootstrap <script> (declaring globals like
+      // __WC_ENV__) into every HTML response, including the fragments htmx swaps
+      // in. Re-executing it throws "Identifier '__WC_ENV__' has already been
+      // declared", so tell htmx to leave scripts inside swapped content inert.
+      htmx.config.allowScriptTags = false;
+    </script>
     <title>HTMX + Express Lesson</title>
   </head>
   <body>
