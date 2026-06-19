@@ -15,6 +15,7 @@ import {
   normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
   type WorkspaceFile,
+  type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
@@ -52,6 +53,35 @@ export function cloneWorkspaceSnapshot(snapshot: StoredWorkspaceSnapshot): Store
     activeFilePath: snapshot.activeFilePath,
     project: snapshot.project,
     sidebarWidth: snapshot.sidebarWidth,
+  };
+}
+
+/**
+ * Strip binary asset bytes from a snapshot before it goes to localStorage. The
+ * heavy bytes are persisted separately in IndexedDB (see workspaceAssetStore),
+ * so the localStorage snapshot only carries lightweight file metadata and stays
+ * well within the storage quota.
+ */
+export function toPersistedSnapshot(snapshot: StoredWorkspaceSnapshot): StoredWorkspaceSnapshot {
+  let strippedAny = false;
+  const files: Record<string, WorkspaceFile> = {};
+
+  for (const [path, file] of Object.entries(snapshot.project.files)) {
+    if (file.encoding === "base64" && file.content !== "") {
+      files[path] = { ...file, content: "" };
+      strippedAny = true;
+    } else {
+      files[path] = file;
+    }
+  }
+
+  if (!strippedAny) {
+    return snapshot;
+  }
+
+  return {
+    ...snapshot,
+    project: { ...snapshot.project, files },
   };
 }
 
@@ -102,7 +132,11 @@ function listProjectFiles(project: WorkspaceProject): WorkspaceFile[] {
   return Object.values(project.files).sort((left, right) => left.path.localeCompare(right.path));
 }
 
-function createWorkspaceFile(path: string, content: string): WorkspaceFile {
+function createWorkspaceFile(
+  path: string,
+  content: string,
+  encoding?: WorkspaceFileEncoding,
+): WorkspaceFile {
   const normalizedPath = normalizeWorkspacePath(path);
 
   return {
@@ -110,6 +144,7 @@ function createWorkspaceFile(path: string, content: string): WorkspaceFile {
     name: getWorkspaceBaseName(normalizedPath),
     language: inferLanguageFromPath(normalizedPath),
     content,
+    ...(encoding && encoding !== "utf-8" ? { encoding } : {}),
   };
 }
 
@@ -498,6 +533,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
         event: {
           path: string;
           content: string;
+          encoding?: WorkspaceFileEncoding;
         },
       ) => {
         const normalizedPath = normalizeWorkspacePath(event.path);
@@ -510,7 +546,7 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           return context;
         }
 
-        const file = createWorkspaceFile(normalizedPath, event.content);
+        const file = createWorkspaceFile(normalizedPath, event.content, event.encoding);
         const nextFiles = {
           ...context.project.files,
           [normalizedPath]: file,
@@ -577,7 +613,11 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           return context;
         }
 
-        const updatedFile = createWorkspaceFile(normalizedNextPath, existingFile.content);
+        const updatedFile = createWorkspaceFile(
+          normalizedNextPath,
+          existingFile.content,
+          existingFile.encoding,
+        );
         const nextFiles = { ...context.project.files };
         delete nextFiles[normalizedCurrentPath];
         nextFiles[normalizedNextPath] = updatedFile;
@@ -639,7 +679,9 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           }
 
           nextFiles[nextFilePath] =
-            nextFilePath === file.path ? file : createWorkspaceFile(nextFilePath, file.content);
+            nextFilePath === file.path
+              ? file
+              : createWorkspaceFile(nextFilePath, file.content, file.encoding);
         }
 
         const nextProject = {
@@ -872,6 +914,57 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           savedSnapshot: event.snapshot,
           saveVersion: context.saveVersion + 1,
         });
+      },
+      hydrateAssetContents: (
+        context,
+        event: {
+          contents: Record<string, string>;
+        },
+      ) => {
+        // Fill in binary asset bytes loaded asynchronously from IndexedDB after
+        // the synchronous localStorage bootstrap. Both the live project and the
+        // saved snapshot are updated so this does not register as a dirty edit,
+        // and only files still awaiting content are touched (never clobbering a
+        // user upload/edit that already landed).
+        let changed = false;
+        const nextFiles = { ...context.project.files };
+        const nextSavedFiles = { ...context.savedSnapshot.project.files };
+
+        for (const [path, content] of Object.entries(event.contents)) {
+          if (!content) {
+            continue;
+          }
+
+          const file = nextFiles[path];
+
+          if (file && file.encoding === "base64" && file.content === "") {
+            nextFiles[path] = { ...file, content };
+            changed = true;
+          }
+
+          const savedFile = nextSavedFiles[path];
+
+          if (savedFile && savedFile.encoding === "base64" && savedFile.content === "") {
+            nextSavedFiles[path] = { ...savedFile, content };
+          }
+        }
+
+        if (!changed) {
+          return context;
+        }
+
+        return withDirtyState(
+          withRefreshedWorkspaceSlices({
+            ...context,
+            project: { ...context.project, files: nextFiles },
+            savedSnapshot: {
+              ...context.savedSnapshot,
+              project: { ...context.savedSnapshot.project, files: nextSavedFiles },
+            },
+            previewVersion: context.previewVersion + 1,
+            syncVersion: context.syncVersion + 1,
+          }),
+        );
       },
     },
   });

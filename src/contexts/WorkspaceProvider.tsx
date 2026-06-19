@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
 import {
   WORKSPACE_STORAGE_KEY,
@@ -7,12 +7,15 @@ import {
   createInitialWorkspaceSnapshot,
   createWorkspaceStore,
   normalizeProject,
+  toPersistedSnapshot,
   type StoredWorkspaceSnapshot,
 } from "../stores/workspaceStore";
+import { loadWorkspaceAssetContents, persistWorkspaceAssets } from "../storage/workspaceAssetStore";
 import {
   createStarterHtmlCssWorkspace,
   createStarterWorkspaceProject,
   normalizeWorkspacePath,
+  type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
@@ -25,6 +28,30 @@ interface WorkspaceProviderProps {
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }) => {
   const initialSnapshotRef = useRef<StoredWorkspaceSnapshot>(createInitialWorkspaceSnapshot());
   const workspaceStoreRef = useRef(createWorkspaceStore(initialSnapshotRef.current));
+
+  // The synchronous localStorage bootstrap loads binary assets with empty
+  // content; hydrate their bytes from IndexedDB and let the store re-sync them
+  // into the running preview.
+  useEffect(() => {
+    let cancelled = false;
+    const store = workspaceStoreRef.current;
+
+    void loadWorkspaceAssetContents(store.getSnapshot().context.project)
+      .then((contents) => {
+        if (cancelled || Object.keys(contents).length === 0) {
+          return;
+        }
+
+        store.trigger.hydrateAssetContents({ contents });
+      })
+      .catch((error) => {
+        console.warn("Failed to load workspace assets:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const setActiveFilePath = useCallback((path: string) => {
     workspaceStoreRef.current.trigger.setActiveFilePath({ path });
@@ -47,8 +74,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     writeStoredFileSidebarWidth(workspaceStoreRef.current.getSnapshot().context.sidebarWidth);
   }, []);
 
-  const createFile = useCallback((path: string, content = "") => {
-    workspaceStoreRef.current.trigger.createFile({ path, content });
+  const createFile = useCallback((path: string, content = "", encoding?: WorkspaceFileEncoding) => {
+    workspaceStoreRef.current.trigger.createFile({ path, content, encoding });
   }, []);
 
   const createFolder = useCallback((path: string) => {
@@ -107,7 +134,15 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         sidebarWidth,
       } satisfies StoredWorkspaceSnapshot;
 
-      window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(storedSnapshot));
+      // localStorage holds only the lightweight metadata (binary bytes stripped);
+      // the heavy asset bytes are persisted to IndexedDB best-effort.
+      window.localStorage.setItem(
+        WORKSPACE_STORAGE_KEY,
+        JSON.stringify(toPersistedSnapshot(storedSnapshot)),
+      );
+      void persistWorkspaceAssets(project).catch((error) => {
+        console.warn("Failed to persist workspace assets:", error);
+      });
       workspaceStoreRef.current.trigger.markSaved({
         snapshot: cloneWorkspaceSnapshot(storedSnapshot),
       });

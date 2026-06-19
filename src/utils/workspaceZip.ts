@@ -26,7 +26,7 @@ export async function downloadWorkspaceProjectAsZip(project: WorkspaceProject): 
   }
 
   for (const file of Object.values(project.files)) {
-    zip.file(file.path, file.content);
+    zip.file(file.path, file.content, { base64: file.encoding === "base64" });
   }
 
   const blob = await zip.generateAsync({ type: "blob" });

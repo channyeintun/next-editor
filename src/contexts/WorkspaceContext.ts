@@ -1,5 +1,10 @@
 import { createContext } from "react";
-import type { WorkspaceFile, WorkspaceLessonType, WorkspaceProject } from "../types/workspace";
+import type {
+  WorkspaceFile,
+  WorkspaceFileEncoding,
+  WorkspaceLessonType,
+  WorkspaceProject,
+} from "../types/workspace";
 
 export interface WorkspaceActions {
   setActiveFilePath: (path: string) => void;
@@ -8,7 +13,7 @@ export interface WorkspaceActions {
   setSidebarScrollTop: (scrollTop: number) => void;
   setSidebarWidth: (width: number) => void;
   createNewEditor: () => void;
-  createFile: (path: string, content?: string) => void;
+  createFile: (path: string, content?: string, encoding?: WorkspaceFileEncoding) => void;
   createFolder: (path: string) => void;
   renameFile: (currentPath: string, nextPath: string) => void;
   renameFolder: (currentPath: string, nextPath: string) => void;

@@ -1,24 +1,32 @@
 import { memo, type UIEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  FileBox,
   FileCode2,
   FileJson2,
   FilePlus2,
   FileText,
+  Film,
   Folder,
   FolderOpen,
   FolderPlus,
   Globe,
+  ImageIcon,
+  Music,
   Package,
   Palette,
+  Upload,
 } from "lucide-react";
 import {
   getParentWorkspacePath,
+  getUniqueWorkspacePath,
   getWorkspaceBaseName,
+  getWorkspaceMediaKind,
   inferLanguageFromPath,
   joinWorkspacePath,
   type WorkspaceFile,
 } from "../types/workspace";
 import { useWorkspaceActions, useWorkspaceSidebarState } from "../hooks/useWorkspace";
+import { MAX_WORKSPACE_ASSET_BYTES, readUploadedWorkspaceFile } from "../utils/workspaceFileUpload";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import {
   DEFAULT_FILE_SIDEBAR_WIDTH,
@@ -153,6 +161,24 @@ function removeFolderFromCollapsedState(current: Set<string>, folderPath: string
 }
 
 function getFileIcon(file: WorkspaceFile) {
+  if (file.encoding === "base64") {
+    const mediaKind = getWorkspaceMediaKind(file.path);
+
+    if (mediaKind === "image") {
+      return <ImageIcon size={14} className="text-fuchsia-300" />;
+    }
+
+    if (mediaKind === "video") {
+      return <Film size={14} className="text-rose-300" />;
+    }
+
+    if (mediaKind === "audio") {
+      return <Music size={14} className="text-teal-300" />;
+    }
+
+    return <FileBox size={14} className="text-slate-300" />;
+  }
+
   if (file.path === "package.json") {
     return <Package size={14} className="text-emerald-300" />;
   }
@@ -284,6 +310,8 @@ const FileSidebar = memo(function FileSidebar() {
   const [editState, setEditState] = useState<SidebarEditState>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadTargetPathRef = useRef("");
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const sidebarScrollAnimationFrameRef = useRef<number | null>(null);
@@ -294,6 +322,7 @@ const FileSidebar = memo(function FileSidebar() {
     width: DEFAULT_FILE_SIDEBAR_WIDTH,
   });
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const [isFileDragOver, setIsFileDragOver] = useState(false);
   const [contextMenuSize, setContextMenuSize] = useState({
     width: CONTEXT_MENU_FALLBACK_WIDTH,
     height: CONTEXT_MENU_FALLBACK_HEIGHT,
@@ -303,6 +332,7 @@ const FileSidebar = memo(function FileSidebar() {
     createFolder,
     deleteFile,
     deleteFolder,
+    getProject,
     renameFile,
     renameFolder,
     saveProject,
@@ -531,6 +561,101 @@ const FileSidebar = memo(function FileSidebar() {
 
   const handleCreateFolder = () => {
     openCreateInput("folder", "");
+  };
+
+  const importUploadedFiles = async (fileList: FileList | null, parentPath: string) => {
+    if (!fileList || fileList.length === 0) {
+      return;
+    }
+
+    const isPathTaken = (candidatePath: string) => {
+      const project = getProject();
+      return Boolean(project.files[candidatePath]) || project.folders.includes(candidatePath);
+    };
+
+    let firstCreatedPath: string | null = null;
+    const skippedNames: string[] = [];
+
+    for (const file of Array.from(fileList)) {
+      if (file.size > MAX_WORKSPACE_ASSET_BYTES) {
+        skippedNames.push(file.name);
+        continue;
+      }
+
+      let uploaded;
+      try {
+        uploaded = await readUploadedWorkspaceFile(file);
+      } catch (error) {
+        console.warn(`Failed to read uploaded file "${file.name}":`, error);
+        skippedNames.push(file.name);
+        continue;
+      }
+
+      const targetPath = getUniqueWorkspacePath(
+        joinWorkspacePath(parentPath, file.name),
+        isPathTaken,
+      );
+      createFile(targetPath, uploaded.content, uploaded.encoding);
+      firstCreatedPath = firstCreatedPath ?? targetPath;
+    }
+
+    if (firstCreatedPath) {
+      saveProject();
+      handleWorkspaceEvent();
+    }
+
+    if (skippedNames.length > 0) {
+      const limitMb = Math.round(MAX_WORKSPACE_ASSET_BYTES / (1024 * 1024));
+      window.alert(
+        `Skipped (must be under ${limitMb} MB or unreadable):\n${skippedNames.join("\n")}`,
+      );
+    }
+  };
+
+  const openUploadDialog = (parentPath: string) => {
+    uploadTargetPathRef.current = parentPath;
+    setContextMenu(null);
+    uploadInputRef.current?.click();
+  };
+
+  const handleUploadInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    void importUploadedFiles(event.target.files, uploadTargetPathRef.current);
+    event.target.value = "";
+  };
+
+  const handleSidebarDragOver = (event: React.DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes("Files")) {
+      return;
+    }
+
+    // Stop the document-level URL/file drop handler from also importing this as
+    // a NextEditor project file; the sidebar drop adds it as a workspace asset.
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+
+    if (!isFileDragOver) {
+      setIsFileDragOver(true);
+    }
+  };
+
+  const handleSidebarDragLeave = (event: React.DragEvent<HTMLElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      return;
+    }
+
+    setIsFileDragOver(false);
+  };
+
+  const handleSidebarDrop = (event: React.DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes("Files")) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setIsFileDragOver(false);
+    void importUploadedFiles(event.dataTransfer.files, "");
   };
 
   const startRenameEntry = (kind: SidebarEntryKind, path: string) => {
@@ -820,6 +945,9 @@ const FileSidebar = memo(function FileSidebar() {
       className="relative flex h-full shrink-0 flex-col border-r border-slate-800 bg-[#11141c] text-slate-100"
       style={{ width: sidebarWidth }}
       data-cursor-replay-target="file-sidebar"
+      onDragOver={handleSidebarDragOver}
+      onDragLeave={handleSidebarDragLeave}
+      onDrop={handleSidebarDrop}
     >
       <div className="border-b border-slate-800 px-3 py-2">
         <div className="flex items-center justify-between gap-3">
@@ -845,9 +973,35 @@ const FileSidebar = memo(function FileSidebar() {
             >
               <FolderPlus size={14} />
             </button>
+            <button
+              type="button"
+              onClick={() => openUploadDialog("")}
+              className="inline-flex size-5 items-center justify-center text-slate-400 transition-colors hover:text-white"
+              aria-label="Upload files"
+              title="Upload local files (images, video, assets)"
+            >
+              <Upload size={14} />
+            </button>
           </div>
         </div>
       </div>
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleUploadInputChange}
+      />
+      {isFileDragOver ? (
+        // z-110 keeps this above the app-wide drag overlay (z-105) so the
+        // sidebar shows the correct "add as asset" hint while dragging.
+        <div className="pointer-events-none absolute inset-0 z-110 flex items-center justify-center bg-[#11141c]/80 px-4">
+          <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-sky-400/70 bg-[#11141c] px-6 py-5 text-center">
+            <Upload size={22} className="text-sky-300" />
+            <p className="text-xs font-medium text-slate-200">Drop files to add to the workspace</p>
+          </div>
+        </div>
+      ) : null}
 
       <div
         ref={sidebarScrollContainerRef}
@@ -880,6 +1034,13 @@ const FileSidebar = memo(function FileSidebar() {
               className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
             >
               New Folder
+            </button>
+            <button
+              type="button"
+              onClick={() => openUploadDialog(contextMenuCreateParentPath)}
+              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
+            >
+              Upload Files Here
             </button>
             {canOpenContextFileInPreview ? (
               <button

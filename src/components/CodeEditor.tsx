@@ -10,6 +10,7 @@ import {
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
+import BinaryFilePreview from "./BinaryFilePreview";
 import {
   disposePlaybackModels,
   syncPlaybackModel,
@@ -192,13 +193,16 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
   // Only subscribe to the flags we actually need for rendering decisions
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
+  // Binary assets (images, video, …) cannot be edited as text, so the Monaco
+  // editor is swapped for a media preview and the editor sync paths are skipped.
+  const isBinaryActiveFile = activeFile.encoding === "base64";
   const selectedLanguage = activeFile.language || language || "html";
   const editorModelPath = usesPlaybackModel
     ? toPlaybackModelPath(activeFile.path)
     : toMonacoModelPath(activeFile.path);
 
   const syncActivePlaybackModel = useEffectEvent((monaco: Monaco) => {
-    if (!usesPlaybackModel) {
+    if (!usesPlaybackModel || isBinaryActiveFile) {
       return null;
     }
 
@@ -244,7 +248,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   });
 
   const syncEditorContentToWorkspace = useEffectEvent((editor: Parameters<OnMount>[0] | null) => {
-    if (usesPlaybackModel || !editor) {
+    if (usesPlaybackModel || !editor || isBinaryActiveFile) {
       return;
     }
 
@@ -372,6 +376,15 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       focusEditorIfNeeded(editorRef.current);
     }
   }, [editorRef, isPlaying]);
+
+  // The Monaco <Editor> unmounts while a binary asset is shown; drop the stale
+  // editor reference so recording/save paths don't touch a disposed instance.
+  useEffect(() => {
+    if (isBinaryActiveFile) {
+      editorRef.current = null;
+      syncEditorRef(null);
+    }
+  }, [editorRef, isBinaryActiveFile, syncEditorRef]);
 
   /**
    * Handle Monaco Editor mount event
@@ -577,73 +590,77 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             className={"editor-paint-layer min-w-0 flex-1" + (isPlaying ? " playback-mode" : "")}
             data-cursor-replay-target="code-editor"
           >
-            <Editor
-              height="100%"
-              path={editorModelPath}
-              language={selectedLanguage}
-              theme={theme}
-              defaultValue={usesPlaybackModel ? activeFile.content : undefined}
-              value={usesPlaybackModel ? undefined : activeFile.content}
-              saveViewState={!usesPlaybackModel}
-              onMount={handleEditorDidMount}
-              beforeMount={handleEditorBeforeMount}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 14,
-                lineNumbers: "on",
-                roundedSelection: false,
-                scrollBeyondLastLine: true,
-                readOnly: false, // Keep editor writable to allow cursor blinking
-                cursorStyle: "line",
-                cursorBlinking: isPlaying ? "solid" : "smooth",
-                renderValidationDecorations: "off",
-                automaticLayout: true,
-                // Disable code suggestions and IntelliSense
-                quickSuggestions: false,
-                suggestOnTriggerCharacters: false,
-                acceptSuggestionOnEnter: "off",
-                tabCompletion: "off",
-                wordBasedSuggestions: "currentDocument",
-                parameterHints: { enabled: false },
-                fontWeight: "normal",
-                hover: { enabled: false },
-                contextmenu: false,
-                // Disable other distracting features
-                folding: false,
-                foldingHighlight: false,
-                unfoldOnClickAfterEndOfLine: false,
-                showUnused: false,
-                occurrencesHighlight: "off",
-                selectionHighlight: false,
-                renderLineHighlight: "none",
-                fontFamily: "Source Code Pro",
-                fontLigatures: false,
-                wrappingIndent: "same",
-                dragAndDrop: false,
-                hideCursorInOverviewRuler: true,
-                overviewRulerBorder: false,
-                lineNumbersMinChars: 3,
-                glyphMargin: false,
-                lineDecorationsWidth: "1ch",
-                colorDecorators: false,
-                guides: {
-                  indentation: false,
-                },
-                renderWhitespace: "selection",
-                matchBrackets: "never",
-                links: false,
-                padding: { top: 12 },
-                scrollbar: {
-                  useShadows: false,
-                  verticalScrollbarSize: 8,
-                  horizontalScrollbarSize: 8,
-                  horizontal: "hidden",
-                },
-                unicodeHighlight: {
-                  ambiguousCharacters: false,
-                },
-              }}
-            />
+            {isBinaryActiveFile ? (
+              <BinaryFilePreview file={activeFile} />
+            ) : (
+              <Editor
+                height="100%"
+                path={editorModelPath}
+                language={selectedLanguage}
+                theme={theme}
+                defaultValue={usesPlaybackModel ? activeFile.content : undefined}
+                value={usesPlaybackModel ? undefined : activeFile.content}
+                saveViewState={!usesPlaybackModel}
+                onMount={handleEditorDidMount}
+                beforeMount={handleEditorBeforeMount}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  lineNumbers: "on",
+                  roundedSelection: false,
+                  scrollBeyondLastLine: true,
+                  readOnly: false, // Keep editor writable to allow cursor blinking
+                  cursorStyle: "line",
+                  cursorBlinking: isPlaying ? "solid" : "smooth",
+                  renderValidationDecorations: "off",
+                  automaticLayout: true,
+                  // Disable code suggestions and IntelliSense
+                  quickSuggestions: false,
+                  suggestOnTriggerCharacters: false,
+                  acceptSuggestionOnEnter: "off",
+                  tabCompletion: "off",
+                  wordBasedSuggestions: "currentDocument",
+                  parameterHints: { enabled: false },
+                  fontWeight: "normal",
+                  hover: { enabled: false },
+                  contextmenu: false,
+                  // Disable other distracting features
+                  folding: false,
+                  foldingHighlight: false,
+                  unfoldOnClickAfterEndOfLine: false,
+                  showUnused: false,
+                  occurrencesHighlight: "off",
+                  selectionHighlight: false,
+                  renderLineHighlight: "none",
+                  fontFamily: "Source Code Pro",
+                  fontLigatures: false,
+                  wrappingIndent: "same",
+                  dragAndDrop: false,
+                  hideCursorInOverviewRuler: true,
+                  overviewRulerBorder: false,
+                  lineNumbersMinChars: 3,
+                  glyphMargin: false,
+                  lineDecorationsWidth: "1ch",
+                  colorDecorators: false,
+                  guides: {
+                    indentation: false,
+                  },
+                  renderWhitespace: "selection",
+                  matchBrackets: "never",
+                  links: false,
+                  padding: { top: 12 },
+                  scrollbar: {
+                    useShadows: false,
+                    verticalScrollbarSize: 8,
+                    horizontalScrollbarSize: 8,
+                    horizontal: "hidden",
+                  },
+                  unicodeHighlight: {
+                    ambiguousCharacters: false,
+                  },
+                }}
+              />
+            )}
           </div>
           <Suspense fallback={null}>
             <Preview />

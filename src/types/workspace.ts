@@ -1,8 +1,18 @@
+export type WorkspaceFileEncoding = "utf-8" | "base64";
+
 export interface WorkspaceFile {
   path: string;
   name: string;
   language: string;
   content: string;
+  /**
+   * How `content` is encoded. Text files use "utf-8" (also the default when the
+   * field is absent). Binary assets — images, video, audio, fonts, … — store
+   * their bytes base64-encoded in `content` so the whole workspace stays
+   * JSON-serializable for localStorage persistence and recordings, and so it
+   * can travel through the same string-based file pipeline as text.
+   */
+  encoding?: WorkspaceFileEncoding;
 }
 
 export type WorkspaceLessonType =
@@ -87,7 +97,8 @@ function areWorkspaceFilesEqual(
       leftFile.path === rightFile.path &&
       leftFile.name === rightFile.name &&
       leftFile.language === rightFile.language &&
-      leftFile.content === rightFile.content
+      leftFile.content === rightFile.content &&
+      (leftFile.encoding ?? "utf-8") === (rightFile.encoding ?? "utf-8")
     );
   });
 }
@@ -314,7 +325,186 @@ export function inferLanguageFromPath(path: string): string {
   return "plaintext";
 }
 
-function createWorkspaceFile(path: string, content: string): WorkspaceFile {
+export function getWorkspaceFileExtension(path: string): string {
+  const name = getWorkspaceBaseName(normalizeWorkspacePath(path)).toLowerCase();
+  const dotIndex = name.lastIndexOf(".");
+
+  return dotIndex > 0 ? name.slice(dotIndex + 1) : "";
+}
+
+// Extensions whose contents are not editable text and must be stored as bytes.
+// SVG is intentionally absent: it is XML and stays editable as text.
+const BINARY_WORKSPACE_FILE_EXTENSIONS: ReadonlySet<string> = new Set([
+  // Images
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "avif",
+  "bmp",
+  "ico",
+  "tiff",
+  "tif",
+  // Video
+  "mp4",
+  "webm",
+  "mov",
+  "m4v",
+  "avi",
+  "mkv",
+  "ogv",
+  // Audio
+  "mp3",
+  "wav",
+  "ogg",
+  "oga",
+  "m4a",
+  "aac",
+  "flac",
+  // Fonts
+  "woff",
+  "woff2",
+  "ttf",
+  "otf",
+  "eot",
+  // Other binary assets
+  "pdf",
+  "wasm",
+  "zip",
+  "gz",
+  "tar",
+  "bz2",
+]);
+
+const WORKSPACE_FILE_MIME_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+  svg: "image/svg+xml",
+  tiff: "image/tiff",
+  tif: "image/tiff",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  m4v: "video/x-m4v",
+  ogv: "video/ogg",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  oga: "audio/ogg",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  flac: "audio/flac",
+  woff: "font/woff",
+  woff2: "font/woff2",
+  ttf: "font/ttf",
+  otf: "font/otf",
+  pdf: "application/pdf",
+  wasm: "application/wasm",
+};
+
+/** True when a path points at a non-text asset that must be stored as bytes. */
+export function isBinaryWorkspacePath(path: string): boolean {
+  return BINARY_WORKSPACE_FILE_EXTENSIONS.has(getWorkspaceFileExtension(path));
+}
+
+export function getWorkspaceFileMimeType(path: string): string {
+  return WORKSPACE_FILE_MIME_TYPES[getWorkspaceFileExtension(path)] ?? "application/octet-stream";
+}
+
+export type WorkspaceMediaKind = "image" | "video" | "audio" | "other";
+
+export function getWorkspaceMediaKind(path: string): WorkspaceMediaKind {
+  const mimeType = getWorkspaceFileMimeType(path);
+
+  if (mimeType.startsWith("image/")) {
+    return "image";
+  }
+
+  if (mimeType.startsWith("video/")) {
+    return "video";
+  }
+
+  if (mimeType.startsWith("audio/")) {
+    return "audio";
+  }
+
+  return "other";
+}
+
+/** Encode raw bytes as base64 in chunks so large assets don't overflow the stack. */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
+}
+
+export function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
+}
+
+/** Estimate the decoded byte length of base64 content without decoding it. */
+export function approximateBase64ByteLength(base64: string): number {
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+}
+
+/**
+ * Resolve a non-colliding workspace path by appending `-1`, `-2`, … before the
+ * extension. Used when importing assets so re-uploading never clobbers a file.
+ */
+export function getUniqueWorkspacePath(
+  desiredPath: string,
+  isTaken: (path: string) => boolean,
+): string {
+  const normalizedPath = normalizeWorkspacePath(desiredPath);
+
+  if (!isTaken(normalizedPath)) {
+    return normalizedPath;
+  }
+
+  const parentPath = getParentWorkspacePath(normalizedPath);
+  const baseName = getWorkspaceBaseName(normalizedPath);
+  const dotIndex = baseName.lastIndexOf(".");
+  const stem = dotIndex > 0 ? baseName.slice(0, dotIndex) : baseName;
+  const extension = dotIndex > 0 ? baseName.slice(dotIndex) : "";
+
+  let counter = 1;
+  let candidate = joinWorkspacePath(parentPath, `${stem}-${counter}${extension}`);
+
+  while (isTaken(candidate)) {
+    counter += 1;
+    candidate = joinWorkspacePath(parentPath, `${stem}-${counter}${extension}`);
+  }
+
+  return candidate;
+}
+
+function createWorkspaceFile(
+  path: string,
+  content: string,
+  encoding?: WorkspaceFileEncoding,
+): WorkspaceFile {
   const normalizedPath = normalizeWorkspacePath(path);
 
   return {
@@ -322,6 +512,7 @@ function createWorkspaceFile(path: string, content: string): WorkspaceFile {
     name: getWorkspaceBaseName(normalizedPath),
     language: inferLanguageFromPath(normalizedPath),
     content,
+    ...(encoding && encoding !== "utf-8" ? { encoding } : {}),
   };
 }
 

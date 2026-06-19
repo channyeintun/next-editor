@@ -5,9 +5,12 @@ import type {
   RuntimePreviewMessage,
 } from "./WebContainerRuntimeContext";
 import {
+  base64ToBytes,
+  bytesToBase64,
   collectWorkspaceFolders,
   getWorkspaceBaseName,
   inferLanguageFromPath,
+  isBinaryWorkspacePath,
   lessonRunsInWebContainer,
   normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
@@ -233,6 +236,19 @@ async function readRuntimeDirectory(
       continue;
     }
 
+    if (isBinaryWorkspacePath(nextWorkspacePath)) {
+      const bytes = await instance.fs.readFile(nextRuntimePath);
+
+      files[nextWorkspacePath] = {
+        path: nextWorkspacePath,
+        name: getWorkspaceBaseName(nextWorkspacePath),
+        language: inferLanguageFromPath(nextWorkspacePath),
+        content: bytesToBase64(bytes),
+        encoding: "base64",
+      };
+      continue;
+    }
+
     const content = stripRuntimeSnapshotScript(
       await instance.fs.readFile(nextRuntimePath, "utf-8"),
     );
@@ -322,7 +338,10 @@ export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
 
     currentDirectory[fileName] = {
       file: {
-        contents: injectRuntimeSnapshotScript(project, normalizedPath, file.content),
+        contents:
+          file.encoding === "base64"
+            ? base64ToBytes(file.content)
+            : injectRuntimeSnapshotScript(project, normalizedPath, file.content),
       },
     };
   }
@@ -412,7 +431,12 @@ export async function syncWorkspaceProject(
     }
 
     await ensureDirectory(instance, getFileDirectory(path));
-    await instance.fs.writeFile(path, injectRuntimeSnapshotScript(nextProject, path, file.content));
+    await instance.fs.writeFile(
+      path,
+      file.encoding === "base64"
+        ? base64ToBytes(file.content)
+        : injectRuntimeSnapshotScript(nextProject, path, file.content),
+    );
   }
 }
 
