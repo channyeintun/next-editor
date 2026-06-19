@@ -1,28 +1,68 @@
 import { motion } from "motion/react";
-import { ArrowUpRight, PlayCircle } from "lucide-react";
+import { Maximize, Minimize, SquareArrowOutUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import Navbar from "./Navbar";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 const DEMO_IFRAME_WIDTH = 1440;
 const DEMO_IFRAME_HEIGHT = 900;
 const DEFAULT_IFRAME_SCALE = 0.4513888888888889;
+const DEMO_URL = "/code?url=/introduction.ne";
+const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true`;
 
 const LandingPage = () => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(DEFAULT_IFRAME_SCALE);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
     const resizeObserver = new ResizeObserver((entries) => {
-      for (let entry of entries) {
-        const width = entry.contentRect.width;
-        setScale(width > 0 ? width / DEMO_IFRAME_WIDTH : DEFAULT_IFRAME_SCALE);
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) setDimensions({ width, height });
       }
     });
     resizeObserver.observe(containerRef.current);
     return () => resizeObserver.disconnect();
   }, []);
+
+  useEffect(() => {
+    const doc = document as Document & { webkitFullscreenElement?: Element | null };
+    const handleChange = () => {
+      const current = doc.fullscreenElement ?? doc.webkitFullscreenElement;
+      setIsFullscreen(current === containerRef.current);
+    };
+    document.addEventListener("fullscreenchange", handleChange);
+    document.addEventListener("webkitfullscreenchange", handleChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleChange);
+      document.removeEventListener("webkitfullscreenchange", handleChange);
+    };
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const node = containerRef.current as
+      | (HTMLDivElement & { webkitRequestFullscreen?: () => void })
+      | null;
+    if (!node) return;
+    const doc = document as Document & {
+      webkitFullscreenElement?: Element | null;
+      webkitExitFullscreen?: () => void;
+    };
+    if (doc.fullscreenElement ?? doc.webkitFullscreenElement) {
+      (doc.exitFullscreen ?? doc.webkitExitFullscreen)?.call(doc);
+    } else {
+      (node.requestFullscreen ?? node.webkitRequestFullscreen)?.call(node);
+    }
+  }, []);
+
+  // Contain + center the fixed-size demo iframe within its (possibly fullscreen) container.
+  const scale = dimensions
+    ? Math.min(dimensions.width / DEMO_IFRAME_WIDTH, dimensions.height / DEMO_IFRAME_HEIGHT)
+    : DEFAULT_IFRAME_SCALE;
+  const offsetX = dimensions ? (dimensions.width - DEMO_IFRAME_WIDTH * scale) / 2 : 0;
+  const offsetY = dimensions ? (dimensions.height - DEMO_IFRAME_HEIGHT * scale) / 2 : 0;
 
   return (
     <div className="min-h-screen bg-[#11141c] text-white overflow-hidden selection:bg-pinata-purple selection:text-white font-telegraf">
@@ -120,37 +160,61 @@ const LandingPage = () => {
                           </span>
                         </div>
                       </div>
-                      <Link
-                        to="/code?url=/introduction.ne"
-                        aria-label="Open the introduction demo in the editor"
-                        className="group inline-flex shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white px-3 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-slate-950/20 transition-all hover:-translate-y-0.5 hover:bg-pinata-cyan active:translate-y-0 sm:px-4"
-                      >
-                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white transition-transform group-hover:scale-105">
-                          <PlayCircle className="size-4" strokeWidth={2.4} aria-hidden="true" />
-                        </span>
-                        <span className="hidden sm:inline">Open demo</span>
-                        <span className="sm:hidden">Open</span>
-                        <ArrowUpRight
-                          className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-                          strokeWidth={2.6}
-                          aria-hidden="true"
-                        />
-                      </Link>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={toggleFullscreen}
+                          aria-label={
+                            isFullscreen ? "Exit full screen" : "View demo in full screen"
+                          }
+                          title={isFullscreen ? "Exit full screen" : "Full screen"}
+                          className="inline-flex size-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white"
+                        >
+                          {isFullscreen ? (
+                            <Minimize className="size-4" aria-hidden="true" />
+                          ) : (
+                            <Maximize className="size-4" aria-hidden="true" />
+                          )}
+                        </button>
+                        <a
+                          href={DEMO_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Open the demo in a new tab"
+                          title="Open in new tab"
+                          className="inline-flex size-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white"
+                        >
+                          <SquareArrowOutUpRight className="size-4" aria-hidden="true" />
+                        </a>
+                      </div>
                     </div>
                     <div
                       ref={containerRef}
                       className="relative w-full aspect-1440/900 overflow-hidden bg-[#11141c]"
                     >
                       <iframe
-                        src="/code?url=/introduction.ne&readOnly=true&deferRuntimeAutostart=true"
-                        className="absolute top-0 left-0 border-0 origin-top-left"
+                        src={DEMO_IFRAME_SRC}
+                        className="absolute border-0 origin-top-left"
                         style={{
                           width: DEMO_IFRAME_WIDTH,
                           height: DEMO_IFRAME_HEIGHT,
+                          left: offsetX,
+                          top: offsetY,
                           transform: `scale(${scale})`,
                         }}
                         title="Next Editor Live Demo"
                       />
+                      {isFullscreen && (
+                        <button
+                          type="button"
+                          onClick={toggleFullscreen}
+                          aria-label="Exit full screen"
+                          className="absolute right-4 top-4 z-10 inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-slate-950"
+                        >
+                          <Minimize className="size-4" aria-hidden="true" />
+                          Exit full screen
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
