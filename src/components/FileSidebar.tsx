@@ -146,10 +146,6 @@ function getDefaultFileContent(path: string): string {
   return FILE_TEMPLATES[language] ?? "";
 }
 
-function getDefaultDraftName(kind: "file" | "folder"): string {
-  return kind === "file" ? "new-file.js" : "new-folder";
-}
-
 function removeFolderFromCollapsedState(current: Set<string>, folderPath: string): Set<string> {
   if (!folderPath || !current.has(folderPath)) {
     return current;
@@ -552,7 +548,7 @@ const FileSidebar = memo(function FileSidebar() {
       kind,
       parentPath,
     });
-    setDraftName(getDefaultDraftName(kind));
+    setDraftName("");
   };
 
   const handleCreateFile = () => {
@@ -861,7 +857,8 @@ const FileSidebar = memo(function FileSidebar() {
             onChange={(event) => setDraftName(event.target.value)}
             onKeyDown={handleDraftKeyDown}
             onBlur={commitInlineEdit}
-            className="min-w-0 flex-1 bg-transparent text-[13px] leading-5 text-slate-100 outline-none"
+            placeholder={kind === "folder" ? "Folder name" : "File name"}
+            className="min-w-0 flex-1 bg-transparent text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-500"
           />
         </div>
       </div>
