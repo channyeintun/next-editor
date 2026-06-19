@@ -258,7 +258,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
   const { rerunRunner, resetRuntime, updateEnvironmentVariables, updateRunnerConfig } =
     useWebContainerRuntimeActions();
   const { environmentVariables, runnerConfig, status } = useWebContainerRuntimeMetadata();
-  const { createNewEditor, getProject, loadProject, saveProject } = useWorkspaceActions();
+  const { getProject, loadProject, saveProject } = useWorkspaceActions();
   const fileCount = useWorkspaceFileCount();
   const lessonType = useWorkspaceLessonType();
   const { hasUnsavedChanges } = useWorkspaceDirtyState();
@@ -299,11 +299,15 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
   };
 
   const handleCreateNewEditor = () => {
+    // "New Editor" starts over within the current framework, so reset to a fresh
+    // starter of the active lesson type rather than always falling back to HTML/CSS.
+    const currentOption =
+      LESSON_TYPE_OPTIONS.find((option) => option.value === lessonType) ?? LESSON_TYPE_OPTIONS[0];
     const confirmMessage = hasUnsavedChanges
-      ? "Discard the current workspace and unsaved changes? This will reset the editor to a fresh index.html file."
+      ? `Discard the current workspace and unsaved changes? This will reset the editor to a fresh ${currentOption.label} project.`
       : fileCount > 0
-        ? "Discard the current workspace? This will reset the editor to a fresh index.html file."
-        : "Create a new editor with a fresh index.html file?";
+        ? `Discard the current workspace? This will reset the editor to a fresh ${currentOption.label} project.`
+        : `Create a new ${currentOption.label} project?`;
 
     setIsMenuOpen(false);
 
@@ -311,9 +315,11 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
       return;
     }
 
-    createNewEditor();
+    // Same framework as before, so its dependencies are already installed — just
+    // swap the files in (the running dev server picks them up) and keep it running.
+    loadProject(currentOption.createStarter());
     saveProject();
-    updateRunnerConfig({ enabled: false });
+    updateRunnerConfig({ enabled: true });
   };
 
   const handleSelectLessonType = (nextLessonType: WorkspaceLessonType) => {
