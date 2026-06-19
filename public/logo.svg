@@ -1,6 +1,6 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">next-editor logo</title>
-  <desc id="desc">A dark rounded tile with a colorful N-shaped editor path and a playhead triangle.</desc>
+  <desc id="desc">A dark rounded tile with a colorful N-shaped editor path and a centered play badge.</desc>
   <defs>
     <linearGradient id="tile" x1="140" y1="116" x2="884" y2="908" gradientUnits="userSpaceOnUse">
       <stop stop-color="#171D28"/>
@@ -17,12 +17,15 @@
       <stop offset="0.47" stop-color="#FFD255"/>
       <stop offset="1" stop-color="#6D57FF"/>
     </linearGradient>
-    <linearGradient id="playStroke" x1="451" y1="430" x2="652" y2="594" gradientUnits="userSpaceOnUse">
+    <linearGradient id="playFill" x1="452" y1="452" x2="588" y2="572" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#4DE5D6"/>
+      <stop offset="1" stop-color="#9BF4EA"/>
     </linearGradient>
     <filter id="glyphShadow" x="134" y="210" width="756" height="604" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
       <feDropShadow dx="0" dy="22" stdDeviation="20" flood-color="#020617" flood-opacity="0.46"/>
+    </filter>
+    <filter id="badgeShadow" x="350" y="362" width="324" height="324" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#020617" flood-opacity="0.55"/>
     </filter>
   </defs>
 
@@ -41,8 +44,13 @@
 
   <g filter="url(#glyphShadow)">
     <path d="M280 704V320L744 704V320" stroke="url(#glyph)" stroke-width="118" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M488 413L660 512L488 611V413Z" fill="#11141C" stroke="url(#playStroke)" stroke-width="30" stroke-linejoin="round"/>
     <circle cx="280" cy="320" r="25" fill="#FFFFFF" fill-opacity="0.92"/>
     <circle cx="744" cy="704" r="25" fill="#FFFFFF" fill-opacity="0.92"/>
+  </g>
+
+  <g filter="url(#badgeShadow)">
+    <circle cx="512" cy="512" r="118" fill="#0C0F16"/>
+    <circle cx="512" cy="512" r="118" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="10"/>
+    <path d="M478 454L596 512L478 570V454Z" fill="url(#playFill)" stroke="url(#playFill)" stroke-width="18" stroke-linejoin="round"/>
   </g>
 </svg>
