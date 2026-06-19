@@ -65,8 +65,8 @@ interface Recording {
 
 Notable current fields:
 
-- `previewInitialDocuments` seeds preview replay.
-- `previewPatchBatches` replays DOM mutations after that seed.
+- `previewInitialDocuments` seeds preview replay with the rrweb Meta + FullSnapshot events.
+- `previewPatchBatches` carries the incremental rrweb events that play after that seed.
 - `cursorEvents` gives higher-fidelity cursor playback than relying on frame snapshots alone.
 - `cameraStartOffsetMs` compensates for `getUserMedia` warmup so camera playback stays aligned.
 
@@ -114,12 +114,30 @@ That lets playback remap a recorded cursor onto the current UI layout more relia
 
 ## Preview Replay Data
 
-Preview playback uses two structures together:
+Preview playback is rrweb-based. Both structures carry rrweb events verbatim as
+`PreviewRecordedEvent[]`, which is structurally compatible with rrweb's `eventWithTime`;
+the recording engine treats them as opaque JSON and only reads the envelope `time` /
+`documentId`.
 
-- `PreviewInitialDocument[]` captures a seeded DOM snapshot.
-- `PreviewDomPatchBatch[]` captures ordered DOM mutations over time.
+- `PreviewInitialDocument[]` captures the seed: the rrweb Meta + FullSnapshot pair.
+- `PreviewDomPatchBatch[]` captures the ordered incremental rrweb events that follow,
+  batched per animation frame.
 
-This is what allows preview playback to restore recorded DOM updates without requiring a fresh runtime rerun or a manual save point.
+```ts
+interface PreviewRecordedEvent {
+  type: number; // rrweb EventType
+  data: unknown;
+  timestamp: number;
+  delay?: number;
+}
+```
+
+At replay time the app reassembles the full ordered event stream from the seed plus all
+patch batches and drives an rrweb `Replayer` from the recording timeline (seek-driven, no
+autoplay). Because DOM, scroll, input, and pointer all live in that one stream, they stay
+coupled — restoring recorded preview state without a fresh runtime rerun or a manual save
+point. `PREVIEW_RRWEB_FORMAT_VERSION` is `2` (bumped from the legacy custom-op format `1`,
+whose separate DOM-patch path has been removed).
 
 ## Audio And Camera Data
 

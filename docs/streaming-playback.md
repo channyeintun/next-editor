@@ -188,8 +188,8 @@ effective duration in your UI.
 
 ## Audio and camera behavior (important)
 
-- **Visual playback still streams immediately.** Frames, cursor, preview DOM patches, slides, and
-  workspace/runtime state replay from any decodable prefix.
+- **Visual playback still streams immediately.** Frames, cursor, rrweb preview snapshots, slides,
+  and workspace/runtime state replay from any decodable prefix.
 - **Audio now rides the same clustered stream model.** Later prefixes extend the recording's
   audio coverage and rebuild a larger contiguous blob snapshot. The `audioPlaybackActor` keeps
   using `HTMLAudioElement`, but in stream mode it can reattach that growing blob, seek back to the

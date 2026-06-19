@@ -34,7 +34,7 @@ flowchart TB
 Core responsibilities:
 
 - Maintain the editor machine and playback timeline.
-- Capture editor frames, cursor samples, preview events, preview DOM patches, workspace events, and runtime events.
+- Capture editor frames, cursor samples, preview events, rrweb preview snapshots, workspace events, and runtime events.
 - Normalize recordings into the `Recording` shape used across the app.
 - Expose stable controls such as `startRecording`, `play`, `seekTo`, `loadRecording`, and `extendRecording`.
 
@@ -56,7 +56,7 @@ Key exports:
 - `initWasm`
 - `Recording`, `EditorFrame`, `EditorState`
 - `RecordingStreamSink`, `UseNextEditorConfig`, `UseNextEditorReturn`
-- Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewDomPatchBatch`, and `PreviewInitialDocument`
+- Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`
 
 The core module also re-exports app-level components such as `CodeEditor`, `MediaControls`, `Preview`, and `SlidePanel`, but the recording and playback logic lives underneath those components in the machine and hook layer.
 
@@ -68,7 +68,7 @@ Next Editor records a timeline, not just source text.
 flowchart LR
   Editor[Editor frames] --> Recording
   Cursor[Cursor samples] --> Recording
-  Preview[Preview state + DOM patches] --> Recording
+  Preview[Preview state + rrweb snapshots] --> Recording
   Slides[Slide events] --> Recording
   Workspace[Workspace events + snapshot] --> Recording
   Runtime[Runtime events + snapshot] --> Recording
@@ -81,7 +81,7 @@ Important current details:
 - Frames are delta-compressed during capture, not as a final batch-only step.
 - The current app emits version `3` recordings and stores them in the SCR3 stream container.
 - The public `Recording` facade now carries stream-oriented metadata through `tracks`, `clusters`, and `mediaFragments` in addition to the assembled playback blobs.
-- `previewInitialDocuments` and `previewPatchBatches` are first-class parts of the recording and are used to replay preview DOM updates without requiring a rerun.
+- `previewInitialDocuments` and `previewPatchBatches` are first-class parts of the recording. They carry rrweb events verbatim (`PreviewRecordedEvent`): the seed document holds the rrweb Meta + FullSnapshot pair, and each patch batch holds the incremental events for a frame. Replay drives an rrweb `Replayer`, so the preview is restored without requiring a runtime rerun.
 - `cursorEvents` are stored separately from frame deltas for smoother fake-cursor playback.
 - `audioStartOffsetMs` and `cameraStartOffsetMs` align media tracks to the editor timeline.
 - `cameraStartOffsetMs` aligns instructor camera playback with the recording timeline.
@@ -122,7 +122,7 @@ The main extension hooks in `UseNextEditorConfig` are:
 
 - `recordingStreamSink` to forward a live SCR3 byte stream.
 - Snapshot getters and appliers for slides, preview, workspace, and runtime state.
-- `applyPreviewPatchReplay` to replay recorded preview DOM patches into the current preview surface.
+- `applyPreviewPatchReplay` to feed recorded rrweb preview events into the current preview surface's `Replayer`.
 - Lifecycle callbacks such as `onRecordingStop`, `onPlaybackStart`, and `onError`.
 
 ## Related Docs

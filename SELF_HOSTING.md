@@ -65,7 +65,7 @@ Without those headers, the WebContainer-backed runtime features will not work co
 
 ## Browser And TLS Notes
 
-- Full `Node App Lesson` runtime support still requires a Chromium-based browser
+- Full WebContainer runtime support (the React, Vue, Solid, Svelte, HTMX + Express, and Node lessons) still requires a Chromium-based browser
 - Real production deployments should be served over HTTPS, either by your platform, your ingress, or a reverse proxy in front of the container
 
 ## Files

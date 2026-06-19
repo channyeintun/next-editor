@@ -84,7 +84,7 @@ sequenceDiagram
 Key points:
 
 - Frames are compressed incrementally during capture.
-- Preview replay data is captured as both a seed document and later DOM patch batches.
+- Preview replay data is captured with rrweb: a seed document (Meta + FullSnapshot) plus later patch batches of incremental rrweb events.
 - Workspace and runtime snapshots are captured alongside timed events so playback can restore the full lesson context.
 - If `recordingStreamSink` is configured, the provider forwards a live SCR3 stream while capture is in progress.
 

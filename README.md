@@ -6,15 +6,17 @@
   <h1>Interactive Code Recording & Replay</h1>
 </div>
 
-Next Editor is a browser-based lesson editor and replay engine for real coding projects. It combines a Monaco editor, a multi-file workspace, WebContainer-backed runtime playback for Node lessons, static preview for HTML/CSS lessons, synchronized slides, optional instructor camera capture, and streamed `.ne` recordings that can begin playback before the full file has downloaded.
+Next Editor is a browser-based lesson editor and replay engine for real coding projects. It combines a Monaco editor, a multi-file workspace with local asset upload, WebContainer-backed runtime playback for framework and Node lessons, static preview for HTML/CSS lessons, rrweb-driven preview capture and replay, synchronized slides, optional instructor camera capture, and streamed `.ne` recordings that can begin playback before the full file has downloaded.
 
 ## Overview
 
-- Multi-file workspace editing with file and folder management in the sidebar.
+- Multi-file workspace editing with file and folder management in the sidebar, plus drag-and-drop upload of local assets (images, video, audio, fonts).
+- Starter templates for common stacks, switchable from the editor header: HTML / CSS, React, Vue, Solid, Svelte, and HTMX + Express.
 - Two lesson surfaces:
-  - `Node App Lesson` runs inside WebContainers with preview, terminal, and runtime dock state captured into the recording timeline.
-  - `HTML/CSS Lesson` renders a lightweight static preview from local HTML, CSS, and JavaScript files.
-- Recording captures more than text deltas: it stores workspace changes, preview DOM state, slide events, cursor motion, runtime events, audio, and optional camera video.
+  - Runtime lessons (React, Vue, Solid, Svelte, HTMX + Express) run inside WebContainers with preview, terminal, and runtime dock state captured into the recording timeline.
+  - The HTML/CSS lesson renders a lightweight static preview from local HTML, CSS, and JavaScript files.
+- Runtime preview is recorded and replayed with rrweb: the live DOM, scroll, input, and pointer all ride a single event stream, replayed by an rrweb `Replayer` driven from the recording timeline.
+- Recording captures more than text deltas: it stores workspace changes, rrweb preview snapshots, slide events, cursor motion, runtime events, audio, and optional camera video.
 - Playback restores the recorded project state and replays it from a single timeline.
 - Import and export use the SCR3 `.ne` container.
 - Progressive loading lets `/code?url=...` start playing a recording from a partial download.
@@ -22,16 +24,20 @@ Next Editor is a browser-based lesson editor and replay engine for real coding p
 ## Current Capabilities
 
 - Monaco-powered editing across a real workspace.
-- Runtime-backed preview for package-based Node lessons.
+- Starter templates for React, Vue, Solid, Svelte, HTMX + Express, and HTML/CSS.
+- Local asset upload into the workspace, with a binary file preview and IndexedDB-backed asset storage.
+- Runtime-backed preview for framework and package-based Node lessons.
 - Static preview mode for HTML/CSS lessons.
-- Timeline replay for frames, cursor motion, slide transitions, preview DOM patches, workspace events, and runtime events.
+- rrweb-based capture and replay of the runtime preview (DOM, scroll, input, and pointer in one event stream).
+- Timeline replay for frames, cursor motion, slide transitions, preview snapshots, workspace events, and runtime events.
+- Variable-speed playback with pitch-preserving audio.
 - Portable `.ne` export and import.
 - Optional instructor camera recording with synced playback overlay.
 - Built-in reveal.js slide support.
 
 ## Browser Support
 
-- Chromium-based browsers are the supported target for `Node App Lesson` runtime features because WebContainers require modern browser APIs and cross-origin isolation.
+- Chromium-based browsers are the supported target for the WebContainer-backed runtime lessons (React, Vue, Solid, Svelte, HTMX + Express, and Node) because WebContainers require modern browser APIs and cross-origin isolation.
 - The static HTML/CSS preview path works without the runtime dock when full WebContainer support is not needed.
 
 ## Tech Stack
@@ -39,7 +45,9 @@ Next Editor is a browser-based lesson editor and replay engine for real coding p
 - UI: React 19, Vite 8, Rolldown 1.0
 - Editor and state: Monaco Editor, XState 5
 - Runtime: `@webcontainer/api`
+- Preview capture/replay: rrweb
 - Slides: reveal.js
+- Audio: pitch-preserving variable-speed playback via `@soundtouchjs/audio-worklet`
 - Styling: Tailwind CSS 4, Motion
 - Recording/storage: SCR3 stream container, msgpack, pako, JSZip
 - Quality checks: vite-plus, Oxlint, TypeScript native preview (`tsgo`)
@@ -95,7 +103,7 @@ vp preview
 
 ## Recording And Storage Model
 
-Next Editor records a timeline of delta-compressed editor frames plus timed side-channel events for slides, preview state, preview DOM patches, workspace mutations, runtime events, cursor samples, audio, and optional camera video.
+Next Editor records a timeline of delta-compressed editor frames plus timed side-channel events for slides, preview state, rrweb preview snapshots, workspace mutations, runtime events, cursor samples, audio, and optional camera video.
 
 Recordings use the SCR3 `.ne` container. The shipped exporter currently emits base64-wrapped SCR3 for portability, and the loader also accepts raw SCR3 byte streams. SCR3 is append-only and prefix-decodable, which enables progressive playback from an incomplete download and live forwarding through `recordingStreamSink`.
 
