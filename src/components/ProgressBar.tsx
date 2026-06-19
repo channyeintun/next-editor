@@ -22,6 +22,10 @@ export interface ProgressBarProps {
    */
   height?: string;
   /**
+   * Height of the progress bar while hovered (CSS value)
+   */
+  hoverHeight?: string;
+  /**
    * Background color of the progress bar
    */
   backgroundColor?: string;
@@ -53,6 +57,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   currentTime,
   width = "100%",
   height = "2px",
+  hoverHeight = "6px",
   backgroundColor = "#475569",
   progressColor = "#3b82f6",
   onSeek,
@@ -193,7 +198,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         onMouseDown={handleMouseDown}
         onMouseEnter={(e) => {
           // Grow height on hover like the original
-          e.currentTarget.style.height = "6px";
+          e.currentTarget.style.height = hoverHeight;
         }}
         onMouseLeave={(e) => {
           // Return to original height

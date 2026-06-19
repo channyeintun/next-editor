@@ -26,6 +26,11 @@ interface MediaControlsProps {
   onSaveToImage?: (file: File) => void;
   recordMode?: boolean;
   positioning?: "fixed" | "relative" | "absolute" | "sticky";
+  /**
+   * Renders larger controls, intended for small embeds (e.g. a scaled-down demo
+   * iframe) where the default compact controls become hard to read and tap.
+   */
+  large?: boolean;
 }
 
 type RecordingAudioSourceOption = "microphone" | "external";
@@ -43,10 +48,22 @@ const readCameraOverlayVisibility = (): boolean => {
 };
 
 const PlaybackProgress = memo(
-  ({ progressDuration, onSeek }: { progressDuration: number; onSeek: (time: number) => void }) => {
+  ({
+    progressDuration,
+    onSeek,
+    large = false,
+  }: {
+    progressDuration: number;
+    onSeek: (time: number) => void;
+    large?: boolean;
+  }) => {
     const currentTime = useLiveTime();
     return (
-      <div className="flex-1 mx-1 flex items-center pointer-events-auto">
+      <div
+        className={`flex items-center pointer-events-auto ${
+          large ? "flex-1 max-w-[75%] ml-1 mr-auto" : "flex-1 mx-1"
+        }`}
+      >
         <ProgressBar
           progress={
             progressDuration > 0 ? Math.min((currentTime / progressDuration) * 100, 100) : 0
@@ -54,6 +71,8 @@ const PlaybackProgress = memo(
           duration={progressDuration}
           currentTime={currentTime}
           onSeek={onSeek}
+          height={large ? "10px" : "2px"}
+          hoverHeight={large ? "14px" : "6px"}
           backgroundColor="#475569"
           progressColor="#3b82f6"
           className="w-full"
@@ -69,11 +88,13 @@ const PlaybackTimer = memo(
     recordingTime,
     currentRecording,
     progressDuration,
+    large = false,
   }: {
     isRecording: boolean;
     recordingTime: number;
     currentRecording: Recording | null;
     progressDuration: number;
+    large?: boolean;
   }) => {
     const currentTime = useLiveTime();
     const displayTime = isRecording
@@ -83,7 +104,9 @@ const PlaybackTimer = memo(
         : currentTime;
 
     return (
-      <span className="text-slate-400 text-sm font-mono pointer-events-auto">
+      <span
+        className={`text-slate-400 font-mono pointer-events-auto ${large ? "text-4xl" : "text-sm"}`}
+      >
         {isRecording ? formatTime(displayTime) : `-${formatTime(displayTime)}`}
       </span>
     );
@@ -91,7 +114,7 @@ const PlaybackTimer = memo(
 );
 
 const MediaControls: React.FC<MediaControlsProps> = memo(
-  ({ onRecord, onStopRecording, recordMode = true, positioning = "fixed" }) => {
+  ({ onRecord, onStopRecording, recordMode = true, positioning = "fixed", large = false }) => {
     const {
       startRecording,
       stopRecording,
@@ -269,13 +292,24 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
     const showAudioSourceControls = recordMode && !isRecording && !currentRecording && !isPlaying;
     const hasCameraRecording = currentRecording?.cameraBlob instanceof Blob;
 
+    // Size tokens — scale the controls up for small embeds when `large` is set.
+    const containerPadding = large ? "px-10 py-8" : "px-4 py-3";
+    const rowSizing = large ? "gap-8 min-h-20" : "gap-3 min-h-8";
+    const transportButtonWidth = large ? "w-[72px]" : "w-6";
+    const transportIconSize = large ? 72 : 24;
+    const controlIconSize = large ? 52 : 16;
+    const recordIconSize = large ? 44 : 14;
+    const recordPlusSize = large ? 30 : 10;
+
     if (!recordMode && !currentRecording && !isRecording) {
       return null;
     }
 
     return (
-      <div className={`${positioning} bottom-0 left-0 z-45 w-full px-4 py-3 pointer-events-none`}>
-        <div className="flex items-center gap-3 w-full min-h-8">
+      <div
+        className={`${positioning} bottom-0 left-0 z-45 w-full ${containerPadding} pointer-events-none`}
+      >
+        <div className={`flex items-center w-full ${rowSizing}`}>
           {recordMode && (
             <button
               onClick={handleRecordButtonClick}
@@ -290,12 +324,12 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
               }
             >
               {isRecording ? (
-                <Square size={14} className="fill-red-500 text-red-500 animate-pulse" />
+                <Square size={recordIconSize} className="fill-red-500 text-red-500 animate-pulse" />
               ) : currentRecording ? (
                 <div className="relative">
-                  <Circle size={14} className="fill-red-500 text-red-500" />
+                  <Circle size={recordIconSize} className="fill-red-500 text-red-500" />
                   <div className="absolute -top-1 -right-1.5 bg-[#202732] rounded-full p-[0.5px]">
-                    <Plus size={10} className="text-red-500 stroke-[3px]" />
+                    <Plus size={recordPlusSize} className="text-red-500 stroke-[3px]" />
                   </div>
                 </div>
               ) : (
@@ -386,12 +420,22 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
             <>
               <button
                 onClick={handlePlayPause}
-                className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer w-6 pointer-events-auto"
+                className={`flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer pointer-events-auto ${transportButtonWidth}`}
               >
-                {isPlaying ? <PauseIcon /> : hasEnded ? <ReplayIcon /> : <PlayIcon />}
+                {isPlaying ? (
+                  <PauseIcon size={transportIconSize} />
+                ) : hasEnded ? (
+                  <ReplayIcon size={transportIconSize} />
+                ) : (
+                  <PlayIcon size={transportIconSize} />
+                )}
               </button>
 
-              <PlaybackProgress progressDuration={progressDuration} onSeek={handleSeek} />
+              <PlaybackProgress
+                progressDuration={progressDuration}
+                onSeek={handleSeek}
+                large={large}
+              />
 
               {hasCameraRecording ? (
                 <button
@@ -399,12 +443,12 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
                   onClick={handleToggleCameraOverlay}
                   aria-pressed={isCameraOverlayVisible}
                   title={isCameraOverlayVisible ? "Hide camera" : "Show camera"}
-                  className="flex w-6 items-center justify-center text-slate-300 transition-colors hover:text-white pointer-events-auto"
+                  className={`flex items-center justify-center text-slate-300 transition-colors hover:text-white pointer-events-auto ${transportButtonWidth}`}
                 >
                   {isCameraOverlayVisible ? (
-                    <Video size={16} aria-hidden="true" />
+                    <Video size={controlIconSize} aria-hidden="true" />
                   ) : (
-                    <VideoOff size={16} aria-hidden="true" />
+                    <VideoOff size={controlIconSize} aria-hidden="true" />
                   )}
                 </button>
               ) : null}
@@ -414,7 +458,7 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
                   onClick={() => setShowSettings((prev) => !prev)}
                   className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer"
                 >
-                  <SettingIcon />
+                  <SettingIcon size={controlIconSize} />
                 </button>
 
                 {showSettings && (
@@ -469,6 +513,7 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
               recordingTime={recordingTime}
               currentRecording={currentRecording}
               progressDuration={progressDuration}
+              large={large}
             />
           )}
         </div>

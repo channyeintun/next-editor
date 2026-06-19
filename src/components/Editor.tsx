@@ -28,6 +28,8 @@ export const EditorLayout = memo(function EditorLayout() {
   // Check URL for showImportExport parameter (defaults to true if not specified)
   const urlParams = new URLSearchParams(window.location.search);
   const readOnly = urlParams.get("readOnly") === "true";
+  // Enlarge the playback controls for small embeds (e.g. a scaled-down demo iframe).
+  const largeControls = urlParams.get("largeControls") === "true";
 
   return (
     <div className="h-dvh flex flex-col text-white overflow-hidden" data-cursor-replay-target="app">
@@ -39,7 +41,7 @@ export const EditorLayout = memo(function EditorLayout() {
         <SlidePanel />
       </div>
 
-      <MediaControls recordMode={!readOnly} />
+      <MediaControls recordMode={!readOnly} large={largeControls} />
 
       <DragDropOverlay isDragging={isDragging} />
 

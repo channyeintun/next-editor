@@ -8,7 +8,7 @@ const DEMO_IFRAME_WIDTH = 1440;
 const DEMO_IFRAME_HEIGHT = 900;
 const DEFAULT_IFRAME_SCALE = 0.4513888888888889;
 const DEMO_URL = "/code?url=/introduction.ne";
-const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true`;
+const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true&largeControls=true`;
 
 const LandingPage = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -209,10 +209,10 @@ const LandingPage = () => {
                           type="button"
                           onClick={toggleFullscreen}
                           aria-label="Exit full screen"
-                          className="absolute right-4 top-4 z-10 inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-slate-950"
+                          title="Exit full screen"
+                          className="absolute left-4 top-4 z-10 inline-flex items-center justify-center rounded-full border border-white/15 bg-slate-950/80 p-2.5 text-white backdrop-blur transition-colors hover:bg-slate-950"
                         >
                           <Minimize className="size-4" aria-hidden="true" />
-                          Exit full screen
                         </button>
                       )}
                     </div>
