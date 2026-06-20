@@ -12,13 +12,13 @@ import {
 } from "../stores/workspaceStore";
 import { loadWorkspaceAssetContents, persistWorkspaceAssets } from "../storage/workspaceAssetStore";
 import {
-  createStarterHtmlCssWorkspace,
-  createStarterWorkspaceProject,
   normalizeWorkspacePath,
   type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
+import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
+import { createStarterWorkspaceProject } from "../starters/react";
 import { writeStoredFileSidebarWidth } from "../utils/sidebarLayout";
 
 interface WorkspaceProviderProps {

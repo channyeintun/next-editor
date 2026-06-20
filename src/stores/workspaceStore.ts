@@ -7,8 +7,6 @@ import type {
 } from "../contexts/WorkspaceContext";
 import {
   collectWorkspaceFolders,
-  createStarterHtmlCssWorkspace,
-  createStarterWorkspaceProject,
   DEFAULT_WORKSPACE_ENTRY_PATH,
   getWorkspaceBaseName,
   inferLanguageFromPath,
@@ -19,6 +17,8 @@ import {
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
+import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
+import { createStarterWorkspaceProject } from "../starters/react";
 import { getClampedFileSidebarWidth, readStoredFileSidebarWidth } from "../utils/sidebarLayout";
 
 export interface StoredWorkspaceSnapshot {

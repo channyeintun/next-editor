@@ -13,54 +13,20 @@ import {
   useWorkspaceFileCount,
   useWorkspaceLessonType,
 } from "../hooks/useWorkspace";
-import {
-  createStarterHtmlCssWorkspace,
-  createStarterHtmxExpressWorkspace,
-  createStarterSolidWorkspace,
-  createStarterSvelteWorkspace,
-  createStarterVueWorkspace,
-  createStarterWorkspaceProject,
-  lessonRunsInWebContainer,
-  type WorkspaceLessonType,
-  type WorkspaceProject,
-} from "../types/workspace";
+import { lessonRunsInWebContainer, type WorkspaceLessonType } from "../types/workspace";
+import { createStarterWorkspaceForLessonType } from "../starters";
 import SlidesButton from "./SlidesButton";
 
 const LESSON_TYPE_OPTIONS: Array<{
   value: WorkspaceLessonType;
   label: string;
-  createStarter: () => WorkspaceProject;
 }> = [
-  {
-    value: "html-css",
-    label: "HTML / CSS",
-    createStarter: createStarterHtmlCssWorkspace,
-  },
-  {
-    value: "react",
-    label: "React",
-    createStarter: createStarterWorkspaceProject,
-  },
-  {
-    value: "vue",
-    label: "Vue",
-    createStarter: createStarterVueWorkspace,
-  },
-  {
-    value: "solid",
-    label: "Solid",
-    createStarter: createStarterSolidWorkspace,
-  },
-  {
-    value: "svelte",
-    label: "Svelte",
-    createStarter: createStarterSvelteWorkspace,
-  },
-  {
-    value: "htmx-express",
-    label: "HTMX + Express",
-    createStarter: createStarterHtmxExpressWorkspace,
-  },
+  { value: "html-css", label: "HTML / CSS" },
+  { value: "react", label: "React" },
+  { value: "vue", label: "Vue" },
+  { value: "solid", label: "Solid" },
+  { value: "svelte", label: "Svelte" },
+  { value: "htmx-express", label: "HTMX + Express" },
 ];
 
 const HEADER_TEXT_BUTTON_CLASS =
@@ -298,7 +264,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
     }
   };
 
-  const handleCreateNewEditor = () => {
+  const handleCreateNewEditor = async () => {
     // "New Editor" starts over within the current framework, so reset to a fresh
     // starter of the active lesson type rather than always falling back to HTML/CSS.
     const currentOption =
@@ -315,14 +281,18 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
       return;
     }
 
+    // Starter templates are split into per-framework chunks, so fetch the active
+    // one on demand before swapping it in.
+    const starterProject = await createStarterWorkspaceForLessonType(currentOption.value);
+
     // Same framework as before, so its dependencies are already installed — just
     // swap the files in (the running dev server picks them up) and keep it running.
-    loadProject(currentOption.createStarter());
+    loadProject(starterProject);
     saveProject();
     updateRunnerConfig({ enabled: true });
   };
 
-  const handleSelectLessonType = (nextLessonType: WorkspaceLessonType) => {
+  const handleSelectLessonType = async (nextLessonType: WorkspaceLessonType) => {
     if (lessonType === nextLessonType) {
       setIsMenuOpen(false);
       return;
@@ -348,7 +318,11 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
       return;
     }
 
-    loadProject(nextOption.createStarter());
+    // The selected framework's starter lives in its own lazily loaded chunk;
+    // pull it in before replacing the workspace.
+    const starterProject = await createStarterWorkspaceForLessonType(nextOption.value);
+
+    loadProject(starterProject);
     saveProject();
     updateRunnerConfig({ enabled: true });
     // Each framework ships different dependencies, so tear the runtime down to
@@ -402,7 +376,9 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
                     type="button"
                     role="menuitemradio"
                     aria-checked={isActive}
-                    onClick={() => handleSelectLessonType(option.value)}
+                    onClick={() => {
+                      void handleSelectLessonType(option.value);
+                    }}
                     className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
                       isActive
                         ? "bg-slate-700 text-white"
@@ -424,7 +400,9 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
               <button
                 type="button"
                 role="menuitem"
-                onClick={handleCreateNewEditor}
+                onClick={() => {
+                  void handleCreateNewEditor();
+                }}
                 className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
               >
                 New Editor
@@ -466,7 +444,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
             className="mx-auto flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#151821] shadow-[0_24px_48px_rgba(2,6,23,0.55)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="space-y-5 overflow-y-auto px-5 py-5">
+            <div className="space-y-5 overflow-y-auto p-5">
               <p className="text-sm font-medium text-slate-100">Edit Environment</p>
 
               <label className="block">
@@ -481,7 +459,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
                   }}
                   rows={12}
                   spellCheck={false}
-                  className="min-h-64 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 py-3 font-mono text-sm leading-6 text-slate-100 outline-none transition-colors focus:border-slate-500"
+                  className="min-h-64 w-full rounded-lg border border-slate-700 bg-[#11141c] font-mono text-sm leading-6 text-slate-100 outline-none transition-colors focus:border-slate-500 p-3"
                   placeholder="API_URL=https://example.com\nNODE_ENV=development"
                 />
               </label>
