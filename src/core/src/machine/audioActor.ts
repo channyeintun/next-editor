@@ -47,6 +47,15 @@ const AUDIO_SYNC_DRIFT_THRESHOLD_MS = 500;
 const STREAM_BUFFER_SWITCH_LOOKAHEAD_MS = 1000;
 
 /**
+ * Length of the gain ramp applied when a source is started or stopped on a
+ * seek/restart. Cutting an `AudioBufferSourceNode` mid-waveform (or starting one
+ * mid-cycle at a new offset) produces an audible click; ramping over a few
+ * milliseconds turns the restart into an inaudible crossfade. Long enough to span
+ * a low-frequency cycle, short enough to feel instant.
+ */
+const DECLICK_FADE_SECONDS = 0.015;
+
+/**
  * MediaRecorder timeslice (ms). Emitting `ondataavailable` on an interval produces
  * live audio chunks (forwarded as `CHUNK`) for incremental persistence / streaming,
  * while the final assembled blob is still emitted on stop exactly as before.
@@ -292,6 +301,7 @@ export const audioPlaybackActor = fromCallback<
   let gainNode: GainNode | null = null;
   let sourceNode: AudioBufferSourceNode | null = null;
   let pitchShiftNode: InstanceType<SoundTouchNodeCtor> | null = null;
+  let envelopeNode: GainNode | null = null;
   let soundTouchNodeCtor: SoundTouchNodeCtor | null = null;
   let activeBuffer: AudioBuffer | null = null;
   let pendingBuffer: AudioBuffer | null = null;
@@ -404,35 +414,74 @@ export const audioPlaybackActor = fromCallback<
     return finalized || activeBufferLoadedUntilMs >= targetTimeMs;
   };
 
-  const stopSource = () => {
-    // Discard the per-source pitch shifter so its WSOLA buffer can't replay stale
-    // samples after a seek/restart (the cause of the previous echo).
-    if (pitchShiftNode) {
-      try {
-        pitchShiftNode.disconnect();
-      } catch {
-        // Already disconnected.
-      }
-      pitchShiftNode = null;
-    }
-
+  const stopSource = ({ fade = false }: { fade?: boolean } = {}) => {
     if (!sourceNode) {
+      // No active source, but a detached pitch shifter could still linger. Discard
+      // it so its WSOLA buffer can't replay stale samples on the next start.
+      if (pitchShiftNode) {
+        try {
+          pitchShiftNode.disconnect();
+        } catch {
+          // Already disconnected.
+        }
+        pitchShiftNode = null;
+      }
       return;
     }
 
+    // Detach the whole per-source graph at once so it can finish its fade
+    // independently while a fresh source takes over. A new node per start still
+    // means no stale WSOLA samples survive a seek (the cause of the previous echo).
     const source = sourceNode;
+    const shifter = pitchShiftNode;
+    const envelope = envelopeNode;
     sourceNode = null;
+    pitchShiftNode = null;
+    envelopeNode = null;
     source.onended = null;
+
+    const disconnectGraph = () => {
+      try {
+        source.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        shifter?.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        envelope?.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+    };
+
+    // Declick: ramp this source to silence over a few milliseconds and stop it
+    // once the ramp completes, instead of cutting the waveform instantly (an
+    // audible click, and a burst of them while scrubbing).
+    if (fade && audioContext && envelope) {
+      const now = audioContext.currentTime;
+      const stopAt = now + DECLICK_FADE_SECONDS;
+      try {
+        envelope.gain.cancelScheduledValues(now);
+        envelope.gain.setValueAtTime(envelope.gain.value, now);
+        envelope.gain.linearRampToValueAtTime(0, stopAt);
+        source.onended = disconnectGraph;
+        source.stop(stopAt);
+        return;
+      } catch {
+        // AudioParam/stop scheduling unavailable; fall through to a hard stop.
+      }
+    }
+
     try {
       source.stop();
     } catch {
       // Already stopped.
     }
-    try {
-      source.disconnect();
-    } catch {
-      // Already disconnected.
-    }
+    disconnectGraph();
   };
 
   const shouldActivatePendingBuffer = (force = false): boolean => {
@@ -488,7 +537,7 @@ export const audioPlaybackActor = fromCallback<
       return;
     }
 
-    stopSource();
+    stopSource({ fade: true });
 
     const source = context.createBufferSource();
     source.buffer = activeBuffer;
@@ -521,7 +570,17 @@ export const audioPlaybackActor = fromCallback<
       }
     }
 
-    tail.connect(gainNode);
+    // Per-source envelope between the source graph and the master volume so this
+    // source can fade in while the previous one (if any) fades out — turning the
+    // otherwise-clicky seek/restart into a short crossfade. Master volume stays on
+    // `gainNode`, so the two multiply and the resulting level is unchanged.
+    const envelope = context.createGain();
+    const fadeStartTime = context.currentTime;
+    envelope.gain.setValueAtTime(0, fadeStartTime);
+    envelope.gain.linearRampToValueAtTime(1, fadeStartTime + DECLICK_FADE_SECONDS);
+
+    tail.connect(envelope);
+    envelope.connect(gainNode);
     source.onended = () => {
       if (sourceNode !== source) {
         return;
@@ -541,8 +600,9 @@ export const audioPlaybackActor = fromCallback<
     };
 
     playStartedAtTimelineMs = targetTimeMs;
-    playStartedAtContextTime = context.currentTime;
+    playStartedAtContextTime = fadeStartTime;
     sourceNode = source;
+    envelopeNode = envelope;
     source.start(0, offsetSeconds);
   };
 

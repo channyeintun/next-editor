@@ -601,7 +601,22 @@ describe("audioPlaybackActor", () => {
       MockAudioContext.instances.push(this);
     }
     createGain() {
-      return { gain: { value: 1 }, connect() {}, disconnect() {} };
+      // Mirror a real AudioParam: the declick envelope schedules ramps on `gain`.
+      const gain = {
+        value: 1,
+        setValueAtTime(v: number) {
+          gain.value = v;
+          return gain;
+        },
+        linearRampToValueAtTime(v: number) {
+          gain.value = v;
+          return gain;
+        },
+        cancelScheduledValues() {
+          return gain;
+        },
+      };
+      return { gain, connect() {}, disconnect() {} };
     }
     createBufferSource() {
       const source = new MockBufferSource();
