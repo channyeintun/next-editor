@@ -333,7 +333,7 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
                   </div>
                 </div>
               ) : (
-                <IdleRecordButton />
+                <IdleRecordButton size={recordIconSize} />
               )}
             </button>
           )}
