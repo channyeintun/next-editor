@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 const Navbar = () => {
   return (
-    <nav className="relative z-50 flex items-center justify-between px-4 py-4 bg-transparent sm:px-8 sm:py-6">
+    <nav className="relative z-50 flex items-center justify-between p-4 bg-transparent sm:px-8 sm:py-6">
       <div className="flex items-center gap-2">
         <Link to="/" className="flex items-center gap-2 group">
           <img

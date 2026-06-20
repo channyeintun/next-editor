@@ -689,7 +689,7 @@ const TerminalPanel = memo(function TerminalPanel() {
             className="mx-auto flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#151821] shadow-[0_24px_48px_rgba(2,6,23,0.55)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="space-y-5 overflow-y-auto px-5 py-5">
+            <div className="space-y-5 overflow-y-auto p-5">
               <RunnerToggle
                 checked={runnerConfig.enabled}
                 disabled={isPlaybackSnapshotActive}
