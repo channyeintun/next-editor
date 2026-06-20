@@ -1,6 +1,6 @@
 import { motion, type Transition } from "motion/react";
 import { useCallback, useEffect, memo, useRef } from "react";
-import { ChevronLeft, ChevronRight, Monitor, Keyboard, X } from "lucide-react";
+import { Keyboard } from "lucide-react";
 import type { Slide, SlideEvent } from "../types/slides";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import RevealSlideRenderer from "./RevealSlideRenderer";
@@ -161,7 +161,7 @@ const SlidePreview = memo(function SlidePreview({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-90 bg-black/80"
+        className="fixed inset-0 z-90 bg-black/80 backdrop-blur-md"
         onClick={handleClose}
       />
 
@@ -172,64 +172,12 @@ const SlidePreview = memo(function SlidePreview({
           transformOrigin: "bottom right",
           willChange: "transform",
         }}
-        className={`${positioning} top-[10%] left-[10%] right-[10%] bottom-[10%] z-100 bg-slate-900 rounded-2xl overflow-hidden border border-white/10 flex flex-col shadow-2xl transition-shadow size-[80%]`}
+        className={`${positioning} top-[10%] left-[10%] right-[10%] bottom-[10%] z-100 bg-slate-900 rounded-2xl overflow-hidden flex flex-col shadow-2xl transition-shadow size-[80%]`}
         data-cursor-replay-target="slide-preview"
         onClick={(e) => {
           e.stopPropagation();
         }}
       >
-        {/* Header */}
-        <div className="flex items-center bg-slate-900 px-4 py-2 border-b border-white/5">
-          <div className="flex items-center gap-2 mr-4">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClose();
-              }}
-              className="inline-flex items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-white size-7"
-              title="Close slides"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="rounded bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 size-5">
-              <Monitor className="text-indigo-400 size-3" />
-            </div>
-            <span className="text-[11px] font-bold text-slate-300 tracking-tight uppercase">
-              Slide {currentSlideIndex + 1}{" "}
-              <span className="text-slate-500">of {slides.length}</span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1 ml-auto">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                goToPrevSlide();
-              }}
-              disabled={currentSlideIndex === 0 || isPlaying}
-              className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg disabled:opacity-20 transition-all"
-              title="Previous slide"
-            >
-              <ChevronLeft className="size-4" />
-            </button>
-            <div className="w-px h-4 bg-white/5 mx-1"></div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                goToNextSlide();
-              }}
-              disabled={currentSlideIndex === slides.length - 1 || isPlaying}
-              className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg disabled:opacity-20 transition-all"
-              title="Next slide"
-            >
-              <ChevronRight className="size-4" />
-            </button>
-          </div>
-        </div>
-
         {/* Slide content area */}
         <div
           className="relative w-full flex-1 bg-black"
