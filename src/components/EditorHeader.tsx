@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { PanelRight, RotateCw, Settings } from "lucide-react";
+import { PanelLeft, PanelRight, RotateCw, Settings } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
+import { useFileSidebar } from "../contexts/FileSidebarContext";
 import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
@@ -140,6 +141,28 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
         </button>
       ) : null}
     </div>
+  );
+});
+
+const FileSidebarToggleButton = memo(function FileSidebarToggleButton() {
+  const { isCollapsed, toggleSidebar } = useFileSidebar();
+  const isOpen = !isCollapsed;
+
+  return (
+    <button
+      type="button"
+      aria-label={isOpen ? "Hide file explorer" : "Show file explorer"}
+      aria-pressed={isOpen}
+      title={isOpen ? "Hide file explorer" : "Show file explorer"}
+      onClick={toggleSidebar}
+      className={`${HEADER_ICON_BUTTON_CLASS} ${
+        isOpen
+          ? "border-[#5da4ff] bg-[#273449] text-white shadow-[0_0_0_1px_rgba(93,164,255,0.22)]"
+          : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600 hover:text-white"
+      }`}
+    >
+      <PanelLeft size={16} />
+    </button>
   );
 });
 
@@ -566,7 +589,10 @@ interface EditorHeaderProps {
 const EditorHeader = memo(function EditorHeader({ showImportExport }: EditorHeaderProps) {
   return (
     <div className="bg-[#11141c] px-4 py-1.5 flex items-center justify-between">
-      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
+      <div className="flex items-center gap-2">
+        <FileSidebarToggleButton />
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
+      </div>
       <div className="flex items-center gap-2">
         <SaveAndRerunControls />
         {showImportExport && (

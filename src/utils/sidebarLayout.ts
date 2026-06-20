@@ -3,6 +3,7 @@ export const MIN_FILE_SIDEBAR_WIDTH = 200;
 export const MAX_FILE_SIDEBAR_WIDTH = 520;
 export const MIN_MAIN_EDITOR_WIDTH = 360;
 export const FILE_SIDEBAR_WIDTH_STORAGE_KEY = "next-editor:file-sidebar-width";
+export const FILE_SIDEBAR_COLLAPSED_STORAGE_KEY = "next-editor:file-sidebar-collapsed";
 export const FILE_SIDEBAR_KEYBOARD_STEP = 16;
 export const FILE_SIDEBAR_KEYBOARD_LARGE_STEP = 48;
 
@@ -55,6 +56,30 @@ export function writeStoredFileSidebarWidth(width: number): void {
 
   try {
     window.localStorage.setItem(FILE_SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(width)));
+  } catch {
+    // Storage can be unavailable in restricted browser contexts.
+  }
+}
+
+export function readStoredFileSidebarCollapsed(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(FILE_SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function writeStoredFileSidebarCollapsed(collapsed: boolean): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(FILE_SIDEBAR_COLLAPSED_STORAGE_KEY, collapsed ? "true" : "false");
   } catch {
     // Storage can be unavailable in restricted browser contexts.
   }

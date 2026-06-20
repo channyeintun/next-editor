@@ -7,6 +7,7 @@ import {
   joinWorkspacePath,
 } from "../types/workspace";
 import { useWorkspaceActions, useWorkspaceSidebarState } from "../hooks/useWorkspace";
+import { useFileSidebar } from "../contexts/FileSidebarContext";
 import { MAX_WORKSPACE_ASSET_BYTES, readUploadedWorkspaceFile } from "../utils/workspaceFileUpload";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import {
@@ -35,7 +36,7 @@ import {
   type WorkspaceTreeNode,
 } from "./fileSidebarHelpers";
 
-const FileSidebar = memo(function FileSidebar() {
+const FileSidebarPanel = memo(function FileSidebarPanel() {
   const [draftName, setDraftName] = useState("");
   const [editState, setEditState] = useState<SidebarEditState>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
@@ -846,6 +847,16 @@ const FileSidebar = memo(function FileSidebar() {
       />
     </aside>
   );
+});
+
+const FileSidebar = memo(function FileSidebar() {
+  const { isCollapsed } = useFileSidebar();
+
+  if (isCollapsed) {
+    return null;
+  }
+
+  return <FileSidebarPanel />;
 });
 
 export default FileSidebar;

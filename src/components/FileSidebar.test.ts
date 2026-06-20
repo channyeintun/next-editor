@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
+  FILE_SIDEBAR_COLLAPSED_STORAGE_KEY,
   getClampedFileSidebarWidth,
   MAX_FILE_SIDEBAR_WIDTH,
   MIN_FILE_SIDEBAR_WIDTH,
+  readStoredFileSidebarCollapsed,
+  writeStoredFileSidebarCollapsed,
 } from "../utils/sidebarLayout";
 import { getViewportClampedContextMenuPlacement } from "./fileSidebarHelpers";
 
@@ -60,5 +63,23 @@ describe("getClampedFileSidebarWidth", () => {
 
   it("reserves room for the main editor on narrow screens", () => {
     expect(getClampedFileSidebarWidth(320, 640)).toBe(280);
+  });
+});
+
+describe("file sidebar collapsed preference", () => {
+  afterEach(() => {
+    window.localStorage.removeItem(FILE_SIDEBAR_COLLAPSED_STORAGE_KEY);
+  });
+
+  it("defaults to expanded when nothing is stored", () => {
+    expect(readStoredFileSidebarCollapsed()).toBe(false);
+  });
+
+  it("round-trips the collapsed flag through storage", () => {
+    writeStoredFileSidebarCollapsed(true);
+    expect(readStoredFileSidebarCollapsed()).toBe(true);
+
+    writeStoredFileSidebarCollapsed(false);
+    expect(readStoredFileSidebarCollapsed()).toBe(false);
   });
 });

@@ -10,6 +10,7 @@ import {
 } from "../hooks/useWebContainerRuntime";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import { useWorkspaceSidebarWidth } from "../hooks/useWorkspace";
+import { useFileSidebar } from "../contexts/FileSidebarContext";
 import type {
   RuntimeDockTab,
   RuntimeRecordingSnapshot,
@@ -154,6 +155,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const [terminalScrollLines, setTerminalScrollLines] = useState<RuntimeTerminalScrollLines>({});
   const { dockWidth: previewDockWidth, isDocked: isPreviewDocked } = usePreviewPanel();
   const sidebarWidth = useWorkspaceSidebarWidth();
+  const { isCollapsed: isSidebarCollapsed } = useFileSidebar();
   const { handleRuntimeEvent } = useNextEditorActions();
   const { runtimePanel } = useNextEditorDomainAdapters();
   const {
@@ -449,8 +451,11 @@ const TerminalPanel = memo(function TerminalPanel() {
 
   const runnerCommand = runnerConfig.runCommand.trim() || "Runner disabled";
   const runnerOutput = content || "Waiting for runner output...";
+  // Hiding the file explorer frees its column, so the dock starts flush with the
+  // editor (just the gutter) instead of leaving a gap where the sidebar used to be.
+  const effectiveSidebarWidth = isSidebarCollapsed ? 0 : sidebarWidth;
   const dockStyle: RuntimeDockStyle = {
-    "--runtime-dock-left": `${sidebarWidth + 16}px`,
+    "--runtime-dock-left": `${effectiveSidebarWidth + 16}px`,
     right: isPreviewDocked ? previewDockWidth + 16 : 16,
   };
 
