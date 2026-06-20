@@ -1,5 +1,5 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { PanelLeft, PanelRight, RotateCw, Settings } from "lucide-react";
+import { memo, useEffect, useRef, useState } from "react";
+import { PanelLeft, PanelRight, Settings } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import {
@@ -38,27 +38,6 @@ const HEADER_TEXT_BUTTON_CLASS =
   "inline-flex h-8 items-center justify-center rounded-md px-3 text-xs font-semibold transition-colors";
 const HEADER_ICON_BUTTON_CLASS =
   "inline-flex size-8 items-center justify-center rounded-lg border transition-colors";
-
-function isAppleUserAgent(): boolean {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-
-  const navigatorWithUserAgentData = navigator as Navigator & {
-    userAgentData?: {
-      platform?: string;
-    };
-  };
-  const userAgentDataPlatform = navigatorWithUserAgentData.userAgentData?.platform;
-  const platform = userAgentDataPlatform ?? navigator.platform ?? "";
-  const userAgent = navigator.userAgent ?? "";
-
-  return /Mac|iPhone|iPad|iPod/i.test(`${platform} ${userAgent}`);
-}
-
-function getSaveShortcutLabel(): string {
-  return isAppleUserAgent() ? "CMD + S" : "CTRL + S";
-}
 
 function stringifyEnvironmentVariables(variables: Record<string, string>): string {
   return Object.entries(variables)
@@ -107,42 +86,6 @@ function parseEnvironmentInput(value: string): {
     errorMessage: null,
   };
 }
-
-const SaveAndRerunControls = memo(function SaveAndRerunControls() {
-  const { rerunRunner } = useWebContainerRuntimeActions();
-  const { isSupported, runnerConfig, status } = useWebContainerRuntimeMetadata();
-  const lessonType = useWorkspaceLessonType();
-  const saveShortcutLabel = useMemo(() => getSaveShortcutLabel(), []);
-  const isBusy =
-    status === "booting" ||
-    status === "mounting" ||
-    status === "installing" ||
-    status === "starting";
-
-  return (
-    <div className="flex items-center gap-3">
-      <span
-        className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500"
-        title="Save all and refresh"
-      >
-        {saveShortcutLabel}
-        <RotateCw size={11} strokeWidth={2.25} aria-hidden="true" />
-      </span>
-      {lessonRunsInWebContainer(lessonType) ? (
-        <button
-          type="button"
-          onClick={() => {
-            void rerunRunner();
-          }}
-          disabled={!isSupported || !runnerConfig.enabled || isBusy}
-          className={`${HEADER_TEXT_BUTTON_CLASS} bg-[#173925] font-bold tracking-[0.04em] text-[#58d88d] uppercase hover:bg-[#1f4a31] hover:text-[#75efa6] disabled:cursor-not-allowed disabled:bg-[#17241e] disabled:text-[#4f8e68]`}
-        >
-          RUN
-        </button>
-      ) : null}
-    </div>
-  );
-});
 
 const FileSidebarToggleButton = memo(function FileSidebarToggleButton() {
   const isCollapsed = useWorkspaceSidebarCollapsed();
@@ -595,7 +538,6 @@ const EditorHeader = memo(function EditorHeader({ showImportExport }: EditorHead
         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
       </div>
       <div className="flex items-center gap-2">
-        <SaveAndRerunControls />
         {showImportExport && (
           <>
             <ImportButton />

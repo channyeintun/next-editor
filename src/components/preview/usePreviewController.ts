@@ -76,6 +76,7 @@ export interface PreviewController {
   handleBack: () => void;
   handleForward: () => void;
   handleRefresh: () => void;
+  handleReload: () => void;
   handleOpenConsole: () => void;
   handleResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
   handleDockResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
@@ -744,6 +745,13 @@ export function usePreviewController(): PreviewController {
     forceRefreshPreview({ emitEvent: true, showSpinner: true });
   }, [forceRefreshPreview]);
 
+  // User-initiated reload from the preview URL bar. Unlike `handleRefresh`
+  // (which captures a baseline at recording start without touching the live
+  // frame), this actually reloads the runtime preview iframe.
+  const handleReload = useCallback(() => {
+    forceRefreshPreview({ emitEvent: true, showSpinner: true, reloadRuntime: true });
+  }, [forceRefreshPreview]);
+
   const handleBack = useCallback(() => {
     const iframeWindow = iframeRef.current?.contentWindow;
 
@@ -1060,6 +1068,7 @@ export function usePreviewController(): PreviewController {
     handleBack,
     handleForward,
     handleRefresh,
+    handleReload,
     handleOpenConsole,
     handleResizeStart,
     handleDockResizeStart,
