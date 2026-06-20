@@ -326,6 +326,12 @@ const LandingPage = () => {
             <span className="font-machina tracking-tight">next-editor</span>
           </div>
           <div className="flex flex-col md:flex-row items-center gap-6">
+            <a
+              href="mailto:chanyeintun@gmail.com"
+              className="text-slate-400 hover:text-white transition-colors text-sm"
+            >
+              Contact: chanyeintun@gmail.com
+            </a>
             <p className="text-slate-500 text-sm">© 2026 Next Editor</p>
           </div>
         </div>
