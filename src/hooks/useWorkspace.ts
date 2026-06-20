@@ -19,6 +19,7 @@ import {
   selectWorkspaceProjectVersion,
   selectWorkspaceProjectName,
   selectWorkspaceSaveVersion,
+  selectWorkspaceSidebarCollapsed,
   selectWorkspaceSidebarState,
   selectWorkspaceSidebarWidth,
   selectWorkspaceSyncVersion,
@@ -61,6 +62,10 @@ export const useWorkspaceSidebarState = (): WorkspaceSidebarState => {
 
 export const useWorkspaceSidebarWidth = (): number => {
   return useWorkspaceSelector("useWorkspaceSidebarWidth", selectWorkspaceSidebarWidth);
+};
+
+export const useWorkspaceSidebarCollapsed = (): boolean => {
+  return useWorkspaceSelector("useWorkspaceSidebarCollapsed", selectWorkspaceSidebarCollapsed);
 };
 
 export const useWorkspaceActiveFilePath = (): string => {

@@ -9,8 +9,7 @@ import {
   useWebContainerRuntimeMetadata,
 } from "../hooks/useWebContainerRuntime";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
-import { useWorkspaceSidebarWidth } from "../hooks/useWorkspace";
-import { useFileSidebar } from "../contexts/FileSidebarContext";
+import { useWorkspaceSidebarCollapsed, useWorkspaceSidebarWidth } from "../hooks/useWorkspace";
 import type {
   RuntimeDockTab,
   RuntimeRecordingSnapshot,
@@ -155,7 +154,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   const [terminalScrollLines, setTerminalScrollLines] = useState<RuntimeTerminalScrollLines>({});
   const { dockWidth: previewDockWidth, isDocked: isPreviewDocked } = usePreviewPanel();
   const sidebarWidth = useWorkspaceSidebarWidth();
-  const { isCollapsed: isSidebarCollapsed } = useFileSidebar();
+  const isSidebarCollapsed = useWorkspaceSidebarCollapsed();
   const { handleRuntimeEvent } = useNextEditorActions();
   const { runtimePanel } = useNextEditorDomainAdapters();
   const {

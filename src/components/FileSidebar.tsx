@@ -6,8 +6,11 @@ import {
   getWorkspaceBaseName,
   joinWorkspacePath,
 } from "../types/workspace";
-import { useWorkspaceActions, useWorkspaceSidebarState } from "../hooks/useWorkspace";
-import { useFileSidebar } from "../contexts/FileSidebarContext";
+import {
+  useWorkspaceActions,
+  useWorkspaceSidebarCollapsed,
+  useWorkspaceSidebarState,
+} from "../hooks/useWorkspace";
 import { MAX_WORKSPACE_ASSET_BYTES, readUploadedWorkspaceFile } from "../utils/workspaceFileUpload";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import {
@@ -850,7 +853,7 @@ const FileSidebarPanel = memo(function FileSidebarPanel() {
 });
 
 const FileSidebar = memo(function FileSidebar() {
-  const { isCollapsed } = useFileSidebar();
+  const isCollapsed = useWorkspaceSidebarCollapsed();
 
   if (isCollapsed) {
     return null;

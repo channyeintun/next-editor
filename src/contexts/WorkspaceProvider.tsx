@@ -19,7 +19,10 @@ import {
 } from "../types/workspace";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { createStarterWorkspaceProject } from "../starters/react";
-import { writeStoredFileSidebarWidth } from "../utils/sidebarLayout";
+import {
+  writeStoredFileSidebarCollapsed,
+  writeStoredFileSidebarWidth,
+} from "../utils/sidebarLayout";
 
 interface WorkspaceProviderProps {
   children: React.ReactNode;
@@ -72,6 +75,13 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   const setSidebarWidth = useCallback((width: number) => {
     workspaceStoreRef.current.trigger.setSidebarWidth({ width });
     writeStoredFileSidebarWidth(workspaceStoreRef.current.getSnapshot().context.sidebarWidth);
+  }, []);
+
+  const setSidebarCollapsed = useCallback((collapsed: boolean) => {
+    workspaceStoreRef.current.trigger.setSidebarCollapsed({ collapsed });
+    writeStoredFileSidebarCollapsed(
+      workspaceStoreRef.current.getSnapshot().context.sidebarCollapsed,
+    );
   }, []);
 
   const createFile = useCallback((path: string, content = "", encoding?: WorkspaceFileEncoding) => {
@@ -233,6 +243,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       setCollapsedFolders,
       setSidebarScrollTop,
       setSidebarWidth,
+      setSidebarCollapsed,
       createNewEditor,
       createFile,
       createFolder,
@@ -276,6 +287,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       setCollapsedFolders,
       setSidebarScrollTop,
       setSidebarWidth,
+      setSidebarCollapsed,
       setPreviewFilePath,
       updateLessonType,
       updateActiveFileContent,

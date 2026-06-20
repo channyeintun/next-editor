@@ -9,6 +9,25 @@ export const CURSOR_REPLAY_TARGET_ATTRIBUTE = "data-cursor-replay-target";
 export const CURSOR_REPLAY_VIEWPORT_TARGET_ID = "viewport";
 export const CURSOR_REPLAY_ROOT_TARGET_ID = "app";
 
+// Targets whose *content* is scaled to fit the box (the preview iframe is
+// scaled-to-fit, reveal.js scales slides, and the raw viewport fallback). For
+// these, a recorded point must be re-scaled by the box's current size on replay.
+//
+// Every other target (the code editor, file explorer, terminal dock, layout
+// containers, app root) renders fixed-size, top-left-anchored content, so its
+// cursor is anchored to the box's top-left by absolute offset instead — that
+// keeps the cursor over the same content when the box is merely resized (e.g.
+// the editor widens after the file explorer is hidden) rather than sliding it
+// sideways in proportion to the new width.
+const CURSOR_SCALING_TARGET_IDS: ReadonlySet<string> = new Set([
+  CURSOR_REPLAY_VIEWPORT_TARGET_ID,
+  "preview-frame",
+  "preview-content",
+  "preview",
+  "slide-preview",
+  "slide-content",
+]);
+
 interface CreateCursorPositionOptions {
   clientX: number;
   clientY: number;
@@ -347,9 +366,16 @@ function resolveEndpointToViewport(
     return { x: cursor.x, y: cursor.y };
   }
 
+  if (CURSOR_SCALING_TARGET_IDS.has(target.id)) {
+    return {
+      x: currentRect.left + (target.x / target.rect.width) * currentRect.width,
+      y: currentRect.top + (target.y / target.rect.height) * currentRect.height,
+    };
+  }
+
   return {
-    x: currentRect.left + (target.x / target.rect.width) * currentRect.width,
-    y: currentRect.top + (target.y / target.rect.height) * currentRect.height,
+    x: currentRect.left + target.x,
+    y: currentRect.top + target.y,
   };
 }
 

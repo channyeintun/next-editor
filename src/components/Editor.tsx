@@ -9,7 +9,6 @@ import { SlidesProvider } from "../contexts/SlidesContext";
 import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
-import { FileSidebarProvider } from "../contexts/FileSidebarContext";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useWorkspaceLessonType } from "../hooks/useWorkspace";
 import { lessonRunsInWebContainer } from "../types/workspace";
@@ -63,9 +62,7 @@ export default function Editor() {
           <NextEditorProvider>
             <SlidesProvider>
               <PreviewPanelProvider>
-                <FileSidebarProvider>
-                  <EditorLayout />
-                </FileSidebarProvider>
+                <EditorLayout />
               </PreviewPanelProvider>
             </SlidesProvider>
           </NextEditorProvider>

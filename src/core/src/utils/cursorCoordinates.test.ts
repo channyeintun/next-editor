@@ -79,6 +79,31 @@ describe("cursorCoordinates", () => {
     });
   });
 
+  it("anchors a fixed-content target to its top-left instead of scaling on resize", () => {
+    const target = document.createElement("div");
+
+    target.setAttribute("data-cursor-replay-target", "code-editor");
+    document.body.appendChild(target);
+    mockRect(target, { left: 100, top: 50, width: 400, height: 300 });
+
+    const recordedCursor = createCursorPositionFromClientPoint({
+      clientX: 300,
+      clientY: 200,
+      visible: true,
+      targetElement: target,
+    });
+
+    // The editor widens and shifts left (e.g. the file explorer was hidden). The
+    // cursor must stay at the same offset from the editor's top-left, not slide
+    // sideways in proportion to the new width.
+    mockRect(target, { left: 20, top: 50, width: 800, height: 300 });
+
+    expect(resolveCursorViewportPosition(recordedCursor)).toEqual({
+      x: 220,
+      y: 200,
+    });
+  });
+
   it("records points relative to the app root when present", () => {
     const app = document.createElement("div");
     const target = document.createElement("div");

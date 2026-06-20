@@ -12,6 +12,7 @@ export interface WorkspaceActions {
   setCollapsedFolders: (paths: string[]) => void;
   setSidebarScrollTop: (scrollTop: number) => void;
   setSidebarWidth: (width: number) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   createNewEditor: () => void;
   createFile: (path: string, content?: string, encoding?: WorkspaceFileEncoding) => void;
   createFolder: (path: string) => void;

@@ -2,7 +2,6 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { PanelLeft, PanelRight, RotateCw, Settings } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
-import { useFileSidebar } from "../contexts/FileSidebarContext";
 import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
@@ -17,6 +16,7 @@ import {
   useWorkspaceDirtyState,
   useWorkspaceFileCount,
   useWorkspaceLessonType,
+  useWorkspaceSidebarCollapsed,
 } from "../hooks/useWorkspace";
 import { lessonRunsInWebContainer, type WorkspaceLessonType } from "../types/workspace";
 import { createStarterWorkspaceForLessonType } from "../starters";
@@ -145,7 +145,8 @@ const SaveAndRerunControls = memo(function SaveAndRerunControls() {
 });
 
 const FileSidebarToggleButton = memo(function FileSidebarToggleButton() {
-  const { isCollapsed, toggleSidebar } = useFileSidebar();
+  const isCollapsed = useWorkspaceSidebarCollapsed();
+  const { setSidebarCollapsed } = useWorkspaceActions();
   const isOpen = !isCollapsed;
 
   return (
@@ -154,7 +155,7 @@ const FileSidebarToggleButton = memo(function FileSidebarToggleButton() {
       aria-label={isOpen ? "Hide file explorer" : "Show file explorer"}
       aria-pressed={isOpen}
       title={isOpen ? "Hide file explorer" : "Show file explorer"}
-      onClick={toggleSidebar}
+      onClick={() => setSidebarCollapsed(!isCollapsed)}
       className={`${HEADER_ICON_BUTTON_CLASS} ${
         isOpen
           ? "border-[#5da4ff] bg-[#273449] text-white shadow-[0_0_0_1px_rgba(93,164,255,0.22)]"

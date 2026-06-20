@@ -19,7 +19,11 @@ import {
 } from "../types/workspace";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { createStarterWorkspaceProject } from "../starters/react";
-import { getClampedFileSidebarWidth, readStoredFileSidebarWidth } from "../utils/sidebarLayout";
+import {
+  getClampedFileSidebarWidth,
+  readStoredFileSidebarCollapsed,
+  readStoredFileSidebarWidth,
+} from "../utils/sidebarLayout";
 
 export interface StoredWorkspaceSnapshot {
   activeFilePath: string;
@@ -33,6 +37,7 @@ export interface WorkspaceState {
   collapsedFolders: string[];
   sidebarScrollTop: number;
   sidebarWidth: number;
+  sidebarCollapsed: boolean;
   savedSnapshot: StoredWorkspaceSnapshot;
   projectVersion: number;
   previewVersion: number;
@@ -433,6 +438,7 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
   const collapsedFolders = normalizeCollapsedFolders(project.folders, []);
   const sidebarScrollTop = 0;
   const sidebarWidth = normalizeSidebarWidth(initialSnapshot.sidebarWidth);
+  const sidebarCollapsed = readStoredFileSidebarCollapsed();
 
   return {
     project,
@@ -440,6 +446,7 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
     collapsedFolders,
     sidebarScrollTop,
     sidebarWidth,
+    sidebarCollapsed,
     savedSnapshot,
     projectVersion: 0,
     previewVersion: 0,
@@ -527,6 +534,19 @@ export function createWorkspaceStore(initialSnapshot: StoredWorkspaceSnapshot) {
           ...context,
           sidebarWidth,
         });
+      },
+      // Viewer-side UI preference only: the file explorer can be toggled at any
+      // time (including mid-replay) and is intentionally NOT part of the recorded
+      // workspace snapshot, so it never overrides what the viewer chooses.
+      setSidebarCollapsed: (context, event: { collapsed: boolean }) => {
+        if (context.sidebarCollapsed === event.collapsed) {
+          return context;
+        }
+
+        return {
+          ...context,
+          sidebarCollapsed: event.collapsed,
+        };
       },
       createFile: (
         context,
@@ -983,6 +1003,9 @@ export const selectWorkspaceSidebarState = (context: WorkspaceState): WorkspaceS
 
 export const selectWorkspaceSidebarWidth = (context: WorkspaceState): number =>
   context.sidebarWidth;
+
+export const selectWorkspaceSidebarCollapsed = (context: WorkspaceState): boolean =>
+  context.sidebarCollapsed;
 
 export const selectWorkspaceActiveFilePath = (context: WorkspaceState): string =>
   context.activeFilePath;
