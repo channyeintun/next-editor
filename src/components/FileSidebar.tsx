@@ -1,29 +1,10 @@
 import { memo, type UIEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {
-  FileBox,
-  FileCode2,
-  FileJson2,
-  FilePlus2,
-  FileText,
-  Film,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  Globe,
-  ImageIcon,
-  Music,
-  Package,
-  Palette,
-  Upload,
-} from "lucide-react";
+import { FilePlus2, Folder, FolderOpen, FolderPlus, Upload } from "lucide-react";
 import {
   getParentWorkspacePath,
   getUniqueWorkspacePath,
   getWorkspaceBaseName,
-  getWorkspaceMediaKind,
-  inferLanguageFromPath,
   joinWorkspacePath,
-  type WorkspaceFile,
 } from "../types/workspace";
 import { useWorkspaceActions, useWorkspaceSidebarState } from "../hooks/useWorkspace";
 import { MAX_WORKSPACE_ASSET_BYTES, readUploadedWorkspaceFile } from "../utils/workspaceFileUpload";
@@ -37,269 +18,22 @@ import {
   MIN_FILE_SIDEBAR_WIDTH,
 } from "../utils/sidebarLayout";
 import { dispatchRecordedCursorVisibility } from "../utils/recordedCursorVisibility";
-
-type WorkspaceTreeNode =
-  | {
-      kind: "file";
-      path: string;
-      name: string;
-      file: WorkspaceFile;
-    }
-  | {
-      kind: "folder";
-      path: string;
-      name: string;
-      hasActiveFile: boolean;
-      children: WorkspaceTreeNode[];
-    };
-
-type SidebarEntryKind = "file" | "folder";
-
-type SidebarEditState =
-  | {
-      mode: "create";
-      kind: SidebarEntryKind;
-      parentPath: string;
-    }
-  | {
-      mode: "rename";
-      kind: SidebarEntryKind;
-      path: string;
-      parentPath: string;
-    }
-  | null;
-
-interface SidebarContextMenuState {
-  x: number;
-  y: number;
-  kind: SidebarEntryKind;
-  path: string;
-  parentPath: string;
-}
-
-interface ContextMenuPlacementInput {
-  anchorX: number;
-  anchorY: number;
-  menuWidth: number;
-  menuHeight: number;
-  viewportWidth: number;
-  viewportHeight: number;
-  margin?: number;
-}
-
-interface ContextMenuPlacement {
-  left: number;
-  top: number;
-  maxHeight: number;
-}
-
-const CONTEXT_MENU_VIEWPORT_MARGIN = 8;
-const CONTEXT_MENU_FALLBACK_WIDTH = 224;
-const CONTEXT_MENU_FALLBACK_HEIGHT = 320;
-const SIDEBAR_TREE_INDENT = 12;
-const SIDEBAR_TREE_OFFSET = 10;
-
-function getSidebarTreePaddingLeft(depth: number): string {
-  return `${depth * SIDEBAR_TREE_INDENT + SIDEBAR_TREE_OFFSET}px`;
-}
-
-function clampViewportValue(value: number, min: number, max: number): number {
-  if (max < min) {
-    return min;
-  }
-
-  return Math.min(Math.max(value, min), max);
-}
-
-export function getViewportClampedContextMenuPlacement({
-  anchorX,
-  anchorY,
-  menuWidth,
-  menuHeight,
-  viewportWidth,
-  viewportHeight,
-  margin = CONTEXT_MENU_VIEWPORT_MARGIN,
-}: ContextMenuPlacementInput): ContextMenuPlacement {
-  const availableWidth = Math.max(viewportWidth - margin * 2, 0);
-  const availableHeight = Math.max(viewportHeight - margin * 2, 0);
-  const renderedWidth = Math.min(Math.max(menuWidth, 0), availableWidth);
-  const renderedHeight = Math.min(Math.max(menuHeight, 0), availableHeight);
-
-  return {
-    left: clampViewportValue(anchorX, margin, viewportWidth - renderedWidth - margin),
-    top: clampViewportValue(anchorY, margin, viewportHeight - renderedHeight - margin),
-    maxHeight: availableHeight,
-  };
-}
-
-const FILE_TEMPLATES: Record<string, string> = {
-  css: "body {\n  margin: 0;\n}\n",
-  html: '<!doctype html>\n<html lang="en">\n  <body>\n  </body>\n</html>\n',
-  javascript: "export function main() {\n  return null;\n}\n",
-  json: "{}\n",
-  markdown: "# New file\n",
-  typescript: "export function main(): null {\n  return null;\n}\n",
-};
-
-function getDefaultFileContent(path: string): string {
-  const language = inferLanguageFromPath(path);
-  return FILE_TEMPLATES[language] ?? "";
-}
-
-function removeFolderFromCollapsedState(current: Set<string>, folderPath: string): Set<string> {
-  if (!folderPath || !current.has(folderPath)) {
-    return current;
-  }
-
-  const next = new Set(current);
-  next.delete(folderPath);
-  return next;
-}
-
-function getFileIcon(file: WorkspaceFile) {
-  if (file.encoding === "base64") {
-    const mediaKind = getWorkspaceMediaKind(file.path);
-
-    if (mediaKind === "image") {
-      return <ImageIcon size={14} className="text-fuchsia-300" />;
-    }
-
-    if (mediaKind === "video") {
-      return <Film size={14} className="text-rose-300" />;
-    }
-
-    if (mediaKind === "audio") {
-      return <Music size={14} className="text-teal-300" />;
-    }
-
-    return <FileBox size={14} className="text-slate-300" />;
-  }
-
-  if (file.path === "package.json") {
-    return <Package size={14} className="text-emerald-300" />;
-  }
-
-  if (file.language === "css") {
-    return <Palette size={14} className="text-pink-300" />;
-  }
-
-  if (file.language === "json") {
-    return <FileJson2 size={14} className="text-amber-300" />;
-  }
-
-  if (file.language === "html") {
-    return <Globe size={14} className="text-sky-300" />;
-  }
-
-  if (file.language === "markdown") {
-    return <FileText size={14} className="text-violet-300" />;
-  }
-
-  if (file.language === "javascript" || file.language === "typescript") {
-    return <FileCode2 size={14} className="text-cyan-300" />;
-  }
-
-  return <FileText size={14} className="text-slate-300" />;
-}
-
-function getEditableSelectionEnd(name: string, kind: "file" | "folder") {
-  if (kind === "folder") {
-    return name.length;
-  }
-
-  const extensionIndex = name.lastIndexOf(".");
-  if (extensionIndex <= 0) {
-    return name.length;
-  }
-
-  return extensionIndex;
-}
-
-function copyTextToClipboard(text: string) {
-  if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "absolute";
-  textarea.style.left = "-9999px";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
-}
-
-function buildWorkspaceTree(
-  files: WorkspaceFile[],
-  folders: string[],
-  activeFilePath: string,
-): WorkspaceTreeNode[] {
-  const root = {
-    kind: "folder" as const,
-    path: "",
-    name: "",
-    hasActiveFile: true,
-    children: [] as WorkspaceTreeNode[],
-  };
-  const folderMap = new Map<string, Extract<WorkspaceTreeNode, { kind: "folder" }>>([["", root]]);
-
-  const ensureFolderNode = (folderPath: string) => {
-    if (folderMap.has(folderPath)) {
-      return folderMap.get(folderPath)!;
-    }
-
-    const parentPath = getParentWorkspacePath(folderPath);
-    const parentNode = ensureFolderNode(parentPath);
-    const folderNode: Extract<WorkspaceTreeNode, { kind: "folder" }> = {
-      kind: "folder",
-      path: folderPath,
-      name: getWorkspaceBaseName(folderPath),
-      hasActiveFile: activeFilePath === folderPath || activeFilePath.startsWith(`${folderPath}/`),
-      children: [],
-    };
-
-    parentNode.children.push(folderNode);
-    folderMap.set(folderPath, folderNode);
-    return folderNode;
-  };
-
-  for (const folderPath of folders) {
-    ensureFolderNode(folderPath);
-  }
-
-  for (const file of files) {
-    const parentPath = getParentWorkspacePath(file.path);
-    const parentNode = ensureFolderNode(parentPath);
-    parentNode.children.push({
-      kind: "file",
-      path: file.path,
-      name: file.name,
-      file,
-    });
-  }
-
-  const sortNodes = (nodes: WorkspaceTreeNode[]) => {
-    nodes.sort((left, right) => {
-      if (left.kind !== right.kind) {
-        return left.kind === "folder" ? -1 : 1;
-      }
-
-      return left.name.localeCompare(right.name);
-    });
-
-    for (const node of nodes) {
-      if (node.kind === "folder") {
-        sortNodes(node.children);
-      }
-    }
-  };
-
-  sortNodes(root.children);
-  return root.children;
-}
+import {
+  buildWorkspaceTree,
+  CONTEXT_MENU_FALLBACK_HEIGHT,
+  CONTEXT_MENU_FALLBACK_WIDTH,
+  copyTextToClipboard,
+  getDefaultFileContent,
+  getEditableSelectionEnd,
+  getFileIcon,
+  getSidebarTreePaddingLeft,
+  getViewportClampedContextMenuPlacement,
+  removeFolderFromCollapsedState,
+  type SidebarContextMenuState,
+  type SidebarEditState,
+  type SidebarEntryKind,
+  type WorkspaceTreeNode,
+} from "./fileSidebarHelpers";
 
 const FileSidebar = memo(function FileSidebar() {
   const [draftName, setDraftName] = useState("");

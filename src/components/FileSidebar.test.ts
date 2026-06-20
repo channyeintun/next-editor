@@ -4,7 +4,7 @@ import {
   MAX_FILE_SIDEBAR_WIDTH,
   MIN_FILE_SIDEBAR_WIDTH,
 } from "../utils/sidebarLayout";
-import { getViewportClampedContextMenuPlacement } from "./FileSidebar";
+import { getViewportClampedContextMenuPlacement } from "./fileSidebarHelpers";
 
 describe("getViewportClampedContextMenuPlacement", () => {
   it("keeps a menu opened near the bottom fully inside the viewport", () => {
