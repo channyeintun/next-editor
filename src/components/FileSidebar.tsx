@@ -677,7 +677,7 @@ const FileSidebarPanel = memo(function FileSidebarPanel() {
 
   return (
     <aside
-      className="relative flex h-full shrink-0 flex-col border-r border-slate-800 bg-[#11141c] text-slate-100"
+      className="relative flex h-full shrink-0 flex-col bg-[#11141c] text-slate-100"
       style={{ width: sidebarWidth }}
       data-cursor-replay-target="file-sidebar"
       onDragOver={handleSidebarDragOver}
