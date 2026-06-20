@@ -1,5 +1,11 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { PanelLeft, PanelRight, Settings } from "lucide-react";
+import {
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  Settings,
+} from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import {
@@ -38,6 +44,8 @@ const HEADER_TEXT_BUTTON_CLASS =
   "inline-flex h-8 items-center justify-center rounded-md px-3 text-xs font-semibold transition-colors";
 const HEADER_ICON_BUTTON_CLASS =
   "inline-flex size-8 items-center justify-center rounded-lg border transition-colors";
+const HEADER_ICON_BUTTON_NEUTRAL_CLASS =
+  "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600 hover:text-white";
 
 function stringifyEnvironmentVariables(variables: Record<string, string>): string {
   return Object.entries(variables)
@@ -99,13 +107,9 @@ const FileSidebarToggleButton = memo(function FileSidebarToggleButton() {
       aria-pressed={isOpen}
       title={isOpen ? "Hide file explorer" : "Show file explorer"}
       onClick={() => setSidebarCollapsed(!isCollapsed)}
-      className={`${HEADER_ICON_BUTTON_CLASS} ${
-        isOpen
-          ? "border-[#5da4ff] bg-[#273449] text-white shadow-[0_0_0_1px_rgba(93,164,255,0.22)]"
-          : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600 hover:text-white"
-      }`}
+      className={`${HEADER_ICON_BUTTON_CLASS} ${HEADER_ICON_BUTTON_NEUTRAL_CLASS}`}
     >
-      <PanelLeft size={16} />
+      {isOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
     </button>
   );
 });
@@ -127,13 +131,9 @@ const PreviewHeaderButton = memo(function PreviewHeaderButton() {
 
         openPreview();
       }}
-      className={`${HEADER_ICON_BUTTON_CLASS} ${
-        isOpen
-          ? "border-[#5da4ff] bg-[#273449] text-white shadow-[0_0_0_1px_rgba(93,164,255,0.22)]"
-          : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600 hover:text-white"
-      }`}
+      className={`${HEADER_ICON_BUTTON_CLASS} ${HEADER_ICON_BUTTON_NEUTRAL_CLASS}`}
     >
-      <PanelRight size={16} />
+      {isOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
     </button>
   );
 });
@@ -373,7 +373,7 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
           aria-expanded={isMenuOpen}
           aria-haspopup="menu"
           onClick={() => setIsMenuOpen((current) => !current)}
-          className={`${HEADER_ICON_BUTTON_CLASS} border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600 hover:text-white`}
+          className={`${HEADER_ICON_BUTTON_CLASS} ${HEADER_ICON_BUTTON_NEUTRAL_CLASS}`}
         >
           <Settings size={16} aria-hidden="true" />
         </button>

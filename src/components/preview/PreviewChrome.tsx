@@ -26,6 +26,10 @@ interface PreviewChromeProps {
   size: PreviewSize;
   mode: PreviewPanelMode;
   dockWidth: number;
+  /** Docked-only: whether the panel is at full width (false collapses it to 0). */
+  dockExpanded?: boolean;
+  /** Docked-only: enables the width transition during an open/close slide. */
+  dockAnimating?: boolean;
   onClose: () => void;
   onFloat: () => void;
   onDock: () => void;
@@ -294,6 +298,8 @@ export function PreviewChrome({
   size,
   mode,
   dockWidth,
+  dockExpanded = true,
+  dockAnimating = false,
   onClose,
   onFloat,
   onDock,
@@ -333,9 +339,13 @@ export function PreviewChrome({
   );
 
   const isDocked = mode === "docked";
-  const rootStyle = isDocked ? { width: dockWidth } : getFloatingStyle(size);
+  const rootStyle = isDocked ? { width: dockExpanded ? dockWidth : 0 } : getFloatingStyle(size);
   const rootClassName = isDocked
-    ? "relative z-30 flex h-full shrink-0 flex-col overflow-hidden border-l border-slate-900 bg-[#1d1f29]"
+    ? `relative z-30 flex h-full shrink-0 flex-col overflow-hidden border-l border-slate-900 bg-[#1d1f29]${
+        dockAnimating
+          ? " transition-[width] duration-200 ease-out motion-reduce:transition-none"
+          : ""
+      }`
     : "fixed z-60 flex flex-col overflow-hidden rounded-xl border border-slate-700 bg-[#1d1f29] shadow-[0_24px_54px_rgba(2,6,23,0.52)] transition-[top,right,width,height,transform,opacity] duration-150 ease-out";
 
   return (

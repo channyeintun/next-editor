@@ -109,6 +109,23 @@ body {
 
 .runtime-dock {
   left: var(--runtime-dock-left, 19rem);
+  transition:
+    left 200ms ease-out,
+    right 200ms ease-out;
+}
+
+/* The fixed dock can't ride the flex reflow, so it transitions its own left/right
+   to follow the file sidebar / preview panel sliding open or closed. While a
+   divider is being dragged the class below switches the transition off so the
+   dock tracks the cursor instantly instead of lagging behind it. */
+body.is-resizing-panel .runtime-dock {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runtime-dock {
+    transition: none;
+  }
 }
 
 .editor-scrollbar {

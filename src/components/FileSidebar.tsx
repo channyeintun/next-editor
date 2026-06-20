@@ -10,8 +10,10 @@ import {
   useWorkspaceActions,
   useWorkspaceSidebarCollapsed,
   useWorkspaceSidebarState,
+  useWorkspaceSidebarWidth,
 } from "../hooks/useWorkspace";
 import { MAX_WORKSPACE_ASSET_BYTES, readUploadedWorkspaceFile } from "../utils/workspaceFileUpload";
+import { useCollapseTransition } from "../hooks/useCollapseTransition";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import {
   DEFAULT_FILE_SIDEBAR_WIDTH,
@@ -199,6 +201,8 @@ const FileSidebarPanel = memo(function FileSidebarPanel() {
 
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
+    // Suspend the runtime dock's left/right transition so it tracks the drag live.
+    document.body.classList.add("is-resizing-panel");
 
     const handlePointerMove = (event: PointerEvent) => {
       const dragOffset = event.clientX - sidebarResizeStartRef.current.x;
@@ -227,6 +231,7 @@ const FileSidebarPanel = memo(function FileSidebarPanel() {
     return () => {
       document.body.style.cursor = previousCursor;
       document.body.style.userSelect = previousUserSelect;
+      document.body.classList.remove("is-resizing-panel");
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", stopResizing);
       window.removeEventListener("pointercancel", stopResizing);
@@ -854,12 +859,24 @@ const FileSidebarPanel = memo(function FileSidebarPanel() {
 
 const FileSidebar = memo(function FileSidebar() {
   const isCollapsed = useWorkspaceSidebarCollapsed();
+  const sidebarWidth = useWorkspaceSidebarWidth();
+  const { isMounted, isExpanded, isAnimating } = useCollapseTransition(isCollapsed);
 
-  if (isCollapsed) {
-    return null;
-  }
+  // Clip only while sliding (or fully collapsed); when idle-open the wrapper must
+  // not clip the resize handle, which sits just past the panel's right edge.
+  const shouldClip = isAnimating || isCollapsed;
 
-  return <FileSidebarPanel />;
+  return (
+    <div
+      className={`shrink-0 ${shouldClip ? "overflow-hidden" : ""} ${
+        isAnimating ? "transition-[width] duration-200 ease-out motion-reduce:transition-none" : ""
+      }`}
+      style={{ width: isExpanded ? sidebarWidth : 0 }}
+      aria-hidden={isCollapsed ? true : undefined}
+    >
+      {isMounted ? <FileSidebarPanel /> : null}
+    </div>
+  );
 });
 
 export default FileSidebar;
