@@ -30,7 +30,6 @@ export interface WorkspaceActions {
     sidebarScrollTop?: number,
     sidebarWidth?: number,
   ) => void;
-  resetProject: () => void;
   updateLessonType: (lessonType: WorkspaceLessonType) => void;
   getProject: () => WorkspaceProject;
   getActiveFilePath: () => string;

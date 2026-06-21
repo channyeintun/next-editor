@@ -18,7 +18,6 @@ import {
   type WorkspaceProject,
 } from "../types/workspace";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
-import { createStarterWorkspaceForLessonType } from "../starters";
 import {
   writeStoredFileSidebarCollapsed,
   writeStoredFileSidebarWidth,
@@ -197,14 +196,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     loadProject(createStarterHtmlCssWorkspace());
   }, [loadProject]);
 
-  const resetProject = useCallback(async () => {
-    // Mirror the header's "New Editor" control: start over within the current
-    // framework by loading a fresh starter of the active lesson type, rather than
-    // always dropping the user into the React starter.
-    const { lessonType } = workspaceStoreRef.current.getSnapshot().context.project;
-    loadProject(await createStarterWorkspaceForLessonType(lessonType));
-  }, [loadProject]);
-
   const updateLessonType = useCallback((lessonType: WorkspaceLessonType) => {
     workspaceStoreRef.current.trigger.updateLessonType({ lessonType });
   }, []);
@@ -259,7 +250,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       updateActiveFileContent,
       saveProject,
       loadProject,
-      resetProject,
       updateLessonType,
       getProject,
       getActiveFilePath,
@@ -285,7 +275,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       loadProject,
       renameFile,
       renameFolder,
-      resetProject,
       saveProject,
       setActiveFilePath,
       setCollapsedFolders,

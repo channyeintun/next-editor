@@ -23,7 +23,6 @@ interface NextEditorProviderContentProps {
   children: React.ReactNode;
   config: UseNextEditorConfig;
   jsonStorage: { current: ReturnType<typeof createJsonStorage> };
-  resetProject: () => void;
   suppressWorkspaceEventsRef: { current: boolean };
 }
 
@@ -31,7 +30,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   children,
   config,
   jsonStorage,
-  resetProject,
   suppressWorkspaceEventsRef,
 }) => {
   const actorRef = NextEditorActorContext.useActorRef();
@@ -41,7 +39,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   useRecordingStreamSink(actorRef, config.recordingStreamSink);
 
   const {
-    clearRecording: clearRecordingBase,
+    clearRecording,
     startRecording,
     stopRecording,
     play,
@@ -84,11 +82,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       return [];
     }
   }, [jsonStorage]);
-
-  const clearRecording = useCallback(() => {
-    clearRecordingBase();
-    resetProject();
-  }, [clearRecordingBase, resetProject]);
 
   const handleWorkspaceEvent = useCallback(
     (event?: { sidebarWidthDelta?: number }) => {
@@ -174,7 +167,6 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     getSidebarScrollTop,
     getSidebarWidth,
     loadProject,
-    resetProject,
     setSidebarWidth,
   } = useWorkspaceActions();
   const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
@@ -305,7 +297,6 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       <NextEditorProviderContent
         config={config}
         jsonStorage={jsonStorage}
-        resetProject={resetProject}
         suppressWorkspaceEventsRef={suppressWorkspaceEventsRef}
       >
         {children}
