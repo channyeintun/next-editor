@@ -54,6 +54,32 @@ describe("buildRrwebReplayEvents", () => {
 
     expect(buildRrwebReplayEvents([bare], [])).toEqual([]);
   });
+
+  it("rebases events onto each segment's recording time, dropping the preview-clock offset", () => {
+    // The preview iframe records on a raw Date.now() clock that sits far ahead of
+    // the recording clock (audio warmup delays `startedAt`). Replay must follow the
+    // recording clock, so events anchor to their segment `time`, not their raw ts.
+    const PREVIEW_BASE = 1_700_000_000_000;
+    const seed: PreviewInitialDocument = {
+      version: 2,
+      time: 0,
+      documentId: "doc-1",
+      events: [event(4, PREVIEW_BASE), event(2, PREVIEW_BASE + 1)],
+    };
+    const batch: PreviewDomPatchBatch = {
+      version: 2,
+      time: 500,
+      source: "runtime-preview",
+      documentId: "doc-1",
+      events: [event(3, PREVIEW_BASE + 2200), event(3, PREVIEW_BASE + 2210)],
+    };
+
+    const events = buildRrwebReplayEvents([seed], [batch]);
+
+    // Seed anchored at 0 (offsets 0,1); batch anchored at 500 (offsets 0,10) —
+    // the ~2.2s preview-clock lead is gone.
+    expect(events.map((entry) => entry.timestamp)).toEqual([0, 1, 500, 510]);
+  });
 });
 
 describe("hasRrwebPreviewEvents", () => {
