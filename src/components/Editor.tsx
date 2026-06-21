@@ -37,7 +37,7 @@ export const EditorLayout = memo(function EditorLayout() {
         <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
         <CameraOverlay />
-        {lessonRunsInWebContainer(lessonType) ? <TerminalPanel /> : null}
+        {lessonRunsInWebContainer(lessonType) ? <TerminalPanel large={largeControls} /> : null}
         <SlidePanel />
       </div>
 

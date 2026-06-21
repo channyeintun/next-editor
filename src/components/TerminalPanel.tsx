@@ -143,7 +143,15 @@ const RunnerToggle = memo(function RunnerToggle({
   );
 });
 
-const TerminalPanel = memo(function TerminalPanel() {
+interface TerminalPanelProps {
+  /**
+   * When the media controls are enlarged (small embeds), the bottom control bar
+   * is much taller and would cover the collapsed dock, so lift the dock above it.
+   */
+  large?: boolean;
+}
+
+const TerminalPanel = memo(function TerminalPanel({ large = false }: TerminalPanelProps) {
   const [activeTab, setActiveTab] = useState<RuntimeDockTab>("runner");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -461,7 +469,7 @@ const TerminalPanel = memo(function TerminalPanel() {
   return (
     <>
       <div
-        className="runtime-dock fixed bottom-12 z-40 flex flex-col overflow-hidden rounded-lg border border-[#0f131a] bg-[#15191f] shadow-[0_18px_40px_rgba(2,6,23,0.42)]"
+        className={`runtime-dock fixed ${large ? "bottom-40" : "bottom-12"} z-40 flex flex-col overflow-hidden rounded-lg border border-[#0f131a] bg-[#15191f] shadow-[0_18px_40px_rgba(2,6,23,0.42)]`}
         style={dockStyle}
         data-cursor-replay-target="runtime-dock"
       >
