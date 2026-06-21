@@ -248,6 +248,10 @@ const CameraOverlay: React.FC = () => {
   // `timeline.currentTime` directly from the actor snapshot inside a rAF loop so
   // playback sync never forces a React re-render. While paused, subscribe
   // imperatively so scrubbing still updates the visible frame.
+  //
+  // `isVisible` and `isMinimized` are dependencies because the <video> unmounts when the overlay is
+  // hidden or minimized; the effect must re-run to rebind to (and resume playing) the fresh element
+  // when it remounts, otherwise toggling visibility mid-playback leaves a frozen, detached video.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoUrl) return;
@@ -294,7 +298,7 @@ const CameraOverlay: React.FC = () => {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [actorRef, cameraStartOffsetMs, isMinimized, isPlaying, videoUrl]);
+  }, [actorRef, cameraStartOffsetMs, isMinimized, isVisible, isPlaying, videoUrl]);
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {

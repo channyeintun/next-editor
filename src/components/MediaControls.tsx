@@ -290,7 +290,10 @@ const MediaControls: React.FC<MediaControlsProps> = memo(
     const duration = currentRecording?.duration || 0;
     const progressDuration = actualDuration > 0 ? actualDuration * 1000 : duration;
     const showAudioSourceControls = recordMode && !isRecording && !currentRecording && !isPlaying;
-    const hasCameraRecording = currentRecording?.cameraBlob instanceof Blob;
+    // Camera may be an in-memory blob (just recorded / IndexedDB-restored) or an external video URL
+    // (imported file or hosted sibling). Either means the recording has camera to show/hide.
+    const hasCameraRecording =
+      currentRecording?.cameraBlob instanceof Blob || Boolean(currentRecording?.cameraUrl);
 
     // Size tokens — scale the controls up for small embeds when `large` is set.
     const containerPadding = large ? "px-10 py-8" : "px-4 py-3";
