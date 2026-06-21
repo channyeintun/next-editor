@@ -41,8 +41,6 @@ const LESSON_TYPE_OPTIONS: Array<{
   { value: "htmx-express", label: "HTMX + Express" },
 ];
 
-const HEADER_TEXT_BUTTON_CLASS =
-  "inline-flex h-8 items-center justify-center rounded-md px-3 text-xs font-semibold transition-colors";
 const HEADER_ICON_BUTTON_CLASS =
   "inline-flex size-8 items-center justify-center rounded-lg border transition-colors";
 const HEADER_ICON_BUTTON_NEUTRAL_CLASS =
@@ -139,55 +137,6 @@ const PreviewHeaderButton = memo(function PreviewHeaderButton() {
   );
 });
 
-const ExportButton = memo(function ExportButton() {
-  const { exportAsFile } = useNextEditorActions();
-  const { currentRecording } = useNextEditorMetadata();
-
-  const handleExport = async () => {
-    if (currentRecording) {
-      try {
-        await exportAsFile(currentRecording);
-      } catch (error) {
-        console.error("Export failed:", error);
-      }
-    }
-  };
-
-  return (
-    <button
-      onClick={handleExport}
-      disabled={!currentRecording}
-      className={`${HEADER_TEXT_BUTTON_CLASS} bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50`}
-    >
-      Export
-    </button>
-  );
-});
-
-const ImportButton = memo(function ImportButton() {
-  const { importFromFile, loadRecording } = useNextEditorActions();
-
-  const handleImport = async () => {
-    try {
-      const importedRecordings = await importFromFile();
-      if (importedRecordings.length > 0) {
-        loadRecording(importedRecordings[0]);
-      }
-    } catch (error) {
-      console.error("Import failed:", error);
-    }
-  };
-
-  return (
-    <button
-      onClick={handleImport}
-      className={`${HEADER_TEXT_BUTTON_CLASS} bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white`}
-    >
-      Import
-    </button>
-  );
-});
-
 const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
   const [draftValue, setDraftValue] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -198,6 +147,8 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
   const { rerunRunner, resetRuntime, updateEnvironmentVariables, updateRunnerConfig } =
     useWebContainerRuntimeActions();
   const { environmentVariables, runnerConfig, status } = useWebContainerRuntimeMetadata();
+  const { exportAsFile, importFromFile, loadRecording } = useNextEditorActions();
+  const { currentRecording } = useNextEditorMetadata();
   const { getProject, loadProject, saveProject } = useWorkspaceActions();
   const fileCount = useWorkspaceFileCount();
   const lessonType = useWorkspaceLessonType();
@@ -237,6 +188,33 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
   const handleEditEnvironment = () => {
     setIsMenuOpen(false);
     setIsEnvironmentModalOpen(true);
+  };
+
+  const handleImportRecording = async () => {
+    setIsMenuOpen(false);
+
+    try {
+      const importedRecordings = await importFromFile();
+      if (importedRecordings.length > 0) {
+        loadRecording(importedRecordings[0]);
+      }
+    } catch (error) {
+      console.error("Import failed:", error);
+    }
+  };
+
+  const handleExportRecording = async () => {
+    setIsMenuOpen(false);
+
+    if (!currentRecording) {
+      return;
+    }
+
+    try {
+      await exportAsFile(currentRecording);
+    } catch (error) {
+      console.error("Export failed:", error);
+    }
   };
 
   const handleDownload = async () => {
@@ -477,6 +455,34 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
 
               <div className="my-1 h-px bg-slate-700" />
 
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  void handleImportRecording();
+                }}
+                className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
+              >
+                Import Recording (.ne)
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  void handleExportRecording();
+                }}
+                disabled={!currentRecording}
+                className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+                  currentRecording
+                    ? "text-slate-200 hover:bg-slate-700 hover:text-white"
+                    : "cursor-not-allowed text-slate-500"
+                }`}
+              >
+                Export Recording (.ne)
+              </button>
+
+              <div className="my-1 h-px bg-slate-700" />
+
               {lessonRunsInWebContainer(lessonType) ? (
                 <button
                   type="button"
@@ -587,13 +593,7 @@ const EditorHeader = memo(function EditorHeader({ showImportExport }: EditorHead
         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
       </div>
       <div className="flex items-center gap-2">
-        {showImportExport && (
-          <>
-            <ImportButton />
-            <ExportButton />
-            <WorkspaceSettingsButton />
-          </>
-        )}
+        {showImportExport && <WorkspaceSettingsButton />}
         <div className="h-4 w-px bg-slate-700 mx-1" />
         <div className="flex items-center gap-2">
           {showImportExport ? <SlidesButton /> : null}
