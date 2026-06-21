@@ -28,12 +28,20 @@ export const useDragAndDropUrl = () => {
       e.preventDefault();
       setIsDragging(false);
 
-      // Handle file drops
+      // Handle file drops — accept a `.ne` plus an optional sibling camera video.
       const files = e.dataTransfer?.files;
       if (files && files.length > 0) {
-        const file = files[0];
-        if (file.name.endsWith(".png") || file.name.endsWith(".ne")) {
-          await importNextEditorFile(file);
+        const dropped = Array.from(files);
+        const neFile = dropped.find(
+          (file) => file.name.endsWith(".png") || file.name.endsWith(".ne"),
+        );
+        if (neFile) {
+          const videoFile = dropped.find(
+            (file) =>
+              file !== neFile &&
+              (file.type.startsWith("video/") || /\.(webm|mp4|mov)$/i.test(file.name)),
+          );
+          await importNextEditorFile(neFile, videoFile);
         }
       }
 

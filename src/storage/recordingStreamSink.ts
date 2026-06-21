@@ -86,8 +86,6 @@ export class RecordingStreamBridge {
   };
   /** Number of audio fragments already scheduled for streaming. */
   private audioCount = 0;
-  /** Number of camera fragments already scheduled for streaming. */
-  private cameraCount = 0;
   /** Timeline starts for SCR3 cluster indices known to the live bridge. */
   private readonly clusterStarts: number[] = [];
   /** Serializes segment appends so async media reads cannot reorder the SCR3 stream. */
@@ -184,7 +182,6 @@ export class RecordingStreamBridge {
       ...this.collectEventSegments(SEGMENT_KIND.runtime, session.runtimeEvents, "runtime", final),
       ...this.collectEventSegments(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", final),
       ...this.collectAudioSegments(session.audioFragments),
-      ...this.collectCameraSegments(session.cameraFragments),
     ];
   }
 
@@ -328,33 +325,6 @@ export class RecordingStreamBridge {
         write: async () => {
           const bytes = await blobToBytes(fragment.blob);
           this.writer.appendAudioChunk(bytes, {
-            startTimeMs: fragment.startTimeMs,
-            endTimeMs: fragment.endTimeMs,
-            clusterIndex,
-            isInit: fragmentIndex === 0,
-          });
-        },
-      });
-    }
-    return segments;
-  }
-
-  private collectCameraSegments(
-    fragments: RecordingSession["cameraFragments"],
-  ): PendingStreamSegment[] {
-    const segments: PendingStreamSegment[] = [];
-    while (this.cameraCount < fragments.length) {
-      const fragment = fragments[this.cameraCount];
-      const fragmentIndex = this.cameraCount;
-      this.cameraCount += 1;
-      const clusterIndex = this.resolveClusterIndex(fragment.startTimeMs);
-      segments.push({
-        clusterIndex,
-        startTimeMs: fragment.startTimeMs,
-        priority: 3,
-        write: async () => {
-          const bytes = await blobToBytes(fragment.blob);
-          this.writer.appendCameraChunk(bytes, {
             startTimeMs: fragment.startTimeMs,
             endTimeMs: fragment.endTimeMs,
             clusterIndex,

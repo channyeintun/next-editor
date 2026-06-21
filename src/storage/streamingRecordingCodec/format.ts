@@ -76,7 +76,9 @@ export const SEGMENT_KIND = {
   runtime: 6,
   cursor: 7,
   audioChunk: 8,
-  cameraChunk: 9,
+  // 9 was `cameraChunk`. Camera video is now always stored externally (never inline in the
+  // stream), so the kind is retired and reserved — do not reuse 9 for a new segment kind, since
+  // older streams may still contain camera chunks (now skipped as an unknown kind on decode).
 } as const;
 
 export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
@@ -96,6 +98,10 @@ export interface RecordingStreamMeta {
   cameraType?: string;
   cameraSource?: RecordingCameraSource;
   cameraStartOffsetMs?: number;
+  /** Sibling video filename when camera bytes live outside the stream (see {@link Recording.cameraFile}). */
+  cameraFile?: string;
+  /** Resolved/absolute URL for an external camera video, when known at encode time. */
+  cameraUrl?: string;
   slides?: Slide[];
   workspaceSnapshot?: WorkspaceRecordingSnapshot;
   runtimeSnapshot?: RuntimeRecordingSnapshot;
@@ -328,5 +334,33 @@ export function readSegmentHeader(
 }
 
 export function isKnownSegmentKind(kind: number): boolean {
-  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.cameraChunk;
+  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.audioChunk;
+}
+
+// ----------------------------------------------------------------------------
+// External camera video MIME <-> filename extension helpers
+// ----------------------------------------------------------------------------
+
+const CAMERA_MIME_BY_EXT: Record<string, string> = {
+  webm: "video/webm",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+};
+
+/** Best-effort camera MIME type inferred from a sibling video filename's extension. */
+export function cameraMimeFromFilename(filename: string | undefined): string | undefined {
+  if (!filename) return undefined;
+  const ext = filename.split(".").pop()?.toLowerCase();
+  return ext ? CAMERA_MIME_BY_EXT[ext] : undefined;
+}
+
+/** Sibling video file extension (no dot) for a camera blob's MIME type; defaults to `webm`. */
+export function cameraExtensionFromMime(mimeType: string | undefined): string {
+  if (mimeType) {
+    const base = mimeType.split(";")[0].trim().toLowerCase();
+    for (const [ext, mime] of Object.entries(CAMERA_MIME_BY_EXT)) {
+      if (mime === base) return ext;
+    }
+  }
+  return "webm";
 }

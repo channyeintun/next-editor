@@ -142,9 +142,7 @@ interface DecodedStreamState {
   runtimeEvents: RuntimeRecordingEvent[];
   cursorEvents: CursorRecordingEvent[];
   audioBlob?: Blob;
-  cameraBlob?: Blob;
   audioFragments: RecordingMediaFragment[];
-  cameraFragments: RecordingMediaFragment[];
   clusterSummaries: RecordingClusterMeta[];
 }
 
@@ -159,8 +157,8 @@ function assembleRecording(state: DecodedStreamState): Recording {
   const decodedDuration = Math.max(meta.duration, state.maxSegmentTimeMs);
   const audioStartOffsetMs =
     meta.audioStartOffsetMs ?? state.audioFragments[0]?.startTimeMs ?? undefined;
-  const cameraStartOffsetMs =
-    meta.cameraStartOffsetMs ?? state.cameraFragments[0]?.startTimeMs ?? undefined;
+  // Camera bytes never live in the stream; its offset comes from meta alone.
+  const cameraStartOffsetMs = meta.cameraStartOffsetMs ?? undefined;
 
   const provisionalRecording: Recording = {
     version: meta.version,
@@ -183,9 +181,11 @@ function assembleRecording(state: DecodedStreamState): Recording {
     audioBlob: state.audioBlob,
     audioSource: meta.audioSource,
     audioStartOffsetMs,
-    cameraBlob: state.cameraBlob,
+    // Camera is always external — the stream carries only the reference/metadata, never bytes.
     cameraSource: meta.cameraSource,
     cameraStartOffsetMs,
+    cameraFile: meta.cameraFile,
+    cameraUrl: meta.cameraUrl,
     streamFinalized,
     workspaceSnapshot: meta.workspaceSnapshot,
     runtimeSnapshot: meta.runtimeSnapshot,
@@ -206,8 +206,8 @@ function assembleRecording(state: DecodedStreamState): Recording {
       : deriveRecordingTracks(provisionalRecording);
 
   const mediaFragments =
-    state.audioFragments.length > 0 || state.cameraFragments.length > 0
-      ? [...state.audioFragments, ...state.cameraFragments].sort(
+    state.audioFragments.length > 0
+      ? [...state.audioFragments].sort(
           (left, right) =>
             left.startTimeMs - right.startTimeMs || left.clusterIndex - right.clusterIndex,
         )
@@ -256,7 +256,6 @@ function decodeSegments(bytes: Uint8Array): Recording {
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const cursorEvents: CursorRecordingEvent[] = [];
   const audioSegments: SequencedMediaSegment[] = [];
-  const cameraSegments: SequencedMediaSegment[] = [];
   const clusterMap = new Map<number, RecordingClusterMeta>();
   let hasSegments = false;
   let maxSegmentTimeMs = meta.duration;
@@ -308,18 +307,6 @@ function decodeSegments(bytes: Uint8Array): Recording {
           sequence: segment.sequence,
         });
         break;
-      case SEGMENT_KIND.cameraChunk:
-        cameraSegments.push({
-          trackId: getTrackId(meta.tracks, "camera", DEFAULT_CAMERA_TRACK_ID),
-          clusterIndex: segment.clusterIndex,
-          startTimeMs: segment.startTimeMs,
-          endTimeMs: segment.endTimeMs,
-          byteLength: segment.payload.length,
-          bytes: segment.payload.slice(),
-          isInit: segment.isInit,
-          sequence: segment.sequence,
-        });
-        break;
     }
   }
 
@@ -333,20 +320,12 @@ function decodeSegments(bytes: Uint8Array): Recording {
   cursorEvents.sort((left, right) => left.timestamp - right.timestamp);
 
   const sortedAudioSegments = sortMediaSegments(audioSegments);
-  const sortedCameraSegments = sortMediaSegments(cameraSegments);
 
   const audioBlob =
     sortedAudioSegments.length > 0
       ? new Blob(
           [copyToArrayBuffer(concatChunks(sortedAudioSegments.map((segment) => segment.bytes)))],
           { type: meta.audioType || "audio/webm" },
-        )
-      : undefined;
-  const cameraBlob =
-    sortedCameraSegments.length > 0
-      ? new Blob(
-          [copyToArrayBuffer(concatChunks(sortedCameraSegments.map((segment) => segment.bytes)))],
-          { type: meta.cameraType || "video/webm" },
         )
       : undefined;
 
@@ -365,11 +344,7 @@ function decodeSegments(bytes: Uint8Array): Recording {
     runtimeEvents,
     cursorEvents,
     audioBlob,
-    cameraBlob,
     audioFragments: sortedAudioSegments.map(
-      ({ bytes: _bytes, sequence: _sequence, ...fragment }) => fragment,
-    ),
-    cameraFragments: sortedCameraSegments.map(
       ({ bytes: _bytes, sequence: _sequence, ...fragment }) => fragment,
     ),
     clusterSummaries: Array.from(clusterMap.values()),
@@ -432,11 +407,9 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const cursorEvents: CursorRecordingEvent[] = [];
   const audioFragments: RecordingMediaFragment[] = [];
-  const cameraFragments: RecordingMediaFragment[] = [];
   const clusterMap = new Map<number, RecordingClusterMeta>();
 
   let audioBlob: Blob | undefined;
-  let cameraBlob: Blob | undefined;
   let segmentCount = 0;
   let maxSegmentTimeMs = 0;
 
@@ -537,18 +510,6 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         };
         break;
       }
-      case SEGMENT_KIND.cameraChunk: {
-        const chunk = payload.slice();
-        const type = meta.cameraType || "video/webm";
-        const mediaMeta = meta;
-        commit = () => {
-          cameraBlob = cameraBlob
-            ? new Blob([cameraBlob, chunk], { type })
-            : new Blob([chunk], { type });
-          cameraFragments.push(mediaFragmentFromSegment(mediaMeta, "camera", header, chunk.length));
-        };
-        break;
-      }
       default:
         commit = () => {};
     }
@@ -637,9 +598,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         runtimeEvents,
         cursorEvents,
         audioBlob,
-        cameraBlob,
         audioFragments,
-        cameraFragments,
         clusterSummaries: Array.from(clusterMap.values()),
       });
     },

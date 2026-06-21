@@ -5,7 +5,9 @@ import {
   decompressBinaryToRecordings,
 } from "../storage/recordingCodecClient";
 import { createStreamingRecordingReader } from "../storage/streamingRecordingCodec";
+import { createImportedCameraObjectUrl } from "../storage/cameraVideoUrl";
 import { decodeBase64 } from "../core/src/utils/base64";
+import type { Recording } from "../core/src";
 
 const SAME_ORIGIN_PROXY_PATH = "/api/proxy";
 const MISSING_PROXY_STATUS_CODES = new Set([404, 405, 501]);
@@ -33,6 +35,22 @@ function startsWithScr3(bytes: Uint8Array): boolean {
     bytes.length >= SCR3_MAGIC_BYTES.length &&
     SCR3_MAGIC_BYTES.every((value, index) => bytes[index] === value)
   );
+}
+
+/**
+ * Resolve an external camera reference (`cameraFile`) into an absolute `cameraUrl` relative to the
+ * original `.ne` URL, so a sibling video plays via a native `<video src>`. Resolves against the
+ * user-facing `.ne` URL (not any same-origin proxy URL) so the video is fetched from its real host.
+ */
+function withResolvedCameraUrl(recording: Recording, baseUrl: string | undefined): Recording {
+  if (!recording.cameraFile || recording.cameraUrl || !baseUrl) {
+    return recording;
+  }
+  try {
+    return { ...recording, cameraUrl: new URL(recording.cameraFile, baseUrl).toString() };
+  } catch {
+    return recording;
+  }
 }
 
 function buildSameOriginProxyUrl(targetUrl: string): string {
@@ -78,7 +96,12 @@ export const useUrlLoader = () => {
   };
 
   const importNextEditorFile = useCallback(
-    async (file: File) => {
+    async (file: File, videoFile?: File) => {
+      // Attach a dropped sibling camera video as an object URL so playback streams it directly.
+      const attachVideo = (recording: Recording): Recording =>
+        recording.cameraFile && videoFile
+          ? { ...recording, cameraUrl: createImportedCameraObjectUrl(videoFile) }
+          : recording;
       try {
         setIsLoading(true);
         if (file.name.endsWith(".ne")) {
@@ -91,7 +114,7 @@ export const useUrlLoader = () => {
           if (startsWithScr3(bytes)) {
             const recordings = await decompressBinaryToRecordings(bytes);
             if (recordings.length > 0) {
-              loadRecording(recordings[0]);
+              loadRecording(attachVideo(recordings[0]));
             }
             return;
           }
@@ -114,7 +137,7 @@ export const useUrlLoader = () => {
           const recordings = await decodeBase64ToRecordings(stripped);
 
           if (recordings.length > 0) {
-            loadRecording(recordings[0]);
+            loadRecording(attachVideo(recordings[0]));
           }
         }
       } catch (error) {
@@ -128,28 +151,28 @@ export const useUrlLoader = () => {
   );
 
   const loadRecordingFromBase64Text = useCallback(
-    async (text: string) => {
+    async (text: string, baseUrl?: string) => {
       const stripped = text.replace(/\s/g, "");
       if (!stripped) {
         throw new Error("File appears to be empty or corrupted");
       }
       const recordings = await decodeBase64ToRecordings(stripped);
       if (recordings.length > 0) {
-        loadRecording(recordings[0]);
+        loadRecording(withResolvedCameraUrl(recordings[0], baseUrl));
       }
     },
     [loadRecording],
   );
 
   const loadRecordingFromBinaryBytes = useCallback(
-    async (bytes: Uint8Array) => {
+    async (bytes: Uint8Array, baseUrl?: string) => {
       if (!startsWithScr3(bytes)) {
         throw new Error("File does not contain a valid SCR3 recording stream");
       }
 
       const recordings = await decompressBinaryToRecordings(bytes);
       if (recordings.length > 0) {
-        loadRecording(recordings[0]);
+        loadRecording(withResolvedCameraUrl(recordings[0], baseUrl));
       }
     },
     [loadRecording],
@@ -162,7 +185,7 @@ export const useUrlLoader = () => {
    * caller for whole-file decoding when the body is not streamable.
    */
   const streamRecordingFromResponse = useCallback(
-    async (response: Response): Promise<boolean> => {
+    async (response: Response, baseUrl?: string): Promise<boolean> => {
       const body = response.body;
       if (!body || typeof body.getReader !== "function") {
         return false;
@@ -185,14 +208,16 @@ export const useUrlLoader = () => {
           return;
         }
 
+        const resolved = withResolvedCameraUrl(recording, baseUrl);
+
         if (!loadedOnce) {
-          loadRecording(recording);
+          loadRecording(resolved);
           loadedOnce = true;
           setIsLoading(false);
           return;
         }
 
-        extendRecording(recording);
+        extendRecording(resolved);
       };
 
       // Both `.ne` encodings — raw binary and base64-wrapped — feed the same incremental
@@ -308,7 +333,7 @@ export const useUrlLoader = () => {
         let streamed = false;
         let bodyConsumed = false;
         try {
-          streamed = await streamRecordingFromResponse(response);
+          streamed = await streamRecordingFromResponse(response, url);
         } catch {
           bodyConsumed = true;
         }
@@ -317,9 +342,9 @@ export const useUrlLoader = () => {
           const source = bodyConsumed ? await fetchNextEditorUrl(url) : response;
           const bytes = new Uint8Array(await source.arrayBuffer());
           if (startsWithScr3(bytes)) {
-            await loadRecordingFromBinaryBytes(bytes);
+            await loadRecordingFromBinaryBytes(bytes, url);
           } else {
-            await loadRecordingFromBase64Text(new TextDecoder().decode(bytes).trim());
+            await loadRecordingFromBase64Text(new TextDecoder().decode(bytes).trim(), url);
           }
         }
       } catch (error) {

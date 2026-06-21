@@ -110,8 +110,6 @@ export interface RecordingSession {
    * `MediaRecorder` timeslice fragments; for a selected audio file it is the single file blob.
    */
   audioFragments: RecordingSessionMediaFragment[];
-  /** Timeline-aware camera fragments captured during recording, append-only. */
-  cameraFragments: RecordingSessionMediaFragment[];
   /** Last known mouse position */
   lastMousePosition: MouseCursorPosition;
 }

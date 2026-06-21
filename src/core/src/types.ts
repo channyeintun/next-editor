@@ -191,6 +191,16 @@ export interface Recording {
   cameraSource?: RecordingCameraSource;
   /** Camera warmup offset (ms) between the recording origin and the first camera frame. */
   cameraStartOffsetMs?: number;
+  /**
+   * Sibling video filename for camera stored outside the `.ne` (e.g. `recording-xyz.webm`).
+   * When set, the stream carries no inline `cameraChunk` segments; the video lives in its own file.
+   */
+  cameraFile?: string;
+  /**
+   * Resolved URL for the external camera video — a hosted sibling URL or an object URL created
+   * from an imported file. Preferred by playback so the browser range-streams the video directly.
+   */
+  cameraUrl?: string;
   /** True when a decoded SCR3 stream included its footer; false for a still-growing prefix. */
   streamFinalized?: boolean;
   workspaceSnapshot?: WorkspaceRecordingSnapshot;

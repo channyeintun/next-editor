@@ -114,29 +114,38 @@ const CameraOverlay: React.FC = () => {
   const [previewError, setPreviewError] = useState(false);
 
   const cameraBlob = recording?.cameraBlob instanceof Blob ? recording.cameraBlob : null;
+  // External camera video (sibling file or hosted URL) referenced by the recording. Preferred over
+  // an inline blob so the browser range-streams the video instead of holding it all in memory.
+  const cameraUrl = recording?.cameraUrl ?? null;
   const cameraStartOffsetMs = recording?.cameraStartOffsetMs ?? 0;
-  // Live preview takes over whenever the camera toggle is on and there is no recorded blob to
+  // Live preview takes over whenever the camera toggle is on and there is no recorded camera to
   // replay (i.e. idle or actively recording). During playback, the loaded recording wins and
-  // replays the latest reassembled camera blob snapshot, which can grow across `extendRecording`
-  // calls as streamed camera fragments arrive.
-  const previewMode = isPreviewEnabled && !cameraBlob;
+  // replays either the external video URL (loaded/imported recordings) or the in-memory camera
+  // blob (just-recorded or IndexedDB-restored recordings).
+  const previewMode = isPreviewEnabled && !cameraBlob && !cameraUrl;
 
   useEffect(() => {
+    // External video: use the URL directly. Its lifecycle is owned elsewhere (a hosted URL, or an
+    // imported object URL tracked in cameraVideoUrl.ts), so do not revoke it here.
+    if (cameraUrl) {
+      setVideoUrl(cameraUrl);
+      return;
+    }
+
     if (!cameraBlob) {
       setVideoUrl(null);
       return;
     }
 
-    // Prefix decoding rebuilds `cameraBlob` from whatever camera fragments are currently
-    // available. Replacing the object URL here lets the overlay follow those growing snapshots
-    // without changing its React/UI boundary.
+    // In-memory camera blob (a just-recorded session or an IndexedDB-restored recording): wrap it
+    // in an object URL for the <video>, and revoke it when the blob changes or the overlay unmounts.
     const nextUrl = URL.createObjectURL(cameraBlob);
     setVideoUrl(nextUrl);
 
     return () => {
       URL.revokeObjectURL(nextUrl);
     };
-  }, [cameraBlob]);
+  }, [cameraBlob, cameraUrl]);
 
   useEffect(() => {
     const handleVisibilityChange = (event: Event) => {
@@ -317,7 +326,7 @@ const CameraOverlay: React.FC = () => {
   const handleMinimize = useCallback(() => setIsMinimized(true), []);
   const handleRestore = useCallback(() => setIsMinimized(false), []);
 
-  const showPlayback = Boolean(cameraBlob) && Boolean(videoUrl) && isVisible;
+  const showPlayback = Boolean(cameraBlob || cameraUrl) && Boolean(videoUrl) && isVisible;
   const showPreview = previewMode && !previewError;
   if (!showPlayback && !showPreview) {
     return null;

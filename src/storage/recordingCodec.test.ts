@@ -7,6 +7,7 @@ import {
   decodeRecordingStream,
   encodeRecordingToStream,
 } from "./streamingRecordingCodec";
+import { FLAG_HAS_CAMERA } from "./streamingRecordingCodec/format";
 
 function makeKeyframe(timestamp: number, content: string) {
   return {
@@ -159,12 +160,11 @@ describe("recordingCodec", () => {
     expect(Array.from(streamedAudio)).toEqual(Array.from(oneShotAudio));
     expect(Array.from(streamedAudio)).toEqual([10, 20, 30, 40, 50]);
 
-    const [streamedCamera, oneShotCamera] = await Promise.all([
-      readBlobAsArray(streamed.cameraBlob as Blob),
-      readBlobAsArray(oneShot.cameraBlob as Blob),
-    ]);
-    expect(Array.from(streamedCamera)).toEqual(Array.from(oneShotCamera));
-    expect(Array.from(streamedCamera)).toEqual([1, 2, 3]);
+    // Camera video is never embedded in the stream, so even though the recording had a camera
+    // blob, neither decode path reconstructs one — only the camera metadata survives.
+    expect(streamed.cameraBlob).toBeUndefined();
+    expect(oneShot.cameraBlob).toBeUndefined();
+    expect(streamed.cameraSource).toBe("camera");
   });
 
   it("decodes a replayable prefix before the footer arrives, then finalizes", async () => {
@@ -319,5 +319,45 @@ describe("recordingCodec", () => {
 
     const audioBytes = await readBlobAsArray(streamed.audioBlob as Blob);
     expect(Array.from(audioBytes)).toEqual([7, 8, 9]);
+  });
+
+  it("externalizes camera as a sibling reference instead of inline chunks", async () => {
+    // A recording whose camera lives in its own file carries only a `cameraFile` reference (no
+    // cameraBlob). The stream must still advertise a camera track but embed no camera bytes.
+    const recording = createRecording({
+      duration: 800,
+      frames: [makeKeyframe(0, "a\n"), makeKeyframe(500, "ab\n")],
+      cameraFile: "recording-1.webm",
+      cameraSource: "camera",
+      cameraStartOffsetMs: 120,
+    });
+
+    const bytes = await encodeRecordingToStream(recording);
+
+    // Header still advertises a camera track via FLAG_HAS_CAMERA (flags u16 at byte offset 6)...
+    const flags = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint16(6, true);
+    expect(flags & FLAG_HAS_CAMERA).toBeTruthy();
+
+    const decoded = decodeRecordingStream(bytes);
+    expect(decoded.cameraFile).toBe("recording-1.webm");
+    expect(decoded.cameraSource).toBe("camera");
+    expect(decoded.cameraStartOffsetMs).toBe(120);
+    // ...but no camera bytes were embedded, so there is no reassembled blob.
+    expect(decoded.cameraBlob).toBeUndefined();
+  });
+
+  it("round trips an externalized camera through the base64 .ne path", async () => {
+    const recording = createRecording({
+      cameraFile: "my-recording.webm",
+      cameraSource: "camera",
+      cameraStartOffsetMs: 80,
+    });
+
+    const encoded = await encodeRecordingToBase64Stream(recording);
+    const [decoded] = await decodeBase64ToRecordings(encoded);
+
+    expect(decoded.cameraFile).toBe("my-recording.webm");
+    expect(decoded.cameraStartOffsetMs).toBe(80);
+    expect(decoded.cameraBlob).toBeUndefined();
   });
 });

@@ -56,6 +56,8 @@ interface Recording {
   cameraBlob?: Blob | CameraPlaceholder;
   cameraSource?: "camera";
   cameraStartOffsetMs?: number;
+  cameraFile?: string; // sibling video filename when camera is stored outside the .ne
+  cameraUrl?: string; // resolved URL for the external camera video (hosted or imported object URL)
   workspaceSnapshot?: WorkspaceRecordingSnapshot;
   runtimeSnapshot?: RuntimeRecordingSnapshot;
   duration: number;
@@ -146,9 +148,25 @@ type RecordingAudioSource = "microphone" | "external";
 type RecordingCameraSource = "camera";
 ```
 
-- `audioBlob` and `cameraBlob` remain the assembled playback facades that UI surfaces consume.
-- `tracks`, `clusters`, and `mediaFragments` describe the stream-oriented container layout: time-clustered segments, per-track metadata, and timeline-aligned media coverage.
-- During active capture, the machine session tracks `audioFragments` and `cameraFragments` with `startTimeMs` / `endTimeMs` so the live SCR3 stream and the finalized recording are built from the same timeline-aware media model.
+- `audioBlob` remains the assembled audio playback facade that UI surfaces consume.
+- **Camera video is always external — its bytes never live inside an SCR3 stream** (exported,
+  persisted, or live-streamed). The stream carries only a camera reference + metadata
+  (`cameraFile`, `cameraUrl`, `cameraType`, `cameraSource`, `cameraStartOffsetMs`). The camera bytes
+  live as:
+  - an in-memory `cameraBlob` on the `Recording` (just recorded, or paired from an imported file),
+  - a separate IndexedDB blob (the `recording-camera` object store) for persisted recordings, and/or
+  - a hosted sibling URL resolved to `cameraUrl` for `.ne` files loaded over the network.
+    On export, a recording with a camera produces two artifacts — a small `.ne` plus a sibling video.
+    On load, `cameraFile` resolves to a `cameraUrl` (hosted URL or imported object URL) and plays
+    through a native `<video>` so the browser range-streams it. A missing video is non-fatal and
+    silent: the recording plays without the camera overlay.
+- `tracks`, `clusters`, and `mediaFragments` describe the stream-oriented container layout for
+  **audio** (and editor/event tracks): time-clustered segments, per-track metadata, and
+  timeline-aligned media coverage. Camera is not part of this stream layout.
+- During active capture, the machine session tracks `audioFragments` with `startTimeMs` / `endTimeMs`
+  so the live SCR3 stream and the finalized recording are built from the same timeline-aware audio
+  model. Camera is captured as one finalized blob when the camera recorder stops (no per-chunk
+  streaming, so camera is not crash-resilient mid-recording).
 
 ## Provider Context Shapes
 
@@ -178,6 +196,7 @@ At the container level, SCR3 metadata includes:
 - audio and camera MIME hints
 - `audioStartOffsetMs`
 - `cameraStartOffsetMs`
+- `cameraFile` / `cameraUrl` when the camera video is stored as a sibling file instead of inline
 
 Segments then carry append-only, time-clustered payloads for frames, events, audio, and camera data.
 

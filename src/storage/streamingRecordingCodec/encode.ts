@@ -7,6 +7,7 @@ import {
   buildFooterChunk,
   buildHeaderChunk,
   buildSegmentChunk,
+  cameraMimeFromFilename,
   clampU32,
   concatChunks,
   DEFAULT_AUDIO_TRACK_ID,
@@ -59,7 +60,6 @@ export interface StreamingRecordingWriter {
     options?: SegmentAppendOptions,
   ): void;
   appendAudioChunk(chunk: Uint8Array, options?: SegmentAppendOptions): void;
-  appendCameraChunk(chunk: Uint8Array, options?: SegmentAppendOptions): void;
   finalize(): Uint8Array;
   drainPending(): Uint8Array;
   isFinalized(): boolean;
@@ -179,18 +179,6 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
         isInit: options?.isInit,
       });
     },
-    appendCameraChunk(chunk, options) {
-      ensureWritable();
-      if (chunk.length === 0) return;
-      const startTimeMs = options?.startTimeMs ?? headerMeta?.cameraStartOffsetMs ?? 0;
-      appendSegment(SEGMENT_KIND.cameraChunk, chunk, {
-        startTimeMs,
-        endTimeMs: options?.endTimeMs ?? startTimeMs,
-        firstFrameIndex: options?.firstFrameIndex ?? -1,
-        clusterIndex: options?.clusterIndex,
-        isInit: options?.isInit,
-      });
-    },
     finalize() {
       ensureWritable();
       pushChunk(buildFooterChunk(index));
@@ -300,7 +288,14 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
   const tracks = deriveRecordingTracks(normalized);
   const clusters = deriveRecordingClusters(normalized);
   const audioFragments = await materializeMediaSegments(normalized, "audio", tracks, clusters);
-  const cameraFragments = await materializeMediaSegments(normalized, "camera", tracks, clusters);
+  // Camera video is never embedded in the stream — its bytes live in a separate file/blob. The
+  // stream carries only the camera reference and metadata in its header.
+  const hasCamera = Boolean(
+    normalized.cameraBlob ||
+    normalized.cameraFile ||
+    normalized.cameraUrl ||
+    normalized.cameraSource,
+  );
   const audioTrack = tracks.find((track) => track.kind === "audio");
   const cameraTrack = tracks.find((track) => track.kind === "camera");
   const writer = createStreamingRecordingWriter();
@@ -317,9 +312,13 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     audioType: audioFragments.length > 0 ? audioTrack?.mimeType || "audio/webm" : undefined,
     audioSource: audioFragments.length > 0 ? normalized.audioSource : undefined,
     audioStartOffsetMs: audioFragments.length > 0 ? normalized.audioStartOffsetMs : undefined,
-    cameraType: cameraFragments.length > 0 ? cameraTrack?.mimeType || "video/webm" : undefined,
-    cameraSource: cameraFragments.length > 0 ? normalized.cameraSource : undefined,
-    cameraStartOffsetMs: cameraFragments.length > 0 ? normalized.cameraStartOffsetMs : undefined,
+    cameraType: hasCamera
+      ? cameraTrack?.mimeType || cameraMimeFromFilename(normalized.cameraFile) || "video/webm"
+      : undefined,
+    cameraSource: hasCamera ? normalized.cameraSource : undefined,
+    cameraStartOffsetMs: hasCamera ? normalized.cameraStartOffsetMs : undefined,
+    cameraFile: normalized.cameraFile,
+    cameraUrl: normalized.cameraUrl,
     slides: normalized.slides,
     workspaceSnapshot: normalized.workspaceSnapshot,
     runtimeSnapshot: normalized.runtimeSnapshot,
@@ -403,21 +402,6 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
       priority: 2,
       write: () =>
         writer.appendAudioChunk(fragment.bytes, {
-          startTimeMs: fragment.startTimeMs,
-          endTimeMs: fragment.endTimeMs,
-          clusterIndex: fragment.clusterIndex,
-          isInit: fragment.isInit ?? index === 0,
-        }),
-    });
-  });
-
-  cameraFragments.forEach((fragment, index) => {
-    pendingSegments.push({
-      clusterIndex: fragment.clusterIndex,
-      startTimeMs: fragment.startTimeMs,
-      priority: 3,
-      write: () =>
-        writer.appendCameraChunk(fragment.bytes, {
           startTimeMs: fragment.startTimeMs,
           endTimeMs: fragment.endTimeMs,
           clusterIndex: fragment.clusterIndex,

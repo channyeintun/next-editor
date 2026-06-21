@@ -1,14 +1,21 @@
 import type { Recording } from "../core/src";
 
 const RECORDING_DATABASE_NAME = "next-editor-recordings-db";
-const RECORDING_DATABASE_VERSION = 2;
+const RECORDING_DATABASE_VERSION = 3;
 const RECORDING_METADATA_STORE = "recording-metadata";
 const RECORDING_SEGMENTS_STORE = "recording-segments";
+// Camera video is stored outside the SCR3 byte stream, as a standalone Blob keyed by recording id.
+const RECORDING_CAMERA_STORE = "recording-camera";
 
 interface StoredRecordingSegment {
   recordingId: string;
   seq: number;
   bytes: ArrayBuffer;
+}
+
+interface StoredCameraVideo {
+  recordingId: string;
+  blob: Blob;
 }
 
 export interface StoredRecordingMetadata {
@@ -26,6 +33,8 @@ export interface StoredRecordingMetadata {
 export interface StoredRecordingEntry {
   metadata: StoredRecordingMetadata;
   binaryData: Uint8Array;
+  /** Camera video stored alongside the (camera-free) stream; absent when there is no camera. */
+  cameraBlob?: Blob;
 }
 
 export class IndexedDBRecordingStore {
@@ -60,8 +69,7 @@ export class IndexedDBRecordingStore {
             keyPath: "id",
           });
         } else if (upgradeTransaction) {
-          // Old recordings are not retained: their single-blob payloads are dropped
-          // below, so discard the dangling metadata too.
+          // Old recordings are not retained across an upgrade; discard the dangling metadata.
           upgradeTransaction.objectStore(RECORDING_METADATA_STORE).clear();
         }
 
@@ -73,6 +81,16 @@ export class IndexedDBRecordingStore {
         if (!database.objectStoreNames.contains(RECORDING_SEGMENTS_STORE)) {
           database.createObjectStore(RECORDING_SEGMENTS_STORE, {
             keyPath: ["recordingId", "seq"],
+          });
+        } else if (upgradeTransaction) {
+          // Stream segments of non-retained old recordings are dropped along with their metadata.
+          upgradeTransaction.objectStore(RECORDING_SEGMENTS_STORE).clear();
+        }
+
+        // v3: camera video moved out of the SCR3 stream into its own store.
+        if (!database.objectStoreNames.contains(RECORDING_CAMERA_STORE)) {
+          database.createObjectStore(RECORDING_CAMERA_STORE, {
+            keyPath: "recordingId",
           });
         }
       };
@@ -175,14 +193,16 @@ export class IndexedDBRecordingStore {
   async getEntry(id: string): Promise<StoredRecordingEntry | null> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE],
+      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE, RECORDING_CAMERA_STORE],
       "readonly",
     );
     const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
     const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
+    const cameraStore = transaction.objectStore(RECORDING_CAMERA_STORE);
 
     const metadata = await this.requestToPromise(metadataStore.get(id));
     const segments = await this.requestToPromise(segmentsStore.getAll(this.segmentRange(id)));
+    const camera = await this.requestToPromise(cameraStore.get(id));
     await this.transactionToPromise(transaction);
 
     if (!metadata) {
@@ -194,20 +214,22 @@ export class IndexedDBRecordingStore {
       return null;
     }
 
-    return { metadata, binaryData };
+    return { metadata, binaryData, cameraBlob: camera?.blob };
   }
 
   async getAllEntries(): Promise<StoredRecordingEntry[]> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE],
+      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE, RECORDING_CAMERA_STORE],
       "readonly",
     );
     const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
     const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
+    const cameraStore = transaction.objectStore(RECORDING_CAMERA_STORE);
 
     const metadata = await this.requestToPromise(metadataStore.getAll());
     const segments = await this.requestToPromise(segmentsStore.getAll());
+    const cameras = await this.requestToPromise(cameraStore.getAll());
     await this.transactionToPromise(transaction);
 
     const segmentsById = new Map<string, StoredRecordingSegment[]>();
@@ -218,6 +240,11 @@ export class IndexedDBRecordingStore {
       } else {
         segmentsById.set(segment.recordingId, [segment]);
       }
+    }
+
+    const cameraById = new Map<string, Blob>();
+    for (const camera of cameras) {
+      cameraById.set(camera.recordingId, camera.blob);
     }
 
     const binaryById = new Map<string, Uint8Array>();
@@ -247,6 +274,7 @@ export class IndexedDBRecordingStore {
       .map((entry) => ({
         metadata: entry,
         binaryData: binaryById.get(entry.id)!,
+        cameraBlob: cameraById.get(entry.id),
       }));
   }
 
@@ -261,11 +289,12 @@ export class IndexedDBRecordingStore {
 
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE],
+      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE, RECORDING_CAMERA_STORE],
       "readwrite",
     );
     const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
     const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
+    const cameraStore = transaction.objectStore(RECORDING_CAMERA_STORE);
 
     for (const entry of entries) {
       metadataStore.put(entry.metadata);
@@ -276,6 +305,15 @@ export class IndexedDBRecordingStore {
         seq: 0,
         bytes: this.toArrayBuffer(entry.binaryData),
       } satisfies StoredRecordingSegment);
+      // Camera video lives in its own store; replace or clear it to match the entry.
+      if (entry.cameraBlob) {
+        cameraStore.put({
+          recordingId: entry.metadata.id,
+          blob: entry.cameraBlob,
+        } satisfies StoredCameraVideo);
+      } else {
+        cameraStore.delete(entry.metadata.id);
+      }
     }
 
     await this.transactionToPromise(transaction);
@@ -306,22 +344,24 @@ export class IndexedDBRecordingStore {
   async delete(id: string): Promise<void> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE],
+      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE, RECORDING_CAMERA_STORE],
       "readwrite",
     );
     transaction.objectStore(RECORDING_METADATA_STORE).delete(id);
     transaction.objectStore(RECORDING_SEGMENTS_STORE).delete(this.segmentRange(id));
+    transaction.objectStore(RECORDING_CAMERA_STORE).delete(id);
     await this.transactionToPromise(transaction);
   }
 
   async clear(): Promise<void> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE],
+      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE, RECORDING_CAMERA_STORE],
       "readwrite",
     );
     transaction.objectStore(RECORDING_METADATA_STORE).clear();
     transaction.objectStore(RECORDING_SEGMENTS_STORE).clear();
+    transaction.objectStore(RECORDING_CAMERA_STORE).clear();
     await this.transactionToPromise(transaction);
   }
 }

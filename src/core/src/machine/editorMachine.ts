@@ -55,7 +55,6 @@ import {
   buildMediaFragmentMetadata,
   buildRecordingClusters,
   buildTrackMetadata,
-  CAMERA_TRACK_ID,
   createFrame,
   getLoadedRecordingPayload,
   getPlaybackAudioState,
@@ -303,9 +302,9 @@ export const editorMachine = setup({
           runtimeEvents,
           cursorEvents: [{ timestamp: 0, ...initialMousePosition }],
           // External (selected file) audio is fully known at start, so seed it as the single
-          // audio fragment. Microphone and camera fragments are appended as timeslice events.
+          // audio fragment. Microphone audio is appended as timeslice events. Camera video is
+          // never streamed inline — its blob is captured whole when the camera recorder stops.
           audioFragments: externalAudioFragment,
-          cameraFragments: [],
           lastMousePosition: initialMousePosition,
         },
         lastCallbackFrameTimestamp: undefined,
@@ -501,16 +500,13 @@ export const editorMachine = setup({
         cameraMimeType: context.camera.mimeType || context.camera.blob?.type,
         cameraSource: context.camera.source || undefined,
         cameraStartOffsetMs: context.camera.startOffsetMs,
-        hasCamera: context.session.cameraFragments.length > 0 || Boolean(context.camera.blob),
+        hasCamera: Boolean(context.camera.blob),
       });
-      const mediaFragments = [
-        ...buildMediaFragmentMetadata(
-          context.session.audioFragments,
-          clusters,
-          context.audio.source === "external" ? duration : undefined,
-        ),
-        ...buildMediaFragmentMetadata(context.session.cameraFragments, clusters),
-      ];
+      const mediaFragments = buildMediaFragmentMetadata(
+        context.session.audioFragments,
+        clusters,
+        context.audio.source === "external" ? duration : undefined,
+      );
 
       const recording: Recording = {
         version: 3,
@@ -1104,23 +1100,6 @@ export const editorMachine = setup({
       };
     }),
 
-    captureCameraChunk: assign(({ context, event }) => {
-      if (event.type !== "CAMERA_CHUNK" || !context.session) return {};
-      const fragment: RecordingSessionMediaFragment = {
-        trackId: CAMERA_TRACK_ID,
-        startTimeMs: context.camera.startOffsetMs + event.startTimeMs,
-        endTimeMs: context.camera.startOffsetMs + event.endTimeMs,
-        blob: event.chunk,
-        mimeType: event.chunk.type || context.camera.mimeType || "video/webm",
-      };
-      return {
-        session: {
-          ...context.session,
-          cameraFragments: [...context.session.cameraFragments, fragment],
-        },
-      };
-    }),
-
     storeCameraStarted: assign(({ context, event }) => {
       if (event.type !== "CAMERA_STARTED") return {};
       // The camera MediaRecorder only starts after getUserMedia resolves, which lags the
@@ -1500,9 +1479,6 @@ export const editorMachine = setup({
         CAMERA_STARTED: {
           actions: "storeCameraStarted",
         },
-        CAMERA_CHUNK: {
-          actions: "captureCameraChunk",
-        },
         CAMERA_STOPPED: {
           actions: "storeCameraBlob",
         },
@@ -1667,9 +1643,6 @@ export const editorMachine = setup({
       on: {
         CHUNK: {
           actions: "captureAudioChunk",
-        },
-        CAMERA_CHUNK: {
-          actions: "captureCameraChunk",
         },
         STOPPED: [
           {

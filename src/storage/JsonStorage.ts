@@ -11,12 +11,54 @@ import {
   encodeRecordingToStream,
   normalizeRecording,
 } from "./recordingCodecClient";
+import { cameraExtensionFromMime } from "./streamingRecordingCodec/format";
+import { createImportedCameraObjectUrl } from "./cameraVideoUrl";
 
 interface StorageStats {
   count: number;
   totalSize: string;
   compressedSize?: string;
   compressionRatio?: string;
+}
+
+function stripExtension(filename: string): string {
+  return filename.replace(/\.[^.]+$/, "");
+}
+
+/**
+ * Choose the camera video file that pairs with an imported `.ne`. Prefers an exact `cameraFile`
+ * name match, then a basename match against the `.ne`, then the sole video file if only one was
+ * provided. Returns null when nothing matches (the recording then plays without camera).
+ */
+export function pickCompanionVideo(
+  videos: File[],
+  neFileName: string,
+  cameraFile: string | undefined,
+): File | null {
+  if (videos.length === 0) return null;
+  if (cameraFile) {
+    const exact = videos.find((video) => video.name === cameraFile);
+    if (exact) return exact;
+  }
+  const baseName = stripExtension(neFileName);
+  const byBase = videos.find((video) => stripExtension(video.name) === baseName);
+  if (byBase) return byBase;
+  return videos.length === 1 ? videos[0] : null;
+}
+
+/**
+ * Attach a companion camera video to a recording as an object URL on `cameraUrl`, when the
+ * recording references an external camera (`cameraFile`) and a matching video file is present.
+ */
+export function attachCompanionVideo(
+  recording: Recording,
+  videos: File[],
+  neFileName: string,
+): Recording {
+  if (!recording.cameraFile) return recording;
+  const video = pickCompanionVideo(videos, neFileName, recording.cameraFile);
+  if (!video) return recording;
+  return { ...recording, cameraUrl: createImportedCameraObjectUrl(video) };
 }
 
 /**
@@ -87,11 +129,15 @@ export class JsonStorage {
 
   private async createStoredEntry(recording: Recording): Promise<StoredRecordingEntry> {
     const normalizedRecording = normalizeRecording(recording);
+    // The stream is camera-free; the camera video is persisted separately as its own blob.
     const binaryData = await encodeRecordingToStream(normalizedRecording);
+    const cameraBlob =
+      normalizedRecording.cameraBlob instanceof Blob ? normalizedRecording.cameraBlob : undefined;
 
     return {
       metadata: this.createStoredMetadata(normalizedRecording, binaryData.byteLength),
       binaryData,
+      cameraBlob,
     };
   }
 
@@ -104,7 +150,9 @@ export class JsonStorage {
       );
     }
 
-    return normalizeRecording(recordings[0]);
+    const recording = normalizeRecording(recordings[0]);
+    // Reattach the separately-stored camera video (CameraOverlay turns the blob into an object URL).
+    return entry.cameraBlob ? { ...recording, cameraBlob: entry.cameraBlob } : recording;
   }
 
   private async loadIndexedDBRecordings(): Promise<Recording[]> {
@@ -165,27 +213,34 @@ export class JsonStorage {
   }
 
   /**
-   * Export recording as a compressed `.ne` file download using the SCR3 stream container.
+   * Export a recording. Camera video is written to its own sibling file so the `.ne` stays small
+   * and the video can be range-streamed by a native `<video>` on load: a camera recording exports
+   * as two files (`<name>.ne` + `<name>.<ext>`), one without camera as a single `.ne`.
    */
   async exportAsFile(recording: Recording, filename?: string): Promise<void> {
     try {
-      const base64Data = await encodeRecordingToBase64Stream(recording);
+      const baseFilename = filename?.replace(/\.(json|ne)$/, "") || `recording-${recording.id}`;
 
-      // Create blob with base64 data (will be decoded on import)
-      const blob = new Blob([base64Data], { type: "application/octet-stream" });
-      const url = URL.createObjectURL(blob);
+      // Externalize the camera blob into a sibling video file and reference it from the `.ne`.
+      const cameraBlob = recording.cameraBlob instanceof Blob ? recording.cameraBlob : null;
+      let recordingToEncode = recording;
+      let videoName: string | null = null;
+      if (cameraBlob) {
+        videoName = `${baseFilename}.${cameraExtensionFromMime(cameraBlob.type)}`;
+        recordingToEncode = { ...recording, cameraBlob: undefined, cameraFile: videoName };
+      }
 
-      const link = document.createElement("a");
-      link.href = url;
-      // Use .ne extension to indicate new binary format
-      const baseFilename = filename?.replace(/\.json$/, "") || `recording-${recording.id}`;
-      link.download = `${baseFilename}.ne`;
-      document.body.appendChild(link);
-      link.click();
+      const base64Data = await encodeRecordingToBase64Stream(recordingToEncode);
+      this.downloadBlob(
+        new Blob([base64Data], { type: "application/octet-stream" }),
+        `${baseFilename}.ne`,
+      );
 
-      // Cleanup
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      if (cameraBlob && videoName) {
+        // Small gap so the browser doesn't collapse the two programmatic downloads into one.
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        this.downloadBlob(cameraBlob, videoName);
+      }
     } catch (error) {
       throw new Error(
         `Failed to export recording: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -193,25 +248,43 @@ export class JsonStorage {
     }
   }
 
+  /** Trigger a browser download for a blob under the given filename. */
+  private downloadBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   /**
-   * Import recordings from .ne or .png format file
+   * Import recordings from a `.ne` file, optionally paired with a sibling camera video. The picker
+   * allows selecting both files together; the video is matched to the recording's `cameraFile` (or
+   * by basename) and exposed via an object URL on `cameraUrl`. A missing video is not an error —
+   * the recording loads and plays without the camera overlay.
    */
   importFromFile(): Promise<Recording[]> {
     return new Promise((resolve, reject) => {
       const input = document.createElement("input");
       input.type = "file";
-      input.accept = ".ne";
+      input.multiple = true;
+      input.accept = ".ne,.webm,.mp4,.mov,video/*";
 
       input.onchange = async (event) => {
-        const file = (event.target as HTMLInputElement).files?.[0];
-        if (!file) {
-          reject(new Error("No file selected"));
+        const files = Array.from((event.target as HTMLInputElement).files ?? []);
+        const neFile = files.find((file) => file.name.toLowerCase().endsWith(".ne"));
+        if (!neFile) {
+          reject(new Error("No .ne file selected"));
           return;
         }
+        const videoFiles = files.filter((file) => file !== neFile);
 
         try {
           // Read file as text and validate it's not empty/undefined
-          const text = await file.text();
+          const text = await neFile.text();
           const trimmedText = text.trim();
           if (!trimmedText || trimmedText.length === 0) {
             reject(new Error("File appears to be empty or corrupted"));
@@ -236,9 +309,14 @@ export class JsonStorage {
             return;
           }
 
+          // Attach the companion camera video (if provided) so playback streams it directly.
+          const withVideo = importedRecordings.map((recording) =>
+            attachCompanionVideo(recording, videoFiles, neFile.name),
+          );
+
           // Don't save to localStorage to avoid quota issues with large files
           // Just return the imported recordings for immediate use
-          resolve(importedRecordings);
+          resolve(withVideo);
         } catch (error) {
           console.error("Import error details:", error);
           const errorMessage = error instanceof Error ? error.message : "Invalid file format";
