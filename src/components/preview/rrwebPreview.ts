@@ -28,16 +28,18 @@ const RRWEB_EVENT_TYPE_META = 4;
 // IncrementalSource.Mutation — a DOM add/remove/attribute/text change.
 const RRWEB_INCREMENTAL_SOURCE_MUTATION = 0;
 
-// Corrective-checkpoint timing. rrweb's incremental mutation capture is lossy in
+// Corrective-checkpoint throttle. rrweb's incremental mutation capture is lossy in
 // real browsers for some swap patterns (notably htmx innerHTML swaps, where a
 // removed node is occasionally never emitted), so replay accumulates stale nodes
 // — e.g. each "get server time" click stacks another line instead of replacing.
-// To self-heal, the recorder takes a fresh FullSnapshot once mutations settle:
-// replay treats it as a checkpoint and rebuilds from it, discarding any drift
-// from dropped incremental events. QUIET_MS waits for a burst (a swap) to finish;
-// MAX_MS bounds drift during sustained, never-quiet activity.
-const RRWEB_CHECKPOINT_QUIET_MS = 600;
-const RRWEB_CHECKPOINT_MAX_MS = 4000;
+// To self-heal, the recorder takes a fresh FullSnapshot right after a DOM mutation
+// (leading edge — the swap's content change is synchronous, so the live DOM is
+// already settled and correct); replay rebuilds from it, discarding any drift from
+// dropped incremental events. Firing immediately (rather than after a settle delay)
+// keeps the stale frame on screen for ~1 frame instead of the full delay. The
+// throttle caps snapshot frequency on continuously-mutating pages, which also
+// bounds worst-case drift to one interval.
+const RRWEB_CHECKPOINT_THROTTLE_MS = 200;
 
 interface CreateRrwebPreviewRecorderScriptOptions {
   setupMarker: string;
@@ -65,8 +67,7 @@ export function createRrwebPreviewRecorderScript({
       var incrementalType = ${JSON.stringify(RRWEB_EVENT_TYPE_INCREMENTAL_SNAPSHOT)};
       var mutationSource = ${JSON.stringify(RRWEB_INCREMENTAL_SOURCE_MUTATION)};
       var metaType = ${JSON.stringify(RRWEB_EVENT_TYPE_META)};
-      var checkpointQuietMs = ${JSON.stringify(RRWEB_CHECKPOINT_QUIET_MS)};
-      var checkpointMaxMs = ${JSON.stringify(RRWEB_CHECKPOINT_MAX_MS)};
+      var checkpointThrottleMs = ${JSON.stringify(RRWEB_CHECKPOINT_THROTTLE_MS)};
       var source = 'runtime-preview';
       var documentId = 'rrweb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
 
@@ -74,7 +75,7 @@ export function createRrwebPreviewRecorderScript({
       var frame = 0;
       var sentInitial = false;
       var pendingMeta = null;
-      var checkpointTimer = 0;
+      var checkpointScheduled = false;
       var lastCheckpointAt = 0;
 
       function getRoute() {
@@ -110,25 +111,31 @@ export function createRrwebPreviewRecorderScript({
       }
 
       function takeCheckpoint() {
-        checkpointTimer = 0;
+        checkpointScheduled = false;
         lastCheckpointAt = getMessageTime();
         // Emits a fresh Meta + FullSnapshot, which flow through emit() (below) into
         // the patch stream; replay rebuilds from it, healing any dropped mutations.
         try { window.rrweb.takeFullSnapshot(); } catch (e) {}
       }
 
-      // Arm a corrective checkpoint after a DOM mutation. Coalesces a burst (one
-      // swap) into a single snapshot once it goes quiet, but never lets drift live
-      // longer than checkpointMaxMs during sustained, never-quiet activity.
+      // Arm a corrective checkpoint after a DOM mutation. Fired on a microtask so the
+      // snapshot lands in the SAME animation-frame batch as the mutation that
+      // triggered it: on replay the stale add and the corrective rebuild share a
+      // timestamp, so a dropped remove is overwritten in the same frame (no visible
+      // flash). The throttle caps snapshot frequency on continuously-mutating pages
+      // (falling back to a trailing snapshot), which also bounds worst-case drift.
       function scheduleCheckpoint() {
-        if (!sentInitial) return;
-        if (lastCheckpointAt && getMessageTime() - lastCheckpointAt >= checkpointMaxMs) {
-          if (checkpointTimer) { window.clearTimeout(checkpointTimer); }
-          takeCheckpoint();
+        if (!sentInitial || checkpointScheduled) return;
+        checkpointScheduled = true;
+        var sinceLast = getMessageTime() - lastCheckpointAt;
+        if (sinceLast < checkpointThrottleMs) {
+          window.setTimeout(takeCheckpoint, checkpointThrottleMs - sinceLast);
           return;
         }
-        if (checkpointTimer) { window.clearTimeout(checkpointTimer); }
-        checkpointTimer = window.setTimeout(takeCheckpoint, checkpointQuietMs);
+        var microtask = typeof queueMicrotask === 'function'
+          ? queueMicrotask
+          : function (cb) { Promise.resolve().then(cb); };
+        microtask(takeCheckpoint);
       }
 
       function emit(event) {

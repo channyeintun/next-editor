@@ -170,4 +170,79 @@ describe("corrective checkpoint recovery", () => {
       replayFinalParagraphCount(noCheckpoints as unknown as PreviewRecordedEvent[]),
     ).toBeGreaterThan(1);
   });
+
+  // The recorder fires the checkpoint on a microtask so the snapshot lands in the
+  // SAME batch (timestamp) as the swap. When that holds, a dropped remove is never
+  // visible at any seek point — the stale add and the rebuild apply together.
+  it("never shows a stacking frame when the checkpoint shares the swap's batch", async () => {
+    document.body.innerHTML = `<main><div id="result"></div></main>`;
+
+    const events: PreviewRecordedEvent[] = [];
+    stopRecording = record({
+      emit: (event) => events.push(event as unknown as PreviewRecordedEvent),
+      inlineStylesheet: true,
+      slimDOMOptions: { script: true, comment: true },
+    });
+    await sleep(20);
+
+    const result = document.getElementById("result");
+    if (!result) {
+      throw new Error("missing #result");
+    }
+
+    // Each "swap + same-microtask checkpoint" is one recorded segment. Record the
+    // event index spans so we can bundle each into a single batch (one timestamp).
+    const seedCount = events.length;
+    const swapSpans: { start: number; end: number }[] = [];
+    for (let index = 1; index <= 6; index += 1) {
+      const start = events.length;
+      swap(result, `Server time: ${index}`);
+      record.takeFullSnapshot(); // same task → shares the swap's timestamp/batch
+      swapSpans.push({ start, end: events.length });
+      await sleep(20);
+    }
+    stopRecording?.();
+    stopRecording = undefined;
+
+    const corrupted = dropAlternatingRemoves(events);
+
+    // One batch per swap-segment, all events in it sharing a single recording time.
+    const patchBatches = swapSpans.map((span, i) => ({
+      version: 2 as const,
+      time: 100 + i * 100,
+      source: "runtime-preview" as const,
+      documentId: "d",
+      events: corrupted.slice(span.start, span.end),
+    }));
+    const replayEvents = buildRrwebReplayEvents(
+      [{ version: 2, time: 0, documentId: "d", events: corrupted.slice(0, seedCount) }],
+      patchBatches,
+    );
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    containers.push(container);
+    activeReplayer = new Replayer(replayEvents as unknown as eventWithTime[], {
+      root: container,
+      liveMode: false,
+      mouseTail: false,
+      showWarning: false,
+      useVirtualDom: false,
+      speed: 1,
+      UNSAFE_replayCanvas: true,
+    });
+
+    // Sweep the whole timeline at fine granularity: no seek point shows >1 line.
+    let maxParagraphs = 0;
+    for (let t = 0; t <= 800; t += 5) {
+      activeReplayer.pause(t);
+      const count =
+        container
+          .querySelector("iframe")
+          ?.contentDocument?.getElementById("result")
+          ?.querySelectorAll("p").length ?? 0;
+      maxParagraphs = Math.max(maxParagraphs, count);
+    }
+    expect(maxParagraphs).toBe(1);
+  });
 });
