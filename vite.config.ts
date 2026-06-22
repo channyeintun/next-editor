@@ -1,5 +1,6 @@
 import { defineConfig, lazyPlugins } from "vite-plus";
 import type { PluginOption } from "@voidzero-dev/vite-plus-core";
+import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 
 const crossOriginHeaders = {
@@ -12,9 +13,12 @@ export default defineConfig({
   staged: {
     "*": "vp check --fix",
   },
-  plugins: lazyPlugins(async () => {
-    return [...(await import("@vitejs/plugin-react")).default()] as unknown as PluginOption[];
-  }),
+  plugins: [
+    tailwindcss() as unknown as PluginOption,
+    lazyPlugins(async () => {
+      return [...(await import("@vitejs/plugin-react")).default()] as unknown as PluginOption[];
+    }),
+  ] as unknown as PluginOption[],
   test: {
     globals: true,
     environment: "jsdom",
@@ -47,6 +51,11 @@ export default defineConfig({
     },
   },
   build: {
+    // Match tsconfig `target: ES2022` so first-party code is never down-leveled
+    // to ES5 (avoids Lighthouse "Legacy JavaScript" transpilation overhead).
+    target: "es2022",
+    // Target browsers support <link rel="modulepreload"> natively; skip the polyfill.
+    modulePreload: { polyfill: false },
     minify: "oxc",
     rolldownOptions: {
       output: {
