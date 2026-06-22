@@ -11,7 +11,6 @@ import {
   getWorkspaceBaseName,
   inferLanguageFromPath,
   isBinaryWorkspacePath,
-  lessonRunsInWebContainer,
   normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
   type WorkspaceFile,
@@ -130,54 +129,36 @@ export function sanitizeTerminalChunk(chunk: string): string {
   return normalized;
 }
 
-function injectRuntimeSnapshotScript(
-  project: WorkspaceProject,
-  filePath: string,
-  content: string,
-): string {
-  const normalizedFilePath = normalizeWorkspacePath(filePath);
-  // Instrument every served HTML page (not just the entry) so the preview keeps
-  // recording across multi-page navigation within an html-css lesson.
-  const isHtmlPage = normalizedFilePath.toLowerCase().endsWith(".html");
-
-  if (
-    !lessonRunsInWebContainer(project.lessonType) ||
-    !isHtmlPage ||
-    content.includes(RUNTIME_SNAPSHOT_SCRIPT_MARKER)
-  ) {
-    return content;
-  }
-
+// Builds the single JS payload injected into every preview page through
+// `WebContainer.setPreviewScript`. The WebContainer adds it to *all* HTML
+// responses regardless of which server produced them, so the recorder runs no
+// matter how the preview is rendered — static HTML, a Vite SPA, an Express
+// server, or an SSR/hybrid framework like TanStack Start that assembles its
+// document on the fly. Returns a raw script body (no `<script>` wrapper); the
+// WebContainer supplies the tag. Both halves are guarded by per-window markers,
+// so re-running on navigation (or inside an htmx fragment swap) is a no-op.
+export function createRuntimePreviewScript(): string {
   const interactionCaptureScript = createIframeInteractionCaptureScript(
     RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER,
     { includeMouseMove: true, includeRouteChange: true },
   );
   const consoleBridgeScript = createIframeConsoleBridgeScript(RUNTIME_CONSOLE_BRIDGE_SETUP_MARKER);
 
-  // rrweb records the live DOM (+ inner scroll/input/mouse) for replay. It lives
-  // in its own script tag (large vendored bundle) so it stays cleanly strippable
-  // and so `slimDOMOptions.script` can drop it from its own snapshot.
-  const rrwebRecordScript = `<script data-next-editor-rrweb-record>${createRrwebPreviewRecorderScript(
-    { setupMarker: RUNTIME_RRWEB_RECORD_SETUP_MARKER },
-  )}</script>`;
+  // rrweb records the live DOM (+ inner scroll/input/mouse) for replay. The
+  // vendored UMD bundle is inlined; `slimDOMOptions.script` keeps it (and every
+  // other script) out of the snapshots it produces, so the injected recorder
+  // never pollutes a recording.
+  const rrwebRecordScript = createRrwebPreviewRecorderScript({
+    setupMarker: RUNTIME_RRWEB_RECORD_SETUP_MARKER,
+  });
 
-  const snapshotScript = `<script data-next-editor-runtime-snapshot>(function(){const marker=${JSON.stringify(
+  const snapshotScript = `(function(){const marker=${JSON.stringify(
     RUNTIME_SNAPSHOT_SCRIPT_MARKER,
   )};if(window[marker])return;window[marker]=true;const messageType=${JSON.stringify(
     RUNTIME_SNAPSHOT_MESSAGE_TYPE,
-  )};${consoleBridgeScript}${interactionCaptureScript}const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML.replace(/<script[\\s\\S]*?<\\/script>/gi,"")}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();</script>`;
+  )};${consoleBridgeScript}${interactionCaptureScript}const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML.replace(/<script[\\s\\S]*?<\\/script>/gi,"")}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();`;
 
-  const injectedScripts = `${rrwebRecordScript}\n${snapshotScript}`;
-
-  if (content.includes("</head>")) {
-    return content.replace("</head>", `${injectedScripts}\n</head>`);
-  }
-
-  if (content.includes("</body>")) {
-    return content.replace("</body>", `${injectedScripts}\n</body>`);
-  }
-
-  return `${content}\n${injectedScripts}`;
+  return `${rrwebRecordScript}\n${snapshotScript}`;
 }
 
 function getNormalizedProjectFiles(project: WorkspaceProject | null): Map<string, WorkspaceFile> {
@@ -338,10 +319,10 @@ export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
 
     currentDirectory[fileName] = {
       file: {
-        contents:
-          file.encoding === "base64"
-            ? base64ToBytes(file.content)
-            : injectRuntimeSnapshotScript(project, normalizedPath, file.content),
+        // The recorder is injected at the preview layer (see
+        // createRuntimePreviewScript + setPreviewScript), never written into
+        // workspace files, so files are mounted exactly as authored.
+        contents: file.encoding === "base64" ? base64ToBytes(file.content) : file.content,
       },
     };
   }
@@ -433,9 +414,7 @@ export async function syncWorkspaceProject(
     await ensureDirectory(instance, getFileDirectory(path));
     await instance.fs.writeFile(
       path,
-      file.encoding === "base64"
-        ? base64ToBytes(file.content)
-        : injectRuntimeSnapshotScript(nextProject, path, file.content),
+      file.encoding === "base64" ? base64ToBytes(file.content) : file.content,
     );
   }
 }
@@ -559,7 +538,17 @@ export async function getOrBootSharedWebContainer(): Promise<WebContainer> {
           workdirName: "next-editor-runtime",
         }),
       )
-      .then((instance) => {
+      .then(async (instance) => {
+        // Install the rrweb recorder into every preview HTML response up front,
+        // so replay works regardless of how the app renders (SSR/CSR/hybrid).
+        // Set once per boot; it persists for the instance's whole lifetime and
+        // applies to every preview reloaded afterwards.
+        try {
+          await instance.setPreviewScript(createRuntimePreviewScript());
+        } catch (error) {
+          console.warn("Failed to install runtime preview recorder script:", error);
+        }
+
         sharedWebContainerState.instance = instance;
         return instance;
       })

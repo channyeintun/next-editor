@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceProject } from "../types/workspace";
-import { createWorkspaceTree } from "./webContainerRuntimeSupport";
+import { createRuntimePreviewScript, createWorkspaceTree } from "./webContainerRuntimeSupport";
 
 function nodeProject(htmlContent: string): WorkspaceProject {
   return {
@@ -32,60 +32,34 @@ function getIndexHtml(tree: ReturnType<typeof createWorkspaceTree>): string {
   return contents;
 }
 
-describe("createWorkspaceTree rrweb injection", () => {
-  it("injects the rrweb recorder + snapshot scripts into the runtime bootstrap html", () => {
-    const tree = createWorkspaceTree(nodeProject("<html><head></head><body>Hi</body></html>"));
-    const html = getIndexHtml(tree);
+describe("createRuntimePreviewScript", () => {
+  it("bundles the rrweb recorder and snapshot wiring into one injectable script", () => {
+    const script = createRuntimePreviewScript();
 
-    expect(html).toContain("data-next-editor-rrweb-record");
-    expect(html).toContain("window.rrweb.record");
-    expect(html).toContain("data-next-editor-runtime-snapshot");
+    expect(script).toContain("window.rrweb.record");
     // The vendored UMD bundle is inlined (its IIFE header is present).
-    expect(html).toContain("function (g, f)");
+    expect(script).toContain("function (g, f)");
+    // The snapshot/postMessage wiring keyed on the runtime snapshot message type.
+    expect(script).toContain("NEXT_EDITOR_RUNTIME_SNAPSHOT");
   });
 
-  it("emits exactly two closing tags (no premature </script> from the bundle or regex)", () => {
-    const tree = createWorkspaceTree(nodeProject("<html><head></head><body>Hi</body></html>"));
-    const html = getIndexHtml(tree);
+  it("emits no closing </script> so it survives being wrapped in a <script> tag", () => {
+    // setPreviewScript supplies the surrounding <script> tag; a literal </script>
+    // inside the bundle/wiring would close it early and break every preview.
+    const script = createRuntimePreviewScript();
+    const closings = script.match(/<\/script>/gi)?.length ?? 0;
 
-    // Only the two injected <script> elements (rrweb-record + runtime-snapshot)
-    // may close. A literal </script> inside the inlined bundle/wiring would close a
-    // tag early and break the page; this guards against that.
-    const closings = html.match(/<\/script>/gi)?.length ?? 0;
-    expect(closings).toBe(2);
+    expect(closings).toBe(0);
   });
+});
 
-  it("instruments html-css lessons too (served by Vite in the WebContainer)", () => {
-    const project = nodeProject("<html><head></head><body>Hi</body></html>");
-    project.lessonType = "html-css";
+describe("createWorkspaceTree", () => {
+  it("mounts html files verbatim (the recorder is injected at the preview layer)", () => {
+    const original = "<html><head></head><body>Hi</body></html>";
+    const html = getIndexHtml(createWorkspaceTree(nodeProject(original)));
 
-    const html = getIndexHtml(createWorkspaceTree(project));
-
-    expect(html).toContain("data-next-editor-rrweb-record");
-    expect(html).toContain("data-next-editor-runtime-snapshot");
-  });
-
-  it("instruments every html page, not just the entry, for multi-page recording", () => {
-    const project = nodeProject("<html><head></head><body>Home</body></html>");
-    project.lessonType = "html-css";
-    project.files["about.html"] = {
-      path: "about.html",
-      name: "about.html",
-      language: "html",
-      content: "<html><head></head><body>About</body></html>",
-    };
-
-    const tree = createWorkspaceTree(project);
-    const about = tree["about.html"];
-    if (!about || !("file" in about) || !("contents" in about.file)) {
-      throw new Error("about.html not found in workspace tree");
-    }
-    const aboutContents = about.file.contents;
-    if (typeof aboutContents !== "string") {
-      throw new Error("Expected about.html contents to be a string");
-    }
-
-    expect(aboutContents).toContain("data-next-editor-rrweb-record");
-    expect(aboutContents).toContain("data-next-editor-runtime-snapshot");
+    expect(html).toBe(original);
+    expect(html).not.toContain("data-next-editor-rrweb-record");
+    expect(html).not.toContain("data-next-editor-runtime-snapshot");
   });
 });

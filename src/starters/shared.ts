@@ -47,45 +47,6 @@ export function createHtmlCssLessonPackageJson(): string {
   );
 }
 
-export function createStarterWorkspacePackageJson(projectName: string): string {
-  const normalizedProjectName = projectName
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return JSON.stringify(
-    {
-      name: normalizedProjectName || "next-editor-react-starter",
-      private: true,
-      version: "0.0.0",
-      type: "module",
-      scripts: {
-        dev: "vite --host 0.0.0.0 --port 4173",
-        build: "tsgo -p tsconfig.json --noEmit && vite build",
-        preview: "vite preview --host 0.0.0.0 --port 4173",
-      },
-      dependencies: {
-        "@tanstack/react-query": "^5.101.0",
-        "@tanstack/react-virtual": "^3.14.2",
-        axios: "^1.13.2",
-        react: "^19.2.5",
-        "react-dom": "^19.2.5",
-      },
-      devDependencies: {
-        "@typescript/native-preview": "7.0.0-dev.20260512.1",
-        "@types/react": "^19.2.14",
-        "@types/react-dom": "^19.2.3",
-        "@vitejs/plugin-react": "^5.0.0",
-        typescript: "~6.0.2",
-        vite: "^7.0.0",
-      },
-    },
-    null,
-    2,
-  );
-}
-
 /**
  * Shared, editable page styles for the minimal framework starters so each
  * "hello world" lesson looks consistent while staying self-contained.
