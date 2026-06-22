@@ -1,4 +1,4 @@
-import JSZip from "jszip";
+import { zipSync, strToU8, type Zippable } from "fflate";
 import { describe, expect, it } from "vitest";
 import { base64ToBytes, type WorkspaceFile } from "../types/workspace";
 import {
@@ -13,17 +13,18 @@ function textFile(path: string, content: string): WorkspaceFile {
   return { path, name: path, language: "plaintext", content };
 }
 
-async function createZipFile(
+function createZipFile(
   name: string,
   entries: Array<{ path: string; content: string | Uint8Array }>,
-): Promise<File> {
-  const zip = new JSZip();
+): File {
+  const zippable: Zippable = {};
 
   for (const entry of entries) {
-    zip.file(entry.path, entry.content);
+    zippable[entry.path] =
+      typeof entry.content === "string" ? strToU8(entry.content) : entry.content;
   }
 
-  const bytes = await zip.generateAsync({ type: "uint8array" });
+  const bytes = zipSync(zippable);
   const arrayBuffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(arrayBuffer).set(bytes);
 
@@ -103,7 +104,7 @@ describe("deriveProjectNameFromFileName", () => {
 
 describe("importWorkspaceProjectFromZip", () => {
   it("imports text files and detects the framework", async () => {
-    const file = await createZipFile("react-app.zip", [
+    const file = createZipFile("react-app.zip", [
       { path: "package.json", content: JSON.stringify({ dependencies: { react: "^19.0.0" } }) },
       { path: "src/App.tsx", content: "export default function App() { return null; }" },
       { path: "index.html", content: "<!doctype html>" },
@@ -124,7 +125,7 @@ describe("importWorkspaceProjectFromZip", () => {
   });
 
   it("strips a single top-level wrapper folder", async () => {
-    const file = await createZipFile("wrapped.zip", [
+    const file = createZipFile("wrapped.zip", [
       { path: "wrapped/index.html", content: "<!doctype html>" },
       { path: "wrapped/styles.css", content: "body{}" },
     ]);
@@ -136,7 +137,7 @@ describe("importWorkspaceProjectFromZip", () => {
 
   it("stores binary assets as base64 and excludes dev artifacts", async () => {
     const pngBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
-    const file = await createZipFile("assets.zip", [
+    const file = createZipFile("assets.zip", [
       { path: "index.html", content: "<!doctype html>" },
       { path: "logo.png", content: pngBytes },
       { path: "node_modules/left-pad/index.js", content: "module.exports = () => {};" },
@@ -152,9 +153,7 @@ describe("importWorkspaceProjectFromZip", () => {
   });
 
   it("rejects a zip without importable files", async () => {
-    const file = await createZipFile("empty.zip", [
-      { path: "node_modules/dep/index.js", content: "x" },
-    ]);
+    const file = createZipFile("empty.zip", [{ path: "node_modules/dep/index.js", content: "x" }]);
 
     await expect(importWorkspaceProjectFromZip(file)).rejects.toBeInstanceOf(
       WorkspaceZipImportError,

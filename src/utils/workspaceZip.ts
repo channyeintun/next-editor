@@ -1,5 +1,6 @@
+import { zipSync, strToU8, type Zippable } from "fflate";
 import type { WorkspaceProject } from "../types/workspace";
-import { normalizeWorkspaceFolderPath } from "../types/workspace";
+import { base64ToBytes, normalizeWorkspaceFolderPath } from "../types/workspace";
 
 function getArchiveFileName(projectName: string): string {
   const normalizedName = projectName
@@ -12,9 +13,9 @@ function getArchiveFileName(projectName: string): string {
 }
 
 export async function downloadWorkspaceProjectAsZip(project: WorkspaceProject): Promise<void> {
-  const { default: JSZip } = await import("jszip");
-  const zip = new JSZip();
+  const entries: Zippable = {};
 
+  // Preserve empty folders with explicit directory entries (trailing slash).
   for (const folderPath of project.folders) {
     const normalizedPath = normalizeWorkspaceFolderPath(folderPath);
 
@@ -22,14 +23,15 @@ export async function downloadWorkspaceProjectAsZip(project: WorkspaceProject): 
       continue;
     }
 
-    zip.folder(normalizedPath);
+    entries[`${normalizedPath}/`] = new Uint8Array(0);
   }
 
   for (const file of Object.values(project.files)) {
-    zip.file(file.path, file.content, { base64: file.encoding === "base64" });
+    entries[file.path] =
+      file.encoding === "base64" ? base64ToBytes(file.content) : strToU8(file.content);
   }
 
-  const blob = await zip.generateAsync({ type: "blob" });
+  const blob = new Blob([zipSync(entries)], { type: "application/zip" });
   const downloadUrl = URL.createObjectURL(blob);
 
   try {

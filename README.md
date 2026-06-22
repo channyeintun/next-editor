@@ -49,7 +49,7 @@ Next Editor is a browser-based lesson editor and replay engine for real coding p
 - Slides: reveal.js
 - Audio: pitch-preserving variable-speed playback via `@soundtouchjs/audio-worklet`
 - Styling: Tailwind CSS 4, Motion
-- Recording/storage: SCR3 stream container, msgpack, pako, JSZip
+- Recording/storage: SCR3 stream container, msgpack, fflate (zlib + zip)
 - Quality checks: vite-plus, Oxlint, TypeScript native preview (`tsgo`)
 
 ## Project Structure

@@ -1,5 +1,5 @@
 import { decode as msgpackDecode, encode as msgpackEncode } from "@msgpack/msgpack";
-import { deflate, inflate } from "pako";
+import { zlibSync, unzlibSync } from "fflate";
 import type {
   RecordingAudioSource,
   RecordingCameraSource,
@@ -157,11 +157,11 @@ export function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 export function encodeRecords(records: ReadonlyArray<unknown>): Uint8Array {
-  return deflate(msgpackEncode(records, { ignoreUndefined: true }), { level: 9 });
+  return zlibSync(msgpackEncode(records, { ignoreUndefined: true }), { level: 9 });
 }
 
 export function decodeRecords<T>(payload: Uint8Array): T[] {
-  const decoded = msgpackDecode(inflate(payload));
+  const decoded = msgpackDecode(unzlibSync(payload));
   return Array.isArray(decoded) ? (decoded as T[]) : [];
 }
 
@@ -183,7 +183,7 @@ export function readLastRecordTimestamp(records: ReadonlyArray<unknown>): number
 // ----------------------------------------------------------------------------
 
 export function buildHeaderChunk(meta: RecordingStreamMeta, flags: number): Uint8Array {
-  const metaBytes = deflate(msgpackEncode(meta, { ignoreUndefined: true }), { level: 9 });
+  const metaBytes = zlibSync(msgpackEncode(meta, { ignoreUndefined: true }), { level: 9 });
   const chunk = new Uint8Array(HEADER_PREFIX_SIZE + metaBytes.length);
   const view = new DataView(chunk.buffer);
   chunk.set(STREAM_MAGIC_BYTES, 0);
@@ -275,7 +275,7 @@ export function parseHeader(bytes: Uint8Array): {
   if (metaLength === 0 || metaEnd > bytes.length) {
     throw new Error("Invalid SCR3 stream: bad header length");
   }
-  const meta = msgpackDecode(inflate(bytes.subarray(metaStart, metaEnd))) as RecordingStreamMeta;
+  const meta = msgpackDecode(unzlibSync(bytes.subarray(metaStart, metaEnd))) as RecordingStreamMeta;
   return { meta, headerEnd: metaEnd, formatVersion };
 }
 

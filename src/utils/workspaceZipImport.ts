@@ -1,3 +1,4 @@
+import { unzipSync, strFromU8 } from "fflate";
 import {
   bytesToBase64,
   collectWorkspaceFolders,
@@ -191,22 +192,24 @@ function createWorkspaceFile(
  * in the browser; nothing is uploaded to a server.
  */
 export async function importWorkspaceProjectFromZip(file: File): Promise<WorkspaceProject> {
-  const { default: JSZip } = await import("jszip");
+  let archive: Record<string, Uint8Array>;
 
-  const archive = await JSZip.loadAsync(file).catch(() => {
+  try {
+    archive = unzipSync(new Uint8Array(await file.arrayBuffer()));
+  } catch {
     throw new WorkspaceZipImportError(
       "That file could not be read as a .zip archive. Please pick a valid zip file.",
     );
-  });
+  }
 
   // Collect importable entries (skip directories and ignored artifacts) before
   // detecting a common wrapper folder so the strip decision sees only real files.
-  const entries = Object.values(archive.files).filter((entry) => {
-    if (entry.dir) {
+  const entries = Object.entries(archive).filter(([name]) => {
+    if (name.endsWith("/")) {
       return false;
     }
 
-    const normalizedPath = normalizeWorkspacePath(entry.name);
+    const normalizedPath = normalizeWorkspacePath(name);
 
     return Boolean(normalizedPath) && !shouldIgnoreImportPath(normalizedPath);
   });
@@ -218,47 +221,33 @@ export async function importWorkspaceProjectFromZip(file: File): Promise<Workspa
   }
 
   const stripRootFolder = createRootFolderStripper(
-    entries.map((entry) => normalizeWorkspacePath(entry.name)),
+    entries.map(([name]) => normalizeWorkspacePath(name)),
   );
 
   const files: Record<string, WorkspaceFile> = {};
   let totalBytes = 0;
 
-  for (const entry of entries) {
-    const workspacePath = stripRootFolder(normalizeWorkspacePath(entry.name));
+  for (const [name, bytes] of entries) {
+    const workspacePath = stripRootFolder(normalizeWorkspacePath(name));
 
     if (!workspacePath) {
       continue;
     }
 
-    const isBinary = isBinaryWorkspacePath(workspacePath);
+    totalBytes += bytes.byteLength;
 
-    if (isBinary) {
-      const bytes = await entry.async("uint8array");
-      totalBytes += bytes.byteLength;
+    if (totalBytes > MAX_IMPORTED_PROJECT_BYTES) {
+      throw new WorkspaceZipImportError(
+        `This project is larger than the ${Math.round(
+          MAX_IMPORTED_PROJECT_BYTES / (1024 * 1024),
+        )} MB import limit. Remove large assets and try again.`,
+      );
+    }
 
-      if (totalBytes > MAX_IMPORTED_PROJECT_BYTES) {
-        throw new WorkspaceZipImportError(
-          `This project is larger than the ${Math.round(
-            MAX_IMPORTED_PROJECT_BYTES / (1024 * 1024),
-          )} MB import limit. Remove large assets and try again.`,
-        );
-      }
-
+    if (isBinaryWorkspacePath(workspacePath)) {
       files[workspacePath] = createWorkspaceFile(workspacePath, bytesToBase64(bytes), "base64");
     } else {
-      const text = await entry.async("string");
-      totalBytes += text.length;
-
-      if (totalBytes > MAX_IMPORTED_PROJECT_BYTES) {
-        throw new WorkspaceZipImportError(
-          `This project is larger than the ${Math.round(
-            MAX_IMPORTED_PROJECT_BYTES / (1024 * 1024),
-          )} MB import limit. Remove large assets and try again.`,
-        );
-      }
-
-      files[workspacePath] = createWorkspaceFile(workspacePath, text, undefined);
+      files[workspacePath] = createWorkspaceFile(workspacePath, strFromU8(bytes), undefined);
     }
   }
 
