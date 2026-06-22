@@ -1,4 +1,3 @@
-import { motion, type Transition } from "motion/react";
 import { useCallback, useEffect, memo, useRef } from "react";
 import { Keyboard } from "lucide-react";
 import type { Slide, SlideEvent } from "../types/slides";
@@ -146,32 +145,14 @@ const SlidePreview = memo(function SlidePreview({
     return null;
   }
 
-  const layoutTransition: Transition = {
-    type: "spring",
-    stiffness: 300,
-    damping: 30,
-    mass: 0.8,
-  };
-
-  // Transition already defined above
-
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-90 bg-black/80 backdrop-blur-md"
+      <div
+        className="fixed inset-0 z-90 bg-black/80 backdrop-blur-md opacity-0 animate-[fade-in_0.2s_ease-out_forwards] motion-reduce:animate-none motion-reduce:opacity-100"
         onClick={handleClose}
       />
 
-      <motion.div
-        layout
-        transition={layoutTransition}
-        style={{
-          transformOrigin: "bottom right",
-          willChange: "transform",
-        }}
+      <div
         className={`${positioning} top-[10%] left-[10%] right-[10%] bottom-[10%] z-100 bg-slate-900 rounded-2xl overflow-hidden flex flex-col shadow-2xl transition-shadow size-[80%]`}
         data-cursor-replay-target="slide-preview"
         onClick={(e) => {
@@ -204,7 +185,7 @@ const SlidePreview = memo(function SlidePreview({
             </div>
           )}
         </div>
-      </motion.div>
+      </div>
     </>
   );
 });

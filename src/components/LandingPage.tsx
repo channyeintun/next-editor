@@ -1,4 +1,3 @@
-import { motion } from "motion/react";
 import { Maximize, Minimize, SquareArrowOutUpRight } from "lucide-react";
 import { Link } from "react-router";
 import Navbar from "./Navbar";
@@ -12,8 +11,27 @@ const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true&la
 
 const LandingPage = () => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const featuresRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [featuresInView, setFeaturesInView] = useState(false);
+
+  // Reveal the feature cards once they scroll into view (replaces motion's whileInView).
+  useEffect(() => {
+    const node = featuresRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setFeaturesInView(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -78,12 +96,7 @@ const LandingPage = () => {
         </div>
 
         <div className="flex flex-col items-center">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full"
-          >
+          <div className="w-full opacity-0 animate-[fade-up_0.8s_cubic-bezier(0.22,1,0.36,1)_forwards] motion-reduce:animate-none motion-reduce:opacity-100">
             {/* Main Hero Card */}
             <div className="relative bg-white rounded-[40px] p-8 md:p-16 mb-12 overflow-hidden shadow-2xl">
               {/* Decorative side shapes */}
@@ -220,14 +233,13 @@ const LandingPage = () => {
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.4, duration: 1 }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl mt-12"
+          <div
+            ref={featuresRef}
+            className={`grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl mt-12 transition-opacity duration-1000 delay-400 motion-reduce:transition-none ${
+              featuresInView ? "opacity-100" : "opacity-0"
+            }`}
           >
             {[
               {
@@ -315,7 +327,7 @@ const LandingPage = () => {
                 <div className="text-slate-400 leading-relaxed">{feature.desc}</div>
               </div>
             ))}
-          </motion.div>
+          </div>
         </div>
       </main>
 
