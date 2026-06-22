@@ -1,5 +1,6 @@
 import type * as monaco from "monaco-editor";
 import { findCommonAffixLengthsWasm } from "./wasm";
+import { findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
 import type { EditorPosition, EditorSelection } from "../types";
 
 /**
@@ -209,17 +210,3 @@ export const applyContentDiff = (
     }
   }
 };
-
-function findCommonPrefixJS(str1: string, str2: string): number {
-  const minLen = Math.min(str1.length, str2.length);
-  let i = 0;
-  while (i < minLen && str1[i] === str2[i]) i++;
-  return i;
-}
-
-function findCommonSuffixJS(str1: string, str2: string): number {
-  const minLen = Math.min(str1.length, str2.length);
-  let i = 0;
-  while (i < minLen && str1[str1.length - 1 - i] === str2[str2.length - 1 - i]) i++;
-  return i;
-}

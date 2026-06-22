@@ -15,6 +15,7 @@ import {
   findCommonPrefixLengthWasm,
   findCommonSuffixLengthWasm,
 } from "./wasm";
+import { findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
 import {
   normalizeEditorFrame,
@@ -41,21 +42,6 @@ export function findCommonPrefixLength(str1: string, str2: string): number {
  */
 export function findCommonSuffixLength(str1: string, str2: string): number {
   return findCommonSuffixLengthWasm(str1, str2) ?? findCommonSuffixJS(str1, str2);
-}
-
-// Fallback JS implementations
-function findCommonPrefixJS(str1: string, str2: string): number {
-  const minLen = Math.min(str1.length, str2.length);
-  let i = 0;
-  while (i < minLen && str1[i] === str2[i]) i++;
-  return i;
-}
-
-function findCommonSuffixJS(str1: string, str2: string): number {
-  const minLen = Math.min(str1.length, str2.length);
-  let i = 0;
-  while (i < minLen && str1[str1.length - 1 - i] === str2[str2.length - 1 - i]) i++;
-  return i;
 }
 
 // ============================================================================
