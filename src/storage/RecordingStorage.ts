@@ -80,10 +80,10 @@ export function attachCompanionVideo(
 }
 
 /**
- * JSON Storage Interface for use-next-editor
+ * Recording storage for use-next-editor.
  * Provides IndexedDB persistence plus export/import support for recordings.
  */
-export class JsonStorage {
+export class RecordingStorage {
   private indexedDBStore = createIndexedDBRecordingStore();
 
   private formatSize(bytes: number): string {
@@ -154,7 +154,7 @@ export class JsonStorage {
       const entry = await this.createStoredEntry(recording);
       await this.indexedDBStore.put(entry);
     } catch (error) {
-      console.error("JsonStorage: Failed to save recording:", error);
+      console.error("RecordingStorage: Failed to save recording:", error);
       throw new Error(
         `Failed to save recording: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
@@ -360,4 +360,4 @@ export class JsonStorage {
   }
 }
 
-export const createJsonStorage = () => new JsonStorage();
+export const createRecordingStorage = () => new RecordingStorage();

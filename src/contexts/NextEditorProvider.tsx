@@ -11,7 +11,7 @@ import {
 } from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
 import { useRecordingStreamSink } from "../hooks/useRecordingStreamSink";
-import { createJsonStorage } from "../storage/JsonStorage";
+import { createRecordingStorage } from "../storage/RecordingStorage";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
 import type { WorkspaceRecordingSnapshot } from "../types/workspace";
 
@@ -22,14 +22,14 @@ interface NextEditorProviderProps {
 interface NextEditorProviderContentProps {
   children: React.ReactNode;
   config: UseNextEditorConfig;
-  jsonStorage: { current: ReturnType<typeof createJsonStorage> };
+  recordingStorage: { current: ReturnType<typeof createRecordingStorage> };
   suppressWorkspaceEventsRef: { current: boolean };
 }
 
 const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   children,
   config,
-  jsonStorage,
+  recordingStorage,
   suppressWorkspaceEventsRef,
 }) => {
   const actorRef = NextEditorActorContext.useActorRef();
@@ -63,25 +63,31 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   // Stabilize storage and registration methods
   const exportAsFile = useCallback(
     (recording: Recording, filename?: string) =>
-      jsonStorage.current.exportAsFile(recording, filename),
-    [jsonStorage],
+      recordingStorage.current.exportAsFile(recording, filename),
+    [recordingStorage],
   );
-  const importFromFile = useCallback(() => jsonStorage.current.importFromFile(), [jsonStorage]);
-  const clearStorage = useCallback(() => jsonStorage.current.clear(), [jsonStorage]);
-  const getStorageStats = useCallback(() => jsonStorage.current.getStats(), [jsonStorage]);
+  const importFromFile = useCallback(
+    () => recordingStorage.current.importFromFile(),
+    [recordingStorage],
+  );
+  const clearStorage = useCallback(() => recordingStorage.current.clear(), [recordingStorage]);
+  const getStorageStats = useCallback(
+    () => recordingStorage.current.getStats(),
+    [recordingStorage],
+  );
   const deleteFromStorage = useCallback(
-    (id: string) => jsonStorage.current.delete(id),
-    [jsonStorage],
+    (id: string) => recordingStorage.current.delete(id),
+    [recordingStorage],
   );
 
   const loadRecordingsFromStorage = useCallback(async () => {
     try {
-      return await jsonStorage.current.load();
+      return await recordingStorage.current.load();
     } catch (error) {
       console.warn("Failed to load recordings from storage:", error);
       return [];
     }
-  }, [jsonStorage]);
+  }, [recordingStorage]);
 
   const handleWorkspaceEvent = useCallback(
     (event?: { sidebarWidthDelta?: number }) => {
@@ -158,7 +164,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
 
 export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const jsonStorage = useRef(createJsonStorage());
+  const recordingStorage = useRef(createRecordingStorage());
   const { slides, preview, runtimePanel } = useNextEditorDomainAdapters();
   const {
     getProject,
@@ -296,7 +302,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     <NextEditorActorContext.Provider options={{ input: config }}>
       <NextEditorProviderContent
         config={config}
-        jsonStorage={jsonStorage}
+        recordingStorage={recordingStorage}
         suppressWorkspaceEventsRef={suppressWorkspaceEventsRef}
       >
         {children}
