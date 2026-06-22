@@ -38,11 +38,12 @@ export async function loadGoCodec(wasmUrl) {
     const len = Number(value & 0xffffffffn);
     if (ptr === 0) return new Uint8Array(0);
     const out = u8().slice(ptr, ptr + len);
-    e.free(ptr);
+    e.freeBuf(ptr);
     return out;
   }
 
-  const free = (ptr) => e.free(ptr);
+  // freeBuf, not free: TinyGo's runtime exports its own C `free`.
+  const free = (ptr) => e.freeBuf(ptr);
 
   return {
     instance,

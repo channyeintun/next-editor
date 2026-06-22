@@ -1,6 +1,8 @@
-// Pure-JS common-prefix/suffix length helpers. These are the fallbacks used when
-// the WebAssembly affix routines (see ./wasm) are unavailable, and are shared by
-// both the frame-delta encoder and the editor diff so the two paths stay in sync.
+// Pure-JS common-prefix/suffix length helpers, shared by both the frame-delta
+// encoder and the editor diff so the two paths stay in sync. (These were once a
+// fallback for a WebAssembly affix module; that module was removed when the
+// recording codec moved to the Go zstd/go-diff WASM, so these are now the sole
+// implementation.)
 
 /** Length of the common prefix shared by two strings. */
 export function findCommonPrefixJS(str1: string, str2: string): number {

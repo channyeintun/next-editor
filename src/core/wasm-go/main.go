@@ -11,14 +11,18 @@
 // ABI (all pointers/lengths are wasm32 offsets into the exported `memory`):
 //
 //	alloc(size u32)              -> ptr u32      // pinned host-writable buffer
-//	free(ptr u32)                                // release a pinned buffer
+//	freeBuf(ptr u32)                             // release a pinned buffer
 //	zstdCompress(ptr,len u32)    -> packed u64   // (ptr<<32)|len of result
 //	zstdDecompress(ptr,len u32)  -> packed u64
 //	diffDelta(aPtr,aLen,bPtr,bLen u32) -> packed u64   // go-diff DiffToDelta(a->b)
 //	applyDelta(aPtr,aLen,dPtr,dLen u32) -> packed u64  // reconstructs b from a+delta
 //
 // A packed result of 0 means empty (or, for decode/apply, an error). The host
-// reads `len` bytes at `ptr`, then must call free(ptr).
+// reads `len` bytes at `ptr`, then must call freeBuf(ptr).
+//
+// The release export is named freeBuf, not free: TinyGo's C-ABI runtime exports
+// its own `free`, and two exports can't share a name. `freeBuf` releases buffers
+// from our `keep` map and is unrelated to the C allocator's free.
 package main
 
 import (
@@ -48,8 +52,8 @@ func alloc(size uint32) uint32 {
 	return ptr
 }
 
-//go:wasmexport free
-func free(ptr uint32) {
+//go:wasmexport freeBuf
+func freeBuf(ptr uint32) {
 	delete(keep, ptr)
 }
 

@@ -9,7 +9,8 @@ import { createWasiShim } from "./wasiShim";
 interface GoExports {
   memory: WebAssembly.Memory;
   alloc(size: number): number;
-  free(ptr: number): void;
+  // Named freeBuf (not free) because TinyGo's runtime exports its own C `free`.
+  freeBuf(ptr: number): void;
   zstdCompress(ptr: number, len: number): bigint;
   zstdDecompress(ptr: number, len: number): bigint;
   diffDelta(aPtr: number, aLen: number, bPtr: number, bLen: number): bigint;
@@ -46,7 +47,7 @@ function bind(exports: GoExports): GoCodec {
     const len = Number(value & 0xffffffffn);
     if (ptr === 0) return new Uint8Array(0);
     const out = u8().slice(ptr, ptr + len);
-    exports.free(ptr);
+    exports.freeBuf(ptr);
     return out;
   };
 
@@ -56,7 +57,7 @@ function bind(exports: GoExports): GoCodec {
       try {
         return read(exports.zstdCompress(ptr, input.length), "zstdCompress");
       } finally {
-        exports.free(ptr);
+        exports.freeBuf(ptr);
       }
     },
     zstdDecompress(input) {
@@ -64,7 +65,7 @@ function bind(exports: GoExports): GoCodec {
       try {
         return read(exports.zstdDecompress(ptr, input.length), "zstdDecompress");
       } finally {
-        exports.free(ptr);
+        exports.freeBuf(ptr);
       }
     },
     diffDelta(a, b) {
@@ -73,8 +74,8 @@ function bind(exports: GoExports): GoCodec {
       try {
         return read(exports.diffDelta(aPtr, a.length, bPtr, b.length), "diffDelta");
       } finally {
-        exports.free(aPtr);
-        exports.free(bPtr);
+        exports.freeBuf(aPtr);
+        exports.freeBuf(bPtr);
       }
     },
     applyDelta(a, delta) {
@@ -83,8 +84,8 @@ function bind(exports: GoExports): GoCodec {
       try {
         return read(exports.applyDelta(aPtr, a.length, dPtr, delta.length), "applyDelta");
       } finally {
-        exports.free(aPtr);
-        exports.free(dPtr);
+        exports.freeBuf(aPtr);
+        exports.freeBuf(dPtr);
       }
     },
   };
