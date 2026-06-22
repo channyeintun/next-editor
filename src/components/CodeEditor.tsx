@@ -1,5 +1,8 @@
 import { lazy, memo, Suspense, useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
 import Editor, { type OnMount, type BeforeMount, type Monaco } from "@monaco-editor/react";
+// Self-host a trimmed Monaco (only the languages this editor uses) and point
+// @monaco-editor/react at it instead of the default CDN. Side-effect import.
+import "./monacoSetup";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
   useWorkspaceActions,
