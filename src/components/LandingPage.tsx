@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
 import { Maximize, Minimize, SquareArrowOutUpRight } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import Navbar from "./Navbar";
 import { useState, useEffect, useRef, useCallback } from "react";
 

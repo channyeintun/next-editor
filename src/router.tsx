@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { createBrowserRouter, isRouteErrorResponse, useRouteError } from "react-router-dom";
+import { createBrowserRouter, isRouteErrorResponse, useRouteError } from "react-router";
 import LoadingSpinner from "./components/LoadingSpinner";
 
 const DYNAMIC_IMPORT_RECOVERY_PARAM = "__route_reload";
