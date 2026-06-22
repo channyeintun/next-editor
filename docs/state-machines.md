@@ -2,6 +2,62 @@
 
 This document describes the current XState v5 architecture used by Next Editor.
 
+## State Ownership Boundaries
+
+Next Editor runs three distinct state systems. They are not interchangeable, and
+each owns a different slice of the app. Knowing which one is the source of truth
+for a given field is the difference between a one-line change and an infinite
+update loop.
+
+| System                             | Kind                | Owns (source of truth)                                                                                                              |
+| ---------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `workspaceStore` (`@xstate/store`) | Synchronous CRUD    | Live workspace: `project` (files/folders), `activeFilePath`, `collapsedFolders`, sidebar layout, `lessonType`, dirty/saved snapshot |
+| `editorMachine` (XState machine)   | Async orchestration | The timeline: recording/playback state, frames, cursor/preview/slide/workspace/runtime event streams, replay cursors, audio/camera  |
+| React contexts                     | Wiring/transport    | No durable state — split Actions/Metadata/Playback contexts (render perf), domain adapters, and panel-local UI only                 |
+
+### Who owns `project` / `activeFilePath`
+
+This is the field pair most likely to look "shared." It is not — ownership moves
+with the mode:
+
+- **Authoring / idle / runtime:** `workspaceStore` is the sole owner. The
+  WebContainer filesystem is a one-way _mirror_, synced store → container by
+  `useWebContainerWorkspaceSync` (driven by the store's `syncVersion`). The
+  container FS is never read back as truth.
+- **Recording:** the machine only _reads_ the workspace — it pulls immutable
+  snapshots and timed `WORKSPACE_EVENT`s from the store (via
+  `getWorkspaceSnapshot` / `handleWorkspaceEvent` in `NextEditorProvider`). The
+  store stays the owner; the recording accumulates a history.
+- **Playback:** the machine _drives_ the store. `applyWorkspaceSnapshot` calls
+  `loadProject(...)`, so the store becomes a _render target_ reflecting the
+  recording at the current timeline position.
+
+### The invariant
+
+Workspace-shaped state has exactly **one writer at a time**: the user/UI when not
+playing back, the machine during playback. The hand-off is enforced by
+`suppressWorkspaceEventsRef` in `NextEditorProvider` — while the machine writes a
+recorded snapshot into the store, store → machine `WORKSPACE_EVENT` emission is
+gated for that tick so playback writes are not recaptured as new edits.
+
+Two corollaries that should stay true as the code evolves:
+
+- The machine never persists workspace state. Persistence (localStorage snapshot +
+  IndexedDB assets) is the store's concern, triggered by its `saveVersion` /
+  `previewVersion` counters.
+- The store never advances the timeline. Clock progression belongs to the
+  `timelineMachine` child actor.
+
+```mermaid
+flowchart LR
+    User[User / UI edits] -->|write| Store[(workspaceStore)]
+    Store -->|syncVersion| Container[WebContainer FS mirror]
+    Store -->|saveVersion| Persist[localStorage + IndexedDB]
+    Store -->|snapshots + WORKSPACE_EVENT| Machine[editorMachine]
+    Machine -->|playback: applyWorkspaceSnapshot / loadProject| Store
+    Machine -.suppressWorkspaceEvents gates feedback.-> Store
+```
+
 ## Editor Machine Overview
 
 ```mermaid
