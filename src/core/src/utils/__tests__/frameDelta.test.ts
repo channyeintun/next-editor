@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { beforeAll, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import {
   applyContentDelta,
   compressFrames,
@@ -10,35 +9,9 @@ import {
   reconstructFrameAtIndex,
 } from "../frameDelta";
 import { isKeyframe, isDelta } from "../deltaTypes";
-import { initWasm, isWasmInitialized } from "../wasm";
 import type { EditorFrame } from "../../types";
 
 describe("Delta Compression Optimization", () => {
-  beforeAll(async () => {
-    if (isWasmInitialized()) return;
-
-    const wasmBytes = await readFile(`${process.cwd()}/public/next-editor.wasm`);
-    const originalFetch = globalThis.fetch;
-
-    globalThis.fetch = (async () => {
-      return new Response(wasmBytes, {
-        headers: {
-          "Content-Type": "application/wasm",
-        },
-      });
-    }) as typeof fetch;
-
-    try {
-      const initialized = await initWasm("/next-editor.wasm");
-
-      if (!initialized) {
-        throw new Error("Failed to initialize WASM for frame delta tests");
-      }
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
   const createMockFrame = (content: string, timestamp: number): EditorFrame => ({
     timestamp,
     state: {
@@ -149,25 +122,30 @@ describe("Delta Compression Optimization", () => {
 
   it("should not treat a shared UTF-8 lead byte as a shared character prefix", () => {
     expect(findCommonPrefixLength("éx", "èy")).toBe(0);
-
-    const delta = createContentDelta("éx", "èy");
-    expect(delta).toEqual({
-      prefixLen: 0,
-      suffixLen: 0,
-      insert: "èy",
-    });
-    expect(applyContentDelta("éx", delta!)).toBe("èy");
   });
 
   it("should preserve suffix characters when the differing character is multi-byte", () => {
     expect(findCommonSuffixLength("éa", "ĩa")).toBe(1);
+  });
 
-    const delta = createContentDelta("éa", "ĩa");
-    expect(delta).toEqual({
-      prefixLen: 0,
-      suffixLen: 1,
-      insert: "ĩ",
-    });
-    expect(applyContentDelta("éa", delta!)).toBe("ĩa");
+  it("round-trips content deltas, including multi-byte UTF-8 edits", () => {
+    const cases: Array<[string, string]> = [
+      ["éx", "èy"],
+      ["éa", "ĩa"],
+      ["const label = 'a';", "const label = '漢';"],
+      // Scattered, non-contiguous edits — the case the prefix/suffix model bloated.
+      ["alpha\nbravo\ncharlie\ndelta\n", "ALPHA\nbravo\ncharlie\nDELTA\n"],
+    ];
+
+    for (const [prev, next] of cases) {
+      const delta = createContentDelta(prev, next);
+      expect(delta).not.toBeNull();
+      expect(delta!.delta).toBeInstanceOf(Uint8Array);
+      expect(applyContentDelta(prev, delta!)).toBe(next);
+    }
+  });
+
+  it("returns null when content is unchanged", () => {
+    expect(createContentDelta("same", "same")).toBeNull();
   });
 });

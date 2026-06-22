@@ -14,15 +14,14 @@ import type { WorkspaceRecordingEvent } from "../../../types/workspace";
 // ============================================================================
 
 /**
- * Delta for content changes - stores only what changed
+ * Delta for content changes — an opaque go-diff (diff-match-patch) delta that
+ * transforms the previous frame's content into this frame's content. Unlike the
+ * former prefix/suffix model it stays compact across multiple, non-contiguous
+ * edits. Produced/consumed only by createContentDelta/applyContentDelta, which
+ * round-trip it through the Go WASM codec; msgpack stores it as a binary blob.
  */
 export interface ContentDelta {
-  /** Number of bytes to keep from the start of previous content */
-  prefixLen: number;
-  /** Number of bytes to keep from the end of previous content */
-  suffixLen: number;
-  /** New content to insert between prefix and suffix */
-  insert: string;
+  delta: Uint8Array;
 }
 
 /**

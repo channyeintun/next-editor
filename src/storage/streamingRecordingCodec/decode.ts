@@ -1,5 +1,5 @@
 import { decode as msgpackDecode } from "@msgpack/msgpack";
-import { unzlibSync } from "fflate";
+import { getGoCodec } from "../goCodec/goCodec";
 import type { Recording } from "../../core/src";
 import type {
   CursorRecordingEvent,
@@ -442,7 +442,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
 
     formatVersion = view.getUint16(4, true);
     meta = msgpackDecode(
-      unzlibSync(buffer.subarray(HEADER_PREFIX_SIZE, metaEnd)),
+      getGoCodec().zstdDecompress(buffer.subarray(HEADER_PREFIX_SIZE, metaEnd)),
     ) as RecordingStreamMeta;
     headerEnd = metaEnd;
     cursor = metaEnd;

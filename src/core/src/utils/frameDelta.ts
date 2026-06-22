@@ -10,12 +10,8 @@ import type {
 } from "./deltaTypes";
 import { DELTA_CONFIG, isKeyframe, isDelta } from "./deltaTypes";
 export { isKeyframe, isDelta };
-import {
-  findCommonAffixLengthsWasm,
-  findCommonPrefixLengthWasm,
-  findCommonSuffixLengthWasm,
-} from "./wasm";
 import { findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
+import { getGoCodec } from "../../../storage/goCodec/goCodec";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
 import {
   normalizeEditorFrame,
@@ -29,24 +25,27 @@ const LINEAR_SCAN_LIMIT = 128;
 const keyframeIndexCache = new WeakMap<DeltaFrame[], number[]>();
 
 /**
- * Finds the length of the common prefix between two strings using WebAssembly.
- * Includes safety checks to ensure we don't cut in the middle of a multi-byte UTF-8 character.
+ * Finds the length of the common prefix between two strings, in code units,
+ * without cutting in the middle of a multi-byte UTF-8 character.
  */
 export function findCommonPrefixLength(str1: string, str2: string): number {
-  return findCommonPrefixLengthWasm(str1, str2) ?? findCommonPrefixJS(str1, str2);
+  return findCommonPrefixJS(str1, str2);
 }
 
 /**
- * Finds the length of the common suffix between two strings using WebAssembly.
- * Includes safety checks to ensure we don't cut in the middle of a multi-byte UTF-8 character.
+ * Finds the length of the common suffix between two strings, in code units,
+ * without cutting in the middle of a multi-byte UTF-8 character.
  */
 export function findCommonSuffixLength(str1: string, str2: string): number {
-  return findCommonSuffixLengthWasm(str1, str2) ?? findCommonSuffixJS(str1, str2);
+  return findCommonSuffixJS(str1, str2);
 }
 
 // ============================================================================
 // Content Delta Functions
 // ============================================================================
+
+const contentTextEncoder = new TextEncoder();
+const contentTextDecoder = new TextDecoder();
 
 /**
  * Creates a content delta representing the change from prev to next.
@@ -55,27 +54,21 @@ export function findCommonSuffixLength(str1: string, str2: string): number {
 export function createContentDelta(prev: string, next: string): ContentDelta | null {
   if (prev === next) return null;
 
-  const wasmAffixes = findCommonAffixLengthsWasm(prev, next);
-  const prefixLen = wasmAffixes?.prefixLen ?? findCommonPrefixJS(prev, next);
-  const suffixLen =
-    wasmAffixes?.suffixLen ?? findCommonSuffixJS(prev.slice(prefixLen), next.slice(prefixLen));
-
-  // The insert is computed from the remainder after the common prefix.
-  const nextRemainder = next.slice(prefixLen);
-
-  // The insert is what's in the middle of next, after prefix and before suffix.
-  const insert = nextRemainder.slice(0, nextRemainder.length - suffixLen);
-
-  return { prefixLen, suffixLen, insert };
+  const delta = getGoCodec().diffDelta(
+    contentTextEncoder.encode(prev),
+    contentTextEncoder.encode(next),
+  );
+  return { delta };
 }
 
 /**
- * Reconstructs content by applying a delta to base content.
+ * Reconstructs content by applying a delta to base content. `base` must equal
+ * the `prev` the delta was created against (the same contract the prior
+ * prefix/suffix model relied on); go-diff throws otherwise.
  */
 export function applyContentDelta(base: string, delta: ContentDelta): string {
-  const prefix = base.slice(0, delta.prefixLen);
-  const suffix = base.slice(base.length - delta.suffixLen);
-  return prefix + delta.insert + suffix;
+  const rebuilt = getGoCodec().applyDelta(contentTextEncoder.encode(base), delta.delta);
+  return contentTextDecoder.decode(rebuilt);
 }
 
 // ============================================================================

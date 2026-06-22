@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Recording } from "../core/src";
 import { decodeBase64 } from "../core/src/utils/base64";
+import { createFrameDelta, reconstructFrameAtIndex } from "../core/src/utils/frameDelta";
 import { decodeBase64ToRecordings, encodeRecordingToBase64Stream } from "./recordingCodec";
 import {
   createStreamingRecordingReader,
@@ -114,6 +115,25 @@ describe("recordingCodec", () => {
 
     const decodedAudio = await readBlobAsArray(decodedAudioBlob);
     expect(Array.from(decodedAudio)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("round trips a go-diff content delta through the zstd stream and reconstructs it", async () => {
+    const base = makeKeyframe(0, "line one\nline two\nline three\nline four\n");
+    // Two non-contiguous edits — the case the go-diff delta is meant to keep compact.
+    const next = makeKeyframe(500, "LINE one\nline two\nline three\nLINE four\n");
+    const deltaFrame = createFrameDelta(base, next);
+    expect(deltaFrame.contentDelta?.delta).toBeInstanceOf(Uint8Array);
+
+    const recording = createRecording({ duration: 800, frames: [base, deltaFrame] });
+
+    const encoded = await encodeRecordingToBase64Stream(recording);
+    const [decoded] = await decodeBase64ToRecordings(encoded);
+
+    // The opaque delta must survive msgpack-bin + zstd byte-for-byte...
+    expect(decoded.frames).toEqual(recording.frames);
+    // ...and still reconstruct the edited content during replay.
+    const reconstructed = reconstructFrameAtIndex(decoded.frames, 1);
+    expect(reconstructed?.state.content).toBe("LINE one\nline two\nline three\nLINE four\n");
   });
 
   it("incremental streaming reader matches a one-shot decode of the same bytes", async () => {

@@ -1,5 +1,4 @@
 import type * as monaco from "monaco-editor";
-import { findCommonAffixLengthsWasm } from "./wasm";
 import { findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
 import type { EditorPosition, EditorSelection } from "../types";
 
@@ -165,13 +164,12 @@ export const applyContentDiff = (
   }
 
   try {
-    // Find the common prefix and suffix to minimize the edit range (using Wasm)
-    const wasmAffixes = findCommonAffixLengthsWasm(currentContent, targetContent);
-    const commonPrefix =
-      wasmAffixes?.prefixLen ?? findCommonPrefixJS(currentContent, targetContent);
-    const commonSuffix =
-      wasmAffixes?.suffixLen ??
-      findCommonSuffixJS(currentContent.slice(commonPrefix), targetContent.slice(commonPrefix));
+    // Find the common prefix and suffix to minimize the edit range.
+    const commonPrefix = findCommonPrefixJS(currentContent, targetContent);
+    const commonSuffix = findCommonSuffixJS(
+      currentContent.slice(commonPrefix),
+      targetContent.slice(commonPrefix),
+    );
 
     const currentMiddle = currentContent.slice(commonPrefix, currentContent.length - commonSuffix);
     const targetMiddle = targetContent.slice(commonPrefix, targetContent.length - commonSuffix);

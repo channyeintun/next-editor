@@ -22,3 +22,6 @@ dist-ssr
 *.sw?
 .vite-hooks/_/
 tmp/
+
+# Go codec module is a reproducible build artifact (bun run build:wasm-go); ~4.2MB
+public/next-editor-go.wasm

@@ -1,5 +1,6 @@
 import { transfer, wrap, type Remote } from "comlink";
 import type { Recording } from "../core/src";
+import { loadGoCodec } from "./goCodec/goCodec";
 import {
   decodeBase64ToRecordings as decodeBase64ToRecordingsInProcess,
   decompressBinaryToRecordings as decompressBinaryToRecordingsInProcess,
@@ -55,6 +56,10 @@ function transferUint8Array(data: Uint8Array): Uint8Array {
 export { normalizeRecording };
 
 export async function decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
+  // The worker decodes, but the main thread reconstructs frames synchronously
+  // during replay (applyContentDelta → go-diff), so the codec must be loaded
+  // here regardless of whether the worker is used.
+  await loadGoCodec();
   const client = getRecordingCodecWorkerClient();
 
   if (!client) {
@@ -65,6 +70,7 @@ export async function decompressBinaryToRecordings(binaryData: Uint8Array): Prom
 }
 
 export async function decodeBase64ToRecordings(base64Data: string): Promise<Recording[]> {
+  await loadGoCodec();
   const client = getRecordingCodecWorkerClient();
 
   if (!client) {
@@ -75,6 +81,7 @@ export async function decodeBase64ToRecordings(base64Data: string): Promise<Reco
 }
 
 export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
+  await loadGoCodec();
   const client = getRecordingCodecWorkerClient();
 
   if (!client) {
@@ -85,6 +92,7 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
 }
 
 export async function encodeRecordingToBase64Stream(recording: Recording): Promise<string> {
+  await loadGoCodec();
   const client = getRecordingCodecWorkerClient();
 
   if (!client) {
