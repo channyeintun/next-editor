@@ -10,7 +10,7 @@
 // Importing this module for its side effects is enough; CodeEditor.tsx does so
 // before it renders <Editor>, which is the only @monaco-editor/react render site.
 import { loader } from "@monaco-editor/react";
-import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
+import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 
 // Every standalone editor feature (find, multi-cursor, bracket matching, …) but
 // no bundled languages. Importing editor.main instead would pull in all of them.
@@ -25,21 +25,23 @@ import "monaco-editor/esm/vs/editor/edcore.main";
 // grammar must be registered too.
 
 // Syntax highlighting + language-id registration.
-import "monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution";
-import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution";
-import "monaco-editor/esm/vs/basic-languages/css/css.contribution";
-import "monaco-editor/esm/vs/basic-languages/html/html.contribution";
+import "monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/css/css.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/html/html.contribution.js";
 // Markdown has no worker-backed service — this grammar is all it needs.
-import "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution";
+import "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution.js";
 
-// Worker-backed rich services. The typescript contribution also exposes
-// `monaco.languages.typescript`, which CodeEditor.tsx uses to set compiler
-// options and extra libs. JSON is self-contained: language/json registers its
-// own id and tokenizes via its worker, so it needs no basic-languages grammar.
-import "monaco-editor/esm/vs/language/typescript/monaco.contribution";
-import "monaco-editor/esm/vs/language/css/monaco.contribution";
-import "monaco-editor/esm/vs/language/html/monaco.contribution";
-import "monaco-editor/esm/vs/language/json/monaco.contribution";
+// Worker-backed rich services. As of monaco 0.55 the typescript contribution
+// exposes its compiler API (JsxEmit, typescriptDefaults, …) as named exports
+// rather than assigning `monaco.languages.typescript`; CodeEditor.tsx imports
+// those directly to set compiler options and extra libs. JSON is self-contained:
+// language/json registers its own id and tokenizes via its worker, so it needs
+// no basic-languages grammar.
+import "monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
+import "monaco-editor/esm/vs/language/css/monaco.contribution.js";
+import "monaco-editor/esm/vs/language/html/monaco.contribution.js";
+import "monaco-editor/esm/vs/language/json/monaco.contribution.js";
 
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";

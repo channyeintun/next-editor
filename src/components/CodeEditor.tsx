@@ -3,6 +3,13 @@ import Editor, { type OnMount, type BeforeMount, type Monaco } from "@monaco-edi
 // Self-host a trimmed Monaco (only the languages this editor uses) and point
 // @monaco-editor/react at it instead of the default CDN. Side-effect import.
 import "./monacoSetup";
+// monaco-editor 0.55 moved the TypeScript language API out of
+// `monaco.languages.typescript` and into named exports of this contribution
+// module (the `languages.typescript = …` wiring now lives in editor.main.js,
+// which our trimmed ./monacoSetup intentionally never imports). The module
+// ships an empty `.d.ts`, so we re-type it below through the main entry's
+// top-level `typescript` namespace, where the real declarations live.
+import * as monacoTypeScriptModule from "monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
   useWorkspaceActions,
@@ -138,8 +145,10 @@ declare module "*.svg" {
 
 let hasConfiguredMonacoTypeScript = false;
 const MONACO_BUNDLER_MODULE_RESOLUTION = 100;
+const monacoTypeScript =
+  monacoTypeScriptModule as unknown as typeof import("monaco-editor").typescript;
 
-function configureMonacoTypeScript(monaco: Monaco) {
+function configureMonacoTypeScript() {
   if (hasConfiguredMonacoTypeScript) {
     return;
   }
@@ -150,20 +159,17 @@ function configureMonacoTypeScript(monaco: Monaco) {
     allowNonTsExtensions: true,
     allowSyntheticDefaultImports: true,
     esModuleInterop: true,
-    jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
-    module: monaco.languages.typescript.ModuleKind.ESNext,
+    jsx: monacoTypeScript.JsxEmit.ReactJSX,
+    module: monacoTypeScript.ModuleKind.ESNext,
     moduleResolution: MONACO_BUNDLER_MODULE_RESOLUTION,
     noEmit: true,
     resolvePackageJsonExports: true,
     resolvePackageJsonImports: true,
-    target: monaco.languages.typescript.ScriptTarget.ESNext,
+    target: monacoTypeScript.ScriptTarget.ESNext,
     verbatimModuleSyntax: true,
   };
 
-  const defaults = [
-    monaco.languages.typescript.typescriptDefaults,
-    monaco.languages.typescript.javascriptDefaults,
-  ];
+  const defaults = [monacoTypeScript.typescriptDefaults, monacoTypeScript.javascriptDefaults];
 
   defaults.forEach((currentDefaults) => {
     currentDefaults.setEagerModelSync(true);
@@ -433,7 +439,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
    */
   const handleEditorBeforeMount: BeforeMount = (monaco: Monaco) => {
     monacoRef.current = monaco;
-    configureMonacoTypeScript(monaco);
+    configureMonacoTypeScript();
     syncActivePlaybackModel(monaco);
 
     // Define dark theme based on yCe configuration

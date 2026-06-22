@@ -10,6 +10,15 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "paths": {
+      // monaco-editor 0.55 added an `exports` map that no longer resolves the
+      // extensionless deep path `@monaco-editor/react`'s own .d.ts imports
+      // (`monaco-editor/esm/vs/editor/editor.api`), collapsing its `Monaco`
+      // type to `any`. Point that exact specifier at the real declarations.
+      "monaco-editor/esm/vs/editor/editor.api": [
+        "./node_modules/monaco-editor/esm/vs/editor/editor.api.d.ts"
+      ]
+    },
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
