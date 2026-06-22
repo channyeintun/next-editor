@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import type { PreviewPanelMode, PreviewSize } from "../../types/slides";
+import { isCustomPreviewSize } from "./previewSizeUtils";
 
 interface PreviewChromeProps {
   children: ReactNode;
@@ -46,12 +47,8 @@ interface PreviewChromeProps {
   previewAddressTitle: string;
 }
 
-function isCustomSize(size: PreviewSize): size is { width: number; height: number } {
-  return typeof size === "object";
-}
-
 function getFloatingStyle(size: PreviewSize): CSSProperties {
-  if (isCustomSize(size)) {
+  if (isCustomPreviewSize(size)) {
     return {
       top: "5rem",
       right: "1.5rem",

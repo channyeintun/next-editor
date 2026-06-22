@@ -1,4 +1,5 @@
 import { base64ToBytes, bytesToBase64, type WorkspaceProject } from "../types/workspace";
+import { requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
 
 /**
  * IndexedDB-backed store for binary workspace asset bytes (images, video, audio,
@@ -68,29 +69,6 @@ function getDatabase(): Promise<IDBDatabase> | null {
   }
 
   return databasePromise;
-}
-
-function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
-  });
-}
-
-function transactionToPromise(transaction: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () =>
-      reject(transaction.error ?? new Error("IndexedDB transaction failed"));
-    transaction.onabort = () =>
-      reject(transaction.error ?? new Error("IndexedDB transaction aborted"));
-  });
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  return copy.buffer;
 }
 
 export function collectBinaryAssetPaths(project: WorkspaceProject): string[] {

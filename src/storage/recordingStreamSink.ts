@@ -5,6 +5,7 @@ import { isKeyframe } from "../core/src/utils/deltaTypes";
 import {
   SEGMENT_KIND,
   createStreamingRecordingWriter,
+  readRecordTimestamp,
   type RecordingStreamMeta,
   type StreamingRecordingWriter,
 } from "./streamingRecordingCodec";
@@ -25,15 +26,6 @@ async function blobToBytes(blob: Blob): Promise<Uint8Array> {
     reader.onerror = () => reject(reader.error ?? new Error("Failed to read audio blob"));
     reader.readAsArrayBuffer(blob);
   });
-}
-
-function readRecordTimestamp(record: unknown): number {
-  if (record && typeof record === "object") {
-    const value = record as { timestamp?: unknown; time?: unknown };
-    if (typeof value.timestamp === "number") return value.timestamp;
-    if (typeof value.time === "number") return value.time;
-  }
-  return 0;
 }
 
 interface StreamedCounts {

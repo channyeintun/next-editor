@@ -84,6 +84,44 @@ export interface PreviewController {
   handleTransitionComplete: () => void;
 }
 
+/** Pointer coordinates from a mouse or touch event (React or native). */
+function getPointerCoords(event: MouseEvent | TouchEvent | ReactMouseEvent | ReactTouchEvent): {
+  x: number;
+  y: number;
+} {
+  if ("touches" in event) {
+    return { x: event.touches[0].clientX, y: event.touches[0].clientY };
+  }
+
+  return { x: event.clientX, y: event.clientY };
+}
+
+/**
+ * Navigates the preview iframe's history. Falls back to a postMessage command when the
+ * iframe is cross-origin and `history` access throws.
+ */
+function navigateIframeHistory(
+  iframeWindow: Window | null | undefined,
+  action: "back" | "forward",
+): void {
+  if (!iframeWindow) {
+    return;
+  }
+
+  try {
+    if (action === "back") {
+      iframeWindow.history.back();
+    } else {
+      iframeWindow.history.forward();
+    }
+  } catch {
+    iframeWindow.postMessage(
+      { type: IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE, payload: { action } },
+      "*",
+    );
+  }
+}
+
 export function shouldUsePlaybackPreview({
   currentRecording,
   isPlaying,
@@ -753,49 +791,11 @@ export function usePreviewController(): PreviewController {
   }, [forceRefreshPreview]);
 
   const handleBack = useCallback(() => {
-    const iframeWindow = iframeRef.current?.contentWindow;
-
-    if (!iframeWindow) {
-      return;
-    }
-
-    try {
-      iframeWindow.history.back();
-      return;
-    } catch {
-      iframeWindow.postMessage(
-        {
-          type: IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE,
-          payload: {
-            action: "back",
-          },
-        },
-        "*",
-      );
-    }
+    navigateIframeHistory(iframeRef.current?.contentWindow, "back");
   }, []);
 
   const handleForward = useCallback(() => {
-    const iframeWindow = iframeRef.current?.contentWindow;
-
-    if (!iframeWindow) {
-      return;
-    }
-
-    try {
-      iframeWindow.history.forward();
-      return;
-    } catch {
-      iframeWindow.postMessage(
-        {
-          type: IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE,
-          payload: {
-            action: "forward",
-          },
-        },
-        "*",
-      );
-    }
+    navigateIframeHistory(iframeRef.current?.contentWindow, "forward");
   }, []);
 
   const handleOpenConsole = useCallback(() => {
@@ -863,20 +863,7 @@ export function usePreviewController(): PreviewController {
       event.stopPropagation();
       setIsResizing(true);
 
-      const getCoords = (
-        currentEvent: MouseEvent | TouchEvent | ReactMouseEvent | ReactTouchEvent,
-      ) => {
-        if ("touches" in currentEvent) {
-          return {
-            x: currentEvent.touches[0].clientX,
-            y: currentEvent.touches[0].clientY,
-          };
-        }
-
-        return { x: currentEvent.clientX, y: currentEvent.clientY };
-      };
-
-      const { x: startX, y: startY } = getCoords(event);
+      const { x: startX, y: startY } = getPointerCoords(event);
       if (!iframeRef.current) {
         return;
       }
@@ -901,7 +888,7 @@ export function usePreviewController(): PreviewController {
         if (moveEvent.cancelable) {
           moveEvent.preventDefault();
         }
-        const { x: currentX, y: currentY } = getCoords(moveEvent);
+        const { x: currentX, y: currentY } = getPointerCoords(moveEvent);
 
         const newSize = getCustomPreviewSizeFromResize({
           startSize: { width: startWidth, height: startHeight },
@@ -949,20 +936,7 @@ export function usePreviewController(): PreviewController {
       event.stopPropagation();
       setIsResizing(true);
 
-      const getCoords = (
-        currentEvent: MouseEvent | TouchEvent | ReactMouseEvent | ReactTouchEvent,
-      ) => {
-        if ("touches" in currentEvent) {
-          return {
-            x: currentEvent.touches[0].clientX,
-            y: currentEvent.touches[0].clientY,
-          };
-        }
-
-        return { x: currentEvent.clientX, y: currentEvent.clientY };
-      };
-
-      const { x: startX } = getCoords(event);
+      const { x: startX } = getPointerCoords(event);
       const rect = containerRef.current?.getBoundingClientRect();
 
       if (!rect) {
@@ -977,7 +951,7 @@ export function usePreviewController(): PreviewController {
           moveEvent.preventDefault();
         }
 
-        const { x: currentX } = getCoords(moveEvent);
+        const { x: currentX } = getPointerCoords(moveEvent);
         setDockWidth(clampPreviewDockWidth(startWidth + startX - currentX, window.innerWidth));
       };
 

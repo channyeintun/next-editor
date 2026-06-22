@@ -26,6 +26,24 @@ function stripExtension(filename: string): string {
 }
 
 /**
+ * True when a recording carries non-empty media bytes. The blob is a real {@link Blob}
+ * for in-memory recordings, or a `{ [sizeKey]: number }` size placeholder for recordings
+ * whose bytes were stripped for the lightweight metadata snapshot.
+ */
+function hasMediaPayload(blob: unknown, sizeKey: "__audio_size" | "__camera_size"): boolean {
+  if (blob instanceof Blob) {
+    return blob.size > 0;
+  }
+
+  if (!blob || typeof blob !== "object" || !(sizeKey in blob)) {
+    return false;
+  }
+
+  const size = (blob as Record<string, unknown>)[sizeKey];
+  return typeof size === "number" && size > 0;
+}
+
+/**
  * Choose the camera video file that pairs with an imported `.ne`. Prefers an exact `cameraFile`
  * name match, then a basename match against the `.ne`, then the sole video file if only one was
  * provided. Returns null when nothing matches (the recording then plays without camera).
@@ -81,38 +99,6 @@ export class JsonStorage {
     return `${size.toFixed(1)} ${units[unitIndex]}`;
   }
 
-  private hasAudioPayload(recording: Recording): boolean {
-    const audioBlob = recording.audioBlob;
-
-    if (audioBlob instanceof Blob) {
-      return audioBlob.size > 0;
-    }
-
-    return (
-      !!audioBlob &&
-      typeof audioBlob === "object" &&
-      "__audio_size" in audioBlob &&
-      typeof audioBlob.__audio_size === "number" &&
-      audioBlob.__audio_size > 0
-    );
-  }
-
-  private hasCameraPayload(recording: Recording): boolean {
-    const cameraBlob = recording.cameraBlob;
-
-    if (cameraBlob instanceof Blob) {
-      return cameraBlob.size > 0;
-    }
-
-    return (
-      !!cameraBlob &&
-      typeof cameraBlob === "object" &&
-      "__camera_size" in cameraBlob &&
-      typeof cameraBlob.__camera_size === "number" &&
-      cameraBlob.__camera_size > 0
-    );
-  }
-
   private createStoredMetadata(recording: Recording, payloadSize: number): StoredRecordingMetadata {
     return {
       id: recording.id,
@@ -121,8 +107,8 @@ export class JsonStorage {
       duration: recording.duration,
       createdAt: recording.createdAt,
       updatedAt: Date.now(),
-      hasAudio: this.hasAudioPayload(recording),
-      hasCamera: this.hasCameraPayload(recording),
+      hasAudio: hasMediaPayload(recording.audioBlob, "__audio_size"),
+      hasCamera: hasMediaPayload(recording.cameraBlob, "__camera_size"),
       payloadSize,
     };
   }
