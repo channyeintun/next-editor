@@ -39,7 +39,7 @@ export function createHtmlCssLessonPackageJson(): string {
         preview: "vite preview --host 0.0.0.0 --port 4173",
       },
       devDependencies: {
-        vite: "^7.0.0",
+        vite: "^8.0.16",
       },
     },
     null,
@@ -115,7 +115,7 @@ export function createViteSpaPackageJson(
       },
       dependencies,
       devDependencies: {
-        vite: "^7.0.0",
+        vite: "^8.0.16",
         ...devDependencies,
       },
     },

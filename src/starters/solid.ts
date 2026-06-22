@@ -8,7 +8,7 @@ export function createStarterSolidWorkspace(): WorkspaceProject {
       createViteSpaPackageJson(
         "solid-lesson",
         { "solid-js": "^1.9.0" },
-        { "vite-plugin-solid": "^2.11.0" },
+        { "vite-plugin-solid": "^2.11.12" },
       ),
     ),
     "vite.config.js": createWorkspaceFile(

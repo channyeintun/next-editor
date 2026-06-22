@@ -4,14 +4,14 @@ import { createWorkspaceFile, STARTER_FAVICON_SVG } from "./shared";
 /**
  * TanStack Start "basic" starter.
  *
- * This mirrors the official `start-basic` example, but pinned to the last
- * release line that targets **Vite 7**: TanStack Start + Nitro v3-alpha runs
- * fine on Vite 5/6/7, while Vite 8 currently fails to respond inside the
- * WebContainer runtime, so the whole dependency set is held at the Vite 7 era
- * (`@tanstack/react-start@^1.163`, `vite@^7.3`). It is trimmed to a Home/About
- * route pair and uses plain CSS instead of Tailwind v4 — Tailwind's native
- * oxide/lightningcss bindings are the most likely thing to break in the
- * in-browser runtime, and every other starter here ships plain CSS too.
+ * This mirrors the official `start-basic` example, tracking the current
+ * **Vite 8** release line (`@tanstack/react-start@^1.167`, `vite@^8`). Earlier
+ * Vite 8 + Nitro v3 builds did not respond inside the WebContainer runtime, but
+ * that has since been resolved upstream, so the dependency set moves to latest.
+ * It is trimmed to a Home/About route pair and uses plain CSS instead of
+ * Tailwind v4 — Tailwind's native oxide/lightningcss bindings are the most
+ * likely thing to break in the in-browser runtime, and every other starter
+ * here ships plain CSS too.
  */
 export function createStarterWorkspaceProject(): WorkspaceProject {
   const files = {
@@ -31,9 +31,9 @@ export function createStarterWorkspaceProject(): WorkspaceProject {
             start: "node .output/server/index.mjs",
           },
           dependencies: {
-            "@tanstack/react-router": "^1.163.2",
-            "@tanstack/react-router-devtools": "^1.163.2",
-            "@tanstack/react-start": "^1.163.2",
+            "@tanstack/react-router": "^1.167.0",
+            "@tanstack/react-router-devtools": "^1.167.0",
+            "@tanstack/react-start": "^1.167.0",
             react: "^19.0.0",
             "react-dom": "^19.0.0",
           },
@@ -41,15 +41,14 @@ export function createStarterWorkspaceProject(): WorkspaceProject {
             "@types/node": "^22.5.4",
             "@types/react": "^19.0.8",
             "@types/react-dom": "^19.0.3",
-            "@vitejs/plugin-react": "^4.6.0",
-            // Nitro v3-alpha is the server runtime that pairs with the Vite 7
-            // release line; the exact pin matches the known-good combination.
-            nitro: "3.0.1-alpha.2",
+            "@vitejs/plugin-react": "^6.0.2",
+            // Nitro v3 is the server runtime that pairs with the Vite 8
+            // release line. Pinned exactly because caret ranges don't reliably
+            // match a floating prerelease tag.
+            nitro: "3.0.260610-beta",
             typescript: "^7.0.1-rc",
-            // Pinned to Vite 7 on purpose: Vite 8 + Nitro v3 does not respond
-            // inside the WebContainer runtime yet.
-            vite: "^7.3.1",
-            "vite-tsconfig-paths": "^5.1.4",
+            vite: "^8.0.16",
+            "vite-tsconfig-paths": "^6.1.1",
           },
         },
         null,
@@ -228,7 +227,7 @@ function About() {
         <a href="https://tanstack.com/start" target="_blank" rel="noreferrer">
           TanStack Start
         </a>{" "}
-        on Vite 7, running fully in the browser.
+        on Vite 8, running fully in the browser.
       </p>
     </section>
   );

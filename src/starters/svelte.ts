@@ -8,7 +8,7 @@ export function createStarterSvelteWorkspace(): WorkspaceProject {
       createViteSpaPackageJson(
         "svelte-lesson",
         {},
-        { "@sveltejs/vite-plugin-svelte": "^6.0.0", svelte: "^5.0.0" },
+        { "@sveltejs/vite-plugin-svelte": "^7.1.2", svelte: "^5.0.0" },
       ),
     ),
     "svelte.config.js": createWorkspaceFile(

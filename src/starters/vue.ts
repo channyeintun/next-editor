@@ -5,7 +5,7 @@ export function createStarterVueWorkspace(): WorkspaceProject {
   const files = {
     "package.json": createWorkspaceFile(
       "package.json",
-      createViteSpaPackageJson("vue-lesson", { vue: "^3.5.0" }, { "@vitejs/plugin-vue": "^6.0.0" }),
+      createViteSpaPackageJson("vue-lesson", { vue: "^3.5.0" }, { "@vitejs/plugin-vue": "^6.0.7" }),
     ),
     "vite.config.js": createWorkspaceFile(
       "vite.config.js",
