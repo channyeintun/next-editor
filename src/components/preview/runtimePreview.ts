@@ -166,7 +166,8 @@ export function getRuntimePreviewState(
     return {
       label: "Runtime preview unavailable",
       title: "Runtime preview unavailable",
-      description: "WebContainers need cross-origin isolation before the app preview can run.",
+      description:
+        "The live runtime needs a desktop Chromium or Firefox browser with cross-origin isolation. It isn't available on mobile browsers.",
       placeholderKind: "message",
     };
   }

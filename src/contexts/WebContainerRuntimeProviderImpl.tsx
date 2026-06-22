@@ -15,6 +15,8 @@ import {
   getRuntimeErrorMessage,
   resolveRuntimeRunCommand,
   getWorkspaceRoot,
+  isMobileBrowser,
+  isWebContainerRuntimeSupported,
   loadStoredEnvironmentVariables,
   normalizeEnvironmentVariables,
   persistEnvironmentVariables,
@@ -141,7 +143,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   lessonTypeRef.current = lessonType;
   runnerConfigRef.current = runnerConfig;
 
-  const isSupported = window.crossOriginIsolated;
+  const isSupported = isWebContainerRuntimeSupported();
   const workspaceRoot = useMemo(() => getWorkspaceRoot(projectName), [projectName]);
 
   const resetRuntime = useCallback(() => {
@@ -160,7 +162,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     if (!isSupported) {
       setStatus("error");
       setErrorMessage(
-        "WebContainers require cross-origin isolation. Reload the app from the configured dev or deployed host.",
+        isMobileBrowser()
+          ? "The in-browser runtime isn't supported on mobile browsers. Open this lesson on a desktop Chromium or Firefox browser to run it."
+          : "WebContainers require cross-origin isolation. Reload the app from the configured dev or deployed host.",
       );
       return null;
     }

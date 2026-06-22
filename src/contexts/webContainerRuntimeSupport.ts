@@ -67,6 +67,50 @@ export function getRuntimeErrorMessage(error: unknown): string {
   return "Unknown WebContainer runtime error";
 }
 
+/**
+ * Best-effort mobile/tablet detection. WebContainers only run in desktop
+ * Chromium/Firefox; on mobile browsers (iOS Safari, Android Chrome) booting one
+ * spikes memory enough that the OS reloads or kills the tab. We detect mobile so
+ * the runtime stays disabled rather than crashing the page on load.
+ */
+export function isMobileBrowser(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  // Client Hints are the reliable signal where available (Chromium).
+  const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
+  if (uaData && typeof uaData.mobile === "boolean") {
+    return uaData.mobile;
+  }
+
+  const ua = navigator.userAgent || "";
+  // iPadOS 13+ reports a desktop Safari UA, so treat a touch-capable "Macintosh"
+  // (a real Mac never reports touch points) as a tablet too.
+  const isIpadOs =
+    /Macintosh/.test(ua) &&
+    typeof navigator.maxTouchPoints === "number" &&
+    navigator.maxTouchPoints > 1;
+
+  return (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua) || isIpadOs
+  );
+}
+
+/**
+ * Whether the in-browser WebContainer runtime can boot here. It requires both
+ * cross-origin isolation (for SharedArrayBuffer) and a non-mobile browser. Mobile
+ * is excluded because WebContainers are unsupported there and the boot attempt
+ * OOM-reloads the tab. This gates auto-boot, so the runtime never starts on mobile.
+ */
+export function isWebContainerRuntimeSupported(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.crossOriginIsolated === true && !isMobileBrowser();
+}
+
 function stringifyPreviewMessageArg(value: unknown): string {
   if (typeof value === "string") {
     return value;

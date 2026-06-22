@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceProject } from "../types/workspace";
-import { createRuntimePreviewScript, createWorkspaceTree } from "./webContainerRuntimeSupport";
+import {
+  createRuntimePreviewScript,
+  createWorkspaceTree,
+  isMobileBrowser,
+  isWebContainerRuntimeSupported,
+} from "./webContainerRuntimeSupport";
 
 function nodeProject(htmlContent: string): WorkspaceProject {
   return {
@@ -50,6 +55,87 @@ describe("createRuntimePreviewScript", () => {
     const closings = script.match(/<\/script>/gi)?.length ?? 0;
 
     expect(closings).toBe(0);
+  });
+});
+
+describe("isMobileBrowser", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const stubNavigator = (navigator: Partial<Navigator> & Record<string, unknown>) => {
+    vi.stubGlobal("navigator", navigator);
+  };
+
+  it("honors the userAgentData.mobile client hint when present", () => {
+    stubNavigator({ userAgent: "Mozilla/5.0", userAgentData: { mobile: true } });
+    expect(isMobileBrowser()).toBe(true);
+
+    stubNavigator({ userAgent: "Mozilla/5.0", userAgentData: { mobile: false } });
+    expect(isMobileBrowser()).toBe(false);
+  });
+
+  it("detects phone user agents", () => {
+    stubNavigator({
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+      maxTouchPoints: 5,
+    });
+    expect(isMobileBrowser()).toBe(true);
+
+    stubNavigator({
+      userAgent: "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Mobile Safari/537.36",
+      maxTouchPoints: 5,
+    });
+    expect(isMobileBrowser()).toBe(true);
+  });
+
+  it("treats a touch-capable Macintosh as iPadOS (tablet)", () => {
+    stubNavigator({
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/605.1.15 Safari/605.1.15",
+      maxTouchPoints: 5,
+    });
+    expect(isMobileBrowser()).toBe(true);
+  });
+
+  it("treats a real desktop (no touch) as not mobile", () => {
+    stubNavigator({
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+      maxTouchPoints: 0,
+    });
+    expect(isMobileBrowser()).toBe(false);
+  });
+});
+
+describe("isWebContainerRuntimeSupported", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("requires both cross-origin isolation and a non-mobile browser", () => {
+    const desktop = {
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Chrome/120 Safari/537.36",
+      maxTouchPoints: 0,
+    };
+    const phone = {
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148",
+      maxTouchPoints: 5,
+    };
+
+    vi.stubGlobal("navigator", desktop);
+    vi.stubGlobal("crossOriginIsolated", true);
+    expect(isWebContainerRuntimeSupported()).toBe(true);
+
+    // Cross-origin isolation off → unsupported even on desktop.
+    vi.stubGlobal("crossOriginIsolated", false);
+    expect(isWebContainerRuntimeSupported()).toBe(false);
+
+    // Mobile is excluded even with cross-origin isolation on.
+    vi.stubGlobal("navigator", phone);
+    vi.stubGlobal("crossOriginIsolated", true);
+    expect(isWebContainerRuntimeSupported()).toBe(false);
   });
 });
 
