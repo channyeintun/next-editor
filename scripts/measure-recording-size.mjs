@@ -5,14 +5,22 @@
 // Usage: node scripts/measure-recording-size.mjs [path-to.ne ...]
 //        (defaults to public/introduction.ne)
 //
-// Format source of truth: src/storage/streamingRecordingCodec.ts
+// Format source of truth: src/storage/streamingRecordingCodec/format.ts
 
 import { readFile } from "node:fs/promises";
 
 const MAGIC = "SCR3";
 const HEADER_PREFIX_SIZE = 12; // magic(4) + version(2) + flags(2) + metaLen(4)
-const SEGMENT_HEADER_SIZE = 14; // kind(1) + len(4) + ts(4) + idx(4) + keyframe(1)
+// Segment header byte layout depends on the stream's formatVersion (see format.ts):
+//   v1 (14 bytes): kind(1) + len(4) + ts(4) + idx(4) + keyframe(1)
+//   v2 (22 bytes): kind(1) + len(4) + startTs(4) + endTs(4) + idx(4) + cluster(4) + flags(1)
+const LEGACY_SEGMENT_HEADER_SIZE = 14;
+const SEGMENT_HEADER_SIZE = 22;
 const FOOTER_TRAILER_SIZE = 8; // footerLen(4) + magic(4)
+
+function segmentHeaderSize(formatVersion) {
+  return formatVersion < 2 ? LEGACY_SEGMENT_HEADER_SIZE : SEGMENT_HEADER_SIZE;
+}
 
 const KIND_NAME = [
   "frames",
@@ -48,6 +56,8 @@ function measure(bytes) {
     throw new Error(`Not an SCR3 stream (magic "${magic}")`);
   }
 
+  const formatVersion = view.getUint16(4, true);
+  const segHeaderSize = segmentHeaderSize(formatVersion);
   const metaLen = view.getUint32(8, true);
   const headerEnd = HEADER_PREFIX_SIZE + metaLen;
   const headerBytes = headerEnd;
@@ -73,13 +83,17 @@ function measure(bytes) {
 
   const perKind = KIND_NAME.map((name) => ({ name, count: 0, payload: 0 }));
   let offset = headerEnd;
-  while (offset + SEGMENT_HEADER_SIZE <= segmentsEnd) {
+  while (offset + segHeaderSize <= segmentsEnd) {
     const kind = view.getUint8(offset);
     const byteLength = view.getUint32(offset + 1, true);
-    const payloadEnd = offset + SEGMENT_HEADER_SIZE + byteLength;
-    if (kind >= KIND_NAME.length || payloadEnd > segmentsEnd) break;
-    perKind[kind].count += 1;
-    perKind[kind].payload += byteLength;
+    const payloadEnd = offset + segHeaderSize + byteLength;
+    if (payloadEnd > segmentsEnd) break;
+    // Segments are self-delimiting, so a retired/unknown future kind (e.g. the
+    // reserved cameraChunk=9) is skipped rather than aborting the whole walk.
+    if (kind < KIND_NAME.length) {
+      perKind[kind].count += 1;
+      perKind[kind].payload += byteLength;
+    }
     offset = payloadEnd;
   }
 
