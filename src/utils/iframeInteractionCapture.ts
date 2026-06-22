@@ -102,11 +102,32 @@ export function createIframeInteractionCaptureScript(
         );
       }
 
+      function getClassName(element) {
+        const className = element.className;
+
+        if (typeof className === 'string') {
+          return className || undefined;
+        }
+
+        // SVG elements expose className as an SVGAnimatedString, which cannot be
+        // structured-cloned through postMessage. Read the underlying string so
+        // posting the interaction payload does not throw a DataCloneError.
+        if (className && typeof className.baseVal === 'string') {
+          return className.baseVal || undefined;
+        }
+
+        if (typeof element.getAttribute === 'function') {
+          return element.getAttribute('class') || undefined;
+        }
+
+        return undefined;
+      }
+
       function getTargetInfo(element) {
         return {
           tagName: element.tagName.toLowerCase(),
           id: element.id || undefined,
-          className: element.className || undefined,
+          className: getClassName(element),
           xpath: getXPath(element),
         };
       }

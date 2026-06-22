@@ -202,6 +202,37 @@ describe("createIframeInteractionCaptureScript", () => {
     expect(history.replaceState).toBe(originalReplaceState);
   });
 
+  it("serializes SVG className to a string so postMessage can clone it", () => {
+    const { button, documentTarget, install, parentPostMessage } = createCaptureHarness();
+
+    // SVG elements expose className as an SVGAnimatedString rather than a plain
+    // string; posting it verbatim throws a DataCloneError.
+    (button as unknown as { className: unknown }).className = {
+      baseVal: "icon stroke-current",
+    };
+
+    install();
+    documentTarget.emit("click", {
+      button: 0,
+      clientX: 5,
+      clientY: 6,
+      target: button,
+    });
+
+    expect(parentPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          target: expect.objectContaining({
+            className: "icon stroke-current",
+          }),
+          type: "click",
+        }),
+        type: IFRAME_INTERACTION_MESSAGE_TYPE,
+      }),
+      "*",
+    );
+  });
+
   it("emits mousemove coordinates with iframe viewport dimensions when enabled", () => {
     const { button, documentTarget, installWithMouseMoveCapture, parentPostMessage } =
       createCaptureHarness();
