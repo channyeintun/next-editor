@@ -23,5 +23,5 @@ dist-ssr
 .vite-hooks/_/
 tmp/
 
-# Go codec module is a reproducible build artifact (bun run build:wasm-go); ~4.2MB
-public/next-editor-go.wasm
+# Go codec module (bun run build:wasm-go). Committed because Vercel has no Go
+# toolchain — it's a prebuilt artifact regenerated locally when the codec changes.
