@@ -80,6 +80,8 @@ To compute `ContentDelta` compactly:
 
 > **Note:** the prefix/suffix helpers `findCommonPrefixLength` / `findCommonSuffixLength` (in `frameDelta.ts`, backed by the pure-JS `stringAffix.ts`) are **not** WebAssembly and are **no longer used for `ContentDelta`**. The original AssemblyScript affix module was removed when the codec moved to diff-match-patch. These JS helpers remain only to compute a minimal edit range when applying content to the live Monaco editor (`editorDiff.ts`).
 
+> The codec's implementation language has changed three times (AssemblyScript affix → Go/TinyGo zstd+go-diff → AssemblyScript diff-match-patch). See [`codec-history.md`](./codec-history.md) for the rationale behind each move.
+
 ### Position/Selection compression
 
 Since cursors mostly move short distances:

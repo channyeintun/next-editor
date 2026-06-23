@@ -30,7 +30,9 @@ A Go/TinyGo module can **never** load import-free: its runtime always imports
 `wasi_snapshot_preview1` (or the `gojs` glue), which no import-object-free loader
 can satisfy. The previous Go codec (~0.72 MB) was replaced by this module (~7 KB)
 for that reason — the diff win was always an _algorithm_ choice (Myers vs affix),
-not a _language_ one.
+not a _language_ one. See
+[`../docs/codec-history.md`](../docs/codec-history.md) for the full
+AssemblyScript → TinyGo → AssemblyScript evolution and why the loop settled here.
 
 To stay import-free the build uses `use: ["abort="]` (see
 [`asconfig.json`](../../../asconfig.json)), which traps via the WebAssembly
