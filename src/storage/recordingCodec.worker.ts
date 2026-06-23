@@ -1,6 +1,6 @@
 import { expose, transfer } from "comlink";
 import type { Recording } from "../core/src";
-import { loadGoCodec } from "./goCodec/goCodec";
+import { loadDmpCodec } from "./dmpCodec/dmpCodec";
 import {
   decodeBase64ToRecordings,
   decompressBinaryToRecordings,
@@ -14,19 +14,19 @@ const transferUint8Array = (data: Uint8Array): Uint8Array => {
 
 const api = {
   async decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
-    await loadGoCodec();
+    await loadDmpCodec();
     return decompressBinaryToRecordings(binaryData);
   },
   async decodeBase64ToRecordings(base64Data: string): Promise<Recording[]> {
-    await loadGoCodec();
+    await loadDmpCodec();
     return decodeBase64ToRecordings(base64Data);
   },
   async encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
-    await loadGoCodec();
+    await loadDmpCodec();
     return transferUint8Array(await encodeRecordingToStream(recording));
   },
   async encodeRecordingToBase64Stream(recording: Recording): Promise<string> {
-    await loadGoCodec();
+    await loadDmpCodec();
     return encodeRecordingToBase64Stream(recording);
   },
 };

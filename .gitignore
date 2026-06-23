@@ -23,5 +23,7 @@ dist-ssr
 .vite-hooks/_/
 tmp/
 
-# Go codec module (bun run build:wasm-go). Committed because Vercel has no Go
-# toolchain — it's a prebuilt artifact regenerated locally when the codec changes.
+# AssemblyScript diff-match-patch codec (bun run build:wasm). The .wasm artifact
+# is committed (tiny, ~7 KB) so tests and Vercel use it without a build step; the
+# .wat is a debug disassembly and is not.
+src/core/assembly/build/*.wat

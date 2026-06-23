@@ -11,7 +11,7 @@ import type {
 import { DELTA_CONFIG, isKeyframe, isDelta } from "./deltaTypes";
 export { isKeyframe, isDelta };
 import { findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
-import { getGoCodec } from "../../../storage/goCodec/goCodec";
+import { getDmpCodec } from "../../../storage/dmpCodec/dmpCodec";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
 import {
   normalizeEditorFrame,
@@ -54,7 +54,7 @@ const contentTextDecoder = new TextDecoder();
 export function createContentDelta(prev: string, next: string): ContentDelta | null {
   if (prev === next) return null;
 
-  const delta = getGoCodec().diffDelta(
+  const delta = getDmpCodec().diffDelta(
     contentTextEncoder.encode(prev),
     contentTextEncoder.encode(next),
   );
@@ -64,10 +64,10 @@ export function createContentDelta(prev: string, next: string): ContentDelta | n
 /**
  * Reconstructs content by applying a delta to base content. `base` must equal
  * the `prev` the delta was created against (the same contract the prior
- * prefix/suffix model relied on); go-diff throws otherwise.
+ * prefix/suffix model relied on); the codec throws otherwise.
  */
 export function applyContentDelta(base: string, delta: ContentDelta): string {
-  const rebuilt = getGoCodec().applyDelta(contentTextEncoder.encode(base), delta.delta);
+  const rebuilt = getDmpCodec().applyDelta(contentTextEncoder.encode(base), delta.delta);
   return contentTextDecoder.decode(rebuilt);
 }
 

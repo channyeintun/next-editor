@@ -34,5 +34,9 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts"],
+  // The AssemblyScript codec source uses AS globals (load/store/usize/…) and is
+  // compiled by `asc`, not `tsc`. Its own tsconfig (extending assemblyscript's)
+  // typechecks it; exclude it here so the app build doesn't try to.
+  "exclude": ["src/core/assembly"]
 }
