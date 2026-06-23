@@ -24,13 +24,11 @@ To balance compression ratio with seeking performance, we use a fixed interval (
 
 ### Content Delta
 
-Instead of storing the full text, we calculate the common prefix and suffix between two states and store only the change.
+Instead of storing the full text, we store an opaque diff-match-patch (Myers) delta that transforms the previous frame's content into this one. Unlike the former prefix/suffix ("affix") model, it stays compact across multiple, non-contiguous edits.
 
 ```typescript
 interface ContentDelta {
-  prefixLen: number; // Length of unchanged start
-  suffixLen: number; // Length of unchanged end
-  insert: string; // The new text inserted in the middle
+  delta: Uint8Array; // opaque diff-match-patch delta (see Compression Algorithms)
 }
 ```
 
@@ -72,13 +70,15 @@ interface DeltaRecording {
 
 ## Compression Algorithms
 
-### WebAssembly-Accelerated Diffing
+### WebAssembly diff-match-patch
 
-To compute `ContentDelta` efficiently at 60fps:
+To compute `ContentDelta` compactly:
 
-1.  **AssemblyScript Core**: `findCommonPrefixLength` and `findCommonSuffixLength` are implemented in AssemblyScript and compiled to WebAssembly.
-2.  **Performance**: Wasm operates directly on raw memory bytes, offering predictable high performance compared to JS string manipulation.
-3.  **UTF-8 Safety Guard**: The implementation deliberately checks for multi-byte character boundaries (e.g., emojis). If a calculated split point lands in the middle of a UTF-8 sequence, the guard backtracks to the character start to ensure valid string operations.
+1.  **AssemblyScript core**: `diffDelta(a, b)` / `applyDelta(a, delta)` are a diff-match-patch (Myers middle-snake) implementation in AssemblyScript, compiled to a tiny **zero-import** WebAssembly module (`src/core/assembly/`, ~7 KB). `createContentDelta` / `applyContentDelta` in `frameDelta.ts` round-trip the delta through it (loaded via the host wrapper in `src/storage/dmpCodec/`).
+2.  **Why Myers, not affix**: the earlier prefix/suffix model bloated to near-keyframe size whenever an edit touched both ends of the document; the Myers diff stays small across scattered, non-contiguous edits.
+3.  **Performance & UTF-8 safety**: Wasm diffs the raw UTF-8 bytes directly (predictable, fast). `applyDelta` reconstructs the target bytes exactly, so the round-trip is byte-exact and can never split a multi-byte character.
+
+> **Note:** the prefix/suffix helpers `findCommonPrefixLength` / `findCommonSuffixLength` (in `frameDelta.ts`, backed by the pure-JS `stringAffix.ts`) are **not** WebAssembly and are **no longer used for `ContentDelta`**. The original AssemblyScript affix module was removed when the codec moved to diff-match-patch. These JS helpers remain only to compute a minimal edit range when applying content to the live Monaco editor (`editorDiff.ts`).
 
 ### Position/Selection compression
 
