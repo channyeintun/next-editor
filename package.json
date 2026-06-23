@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vp dev",
     "start": "vp dev",
-    "build": "bun run build:wasm && tsc -b tsconfig.json && vp build",
+    "build": "tsc -b tsconfig.json && vp build",
     "build:wasm": "asc src/core/assembly/index.ts --config asconfig.json --target release",
     "check": "vp check",
     "test": "vp test",
