@@ -47,7 +47,7 @@ export function createStarterWorkspaceProject(): WorkspaceProject {
             // match a floating prerelease tag.
             nitro: "3.0.260610-beta",
             typescript: "^7.0.1-rc",
-            vite: "^8.0.16",
+            vite: "^8.1.0",
             "vite-tsconfig-paths": "^6.1.1",
           },
         },
