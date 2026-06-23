@@ -2,23 +2,22 @@
 //
 // The module is a pure-compute, **zero-import** WASM (see src/core/assembly) — a
 // TinyGo/WASI module can never be, because its runtime always needs host imports.
-// That zero-import shape is precisely what Vite 8.1's WASM-ESM integration wants:
-// the day the build toolchain supports it, this becomes
-//   `import { diffDelta, applyDelta, alloc, freeBuf, memory } from "…wasm";`
-// with no fetch and no import object.
+// That zero-import shape lets us use the WASM-ESM integration directly: a plain
+// `import("…wasm")` instantiates the module (no import object) and hands back its
+// exports. `loadDmpCodec()` uses the *dynamic* form so the wasm code-splits into
+// its own lazy chunk and doesn't pull top-level await into the main graph; the
+// static `import { diffDelta } from "…wasm"` works too.
 //
-// Today the project builds with vite-plus (rolldown), which hasn't wired that
-// bare-`.wasm` ESM integration yet — a bare import routes to the wasm fallback
-// plugin and fails. So we use Vite's `?init` import, which is the supported
-// mechanism in this toolchain: it hands back an init function that instantiates
-// the (import-free) module on demand. Switching to the bare ESM import later is
-// a one-line change here.
+// The integration is provided by `vite-plugin-wasm` (vite.config.ts) — vite-plus
+// (rolldown) doesn't yet ship the bare-`.wasm` integration natively, and that
+// plugin is exactly what stock Vite 8.1 upstreamed it from. Vitest can't import
+// `.wasm`, so tests instantiate from bytes via `instantiateDmpCodec` instead and
+// never hit the dynamic import.
 //
 // WebAssembly calls are synchronous, so once the module is instantiated the
 // codec methods are plain sync calls — only `loadDmpCodec()` is async. All data
 // crosses through linear memory using the module's alloc/pack ABI (see
 // src/core/assembly/README.md).
-import initDmpWasm from "../../core/assembly/build/next-editor-dmp.wasm?init";
 
 interface DmpExports {
   memory: WebAssembly.Memory;
@@ -119,7 +118,7 @@ export function installDmpCodec(codec: DmpCodec): void {
 }
 
 /**
- * Load and cache the codec via Vite's `?init` WASM import, then install it as the
+ * Load and cache the codec via the WASM-ESM integration, then install it as the
  * singleton. A no-op once a codec is present, so it's safe to call repeatedly and
  * won't instantiate again when one was installed directly.
  * Run `bun run build:wasm` to produce the artifact.
@@ -127,9 +126,10 @@ export function installDmpCodec(codec: DmpCodec): void {
 export function loadDmpCodec(): Promise<DmpCodec> {
   if (current) return Promise.resolve(current);
   cached ??= (async () => {
-    // The module imports nothing, so it needs no import object.
-    const instance = await initDmpWasm();
-    const codec = bind(instance.exports as unknown as DmpExports);
+    // Bare WASM-ESM import: Vite instantiates the (zero-import) module and the
+    // returned namespace *is* its exports.
+    const wasm = await import("../../core/assembly/build/next-editor-dmp.wasm");
+    const codec = bind(wasm as unknown as DmpExports);
     current = codec;
     return codec;
   })();

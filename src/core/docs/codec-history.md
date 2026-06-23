@@ -115,13 +115,26 @@ imports (see "Loading", below).
 
 ### Loading (the Vite WASM import)
 
-The codec is import-free, so the goal is Vite 8.1's bare WASM-ESM integration
-(`import { diffDelta } from "…wasm"`). The project builds with **vite-plus
-(rolldown), which hasn't implemented that yet** — a bare import routes to
-`builtin:vite-wasm-fallback` and fails. So `loadDmpCodec()` uses Vite's **`?init`**
-import (`import init from "…wasm?init"` → `await init()`), the supported path in
-this toolchain. Because the module declares no imports, switching to the bare ESM
-form once vite-plus supports it is a one-line change in `dmpCodec.ts`.
+The codec is import-free, so `loadDmpCodec()` uses the **bare WASM-ESM import** —
+`await import("…wasm")` returns the instantiated exports directly (no fetch, no
+import object). The dynamic form is used so the wasm code-splits into its own lazy
+chunk without pulling top-level await into the main module graph.
+
+vite-plus (rolldown) doesn't ship that integration natively yet — a bare import
+would otherwise route to `builtin:vite-wasm-fallback` and fail — so it's provided
+by [`vite-plugin-wasm`](https://github.com/Menci/vite-plugin-wasm) (the plugin
+stock Vite 8.1 upstreamed the feature from), registered in both `plugins` and
+`worker.plugins` in `vite.config.ts`. Two consequences:
+
+- **`worker.format: "es"`** is required: `vite-plugin-wasm` emits a top-level
+  `await` in the generated wasm module, which only an ES-module worker tolerates.
+  This is global, so Monaco's `?worker` workers also build as ES modules (fine —
+  they're created as `type: "module"` already, but worth knowing).
+- **Vitest can't import `.wasm`** (its bundled Vite errors), so tests instantiate
+  from bytes via `instantiateDmpCodec` and never hit the dynamic import.
+
+When vite-plus ships the integration natively, the plugin (and `worker.format`)
+can be dropped with no code change.
 
 ### Format compatibility
 

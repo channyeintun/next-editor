@@ -14,17 +14,18 @@ Compression is handled separately by **fflate** (zlib), not this module.
 ## Why AssemblyScript (and why it can use Vite's `.wasm` import)
 
 This module is intentionally **import-free** — `WebAssembly.Module.imports()` is
-`[]`. That is exactly the shape Vite 8.1's WASM-ESM integration requires: with no
-imports to satisfy, the host can load it with no import object and use its exports
-directly (see [`dmpCodec.ts`](../../storage/dmpCodec/dmpCodec.ts)) — no fetch, no
-`WebAssembly.instantiate` boilerplate.
+`[]`. That is exactly the shape Vite's WASM-ESM integration requires: with no
+imports to satisfy, the host loads it with a bare `import("…wasm")` and uses its
+exports directly (see [`dmpCodec.ts`](../../storage/dmpCodec/dmpCodec.ts)) — no
+fetch, no `WebAssembly.instantiate` boilerplate, no import object.
 
-> **Toolchain note.** The project builds with `vite-plus` (rolldown), which does
-> not yet implement the bare `import { diffDelta } from "…wasm"` ESM integration
-> — a bare import routes to `builtin:vite-wasm-fallback` and fails. So the loader
-> uses Vite's `?init` import, the supported mechanism here. Because the module is
-> import-free, moving to the bare ESM form once vite-plus supports it is a
-> one-line change in `dmpCodec.ts`.
+> **Toolchain note.** `vite-plus` (rolldown) doesn't ship the bare-`.wasm`
+> integration natively yet — without help a bare import routes to
+> `builtin:vite-wasm-fallback` and fails. So it's enabled by
+> [`vite-plugin-wasm`](https://github.com/Menci/vite-plugin-wasm) (the plugin
+> stock Vite 8.1 upstreamed the feature from) in `vite.config.ts`, which also
+> requires `worker.format: "es"` (the plugin emits a top-level `await` only an
+> ES-module worker tolerates). See `../docs/codec-history.md` → "Loading".
 
 A Go/TinyGo module can **never** load import-free: its runtime always imports
 `wasi_snapshot_preview1` (or the `gojs` glue), which no import-object-free loader

@@ -1,6 +1,7 @@
 import { defineConfig, lazyPlugins } from "vite-plus";
 import type { PluginOption } from "@voidzero-dev/vite-plus-core";
 import tailwindcss from "@tailwindcss/vite";
+import wasm from "vite-plugin-wasm";
 import { fileURLToPath } from "node:url";
 
 const crossOriginHeaders = {
@@ -14,11 +15,18 @@ export default defineConfig({
     "*": "vp check --fix",
   },
   plugins: [
+    wasm() as unknown as PluginOption,
     tailwindcss() as unknown as PluginOption,
     lazyPlugins(async () => {
       return [...(await import("@vitejs/plugin-react")).default()] as unknown as PluginOption[];
     }),
   ] as unknown as PluginOption[],
+  worker: {
+    // ES-module workers tolerate the top-level await that vite-plugin-wasm emits
+    // in the generated wasm module (the recording worker is already type:module).
+    format: "es",
+    plugins: () => [wasm()] as unknown as PluginOption[],
+  },
   test: {
     globals: true,
     environment: "jsdom",
