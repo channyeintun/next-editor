@@ -1,7 +1,8 @@
-import { Maximize, Minimize, SquareArrowOutUpRight } from "lucide-react";
+import { Maximize, Minimize, Play, SquareArrowOutUpRight } from "lucide-react";
 import { Link } from "react-router";
 import Navbar from "./Navbar";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { isMobileBrowser } from "../utils/isMobileBrowser";
 
 const DEMO_IFRAME_WIDTH = 1440;
 const DEMO_IFRAME_HEIGHT = 900;
@@ -15,6 +16,11 @@ const LandingPage = () => {
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [featuresInView, setFeaturesInView] = useState(false);
+  // The demo iframe boots a SECOND full copy of the editor (Monaco + recording
+  // decode + rrweb replay + audio). On mobile that runs alongside this page and
+  // its replay buffers grow until iOS Safari reloads then kills the tab. Render a
+  // static tap-to-open card there instead, so the landing page stays light.
+  const [isMobile] = useState(() => isMobileBrowser());
 
   // Reveal the feature cards once they scroll into view (replaces motion's whileInView).
   useEffect(() => {
@@ -174,21 +180,23 @@ const LandingPage = () => {
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={toggleFullscreen}
-                          aria-label={
-                            isFullscreen ? "Exit full screen" : "View demo in full screen"
-                          }
-                          title={isFullscreen ? "Exit full screen" : "Full screen"}
-                          className="inline-flex size-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white"
-                        >
-                          {isFullscreen ? (
-                            <Minimize className="size-4" aria-hidden="true" />
-                          ) : (
-                            <Maximize className="size-4" aria-hidden="true" />
-                          )}
-                        </button>
+                        {!isMobile && (
+                          <button
+                            type="button"
+                            onClick={toggleFullscreen}
+                            aria-label={
+                              isFullscreen ? "Exit full screen" : "View demo in full screen"
+                            }
+                            title={isFullscreen ? "Exit full screen" : "Full screen"}
+                            className="inline-flex size-9 items-center justify-center rounded-full border border-white/10 text-slate-300 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white"
+                          >
+                            {isFullscreen ? (
+                              <Minimize className="size-4" aria-hidden="true" />
+                            ) : (
+                              <Maximize className="size-4" aria-hidden="true" />
+                            )}
+                          </button>
+                        )}
                         <a
                           href={DEMO_URL}
                           target="_blank"
@@ -203,20 +211,43 @@ const LandingPage = () => {
                     </div>
                     <div
                       ref={containerRef}
-                      className="relative w-full aspect-1440/900 overflow-hidden bg-[#11141c]"
+                      className={`relative w-full overflow-hidden bg-[#11141c] ${
+                        isMobile ? "" : "aspect-1440/900"
+                      }`}
                     >
-                      <iframe
-                        src={DEMO_IFRAME_SRC}
-                        className="absolute border-0 origin-top-left"
-                        style={{
-                          width: DEMO_IFRAME_WIDTH,
-                          height: DEMO_IFRAME_HEIGHT,
-                          left: offsetX,
-                          top: offsetY,
-                          transform: `scale(${scale})`,
-                        }}
-                        title="Next Editor Live Demo"
-                      />
+                      {isMobile ? (
+                        <a
+                          href={DEMO_URL}
+                          className="group flex flex-col items-center justify-center gap-5 px-8 py-14 text-center"
+                          aria-label="Open the interactive demo"
+                        >
+                          <span className="flex size-16 items-center justify-center rounded-full bg-pinata-purple shadow-[0_10px_35px_-5px_rgba(109,87,255,0.6)] ring-1 ring-white/20 transition-transform group-active:scale-95">
+                            <Play
+                              className="size-6 translate-x-0.5 fill-white text-white"
+                              aria-hidden="true"
+                            />
+                          </span>
+                          <div className="space-y-1.5">
+                            <p className="text-lg font-semibold text-white">
+                              Play the interactive demo
+                            </p>
+                            <p className="text-sm text-slate-400">Tap to open the full editor</p>
+                          </div>
+                        </a>
+                      ) : (
+                        <iframe
+                          src={DEMO_IFRAME_SRC}
+                          className="absolute border-0 origin-top-left"
+                          style={{
+                            width: DEMO_IFRAME_WIDTH,
+                            height: DEMO_IFRAME_HEIGHT,
+                            left: offsetX,
+                            top: offsetY,
+                            transform: `scale(${scale})`,
+                          }}
+                          title="Next Editor Live Demo"
+                        />
+                      )}
                       {isFullscreen && (
                         <button
                           type="button"

@@ -19,6 +19,7 @@ import {
 import { createRrwebPreviewRecorderScript } from "../components/preview/rrwebPreview";
 import { createIframeConsoleBridgeScript } from "../utils/iframeConsoleBridge";
 import { createIframeInteractionCaptureScript } from "../utils/iframeInteractionCapture";
+import { isMobileBrowser } from "../utils/isMobileBrowser";
 
 export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   enabled: true,
@@ -67,35 +68,10 @@ export function getRuntimeErrorMessage(error: unknown): string {
   return "Unknown WebContainer runtime error";
 }
 
-/**
- * Best-effort mobile/tablet detection. WebContainers only run in desktop
- * Chromium/Firefox; on mobile browsers (iOS Safari, Android Chrome) booting one
- * spikes memory enough that the OS reloads or kills the tab. We detect mobile so
- * the runtime stays disabled rather than crashing the page on load.
- */
-export function isMobileBrowser(): boolean {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-
-  // Client Hints are the reliable signal where available (Chromium).
-  const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
-  if (uaData && typeof uaData.mobile === "boolean") {
-    return uaData.mobile;
-  }
-
-  const ua = navigator.userAgent || "";
-  // iPadOS 13+ reports a desktop Safari UA, so treat a touch-capable "Macintosh"
-  // (a real Mac never reports touch points) as a tablet too.
-  const isIpadOs =
-    /Macintosh/.test(ua) &&
-    typeof navigator.maxTouchPoints === "number" &&
-    navigator.maxTouchPoints > 1;
-
-  return (
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua) || isIpadOs
-  );
-}
+// Re-exported so existing runtime-support imports keep working; the
+// implementation lives in a dependency-free util that the light landing critical
+// path can also import without dragging in this module.
+export { isMobileBrowser };
 
 /**
  * Whether the in-browser WebContainer runtime can boot here. It requires both
