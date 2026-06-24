@@ -18,15 +18,7 @@ export default defineConfig({
     wasm() as unknown as PluginOption,
     tailwindcss() as unknown as PluginOption,
     lazyPlugins(async () => {
-      const { default: react, reactCompilerPreset } = await import("@vitejs/plugin-react");
-      const { default: babel } = await import("@rolldown/plugin-babel");
-      return [
-        ...react(),
-        // React Compiler (babel-plugin-react-compiler) runs through Rolldown's
-        // Babel pass; default target is React 19, so no runtime shim is needed.
-        // The plugin's default exclude already skips node_modules.
-        babel({ presets: [reactCompilerPreset()] }),
-      ] as unknown as PluginOption[];
+      return [...(await import("@vitejs/plugin-react")).default()] as unknown as PluginOption[];
     }),
   ] as unknown as PluginOption[],
   worker: {
