@@ -245,61 +245,7 @@ function loadStoredWorkspaceSnapshot(): StoredWorkspaceSnapshot | null {
   }
 }
 
-/**
- * True when the page was opened with a `?url=…recording.ne` link, i.e. a `.ne`
- * recording is about to be fetched and loaded (see `useUrlQuery`). The pathname
- * check mirrors `useUrlLoader.isNextEditorUrl`.
- */
-function hasPendingRecordingUrl(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  const raw = new URLSearchParams(window.location.search).get("url");
-
-  if (!raw) {
-    return false;
-  }
-
-  try {
-    const decoded = decodeURIComponent(raw);
-    const pathname = decoded.split(/[?#]/)[0].toLowerCase();
-    return pathname.endsWith(".ne");
-  } catch {
-    return false;
-  }
-}
-
-/**
- * An empty workspace with no files. Used as the initial state when a recording
- * URL is pending so the editor starts blank and the loaded recording drops
- * straight in — seeding the starter template first would flash unrelated content
- * that visibly shifts when the recording replaces it.
- */
-function createEmptyWorkspaceProject(): WorkspaceProject {
-  return {
-    id: "empty-workspace",
-    name: "Untitled",
-    lessonType: "html-css",
-    entryFilePath: DEFAULT_WORKSPACE_ENTRY_PATH,
-    folders: [],
-    files: {},
-  };
-}
-
 export function createInitialWorkspaceSnapshot(): StoredWorkspaceSnapshot {
-  // Skip both the saved project and the starter template when a `?url=` recording
-  // is queued for load, so the editor starts empty rather than flashing seeded
-  // content that shifts once the recording arrives.
-  if (hasPendingRecordingUrl()) {
-    const project = createEmptyWorkspaceProject();
-    return {
-      activeFilePath: project.entryFilePath,
-      project,
-      sidebarWidth: readStoredFileSidebarWidth(),
-    };
-  }
-
   const storedSnapshot = loadStoredWorkspaceSnapshot();
 
   if (storedSnapshot) {

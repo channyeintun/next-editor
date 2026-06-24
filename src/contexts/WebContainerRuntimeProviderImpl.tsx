@@ -24,7 +24,6 @@ import {
 } from "./webContainerRuntimeSupport";
 import {
   useWorkspaceActions,
-  useWorkspaceFileCount,
   useWorkspaceLessonType,
   useWorkspaceProjectName,
   useWorkspaceSyncVersion,
@@ -51,7 +50,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const lessonType = useWorkspaceLessonType();
   const projectName = useWorkspaceProjectName();
   const syncVersion = useWorkspaceSyncVersion();
-  const fileCount = useWorkspaceFileCount();
   const hasRunInitCommandRef = useRef(false);
   const hasAutoStartedRef = useRef(false);
   const reverseSyncTimeoutRef = useRef<number | null>(null);
@@ -534,24 +532,14 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       !isSupported ||
       hasAutoStartedRef.current ||
       !runnerConfig.enabled ||
-      !runnerConfig.runOnStartup ||
-      // Don't boot a runtime for an empty workspace (e.g. while a `?url=` recording
-      // is still loading); the effect re-runs once its files land.
-      fileCount === 0
+      !runnerConfig.runOnStartup
     ) {
       return;
     }
 
     hasAutoStartedRef.current = true;
     void startRuntime();
-  }, [
-    fileCount,
-    lessonType,
-    isSupported,
-    runnerConfig.enabled,
-    runnerConfig.runOnStartup,
-    startRuntime,
-  ]);
+  }, [lessonType, isSupported, runnerConfig.enabled, runnerConfig.runOnStartup, startRuntime]);
 
   useEffect(() => {
     hasRunInitCommandRef.current = false;
