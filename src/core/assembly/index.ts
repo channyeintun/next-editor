@@ -19,6 +19,14 @@
 // `(ptr << 32) | len`, then releases buffers with `freeBuf`. A result of `0`
 // means empty; `ERR` (all ones) means failure (corrupt/mismatched delta). This
 // mirrors the prior Go codec ABI so the JS host's reader is unchanged.
+//
+// SIZE BOUND: offsets and op lengths are i32/u32 and the serialized op tag is
+// `(len << 2) | type`, so each buffer and each single op must stay under ~2^30
+// bytes, and linear-memory addresses under 2^31 (INSERT stores its source as a
+// signed-i32 address). The varint reader matches this — it stops at `shift > 28`,
+// i.e. a 32-bit value. Comfortable for editor-sized documents; past ~1 GB these
+// would overflow *silently* rather than trap, so callers must not feed it
+// gigabyte inputs.
 
 const ERR: u64 = 0xffffffffffffffff;
 
@@ -304,6 +312,12 @@ export function diffDelta(aPtr: usize, aLen: i32, bPtr: usize, bLen: i32): u64 {
   }
   if (size == 0) {
     resetOps();
+    // The `0` (empty-delta) result is reserved for empty OUTPUT: applyDelta reads
+    // an empty delta as "produce nothing" and still requires the source to be
+    // fully consumed, so it only round-trips when aLen == 0 too. Identical
+    // *non-empty* inputs must NOT short-circuit to 0 — they fall through to the
+    // compact EQUAL-only delta below (~1-5 bytes) so applyDelta can copy the
+    // source back. (Callers skip identical content upstream; see createContentDelta.)
     return 0; // both inputs empty (or identical empty middle)
   }
 
@@ -347,7 +361,11 @@ export function applyDelta(aPtr: usize, aLen: i32, dPtr: usize, dLen: i32): u64 
       outLen += len;
     }
   }
-  // A well-formed delta consumes the whole source (guards against a wrong base).
+  // A well-formed delta consumes exactly the whole source. This catches a
+  // wrong-*length* base and structurally invalid deltas — but NOT a same-length
+  // base whose bytes differ: EQUAL copies from the source cursor unconditionally,
+  // so a same-length mismatch reconstructs silently-wrong output. Base-content
+  // integrity is the caller's contract (see applyContentDelta), not checked here.
   if (srcCursor != aLen) return ERR;
   if (outLen == 0) return 0;
 
