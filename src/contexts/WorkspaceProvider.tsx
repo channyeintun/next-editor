@@ -28,7 +28,9 @@ interface WorkspaceProviderProps {
 }
 
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }) => {
-  const initialSnapshotRef = useRef<StoredWorkspaceSnapshot>(createInitialWorkspaceSnapshot());
+  const initialSnapshotRef = useRef<StoredWorkspaceSnapshot | null>(
+    createInitialWorkspaceSnapshot(),
+  );
   const workspaceStoreRef = useRef(createWorkspaceStore(initialSnapshotRef.current));
 
   // The synchronous localStorage bootstrap loads binary assets with empty
@@ -37,8 +39,13 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   useEffect(() => {
     let cancelled = false;
     const store = workspaceStoreRef.current;
+    const context = store.getSnapshot().context;
 
-    void loadWorkspaceAssetContents(store.getSnapshot().context.project)
+    if (!context.isInitialized) {
+      return;
+    }
+
+    void loadWorkspaceAssetContents(context.project)
       .then((contents) => {
         if (cancelled || Object.keys(contents).length === 0) {
           return;
@@ -121,10 +128,13 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, []);
 
   const updateActiveFileContent = useCallback((content: string) => {
-    const { activeFilePath } = workspaceStoreRef.current.getSnapshot().context;
+    const context = workspaceStoreRef.current.getSnapshot().context;
+    if (!context.isInitialized) {
+      return;
+    }
 
     workspaceStoreRef.current.trigger.updateFileContent({
-      path: activeFilePath,
+      path: context.activeFilePath,
       content,
     });
   }, []);
@@ -135,8 +145,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     }
 
     try {
-      const { activeFilePath, project, sidebarWidth } =
-        workspaceStoreRef.current.getSnapshot().context;
+      const context = workspaceStoreRef.current.getSnapshot().context;
+      if (!context.isInitialized) {
+        return;
+      }
+      const { activeFilePath, project, sidebarWidth } = context;
       const storedSnapshot = {
         activeFilePath,
         project,
@@ -201,11 +214,22 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, []);
 
   const getProject = useCallback(() => {
-    return workspaceStoreRef.current.getSnapshot().context.project;
+    const context = workspaceStoreRef.current.getSnapshot().context;
+    return context.isInitialized
+      ? context.project
+      : {
+          id: "uninitialized",
+          name: "Untitled",
+          lessonType: "html-css" as const,
+          entryFilePath: "",
+          folders: [],
+          files: {},
+        };
   }, []);
 
   const getActiveFilePath = useCallback(() => {
-    return workspaceStoreRef.current.getSnapshot().context.activeFilePath;
+    const context = workspaceStoreRef.current.getSnapshot().context;
+    return context.isInitialized ? context.activeFilePath : "";
   }, []);
 
   const getCollapsedFolders = useCallback(() => {
@@ -221,14 +245,16 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, []);
 
   const getFile = useCallback((path: string) => {
-    return (
-      workspaceStoreRef.current.getSnapshot().context.project.files[normalizeWorkspacePath(path)] ??
-      null
-    );
+    const context = workspaceStoreRef.current.getSnapshot().context;
+    if (!context.isInitialized) {
+      return null;
+    }
+    return context.project.files[normalizeWorkspacePath(path)] ?? null;
   }, []);
 
   const listFiles = useCallback(() => {
-    return workspaceStoreRef.current.getSnapshot().context.sidebarState.files;
+    const context = workspaceStoreRef.current.getSnapshot().context;
+    return context.isInitialized ? context.sidebarState.files : [];
   }, []);
 
   const actionsValue = useMemo<WorkspaceActions>(

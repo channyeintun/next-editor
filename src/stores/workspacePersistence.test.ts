@@ -83,11 +83,13 @@ describe("hydrateAssetContents", () => {
       ]),
     });
 
-    expect(store.getSnapshot().context.dirtyState.hasUnsavedChanges).toBe(false);
+    const initial = store.getSnapshot().context;
+    expect(initial.isInitialized && initial.dirtyState.hasUnsavedChanges).toBe(false);
 
     store.trigger.hydrateAssetContents({ contents: { "public/logo.png": "SGVsbG8=" } });
 
     const context = store.getSnapshot().context;
+    if (!context.isInitialized) throw new Error("Expected initialized");
     expect(context.project.files["public/logo.png"].content).toBe("SGVsbG8=");
     expect(context.dirtyState.hasUnsavedChanges).toBe(false);
     expect(context.syncVersion).toBe(1);
@@ -106,6 +108,7 @@ describe("hydrateAssetContents", () => {
     store.trigger.hydrateAssetContents({ contents: { "public/logo.png": "ZZZZ" } });
 
     const context = store.getSnapshot().context;
+    if (!context.isInitialized) throw new Error("Expected initialized");
     expect(context.project.files["public/logo.png"].content).toBe("QUJD");
     expect(context.syncVersion).toBe(0);
   });
