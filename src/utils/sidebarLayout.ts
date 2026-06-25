@@ -2,7 +2,6 @@ export const DEFAULT_FILE_SIDEBAR_WIDTH = 248;
 export const MIN_FILE_SIDEBAR_WIDTH = 200;
 export const MAX_FILE_SIDEBAR_WIDTH = 520;
 export const MIN_MAIN_EDITOR_WIDTH = 360;
-export const FILE_SIDEBAR_WIDTH_STORAGE_KEY = "next-editor:file-sidebar-width";
 export const FILE_SIDEBAR_COLLAPSED_STORAGE_KEY = "next-editor:file-sidebar-collapsed";
 export const FILE_SIDEBAR_KEYBOARD_STEP = 16;
 export const FILE_SIDEBAR_KEYBOARD_LARGE_STEP = 48;
@@ -29,38 +28,10 @@ export function getClampedFileSidebarWidth(width: number, viewportWidth?: number
   return clampValue(nextWidth, MIN_FILE_SIDEBAR_WIDTH, getFileSidebarMaxWidth(viewportWidth));
 }
 
-export function readStoredFileSidebarWidth(): number {
-  if (typeof window === "undefined") {
-    return DEFAULT_FILE_SIDEBAR_WIDTH;
-  }
-
-  let storedValue: string | null = null;
-
-  try {
-    storedValue = window.localStorage.getItem(FILE_SIDEBAR_WIDTH_STORAGE_KEY);
-  } catch {
-    return DEFAULT_FILE_SIDEBAR_WIDTH;
-  }
-
-  if (!storedValue) {
-    return DEFAULT_FILE_SIDEBAR_WIDTH;
-  }
-
-  return getClampedFileSidebarWidth(Number(storedValue), window.innerWidth);
-}
-
-export function writeStoredFileSidebarWidth(width: number): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(FILE_SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(width)));
-  } catch {
-    // Storage can be unavailable in restricted browser contexts.
-  }
-}
-
+// The sidebar width is intentionally NOT persisted: every reload starts from
+// DEFAULT_FILE_SIDEBAR_WIDTH. During recording, resizes are captured as per-event
+// offsets (deltas) rather than absolute widths so playback adapts to the viewer's
+// own layout. Only the collapsed/expanded preference below is remembered.
 export function readStoredFileSidebarCollapsed(): boolean {
   if (typeof window === "undefined") {
     return false;

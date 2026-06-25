@@ -20,9 +20,9 @@ import {
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { createStarterWorkspaceProject } from "../starters/react";
 import {
+  DEFAULT_FILE_SIDEBAR_WIDTH,
   getClampedFileSidebarWidth,
   readStoredFileSidebarCollapsed,
-  readStoredFileSidebarWidth,
 } from "../utils/sidebarLayout";
 
 export interface StoredWorkspaceSnapshot {
@@ -249,10 +249,11 @@ function loadStoredWorkspaceSnapshot(): StoredWorkspaceSnapshot | null {
       ? parsed.activeFilePath
       : project.entryFilePath;
 
+    // Sidebar width is deliberately not restored from storage; it resets to the
+    // default on every reload (see sidebarLayout.ts).
     return {
       activeFilePath,
       project,
-      sidebarWidth: parsed.sidebarWidth,
     };
   } catch (error) {
     console.warn("Failed to load workspace snapshot:", error);
@@ -295,7 +296,7 @@ export function createInitialWorkspaceSnapshot(): StoredWorkspaceSnapshot | null
   return {
     activeFilePath: project.entryFilePath,
     project,
-    sidebarWidth: readStoredFileSidebarWidth(),
+    sidebarWidth: DEFAULT_FILE_SIDEBAR_WIDTH,
   };
 }
 
@@ -346,7 +347,7 @@ function normalizeSidebarWidth(width: number | undefined): number {
     );
   }
 
-  return readStoredFileSidebarWidth();
+  return DEFAULT_FILE_SIDEBAR_WIDTH;
 }
 
 function createSidebarState(
@@ -481,7 +482,7 @@ function withDirtyState(state: WorkspaceState): WorkspaceState {
 function createUninitializedWorkspaceState(): WorkspaceState {
   return {
     isInitialized: false,
-    sidebarWidth: readStoredFileSidebarWidth(),
+    sidebarWidth: DEFAULT_FILE_SIDEBAR_WIDTH,
     sidebarCollapsed: readStoredFileSidebarCollapsed(),
     collapsedFolders: [],
     sidebarScrollTop: 0,

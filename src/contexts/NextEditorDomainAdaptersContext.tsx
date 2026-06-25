@@ -32,9 +32,12 @@ export interface PreviewDomainAdapter {
   getSnapshot: () => PreviewState | null;
   applySnapshot: (previewState: PreviewState) => void;
   applyPatchReplay: (input: PreviewPatchReplayInput) => number;
+  /** Apply a docked-preview width offset (px) to the viewer's current dock width during replay. */
+  applyDockWidthDelta: (delta: number) => void;
   setSnapshotGetter: (getter: () => PreviewState | null) => void;
   setSnapshotApplier: (applier: (previewState: PreviewState) => void) => void;
   setPatchReplayApplier: (applier: (input: PreviewPatchReplayInput) => number) => void;
+  setDockWidthDeltaApplier: (applier: (delta: number) => void) => void;
 }
 
 export interface PreviewPatchReplayInput {
@@ -100,11 +103,13 @@ function createPreviewDomainAdapter(): PreviewDomainAdapter {
   let applySnapshot: (previewState: PreviewState) => void = () => undefined;
   let applyPatchReplay: (input: PreviewPatchReplayInput) => number = (input) =>
     input.lastAppliedPatchBatchIndex;
+  let applyDockWidthDelta: (delta: number) => void = () => undefined;
 
   return {
     getSnapshot: () => getSnapshot(),
     applySnapshot: (previewState) => applySnapshot(previewState),
     applyPatchReplay: (input) => applyPatchReplay(input),
+    applyDockWidthDelta: (delta) => applyDockWidthDelta(delta),
     setSnapshotGetter: (getter) => {
       getSnapshot = getter;
     },
@@ -113,6 +118,9 @@ function createPreviewDomainAdapter(): PreviewDomainAdapter {
     },
     setPatchReplayApplier: (applier) => {
       applyPatchReplay = applier;
+    },
+    setDockWidthDeltaApplier: (applier) => {
+      applyDockWidthDelta = applier;
     },
   };
 }

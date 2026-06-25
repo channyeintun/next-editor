@@ -174,8 +174,12 @@ export function usePreviewController(): PreviewController {
   const lastPreviewInitialDocumentRef = useRef<PreviewInitialDocument | null>(null);
   const recordedPreviewInitialDocumentIdRef = useRef<string | null>(null);
 
-  const { handlePreviewEvent, handlePreviewInitialDocument, handlePreviewPatchBatch } =
-    useNextEditorActions();
+  const {
+    handlePreviewEvent,
+    handlePreviewInitialDocument,
+    handlePreviewPatchBatch,
+    handleWorkspaceEvent,
+  } = useNextEditorActions();
   const { preview, runtimePanel } = useNextEditorDomainAdapters();
   const {
     isOpen,
@@ -945,6 +949,7 @@ export function usePreviewController(): PreviewController {
       }
 
       const startWidth = rect.width;
+      let lastWidth = startWidth;
 
       const onMove = (moveEvent: MouseEvent | TouchEvent) => {
         if (moveEvent.cancelable) {
@@ -952,7 +957,8 @@ export function usePreviewController(): PreviewController {
         }
 
         const { x: currentX } = getPointerCoords(moveEvent);
-        setDockWidth(clampPreviewDockWidth(startWidth + startX - currentX, window.innerWidth));
+        lastWidth = clampPreviewDockWidth(startWidth + startX - currentX, window.innerWidth);
+        setDockWidth(lastWidth);
       };
 
       const onEnd = () => {
@@ -961,6 +967,13 @@ export function usePreviewController(): PreviewController {
         window.removeEventListener("mouseup", onEnd);
         window.removeEventListener("touchmove", onMove);
         window.removeEventListener("touchend", onEnd);
+
+        // Record the net resize as an offset (not an absolute width) so playback
+        // applies the same delta to whatever dock width the viewer has.
+        const previewDockWidthDelta = Math.round(lastWidth - startWidth);
+        if (isRecordingRef.current && previewDockWidthDelta !== 0) {
+          handleWorkspaceEvent({ previewDockWidthDelta });
+        }
       };
 
       window.addEventListener("mousemove", onMove);
@@ -968,7 +981,7 @@ export function usePreviewController(): PreviewController {
       window.addEventListener("touchmove", onMove, { passive: false });
       window.addEventListener("touchend", onEnd);
     },
-    [setDockWidth],
+    [handleWorkspaceEvent, setDockWidth],
   );
 
   const forceIframeRepaint = useCallback(() => {

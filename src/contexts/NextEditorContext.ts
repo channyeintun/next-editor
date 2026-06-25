@@ -32,7 +32,10 @@ export interface NextEditorActions {
   handlePreviewEvent: (event: PreviewEvent) => void;
   handlePreviewInitialDocument: (document: PreviewInitialDocument) => void;
   handlePreviewPatchBatch: (batch: PreviewDomPatchBatch) => void;
-  handleWorkspaceEvent: (event?: { sidebarWidthDelta?: number }) => void;
+  handleWorkspaceEvent: (event?: {
+    sidebarWidthDelta?: number;
+    previewDockWidthDelta?: number;
+  }) => void;
   handleRuntimeEvent: () => void;
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;
   importFromFile: () => Promise<Recording[]>;

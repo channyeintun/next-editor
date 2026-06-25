@@ -90,7 +90,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   }, [recordingStorage]);
 
   const handleWorkspaceEvent = useCallback(
-    (event?: { sidebarWidthDelta?: number }) => {
+    (event?: { sidebarWidthDelta?: number; previewDockWidthDelta?: number }) => {
       if (suppressWorkspaceEventsRef.current) {
         return;
       }
@@ -258,6 +258,13 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
           snapshot.sidebarWidthDelta !== 0
         ) {
           setSidebarWidth(getSidebarWidth() + snapshot.sidebarWidthDelta);
+        }
+        if (
+          typeof snapshot.previewDockWidthDelta === "number" &&
+          Number.isFinite(snapshot.previewDockWidthDelta) &&
+          snapshot.previewDockWidthDelta !== 0
+        ) {
+          preview.applyDockWidthDelta(snapshot.previewDockWidthDelta);
         }
         void saveRuntimeWorkspace();
       },

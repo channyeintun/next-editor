@@ -303,8 +303,12 @@ export const useNextEditorActorBindings = (
   );
 
   const handleWorkspaceEvent = useCallback(
-    (event?: { sidebarWidthDelta?: number }) => {
-      actorRef.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: event?.sidebarWidthDelta });
+    (event?: { sidebarWidthDelta?: number; previewDockWidthDelta?: number }) => {
+      actorRef.send({
+        type: "WORKSPACE_EVENT",
+        sidebarWidthDelta: event?.sidebarWidthDelta,
+        previewDockWidthDelta: event?.previewDockWidthDelta,
+      });
     },
     [actorRef],
   );

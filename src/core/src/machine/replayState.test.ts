@@ -13,12 +13,14 @@ function createWorkspaceSnapshot(
   content: string,
   sidebarScrollTop = 0,
   sidebarWidthDelta?: number,
+  previewDockWidthDelta?: number,
 ): WorkspaceRecordingSnapshot {
   return {
     activeFilePath: "index.html",
     collapsedFolders: [],
     sidebarScrollTop,
     ...(sidebarWidthDelta === undefined ? {} : { sidebarWidthDelta }),
+    ...(previewDockWidthDelta === undefined ? {} : { previewDockWidthDelta }),
     project: {
       id: "project-1",
       name: "Project",
@@ -239,6 +241,67 @@ describe("replayState", () => {
     expect(backwardSeek.nextIndex).toBe(1);
     expect(backwardSeek.snapshotToApply).toMatchObject({
       sidebarWidthDelta: 15,
+    });
+  });
+
+  it("replays docked-preview resize deltas against the current local width", () => {
+    const firstSnapshot = createWorkspaceSnapshot("same", 0, 0, 0);
+    const resizedSnapshot = createWorkspaceSnapshot("same", 0, undefined, 64);
+    const currentSnapshot = createWorkspaceSnapshot("same", 0);
+    const workspaceEvents: WorkspaceRecordingEvent[] = [
+      {
+        timestamp: 0,
+        snapshot: firstSnapshot,
+      },
+      {
+        timestamp: 100,
+        snapshot: resizedSnapshot,
+      },
+    ];
+
+    const resizeForward = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 100,
+      currentSnapshot,
+      lastAppliedIndex: 0,
+    });
+
+    expect(resizeForward.nextIndex).toBe(1);
+    expect(resizeForward.snapshotToApply).toMatchObject({
+      previewDockWidthDelta: 64,
+    });
+  });
+
+  it("undoes later docked-preview resize deltas when seeking backward", () => {
+    const firstSnapshot = createWorkspaceSnapshot("first", 0, 0, 0);
+    const expandedSnapshot = createWorkspaceSnapshot("expanded", 0, undefined, 50);
+    const narrowedSnapshot = createWorkspaceSnapshot("narrowed", 0, undefined, -20);
+    const currentSnapshot = createWorkspaceSnapshot("narrowed", 0);
+    const workspaceEvents: WorkspaceRecordingEvent[] = [
+      {
+        timestamp: 0,
+        snapshot: firstSnapshot,
+      },
+      {
+        timestamp: 100,
+        snapshot: expandedSnapshot,
+      },
+      {
+        timestamp: 200,
+        snapshot: narrowedSnapshot,
+      },
+    ];
+
+    const backwardSeek = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 100,
+      currentSnapshot,
+      lastAppliedIndex: 2,
+    });
+
+    expect(backwardSeek.nextIndex).toBe(1);
+    expect(backwardSeek.snapshotToApply).toMatchObject({
+      previewDockWidthDelta: 20,
     });
   });
 

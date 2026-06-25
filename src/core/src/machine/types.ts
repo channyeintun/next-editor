@@ -436,6 +436,7 @@ export type PreviewPatchBatchOccurred = {
 export type WorkspaceEventOccurred = {
   type: "WORKSPACE_EVENT";
   sidebarWidthDelta?: number;
+  previewDockWidthDelta?: number;
 };
 
 /** Runtime event occurred */

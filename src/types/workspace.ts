@@ -57,8 +57,10 @@ export interface WorkspaceRecordingSnapshot {
   activeFilePath: string;
   collapsedFolders?: string[];
   sidebarScrollTop?: number;
-  /** Width change since the previous recorded workspace event. */
+  /** File-sidebar width change since the previous recorded workspace event. */
   sidebarWidthDelta?: number;
+  /** Docked-preview width change since the previous recorded workspace event. */
+  previewDockWidthDelta?: number;
 }
 
 export interface WorkspaceRecordingEvent {
@@ -107,14 +109,18 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function areWorkspaceSidebarDeltasEqual(
+function areWorkspaceWidthDeltasEqual(
   left: WorkspaceRecordingSnapshot,
   right: WorkspaceRecordingSnapshot,
 ): boolean {
-  const leftDelta = isFiniteNumber(left.sidebarWidthDelta) ? left.sidebarWidthDelta : 0;
-  const rightDelta = isFiniteNumber(right.sidebarWidthDelta) ? right.sidebarWidthDelta : 0;
+  const leftSidebar = isFiniteNumber(left.sidebarWidthDelta) ? left.sidebarWidthDelta : 0;
+  const rightSidebar = isFiniteNumber(right.sidebarWidthDelta) ? right.sidebarWidthDelta : 0;
+  const leftPreview = isFiniteNumber(left.previewDockWidthDelta) ? left.previewDockWidthDelta : 0;
+  const rightPreview = isFiniteNumber(right.previewDockWidthDelta)
+    ? right.previewDockWidthDelta
+    : 0;
 
-  return leftDelta === rightDelta;
+  return leftSidebar === rightSidebar && leftPreview === rightPreview;
 }
 
 export function areWorkspaceProjectsEqual(
@@ -146,7 +152,7 @@ export function areWorkspaceSnapshotsEqual(
   return (
     left.activeFilePath === right.activeFilePath &&
     (left.sidebarScrollTop ?? 0) === (right.sidebarScrollTop ?? 0) &&
-    areWorkspaceSidebarDeltasEqual(left, right) &&
+    areWorkspaceWidthDeltasEqual(left, right) &&
     areStringArraysEqual(left.collapsedFolders ?? [], right.collapsedFolders ?? []) &&
     areWorkspaceProjectsEqual(left.project, right.project)
   );
@@ -164,6 +170,37 @@ export function toSidebarWidthDeltaSnapshot(
     ...snapshot,
     sidebarWidthDelta,
   };
+}
+
+export interface WorkspaceWidthDeltas {
+  sidebarWidthDelta?: number;
+  previewDockWidthDelta?: number;
+}
+
+/**
+ * Fold panel-resize offsets into a workspace snapshot. Both the file-sidebar and
+ * the docked-preview record their resizes as per-event deltas (not absolute
+ * widths) so playback applies the same offset to whatever width the viewer
+ * currently has.
+ */
+export function toWorkspaceDeltaSnapshot(
+  snapshot: WorkspaceRecordingSnapshot,
+  deltas: WorkspaceWidthDeltas,
+): WorkspaceRecordingSnapshot {
+  const next: WorkspaceRecordingSnapshot = { ...snapshot };
+  let changed = false;
+
+  if (isFiniteNumber(deltas.sidebarWidthDelta)) {
+    next.sidebarWidthDelta = deltas.sidebarWidthDelta;
+    changed = true;
+  }
+
+  if (isFiniteNumber(deltas.previewDockWidthDelta)) {
+    next.previewDockWidthDelta = deltas.previewDockWidthDelta;
+    changed = true;
+  }
+
+  return changed ? next : snapshot;
 }
 
 export const DEFAULT_WORKSPACE_ENTRY_PATH = "index.html";

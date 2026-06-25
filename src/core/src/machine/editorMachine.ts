@@ -1571,11 +1571,10 @@ export const editorMachine = setup({
               const snapshot = context.getWorkspaceSnapshot?.();
               if (!context.session || !snapshot) return {};
 
-              const nextSession = appendWorkspaceRecordingEvent(
-                context.session,
-                snapshot,
-                event.sidebarWidthDelta,
-              );
+              const nextSession = appendWorkspaceRecordingEvent(context.session, snapshot, {
+                sidebarWidthDelta: event.sidebarWidthDelta,
+                previewDockWidthDelta: event.previewDockWidthDelta,
+              });
 
               if (nextSession === context.session) {
                 return {};

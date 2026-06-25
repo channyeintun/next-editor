@@ -18,10 +18,7 @@ import {
   type WorkspaceProject,
 } from "../types/workspace";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
-import {
-  writeStoredFileSidebarCollapsed,
-  writeStoredFileSidebarWidth,
-} from "../utils/sidebarLayout";
+import { writeStoredFileSidebarCollapsed } from "../utils/sidebarLayout";
 
 interface WorkspaceProviderProps {
   children: React.ReactNode;
@@ -79,8 +76,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, []);
 
   const setSidebarWidth = useCallback((width: number) => {
+    // Width is session-only: not written to storage, so it resets to the default
+    // on reload. Recording captures resizes as offsets via handleWorkspaceEvent.
     workspaceStoreRef.current.trigger.setSidebarWidth({ width });
-    writeStoredFileSidebarWidth(workspaceStoreRef.current.getSnapshot().context.sidebarWidth);
   }, []);
 
   const setSidebarCollapsed = useCallback((collapsed: boolean) => {
@@ -149,11 +147,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       if (!context.isInitialized) {
         return;
       }
-      const { activeFilePath, project, sidebarWidth } = context;
+      const { activeFilePath, project } = context;
+      // sidebarWidth is intentionally omitted so it is not persisted across reloads.
       const storedSnapshot = {
         activeFilePath,
         project,
-        sidebarWidth,
       } satisfies StoredWorkspaceSnapshot;
 
       // localStorage holds only the lightweight metadata (binary bytes stripped);

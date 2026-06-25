@@ -7,8 +7,9 @@ import type {
 import type { RuntimeRecordingSnapshot } from "../../../types/runtime";
 import {
   areWorkspaceSnapshotsEqual,
-  toSidebarWidthDeltaSnapshot,
+  toWorkspaceDeltaSnapshot,
   type WorkspaceRecordingSnapshot,
+  type WorkspaceWidthDeltas,
 } from "../../../types/workspace";
 import { areRuntimeRecordingSnapshotsEqual } from "../../../utils/equality";
 import type { RecordingSession } from "./types";
@@ -84,9 +85,9 @@ export function appendPreviewPatchBatch(
 export function appendWorkspaceRecordingEvent(
   session: RecordingSession,
   snapshot: WorkspaceRecordingSnapshot,
-  sidebarWidthDelta?: number,
+  deltas?: WorkspaceWidthDeltas,
 ): RecordingSession {
-  const recordingSnapshot = toSidebarWidthDeltaSnapshot(snapshot, sidebarWidthDelta);
+  const recordingSnapshot = deltas ? toWorkspaceDeltaSnapshot(snapshot, deltas) : snapshot;
   const previousEvent = session.workspaceEvents[session.workspaceEvents.length - 1];
 
   if (previousEvent && areWorkspaceSnapshotsEqual(previousEvent.snapshot, recordingSnapshot)) {
