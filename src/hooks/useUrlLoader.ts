@@ -7,7 +7,7 @@ import {
 import { createStreamingRecordingReader } from "../storage/streamingRecordingCodec";
 import { createImportedCameraObjectUrl } from "../storage/cameraVideoUrl";
 import { decodeBase64 } from "../core/src/utils/base64";
-import type { Recording } from "../core/src";
+import type { CaptionTrack, Recording } from "../core/src";
 
 const SAME_ORIGIN_PROXY_PATH = "/api/proxy";
 const MISSING_PROXY_STATUS_CODES = new Set([404, 405, 501]);
@@ -53,6 +53,42 @@ function withResolvedCameraUrl(recording: Recording, baseUrl: string | undefined
   }
 }
 
+const CAPTION_EXTENSIONS = ["en", "ar", "bn", "de", "es", "fr", "ja", "ko", "pt", "zh"];
+
+async function fetchSiblingCaptions(neUrl: string): Promise<CaptionTrack[]> {
+  const tracks: CaptionTrack[] = [];
+  const base = neUrl.replace(/\.ne$/i, "");
+
+  const results = await Promise.allSettled(
+    CAPTION_EXTENSIONS.map(async (lang) => {
+      const vttUrl = `${base}.${lang}.vtt`;
+      const res = await fetch(vttUrl);
+      if (!res.ok) return null;
+      const text = await res.text();
+      if (!text.trim().startsWith("WEBVTT")) return null;
+      const { parseVtt } = await import("../captions/parseCaptions");
+      const cues = parseVtt(text);
+      if (cues.length === 0) return null;
+      return { lang, cues };
+    }),
+  );
+
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value) {
+      const { lang, cues } = result.value;
+      tracks.push({
+        id: `${lang}-sibling`,
+        language: lang,
+        label: lang.toUpperCase(),
+        cues,
+        default: tracks.length === 0,
+      });
+    }
+  }
+
+  return tracks;
+}
+
 function buildSameOriginProxyUrl(targetUrl: string): string {
   const proxyUrl = new URL(SAME_ORIGIN_PROXY_PATH, window.location.origin);
   proxyUrl.searchParams.set("url", targetUrl);
@@ -83,7 +119,7 @@ async function fetchNextEditorUrl(url: string): Promise<Response> {
 
 export const useUrlLoader = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const { loadRecording, extendRecording } = useNextEditorActions();
+  const { loadRecording, extendRecording, addCaptionTrack } = useNextEditorActions();
 
   const isNextEditorUrl = (url: string): boolean => {
     try {
@@ -337,6 +373,12 @@ export const useUrlLoader = () => {
           await loadRecordingFromBase64Text(new TextDecoder().decode(bytes).trim(), url);
         }
       }
+
+      fetchSiblingCaptions(url)
+        .then((tracks) => {
+          for (const track of tracks) addCaptionTrack(track);
+        })
+        .catch(() => {});
     } catch (error) {
       console.error("Failed to load tutorial from URL:", error);
       alert(`Failed to load tutorial: ${error instanceof Error ? error.message : "Unknown error"}`);
