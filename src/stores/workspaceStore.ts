@@ -1122,7 +1122,10 @@ const emptySidebarState: WorkspaceSidebarState = {
   folders: [],
   collapsedFolders: [],
   sidebarScrollTop: 0,
-  sidebarWidth: 240,
+  // Must match the uninitialized context.sidebarWidth (DEFAULT_FILE_SIDEBAR_WIDTH):
+  // the outer FileSidebar wrapper reads context.sidebarWidth while the inner panel
+  // reads this sidebarState.sidebarWidth, and a mismatch shows as a load-time gap.
+  sidebarWidth: DEFAULT_FILE_SIDEBAR_WIDTH,
   lessonType: "html-css",
   previewFilePath: "",
 };
