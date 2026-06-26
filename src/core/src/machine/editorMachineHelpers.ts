@@ -1,4 +1,5 @@
 import type * as monaco from "monaco-editor";
+import { Range } from "monaco-editor/esm/vs/editor/editor.api.js";
 import type {
   CursorRecordingEvent,
   EditorFrame,
@@ -254,7 +255,6 @@ export const applyFrameState = (
         const currentSelections = editor.getSelections() || [frame.state.selection];
 
         currentSelections.forEach((selection) => {
-          const Range = (window as unknown as { monaco: typeof monaco }).monaco.Range;
           newDecorations.push({
             range: new Range(
               selection.positionLineNumber,
