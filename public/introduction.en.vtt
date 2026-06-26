@@ -1,7 +1,7 @@
 WEBVTT
 
 00:03.150 --> 00:07.501
-Hello everyone we can to next editor.dev Today I would
+Hello everyone welcome to nexteditor.dev Today I would
 
 00:07.501 --> 00:12.163
 like to show you a project that I implemented like a social
@@ -13,7 +13,7 @@ newsfeed application with infinite scrolling.
 Before looking at the implementation, let me quickly walk
 
 00:20.675 --> 00:24.310
-through the package dot Jason file and introduce the tech
+through the package dot JSON file and introduce the tech
 
 00:24.310 --> 00:27.940
 stack used in this project.
@@ -28,10 +28,10 @@ Vite for development and built performance for data fetching and
 state management, we use TanStack React Query.
 
 00:43.600 --> 00:48.903
-For infinite scrolling and optimize list rendering we use
+For infinite scrolling and optimized list rendering we use
 
 00:48.903 --> 00:54.115
-TanStack React Virtual and acios is for API communication.
+TanStack React Virtual and axios is for API communication.
 
 00:54.115 --> 00:58.490
 Now the project is already rendering.
@@ -88,7 +88,7 @@ We also manage loading and error.
 And pagination states.
 
 02:28.580 --> 02:33.410
-Now let's open the trending status List component. This
+Now let's open the trending status list component. This
 
 02:33.410 --> 02:38.740
 component is responsible for rendering the newsfeed.
@@ -100,7 +100,7 @@ To improve performance we use tanstack react virtual so only
 visible items are rendered on the screen.
 
 02:48.180 --> 02:54.540
-When userâ€™s scrolling, more data is loaded automatically.
+When user's scrolling, more data is loaded automatically.
 
 02:54.540 --> 03:01.010
 And for this card design we separate the component
@@ -121,7 +121,7 @@ hook helps keep the project clean and maintainable.
 OK, that's a brief overview of the implementation in our
 
 03:28.107 --> 03:30.800
-next editor dot dev.
+NextEditor.dev.
 
 03:30.800 --> 03:34.160
 Thank you for watching.
