@@ -1,5 +1,4 @@
 import type * as monaco from "monaco-editor";
-import { Range } from "monaco-editor/esm/vs/editor/editor.api.js";
 import type {
   CursorRecordingEvent,
   EditorFrame,
@@ -256,12 +255,16 @@ export const applyFrameState = (
 
         currentSelections.forEach((selection) => {
           newDecorations.push({
-            range: new Range(
-              selection.positionLineNumber,
-              selection.positionColumn,
-              selection.positionLineNumber,
-              selection.positionColumn,
-            ),
+            // Plain IRange (not `new Range(...)`) so this core machine never
+            // value-imports monaco-editor; Monaco's decoration API lifts IRange
+            // internally. Keeps the 3.7 MB editor chunk out of the eager route
+            // graph (it loads lazily with CodeEditor instead).
+            range: {
+              startLineNumber: selection.positionLineNumber,
+              startColumn: selection.positionColumn,
+              endLineNumber: selection.positionLineNumber,
+              endColumn: selection.positionColumn,
+            },
             options: {
               className: "playback-cursor-decoration",
               stickiness: 1, // NeverGrowsWhenTypingAtEdges
