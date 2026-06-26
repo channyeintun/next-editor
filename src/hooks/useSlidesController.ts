@@ -1,14 +1,30 @@
-import { useRef, useEffect, useSyncExternalStore } from "react";
-import type { Slide, SlideEvent, SlideContentType } from "../types/slides";
-import type { SlidesStore } from "../stores/slidesStore";
+import { useRef, useEffect } from "react";
+import { useSelector } from "@xstate/store-react";
+import type { Slide, SlideEvent, SlidePreviewState, SlideContentType } from "../types/slides";
+import { selectPreviewState, selectSlides, type SlidesStoreInstance } from "../stores/slidesStore";
 
 interface UseSlidesControllerConfig {
-  store: SlidesStore;
+  store: SlidesStoreInstance;
   onSlideEvent?: (event: SlideEvent) => void;
 }
 
 export const useSlidesController = ({ store, onSlideEvent }: UseSlidesControllerConfig) => {
-  const { slides, previewState } = useSyncExternalStore(store.subscribe, store.getState);
+  const slides = useSelector(store, (snapshot) => selectSlides(snapshot.context));
+  const previewState = useSelector(store, (snapshot) => selectPreviewState(snapshot.context));
+
+  const setSlides = (updater: Slide[] | ((prev: Slide[]) => Slide[])) => {
+    const current = store.getSnapshot().context.slides;
+    const next = typeof updater === "function" ? updater(current) : updater;
+    store.trigger.setSlides({ slides: next });
+  };
+
+  const setPreviewState = (
+    updater: SlidePreviewState | ((prev: SlidePreviewState) => SlidePreviewState),
+  ) => {
+    const current = store.getSnapshot().context.previewState;
+    const next = typeof updater === "function" ? updater(current) : updater;
+    store.trigger.setPreviewState({ previewState: next });
+  };
 
   const onSlideEventRef = useRef(onSlideEvent);
   useEffect(() => {
@@ -33,12 +49,12 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
       contentType,
       order: slides.length,
     };
-    store.setSlides((prev) => [...prev, newSlide]);
+    setSlides((prev) => [...prev, newSlide]);
     return newSlide;
   };
 
   const removeSlide = (slideId: string) => {
-    store.setSlides((prev) => {
+    setSlides((prev) => {
       const updated = prev
         .filter((slide) => slide.id !== slideId)
         .map((slide, index) => ({ ...slide, order: index }));
@@ -46,12 +62,12 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
       if (previewState.currentSlideId === slideId) {
         if (updated.length > 0) {
           const newIndex = Math.min(currentSlideIndex, updated.length - 1);
-          store.setPreviewState((prevState) => ({
+          setPreviewState((prevState) => ({
             ...prevState,
             currentSlideId: updated[newIndex]?.id || null,
           }));
         } else {
-          store.setPreviewState((prevState) => ({
+          setPreviewState((prevState) => ({
             ...prevState,
             isOpen: false,
             currentSlideId: null,
@@ -64,7 +80,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
   };
 
   const reorderSlides = (newSlides: Slide[]) => {
-    store.setSlides(newSlides);
+    setSlides(newSlides);
   };
 
   const handleSlideEvent = (event: SlideEvent) => {
@@ -73,7 +89,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
 
     switch (event.type) {
       case "slide_open":
-        store.setPreviewState((prev) => {
+        setPreviewState((prev) => {
           const nextSlideId = event.slideId || prev.currentSlideId;
           const nextIndexv = event.indexv ?? 0;
           const nextIsMaximized = event.isMaximized ?? true;
@@ -97,7 +113,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
         });
         break;
       case "slide_close":
-        store.setPreviewState((prev) => {
+        setPreviewState((prev) => {
           if (!prev.isOpen && !prev.isMaximized && prev.currentSlideId === null) {
             return prev;
           }
@@ -111,7 +127,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
         });
         break;
       case "slide_maximize":
-        store.setPreviewState((prev) => {
+        setPreviewState((prev) => {
           if (prev.isMaximized === (event.isMaximized || false)) {
             return prev;
           }
@@ -119,7 +135,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
         });
         break;
       case "slide_minimize":
-        store.setPreviewState((prev) => {
+        setPreviewState((prev) => {
           if (!prev.isMaximized) {
             return prev;
           }
@@ -127,7 +143,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
         });
         break;
       case "slide_change":
-        store.setPreviewState((prev) => {
+        setPreviewState((prev) => {
           const targetIndexv = event.indexv ?? 0;
           if (
             prev.currentSlideId === (event.slideId || prev.currentSlideId) &&
@@ -143,7 +159,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
         });
         break;
       case "slide_interaction":
-        store.setPreviewState((prev) => {
+        setPreviewState((prev) => {
           if (prev.currentInteraction === event.interaction) {
             return prev;
           }
@@ -171,7 +187,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
 
     const targetIndexv = lastVerticalIndicesRef.current[targetSlide.id] ?? 0;
 
-    store.setPreviewState({
+    setPreviewState({
       isOpen: true,
       isMaximized: true,
       currentSlideId: targetSlide.id,
@@ -190,7 +206,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
   const startPresentation = () => {
     if (slides.length === 0) return;
 
-    store.setPreviewState({
+    setPreviewState({
       isOpen: true,
       isMaximized: true,
       currentSlideId: slides[0].id,
@@ -215,7 +231,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
       });
     }
 
-    store.setPreviewState({
+    setPreviewState({
       isOpen: false,
       isMaximized: false,
       currentSlideId: null,
@@ -228,7 +244,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
       const slideId = slides[index].id;
       const targetIndexv = indexv ?? lastVerticalIndicesRef.current[slideId] ?? 0;
 
-      store.setPreviewState((prev) => ({
+      setPreviewState((prev) => ({
         ...prev,
         currentSlideId: slideId,
         indexv: targetIndexv,
@@ -252,8 +268,8 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
     addSlide,
     removeSlide,
     reorderSlides,
-    setSlides: store.setSlides,
-    setPreviewState: store.setPreviewState,
+    setSlides,
+    setPreviewState,
     openPresentation,
     startPresentation,
     closePresentation,

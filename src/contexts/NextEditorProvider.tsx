@@ -126,7 +126,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const recordingStorage = useRef(createRecordingStorage());
   const previewHandle = usePreviewAdapterHandle();
-  const slidesStore = useSlidesStore();
+  const { store: slidesStore, navigator: slideNavigator } = useSlidesStore();
   const runtimePanelStore = useRuntimePanelStore();
   const {
     getProject,
@@ -169,7 +169,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     enableAudioRecording: true, // Enable built-in synchronized audio recording
     pauseOnUserInteraction: true,
     getSlideState: () => {
-      const { slides, previewState } = slidesStore.getState();
+      const { slides, previewState } = slidesStore.getSnapshot().context;
       const currentSlideIndex = Math.max(
         0,
         slides.findIndex((s) => s.id === previewState.currentSlideId),
@@ -177,44 +177,46 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       return { previewState, currentSlideIndex };
     },
     applySlideState: (slideState, currentSlideIndex) => {
-      slidesStore.setPreviewState((prev) => {
-        const nextIsOpen = slideState.isOpen;
-        const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
-        const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
-        const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
-        const nextInteraction = slideState.currentInteraction;
+      // Capture the pre-update state up front: the navigate decision below
+      // compares the replay target against where the deck currently is.
+      const { slides, previewState: prev } = slidesStore.getSnapshot().context;
 
-        if (
-          nextIsOpen !== prev.isOpen ||
-          nextIsMaximized !== prev.isMaximized ||
-          nextSlideId !== prev.currentSlideId ||
-          nextIndexv !== prev.indexv ||
-          nextInteraction !== prev.currentInteraction
-        ) {
-          return {
+      const nextIsOpen = slideState.isOpen;
+      const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
+      const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
+      const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
+      const nextInteraction = slideState.currentInteraction;
+
+      if (
+        nextIsOpen !== prev.isOpen ||
+        nextIsMaximized !== prev.isMaximized ||
+        nextSlideId !== prev.currentSlideId ||
+        nextIndexv !== prev.indexv ||
+        nextInteraction !== prev.currentInteraction
+      ) {
+        slidesStore.trigger.setPreviewState({
+          previewState: {
             isOpen: nextIsOpen,
             isMaximized: nextIsMaximized,
             currentSlideId: nextSlideId,
             indexv: nextIndexv,
             currentInteraction: nextInteraction,
-          };
-        }
-        return prev;
-      });
+          },
+        });
+      }
 
       if (slideState.isOpen) {
-        const prevState = slidesStore.getState().previewState;
-        const nextIndexv = slideState.indexv ?? prevState.indexv ?? 0;
-        const prevIndexv = prevState.indexv ?? 0;
-        const prevSlideIndex = slidesStore
-          .getState()
-          .slides.findIndex((s) => s.id === prevState.currentSlideId);
+        const prevIndexv = prev.indexv ?? 0;
+        const prevSlideIndex = Math.max(
+          0,
+          slides.findIndex((s) => s.id === prev.currentSlideId),
+        );
 
         if (
           currentSlideIndex !== prevSlideIndex ||
           (slideState.indexv !== undefined && nextIndexv !== prevIndexv)
         ) {
-          slidesStore.navigator.current?.(currentSlideIndex, nextIndexv);
+          slideNavigator.current?.(currentSlideIndex, nextIndexv);
         }
       }
     },
@@ -224,8 +226,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     applyPreviewPatchReplay: (input) =>
       previewHandle.patchReplayApplier.current?.(input) ?? input.lastAppliedPatchBatchIndex,
 
-    getSlides: () => slidesStore.getState().slides,
-    applySlides: (nextSlides) => slidesStore.setSlides(nextSlides),
+    getSlides: () => slidesStore.getSnapshot().context.slides,
+    applySlides: (nextSlides) => slidesStore.trigger.setSlides({ slides: nextSlides }),
     getWorkspaceSnapshot: () => {
       const project = getProject();
       const activeFilePath = getActiveFilePath();

@@ -1,3 +1,4 @@
+import { createStore } from "@xstate/store-react";
 import type { Slide, SlidePreviewState } from "../types/slides";
 
 const SLIDES_STORAGE_KEY = "next-editor-slides";
@@ -13,7 +14,7 @@ const isSlide = (item: unknown): item is Slide => {
   );
 };
 
-const loadSlidesFromStorage = (): Slide[] => {
+export const loadSlidesFromStorage = (): Slide[] => {
   try {
     const saved = localStorage.getItem(SLIDES_STORAGE_KEY);
     if (saved) {
@@ -31,7 +32,7 @@ const loadSlidesFromStorage = (): Slide[] => {
   return [];
 };
 
-const saveSlidesToStorage = (slides: Slide[]): void => {
+export const saveSlidesToStorage = (slides: Slide[]): void => {
   try {
     localStorage.setItem(SLIDES_STORAGE_KEY, JSON.stringify(slides));
   } catch (e) {
@@ -41,19 +42,9 @@ const saveSlidesToStorage = (slides: Slide[]): void => {
 
 export type SlideNavigator = (indexh: number, indexv: number) => void;
 
-export interface SlidesStoreState {
+export interface SlidesContext {
   slides: Slide[];
   previewState: SlidePreviewState;
-}
-
-export interface SlidesStore {
-  getState: () => SlidesStoreState;
-  subscribe: (listener: () => void) => () => void;
-  setSlides: (updater: Slide[] | ((prev: Slide[]) => Slide[])) => void;
-  setPreviewState: (
-    updater: SlidePreviewState | ((prev: SlidePreviewState) => SlidePreviewState),
-  ) => void;
-  navigator: { current: SlideNavigator | null };
 }
 
 const DEFAULT_PREVIEW_STATE: SlidePreviewState = {
@@ -63,46 +54,25 @@ const DEFAULT_PREVIEW_STATE: SlidePreviewState = {
   indexv: 0,
 };
 
-export function createSlidesStore(): SlidesStore {
-  let state: SlidesStoreState = {
-    slides: loadSlidesFromStorage(),
-    previewState: DEFAULT_PREVIEW_STATE,
-  };
-
-  const listeners = new Set<() => void>();
-
-  const notify = () => {
-    for (const listener of listeners) {
-      listener();
-    }
-  };
-
-  const navigator: { current: SlideNavigator | null } = { current: null };
-
-  return {
-    getState: () => state,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
+export function createSlidesStore() {
+  return createStore({
+    context: {
+      slides: loadSlidesFromStorage(),
+      previewState: DEFAULT_PREVIEW_STATE,
+    } as SlidesContext,
+    on: {
+      setSlides: (context, event: { slides: Slide[] }) =>
+        event.slides === context.slides ? context : { ...context, slides: event.slides },
+      setPreviewState: (context, event: { previewState: SlidePreviewState }) =>
+        event.previewState === context.previewState
+          ? context
+          : { ...context, previewState: event.previewState },
     },
-    setSlides: (updater) => {
-      const nextSlides = typeof updater === "function" ? updater(state.slides) : updater;
-      if (nextSlides !== state.slides) {
-        state = { ...state, slides: nextSlides };
-        saveSlidesToStorage(nextSlides);
-        notify();
-      }
-    },
-    setPreviewState: (updater) => {
-      const nextPreviewState =
-        typeof updater === "function" ? updater(state.previewState) : updater;
-      if (nextPreviewState !== state.previewState) {
-        state = { ...state, previewState: nextPreviewState };
-        notify();
-      }
-    },
-    navigator,
-  };
+  });
 }
+
+export type SlidesStoreInstance = ReturnType<typeof createSlidesStore>;
+
+export const selectSlides = (context: SlidesContext): Slide[] => context.slides;
+export const selectPreviewState = (context: SlidesContext): SlidePreviewState =>
+  context.previewState;

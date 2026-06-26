@@ -11,7 +11,7 @@ interface SlidesProviderProps {
 
 export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
   const { handleSlideEvent } = useNextEditorActions();
-  const store = useSlidesStore();
+  const { store } = useSlidesStore();
 
   const slidesData = useSlidesController({
     store,

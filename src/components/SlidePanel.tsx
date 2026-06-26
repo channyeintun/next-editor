@@ -12,7 +12,7 @@ export default function SlidePanel() {
     closePresentation,
     handleSlideEvent: onSlideEvent,
   } = useSlidesContext();
-  const slidesStore = useSlidesStore();
+  const { navigator } = useSlidesStore();
 
   const { pause } = useNextEditorActions();
   const isPresentationVisible = previewState.isOpen && previewState.isMaximized === true;
@@ -32,7 +32,7 @@ export default function SlidePanel() {
         verticalIndex={previewState.indexv}
         currentInteraction={previewState.currentInteraction}
         setSlideNavigator={(nav) => {
-          slidesStore.navigator.current = nav;
+          navigator.current = nav;
         }}
         positioning="fixed"
       />
