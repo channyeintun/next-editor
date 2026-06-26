@@ -1,8 +1,8 @@
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type {
-  PreviewDomainAdapter,
+  PreviewAdapterHandle,
   PreviewPatchReplayInput,
-} from "../../contexts/NextEditorDomainAdaptersContext";
+} from "../../stores/previewAdapterHandle";
 import type {
   IframeInteractionEvent,
   PreviewPanelMode,
@@ -16,7 +16,7 @@ import { buildRrwebReplayEvents, hasRrwebPreviewEvents } from "./rrwebPreview";
 import { RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
 interface UsePreviewPlaybackRegistrationOptions {
-  previewAdapter: PreviewDomainAdapter;
+  previewHandle: PreviewAdapterHandle;
   captureRuntimePreviewSnapshot: () => string | null;
   isPlaybackPreviewActive: boolean;
   isRuntimePreviewActive: boolean;
@@ -68,7 +68,7 @@ function getIframeDocumentAndWindow(iframe: HTMLIFrameElement): {
 }
 
 export function usePreviewPlaybackRegistration({
-  previewAdapter,
+  previewHandle,
   captureRuntimePreviewSnapshot,
   isPlaybackPreviewActive,
   isRuntimePreviewActive,
@@ -180,7 +180,7 @@ export function usePreviewPlaybackRegistration({
       return cursor;
     };
 
-    previewAdapter.setPatchReplayApplier((input) => {
+    previewHandle.patchReplayApplier.current = (input) => {
       if (!hasPreviewPatchReplay || isLiveRuntimePreviewActive) {
         return input.lastAppliedPatchBatchIndex;
       }
@@ -192,15 +192,15 @@ export function usePreviewPlaybackRegistration({
       // Runtime previews always record in the rrweb format; there is no other
       // runtime replay path.
       return -1;
-    });
+    };
 
     return () => {
-      previewAdapter.setPatchReplayApplier((input) => input.lastAppliedPatchBatchIndex);
+      previewHandle.patchReplayApplier.current = null;
     };
-  }, [hasPreviewPatchReplay, isLiveRuntimePreviewActive, previewAdapter, replayContainerRef]);
+  }, [hasPreviewPatchReplay, isLiveRuntimePreviewActive, previewHandle, replayContainerRef]);
 
   useEffect(() => {
-    previewAdapter.setSnapshotGetter((): PreviewState | null => {
+    previewHandle.snapshotGetter.current = (): PreviewState | null => {
       if (!isOpenRef.current) {
         return null;
       }
@@ -221,10 +221,10 @@ export function usePreviewPlaybackRegistration({
         scrollLeft: scrollPositionRef.current.scrollLeft,
         currentInteraction: interaction || undefined,
       };
-    });
+    };
 
     return () => {
-      previewAdapter.setSnapshotGetter(() => null);
+      previewHandle.snapshotGetter.current = null;
     };
   }, [
     captureRuntimePreviewSnapshot,
@@ -234,14 +234,14 @@ export function usePreviewPlaybackRegistration({
     lastRuntimeSnapshotRef,
     modeRef,
     pendingInteractionRef,
-    previewAdapter,
+    previewHandle,
     routeRef,
     scrollPositionRef,
     sizeRef,
   ]);
 
   useEffect(() => {
-    previewAdapter.setSnapshotApplier((previewState: PreviewState) => {
+    previewHandle.snapshotApplier.current = (previewState: PreviewState) => {
       let sizeToApply = previewState.size;
 
       if (isCustomPreviewSize(sizeToApply)) {
@@ -439,10 +439,10 @@ export function usePreviewPlaybackRegistration({
           break;
         }
       }
-    });
+    };
 
     return () => {
-      previewAdapter.setSnapshotApplier((_previewState) => undefined);
+      previewHandle.snapshotApplier.current = null;
     };
   }, [
     applyPreviewPanelState,
@@ -456,7 +456,7 @@ export function usePreviewPlaybackRegistration({
     lastContentRef,
     lastRefreshKeyRef,
     rafRef,
-    previewAdapter,
+    previewHandle,
     setSize,
     sizeRef,
     targetScrollRef,

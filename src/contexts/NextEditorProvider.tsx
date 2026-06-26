@@ -4,7 +4,7 @@ import type { Recording, UseNextEditorConfig } from "../core/src";
 import { useNextEditorActorBindings } from "../core/src/useNextEditor";
 import { NextEditorActionsContext } from "./NextEditorContext";
 import { NextEditorActorContext } from "./NextEditorActorContext";
-import { useNextEditorDomainAdapters } from "./NextEditorDomainAdaptersContext";
+import { usePreviewAdapterHandle } from "./PreviewAdapterHandleContext";
 import { useSlidesStore } from "./SlidesStoreContext";
 import { useRuntimePanelStore } from "./RuntimePanelStoreContext";
 import {
@@ -125,7 +125,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
 export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const recordingStorage = useRef(createRecordingStorage());
-  const { preview } = useNextEditorDomainAdapters();
+  const previewHandle = usePreviewAdapterHandle();
   const slidesStore = useSlidesStore();
   const runtimePanelStore = useRuntimePanelStore();
   const {
@@ -217,9 +217,10 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       }
     },
 
-    getPreviewState: () => preview.getSnapshot(),
-    applyPreviewState: (previewState) => preview.applySnapshot(previewState),
-    applyPreviewPatchReplay: (input) => preview.applyPatchReplay(input),
+    getPreviewState: () => previewHandle.snapshotGetter.current?.() ?? null,
+    applyPreviewState: (previewState) => previewHandle.snapshotApplier.current?.(previewState),
+    applyPreviewPatchReplay: (input) =>
+      previewHandle.patchReplayApplier.current?.(input) ?? input.lastAppliedPatchBatchIndex,
 
     getSlides: () => slidesStore.getState().slides,
     applySlides: (nextSlides) => slidesStore.setSlides(nextSlides),
@@ -270,7 +271,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
         Number.isFinite(snapshot.previewDockWidthDelta) &&
         snapshot.previewDockWidthDelta !== 0
       ) {
-        preview.applyDockWidthDelta(snapshot.previewDockWidthDelta);
+        previewHandle.dockWidthDeltaApplier.current?.(snapshot.previewDockWidthDelta);
       }
       void saveRuntimeWorkspace();
     },

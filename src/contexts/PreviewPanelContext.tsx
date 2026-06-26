@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { PreviewPanelMode } from "../types/slides";
-import { useNextEditorDomainAdapters } from "./NextEditorDomainAdaptersContext";
+import { usePreviewAdapterHandle } from "./PreviewAdapterHandleContext";
 
 export const PREVIEW_DOCK_DEFAULT_WIDTH = 432;
 export const PREVIEW_DOCK_MIN_WIDTH = 320;
@@ -51,20 +51,21 @@ export function PreviewPanelProvider({ children }: PreviewPanelProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<PreviewPanelMode>("docked");
   const [dockWidth, setDockWidthState] = useState(getDefaultPreviewDockWidth);
-  const { preview } = useNextEditorDomainAdapters();
+  const previewHandle = usePreviewAdapterHandle();
 
   const setDockWidth = (width: number) => {
     setDockWidthState(clampPreviewDockWidth(width));
   };
 
-  // Replay applies docked-preview resizes as offsets against the viewer's current
-  // width (mirrors the file-sidebar). Registered here — not in the preview panel
-  // component — so the offset still lands when the preview panel is closed.
   useEffect(() => {
-    preview.setDockWidthDeltaApplier((delta) => {
+    previewHandle.dockWidthDeltaApplier.current = (delta) => {
       setDockWidthState((currentWidth) => clampPreviewDockWidth(currentWidth + delta));
-    });
-  }, [preview]);
+    };
+
+    return () => {
+      previewHandle.dockWidthDeltaApplier.current = null;
+    };
+  }, [previewHandle]);
 
   const openPreview = (nextMode?: PreviewPanelMode) => {
     if (nextMode) {

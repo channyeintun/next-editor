@@ -7,7 +7,7 @@ import {
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
-import { useNextEditorDomainAdapters } from "../../contexts/NextEditorDomainAdaptersContext";
+import { usePreviewAdapterHandle } from "../../contexts/PreviewAdapterHandleContext";
 import { useRuntimePanelStore } from "../../contexts/RuntimePanelStoreContext";
 import { clampPreviewDockWidth, usePreviewPanel } from "../../contexts/PreviewPanelContext";
 import {
@@ -179,7 +179,7 @@ export function usePreviewController(): PreviewController {
     handlePreviewPatchBatch,
     handleWorkspaceEvent,
   } = useNextEditorActions();
-  const { preview } = useNextEditorDomainAdapters();
+  const previewHandle = usePreviewAdapterHandle();
   const runtimePanelStore = useRuntimePanelStore();
   const {
     isOpen,
@@ -553,7 +553,7 @@ export function usePreviewController(): PreviewController {
   };
 
   usePreviewPlaybackRegistration({
-    previewAdapter: preview,
+    previewHandle,
     captureRuntimePreviewSnapshot,
     isPlaybackPreviewActive,
     isRuntimePreviewActive,

@@ -4,7 +4,7 @@ import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
 import FloatingPlayButton from "./FloatingPlayButton";
 import { NextEditorProvider } from "../contexts/NextEditorProvider.tsx";
-import { NextEditorDomainAdaptersProvider } from "../contexts/NextEditorDomainAdaptersContext";
+import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleContext";
 import { SlidesStoreProvider } from "../contexts/SlidesStoreContext";
 import { RuntimePanelStoreProvider } from "../contexts/RuntimePanelStoreContext";
 import { SlidesProvider } from "../contexts/SlidesContext";
@@ -62,7 +62,7 @@ export default function Editor() {
       <WebContainerRuntimeProvider>
         <SlidesStoreProvider>
           <RuntimePanelStoreProvider>
-            <NextEditorDomainAdaptersProvider>
+            <PreviewAdapterHandleProvider>
               <NextEditorProvider>
                 <SlidesProvider>
                   <PreviewPanelProvider>
@@ -70,7 +70,7 @@ export default function Editor() {
                   </PreviewPanelProvider>
                 </SlidesProvider>
               </NextEditorProvider>
-            </NextEditorDomainAdaptersProvider>
+            </PreviewAdapterHandleProvider>
           </RuntimePanelStoreProvider>
         </SlidesStoreProvider>
       </WebContainerRuntimeProvider>
