@@ -53,7 +53,7 @@ const STREAM_BUFFER_SWITCH_LOOKAHEAD_MS = 1000;
  * milliseconds turns the restart into an inaudible crossfade. Long enough to span
  * a low-frequency cycle, short enough to feel instant.
  */
-const DECLICK_FADE_SECONDS = 0.015;
+const DECLICK_FADE_SECONDS = 0.02;
 
 /**
  * MediaRecorder timeslice (ms). Emitting `ondataavailable` on an interval produces
@@ -285,6 +285,36 @@ export const audioRecordingActor = fromCallback<
 });
 
 // ============================================================================
+// Audio Playback Actor Helpers
+// ============================================================================
+
+/**
+ * Safely stops an AudioBufferSourceNode, ignoring any errors if it is already stopped.
+ */
+const safeStop = (source?: AudioBufferSourceNode | null) => {
+  if (source) {
+    try {
+      source.stop();
+    } catch {
+      // Already stopped.
+    }
+  }
+};
+
+/**
+ * Safely disconnects an AudioNode, ignoring any errors if it is already disconnected.
+ */
+const safeDisconnect = (node?: AudioNode | null) => {
+  if (node) {
+    try {
+      node.disconnect();
+    } catch {
+      // Already disconnected.
+    }
+  }
+};
+
+// ============================================================================
 // Audio Playback Actor
 // ============================================================================
 
@@ -321,8 +351,32 @@ export const audioPlaybackActor = fromCallback<
   let decodeSerial = 0;
   let disposed = false;
 
+  /**
+   * Ghost sources: AudioBufferSourceNodes that have been detached from `sourceNode`
+   * and are currently fading out. Tracking them here lets us immediately hard-stop
+   * all lingering ghosts when a new seek arrives, preventing echo/chorus buildup
+   * from rapid consecutive seeks where multiple fades overlap.
+   */
+  type LingeringNode = {
+    source: AudioBufferSourceNode;
+    envelope: GainNode;
+    shifter: InstanceType<SoundTouchNodeCtor> | null;
+  };
+  const lingeringNodes = new Set<LingeringNode>();
+
+  const killLingeringNodes = () => {
+    for (const ghost of lingeringNodes) {
+      safeStop(ghost.source);
+      safeDisconnect(ghost.source);
+      safeDisconnect(ghost.shifter);
+      safeDisconnect(ghost.envelope);
+    }
+    lingeringNodes.clear();
+  };
+
   const cleanup = () => {
     disposed = true;
+    killLingeringNodes();
     stopSource();
     gainNode?.disconnect();
     gainNode = null;
@@ -418,14 +472,8 @@ export const audioPlaybackActor = fromCallback<
     if (!sourceNode) {
       // No active source, but a detached pitch shifter could still linger. Discard
       // it so its WSOLA buffer can't replay stale samples on the next start.
-      if (pitchShiftNode) {
-        try {
-          pitchShiftNode.disconnect();
-        } catch {
-          // Already disconnected.
-        }
-        pitchShiftNode = null;
-      }
+      safeDisconnect(pitchShiftNode);
+      pitchShiftNode = null;
       return;
     }
 
@@ -441,26 +489,18 @@ export const audioPlaybackActor = fromCallback<
     source.onended = null;
 
     const disconnectGraph = () => {
-      try {
-        source.disconnect();
-      } catch {
-        // Already disconnected.
-      }
-      try {
-        shifter?.disconnect();
-      } catch {
-        // Already disconnected.
-      }
-      try {
-        envelope?.disconnect();
-      } catch {
-        // Already disconnected.
-      }
+      safeDisconnect(source);
+      safeDisconnect(shifter);
+      safeDisconnect(envelope);
     };
 
     // Declick: ramp this source to silence over a few milliseconds and stop it
     // once the ramp completes, instead of cutting the waveform instantly (an
     // audible click, and a burst of them while scrubbing).
+    //
+    // The ghost is registered in `lingeringNodes` so that rapid consecutive seeks
+    // can immediately kill all lingering fades — preventing echo buildup where
+    // multiple ghost sources overlap and play simultaneously.
     if (fade && audioContext && envelope) {
       const now = audioContext.currentTime;
       const stopAt = now + DECLICK_FADE_SECONDS;
@@ -468,7 +508,13 @@ export const audioPlaybackActor = fromCallback<
         envelope.gain.cancelScheduledValues(now);
         envelope.gain.setValueAtTime(envelope.gain.value, now);
         envelope.gain.linearRampToValueAtTime(0, stopAt);
-        source.onended = disconnectGraph;
+
+        const ghost: LingeringNode = { source, envelope, shifter };
+        lingeringNodes.add(ghost);
+        source.onended = () => {
+          lingeringNodes.delete(ghost);
+          disconnectGraph();
+        };
         source.stop(stopAt);
         return;
       } catch {
@@ -476,11 +522,7 @@ export const audioPlaybackActor = fromCallback<
       }
     }
 
-    try {
-      source.stop();
-    } catch {
-      // Already stopped.
-    }
+    safeStop(source);
     disconnectGraph();
   };
 
@@ -537,6 +579,10 @@ export const audioPlaybackActor = fromCallback<
       return;
     }
 
+    // Kill any ghost sources from previous seeks before starting the new one.
+    // Without this, rapid seeks accumulate overlapping fade-out nodes that play
+    // concurrently and produce an audible echo/chorus effect.
+    killLingeringNodes();
     stopSource({ fade: true });
 
     const source = context.createBufferSource();
