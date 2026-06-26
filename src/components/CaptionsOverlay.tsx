@@ -54,7 +54,7 @@ const CaptionsOverlay: React.FC = () => {
   const isRtl = RTL_LANGUAGES.has(activeTrack.language.split("-")[0]);
 
   return (
-    <div className="absolute bottom-32 left-0 right-0 z-46 flex justify-center pointer-events-none px-4">
+    <div className="absolute bottom-32 left-0 right-0 z-101 flex justify-center pointer-events-none px-4">
       <div
         dir={isRtl ? "rtl" : undefined}
         className="max-w-[78ch] rounded-xl bg-[lch(4.83_5.58_267.3/0.15)] px-4.5 py-2.25 text-center text-[24px] leading-8.5 font-medium text-white [text-shadow:0_1px_4px_#000] backdrop-blur-sm sm:text-[18px] sm:leading-6.5 sm:px-3.5"
