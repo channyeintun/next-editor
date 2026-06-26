@@ -366,6 +366,73 @@ describe("recordingCodec", () => {
     expect(decoded.cameraBlob).toBeUndefined();
   });
 
+  it("round trips captions through SCR3 encode/decode", async () => {
+    const recording = createRecording({
+      captions: [
+        {
+          id: "en-track",
+          language: "en",
+          label: "English",
+          default: true,
+          cues: [
+            { start: 0, end: 2000, text: "Hello world" },
+            { start: 2500, end: 5000, text: "This is a test" },
+          ],
+        },
+        {
+          id: "es-track",
+          language: "es",
+          label: "Spanish (español)",
+          cues: [
+            { start: 0, end: 2000, text: "Hola mundo" },
+            { start: 2500, end: 5000, text: "Esto es una prueba" },
+          ],
+        },
+      ],
+    });
+
+    const bytes = await encodeRecordingToStream(recording);
+    const decoded = decodeRecordingStream(bytes);
+
+    expect(decoded.captions).toEqual(recording.captions);
+  });
+
+  it("round trips captions with word-level timing through SCR3", async () => {
+    const recording = createRecording({
+      captions: [
+        {
+          id: "en-words",
+          language: "en",
+          cues: [
+            {
+              start: 0,
+              end: 2000,
+              text: "Hello world",
+              words: [
+                { start: 0, end: 900, text: "Hello" },
+                { start: 1000, end: 2000, text: "world" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const encoded = await encodeRecordingToBase64Stream(recording);
+    const [decoded] = await decodeBase64ToRecordings(encoded);
+
+    expect(decoded.captions).toEqual(recording.captions);
+  });
+
+  it("round trips a recording without captions (backwards compat)", async () => {
+    const recording = createRecording();
+
+    const bytes = await encodeRecordingToStream(recording);
+    const decoded = decodeRecordingStream(bytes);
+
+    expect(decoded.captions).toBeUndefined();
+  });
+
   it("round trips an externalized camera through the base64 .ne path", async () => {
     const recording = createRecording({
       cameraFile: "my-recording.webm",

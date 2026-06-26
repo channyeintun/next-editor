@@ -1,6 +1,7 @@
 import { decode as msgpackDecode, encode as msgpackEncode } from "@msgpack/msgpack";
 import { zlibSync, unzlibSync } from "fflate";
 import type {
+  CaptionTrack,
   RecordingAudioSource,
   RecordingCameraSource,
   RecordingClusterMeta,
@@ -102,6 +103,7 @@ export interface RecordingStreamMeta {
   cameraFile?: string;
   /** Resolved/absolute URL for an external camera video, when known at encode time. */
   cameraUrl?: string;
+  captions?: CaptionTrack[];
   slides?: Slide[];
   workspaceSnapshot?: WorkspaceRecordingSnapshot;
   runtimeSnapshot?: RuntimeRecordingSnapshot;

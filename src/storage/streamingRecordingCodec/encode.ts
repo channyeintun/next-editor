@@ -319,6 +319,7 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     cameraStartOffsetMs: hasCamera ? normalized.cameraStartOffsetMs : undefined,
     cameraFile: normalized.cameraFile,
     cameraUrl: normalized.cameraUrl,
+    captions: normalized.captions,
     slides: normalized.slides,
     workspaceSnapshot: normalized.workspaceSnapshot,
     runtimeSnapshot: normalized.runtimeSnapshot,

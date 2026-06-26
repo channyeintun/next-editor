@@ -24,6 +24,9 @@ export { default as SlidePanel } from "../../components/SlidePanel";
 
 // Type exports for users
 export type {
+  CaptionWord,
+  CaptionCue,
+  CaptionTrack,
   RecordingTrackKind,
   RecordingTrackMeta,
   RecordingClusterMeta,

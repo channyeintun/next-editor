@@ -25,6 +25,27 @@ export interface AudioPlaceholder {
 export type RecordingAudioSource = "microphone" | "external";
 export type RecordingCameraSource = "camera";
 
+export interface CaptionWord {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface CaptionCue {
+  start: number;
+  end: number;
+  text: string;
+  words?: CaptionWord[];
+}
+
+export interface CaptionTrack {
+  id: string;
+  language: string;
+  label?: string;
+  cues: CaptionCue[];
+  default?: boolean;
+}
+
 export type RecordingTrackKind =
   | "editor"
   | "audio"
@@ -179,6 +200,7 @@ export interface Recording {
   workspaceEvents?: WorkspaceRecordingEvent[];
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];
+  captions?: CaptionTrack[];
   slides?: Slide[];
   tracks?: RecordingTrackMeta[];
   clusters?: RecordingClusterMeta[];
