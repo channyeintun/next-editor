@@ -1,4 +1,4 @@
-import { lazy, memo } from "react";
+import { lazy } from "react";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
@@ -20,7 +20,7 @@ import LoadingSpinner from "./LoadingSpinner.tsx";
 const CodeEditor = lazy(() => import("./CodeEditor"));
 const TerminalPanel = lazy(() => import("./TerminalPanel"));
 
-export const EditorLayout = memo(function EditorLayout() {
+export function EditorLayout() {
   const { isLoading: urlLoading } = useUrlQuery();
   const { isDragging } = useDragAndDropUrl();
   const lessonType = useWorkspaceLessonType();
@@ -52,7 +52,7 @@ export const EditorLayout = memo(function EditorLayout() {
       )}
     </div>
   );
-});
+}
 
 export default function Editor() {
   return (

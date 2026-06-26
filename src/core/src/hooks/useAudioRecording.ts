@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef } from "react";
 import { calculateDurationFromFileReader } from "../utils/audioDuration";
 
 const getSupportedAudioMimeType = (): string => {
@@ -49,7 +49,7 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
   const recordingStartTimeRef = useRef<number | null>(null);
   const mimeTypeRef = useRef<string>("");
 
-  const startRecording = useCallback(async () => {
+  const startRecording = async () => {
     try {
       setError(null);
       recordingStartTimeRef.current = Date.now();
@@ -91,9 +91,9 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
       console.error("Error starting audio recording:", err);
       recordingStartTimeRef.current = null;
     }
-  }, []);
+  };
 
-  const stopRecording = useCallback((): Promise<Blob | null> => {
+  const stopRecording = (): Promise<Blob | null> => {
     return new Promise((resolve) => {
       if (mediaRecorderRef.current && isRecordingAudio) {
         // Store the original onstop callback
@@ -116,11 +116,11 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
         resolve(null);
       }
     });
-  }, [isRecordingAudio]);
+  };
 
-  const calculateExactDuration = useCallback(async (audioBlob: Blob): Promise<number> => {
+  const calculateExactDuration = async (audioBlob: Blob): Promise<number> => {
     return await calculateDurationFromFileReader(audioBlob);
-  }, []);
+  };
 
   return {
     isRecordingAudio,

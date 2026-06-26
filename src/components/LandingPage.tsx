@@ -1,7 +1,7 @@
 import { Maximize, Minimize, Play, SquareArrowOutUpRight } from "lucide-react";
 import { Link } from "react-router";
 import Navbar from "./Navbar";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
 
 const DEMO_IFRAME_WIDTH = 1440;
@@ -65,7 +65,7 @@ const LandingPage = () => {
     };
   }, []);
 
-  const toggleFullscreen = useCallback(() => {
+  const toggleFullscreen = () => {
     const node = containerRef.current as
       | (HTMLDivElement & { webkitRequestFullscreen?: () => void })
       | null;
@@ -79,7 +79,7 @@ const LandingPage = () => {
     } else {
       (node.requestFullscreen ?? node.webkitRequestFullscreen)?.call(node);
     }
-  }, []);
+  };
 
   // Contain + center the fixed-size demo iframe within its (possibly fullscreen) container.
   const scale = dimensions

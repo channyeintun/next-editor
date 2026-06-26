@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import {
   Plus,
   Trash2,
@@ -52,7 +52,7 @@ export default function SlidesManager({
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
 
-  const addSlide = useCallback(() => {
+  const addSlide = () => {
     const content =
       newSlideContent.trim() ||
       (contentType === "html" ? DEFAULT_HTML_CONTENT : DEFAULT_MARKDOWN_CONTENT);
@@ -66,48 +66,42 @@ export default function SlidesManager({
 
     onSlidesChange([...slides, newSlide]);
     setNewSlideContent("");
-  }, [newSlideContent, contentType, slides, onSlidesChange]);
+  };
 
-  const removeSlide = useCallback(
-    (slideId: string) => {
-      const updatedSlides = slides
-        .filter((slide) => slide.id !== slideId)
-        .map((slide, index) => ({ ...slide, order: index }));
-      onSlidesChange(updatedSlides);
-    },
-    [slides, onSlidesChange],
-  );
+  const removeSlide = (slideId: string) => {
+    const updatedSlides = slides
+      .filter((slide) => slide.id !== slideId)
+      .map((slide, index) => ({ ...slide, order: index }));
+    onSlidesChange(updatedSlides);
+  };
 
-  const moveSlide = useCallback(
-    (slideId: string, direction: "up" | "down") => {
-      const slideIndex = slides.findIndex((slide) => slide.id === slideId);
-      if (slideIndex === -1) return;
+  const moveSlide = (slideId: string, direction: "up" | "down") => {
+    const slideIndex = slides.findIndex((slide) => slide.id === slideId);
+    if (slideIndex === -1) return;
 
-      const newIndex = direction === "up" ? slideIndex - 1 : slideIndex + 1;
-      if (newIndex < 0 || newIndex >= slides.length) return;
+    const newIndex = direction === "up" ? slideIndex - 1 : slideIndex + 1;
+    if (newIndex < 0 || newIndex >= slides.length) return;
 
-      const updatedSlides = [...slides];
-      [updatedSlides[slideIndex], updatedSlides[newIndex]] = [
-        updatedSlides[newIndex],
-        updatedSlides[slideIndex],
-      ];
+    const updatedSlides = [...slides];
+    [updatedSlides[slideIndex], updatedSlides[newIndex]] = [
+      updatedSlides[newIndex],
+      updatedSlides[slideIndex],
+    ];
 
-      // Update order numbers
-      updatedSlides.forEach((slide, index) => {
-        slide.order = index;
-      });
+    // Update order numbers
+    updatedSlides.forEach((slide, index) => {
+      slide.order = index;
+    });
 
-      onSlidesChange(updatedSlides);
-    },
-    [slides, onSlidesChange],
-  );
+    onSlidesChange(updatedSlides);
+  };
 
-  const startEditing = useCallback((slide: Slide) => {
+  const startEditing = (slide: Slide) => {
     setEditingSlideId(slide.id);
     setEditContent(slide.content);
-  }, []);
+  };
 
-  const saveEdit = useCallback(() => {
+  const saveEdit = () => {
     if (!editingSlideId) return;
 
     const updatedSlides = slides.map((slide) =>
@@ -116,12 +110,12 @@ export default function SlidesManager({
     onSlidesChange(updatedSlides);
     setEditingSlideId(null);
     setEditContent("");
-  }, [editingSlideId, editContent, slides, onSlidesChange]);
+  };
 
-  const cancelEdit = useCallback(() => {
+  const cancelEdit = () => {
     setEditingSlideId(null);
     setEditContent("");
-  }, []);
+  };
 
   return (
     <div className="flex max-h-[calc(100dvh-120px)] w-full flex-col overflow-hidden rounded-xl border border-slate-700 bg-[#151821] shadow-[0_18px_40px_rgba(2,6,23,0.45)] sm:w-105 sm:max-h-160">

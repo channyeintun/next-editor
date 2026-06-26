@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useEffect } from "react";
 import { useNextEditorDomainAdapters } from "./NextEditorDomainAdaptersContext";
 import { useSlides } from "../hooks/useSlides";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
@@ -18,13 +18,10 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     onSlideEvent: handleSlideEvent,
   });
 
-  const slideStateGetter = useCallback(
-    () => ({
-      previewState: slidesData.previewState,
-      currentSlideIndex: slidesData.currentSlideIndex,
-    }),
-    [slidesData.previewState, slidesData.currentSlideIndex],
-  );
+  const slideStateGetter = () => ({
+    previewState: slidesData.previewState,
+    currentSlideIndex: slidesData.currentSlideIndex,
+  });
 
   useEffect(() => {
     slides.setSnapshotGetter(slideStateGetter);
@@ -34,7 +31,7 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     };
   }, [slideStateGetter, slides]);
 
-  const slidesGetter = useCallback(() => slidesData.slides, [slidesData.slides]);
+  const slidesGetter = () => slidesData.slides;
 
   useEffect(() => {
     slides.setSlidesGetter(slidesGetter);
@@ -44,53 +41,50 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     };
   }, [slides, slidesGetter]);
 
-  const slideStateApplier = useCallback(
-    (slideState: SlidePreviewState, currentSlideIndex: number) => {
-      // Directly apply the slide state during playback without triggering events
-      // to avoid double event recording during playback
+  const slideStateApplier = (slideState: SlidePreviewState, currentSlideIndex: number) => {
+    // Directly apply the slide state during playback without triggering events
+    // to avoid double event recording during playback
 
-      // Set the preview state directly to match the recorded state
-      slidesData.setPreviewState((prev) => {
-        const nextIsOpen = slideState.isOpen;
-        const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
-        const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
-        // Preserve the current vertical index if slideState.indexv is undefined
-        const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
-        const nextInteraction = slideState.currentInteraction;
+    // Set the preview state directly to match the recorded state
+    slidesData.setPreviewState((prev) => {
+      const nextIsOpen = slideState.isOpen;
+      const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
+      const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
+      // Preserve the current vertical index if slideState.indexv is undefined
+      const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
+      const nextInteraction = slideState.currentInteraction;
 
-        if (
-          nextIsOpen !== prev.isOpen ||
-          nextIsMaximized !== prev.isMaximized ||
-          nextSlideId !== prev.currentSlideId ||
-          nextIndexv !== prev.indexv ||
-          nextInteraction !== prev.currentInteraction
-        ) {
-          return {
-            isOpen: nextIsOpen,
-            isMaximized: nextIsMaximized,
-            currentSlideId: nextSlideId,
-            indexv: nextIndexv,
-            currentInteraction: nextInteraction,
-          };
-        }
-        return prev;
-      });
-
-      // Update slide index if needed
-      if (slideState.isOpen) {
-        const nextIndexv = slideState.indexv ?? slidesData.previewState.indexv ?? 0;
-        const prevIndexv = slidesData.previewState.indexv ?? 0;
-
-        if (
-          currentSlideIndex !== slidesData.currentSlideIndex ||
-          (slideState.indexv !== undefined && nextIndexv !== prevIndexv)
-        ) {
-          slides.navigate(currentSlideIndex, nextIndexv);
-        }
+      if (
+        nextIsOpen !== prev.isOpen ||
+        nextIsMaximized !== prev.isMaximized ||
+        nextSlideId !== prev.currentSlideId ||
+        nextIndexv !== prev.indexv ||
+        nextInteraction !== prev.currentInteraction
+      ) {
+        return {
+          isOpen: nextIsOpen,
+          isMaximized: nextIsMaximized,
+          currentSlideId: nextSlideId,
+          indexv: nextIndexv,
+          currentInteraction: nextInteraction,
+        };
       }
-    },
-    [slides, slidesData],
-  );
+      return prev;
+    });
+
+    // Update slide index if needed
+    if (slideState.isOpen) {
+      const nextIndexv = slideState.indexv ?? slidesData.previewState.indexv ?? 0;
+      const prevIndexv = slidesData.previewState.indexv ?? 0;
+
+      if (
+        currentSlideIndex !== slidesData.currentSlideIndex ||
+        (slideState.indexv !== undefined && nextIndexv !== prevIndexv)
+      ) {
+        slides.navigate(currentSlideIndex, nextIndexv);
+      }
+    }
+  };
 
   useEffect(() => {
     slides.setSnapshotApplier(slideStateApplier);
@@ -100,20 +94,17 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     };
   }, [slideStateApplier, slides]);
 
-  const slidesApplier = useCallback(
-    (
-      slides: Array<{
-        id: string;
-        content: string;
-        contentType: "html" | "markdown";
-        name?: string;
-        order: number;
-      }>,
-    ) => {
-      slidesData.setSlides(slides);
-    },
-    [slidesData],
-  );
+  const slidesApplier = (
+    slides: Array<{
+      id: string;
+      content: string;
+      contentType: "html" | "markdown";
+      name?: string;
+      order: number;
+    }>,
+  ) => {
+    slidesData.setSlides(slides);
+  };
 
   useEffect(() => {
     slides.setSlidesApplier(slidesApplier);

@@ -1,4 +1,4 @@
-import React, { type MouseEvent, useRef, useState, useCallback, useEffect } from "react";
+import React, { type MouseEvent, useRef, useState, useEffect } from "react";
 
 export interface ProgressBarProps {
   /**
@@ -68,37 +68,28 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragProgress, setDragProgress] = useState<number | null>(null);
 
-  const calculateProgress = useCallback(
-    (clientX: number): number => {
-      if (!containerRef.current || !duration) return 0;
-      const rect = containerRef.current.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const percentage = Math.max(0, Math.min(x / rect.width, 1));
-      return percentage * 100;
-    },
-    [duration],
-  );
+  const calculateProgress = (clientX: number): number => {
+    if (!containerRef.current || !duration) return 0;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const percentage = Math.max(0, Math.min(x / rect.width, 1));
+    return percentage * 100;
+  };
 
-  const calculateTime = useCallback(
-    (clientX: number): number => {
-      if (!containerRef.current || !duration) return 0;
-      const rect = containerRef.current.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const percentage = Math.max(0, Math.min(x / rect.width, 1));
-      return percentage * duration;
-    },
-    [duration],
-  );
+  const calculateTime = (clientX: number): number => {
+    if (!containerRef.current || !duration) return 0;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const percentage = Math.max(0, Math.min(x / rect.width, 1));
+    return percentage * duration;
+  };
 
-  const handleMouseDown = useCallback(
-    (e: MouseEvent<HTMLDivElement>) => {
-      if (!onSeek || !duration) return;
-      e.preventDefault();
-      setIsDragging(true);
-      setDragProgress(calculateProgress(e.clientX));
-    },
-    [onSeek, duration, calculateProgress],
-  );
+  const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
+    if (!onSeek || !duration) return;
+    e.preventDefault();
+    setIsDragging(true);
+    setDragProgress(calculateProgress(e.clientX));
+  };
 
   useEffect(() => {
     if (!isDragging) return;

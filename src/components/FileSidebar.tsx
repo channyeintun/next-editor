@@ -1,4 +1,4 @@
-import { memo, type UIEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type UIEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FilePlus2, Folder, FolderOpen, FolderPlus, Upload } from "lucide-react";
 import {
   getParentWorkspacePath,
@@ -41,7 +41,7 @@ import {
   type WorkspaceTreeNode,
 } from "./fileSidebarHelpers";
 
-const FileSidebarPanel = memo(function FileSidebarPanel() {
+function FileSidebarPanel() {
   const [draftName, setDraftName] = useState("");
   const [editState, setEditState] = useState<SidebarEditState>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
@@ -89,38 +89,29 @@ const FileSidebarPanel = memo(function FileSidebarPanel() {
     sidebarScrollTop,
     sidebarWidth,
   } = useWorkspaceSidebarState();
-  const collapsedFolders = useMemo(() => new Set(collapsedFolderPaths), [collapsedFolderPaths]);
-  const tree = useMemo(
-    () => buildWorkspaceTree(files, folders, activeFilePath),
-    [activeFilePath, files, folders],
-  );
-  const menuStyle = useMemo(() => {
-    if (!contextMenu) {
-      return undefined;
-    }
-
-    const placement = getViewportClampedContextMenuPlacement({
-      anchorX: contextMenu.x,
-      anchorY: contextMenu.y,
-      menuWidth: contextMenuSize.width,
-      menuHeight: contextMenuSize.height,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
-    });
-
-    return {
-      left: placement.left,
-      top: placement.top,
-      maxHeight: placement.maxHeight,
-    };
-  }, [contextMenu, contextMenuSize]);
-  const contextMenuFile = useMemo(() => {
-    if (!contextMenu || contextMenu.kind !== "file") {
-      return null;
-    }
-
-    return files.find((file) => file.path === contextMenu.path) ?? null;
-  }, [contextMenu, files]);
+  const collapsedFolders = new Set(collapsedFolderPaths);
+  const tree = buildWorkspaceTree(files, folders, activeFilePath);
+  const menuPlacement = contextMenu
+    ? getViewportClampedContextMenuPlacement({
+        anchorX: contextMenu.x,
+        anchorY: contextMenu.y,
+        menuWidth: contextMenuSize.width,
+        menuHeight: contextMenuSize.height,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      })
+    : undefined;
+  const menuStyle = menuPlacement
+    ? {
+        left: menuPlacement.left,
+        top: menuPlacement.top,
+        maxHeight: menuPlacement.maxHeight,
+      }
+    : undefined;
+  const contextMenuFile =
+    contextMenu && contextMenu.kind === "file"
+      ? (files.find((file) => file.path === contextMenu.path) ?? null)
+      : null;
   const canOpenContextFileInPreview =
     lessonType !== "react" && contextMenuFile?.language === "html";
   const isContextFileInPreview = contextMenu?.path === previewFilePath;
@@ -855,9 +846,9 @@ const FileSidebarPanel = memo(function FileSidebarPanel() {
       />
     </aside>
   );
-});
+}
 
-const FileSidebar = memo(function FileSidebar() {
+function FileSidebar() {
   const isCollapsed = useWorkspaceSidebarCollapsed();
   const sidebarWidth = useWorkspaceSidebarWidth();
   const { isMounted, isExpanded, isAnimating } = useCollapseTransition(isCollapsed);
@@ -877,6 +868,6 @@ const FileSidebar = memo(function FileSidebar() {
       {isMounted ? <FileSidebarPanel /> : null}
     </div>
   );
-});
+}
 
 export default FileSidebar;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import type * as monaco from "monaco-editor";
 import { useActorRef, useSelector, shallowEqual } from "@xstate/react";
 import type { ActorRefFrom } from "xstate";
@@ -148,84 +148,63 @@ export const useNextEditorActorBindings = (
   }); // No dependencies - run on every render to catch ref changes
 
   // Recording Controls
-  const startRecording = useCallback(
-    (options?: { audioBlob?: Blob; enableCamera?: boolean }) => {
-      actorRef.send({
-        type: "START_RECORDING",
-        audioBlob: options?.audioBlob,
-        enableCamera: options?.enableCamera,
-      });
-    },
-    [actorRef],
-  );
+  const startRecording = (options?: { audioBlob?: Blob; enableCamera?: boolean }) => {
+    actorRef.send({
+      type: "START_RECORDING",
+      audioBlob: options?.audioBlob,
+      enableCamera: options?.enableCamera,
+    });
+  };
 
-  const stopRecording = useCallback(() => {
+  const stopRecording = () => {
     actorRef.send({ type: "STOP_RECORDING" });
-  }, [actorRef]);
+  };
 
   // Playback Controls
-  const play = useCallback(() => {
+  const play = () => {
     actorRef.send({ type: "PLAY" });
-  }, [actorRef]);
+  };
 
-  const pause = useCallback(() => {
+  const pause = () => {
     actorRef.send({ type: "PAUSE" });
-  }, [actorRef]);
+  };
 
-  const stop = useCallback(() => {
+  const stop = () => {
     actorRef.send({ type: "STOP" });
-  }, [actorRef]);
+  };
 
-  const seekTo = useCallback(
-    (time: number) => {
-      actorRef.send({ type: "SEEK", time });
-    },
-    [actorRef],
-  );
+  const seekTo = (time: number) => {
+    actorRef.send({ type: "SEEK", time });
+  };
 
-  const setPlaybackSpeed = useCallback(
-    (speed: number) => {
-      actorRef.send({ type: "SET_SPEED", speed });
-    },
-    [actorRef],
-  );
+  const setPlaybackSpeed = (speed: number) => {
+    actorRef.send({ type: "SET_SPEED", speed });
+  };
 
-  const setVolume = useCallback(
-    (vol: number) => {
-      actorRef.send({ type: "SET_VOLUME", volume: vol });
-    },
-    [actorRef],
-  );
+  const setVolume = (vol: number) => {
+    actorRef.send({ type: "SET_VOLUME", volume: vol });
+  };
 
-  const loadRecording = useCallback(
-    (recording: Recording) => {
-      actorRef.send({ type: "LOAD_RECORDING", recording });
-    },
-    [actorRef],
-  );
+  const loadRecording = (recording: Recording) => {
+    actorRef.send({ type: "LOAD_RECORDING", recording });
+  };
 
-  const extendRecording = useCallback(
-    (recording: Recording) => {
-      actorRef.send({ type: "EXTEND_RECORDING", recording });
-    },
-    [actorRef],
-  );
+  const extendRecording = (recording: Recording) => {
+    actorRef.send({ type: "EXTEND_RECORDING", recording });
+  };
 
-  const clearRecording = useCallback(() => {
+  const clearRecording = () => {
     actorRef.send({ type: "UNLOAD" });
-  }, [actorRef]);
+  };
 
-  const syncEditorRef = useCallback(
-    (nextEditor: monaco.editor.IStandaloneCodeEditor | null) => {
-      actorRef.send({ type: "SET_EDITOR_REF", editor: nextEditor });
-    },
-    [actorRef],
-  );
+  const syncEditorRef = (nextEditor: monaco.editor.IStandaloneCodeEditor | null) => {
+    actorRef.send({ type: "SET_EDITOR_REF", editor: nextEditor });
+  };
 
   // Event Handlers for UI
-  const handleEditorChange = useCallback(() => {
+  const handleEditorChange = () => {
     actorRef.send({ type: "CAPTURE_FRAME" });
-  }, [actorRef]);
+  };
 
   // Handle playback interaction detection via direct input listeners
   // This is more stable than onChange for preventing machine/user feedback loops
@@ -274,51 +253,39 @@ export const useNextEditorActorBindings = (
     }
   }, [isPlaying, actorRef]);
 
-  const handleSlideEvent = useCallback(
-    (event: SlideEvent) => {
-      actorRef.send({ type: "SLIDE_EVENT", event });
-    },
-    [actorRef],
-  );
+  const handleSlideEvent = (event: SlideEvent) => {
+    actorRef.send({ type: "SLIDE_EVENT", event });
+  };
 
-  const handlePreviewEvent = useCallback(
-    (event: PreviewEvent) => {
-      actorRef.send({ type: "PREVIEW_EVENT", event });
-    },
-    [actorRef],
-  );
+  const handlePreviewEvent = (event: PreviewEvent) => {
+    actorRef.send({ type: "PREVIEW_EVENT", event });
+  };
 
-  const handlePreviewInitialDocument = useCallback(
-    (document: PreviewInitialDocument) => {
-      actorRef.send({ type: "PREVIEW_INITIAL_DOCUMENT", document });
-    },
-    [actorRef],
-  );
+  const handlePreviewInitialDocument = (document: PreviewInitialDocument) => {
+    actorRef.send({ type: "PREVIEW_INITIAL_DOCUMENT", document });
+  };
 
-  const handlePreviewPatchBatch = useCallback(
-    (batch: PreviewDomPatchBatch) => {
-      actorRef.send({ type: "PREVIEW_PATCH_BATCH", batch });
-    },
-    [actorRef],
-  );
+  const handlePreviewPatchBatch = (batch: PreviewDomPatchBatch) => {
+    actorRef.send({ type: "PREVIEW_PATCH_BATCH", batch });
+  };
 
-  const handleWorkspaceEvent = useCallback(
-    (event?: { sidebarWidthDelta?: number; previewDockWidthDelta?: number }) => {
-      actorRef.send({
-        type: "WORKSPACE_EVENT",
-        sidebarWidthDelta: event?.sidebarWidthDelta,
-        previewDockWidthDelta: event?.previewDockWidthDelta,
-      });
-    },
-    [actorRef],
-  );
+  const handleWorkspaceEvent = (event?: {
+    sidebarWidthDelta?: number;
+    previewDockWidthDelta?: number;
+  }) => {
+    actorRef.send({
+      type: "WORKSPACE_EVENT",
+      sidebarWidthDelta: event?.sidebarWidthDelta,
+      previewDockWidthDelta: event?.previewDockWidthDelta,
+    });
+  };
 
-  const handleRuntimeEvent = useCallback(() => {
+  const handleRuntimeEvent = () => {
     actorRef.send({ type: "RUNTIME_EVENT" });
-  }, [actorRef]);
+  };
 
   // Helper functions
-  const getEditorState = useCallback((): EditorState | null => {
+  const getEditorState = (): EditorState | null => {
     if (!editor) return null;
     return {
       content: editor.getValue(),
@@ -326,24 +293,21 @@ export const useNextEditorActorBindings = (
       position: editor.getPosition()!,
       viewState: editor.saveViewState(),
     };
-  }, [editor]);
+  };
 
-  const getFrame = useCallback(
-    (timestamp?: number): EditorFrame | null => {
-      if (!currentRecording) return null;
+  const getFrame = (timestamp?: number): EditorFrame | null => {
+    if (!currentRecording) return null;
 
-      if (timestamp === undefined) {
-        // Get current frame from actor context directly to avoid hook-level re-renders
-        return actorRef.getSnapshot().context.currentFrame;
-      }
+    if (timestamp === undefined) {
+      // Get current frame from actor context directly to avoid hook-level re-renders
+      return actorRef.getSnapshot().context.currentFrame;
+    }
 
-      // Find closest frame at or before timestamp
-      const { frames } = currentRecording;
-      const index = findFrameIndexAtTime(frames, timestamp);
-      return reconstructFrameAtIndex(frames, index);
-    },
-    [actorRef, currentRecording],
-  );
+    // Find closest frame at or before timestamp
+    const { frames } = currentRecording;
+    const index = findFrameIndexAtTime(frames, timestamp);
+    return reconstructFrameAtIndex(frames, index);
+  };
 
   return {
     // State

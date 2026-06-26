@@ -1,11 +1,11 @@
-import { memo, useEffect } from "react";
+import { useEffect } from "react";
 import { PreviewChrome } from "./preview/PreviewChrome";
 import { RuntimePreviewRenderer } from "./preview/RuntimePreviewRenderer";
 import { usePreviewController } from "./preview/usePreviewController";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 
-const Preview = memo(function Preview() {
+function Preview() {
   const controller = usePreviewController();
   const { isPlaying } = useNextEditorMetadata();
   const isDocked = controller.panelMode === "docked";
@@ -74,6 +74,6 @@ const Preview = memo(function Preview() {
   );
 
   return previewChrome;
-});
+}
 
 export default Preview;

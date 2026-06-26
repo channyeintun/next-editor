@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState, memo } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Deck, Markdown, Slide as RevealReactSlide } from "@revealjs/react";
 import "reveal.js/reveal.css";
 import "reveal.js/theme/black.css";
@@ -98,7 +98,7 @@ function RevealDeckContent({
   );
 }
 
-const RevealSlideRenderer = memo(function RevealSlideRenderer({
+function RevealSlideRenderer({
   slides,
   currentSlideIndex,
   currentVerticalIndex,
@@ -123,12 +123,12 @@ const RevealSlideRenderer = memo(function RevealSlideRenderer({
     currentVerticalIndexRef.current = currentVerticalIndex;
   }, [currentSlideIndex, currentVerticalIndex]);
 
-  const handleDeckReady = useCallback((deck: RevealApi) => {
+  const handleDeckReady = (deck: RevealApi) => {
     deckRef.current = deck;
     setIsReady(true);
-  }, []);
+  };
 
-  const handleDeckSlideChange = useCallback((indexh: number, indexv: number) => {
+  const handleDeckSlideChange = (indexh: number, indexv: number) => {
     if (
       !onSlideChangeRef.current ||
       (indexh === currentSlideIndexRef.current && indexv === currentVerticalIndexRef.current)
@@ -137,7 +137,7 @@ const RevealSlideRenderer = memo(function RevealSlideRenderer({
     }
 
     onSlideChangeRef.current(indexh, indexv);
-  }, []);
+  };
 
   useEffect(() => {
     setIsReady(false);
@@ -206,6 +206,6 @@ const RevealSlideRenderer = memo(function RevealSlideRenderer({
       />
     </div>
   );
-});
+}
 
 export default RevealSlideRenderer;

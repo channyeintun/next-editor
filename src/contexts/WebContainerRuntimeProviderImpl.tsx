@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
@@ -144,9 +144,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   runnerConfigRef.current = runnerConfig;
 
   const isSupported = isWebContainerRuntimeSupported();
-  const workspaceRoot = useMemo(() => getWorkspaceRoot(projectName), [projectName]);
+  const workspaceRoot = getWorkspaceRoot(projectName);
 
-  const resetRuntime = useCallback(() => {
+  const resetRuntime = () => {
     hasRunInitCommandRef.current = false;
     if (typeof window !== "undefined" && reverseSyncTimeoutRef.current !== null) {
       window.clearTimeout(reverseSyncTimeoutRef.current);
@@ -154,9 +154,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     }
     resetWorkspaceSync();
     resetRuntimeSession();
-  }, [resetRuntimeSession, resetWorkspaceSync]);
+  };
 
-  const prepareRuntime = useCallback(async () => {
+  const prepareRuntime = async () => {
     const generation = getRuntimeGeneration();
 
     if (!isSupported) {
@@ -209,21 +209,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
     hasRunInitCommandRef.current = true;
     return instance;
-  }, [
-    bootInstance,
-    ensureProjectMounted,
-    getRuntimeGeneration,
-    getProject,
-    isRuntimeGenerationActive,
-    isMountedRef,
-    isSupported,
-    runForegroundCommand,
-    runnerConfig.initCommand,
-    setErrorMessage,
-    setStatus,
-  ]);
+  };
 
-  const startRuntime = useCallback(async () => {
+  const startRuntime = async () => {
     if (!lessonRunsInWebContainer(lessonType)) {
       resetRuntime();
       return;
@@ -266,22 +254,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
         setErrorMessage(getRuntimeErrorMessage(error));
       }
     }
-  }, [
-    getRuntimeGeneration,
-    lessonType,
-    prepareRuntime,
-    getProject,
-    isRuntimeGenerationActive,
-    resetRuntime,
-    runnerConfig.enabled,
-    runnerConfig.runCommand,
-    setErrorMessage,
-    setStatus,
-    startRunnerProcess,
-    statusRef,
-  ]);
+  };
 
-  const rerunRunner = useCallback(async () => {
+  const rerunRunner = async () => {
     if (!lessonRunsInWebContainer(lessonType)) {
       resetRuntime();
       return;
@@ -314,23 +289,11 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
         setErrorMessage(getRuntimeErrorMessage(error));
       }
     }
-  }, [
-    getRuntimeGeneration,
-    lessonType,
-    prepareRuntime,
-    getProject,
-    isRuntimeGenerationActive,
-    resetRuntime,
-    runnerConfig.enabled,
-    runnerConfig.runCommand,
-    setErrorMessage,
-    setStatus,
-    startRunnerProcess,
-  ]);
+  };
   const rerunRunnerRef = useRef(rerunRunner);
   rerunRunnerRef.current = rerunRunner;
 
-  const startTerminalSession = useCallback(async () => {
+  const startTerminalSession = async () => {
     if (!lessonRunsInWebContainer(lessonType)) {
       return;
     }
@@ -349,16 +312,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
         setErrorMessage(getRuntimeErrorMessage(error));
       }
     }
-  }, [
-    ensureTerminalSession,
-    getRuntimeGeneration,
-    isRuntimeGenerationActive,
-    lessonType,
-    prepareRuntime,
-    setErrorMessage,
-  ]);
+  };
 
-  const createTerminalSession = useCallback(async () => {
+  const createTerminalSession = async () => {
     if (!lessonRunsInWebContainer(lessonType)) {
       return;
     }
@@ -377,98 +333,72 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
         setErrorMessage(getRuntimeErrorMessage(error));
       }
     }
-  }, [
-    createTerminalSessionInRuntime,
-    getRuntimeGeneration,
-    isRuntimeGenerationActive,
-    lessonType,
-    prepareRuntime,
-    setErrorMessage,
-  ]);
+  };
 
-  const sendTerminalInput = useCallback(
-    async (input: string) => {
-      if (!lessonRunsInWebContainer(lessonType)) {
+  const sendTerminalInput = async (input: string) => {
+    if (!lessonRunsInWebContainer(lessonType)) {
+      return;
+    }
+
+    const generation = getRuntimeGeneration();
+
+    try {
+      const instance = await prepareRuntime();
+      if (!instance || !isRuntimeGenerationActive(generation)) {
         return;
       }
 
-      const generation = getRuntimeGeneration();
+      await writeTerminalInput(instance, input);
 
-      try {
-        const instance = await prepareRuntime();
-        if (!instance || !isRuntimeGenerationActive(generation)) {
-          return;
+      if (typeof window !== "undefined" && (input.includes("\n") || input.includes("\u0003"))) {
+        if (reverseSyncTimeoutRef.current !== null) {
+          window.clearTimeout(reverseSyncTimeoutRef.current);
         }
 
-        await writeTerminalInput(instance, input);
+        reverseSyncTimeoutRef.current = window.setTimeout(() => {
+          reverseSyncTimeoutRef.current = null;
 
-        if (typeof window !== "undefined" && (input.includes("\n") || input.includes("\u0003"))) {
-          if (reverseSyncTimeoutRef.current !== null) {
-            window.clearTimeout(reverseSyncTimeoutRef.current);
-          }
+          void (async () => {
+            if (!isRuntimeGenerationActive(generation)) {
+              return;
+            }
 
-          reverseSyncTimeoutRef.current = window.setTimeout(() => {
-            reverseSyncTimeoutRef.current = null;
+            const currentProject = getProject();
+            const nextProject = await readWorkspaceProject(instance, currentProject);
 
-            void (async () => {
-              if (!isRuntimeGenerationActive(generation)) {
-                return;
-              }
+            if (
+              !isRuntimeGenerationActive(generation) ||
+              areWorkspaceProjectsEqual(currentProject, nextProject)
+            ) {
+              return;
+            }
 
-              const currentProject = getProject();
-              const nextProject = await readWorkspaceProject(instance, currentProject);
-
-              if (
-                !isRuntimeGenerationActive(generation) ||
-                areWorkspaceProjectsEqual(currentProject, nextProject)
-              ) {
-                return;
-              }
-
-              loadProject(
-                nextProject,
-                getActiveFilePath(),
-                getCollapsedFolders(),
-                getSidebarScrollTop(),
-                getSidebarWidth(),
-              );
-            })().catch((error) => {
-              if (isRuntimeGenerationActive(generation)) {
-                setErrorMessage(getRuntimeErrorMessage(error));
-              }
-            });
-          }, 150);
-        }
-      } catch (error) {
-        if (isRuntimeGenerationActive(generation)) {
-          setErrorMessage(getRuntimeErrorMessage(error));
-        }
+            loadProject(
+              nextProject,
+              getActiveFilePath(),
+              getCollapsedFolders(),
+              getSidebarScrollTop(),
+              getSidebarWidth(),
+            );
+          })().catch((error) => {
+            if (isRuntimeGenerationActive(generation)) {
+              setErrorMessage(getRuntimeErrorMessage(error));
+            }
+          });
+        }, 150);
       }
-    },
-    [
-      getActiveFilePath,
-      getCollapsedFolders,
-      getSidebarScrollTop,
-      getSidebarWidth,
-      getRuntimeGeneration,
-      getProject,
-      isRuntimeGenerationActive,
-      lessonType,
-      loadProject,
-      prepareRuntime,
-      setErrorMessage,
-      writeTerminalInput,
-    ],
-  );
+    } catch (error) {
+      if (isRuntimeGenerationActive(generation)) {
+        setErrorMessage(getRuntimeErrorMessage(error));
+      }
+    }
+  };
 
-  const runCommand = useCallback(
-    async (commandLine: string) => {
-      await sendTerminalInput(`${commandLine}\n`);
-    },
-    [sendTerminalInput],
-  );
+  const runCommand = async (commandLine: string) => {
+    await sendTerminalInput(`${commandLine}\n`);
+  };
 
-  const saveWorkspace = useCallback(async () => {
+  const saveWorkspace = async () => {
     if (!lessonRunsInWebContainer(lessonTypeRef.current)) {
       return;
     }
@@ -504,21 +434,21 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     }
 
     await rerunRunnerRef.current();
-  }, [getProject, hasActiveRunner, instanceRef, queueProjectSync, setErrorMessage, statusRef]);
+  };
 
-  const updateRunnerConfig = useCallback((config: Partial<RunnerConfig>) => {
+  const updateRunnerConfig = (config: Partial<RunnerConfig>) => {
     setRunnerConfig((current) => ({
       ...current,
       ...config,
     }));
-  }, []);
+  };
 
-  const updateEnvironmentVariables = useCallback((variables: EnvironmentVariables) => {
+  const updateEnvironmentVariables = (variables: EnvironmentVariables) => {
     const normalizedVariables = normalizeEnvironmentVariables(variables);
 
     setEnvironmentVariables(normalizedVariables);
     persistEnvironmentVariables(normalizedVariables);
-  }, []);
+  };
 
   useEffect(() => {
     hasAutoStartedRef.current = false;
@@ -591,75 +521,39 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     };
   }, [resetRuntime]);
 
-  const actionsValue = useMemo<WebContainerRuntimeActions>(
-    () => ({
-      createTerminalSession,
-      closeTerminalSession,
-      startRuntime,
-      resetRuntime,
-      rerunRunner,
-      runCommand,
-      setActiveTerminalSession,
-      startTerminalSession,
-      sendTerminalInput,
-      resizeTerminal,
-      saveWorkspace,
-      updateEnvironmentVariables,
-      updateRunnerConfig,
-    }),
-    [
-      createTerminalSession,
-      closeTerminalSession,
-      resetRuntime,
-      resizeTerminal,
-      rerunRunner,
-      runCommand,
-      saveWorkspace,
-      sendTerminalInput,
-      setActiveTerminalSession,
-      startTerminalSession,
-      startRuntime,
-      updateEnvironmentVariables,
-      updateRunnerConfig,
-    ],
-  );
+  const actionsValue: WebContainerRuntimeActions = {
+    createTerminalSession,
+    closeTerminalSession,
+    startRuntime,
+    resetRuntime,
+    rerunRunner,
+    runCommand,
+    setActiveTerminalSession,
+    startTerminalSession,
+    sendTerminalInput,
+    resizeTerminal,
+    saveWorkspace,
+    updateEnvironmentVariables,
+    updateRunnerConfig,
+  };
 
-  const metadataValue = useMemo<WebContainerRuntimeMetadata>(
-    () => ({
-      status,
-      previewUrl,
-      previewPort,
-      isSupported,
-      errorMessage,
-      latestPreviewMessage,
-      openPorts,
-      latestLifecycleEvent,
-      lastOutput,
-      terminalSessions,
-      activeTerminalSessionId,
-      activeCommand,
-      environmentVariables,
-      runnerConfig,
-      workspaceRoot,
-    }),
-    [
-      activeCommand,
-      activeTerminalSessionId,
-      environmentVariables,
-      errorMessage,
-      isSupported,
-      lastOutput,
-      latestLifecycleEvent,
-      latestPreviewMessage,
-      openPorts,
-      previewPort,
-      previewUrl,
-      runnerConfig,
-      status,
-      terminalSessions,
-      workspaceRoot,
-    ],
-  );
+  const metadataValue: WebContainerRuntimeMetadata = {
+    status,
+    previewUrl,
+    previewPort,
+    isSupported,
+    errorMessage,
+    latestPreviewMessage,
+    openPorts,
+    latestLifecycleEvent,
+    lastOutput,
+    terminalSessions,
+    activeTerminalSessionId,
+    activeCommand,
+    environmentVariables,
+    runnerConfig,
+    workspaceRoot,
+  };
 
   return (
     <WebContainerRuntimeSnapshotGetterContext value={getRecordingSnapshot}>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { selectIsPlaying, selectRecording } from "../core/src/useNextEditor";
 import { resolveCursorViewportPosition } from "../core/src/utils/cursorCoordinates";
@@ -26,10 +26,7 @@ const CursorComponent: React.FC<{
   const recording = NextEditorActorContext.useSelector(selectRecording);
   const cursorRef = useRef<HTMLDivElement>(null);
   const [isCursorSuppressed, setIsCursorSuppressed] = useState(false);
-  const cursorSamples = useMemo(
-    () => (recording ? getCursorReplaySamples(recording) : []),
-    [recording],
-  );
+  const cursorSamples = recording ? getCursorReplaySamples(recording) : [];
 
   useEffect(() => {
     const handleRecordedCursorVisibility = (event: Event) => {

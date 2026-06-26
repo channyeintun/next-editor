@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { useNextEditorActions } from "./useNextEditorContext";
 import {
   decodeBase64ToRecordings,
@@ -95,88 +95,79 @@ export const useUrlLoader = () => {
     }
   };
 
-  const importNextEditorFile = useCallback(
-    async (file: File, videoFile?: File) => {
-      // Attach a dropped sibling camera video as an object URL so playback streams it directly.
-      const attachVideo = (recording: Recording): Recording =>
-        recording.cameraFile && videoFile
-          ? { ...recording, cameraUrl: createImportedCameraObjectUrl(videoFile) }
-          : recording;
-      try {
-        setIsLoading(true);
-        if (file.name.endsWith(".ne")) {
-          const bytes = new Uint8Array(await file.arrayBuffer());
+  const importNextEditorFile = async (file: File, videoFile?: File) => {
+    // Attach a dropped sibling camera video as an object URL so playback streams it directly.
+    const attachVideo = (recording: Recording): Recording =>
+      recording.cameraFile && videoFile
+        ? { ...recording, cameraUrl: createImportedCameraObjectUrl(videoFile) }
+        : recording;
+    try {
+      setIsLoading(true);
+      if (file.name.endsWith(".ne")) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
 
-          if (bytes.length === 0) {
-            throw new Error("File appears to be empty or corrupted");
-          }
+        if (bytes.length === 0) {
+          throw new Error("File appears to be empty or corrupted");
+        }
 
-          if (startsWithScr3(bytes)) {
-            const recordings = await decompressBinaryToRecordings(bytes);
-            if (recordings.length > 0) {
-              loadRecording(attachVideo(recordings[0]));
-            }
-            return;
-          }
-
-          const text = new TextDecoder().decode(bytes);
-          const trimmedText = text.trim();
-
-          if (!trimmedText) {
-            throw new Error("File appears to be empty or corrupted");
-          }
-
-          // Relaxed validation: Allow whitespace/newlines and check general format
-          // Strip whitespace for the check
-          const stripped = trimmedText.replace(/\s/g, "");
-          const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
-          if (!base64Pattern.test(stripped)) {
-            throw new Error("File does not contain valid base64 data");
-          }
-
-          const recordings = await decodeBase64ToRecordings(stripped);
-
+        if (startsWithScr3(bytes)) {
+          const recordings = await decompressBinaryToRecordings(bytes);
           if (recordings.length > 0) {
             loadRecording(attachVideo(recordings[0]));
           }
+          return;
         }
-      } catch (error) {
-        console.error("Failed to import file:", error);
-        alert(`Failed to import file: ${error instanceof Error ? error.message : "Unknown error"}`);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [loadRecording],
-  );
 
-  const loadRecordingFromBase64Text = useCallback(
-    async (text: string, baseUrl?: string) => {
-      const stripped = text.replace(/\s/g, "");
-      if (!stripped) {
-        throw new Error("File appears to be empty or corrupted");
-      }
-      const recordings = await decodeBase64ToRecordings(stripped);
-      if (recordings.length > 0) {
-        loadRecording(withResolvedCameraUrl(recordings[0], baseUrl));
-      }
-    },
-    [loadRecording],
-  );
+        const text = new TextDecoder().decode(bytes);
+        const trimmedText = text.trim();
 
-  const loadRecordingFromBinaryBytes = useCallback(
-    async (bytes: Uint8Array, baseUrl?: string) => {
-      if (!startsWithScr3(bytes)) {
-        throw new Error("File does not contain a valid SCR3 recording stream");
-      }
+        if (!trimmedText) {
+          throw new Error("File appears to be empty or corrupted");
+        }
 
-      const recordings = await decompressBinaryToRecordings(bytes);
-      if (recordings.length > 0) {
-        loadRecording(withResolvedCameraUrl(recordings[0], baseUrl));
+        // Relaxed validation: Allow whitespace/newlines and check general format
+        // Strip whitespace for the check
+        const stripped = trimmedText.replace(/\s/g, "");
+        const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
+        if (!base64Pattern.test(stripped)) {
+          throw new Error("File does not contain valid base64 data");
+        }
+
+        const recordings = await decodeBase64ToRecordings(stripped);
+
+        if (recordings.length > 0) {
+          loadRecording(attachVideo(recordings[0]));
+        }
       }
-    },
-    [loadRecording],
-  );
+    } catch (error) {
+      console.error("Failed to import file:", error);
+      alert(`Failed to import file: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadRecordingFromBase64Text = async (text: string, baseUrl?: string) => {
+    const stripped = text.replace(/\s/g, "");
+    if (!stripped) {
+      throw new Error("File appears to be empty or corrupted");
+    }
+    const recordings = await decodeBase64ToRecordings(stripped);
+    if (recordings.length > 0) {
+      loadRecording(withResolvedCameraUrl(recordings[0], baseUrl));
+    }
+  };
+
+  const loadRecordingFromBinaryBytes = async (bytes: Uint8Array, baseUrl?: string) => {
+    if (!startsWithScr3(bytes)) {
+      throw new Error("File does not contain a valid SCR3 recording stream");
+    }
+
+    const recordings = await decompressBinaryToRecordings(bytes);
+    if (recordings.length > 0) {
+      loadRecording(withResolvedCameraUrl(recordings[0], baseUrl));
+    }
+  };
 
   /**
    * Streams a `.ne` response and progressively decodes ever-larger prefixes of the SCR3 stream,
@@ -184,181 +175,176 @@ export const useUrlLoader = () => {
    * loaded; subsequent prefixes extend it in place (see `extendRecording`). Falls back to the
    * caller for whole-file decoding when the body is not streamable.
    */
-  const streamRecordingFromResponse = useCallback(
-    async (response: Response, baseUrl?: string): Promise<boolean> => {
-      const body = response.body;
-      if (!body || typeof body.getReader !== "function") {
-        return false;
+  const streamRecordingFromResponse = async (
+    response: Response,
+    baseUrl?: string,
+  ): Promise<boolean> => {
+    const body = response.body;
+    if (!body || typeof body.getReader !== "function") {
+      return false;
+    }
+
+    const reader = body.getReader();
+    const textDecoder = new TextDecoder();
+    const sniffParts: Uint8Array[] = [];
+    let sniffLength = 0;
+    let cleanBase64 = "";
+    let decodedBase64Len = 0;
+    const streamReader = createStreamingRecordingReader();
+    let lastDecodeLength = 0;
+    let loadedOnce = false;
+
+    const applyRecording = (
+      recording: Awaited<ReturnType<typeof decodeBase64ToRecordings>>[0] | null | undefined,
+    ) => {
+      if (!recording) {
+        return;
       }
 
-      const reader = body.getReader();
-      const textDecoder = new TextDecoder();
-      const sniffParts: Uint8Array[] = [];
-      let sniffLength = 0;
-      let cleanBase64 = "";
-      let decodedBase64Len = 0;
-      const streamReader = createStreamingRecordingReader();
-      let lastDecodeLength = 0;
-      let loadedOnce = false;
+      const resolved = withResolvedCameraUrl(recording, baseUrl);
 
-      const applyRecording = (
-        recording: Awaited<ReturnType<typeof decodeBase64ToRecordings>>[0] | null | undefined,
-      ) => {
-        if (!recording) {
-          return;
+      if (!loadedOnce) {
+        loadRecording(resolved);
+        loadedOnce = true;
+        setIsLoading(false);
+        return;
+      }
+
+      extendRecording(resolved);
+    };
+
+    // Both `.ne` encodings — raw binary and base64-wrapped — feed the same incremental
+    // reader, which decodes only newly-arrived segments. A prefix that isn't decodable yet
+    // simply yields `null` (no throw); a thrown error is genuine corruption/desync and
+    // propagates to the whole-file fallback in `fetchNextEditorFile`.
+    const applyStreamed = () => {
+      applyRecording(streamReader.getRecording());
+    };
+
+    // Decode whole 4-character base64 groups into bytes and push them to the reader.
+    // Base64 padding only appears in the final group, so every mid-stream slice is a clean,
+    // independently-decodable group boundary.
+    const feedBase64 = () => {
+      const boundary = cleanBase64.length - (cleanBase64.length % 4);
+      if (boundary <= decodedBase64Len) {
+        return;
+      }
+      const bytes = decodeBase64(cleanBase64.slice(decodedBase64Len, boundary));
+      decodedBase64Len = boundary;
+      if (bytes.length > 0) {
+        streamReader.push(bytes);
+      }
+    };
+
+    const ingestChunk = (mode: "binary" | "text", bytes: Uint8Array) => {
+      if (mode === "binary") {
+        streamReader.push(bytes);
+        return;
+      }
+      cleanBase64 += textDecoder.decode(bytes, { stream: true }).replace(/\s/g, "");
+      feedBase64();
+    };
+
+    try {
+      let streamMode: "binary" | "text" | null = null;
+
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        if (!value || value.length === 0) {
+          continue;
         }
 
-        const resolved = withResolvedCameraUrl(recording, baseUrl);
-
-        if (!loadedOnce) {
-          loadRecording(resolved);
-          loadedOnce = true;
-          setIsLoading(false);
-          return;
-        }
-
-        extendRecording(resolved);
-      };
-
-      // Both `.ne` encodings — raw binary and base64-wrapped — feed the same incremental
-      // reader, which decodes only newly-arrived segments. A prefix that isn't decodable yet
-      // simply yields `null` (no throw); a thrown error is genuine corruption/desync and
-      // propagates to the whole-file fallback in `fetchNextEditorFile`.
-      const applyStreamed = () => {
-        applyRecording(streamReader.getRecording());
-      };
-
-      // Decode whole 4-character base64 groups into bytes and push them to the reader.
-      // Base64 padding only appears in the final group, so every mid-stream slice is a clean,
-      // independently-decodable group boundary.
-      const feedBase64 = () => {
-        const boundary = cleanBase64.length - (cleanBase64.length % 4);
-        if (boundary <= decodedBase64Len) {
-          return;
-        }
-        const bytes = decodeBase64(cleanBase64.slice(decodedBase64Len, boundary));
-        decodedBase64Len = boundary;
-        if (bytes.length > 0) {
-          streamReader.push(bytes);
-        }
-      };
-
-      const ingestChunk = (mode: "binary" | "text", bytes: Uint8Array) => {
-        if (mode === "binary") {
-          streamReader.push(bytes);
-          return;
-        }
-        cleanBase64 += textDecoder.decode(bytes, { stream: true }).replace(/\s/g, "");
-        feedBase64();
-      };
-
-      try {
-        let streamMode: "binary" | "text" | null = null;
-
-        for (;;) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          if (!value || value.length === 0) {
+        if (streamMode === null) {
+          sniffParts.push(value);
+          sniffLength += value.length;
+          if (sniffLength < SCR3_MAGIC_BYTES.length) {
             continue;
           }
 
-          if (streamMode === null) {
-            sniffParts.push(value);
-            sniffLength += value.length;
-            if (sniffLength < SCR3_MAGIC_BYTES.length) {
-              continue;
-            }
-
-            const sniffBytes = concatByteChunks(sniffParts, sniffLength);
-            streamMode = startsWithScr3(sniffBytes) ? "binary" : "text";
-            ingestChunk(streamMode, sniffBytes);
-            sniffParts.length = 0;
-            sniffLength = 0;
-          } else {
-            ingestChunk(streamMode, value);
-          }
-
-          const downloaded = streamReader.byteLength();
-          if (downloaded - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
-            lastDecodeLength = downloaded;
-            applyStreamed();
-          }
-        }
-
-        if (streamMode === null && sniffLength > 0) {
           const sniffBytes = concatByteChunks(sniffParts, sniffLength);
           streamMode = startsWithScr3(sniffBytes) ? "binary" : "text";
           ingestChunk(streamMode, sniffBytes);
+          sniffParts.length = 0;
+          sniffLength = 0;
+        } else {
+          ingestChunk(streamMode, value);
         }
 
-        if (streamMode === "text") {
-          // Flush the text decoder's buffered tail, then decode the final (padded) group.
-          cleanBase64 += textDecoder.decode().replace(/\s/g, "");
-          feedBase64();
+        const downloaded = streamReader.byteLength();
+        if (downloaded - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
+          lastDecodeLength = downloaded;
+          applyStreamed();
         }
-        applyStreamed();
-      } finally {
-        reader.releaseLock();
       }
 
-      if (!loadedOnce) {
-        throw new Error("No valid recording found in stream");
-      }
-      return true;
-    },
-    [loadRecording, extendRecording],
-  );
-
-  const fetchNextEditorFile = useCallback(
-    async (url: string) => {
-      if (!isNextEditorUrl(url)) {
-        throw new Error("URL does not point to a supported file (.ne)");
+      if (streamMode === null && sniffLength > 0) {
+        const sniffBytes = concatByteChunks(sniffParts, sniffLength);
+        streamMode = startsWithScr3(sniffBytes) ? "binary" : "text";
+        ingestChunk(streamMode, sniffBytes);
       }
 
+      if (streamMode === "text") {
+        // Flush the text decoder's buffered tail, then decode the final (padded) group.
+        cleanBase64 += textDecoder.decode().replace(/\s/g, "");
+        feedBase64();
+      }
+      applyStreamed();
+    } finally {
+      reader.releaseLock();
+    }
+
+    if (!loadedOnce) {
+      throw new Error("No valid recording found in stream");
+    }
+    return true;
+  };
+
+  const fetchNextEditorFile = async (url: string) => {
+    if (!isNextEditorUrl(url)) {
+      throw new Error("URL does not point to a supported file (.ne)");
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await fetchNextEditorUrl(url);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file: ${response.statusText}`);
+      }
+
+      // Stream + progressively decode straight from the response body. Cloning the
+      // response here would tee the stream and buffer the *entire* file in the unread
+      // branch — defeating streaming — so the body is consumed directly. The reader
+      // only returns `false` before touching the body (not a readable stream); any
+      // failure after it starts reading throws, in which case the body is already
+      // drained and the whole-file fallback re-fetches the URL.
+      let streamed = false;
+      let bodyConsumed = false;
       try {
-        setIsLoading(true);
-        const response = await fetchNextEditorUrl(url);
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch file: ${response.statusText}`);
-        }
-
-        // Stream + progressively decode straight from the response body. Cloning the
-        // response here would tee the stream and buffer the *entire* file in the unread
-        // branch — defeating streaming — so the body is consumed directly. The reader
-        // only returns `false` before touching the body (not a readable stream); any
-        // failure after it starts reading throws, in which case the body is already
-        // drained and the whole-file fallback re-fetches the URL.
-        let streamed = false;
-        let bodyConsumed = false;
-        try {
-          streamed = await streamRecordingFromResponse(response, url);
-        } catch {
-          bodyConsumed = true;
-        }
-
-        if (!streamed) {
-          const source = bodyConsumed ? await fetchNextEditorUrl(url) : response;
-          const bytes = new Uint8Array(await source.arrayBuffer());
-          if (startsWithScr3(bytes)) {
-            await loadRecordingFromBinaryBytes(bytes, url);
-          } else {
-            await loadRecordingFromBase64Text(new TextDecoder().decode(bytes).trim(), url);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load tutorial from URL:", error);
-        alert(
-          `Failed to load tutorial: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-        throw error;
-      } finally {
-        setIsLoading(false);
+        streamed = await streamRecordingFromResponse(response, url);
+      } catch {
+        bodyConsumed = true;
       }
-    },
-    [streamRecordingFromResponse, loadRecordingFromBase64Text, loadRecordingFromBinaryBytes],
-  );
+
+      if (!streamed) {
+        const source = bodyConsumed ? await fetchNextEditorUrl(url) : response;
+        const bytes = new Uint8Array(await source.arrayBuffer());
+        if (startsWithScr3(bytes)) {
+          await loadRecordingFromBinaryBytes(bytes, url);
+        } else {
+          await loadRecordingFromBase64Text(new TextDecoder().decode(bytes).trim(), url);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load tutorial from URL:", error);
+      alert(`Failed to load tutorial: ${error instanceof Error ? error.message : "Unknown error"}`);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return {
     fetchNextEditorFile,

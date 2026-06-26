@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -48,7 +48,7 @@ type TerminalStyle = CSSProperties & {
   "--terminal-background"?: string;
 };
 
-const XtermTerminal = memo(function XtermTerminal({
+function XtermTerminal({
   output,
   sessionId,
   interactive,
@@ -235,6 +235,6 @@ const XtermTerminal = memo(function XtermTerminal({
       }}
     />
   );
-});
+}
 
 export default XtermTerminal;

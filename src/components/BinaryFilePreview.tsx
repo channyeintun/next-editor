@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { Download, FileBox } from "lucide-react";
 import {
   approximateBase64ByteLength,
@@ -35,10 +34,7 @@ function formatByteSize(byteLength: number): string {
 const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
   const mimeType = getWorkspaceFileMimeType(file.path);
   const mediaKind = getWorkspaceMediaKind(file.path);
-  const dataUrl = useMemo(
-    () => `data:${mimeType};base64,${file.content}`,
-    [mimeType, file.content],
-  );
+  const dataUrl = `data:${mimeType};base64,${file.content}`;
   const byteSize = formatByteSize(approximateBase64ByteLength(file.content));
 
   return (

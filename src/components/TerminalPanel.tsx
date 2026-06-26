@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ChevronDown, ChevronUp, Diamond, Plus, Settings, SquareTerminal, X } from "lucide-react";
 import { useNextEditorDomainAdapters } from "../contexts/NextEditorDomainAdaptersContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
@@ -108,7 +108,7 @@ interface RunnerToggleProps {
   onChange: (checked: boolean) => void;
 }
 
-const RunnerToggle = memo(function RunnerToggle({
+function RunnerToggle({
   checked,
   description,
   disabled = false,
@@ -141,7 +141,7 @@ const RunnerToggle = memo(function RunnerToggle({
       </button>
     </label>
   );
-});
+}
 
 interface TerminalPanelProps {
   /**
@@ -151,7 +151,7 @@ interface TerminalPanelProps {
   large?: boolean;
 }
 
-const TerminalPanel = memo(function TerminalPanel({ large = false }: TerminalPanelProps) {
+function TerminalPanel({ large = false }: TerminalPanelProps) {
   const [activeTab, setActiveTab] = useState<RuntimeDockTab>("runner");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -211,15 +211,11 @@ const TerminalPanel = memo(function TerminalPanel({ large = false }: TerminalPan
   const effectiveErrorMessage = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.errorMessage ?? null)
     : errorMessage;
-  const effectiveConsoleLines = useMemo(() => {
-    if (!isPlaybackSnapshotActive) {
-      return consoleLines;
-    }
-
-    return recordedRuntimeSnapshot?.consoleLines?.length
+  const effectiveConsoleLines = !isPlaybackSnapshotActive
+    ? consoleLines
+    : recordedRuntimeSnapshot?.consoleLines?.length
       ? recordedRuntimeSnapshot.consoleLines
       : DEFAULT_CONSOLE_LINES;
-  }, [consoleLines, isPlaybackSnapshotActive, recordedRuntimeSnapshot]);
   const effectiveTerminalSessions = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.terminalSessions ?? [])
     : terminalSessions;
@@ -291,7 +287,7 @@ const TerminalPanel = memo(function TerminalPanel({ large = false }: TerminalPan
     }
   }, [currentRecording]);
 
-  const appendConsoleLine = useCallback((message: string) => {
+  const appendConsoleLine = (message: string) => {
     const nextMessage = message.trim();
 
     if (!nextMessage) {
@@ -305,7 +301,7 @@ const TerminalPanel = memo(function TerminalPanel({ large = false }: TerminalPan
 
       return [...current.slice(-24), nextMessage];
     });
-  }, []);
+  };
 
   useEffect(() => {
     runtimePanel.setConsoleAppender((message) => {
@@ -373,36 +369,20 @@ const TerminalPanel = memo(function TerminalPanel({ large = false }: TerminalPan
     setActiveTab("console");
   }, [appendConsoleLine, isPlaybackSnapshotActive, latestPreviewMessage]);
 
-  const runtimeEventState = useMemo<RuntimeEventState>(
-    () => ({
-      activeTab: recordableActiveTab,
-      isCollapsed,
-      isSettingsOpen,
-      status,
-      previewUrl: previewUrl ?? null,
-      previewPort: previewPort ?? null,
-      activeCommand,
-      errorMessage,
-      consoleLines,
-      terminalSessions,
-      activeTerminalSessionId,
-      terminalScrollLines,
-    }),
-    [
-      activeCommand,
-      activeTerminalSessionId,
-      consoleLines,
-      errorMessage,
-      isCollapsed,
-      isSettingsOpen,
-      previewPort,
-      previewUrl,
-      recordableActiveTab,
-      status,
-      terminalScrollLines,
-      terminalSessions,
-    ],
-  );
+  const runtimeEventState: RuntimeEventState = {
+    activeTab: recordableActiveTab,
+    isCollapsed,
+    isSettingsOpen,
+    status,
+    previewUrl: previewUrl ?? null,
+    previewPort: previewPort ?? null,
+    activeCommand,
+    errorMessage,
+    consoleLines,
+    terminalSessions,
+    activeTerminalSessionId,
+    terminalScrollLines,
+  };
 
   useEffect(() => {
     if (!isRecording || isPlaybackSnapshotActive) {
@@ -448,13 +428,10 @@ const TerminalPanel = memo(function TerminalPanel({ large = false }: TerminalPan
           ? "Starting the workspace dev server..."
           : "Waiting for runtime output...";
   const content = formatTerminalContent(rawContent);
-  const consoleContent = useMemo(() => {
-    if (effectiveConsoleLines.length === 0) {
-      return "";
-    }
-
-    return effectiveConsoleLines.map(decorateConsoleLine).join("\n");
-  }, [effectiveConsoleLines]);
+  const consoleContent =
+    effectiveConsoleLines.length === 0
+      ? ""
+      : effectiveConsoleLines.map(decorateConsoleLine).join("\n");
 
   const runnerCommand = runnerConfig.runCommand.trim() || "Runner disabled";
   const runnerOutput = content || "Waiting for runner output...";
@@ -752,6 +729,6 @@ const TerminalPanel = memo(function TerminalPanel({ large = false }: TerminalPan
       )}
     </>
   );
-});
+}
 
 export default TerminalPanel;

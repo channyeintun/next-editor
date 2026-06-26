@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { selectIsPlaying, selectRecording } from "../core/src/useNextEditor";
@@ -300,18 +300,15 @@ const CameraOverlay: React.FC = () => {
     };
   }, [actorRef, cameraStartOffsetMs, isMinimized, isVisible, isPlaying, videoUrl]);
 
-  const handlePointerDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      event.currentTarget.setPointerCapture(event.pointerId);
-      dragOffsetRef.current = {
-        x: event.clientX - position.x,
-        y: event.clientY - position.y,
-      };
-    },
-    [position],
-  );
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragOffsetRef.current = {
+      x: event.clientX - position.x,
+      y: event.clientY - position.y,
+    };
+  };
 
-  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
 
     setPosition(
@@ -320,15 +317,15 @@ const CameraOverlay: React.FC = () => {
         y: event.clientY - dragOffsetRef.current.y,
       }),
     );
-  }, []);
+  };
 
   // Minimize is a pure viewer-side convenience (independent of recording/playback): stop the
   // pointer from starting a drag, then collapse to a side-docked handle.
-  const handleMinimizePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+  const handleMinimizePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-  }, []);
-  const handleMinimize = useCallback(() => setIsMinimized(true), []);
-  const handleRestore = useCallback(() => setIsMinimized(false), []);
+  };
+  const handleMinimize = () => setIsMinimized(true);
+  const handleRestore = () => setIsMinimized(false);
 
   const showPlayback = Boolean(cameraBlob || cameraUrl) && Boolean(videoUrl) && isVisible;
   const showPreview = previewMode && !previewError;

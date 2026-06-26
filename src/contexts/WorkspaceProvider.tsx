@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
 import {
   WORKSPACE_STORAGE_KEY,
@@ -59,73 +59,73 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     };
   }, []);
 
-  const setActiveFilePath = useCallback((path: string) => {
+  const setActiveFilePath = (path: string) => {
     workspaceStoreRef.current.trigger.setActiveFilePath({ path });
-  }, []);
+  };
 
-  const setPreviewFilePath = useCallback((path: string) => {
+  const setPreviewFilePath = (path: string) => {
     workspaceStoreRef.current.trigger.setPreviewFilePath({ path });
-  }, []);
+  };
 
-  const setCollapsedFolders = useCallback((paths: string[]) => {
+  const setCollapsedFolders = (paths: string[]) => {
     workspaceStoreRef.current.trigger.setCollapsedFolders({ paths });
-  }, []);
+  };
 
-  const setSidebarScrollTop = useCallback((scrollTop: number) => {
+  const setSidebarScrollTop = (scrollTop: number) => {
     workspaceStoreRef.current.trigger.setSidebarScrollTop({ scrollTop });
-  }, []);
+  };
 
-  const setSidebarWidth = useCallback((width: number) => {
+  const setSidebarWidth = (width: number) => {
     // Width is session-only: not written to storage, so it resets to the default
     // on reload. Recording captures resizes as offsets via handleWorkspaceEvent.
     workspaceStoreRef.current.trigger.setSidebarWidth({ width });
-  }, []);
+  };
 
-  const setSidebarCollapsed = useCallback((collapsed: boolean) => {
+  const setSidebarCollapsed = (collapsed: boolean) => {
     workspaceStoreRef.current.trigger.setSidebarCollapsed({ collapsed });
     writeStoredFileSidebarCollapsed(
       workspaceStoreRef.current.getSnapshot().context.sidebarCollapsed,
     );
-  }, []);
+  };
 
-  const createFile = useCallback((path: string, content = "", encoding?: WorkspaceFileEncoding) => {
+  const createFile = (path: string, content = "", encoding?: WorkspaceFileEncoding) => {
     workspaceStoreRef.current.trigger.createFile({ path, content, encoding });
-  }, []);
+  };
 
-  const createFolder = useCallback((path: string) => {
+  const createFolder = (path: string) => {
     workspaceStoreRef.current.trigger.createFolder({ path });
-  }, []);
+  };
 
-  const renameFile = useCallback((currentPath: string, nextPath: string) => {
+  const renameFile = (currentPath: string, nextPath: string) => {
     workspaceStoreRef.current.trigger.renameFile({
       currentPath,
       nextPath,
     });
-  }, []);
+  };
 
-  const renameFolder = useCallback((currentPath: string, nextPath: string) => {
+  const renameFolder = (currentPath: string, nextPath: string) => {
     workspaceStoreRef.current.trigger.renameFolder({
       currentPath,
       nextPath,
     });
-  }, []);
+  };
 
-  const deleteFile = useCallback((path: string) => {
+  const deleteFile = (path: string) => {
     workspaceStoreRef.current.trigger.deleteFile({ path });
-  }, []);
+  };
 
-  const deleteFolder = useCallback((path: string) => {
+  const deleteFolder = (path: string) => {
     workspaceStoreRef.current.trigger.deleteFolder({ path });
-  }, []);
+  };
 
-  const updateFileContent = useCallback((path: string, content: string) => {
+  const updateFileContent = (path: string, content: string) => {
     workspaceStoreRef.current.trigger.updateFileContent({
       path,
       content,
     });
-  }, []);
+  };
 
-  const updateActiveFileContent = useCallback((content: string) => {
+  const updateActiveFileContent = (content: string) => {
     const context = workspaceStoreRef.current.getSnapshot().context;
     if (!context.isInitialized) {
       return;
@@ -135,9 +135,9 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       path: context.activeFilePath,
       content,
     });
-  }, []);
+  };
 
-  const saveProject = useCallback(() => {
+  const saveProject = () => {
     if (typeof window === "undefined") {
       return;
     }
@@ -169,49 +169,46 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     } catch (error) {
       console.warn("Failed to save workspace snapshot:", error);
     }
-  }, []);
+  };
 
-  const loadProject = useCallback(
-    (
-      project: WorkspaceProject,
-      nextActiveFilePath?: string,
-      collapsedFolders?: string[],
-      sidebarScrollTop?: number,
-      sidebarWidth?: number,
-    ) => {
-      const normalizedProject = normalizeProject(project);
-      const normalizedNextActiveFilePath = normalizeWorkspacePath(nextActiveFilePath ?? "");
-      const resolvedActiveFilePath = normalizedProject.files[normalizedNextActiveFilePath]
-        ? normalizedNextActiveFilePath
-        : normalizedProject.entryFilePath;
+  const loadProject = (
+    project: WorkspaceProject,
+    nextActiveFilePath?: string,
+    collapsedFolders?: string[],
+    sidebarScrollTop?: number,
+    sidebarWidth?: number,
+  ) => {
+    const normalizedProject = normalizeProject(project);
+    const normalizedNextActiveFilePath = normalizeWorkspacePath(nextActiveFilePath ?? "");
+    const resolvedActiveFilePath = normalizedProject.files[normalizedNextActiveFilePath]
+      ? normalizedNextActiveFilePath
+      : normalizedProject.entryFilePath;
 
-      const savedSnapshot = cloneWorkspaceSnapshot({
-        activeFilePath: resolvedActiveFilePath,
-        project: normalizedProject,
-        sidebarWidth,
-      });
+    const savedSnapshot = cloneWorkspaceSnapshot({
+      activeFilePath: resolvedActiveFilePath,
+      project: normalizedProject,
+      sidebarWidth,
+    });
 
-      workspaceStoreRef.current.trigger.loadProject({
-        project: normalizedProject,
-        activeFilePath: resolvedActiveFilePath,
-        collapsedFolders,
-        sidebarScrollTop,
-        sidebarWidth,
-        savedSnapshot,
-      });
-    },
-    [],
-  );
+    workspaceStoreRef.current.trigger.loadProject({
+      project: normalizedProject,
+      activeFilePath: resolvedActiveFilePath,
+      collapsedFolders,
+      sidebarScrollTop,
+      sidebarWidth,
+      savedSnapshot,
+    });
+  };
 
-  const createNewEditor = useCallback(() => {
+  const createNewEditor = () => {
     loadProject(createStarterHtmlCssWorkspace());
-  }, [loadProject]);
+  };
 
-  const updateLessonType = useCallback((lessonType: WorkspaceLessonType) => {
+  const updateLessonType = (lessonType: WorkspaceLessonType) => {
     workspaceStoreRef.current.trigger.updateLessonType({ lessonType });
-  }, []);
+  };
 
-  const getProject = useCallback(() => {
+  const getProject = () => {
     const context = workspaceStoreRef.current.getSnapshot().context;
     return context.isInitialized
       ? context.project
@@ -223,94 +220,65 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
           folders: [],
           files: {},
         };
-  }, []);
+  };
 
-  const getActiveFilePath = useCallback(() => {
+  const getActiveFilePath = () => {
     const context = workspaceStoreRef.current.getSnapshot().context;
     return context.isInitialized ? context.activeFilePath : "";
-  }, []);
+  };
 
-  const getCollapsedFolders = useCallback(() => {
+  const getCollapsedFolders = () => {
     return workspaceStoreRef.current.getSnapshot().context.collapsedFolders;
-  }, []);
+  };
 
-  const getSidebarScrollTop = useCallback(() => {
+  const getSidebarScrollTop = () => {
     return workspaceStoreRef.current.getSnapshot().context.sidebarScrollTop;
-  }, []);
+  };
 
-  const getSidebarWidth = useCallback(() => {
+  const getSidebarWidth = () => {
     return workspaceStoreRef.current.getSnapshot().context.sidebarWidth;
-  }, []);
+  };
 
-  const getFile = useCallback((path: string) => {
+  const getFile = (path: string) => {
     const context = workspaceStoreRef.current.getSnapshot().context;
     if (!context.isInitialized) {
       return null;
     }
     return context.project.files[normalizeWorkspacePath(path)] ?? null;
-  }, []);
+  };
 
-  const listFiles = useCallback(() => {
+  const listFiles = () => {
     const context = workspaceStoreRef.current.getSnapshot().context;
     return context.isInitialized ? context.sidebarState.files : [];
-  }, []);
+  };
 
-  const actionsValue = useMemo<WorkspaceActions>(
-    () => ({
-      setActiveFilePath,
-      setPreviewFilePath,
-      setCollapsedFolders,
-      setSidebarScrollTop,
-      setSidebarWidth,
-      setSidebarCollapsed,
-      createNewEditor,
-      createFile,
-      createFolder,
-      deleteFolder,
-      renameFile,
-      renameFolder,
-      deleteFile,
-      updateFileContent,
-      updateActiveFileContent,
-      saveProject,
-      loadProject,
-      updateLessonType,
-      getProject,
-      getActiveFilePath,
-      getCollapsedFolders,
-      getSidebarScrollTop,
-      getSidebarWidth,
-      getFile,
-      listFiles,
-    }),
-    [
-      createNewEditor,
-      createFile,
-      createFolder,
-      deleteFolder,
-      deleteFile,
-      getActiveFilePath,
-      getCollapsedFolders,
-      getSidebarWidth,
-      getSidebarScrollTop,
-      getFile,
-      getProject,
-      listFiles,
-      loadProject,
-      renameFile,
-      renameFolder,
-      saveProject,
-      setActiveFilePath,
-      setCollapsedFolders,
-      setSidebarScrollTop,
-      setSidebarWidth,
-      setSidebarCollapsed,
-      setPreviewFilePath,
-      updateLessonType,
-      updateActiveFileContent,
-      updateFileContent,
-    ],
-  );
+  const actionsValue: WorkspaceActions = {
+    setActiveFilePath,
+    setPreviewFilePath,
+    setCollapsedFolders,
+    setSidebarScrollTop,
+    setSidebarWidth,
+    setSidebarCollapsed,
+    createNewEditor,
+    createFile,
+    createFolder,
+    deleteFolder,
+    renameFile,
+    renameFolder,
+    deleteFile,
+    updateFileContent,
+    updateActiveFileContent,
+    saveProject,
+    loadProject,
+    updateLessonType,
+    getProject,
+    getActiveFilePath,
+    getCollapsedFolders,
+    getSidebarScrollTop,
+    getSidebarWidth,
+    getFile,
+    listFiles,
+  };
 
   return (
     <WorkspaceActionsContext value={actionsValue}>

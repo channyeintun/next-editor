@@ -1,7 +1,5 @@
 import {
-  useCallback,
   useEffect,
-  useMemo,
   type RefObject,
   useRef,
   useState,
@@ -250,27 +248,15 @@ export function usePreviewController(): PreviewController {
     effectiveRuntimeStatus === "ready" &&
     Boolean(effectiveRuntimePreviewUrl);
   const isRuntimeManagedPreview = lessonRunsInWebContainer(lessonType) && runnerConfig.enabled;
-  const runtimePreviewState = useMemo(
-    () =>
-      getRuntimePreviewState(
-        effectiveRuntimeStatus,
-        effectiveRuntimeErrorMessage,
-        isRuntimeSupported,
-      ),
-    [effectiveRuntimeErrorMessage, effectiveRuntimeStatus, isRuntimeSupported],
+  const runtimePreviewState = getRuntimePreviewState(
+    effectiveRuntimeStatus,
+    effectiveRuntimeErrorMessage,
+    isRuntimeSupported,
   );
-  const runtimePreviewPlaceholder = useMemo(
-    () =>
-      createRuntimePreviewPlaceholder(
-        runtimePreviewState.placeholderKind,
-        runtimePreviewState.title,
-        runtimePreviewState.description,
-      ),
-    [
-      runtimePreviewState.description,
-      runtimePreviewState.placeholderKind,
-      runtimePreviewState.title,
-    ],
+  const runtimePreviewPlaceholder = createRuntimePreviewPlaceholder(
+    runtimePreviewState.placeholderKind,
+    runtimePreviewState.title,
+    runtimePreviewState.description,
   );
 
   isRecordingRef.current = isRecording;
@@ -306,14 +292,14 @@ export function usePreviewController(): PreviewController {
   const previousPanelStateRef = useRef({ isOpen, panelMode });
   const hasRequestedRuntimeStartForOpenRef = useRef(false);
 
-  const applyPreviewRoute = useCallback((route: string) => {
+  const applyPreviewRoute = (route: string) => {
     const normalizedRoute = normalizePreviewRoute(route);
 
     previewRouteRef.current = normalizedRoute;
     setPreviewRoute((currentRoute) =>
       currentRoute === normalizedRoute ? currentRoute : normalizedRoute,
     );
-  }, []);
+  };
 
   useEffect(() => {
     const location = createRuntimePreviewLocationFromUrl(
@@ -324,7 +310,7 @@ export function usePreviewController(): PreviewController {
     applyPreviewRoute(location?.route ?? "/");
   }, [applyPreviewRoute, effectiveRuntimePreviewPort, effectiveRuntimePreviewUrl]);
 
-  const captureRuntimePreviewSnapshot = useCallback(() => {
+  const captureRuntimePreviewSnapshot = () => {
     if (!effectiveRuntimePreviewUrl) {
       return null;
     }
@@ -343,7 +329,7 @@ export function usePreviewController(): PreviewController {
     }
 
     return snapshot;
-  }, [effectiveRuntimePreviewUrl]);
+  };
 
   useEffect(() => {
     if (isRuntimePreviewActive) {
@@ -353,38 +339,35 @@ export function usePreviewController(): PreviewController {
     lastRuntimeSnapshotRef.current = "";
   }, [effectiveRuntimePreviewUrl, isRuntimePreviewActive]);
 
-  const emitPreviewEvent = useCallback(
-    (
-      eventType: PreviewEvent["type"],
-      options?: {
-        newSize?: PreviewSize;
-        isOpen?: boolean;
-        mode?: PreviewPanelMode;
-        content?: string;
-        route?: string;
-        scrollTop?: number;
-        scrollLeft?: number;
-        interaction?: IframeInteractionEvent;
-      },
-    ) => {
-      if (isRecordingRef.current && handlePreviewEventRef.current) {
-        const event: PreviewEvent = {
-          type: eventType,
-          timestamp: performance.now(),
-          size: options?.newSize ?? sizeRef.current,
-          isOpen: options?.isOpen ?? isOpenRef.current,
-          mode: options?.mode ?? panelModeRef.current,
-          content: options?.content,
-          route: options?.route,
-          scrollTop: options?.scrollTop,
-          scrollLeft: options?.scrollLeft,
-          interaction: options?.interaction,
-        };
-        handlePreviewEventRef.current(event);
-      }
+  const emitPreviewEvent = (
+    eventType: PreviewEvent["type"],
+    options?: {
+      newSize?: PreviewSize;
+      isOpen?: boolean;
+      mode?: PreviewPanelMode;
+      content?: string;
+      route?: string;
+      scrollTop?: number;
+      scrollLeft?: number;
+      interaction?: IframeInteractionEvent;
     },
-    [],
-  );
+  ) => {
+    if (isRecordingRef.current && handlePreviewEventRef.current) {
+      const event: PreviewEvent = {
+        type: eventType,
+        timestamp: performance.now(),
+        size: options?.newSize ?? sizeRef.current,
+        isOpen: options?.isOpen ?? isOpenRef.current,
+        mode: options?.mode ?? panelModeRef.current,
+        content: options?.content,
+        route: options?.route,
+        scrollTop: options?.scrollTop,
+        scrollLeft: options?.scrollLeft,
+        interaction: options?.interaction,
+      };
+      handlePreviewEventRef.current(event);
+    }
+  };
 
   usePreviewMessageBridge({
     iframeRef,
@@ -406,177 +389,166 @@ export function usePreviewController(): PreviewController {
     onRouteChange: applyPreviewRoute,
   });
 
-  const updateIframeContent = useCallback(
-    (content: string, options?: { force?: boolean; preserveDocument?: boolean }) => {
-      if (!iframeRef.current || (isLiveRuntimePreviewActive && !options?.force)) {
-        return;
-      }
+  const updateIframeContent = (
+    content: string,
+    options?: { force?: boolean; preserveDocument?: boolean },
+  ) => {
+    if (!iframeRef.current || (isLiveRuntimePreviewActive && !options?.force)) {
+      return;
+    }
 
-      if (!options?.force && lastContentRef.current === content) {
-        return;
-      }
+    if (!options?.force && lastContentRef.current === content) {
+      return;
+    }
 
-      const iframe = iframeRef.current;
+    const iframe = iframeRef.current;
 
-      try {
-        if (
-          options?.preserveDocument &&
-          iframe.getAttribute("src") === null &&
-          patchIframeContentFromHtml(iframe, content)
-        ) {
-          lastContentRef.current = content;
-          return;
-        }
-
-        iframe.removeAttribute("src");
-        iframe.srcdoc = content;
+    try {
+      if (
+        options?.preserveDocument &&
+        iframe.getAttribute("src") === null &&
+        patchIframeContentFromHtml(iframe, content)
+      ) {
         lastContentRef.current = content;
-      } catch (error) {
-        console.error("Error updating iframe srcdoc:", error);
-      }
-    },
-    [isLiveRuntimePreviewActive],
-  );
-
-  const forceRefreshPreview = useCallback(
-    (options?: {
-      content?: string;
-      emitEvent?: boolean;
-      showSpinner?: boolean;
-      reloadRuntime?: boolean;
-    }) => {
-      const iframe = iframeRef.current;
-
-      if (!iframe) {
         return;
       }
 
-      if (options?.showSpinner) {
-        setIsRefreshing(true);
-      }
+      iframe.removeAttribute("src");
+      iframe.srcdoc = content;
+      lastContentRef.current = content;
+    } catch (error) {
+      console.error("Error updating iframe srcdoc:", error);
+    }
+  };
 
-      const finishRefresh = () => {
-        if (!options?.showSpinner) {
-          return;
-        }
+  const forceRefreshPreview = (options?: {
+    content?: string;
+    emitEvent?: boolean;
+    showSpinner?: boolean;
+    reloadRuntime?: boolean;
+  }) => {
+    const iframe = iframeRef.current;
 
-        setTimeout(() => setIsRefreshing(false), 600);
-      };
+    if (!iframe) {
+      return;
+    }
 
-      if (options?.content !== undefined) {
-        lastContentRef.current = "";
-        updateIframeContent(options.content, { force: true });
+    if (options?.showSpinner) {
+      setIsRefreshing(true);
+    }
 
-        if (options.emitEvent) {
-          emitPreviewEvent("preview_refresh", { content: options.content });
-        }
-
-        finishRefresh();
+    const finishRefresh = () => {
+      if (!options?.showSpinner) {
         return;
       }
 
-      if (isRuntimePreviewActive && effectiveRuntimePreviewUrl) {
-        const shouldReloadRuntime = options?.reloadRuntime ?? !options?.emitEvent;
+      setTimeout(() => setIsRefreshing(false), 600);
+    };
 
-        if (!options?.emitEvent && shouldReloadRuntime) {
-          void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).finally(finishRefresh);
-          return;
-        }
+    if (options?.content !== undefined) {
+      lastContentRef.current = "";
+      updateIframeContent(options.content, { force: true });
 
-        let didFinalize = false;
-        let runtimeSnapshotPollTimeout: number | null = null;
-        const initialRuntimeSnapshot =
-          captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || "";
-
-        const cleanupRuntimeRefresh = () => {
-          iframe.removeEventListener("load", handleRuntimeRefreshLoad);
-          if (runtimeSnapshotPollTimeout !== null) {
-            window.clearTimeout(runtimeSnapshotPollTimeout);
-          }
-        };
-
-        const finalizeRuntimeRefresh = (content?: string) => {
-          if (didFinalize) {
-            return;
-          }
-
-          didFinalize = true;
-          cleanupRuntimeRefresh();
-
-          const resolvedContent = content || undefined;
-
-          emitPreviewEvent(
-            "preview_refresh",
-            resolvedContent ? { content: resolvedContent } : undefined,
-          );
-          finishRefresh();
-        };
-
-        const pollRuntimeSnapshot = () => {
-          const content =
-            captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || undefined;
-
-          if (content !== undefined && content !== initialRuntimeSnapshot) {
-            finalizeRuntimeRefresh(content);
-            return;
-          }
-
-          const hasTimedOut = performance.now() - refreshStartedAt >= 1500;
-
-          if (hasTimedOut) {
-            finalizeRuntimeRefresh(content);
-            return;
-          }
-
-          runtimeSnapshotPollTimeout = window.setTimeout(pollRuntimeSnapshot, 100);
-        };
-
-        const handleRuntimeRefreshLoad = () => {
-          runtimeSnapshotPollTimeout = window.setTimeout(pollRuntimeSnapshot, 0);
-        };
-
-        const refreshStartedAt = performance.now();
-
-        if (!shouldReloadRuntime) {
-          pollRuntimeSnapshot();
-          return;
-        }
-
-        iframe.addEventListener("load", handleRuntimeRefreshLoad, {
-          once: true,
-        });
-
-        void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).catch(() =>
-          finalizeRuntimeRefresh(initialRuntimeSnapshot || undefined),
-        );
-        return;
-      }
-
-      if (isRuntimeManagedPreview) {
-        lastContentRef.current = "";
-        iframe.removeAttribute("src");
-        iframe.srcdoc = runtimePreviewPlaceholder;
-
-        if (options?.emitEvent) {
-          emitPreviewEvent("preview_refresh");
-        }
-
-        finishRefresh();
-        return;
+      if (options.emitEvent) {
+        emitPreviewEvent("preview_refresh", { content: options.content });
       }
 
       finishRefresh();
-    },
-    [
-      captureRuntimePreviewSnapshot,
-      emitPreviewEvent,
-      isRuntimeManagedPreview,
-      isRuntimePreviewActive,
-      effectiveRuntimePreviewUrl,
-      runtimePreviewPlaceholder,
-      updateIframeContent,
-    ],
-  );
+      return;
+    }
+
+    if (isRuntimePreviewActive && effectiveRuntimePreviewUrl) {
+      const shouldReloadRuntime = options?.reloadRuntime ?? !options?.emitEvent;
+
+      if (!options?.emitEvent && shouldReloadRuntime) {
+        void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).finally(finishRefresh);
+        return;
+      }
+
+      let didFinalize = false;
+      let runtimeSnapshotPollTimeout: number | null = null;
+      const initialRuntimeSnapshot =
+        captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || "";
+
+      const cleanupRuntimeRefresh = () => {
+        iframe.removeEventListener("load", handleRuntimeRefreshLoad);
+        if (runtimeSnapshotPollTimeout !== null) {
+          window.clearTimeout(runtimeSnapshotPollTimeout);
+        }
+      };
+
+      const finalizeRuntimeRefresh = (content?: string) => {
+        if (didFinalize) {
+          return;
+        }
+
+        didFinalize = true;
+        cleanupRuntimeRefresh();
+
+        const resolvedContent = content || undefined;
+
+        emitPreviewEvent(
+          "preview_refresh",
+          resolvedContent ? { content: resolvedContent } : undefined,
+        );
+        finishRefresh();
+      };
+
+      const pollRuntimeSnapshot = () => {
+        const content =
+          captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || undefined;
+
+        if (content !== undefined && content !== initialRuntimeSnapshot) {
+          finalizeRuntimeRefresh(content);
+          return;
+        }
+
+        const hasTimedOut = performance.now() - refreshStartedAt >= 1500;
+
+        if (hasTimedOut) {
+          finalizeRuntimeRefresh(content);
+          return;
+        }
+
+        runtimeSnapshotPollTimeout = window.setTimeout(pollRuntimeSnapshot, 100);
+      };
+
+      const handleRuntimeRefreshLoad = () => {
+        runtimeSnapshotPollTimeout = window.setTimeout(pollRuntimeSnapshot, 0);
+      };
+
+      const refreshStartedAt = performance.now();
+
+      if (!shouldReloadRuntime) {
+        pollRuntimeSnapshot();
+        return;
+      }
+
+      iframe.addEventListener("load", handleRuntimeRefreshLoad, {
+        once: true,
+      });
+
+      void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).catch(() =>
+        finalizeRuntimeRefresh(initialRuntimeSnapshot || undefined),
+      );
+      return;
+    }
+
+    if (isRuntimeManagedPreview) {
+      lastContentRef.current = "";
+      iframe.removeAttribute("src");
+      iframe.srcdoc = runtimePreviewPlaceholder;
+
+      if (options?.emitEvent) {
+        emitPreviewEvent("preview_refresh");
+      }
+
+      finishRefresh();
+      return;
+    }
+
+    finishRefresh();
+  };
 
   usePreviewPlaybackRegistration({
     previewAdapter: preview,
@@ -768,55 +740,52 @@ export function usePreviewController(): PreviewController {
     startRuntime,
   ]);
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     closePreview();
-  }, [closePreview]);
+  };
 
-  const handleFloat = useCallback(() => {
+  const handleFloat = () => {
     setSize((currentSize) =>
       currentSize === "small" || currentSize === "large" ? "medium" : currentSize,
     );
     floatPreview();
-  }, [floatPreview]);
+  };
 
-  const handleDock = useCallback(() => {
+  const handleDock = () => {
     dockPreview();
-  }, [dockPreview]);
+  };
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = () => {
     forceRefreshPreview({ emitEvent: true, showSpinner: true });
-  }, [forceRefreshPreview]);
+  };
 
   // User-initiated reload from the preview URL bar. Unlike `handleRefresh`
   // (which captures a baseline at recording start without touching the live
   // frame), this actually reloads the runtime preview iframe.
-  const handleReload = useCallback(() => {
+  const handleReload = () => {
     forceRefreshPreview({ emitEvent: true, showSpinner: true, reloadRuntime: true });
-  }, [forceRefreshPreview]);
+  };
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     navigateIframeHistory(iframeRef.current?.contentWindow, "back");
-  }, []);
+  };
 
-  const handleForward = useCallback(() => {
+  const handleForward = () => {
     navigateIframeHistory(iframeRef.current?.contentWindow, "forward");
-  }, []);
+  };
 
-  const handleOpenConsole = useCallback(() => {
+  const handleOpenConsole = () => {
     runtimePanel.openConsole();
-  }, [runtimePanel]);
+  };
 
-  const previewAddress = useMemo(() => {
-    const location = applyRouteToRuntimePreviewLocation(
-      createRuntimePreviewLocationFromUrl(effectiveRuntimePreviewUrl, effectiveRuntimePreviewPort),
-      previewRoute,
-    );
-
-    return {
-      label: formatPreviewAddressLabel(location),
-      title: location?.href ?? effectiveRuntimePreviewUrl ?? "Preview",
-    };
-  }, [effectiveRuntimePreviewPort, effectiveRuntimePreviewUrl, previewRoute]);
+  const previewAddressLocation = applyRouteToRuntimePreviewLocation(
+    createRuntimePreviewLocationFromUrl(effectiveRuntimePreviewUrl, effectiveRuntimePreviewPort),
+    previewRoute,
+  );
+  const previewAddress = {
+    label: formatPreviewAddressLabel(previewAddressLocation),
+    title: previewAddressLocation?.href ?? effectiveRuntimePreviewUrl ?? "Preview",
+  };
 
   useEffect(() => {
     const clampCurrentCustomSize = () => {
@@ -857,134 +826,128 @@ export function usePreviewController(): PreviewController {
     handleRefresh();
   }, [handleRefresh, isPlaying, isRecording]);
 
-  const handleResizeStart = useCallback(
-    (event: ReactMouseEvent | ReactTouchEvent) => {
-      if ("button" in event && event.button !== 0) {
-        return;
+  const handleResizeStart = (event: ReactMouseEvent | ReactTouchEvent) => {
+    if ("button" in event && event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setIsResizing(true);
+
+    const { x: startX, y: startY } = getPointerCoords(event);
+    if (!iframeRef.current) {
+      return;
+    }
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+
+    const startWidth = rect.width;
+    const startHeight = rect.height;
+
+    setSize(
+      clampCustomPreviewSize(
+        { width: startWidth, height: startHeight },
+        { width: window.innerWidth, height: window.innerHeight },
+      ),
+    );
+
+    let resizeRaf: number | null = null;
+    const onMove = (moveEvent: MouseEvent | TouchEvent) => {
+      if (moveEvent.cancelable) {
+        moveEvent.preventDefault();
+      }
+      const { x: currentX, y: currentY } = getPointerCoords(moveEvent);
+
+      const newSize = getCustomPreviewSizeFromResize({
+        startSize: { width: startWidth, height: startHeight },
+        startPointer: { x: startX, y: startY },
+        currentPointer: { x: currentX, y: currentY },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+      });
+      setSize(newSize);
+
+      if (resizeRaf) {
+        cancelAnimationFrame(resizeRaf);
+      }
+      resizeRaf = requestAnimationFrame(() => {
+        emitPreviewEvent("preview_resize", { newSize });
+      });
+    };
+
+    const onEnd = () => {
+      setIsResizing(false);
+      if (resizeRaf) {
+        cancelAnimationFrame(resizeRaf);
+      }
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onEnd);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
+      emitPreviewEvent("preview_resize");
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onEnd);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onEnd);
+  };
+
+  const handleDockResizeStart = (event: ReactMouseEvent | ReactTouchEvent) => {
+    if ("button" in event && event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setIsResizing(true);
+
+    const { x: startX } = getPointerCoords(event);
+    const rect = containerRef.current?.getBoundingClientRect();
+
+    if (!rect) {
+      setIsResizing(false);
+      return;
+    }
+
+    const startWidth = rect.width;
+    let lastWidth = startWidth;
+
+    const onMove = (moveEvent: MouseEvent | TouchEvent) => {
+      if (moveEvent.cancelable) {
+        moveEvent.preventDefault();
       }
 
-      event.preventDefault();
-      event.stopPropagation();
-      setIsResizing(true);
+      const { x: currentX } = getPointerCoords(moveEvent);
+      lastWidth = clampPreviewDockWidth(startWidth + startX - currentX, window.innerWidth);
+      setDockWidth(lastWidth);
+    };
 
-      const { x: startX, y: startY } = getPointerCoords(event);
-      if (!iframeRef.current) {
-        return;
+    const onEnd = () => {
+      setIsResizing(false);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onEnd);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
+
+      // Record the net resize as an offset (not an absolute width) so playback
+      // applies the same delta to whatever dock width the viewer has.
+      const previewDockWidthDelta = Math.round(lastWidth - startWidth);
+      if (isRecordingRef.current && previewDockWidthDelta !== 0) {
+        handleWorkspaceEvent({ previewDockWidthDelta });
       }
+    };
 
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) {
-        return;
-      }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onEnd);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onEnd);
+  };
 
-      const startWidth = rect.width;
-      const startHeight = rect.height;
-
-      setSize(
-        clampCustomPreviewSize(
-          { width: startWidth, height: startHeight },
-          { width: window.innerWidth, height: window.innerHeight },
-        ),
-      );
-
-      let resizeRaf: number | null = null;
-      const onMove = (moveEvent: MouseEvent | TouchEvent) => {
-        if (moveEvent.cancelable) {
-          moveEvent.preventDefault();
-        }
-        const { x: currentX, y: currentY } = getPointerCoords(moveEvent);
-
-        const newSize = getCustomPreviewSizeFromResize({
-          startSize: { width: startWidth, height: startHeight },
-          startPointer: { x: startX, y: startY },
-          currentPointer: { x: currentX, y: currentY },
-          viewport: { width: window.innerWidth, height: window.innerHeight },
-        });
-        setSize(newSize);
-
-        if (resizeRaf) {
-          cancelAnimationFrame(resizeRaf);
-        }
-        resizeRaf = requestAnimationFrame(() => {
-          emitPreviewEvent("preview_resize", { newSize });
-        });
-      };
-
-      const onEnd = () => {
-        setIsResizing(false);
-        if (resizeRaf) {
-          cancelAnimationFrame(resizeRaf);
-        }
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onEnd);
-        window.removeEventListener("touchmove", onMove);
-        window.removeEventListener("touchend", onEnd);
-        emitPreviewEvent("preview_resize");
-      };
-
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onEnd);
-      window.addEventListener("touchmove", onMove, { passive: false });
-      window.addEventListener("touchend", onEnd);
-    },
-    [emitPreviewEvent],
-  );
-
-  const handleDockResizeStart = useCallback(
-    (event: ReactMouseEvent | ReactTouchEvent) => {
-      if ("button" in event && event.button !== 0) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      setIsResizing(true);
-
-      const { x: startX } = getPointerCoords(event);
-      const rect = containerRef.current?.getBoundingClientRect();
-
-      if (!rect) {
-        setIsResizing(false);
-        return;
-      }
-
-      const startWidth = rect.width;
-      let lastWidth = startWidth;
-
-      const onMove = (moveEvent: MouseEvent | TouchEvent) => {
-        if (moveEvent.cancelable) {
-          moveEvent.preventDefault();
-        }
-
-        const { x: currentX } = getPointerCoords(moveEvent);
-        lastWidth = clampPreviewDockWidth(startWidth + startX - currentX, window.innerWidth);
-        setDockWidth(lastWidth);
-      };
-
-      const onEnd = () => {
-        setIsResizing(false);
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onEnd);
-        window.removeEventListener("touchmove", onMove);
-        window.removeEventListener("touchend", onEnd);
-
-        // Record the net resize as an offset (not an absolute width) so playback
-        // applies the same delta to whatever dock width the viewer has.
-        const previewDockWidthDelta = Math.round(lastWidth - startWidth);
-        if (isRecordingRef.current && previewDockWidthDelta !== 0) {
-          handleWorkspaceEvent({ previewDockWidthDelta });
-        }
-      };
-
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onEnd);
-      window.addEventListener("touchmove", onMove, { passive: false });
-      window.addEventListener("touchend", onEnd);
-    },
-    [handleWorkspaceEvent, setDockWidth],
-  );
-
-  const forceIframeRepaint = useCallback(() => {
+  const forceIframeRepaint = () => {
     const iframe = iframeRef.current;
     if (!iframe) {
       return;
@@ -1005,16 +968,16 @@ export function usePreviewController(): PreviewController {
         current.style.transform = "";
       }
     });
-  }, []);
+  };
 
-  const handleTransitionStart = useCallback(() => {
+  const handleTransitionStart = () => {
     setIsTransitioning(true);
-  }, []);
+  };
 
-  const handleTransitionComplete = useCallback(() => {
+  const handleTransitionComplete = () => {
     setIsTransitioning(false);
     forceIframeRepaint();
-  }, [forceIframeRepaint]);
+  };
 
   useEffect(() => {
     if (!isOpen) {

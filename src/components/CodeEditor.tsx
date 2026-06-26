@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
 import Editor, { type OnMount, type BeforeMount, type Monaco } from "@monaco-editor/react";
 // Self-host a trimmed Monaco (only the languages this editor uses) and point
 // @monaco-editor/react at it instead of the default CDN. Side-effect import.
@@ -192,6 +192,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   theme = "next-editor-dark",
   showImportExport = false,
 }) => {
+  // Opt out of the React Compiler. Monaco is a heavily imperative integration:
+  // the theme is registered in `beforeMount`, and the model/language/tokenizer
+  // depend on the exact render-to-render flow of the <Editor> props and the
+  // onMount/useEffectEvent callbacks. The compiler's auto-memoization disrupts
+  // that flow and breaks syntax highlighting, so this component stays uncompiled.
+  // See [[react-compiler-babel-preset]].
+  "use no memo";
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
   const { saveProject, updateFileContent } = useWorkspaceActions();
@@ -680,4 +687,4 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   );
 };
 
-export default memo(CodeEditorComponent);
+export default CodeEditorComponent;

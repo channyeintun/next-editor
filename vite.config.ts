@@ -57,6 +57,12 @@ export default defineConfig({
       },
     },
     rules: {
+      // The React Compiler (babel-plugin-react-compiler) is the memoization
+      // authority now, so manual useMemo/useCallback were removed across the
+      // app. oxlint's exhaustive-deps isn't compiler-aware and false-positives
+      // with "changes every render" on values the compiler already memoizes.
+      // rules-of-hooks stays on. See [[react-compiler-babel-preset]].
+      "react-hooks/exhaustive-deps": "off",
       "tailwindcss/enforce-canonical": "warn",
       "tailwindcss/enforce-shorthand": "warn",
       "tailwindcss/no-unnecessary-arbitrary-value": "warn",

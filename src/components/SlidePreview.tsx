@@ -1,4 +1,4 @@
-import { useCallback, useEffect, memo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Keyboard } from "lucide-react";
 import type { Slide, SlideEvent } from "../types/slides";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -19,7 +19,7 @@ interface SlidePreviewProps {
   positioning?: "fixed" | "relative" | "absolute" | "sticky";
 }
 
-const SlidePreview = memo(function SlidePreview({
+function SlidePreview({
   slides,
   currentSlideIndex,
   onSlideChange,
@@ -41,34 +41,33 @@ const SlidePreview = memo(function SlidePreview({
 
   const currentSlide = slides[currentSlideIndex];
 
-  const emitSlideEvent = useCallback(
-    (type: SlideEvent["type"], slideId?: string, isMaximizedState?: boolean, indexv?: number) => {
-      onSlideEventRef.current?.({
-        type,
-        timestamp: performance.now(),
-        slideId,
-        isMaximized: isMaximizedState,
-        indexv,
-      });
-    },
-    [],
-  );
+  const emitSlideEvent = (
+    type: SlideEvent["type"],
+    slideId?: string,
+    isMaximizedState?: boolean,
+    indexv?: number,
+  ) => {
+    onSlideEventRef.current?.({
+      type,
+      timestamp: performance.now(),
+      slideId,
+      isMaximized: isMaximizedState,
+      indexv,
+    });
+  };
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     onClose?.();
     onStopPlayback?.();
-  }, [onClose, onStopPlayback]);
+  };
 
-  const handleSlideChangeFromReveal = useCallback(
-    (indexh: number, indexv?: number) => {
-      if (isPlaying) return;
-      onSlideChange(indexh, indexv);
-      if (slides[indexh]) {
-        emitSlideEvent("slide_change", slides[indexh].id, true, indexv);
-      }
-    },
-    [isPlaying, onSlideChange, slides, emitSlideEvent],
-  );
+  const handleSlideChangeFromReveal = (indexh: number, indexv?: number) => {
+    if (isPlaying) return;
+    onSlideChange(indexh, indexv);
+    if (slides[indexh]) {
+      emitSlideEvent("slide_change", slides[indexh].id, true, indexv);
+    }
+  };
 
   // Handle messages from the Reveal iframe
   useEffect(() => {
@@ -98,23 +97,23 @@ const SlidePreview = memo(function SlidePreview({
     return () => window.removeEventListener("message", handleMessage);
   }, [isPlaying, currentSlide?.id]);
 
-  const goToNextSlide = useCallback(() => {
+  const goToNextSlide = () => {
     if (isPlaying) return;
     if (currentSlideIndex < slides.length - 1) {
       const newIndex = currentSlideIndex + 1;
       onSlideChange(newIndex); // Leave indexv undefined to use memory
       emitSlideEvent("slide_change", slides[newIndex]?.id, true);
     }
-  }, [isPlaying, currentSlideIndex, slides, onSlideChange, emitSlideEvent]);
+  };
 
-  const goToPrevSlide = useCallback(() => {
+  const goToPrevSlide = () => {
     if (isPlaying) return;
     if (currentSlideIndex > 0) {
       const newIndex = currentSlideIndex - 1;
       onSlideChange(newIndex); // Leave indexv undefined to use memory
       emitSlideEvent("slide_change", slides[newIndex]?.id, true);
     }
-  }, [isPlaying, currentSlideIndex, onSlideChange, emitSlideEvent, slides]);
+  };
 
   // Keyboard navigation while the slide preview is open.
   useEffect(() => {
@@ -188,6 +187,6 @@ const SlidePreview = memo(function SlidePreview({
       </div>
     </>
   );
-});
+}
 
 export default SlidePreview;

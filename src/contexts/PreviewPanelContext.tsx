@@ -1,13 +1,4 @@
-import {
-  createContext,
-  memo,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { PreviewPanelMode } from "../types/slides";
 import { useNextEditorDomainAdapters } from "./NextEditorDomainAdaptersContext";
 
@@ -56,17 +47,15 @@ interface PreviewPanelProviderProps {
   children: ReactNode;
 }
 
-export const PreviewPanelProvider = memo(function PreviewPanelProvider({
-  children,
-}: PreviewPanelProviderProps) {
+export function PreviewPanelProvider({ children }: PreviewPanelProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<PreviewPanelMode>("docked");
   const [dockWidth, setDockWidthState] = useState(getDefaultPreviewDockWidth);
   const { preview } = useNextEditorDomainAdapters();
 
-  const setDockWidth = useCallback((width: number) => {
+  const setDockWidth = (width: number) => {
     setDockWidthState(clampPreviewDockWidth(width));
-  }, []);
+  };
 
   // Replay applies docked-preview resizes as offsets against the viewer's current
   // width (mirrors the file-sidebar). Registered here — not in the preview panel
@@ -77,31 +66,31 @@ export const PreviewPanelProvider = memo(function PreviewPanelProvider({
     });
   }, [preview]);
 
-  const openPreview = useCallback((nextMode?: PreviewPanelMode) => {
+  const openPreview = (nextMode?: PreviewPanelMode) => {
     if (nextMode) {
       setMode(nextMode);
     }
 
     setIsOpen(true);
-  }, []);
+  };
 
-  const closePreview = useCallback(() => {
+  const closePreview = () => {
     setIsOpen(false);
-  }, []);
+  };
 
-  const floatPreview = useCallback(() => {
+  const floatPreview = () => {
     setMode("floating");
     setIsOpen(true);
-  }, []);
+  };
 
-  const dockPreview = useCallback(() => {
+  const dockPreview = () => {
     setMode("docked");
     setIsOpen(true);
-  }, []);
+  };
 
-  const togglePreview = useCallback(() => {
+  const togglePreview = () => {
     setIsOpen((current) => !current);
-  }, []);
+  };
 
   useEffect(() => {
     const clampDockWidthToViewport = () => {
@@ -112,52 +101,35 @@ export const PreviewPanelProvider = memo(function PreviewPanelProvider({
     return () => window.removeEventListener("resize", clampDockWidthToViewport);
   }, []);
 
-  const applyPreviewPanelState = useCallback(
-    (state: { isOpen?: boolean; mode?: PreviewPanelMode }) => {
-      if (state.mode) {
-        setMode(state.mode);
-      }
+  const applyPreviewPanelState = (state: { isOpen?: boolean; mode?: PreviewPanelMode }) => {
+    if (state.mode) {
+      setMode(state.mode);
+    }
 
-      if (state.isOpen !== undefined) {
-        setIsOpen(state.isOpen);
-        return;
-      }
+    if (state.isOpen !== undefined) {
+      setIsOpen(state.isOpen);
+      return;
+    }
 
-      setIsOpen(true);
-    },
-    [],
-  );
+    setIsOpen(true);
+  };
 
-  const value = useMemo<PreviewPanelContextValue>(
-    () => ({
-      isOpen,
-      mode,
-      isDocked: isOpen && mode === "docked",
-      dockWidth,
-      openPreview,
-      closePreview,
-      floatPreview,
-      dockPreview,
-      setDockWidth,
-      togglePreview,
-      applyPreviewPanelState,
-    }),
-    [
-      applyPreviewPanelState,
-      closePreview,
-      dockPreview,
-      dockWidth,
-      floatPreview,
-      isOpen,
-      mode,
-      openPreview,
-      setDockWidth,
-      togglePreview,
-    ],
-  );
+  const value: PreviewPanelContextValue = {
+    isOpen,
+    mode,
+    isDocked: isOpen && mode === "docked",
+    dockWidth,
+    openPreview,
+    closePreview,
+    floatPreview,
+    dockPreview,
+    setDockWidth,
+    togglePreview,
+    applyPreviewPanelState,
+  };
 
   return <PreviewPanelContext.Provider value={value}>{children}</PreviewPanelContext.Provider>;
-});
+}
 
 export function usePreviewPanel(): PreviewPanelContextValue {
   const context = useContext(PreviewPanelContext);

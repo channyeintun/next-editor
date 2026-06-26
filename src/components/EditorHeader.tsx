@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
   PanelLeftClose,
@@ -94,7 +94,7 @@ function parseEnvironmentInput(value: string): {
   };
 }
 
-const FileSidebarToggleButton = memo(function FileSidebarToggleButton() {
+function FileSidebarToggleButton() {
   const isCollapsed = useWorkspaceSidebarCollapsed();
   const { setSidebarCollapsed } = useWorkspaceActions();
   const isOpen = !isCollapsed;
@@ -111,9 +111,9 @@ const FileSidebarToggleButton = memo(function FileSidebarToggleButton() {
       {isOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
     </button>
   );
-});
+}
 
-const PreviewHeaderButton = memo(function PreviewHeaderButton() {
+function PreviewHeaderButton() {
   const { isOpen, openPreview, closePreview } = usePreviewPanel();
 
   return (
@@ -135,9 +135,9 @@ const PreviewHeaderButton = memo(function PreviewHeaderButton() {
       {isOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
     </button>
   );
-});
+}
 
-const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
+function WorkspaceSettingsButton() {
   const [draftValue, setDraftValue] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
@@ -579,13 +579,13 @@ const WorkspaceSettingsButton = memo(function WorkspaceSettingsButton() {
       )}
     </>
   );
-});
+}
 
 interface EditorHeaderProps {
   showImportExport: boolean;
 }
 
-const EditorHeader = memo(function EditorHeader({ showImportExport }: EditorHeaderProps) {
+function EditorHeader({ showImportExport }: EditorHeaderProps) {
   return (
     <div className="bg-[#11141c] px-4 py-1.5 flex items-center justify-between">
       <div className="flex items-center gap-2">
@@ -602,6 +602,6 @@ const EditorHeader = memo(function EditorHeader({ showImportExport }: EditorHead
       </div>
     </div>
   );
-});
+}
 
 export default EditorHeader;

@@ -1,6 +1,4 @@
-import { memo } from "react";
-
-const IdleRecordButton = memo(function IdleRecordButton({ size = 14 }: { size?: number }) {
+function IdleRecordButton({ size = 14 }: { size?: number }) {
   const ringWidth = Math.max(2, Math.round(size * 0.12));
   const dotSize = size * 0.5;
 
@@ -12,6 +10,6 @@ const IdleRecordButton = memo(function IdleRecordButton({ size = 14 }: { size?: 
       <div className="rounded-full bg-red-500" style={{ width: dotSize, height: dotSize }} />
     </div>
   );
-});
+}
 
 export default IdleRecordButton;

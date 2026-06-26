@@ -1,4 +1,4 @@
-import { useContext, useMemo } from "react";
+import { useContext } from "react";
 import { shallowEqual } from "@xstate/react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import {
@@ -50,28 +50,16 @@ export const useNextEditorMetadata = (): NextEditorMetadata => {
   const currentRecording = NextEditorActorContext.useSelector(selectRecording, shallowEqual);
   const recordingStartTime = NextEditorActorContext.useSelector(selectRecordingStartTime);
 
-  return useMemo(
-    () => ({
-      isRecording,
-      isRecordingAudio,
-      isPlaying,
-      isPaused,
-      hasEnded,
-      usesPlaybackModel,
-      currentRecording,
-      recordingStartTime,
-    }),
-    [
-      isRecording,
-      isRecordingAudio,
-      isPlaying,
-      isPaused,
-      hasEnded,
-      usesPlaybackModel,
-      currentRecording,
-      recordingStartTime,
-    ],
-  );
+  return {
+    isRecording,
+    isRecordingAudio,
+    isPlaying,
+    isPaused,
+    hasEnded,
+    usesPlaybackModel,
+    currentRecording,
+    recordingStartTime,
+  };
 };
 
 /**
@@ -85,16 +73,13 @@ export const useNextEditorPlayback = (): NextEditorPlayback => {
   const volume = NextEditorActorContext.useSelector(selectVolume);
   const duration = NextEditorActorContext.useSelector(selectDuration);
 
-  return useMemo(
-    () => ({
-      timelineActor,
-      editorActor: actorRef,
-      playbackSpeed,
-      volume,
-      duration: duration / 1000,
-    }),
-    [timelineActor, actorRef, playbackSpeed, volume, duration],
-  );
+  return {
+    timelineActor,
+    editorActor: actorRef,
+    playbackSpeed,
+    volume,
+    duration: duration / 1000,
+  };
 };
 
 /**
