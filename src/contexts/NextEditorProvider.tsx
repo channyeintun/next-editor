@@ -170,8 +170,10 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     pauseOnUserInteraction: true,
     getSlideState: () => {
       const { slides, previewState } = slidesStore.getState();
-      if (!previewState.isOpen) return null;
-      const currentSlideIndex = slides.findIndex((s) => s.id === previewState.currentSlideId);
+      const currentSlideIndex = Math.max(
+        0,
+        slides.findIndex((s) => s.id === previewState.currentSlideId),
+      );
       return { previewState, currentSlideIndex };
     },
     applySlideState: (slideState, currentSlideIndex) => {
