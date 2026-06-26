@@ -180,7 +180,7 @@ export function usePreviewController(): PreviewController {
     handleWorkspaceEvent,
   } = useNextEditorActions();
   const previewHandle = usePreviewAdapterHandle();
-  const runtimePanelStore = useRuntimePanelStore();
+  const { consoleAppender, consoleOpener } = useRuntimePanelStore();
   const {
     isOpen,
     mode: panelMode,
@@ -387,7 +387,7 @@ export function usePreviewController(): PreviewController {
     targetScrollRef,
     pendingInteractionRef,
     sizeRef,
-    onConsoleMessage: (msg: string) => runtimePanelStore.consoleAppender.current?.(msg),
+    onConsoleMessage: (msg: string) => consoleAppender.current?.(msg),
     onRouteChange: applyPreviewRoute,
   });
 
@@ -777,7 +777,7 @@ export function usePreviewController(): PreviewController {
   };
 
   const handleOpenConsole = () => {
-    runtimePanelStore.consoleOpener.current?.();
+    consoleOpener.current?.();
   };
 
   const previewAddressLocation = applyRouteToRuntimePreviewLocation(

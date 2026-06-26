@@ -7,6 +7,7 @@ import { NextEditorActorContext } from "./NextEditorActorContext";
 import { usePreviewAdapterHandle } from "./PreviewAdapterHandleContext";
 import { useSlidesStore } from "./SlidesStoreContext";
 import { useRuntimePanelStore } from "./RuntimePanelStoreContext";
+import { selectRecordingState } from "../stores/runtimePanelStore";
 import {
   useWebContainerRuntimeSaveWorkspace,
   useWebContainerRuntimeSnapshotGetter,
@@ -127,7 +128,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   const recordingStorage = useRef(createRecordingStorage());
   const previewHandle = usePreviewAdapterHandle();
   const { store: slidesStore, navigator: slideNavigator } = useSlidesStore();
-  const runtimePanelStore = useRuntimePanelStore();
+  const { store: runtimePanelStore } = useRuntimePanelStore();
   const {
     getProject,
     getActiveFilePath,
@@ -292,11 +293,11 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
         errorMessage: snapshot.errorMessage,
         terminalSessions: snapshot.terminalSessions,
         activeTerminalSessionId: snapshot.activeTerminalSessionId,
-        ...runtimePanelStore.getRecordingState(),
+        ...selectRecordingState(runtimePanelStore.getSnapshot().context),
       };
     },
     applyRuntimeSnapshot: (snapshot) => {
-      runtimePanelStore.setPlaybackSnapshot(snapshot);
+      runtimePanelStore.trigger.setPlaybackSnapshot({ snapshot });
     },
   };
 
