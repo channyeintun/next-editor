@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, type PropsWithChildren } from "react";
 import type { PreviewDomPatchBatch, PreviewInitialDocument, PreviewState } from "../types/slides";
-import type { RuntimePanelRecordingState, RuntimeRecordingSnapshot } from "../types/runtime";
 
 export interface PreviewDomainAdapter {
   getSnapshot: () => PreviewState | null;
@@ -23,20 +22,8 @@ export interface PreviewPatchReplayInput {
   lastAppliedPatchBatchIndex: number;
 }
 
-export interface RuntimePanelDomainAdapter {
-  appendConsoleLine: (line: string) => void;
-  getSnapshot: () => RuntimePanelRecordingState | null;
-  applySnapshot: (snapshot: RuntimeRecordingSnapshot) => void;
-  openConsole: () => void;
-  setConsoleAppender: (appender: (line: string) => void) => void;
-  setSnapshotGetter: (getter: () => RuntimePanelRecordingState | null) => void;
-  setSnapshotApplier: (applier: (snapshot: RuntimeRecordingSnapshot) => void) => void;
-  setConsoleOpener: (opener: () => void) => void;
-}
-
 export interface NextEditorDomainAdapters {
   preview: PreviewDomainAdapter;
-  runtimePanel: RuntimePanelDomainAdapter;
 }
 
 function createPreviewDomainAdapter(): PreviewDomainAdapter {
@@ -66,38 +53,11 @@ function createPreviewDomainAdapter(): PreviewDomainAdapter {
   };
 }
 
-function createRuntimePanelDomainAdapter(): RuntimePanelDomainAdapter {
-  let getSnapshot: () => RuntimePanelRecordingState | null = () => null;
-  let applySnapshot: (snapshot: RuntimeRecordingSnapshot) => void = () => undefined;
-  let openConsole: () => void = () => undefined;
-  let appendConsoleLine: (line: string) => void = () => undefined;
-
-  return {
-    appendConsoleLine: (line) => appendConsoleLine(line),
-    getSnapshot: () => getSnapshot(),
-    applySnapshot: (snapshot) => applySnapshot(snapshot),
-    openConsole: () => openConsole(),
-    setConsoleAppender: (appender) => {
-      appendConsoleLine = appender;
-    },
-    setSnapshotGetter: (getter) => {
-      getSnapshot = getter;
-    },
-    setSnapshotApplier: (applier) => {
-      applySnapshot = applier;
-    },
-    setConsoleOpener: (opener) => {
-      openConsole = opener;
-    },
-  };
-}
-
 const NextEditorDomainAdaptersContext = createContext<NextEditorDomainAdapters | null>(null);
 
 export function NextEditorDomainAdaptersProvider({ children }: PropsWithChildren) {
   const [adapters] = useState<NextEditorDomainAdapters>(() => ({
     preview: createPreviewDomainAdapter(),
-    runtimePanel: createRuntimePanelDomainAdapter(),
   }));
 
   return (

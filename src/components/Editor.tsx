@@ -6,6 +6,7 @@ import FloatingPlayButton from "./FloatingPlayButton";
 import { NextEditorProvider } from "../contexts/NextEditorProvider.tsx";
 import { NextEditorDomainAdaptersProvider } from "../contexts/NextEditorDomainAdaptersContext";
 import { SlidesStoreProvider } from "../contexts/SlidesStoreContext";
+import { RuntimePanelStoreProvider } from "../contexts/RuntimePanelStoreContext";
 import { SlidesProvider } from "../contexts/SlidesContext";
 import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
@@ -60,15 +61,17 @@ export default function Editor() {
     <WorkspaceProvider>
       <WebContainerRuntimeProvider>
         <SlidesStoreProvider>
-          <NextEditorDomainAdaptersProvider>
-            <NextEditorProvider>
-              <SlidesProvider>
-                <PreviewPanelProvider>
-                  <EditorLayout />
-                </PreviewPanelProvider>
-              </SlidesProvider>
-            </NextEditorProvider>
-          </NextEditorDomainAdaptersProvider>
+          <RuntimePanelStoreProvider>
+            <NextEditorDomainAdaptersProvider>
+              <NextEditorProvider>
+                <SlidesProvider>
+                  <PreviewPanelProvider>
+                    <EditorLayout />
+                  </PreviewPanelProvider>
+                </SlidesProvider>
+              </NextEditorProvider>
+            </NextEditorDomainAdaptersProvider>
+          </RuntimePanelStoreProvider>
         </SlidesStoreProvider>
       </WebContainerRuntimeProvider>
     </WorkspaceProvider>

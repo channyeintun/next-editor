@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
 import { useNextEditorDomainAdapters } from "../../contexts/NextEditorDomainAdaptersContext";
+import { useRuntimePanelStore } from "../../contexts/RuntimePanelStoreContext";
 import { clampPreviewDockWidth, usePreviewPanel } from "../../contexts/PreviewPanelContext";
 import {
   useWorkspaceLessonType,
@@ -178,7 +179,8 @@ export function usePreviewController(): PreviewController {
     handlePreviewPatchBatch,
     handleWorkspaceEvent,
   } = useNextEditorActions();
-  const { preview, runtimePanel } = useNextEditorDomainAdapters();
+  const { preview } = useNextEditorDomainAdapters();
+  const runtimePanelStore = useRuntimePanelStore();
   const {
     isOpen,
     mode: panelMode,
@@ -385,7 +387,7 @@ export function usePreviewController(): PreviewController {
     targetScrollRef,
     pendingInteractionRef,
     sizeRef,
-    onConsoleMessage: runtimePanel.appendConsoleLine,
+    onConsoleMessage: (msg: string) => runtimePanelStore.consoleAppender.current?.(msg),
     onRouteChange: applyPreviewRoute,
   });
 
@@ -775,7 +777,7 @@ export function usePreviewController(): PreviewController {
   };
 
   const handleOpenConsole = () => {
-    runtimePanel.openConsole();
+    runtimePanelStore.consoleOpener.current?.();
   };
 
   const previewAddressLocation = applyRouteToRuntimePreviewLocation(

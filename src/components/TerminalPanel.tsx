@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { ChevronDown, ChevronUp, Diamond, Plus, Settings, SquareTerminal, X } from "lucide-react";
-import { useNextEditorDomainAdapters } from "../contexts/NextEditorDomainAdaptersContext";
+import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import XtermTerminal from "./XtermTerminal";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -152,19 +152,23 @@ interface TerminalPanelProps {
 }
 
 function TerminalPanel({ large = false }: TerminalPanelProps) {
-  const [activeTab, setActiveTab] = useState<RuntimeDockTab>("runner");
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const runtimePanelStore = useRuntimePanelStore();
+  const {
+    activeTab,
+    isCollapsed,
+    isSettingsOpen,
+    consoleLines,
+    terminalScrollLines,
+    playbackSnapshot: playbackRuntimeSnapshot,
+  } = useSyncExternalStore(runtimePanelStore.subscribe, runtimePanelStore.getState);
+  const setActiveTab = runtimePanelStore.setActiveTab;
+  const setIsCollapsed = runtimePanelStore.setIsCollapsed;
+  const setIsSettingsOpen = runtimePanelStore.setIsSettingsOpen;
   const [isCreatingTerminal, setIsCreatingTerminal] = useState(false);
-  const [playbackRuntimeSnapshot, setPlaybackRuntimeSnapshot] =
-    useState<RuntimeRecordingSnapshot | null>(null);
-  const [consoleLines, setConsoleLines] = useState<string[]>(DEFAULT_CONSOLE_LINES);
-  const [terminalScrollLines, setTerminalScrollLines] = useState<RuntimeTerminalScrollLines>({});
   const { dockWidth: previewDockWidth, isDocked: isPreviewDocked } = usePreviewPanel();
   const sidebarWidth = useWorkspaceSidebarWidth();
   const isSidebarCollapsed = useWorkspaceSidebarCollapsed();
   const { handleRuntimeEvent } = useNextEditorActions();
-  const { runtimePanel } = useNextEditorDomainAdapters();
   const {
     closeTerminalSession,
     createTerminalSession,
@@ -236,56 +240,10 @@ function TerminalPanel({ large = false }: TerminalPanelProps) {
   const previousRuntimeEventStateRef = useRef<RuntimeEventState | null>(null);
 
   useEffect(() => {
-    runtimePanel.setSnapshotGetter(() => ({
-      activeTab: recordableActiveTab,
-      isCollapsed,
-      isSettingsOpen,
-      consoleLines,
-      terminalScrollLines,
-    }));
-
-    return () => {
-      runtimePanel.setSnapshotGetter(() => null);
-    };
-  }, [
-    consoleLines,
-    isCollapsed,
-    isSettingsOpen,
-    recordableActiveTab,
-    runtimePanel,
-    terminalScrollLines,
-  ]);
-
-  useEffect(() => {
-    runtimePanel.setSnapshotApplier((snapshot) => {
-      setPlaybackRuntimeSnapshot(snapshot);
-    });
-
-    return () => {
-      runtimePanel.setSnapshotApplier((_snapshot) => undefined);
-    };
-  }, [runtimePanel]);
-
-  useEffect(() => {
-    runtimePanel.setConsoleOpener(() => {
-      if (isPlaybackSnapshotActive) {
-        return;
-      }
-
-      setIsCollapsed(false);
-      setActiveTab("console");
-    });
-
-    return () => {
-      runtimePanel.setConsoleOpener(() => undefined);
-    };
-  }, [isPlaybackSnapshotActive, runtimePanel]);
-
-  useEffect(() => {
     if (!currentRecording) {
-      setPlaybackRuntimeSnapshot(null);
+      runtimePanelStore.setPlaybackSnapshot(null);
     }
-  }, [currentRecording]);
+  }, [currentRecording, runtimePanelStore]);
 
   const appendConsoleLine = (message: string) => {
     const nextMessage = message.trim();
@@ -294,7 +252,7 @@ function TerminalPanel({ large = false }: TerminalPanelProps) {
       return;
     }
 
-    setConsoleLines((current) => {
+    runtimePanelStore.setConsoleLines((current) => {
       if (current[current.length - 1] === nextMessage) {
         return current;
       }
@@ -304,26 +262,41 @@ function TerminalPanel({ large = false }: TerminalPanelProps) {
   };
 
   useEffect(() => {
-    runtimePanel.setConsoleAppender((message) => {
+    runtimePanelStore.consoleAppender.current = (message) => {
       if (isPlaybackSnapshotActive) {
         return;
       }
 
       appendConsoleLine(message);
       setActiveTab("console");
-    });
+    };
 
     return () => {
-      runtimePanel.setConsoleAppender(() => undefined);
+      runtimePanelStore.consoleAppender.current = null;
     };
-  }, [appendConsoleLine, isPlaybackSnapshotActive, runtimePanel]);
+  }, [appendConsoleLine, isPlaybackSnapshotActive, runtimePanelStore, setActiveTab]);
+
+  useEffect(() => {
+    runtimePanelStore.consoleOpener.current = () => {
+      if (isPlaybackSnapshotActive) {
+        return;
+      }
+
+      setIsCollapsed(false);
+      setActiveTab("console");
+    };
+
+    return () => {
+      runtimePanelStore.consoleOpener.current = null;
+    };
+  }, [isPlaybackSnapshotActive, runtimePanelStore, setActiveTab, setIsCollapsed]);
 
   const updateTerminalScrollLine = (surfaceId: string | null, scrollLine: number) => {
     if (!surfaceId || isPlaybackSnapshotActive) {
       return;
     }
 
-    setTerminalScrollLines((current) => {
+    runtimePanelStore.setTerminalScrollLines((current) => {
       if (current[surfaceId] === scrollLine) {
         return current;
       }
@@ -537,7 +510,7 @@ function TerminalPanel({ large = false }: TerminalPanelProps) {
           <button
             type="button"
             disabled={isPlaybackSnapshotActive}
-            onClick={() => setIsCollapsed((current) => !current)}
+            onClick={() => setIsCollapsed(!runtimePanelStore.getState().isCollapsed)}
             className="ml-auto inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
             aria-label={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
             title={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}

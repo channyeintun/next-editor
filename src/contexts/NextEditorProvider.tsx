@@ -6,6 +6,7 @@ import { NextEditorActionsContext } from "./NextEditorContext";
 import { NextEditorActorContext } from "./NextEditorActorContext";
 import { useNextEditorDomainAdapters } from "./NextEditorDomainAdaptersContext";
 import { useSlidesStore } from "./SlidesStoreContext";
+import { useRuntimePanelStore } from "./RuntimePanelStoreContext";
 import {
   useWebContainerRuntimeSaveWorkspace,
   useWebContainerRuntimeSnapshotGetter,
@@ -124,8 +125,9 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
 export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const recordingStorage = useRef(createRecordingStorage());
-  const { preview, runtimePanel } = useNextEditorDomainAdapters();
+  const { preview } = useNextEditorDomainAdapters();
   const slidesStore = useSlidesStore();
+  const runtimePanelStore = useRuntimePanelStore();
   const {
     getProject,
     getActiveFilePath,
@@ -285,11 +287,11 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
         errorMessage: snapshot.errorMessage,
         terminalSessions: snapshot.terminalSessions,
         activeTerminalSessionId: snapshot.activeTerminalSessionId,
-        ...runtimePanel.getSnapshot(),
+        ...runtimePanelStore.getRecordingState(),
       };
     },
     applyRuntimeSnapshot: (snapshot) => {
-      runtimePanel.applySnapshot(snapshot);
+      runtimePanelStore.setPlaybackSnapshot(snapshot);
     },
   };
 
