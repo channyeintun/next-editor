@@ -5,6 +5,7 @@ import SlidePanel from "./SlidePanel";
 import FloatingPlayButton from "./FloatingPlayButton";
 import { NextEditorProvider } from "../contexts/NextEditorProvider.tsx";
 import { NextEditorDomainAdaptersProvider } from "../contexts/NextEditorDomainAdaptersContext";
+import { SlidesStoreProvider } from "../contexts/SlidesStoreContext";
 import { SlidesProvider } from "../contexts/SlidesContext";
 import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
@@ -58,15 +59,17 @@ export default function Editor() {
   return (
     <WorkspaceProvider>
       <WebContainerRuntimeProvider>
-        <NextEditorDomainAdaptersProvider>
-          <NextEditorProvider>
-            <SlidesProvider>
-              <PreviewPanelProvider>
-                <EditorLayout />
-              </PreviewPanelProvider>
-            </SlidesProvider>
-          </NextEditorProvider>
-        </NextEditorDomainAdaptersProvider>
+        <SlidesStoreProvider>
+          <NextEditorDomainAdaptersProvider>
+            <NextEditorProvider>
+              <SlidesProvider>
+                <PreviewPanelProvider>
+                  <EditorLayout />
+                </PreviewPanelProvider>
+              </SlidesProvider>
+            </NextEditorProvider>
+          </NextEditorDomainAdaptersProvider>
+        </SlidesStoreProvider>
       </WebContainerRuntimeProvider>
     </WorkspaceProvider>
   );

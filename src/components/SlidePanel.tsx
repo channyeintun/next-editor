@@ -1,4 +1,4 @@
-import { useNextEditorDomainAdapters } from "../contexts/NextEditorDomainAdaptersContext";
+import { useSlidesStore } from "../contexts/SlidesStoreContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import SlidePreview from "./SlidePreview";
@@ -12,7 +12,7 @@ export default function SlidePanel() {
     closePresentation,
     handleSlideEvent: onSlideEvent,
   } = useSlidesContext();
-  const { slides: slidesAdapter } = useNextEditorDomainAdapters();
+  const slidesStore = useSlidesStore();
 
   const { pause } = useNextEditorActions();
   const isPresentationVisible = previewState.isOpen && previewState.isMaximized === true;
@@ -31,7 +31,9 @@ export default function SlidePanel() {
         isMaximized={previewState.isMaximized}
         verticalIndex={previewState.indexv}
         currentInteraction={previewState.currentInteraction}
-        setSlideNavigator={slidesAdapter.setNavigator}
+        setSlideNavigator={(nav) => {
+          slidesStore.navigator.current = nav;
+        }}
         positioning="fixed"
       />
     </>

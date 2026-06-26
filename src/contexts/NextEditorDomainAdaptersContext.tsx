@@ -1,32 +1,6 @@
 import { createContext, useContext, useState, type PropsWithChildren } from "react";
-import type {
-  PreviewDomPatchBatch,
-  PreviewInitialDocument,
-  PreviewState,
-  Slide,
-  SlidePreviewState,
-} from "../types/slides";
+import type { PreviewDomPatchBatch, PreviewInitialDocument, PreviewState } from "../types/slides";
 import type { RuntimePanelRecordingState, RuntimeRecordingSnapshot } from "../types/runtime";
-
-export interface SlideStateSnapshot {
-  previewState: SlidePreviewState;
-  currentSlideIndex: number;
-}
-
-export interface SlidesDomainAdapter {
-  getSnapshot: () => SlideStateSnapshot | null;
-  applySnapshot: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
-  getSlides: () => Slide[];
-  applySlides: (slides: Slide[]) => void;
-  navigate: (indexh: number, indexv: number) => void;
-  setSnapshotGetter: (getter: () => SlideStateSnapshot | null) => void;
-  setSnapshotApplier: (
-    applier: (slideState: SlidePreviewState, currentSlideIndex: number) => void,
-  ) => void;
-  setSlidesGetter: (getter: () => Slide[]) => void;
-  setSlidesApplier: (applier: (slides: Slide[]) => void) => void;
-  setNavigator: (navigator: (indexh: number, indexv: number) => void) => void;
-}
 
 export interface PreviewDomainAdapter {
   getSnapshot: () => PreviewState | null;
@@ -61,41 +35,8 @@ export interface RuntimePanelDomainAdapter {
 }
 
 export interface NextEditorDomainAdapters {
-  slides: SlidesDomainAdapter;
   preview: PreviewDomainAdapter;
   runtimePanel: RuntimePanelDomainAdapter;
-}
-
-function createSlidesDomainAdapter(): SlidesDomainAdapter {
-  let getSnapshot: () => SlideStateSnapshot | null = () => null;
-  let applySnapshot: (slideState: SlidePreviewState, currentSlideIndex: number) => void = () =>
-    undefined;
-  let getSlides: () => Slide[] = () => [];
-  let applySlides: (slides: Slide[]) => void = () => undefined;
-  let navigate: (indexh: number, indexv: number) => void = () => undefined;
-
-  return {
-    getSnapshot: () => getSnapshot(),
-    applySnapshot: (slideState, currentSlideIndex) => applySnapshot(slideState, currentSlideIndex),
-    getSlides: () => getSlides(),
-    applySlides: (slides) => applySlides(slides),
-    navigate: (indexh, indexv) => navigate(indexh, indexv),
-    setSnapshotGetter: (getter) => {
-      getSnapshot = getter;
-    },
-    setSnapshotApplier: (applier) => {
-      applySnapshot = applier;
-    },
-    setSlidesGetter: (getter) => {
-      getSlides = getter;
-    },
-    setSlidesApplier: (applier) => {
-      applySlides = applier;
-    },
-    setNavigator: (nextNavigator) => {
-      navigate = nextNavigator;
-    },
-  };
 }
 
 function createPreviewDomainAdapter(): PreviewDomainAdapter {
@@ -155,7 +96,6 @@ const NextEditorDomainAdaptersContext = createContext<NextEditorDomainAdapters |
 
 export function NextEditorDomainAdaptersProvider({ children }: PropsWithChildren) {
   const [adapters] = useState<NextEditorDomainAdapters>(() => ({
-    slides: createSlidesDomainAdapter(),
     preview: createPreviewDomainAdapter(),
     runtimePanel: createRuntimePanelDomainAdapter(),
   }));

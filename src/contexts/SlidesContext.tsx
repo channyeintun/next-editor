@@ -1,10 +1,9 @@
-import React, { createContext, useContext, useEffect } from "react";
-import { useNextEditorDomainAdapters } from "./NextEditorDomainAdaptersContext";
-import { useSlides } from "../hooks/useSlides";
+import React, { createContext, useContext } from "react";
+import { useSlidesController } from "../hooks/useSlidesController";
+import { useSlidesStore } from "./SlidesStoreContext";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
-import type { SlidePreviewState } from "../types/slides";
 
-const SlidesContext = createContext<ReturnType<typeof useSlides> | null>(null);
+const SlidesContext = createContext<ReturnType<typeof useSlidesController> | null>(null);
 
 interface SlidesProviderProps {
   children: React.ReactNode;
@@ -12,107 +11,12 @@ interface SlidesProviderProps {
 
 export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
   const { handleSlideEvent } = useNextEditorActions();
-  const { slides } = useNextEditorDomainAdapters();
+  const store = useSlidesStore();
 
-  const slidesData = useSlides({
+  const slidesData = useSlidesController({
+    store,
     onSlideEvent: handleSlideEvent,
   });
-
-  const slideStateGetter = () => ({
-    previewState: slidesData.previewState,
-    currentSlideIndex: slidesData.currentSlideIndex,
-  });
-
-  useEffect(() => {
-    slides.setSnapshotGetter(slideStateGetter);
-
-    return () => {
-      slides.setSnapshotGetter(() => null);
-    };
-  }, [slideStateGetter, slides]);
-
-  const slidesGetter = () => slidesData.slides;
-
-  useEffect(() => {
-    slides.setSlidesGetter(slidesGetter);
-
-    return () => {
-      slides.setSlidesGetter(() => []);
-    };
-  }, [slides, slidesGetter]);
-
-  const slideStateApplier = (slideState: SlidePreviewState, currentSlideIndex: number) => {
-    // Directly apply the slide state during playback without triggering events
-    // to avoid double event recording during playback
-
-    // Set the preview state directly to match the recorded state
-    slidesData.setPreviewState((prev) => {
-      const nextIsOpen = slideState.isOpen;
-      const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
-      const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
-      // Preserve the current vertical index if slideState.indexv is undefined
-      const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
-      const nextInteraction = slideState.currentInteraction;
-
-      if (
-        nextIsOpen !== prev.isOpen ||
-        nextIsMaximized !== prev.isMaximized ||
-        nextSlideId !== prev.currentSlideId ||
-        nextIndexv !== prev.indexv ||
-        nextInteraction !== prev.currentInteraction
-      ) {
-        return {
-          isOpen: nextIsOpen,
-          isMaximized: nextIsMaximized,
-          currentSlideId: nextSlideId,
-          indexv: nextIndexv,
-          currentInteraction: nextInteraction,
-        };
-      }
-      return prev;
-    });
-
-    // Update slide index if needed
-    if (slideState.isOpen) {
-      const nextIndexv = slideState.indexv ?? slidesData.previewState.indexv ?? 0;
-      const prevIndexv = slidesData.previewState.indexv ?? 0;
-
-      if (
-        currentSlideIndex !== slidesData.currentSlideIndex ||
-        (slideState.indexv !== undefined && nextIndexv !== prevIndexv)
-      ) {
-        slides.navigate(currentSlideIndex, nextIndexv);
-      }
-    }
-  };
-
-  useEffect(() => {
-    slides.setSnapshotApplier(slideStateApplier);
-
-    return () => {
-      slides.setSnapshotApplier((_nextSlideState, _nextSlideIndex) => undefined);
-    };
-  }, [slideStateApplier, slides]);
-
-  const slidesApplier = (
-    slides: Array<{
-      id: string;
-      content: string;
-      contentType: "html" | "markdown";
-      name?: string;
-      order: number;
-    }>,
-  ) => {
-    slidesData.setSlides(slides);
-  };
-
-  useEffect(() => {
-    slides.setSlidesApplier(slidesApplier);
-
-    return () => {
-      slides.setSlidesApplier((_nextSlides) => undefined);
-    };
-  }, [slides, slidesApplier]);
 
   return <SlidesContext.Provider value={slidesData}>{children}</SlidesContext.Provider>;
 };

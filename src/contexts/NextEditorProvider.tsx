@@ -5,6 +5,7 @@ import { useNextEditorActorBindings } from "../core/src/useNextEditor";
 import { NextEditorActionsContext } from "./NextEditorContext";
 import { NextEditorActorContext } from "./NextEditorActorContext";
 import { useNextEditorDomainAdapters } from "./NextEditorDomainAdaptersContext";
+import { useSlidesStore } from "./SlidesStoreContext";
 import {
   useWebContainerRuntimeSaveWorkspace,
   useWebContainerRuntimeSnapshotGetter,
@@ -123,7 +124,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
 export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const recordingStorage = useRef(createRecordingStorage());
-  const { slides, preview, runtimePanel } = useNextEditorDomainAdapters();
+  const { preview, runtimePanel } = useNextEditorDomainAdapters();
+  const slidesStore = useSlidesStore();
   const {
     getProject,
     getActiveFilePath,
@@ -164,16 +166,61 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     editorRef,
     enableAudioRecording: true, // Enable built-in synchronized audio recording
     pauseOnUserInteraction: true,
-    getSlideState: () => slides.getSnapshot(),
-    applySlideState: (slideState, currentSlideIndex) =>
-      slides.applySnapshot(slideState, currentSlideIndex),
+    getSlideState: () => {
+      const { slides, previewState } = slidesStore.getState();
+      if (!previewState.isOpen) return null;
+      const currentSlideIndex = slides.findIndex((s) => s.id === previewState.currentSlideId);
+      return { previewState, currentSlideIndex };
+    },
+    applySlideState: (slideState, currentSlideIndex) => {
+      slidesStore.setPreviewState((prev) => {
+        const nextIsOpen = slideState.isOpen;
+        const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
+        const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
+        const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
+        const nextInteraction = slideState.currentInteraction;
+
+        if (
+          nextIsOpen !== prev.isOpen ||
+          nextIsMaximized !== prev.isMaximized ||
+          nextSlideId !== prev.currentSlideId ||
+          nextIndexv !== prev.indexv ||
+          nextInteraction !== prev.currentInteraction
+        ) {
+          return {
+            isOpen: nextIsOpen,
+            isMaximized: nextIsMaximized,
+            currentSlideId: nextSlideId,
+            indexv: nextIndexv,
+            currentInteraction: nextInteraction,
+          };
+        }
+        return prev;
+      });
+
+      if (slideState.isOpen) {
+        const prevState = slidesStore.getState().previewState;
+        const nextIndexv = slideState.indexv ?? prevState.indexv ?? 0;
+        const prevIndexv = prevState.indexv ?? 0;
+        const prevSlideIndex = slidesStore
+          .getState()
+          .slides.findIndex((s) => s.id === prevState.currentSlideId);
+
+        if (
+          currentSlideIndex !== prevSlideIndex ||
+          (slideState.indexv !== undefined && nextIndexv !== prevIndexv)
+        ) {
+          slidesStore.navigator.current?.(currentSlideIndex, nextIndexv);
+        }
+      }
+    },
 
     getPreviewState: () => preview.getSnapshot(),
     applyPreviewState: (previewState) => preview.applySnapshot(previewState),
     applyPreviewPatchReplay: (input) => preview.applyPatchReplay(input),
 
-    getSlides: () => slides.getSlides(),
-    applySlides: (nextSlides) => slides.applySlides(nextSlides),
+    getSlides: () => slidesStore.getState().slides,
+    applySlides: (nextSlides) => slidesStore.setSlides(nextSlides),
     getWorkspaceSnapshot: () => {
       const project = getProject();
       const activeFilePath = getActiveFilePath();
