@@ -9,10 +9,10 @@
 - [x] Wire captions through SCR3 decode
 - [x] Add round-trip test in `recordingCodec.test.ts`
 
-## Phase 2: Parser
+## Phase 2: Parser ✅
 
-- [ ] Create `src/captions/parseCaptions.ts` (VTT + SRT)
-- [ ] Create `src/captions/parseCaptions.test.ts`
+- [x] Create `src/captions/parseCaptions.ts` (VTT + SRT)
+- [x] Create `src/captions/parseCaptions.test.ts`
 
 ## Phase 3: Import Wiring
 
