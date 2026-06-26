@@ -9,6 +9,7 @@ import type {
   SlidePreviewState,
 } from "../slides";
 import type {
+  CaptionTrack,
   MouseCursorPosition,
   CursorRecordingEvent,
   EditorFrame,
@@ -473,6 +474,18 @@ export type CameraActorStoppedEvent = { type: "CAMERA_STOPPED"; blob: Blob };
 /** Camera actor error event */
 export type CameraActorErrorEvent = { type: "CAMERA_ERROR"; error: string };
 
+/** Add or replace a caption track on the loaded recording */
+export type AddCaptionTrackEvent = {
+  type: "ADD_CAPTION_TRACK";
+  track: CaptionTrack;
+};
+
+/** Remove a caption track from the loaded recording */
+export type RemoveCaptionTrackEvent = {
+  type: "REMOVE_CAPTION_TRACK";
+  trackId: string;
+};
+
 /**
  * Union of all machine events
  */
@@ -506,6 +519,8 @@ export type EditorMachineEvent =
   | CameraChunkEvent
   | CameraActorStoppedEvent
   | CameraActorErrorEvent
+  | AddCaptionTrackEvent
+  | RemoveCaptionTrackEvent
   | AudioPlaybackReadyEvent
   | AudioActorStoppedEvent
   | AudioActorStartedEvent

@@ -4,6 +4,7 @@ import { useActorRef, useSelector, shallowEqual } from "@xstate/react";
 import type { ActorRefFrom } from "xstate";
 import { editorMachine } from "./machine/editorMachine";
 import type {
+  CaptionTrack,
   UseNextEditorConfig,
   UseNextEditorReturn,
   EditorState,
@@ -193,6 +194,14 @@ export const useNextEditorActorBindings = (
     actorRef.send({ type: "EXTEND_RECORDING", recording });
   };
 
+  const addCaptionTrack = (track: CaptionTrack) => {
+    actorRef.send({ type: "ADD_CAPTION_TRACK", track });
+  };
+
+  const removeCaptionTrack = (trackId: string) => {
+    actorRef.send({ type: "REMOVE_CAPTION_TRACK", trackId });
+  };
+
   const clearRecording = () => {
     actorRef.send({ type: "UNLOAD" });
   };
@@ -339,6 +348,8 @@ export const useNextEditorActorBindings = (
     setVolume,
     loadRecording,
     extendRecording,
+    addCaptionTrack,
+    removeCaptionTrack,
     clearRecording,
 
     // Integration

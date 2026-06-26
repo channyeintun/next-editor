@@ -360,6 +360,8 @@ export interface UseNextEditorReturn {
   // Recording Management
   loadRecording: (recording: Recording) => void;
   extendRecording: (recording: Recording) => void;
+  addCaptionTrack: (track: CaptionTrack) => void;
+  removeCaptionTrack: (trackId: string) => void;
   clearRecording: () => void;
 
   // Monaco Editor Integration

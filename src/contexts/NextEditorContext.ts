@@ -1,5 +1,5 @@
 import { createContext, type RefObject } from "react";
-import type { Recording } from "../core/src/types";
+import type { CaptionTrack, Recording } from "../core/src/types";
 import type { TimelineActorRef } from "../core/src/machine/timelineMachine";
 import type { EditorActorRef } from "../core/src/useNextEditor";
 import type {
@@ -26,6 +26,8 @@ export interface NextEditorActions {
   setVolume: (volume: number) => void;
   loadRecording: (recording: Recording) => void;
   extendRecording: (recording: Recording) => void;
+  addCaptionTrack: (track: CaptionTrack) => void;
+  removeCaptionTrack: (trackId: string) => void;
   clearRecording: () => void;
   handleEditorChange: () => void;
   handleSlideEvent: (event: SlideEvent) => void;

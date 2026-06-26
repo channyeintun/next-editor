@@ -14,11 +14,11 @@
 - [x] Create `src/captions/parseCaptions.ts` (VTT + SRT)
 - [x] Create `src/captions/parseCaptions.test.ts`
 
-## Phase 3: Import Wiring
+## Phase 3: Import Wiring ✅
 
-- [ ] Add `addCaptionTrack` / `removeCaptionTrack` events to `editorMachine`
-- [ ] Surface actions through `useNextEditor` → actions context → provider
-- [ ] Add "Import captions…" UI entry point
+- [x] Add `addCaptionTrack` / `removeCaptionTrack` events to `editorMachine`
+- [x] Surface actions through `useNextEditor` → actions context → provider
+- [x] Add "Import captions…" UI entry point
 
 ## Phase 4: Playback Overlay
 

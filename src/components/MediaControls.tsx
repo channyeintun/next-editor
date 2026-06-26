@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Circle, Square, Plus, FileMusic, Mic, Video, VideoOff, X } from "lucide-react";
+import { Circle, Square, Plus, FileMusic, Mic, Video, VideoOff, X, Captions } from "lucide-react";
 import {
   useNextEditorActions,
   useNextEditorMetadata,
@@ -123,6 +123,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     seekTo,
     setPlaybackSpeed,
     setVolume,
+    addCaptionTrack,
   } = useNextEditorActions();
 
   const { isRecording, isPlaying, currentRecording, hasEnded, recordingStartTime } =
@@ -139,6 +140,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const [isCameraOverlayVisible, setIsCameraOverlayVisible] = useState(readCameraOverlayVisibility);
   const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement>(null);
+  const captionFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setIsCameraSupported(Boolean(navigator.mediaDevices?.getUserMedia));
@@ -213,6 +215,26 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const handleClearSelectedAudio = () => {
     setSelectedAudioFile(null);
     setRecordingAudioSource("microphone");
+  };
+
+  const handleCaptionFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = "";
+
+    const { detectAndParse, inferLanguageFromFilename } = await import("../captions/parseCaptions");
+    const text = await file.text();
+    const cues = detectAndParse(file.name, text);
+    if (cues.length === 0) return;
+
+    const language = inferLanguageFromFilename(file.name) ?? "en";
+    addCaptionTrack({
+      id: `${language}-${Date.now()}`,
+      language,
+      label: language.toUpperCase(),
+      cues,
+      default: !currentRecording?.captions?.length,
+    });
   };
 
   const handleToggleCameraForNextRecording = () => {
@@ -376,6 +398,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               className="sr-only"
               onChange={handleAudioFileChange}
             />
+            <input
+              ref={captionFileInputRef}
+              type="file"
+              accept=".vtt,.srt,text/vtt,application/x-subrip"
+              className="sr-only"
+              onChange={handleCaptionFileChange}
+            />
             {isCameraSupported ? (
               <button
                 type="button"
@@ -478,6 +507,16 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                           className="flex-1 h-1 bg-gray-300 rounded appearance-none cursor-pointer"
                         />
                       </div>
+                    </div>
+                    <div className="border-t border-gray-200 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => captionFileInputRef.current?.click()}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+                      >
+                        <Captions size={14} aria-hidden="true" />
+                        Import captions…
+                      </button>
                     </div>
                   </div>
                 </div>
