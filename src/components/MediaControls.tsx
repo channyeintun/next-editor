@@ -494,8 +494,16 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                       captionTrigger.toggleEnabled();
                     }
                   }}
-                  aria-pressed={captionsEnabled}
-                  title={captionsEnabled ? "Hide captions" : "Show captions"}
+                  {...(hasMultipleCaptionTracks
+                    ? { "aria-haspopup": "menu" as const, "aria-expanded": showCaptionMenu }
+                    : { "aria-pressed": captionsEnabled })}
+                  title={
+                    hasMultipleCaptionTracks
+                      ? "Captions"
+                      : captionsEnabled
+                        ? "Hide captions"
+                        : "Show captions"
+                  }
                   className={`flex items-center justify-center transition-colors hover:text-white ${
                     captionsEnabled ? "text-white" : "text-slate-500"
                   } ${transportButtonWidth}`}
@@ -504,7 +512,29 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 </button>
 
                 {showCaptionMenu && hasMultipleCaptionTracks && (
-                  <div className="absolute bottom-full right-0 z-46 mb-2 min-w-40 rounded-lg bg-white py-1 shadow-lg">
+                  <div
+                    role="menu"
+                    className="absolute bottom-full right-0 z-46 mb-2 min-w-40 rounded-lg bg-white py-1 shadow-lg"
+                  >
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={!captionsEnabled}
+                      onClick={() => {
+                        captionTrigger.setEnabled({ enabled: false });
+                        setShowCaptionMenu(false);
+                      }}
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-gray-100 ${
+                        !captionsEnabled
+                          ? "font-semibold text-gray-900"
+                          : "font-normal text-gray-700"
+                      }`}
+                    >
+                      <span className="w-4">
+                        {!captionsEnabled ? <Check size={14} aria-hidden="true" /> : null}
+                      </span>
+                      Off
+                    </button>
                     {captionTracks.map((track) => {
                       const isSelected =
                         captionsEnabled &&
@@ -513,6 +543,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                         <button
                           key={track.id}
                           type="button"
+                          role="menuitemradio"
+                          aria-checked={isSelected}
                           onClick={() => {
                             captionTrigger.setLanguage({ language: track.language });
                             if (!captionsEnabled) captionTrigger.toggleEnabled();
