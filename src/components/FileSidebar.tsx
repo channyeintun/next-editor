@@ -1,5 +1,5 @@
 import { type UIEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { FilePlus2, Folder, FolderOpen, FolderPlus, Upload } from "lucide-react";
+import { FilePlus2, FolderPlus, Upload } from "lucide-react";
 import {
   getParentWorkspacePath,
   getUniqueWorkspacePath,
@@ -623,9 +623,30 @@ function FileSidebarPanel() {
               >
                 <span className="flex size-4 shrink-0 items-center justify-center">
                   {isExpanded || node.hasActiveFile ? (
-                    <FolderOpen size={13} className="text-sky-300" />
+                    <svg
+                      width={13}
+                      height={13}
+                      viewBox="0 0 16 16"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path fill="#5c99d6" d="M1 6v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6z" />
+                      <path
+                        fill="#3d7ab5"
+                        d="m6.922 3.768-.644-.536A1 1 0 0 0 5.638 3H2a1 1 0 0 0-1 1v2h14V5a1 1 0 0 0-1-1H7.562a1 1 0 0 1-.64-.232"
+                      />
+                    </svg>
                   ) : (
-                    <Folder size={13} className="text-slate-500" />
+                    <svg
+                      width={13}
+                      height={13}
+                      viewBox="0 0 16 16"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        fill="#78909c"
+                        d="m6.922 3.768-.644-.536A1 1 0 0 0 5.638 3H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H7.562a1 1 0 0 1-.64-.232"
+                      />
+                    </svg>
                   )}
                 </span>
                 <span className="truncate font-medium">{node.name}</span>

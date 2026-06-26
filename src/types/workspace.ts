@@ -267,11 +267,21 @@ export function collectWorkspaceFolders(
 export function inferLanguageFromPath(path: string): string {
   const normalizedPath = normalizeWorkspacePath(path).toLowerCase();
 
-  if (normalizedPath.endsWith(".tsx") || normalizedPath.endsWith(".ts")) {
+  if (
+    normalizedPath.endsWith(".tsx") ||
+    normalizedPath.endsWith(".ts") ||
+    normalizedPath.endsWith(".mts") ||
+    normalizedPath.endsWith(".cts")
+  ) {
     return "typescript";
   }
 
-  if (normalizedPath.endsWith(".jsx") || normalizedPath.endsWith(".js")) {
+  if (
+    normalizedPath.endsWith(".jsx") ||
+    normalizedPath.endsWith(".js") ||
+    normalizedPath.endsWith(".mjs") ||
+    normalizedPath.endsWith(".cjs")
+  ) {
     return "javascript";
   }
 
