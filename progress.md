@@ -20,10 +20,10 @@
 - [x] Surface actions through `useNextEditor` → actions context → provider
 - [x] Add "Import captions…" UI entry point
 
-## Phase 4: Playback Overlay
+## Phase 4: Playback Overlay ✅
 
-- [ ] Create `src/components/CaptionsOverlay.tsx`
-- [ ] Mount in `Editor.tsx` as sibling of `CameraOverlay`
+- [x] Create `src/components/CaptionsOverlay.tsx`
+- [x] Mount in `Editor.tsx` as sibling of `CameraOverlay`
 
 ## Phase 5: Controls (CC toggle + language menu + caption store)
 

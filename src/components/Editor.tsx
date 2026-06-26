@@ -16,8 +16,10 @@ import { useWorkspaceLessonType } from "../hooks/useWorkspace";
 import { lessonRunsInWebContainer } from "../types/workspace";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import CameraOverlay from "./CameraOverlay";
+import CaptionsOverlay from "./CaptionsOverlay";
 import CursorComponent from "./Cursor.tsx";
 import LoadingSpinner from "./LoadingSpinner.tsx";
+import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
 const TerminalPanel = lazy(() => import("./TerminalPanel"));
@@ -39,6 +41,7 @@ export function EditorLayout() {
         <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
         <CameraOverlay />
+        <CaptionsOverlay />
         {lessonRunsInWebContainer(lessonType) ? <TerminalPanel large={largeControls} /> : null}
         <SlidePanel />
       </div>
@@ -63,13 +66,15 @@ export default function Editor() {
         <SlidesStoreProvider>
           <RuntimePanelStoreProvider>
             <PreviewAdapterHandleProvider>
-              <NextEditorProvider>
-                <SlidesProvider>
-                  <PreviewPanelProvider>
-                    <EditorLayout />
-                  </PreviewPanelProvider>
-                </SlidesProvider>
-              </NextEditorProvider>
+              <CaptionStoreProvider>
+                <NextEditorProvider>
+                  <SlidesProvider>
+                    <PreviewPanelProvider>
+                      <EditorLayout />
+                    </PreviewPanelProvider>
+                  </SlidesProvider>
+                </NextEditorProvider>
+              </CaptionStoreProvider>
             </PreviewAdapterHandleProvider>
           </RuntimePanelStoreProvider>
         </SlidesStoreProvider>
