@@ -10,7 +10,11 @@ export const CAMERA_OVERLAY_VISIBILITY_EVENT = "next-editor-camera-overlay-visib
 /** Dispatched by MediaControls when the camera capture toggle flips, to drive the live preview. */
 export const CAMERA_OVERLAY_PREVIEW_EVENT = "next-editor-camera-overlay-preview";
 
-const OVERLAY_SIZE = 192;
+// Portrait rounded-rectangle ("squircle") framing: a 4:5 vertical card with softly rounded corners,
+// rather than a circle. The face crop reads better tall, matching a webcam picture-in-picture.
+const OVERLAY_WIDTH = 176;
+const OVERLAY_HEIGHT = 176;
+const OVERLAY_RADIUS = 32;
 const EDGE_PADDING = 24;
 const MEDIA_CONTROLS_CLEARANCE = 88;
 const DRIFT_THRESHOLD_MS = 250;
@@ -45,8 +49,8 @@ function getDefaultPosition(): OverlayPosition {
   }
 
   return {
-    x: window.innerWidth - OVERLAY_SIZE - EDGE_PADDING,
-    y: window.innerHeight - OVERLAY_SIZE - MEDIA_CONTROLS_CLEARANCE,
+    x: window.innerWidth - OVERLAY_WIDTH - EDGE_PADDING,
+    y: window.innerHeight - OVERLAY_HEIGHT - MEDIA_CONTROLS_CLEARANCE,
   };
 }
 
@@ -56,11 +60,11 @@ function clampPosition(position: OverlayPosition): OverlayPosition {
   return {
     x: Math.min(
       Math.max(position.x, EDGE_PADDING),
-      window.innerWidth - OVERLAY_SIZE - EDGE_PADDING,
+      window.innerWidth - OVERLAY_WIDTH - EDGE_PADDING,
     ),
     y: Math.min(
       Math.max(position.y, EDGE_PADDING),
-      window.innerHeight - OVERLAY_SIZE - MEDIA_CONTROLS_CLEARANCE,
+      window.innerHeight - OVERLAY_HEIGHT - MEDIA_CONTROLS_CLEARANCE,
     ),
   };
 }
@@ -86,12 +90,12 @@ function readStoredPosition(): OverlayPosition {
 /** The screen edge the minimized handle docks to, based on which half the overlay sits in. */
 function getDockSide(position: OverlayPosition): "left" | "right" {
   if (typeof window === "undefined") return "right";
-  return position.x + OVERLAY_SIZE / 2 < window.innerWidth / 2 ? "left" : "right";
+  return position.x + OVERLAY_WIDTH / 2 < window.innerWidth / 2 ? "left" : "right";
 }
 
 /** Vertical offset for the minimized handle, centered on the overlay and clamped to the viewport. */
 function getMinimizedHandleTop(position: OverlayPosition): number {
-  const centeredTop = position.y + OVERLAY_SIZE / 2 - MINIMIZED_HANDLE_HEIGHT / 2;
+  const centeredTop = position.y + OVERLAY_HEIGHT / 2 - MINIMIZED_HANDLE_HEIGHT / 2;
   if (typeof window === "undefined") return Math.max(centeredTop, EDGE_PADDING);
   return Math.min(
     Math.max(centeredTop, EDGE_PADDING),
@@ -360,8 +364,13 @@ const CameraOverlay: React.FC = () => {
 
   return (
     <div
-      className="group fixed left-0 top-0 z-44 size-48 cursor-grab touch-none overflow-hidden rounded-full border border-white/25 bg-slate-950 shadow-2xl shadow-slate-950/40 ring-2 ring-black/20 active:cursor-grabbing"
-      style={{ transform: `translate3d(${position.x}px, ${position.y}px, 0)` }}
+      className="group fixed left-0 top-0 z-44 cursor-grab touch-none overflow-hidden border border-white/25 bg-slate-950 shadow-2xl shadow-slate-950/40 ring-2 ring-black/20 active:cursor-grabbing"
+      style={{
+        width: OVERLAY_WIDTH,
+        height: OVERLAY_HEIGHT,
+        borderRadius: OVERLAY_RADIUS,
+        transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+      }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
     >
