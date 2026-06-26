@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
@@ -450,13 +450,21 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     persistEnvironmentVariables(normalizedVariables);
   };
 
-  useEffect(() => {
+  const onLessonTypeChange = useEffectEvent(() => {
     hasAutoStartedRef.current = false;
-
     if (!lessonRunsInWebContainer(lessonType)) {
       resetRuntime();
     }
-  }, [lessonType, resetRuntime]);
+  });
+
+  useEffect(() => {
+    onLessonTypeChange();
+  }, [lessonType]);
+
+  const onAutoStart = useEffectEvent(() => {
+    hasAutoStartedRef.current = true;
+    void startRuntime();
+  });
 
   useEffect(() => {
     if (
@@ -472,16 +480,8 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       return;
     }
 
-    hasAutoStartedRef.current = true;
-    void startRuntime();
-  }, [
-    fileCount,
-    lessonType,
-    isSupported,
-    runnerConfig.enabled,
-    runnerConfig.runOnStartup,
-    startRuntime,
-  ]);
+    onAutoStart();
+  }, [fileCount, lessonType, isSupported, runnerConfig.enabled, runnerConfig.runOnStartup]);
 
   useEffect(() => {
     hasRunInitCommandRef.current = false;
@@ -515,11 +515,15 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     };
   }, []);
 
+  const onUnmount = useEffectEvent(() => {
+    resetRuntime();
+  });
+
   useEffect(() => {
     return () => {
-      resetRuntime();
+      onUnmount();
     };
-  }, [resetRuntime]);
+  }, []);
 
   const actionsValue: WebContainerRuntimeActions = {
     createTerminalSession,
