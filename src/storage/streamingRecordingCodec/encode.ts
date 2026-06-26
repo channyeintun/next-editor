@@ -320,6 +320,7 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     cameraFile: normalized.cameraFile,
     cameraUrl: normalized.cameraUrl,
     captions: normalized.captions,
+    captionFiles: normalized.captionFiles,
     slides: normalized.slides,
     workspaceSnapshot: normalized.workspaceSnapshot,
     runtimeSnapshot: normalized.runtimeSnapshot,

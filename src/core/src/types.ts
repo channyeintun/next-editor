@@ -218,6 +218,7 @@ export interface Recording {
    * When set, the stream carries no inline `cameraChunk` segments; the video lives in its own file.
    */
   cameraFile?: string;
+  captionFiles?: string[];
   /**
    * Resolved URL for the external camera video — a hosted sibling URL or an object URL created
    * from an imported file. Preferred by playback so the browser range-streams the video directly.

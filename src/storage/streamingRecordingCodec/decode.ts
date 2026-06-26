@@ -178,6 +178,7 @@ function assembleRecording(state: DecodedStreamState): Recording {
     runtimeEvents: state.runtimeEvents.length > 0 ? state.runtimeEvents : undefined,
     cursorEvents: state.cursorEvents.length > 0 ? state.cursorEvents : undefined,
     captions: meta.captions,
+    captionFiles: meta.captionFiles,
     slides: meta.slides,
     audioBlob: state.audioBlob,
     audioSource: meta.audioSource,

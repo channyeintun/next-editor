@@ -104,6 +104,7 @@ export interface RecordingStreamMeta {
   /** Resolved/absolute URL for an external camera video, when known at encode time. */
   cameraUrl?: string;
   captions?: CaptionTrack[];
+  captionFiles?: string[];
   slides?: Slide[];
   workspaceSnapshot?: WorkspaceRecordingSnapshot;
   runtimeSnapshot?: RuntimeRecordingSnapshot;

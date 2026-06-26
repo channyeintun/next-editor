@@ -53,40 +53,52 @@ function withResolvedCameraUrl(recording: Recording, baseUrl: string | undefined
   }
 }
 
-const CAPTION_EXTENSIONS = ["en", "ar", "bn", "de", "es", "fr", "ja", "ko", "pt", "zh"];
+async function fetchVttFile(url: string): Promise<CaptionTrack | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (!text.trim().startsWith("WEBVTT")) return null;
+    const { parseVtt, inferLanguageFromFilename } = await import("../captions/parseCaptions");
+    const cues = parseVtt(text);
+    if (cues.length === 0) return null;
+    const lang = inferLanguageFromFilename(url) ?? "en";
+    return {
+      id: `${lang}-sibling`,
+      language: lang,
+      label: lang.toUpperCase(),
+      cues,
+      default: true,
+    };
+  } catch {
+    return null;
+  }
+}
 
-async function fetchSiblingCaptions(neUrl: string): Promise<CaptionTrack[]> {
-  const tracks: CaptionTrack[] = [];
-  const base = neUrl.replace(/\.ne$/i, "");
-
-  const results = await Promise.allSettled(
-    CAPTION_EXTENSIONS.map(async (lang) => {
-      const vttUrl = `${base}.${lang}.vtt`;
-      const res = await fetch(vttUrl);
-      if (!res.ok) return null;
-      const text = await res.text();
-      if (!text.trim().startsWith("WEBVTT")) return null;
-      const { parseVtt } = await import("../captions/parseCaptions");
-      const cues = parseVtt(text);
-      if (cues.length === 0) return null;
-      return { lang, cues };
-    }),
-  );
-
-  for (const result of results) {
-    if (result.status === "fulfilled" && result.value) {
-      const { lang, cues } = result.value;
-      tracks.push({
-        id: `${lang}-sibling`,
-        language: lang,
-        label: lang.toUpperCase(),
-        cues,
-        default: tracks.length === 0,
-      });
+async function fetchSiblingCaptions(
+  neUrl: string,
+  captionFiles?: string[],
+): Promise<CaptionTrack[]> {
+  if (captionFiles && captionFiles.length > 0) {
+    const results = await Promise.allSettled(
+      captionFiles.map((file) => {
+        const url = new URL(file, neUrl).toString();
+        return fetchVttFile(url);
+      }),
+    );
+    const tracks: CaptionTrack[] = [];
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value) {
+        if (tracks.length > 0) result.value.default = false;
+        tracks.push(result.value);
+      }
     }
+    return tracks;
   }
 
-  return tracks;
+  const base = neUrl.replace(/\.ne$/i, "");
+  const track = await fetchVttFile(`${base}.vtt`);
+  return track ? [track] : [];
 }
 
 function buildSameOriginProxyUrl(targetUrl: string): string {
@@ -183,26 +195,38 @@ export const useUrlLoader = () => {
     }
   };
 
-  const loadRecordingFromBase64Text = async (text: string, baseUrl?: string) => {
+  const loadRecordingFromBase64Text = async (
+    text: string,
+    baseUrl?: string,
+  ): Promise<Recording | null> => {
     const stripped = text.replace(/\s/g, "");
     if (!stripped) {
       throw new Error("File appears to be empty or corrupted");
     }
     const recordings = await decodeBase64ToRecordings(stripped);
     if (recordings.length > 0) {
-      loadRecording(withResolvedCameraUrl(recordings[0], baseUrl));
+      const resolved = withResolvedCameraUrl(recordings[0], baseUrl);
+      loadRecording(resolved);
+      return resolved;
     }
+    return null;
   };
 
-  const loadRecordingFromBinaryBytes = async (bytes: Uint8Array, baseUrl?: string) => {
+  const loadRecordingFromBinaryBytes = async (
+    bytes: Uint8Array,
+    baseUrl?: string,
+  ): Promise<Recording | null> => {
     if (!startsWithScr3(bytes)) {
       throw new Error("File does not contain a valid SCR3 recording stream");
     }
 
     const recordings = await decompressBinaryToRecordings(bytes);
     if (recordings.length > 0) {
-      loadRecording(withResolvedCameraUrl(recordings[0], baseUrl));
+      const resolved = withResolvedCameraUrl(recordings[0], baseUrl);
+      loadRecording(resolved);
+      return resolved;
     }
+    return null;
   };
 
   /**
@@ -214,10 +238,10 @@ export const useUrlLoader = () => {
   const streamRecordingFromResponse = async (
     response: Response,
     baseUrl?: string,
-  ): Promise<boolean> => {
+  ): Promise<Recording | null> => {
     const body = response.body;
     if (!body || typeof body.getReader !== "function") {
-      return false;
+      return null;
     }
 
     const reader = body.getReader();
@@ -229,6 +253,7 @@ export const useUrlLoader = () => {
     const streamReader = createStreamingRecordingReader();
     let lastDecodeLength = 0;
     let loadedOnce = false;
+    let firstRecording: Recording | null = null;
 
     const applyRecording = (
       recording: Awaited<ReturnType<typeof decodeBase64ToRecordings>>[0] | null | undefined,
@@ -242,6 +267,7 @@ export const useUrlLoader = () => {
       if (!loadedOnce) {
         loadRecording(resolved);
         loadedOnce = true;
+        firstRecording = resolved;
         setIsLoading(false);
         return;
       }
@@ -334,7 +360,7 @@ export const useUrlLoader = () => {
     if (!loadedOnce) {
       throw new Error("No valid recording found in stream");
     }
-    return true;
+    return firstRecording;
   };
 
   const fetchNextEditorFile = async (url: string) => {
@@ -356,25 +382,25 @@ export const useUrlLoader = () => {
       // only returns `false` before touching the body (not a readable stream); any
       // failure after it starts reading throws, in which case the body is already
       // drained and the whole-file fallback re-fetches the URL.
-      let streamed = false;
+      let loaded: Recording | null = null;
       let bodyConsumed = false;
       try {
-        streamed = await streamRecordingFromResponse(response, url);
+        loaded = await streamRecordingFromResponse(response, url);
       } catch {
         bodyConsumed = true;
       }
 
-      if (!streamed) {
+      if (!loaded) {
         const source = bodyConsumed ? await fetchNextEditorUrl(url) : response;
         const bytes = new Uint8Array(await source.arrayBuffer());
         if (startsWithScr3(bytes)) {
-          await loadRecordingFromBinaryBytes(bytes, url);
+          loaded = await loadRecordingFromBinaryBytes(bytes, url);
         } else {
-          await loadRecordingFromBase64Text(new TextDecoder().decode(bytes).trim(), url);
+          loaded = await loadRecordingFromBase64Text(new TextDecoder().decode(bytes).trim(), url);
         }
       }
 
-      fetchSiblingCaptions(url)
+      fetchSiblingCaptions(url, loaded?.captionFiles)
         .then((tracks) => {
           for (const track of tracks) addCaptionTrack(track);
         })
