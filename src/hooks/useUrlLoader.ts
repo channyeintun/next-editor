@@ -75,30 +75,30 @@ async function fetchVttFile(url: string): Promise<CaptionTrack | null> {
   }
 }
 
+/**
+ * Loads caption tracks the recording explicitly declares via `captionFiles`, resolved relative
+ * to the `.ne` URL. Captions are never guessed from sibling filenames — HTTP has no directory
+ * listing, so a recording must name its companion VTTs to have them auto-load.
+ */
 async function fetchSiblingCaptions(
   neUrl: string,
   captionFiles?: string[],
 ): Promise<CaptionTrack[]> {
-  if (captionFiles && captionFiles.length > 0) {
-    const results = await Promise.allSettled(
-      captionFiles.map((file) => {
-        const url = new URL(file, neUrl).toString();
-        return fetchVttFile(url);
-      }),
-    );
-    const tracks: CaptionTrack[] = [];
-    for (const result of results) {
-      if (result.status === "fulfilled" && result.value) {
-        if (tracks.length > 0) result.value.default = false;
-        tracks.push(result.value);
-      }
-    }
-    return tracks;
+  if (!captionFiles || captionFiles.length === 0) {
+    return [];
   }
 
-  const base = neUrl.replace(/\.ne$/i, "");
-  const track = await fetchVttFile(`${base}.vtt`);
-  return track ? [track] : [];
+  const results = await Promise.allSettled(
+    captionFiles.map((file) => fetchVttFile(new URL(file, neUrl).toString())),
+  );
+  const tracks: CaptionTrack[] = [];
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value) {
+      if (tracks.length > 0) result.value.default = false;
+      tracks.push(result.value);
+    }
+  }
+  return tracks;
 }
 
 function buildSameOriginProxyUrl(targetUrl: string): string {
