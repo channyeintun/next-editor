@@ -25,9 +25,9 @@
 - [x] Create `src/components/CaptionsOverlay.tsx`
 - [x] Mount in `Editor.tsx` as sibling of `CameraOverlay`
 
-## Phase 5: Controls (CC toggle + language menu + caption store)
+## Phase 5: Controls (CC toggle + language menu + caption store) ✅
 
-- [ ] Create `src/stores/captionStore.ts`
-- [ ] Create `src/contexts/CaptionStoreContext.tsx`
-- [ ] Wire caption store provider
-- [ ] Add CC button + language menu in `MediaControls.tsx`
+- [x] Create `src/stores/captionStore.ts`
+- [x] Create `src/contexts/CaptionStoreContext.tsx`
+- [x] Wire caption store provider
+- [x] Add CC button + language menu in `MediaControls.tsx`

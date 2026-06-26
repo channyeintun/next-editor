@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Circle, Square, Plus, FileMusic, Mic, Video, VideoOff, X, Captions } from "lucide-react";
+import {
+  Circle,
+  Square,
+  Plus,
+  FileMusic,
+  Mic,
+  Video,
+  VideoOff,
+  X,
+  Captions,
+  Check,
+} from "lucide-react";
 import {
   useNextEditorActions,
   useNextEditorMetadata,
@@ -19,6 +30,7 @@ import {
   CAMERA_OVERLAY_VISIBILITY_EVENT,
   CAMERA_OVERLAY_VISIBILITY_KEY,
 } from "./CameraOverlay";
+import { useCaptionStore, useCaptionStoreTrigger } from "../hooks/useCaptionStore";
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -131,7 +143,10 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   const { playbackSpeed, volume, duration: actualDuration } = useNextEditorPlayback();
 
+  const { enabled: captionsEnabled, language: captionLanguage } = useCaptionStore();
+  const captionTrigger = useCaptionStoreTrigger();
   const [showSettings, setShowSettings] = useState(false);
+  const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordingAudioSource, setRecordingAudioSource] =
     useState<RecordingAudioSourceOption>("microphone");
@@ -296,6 +311,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   // (imported file or hosted sibling). Either means the recording has camera to show/hide.
   const hasCameraRecording =
     currentRecording?.cameraBlob instanceof Blob || Boolean(currentRecording?.cameraUrl);
+  const captionTracks = currentRecording?.captions;
+  const hasCaptionTracks = captionTracks && captionTracks.length > 0;
+  const hasMultipleCaptionTracks = captionTracks && captionTracks.length > 1;
 
   // Size tokens — scale the controls up for small embeds when `large` is set.
   const containerPadding = large ? "px-10 py-8" : "px-4 py-3";
@@ -463,6 +481,57 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                   <VideoOff size={controlIconSize} aria-hidden="true" />
                 )}
               </button>
+            ) : null}
+
+            {hasCaptionTracks ? (
+              <div className="relative pointer-events-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (hasMultipleCaptionTracks) {
+                      setShowCaptionMenu((prev) => !prev);
+                    } else {
+                      captionTrigger.toggleEnabled();
+                    }
+                  }}
+                  aria-pressed={captionsEnabled}
+                  title={captionsEnabled ? "Hide captions" : "Show captions"}
+                  className={`flex items-center justify-center transition-colors hover:text-white ${
+                    captionsEnabled ? "text-white" : "text-slate-500"
+                  } ${transportButtonWidth}`}
+                >
+                  <Captions size={controlIconSize} aria-hidden="true" />
+                </button>
+
+                {showCaptionMenu && hasMultipleCaptionTracks && (
+                  <div className="absolute bottom-full right-0 z-46 mb-2 min-w-40 rounded-lg bg-white py-1 shadow-lg">
+                    {captionTracks.map((track) => {
+                      const isSelected =
+                        captionsEnabled &&
+                        (captionLanguage === track.language || (!captionLanguage && track.default));
+                      return (
+                        <button
+                          key={track.id}
+                          type="button"
+                          onClick={() => {
+                            captionTrigger.setLanguage({ language: track.language });
+                            if (!captionsEnabled) captionTrigger.toggleEnabled();
+                            setShowCaptionMenu(false);
+                          }}
+                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-gray-100 ${
+                            isSelected ? "font-semibold text-gray-900" : "font-normal text-gray-700"
+                          }`}
+                        >
+                          <span className="w-4">
+                            {isSelected ? <Check size={14} aria-hidden="true" /> : null}
+                          </span>
+                          {track.label || track.language}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             ) : null}
 
             <div className="relative pointer-events-auto">
