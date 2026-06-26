@@ -332,6 +332,15 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     <div
       className={`${positioning} bottom-0 left-0 z-45 w-full ${containerPadding} pointer-events-none`}
     >
+      {/* Caption file picker — kept outside the record-only controls so "Import captions…"
+          works once a recording is loaded (when the audio-source row is no longer rendered). */}
+      <input
+        ref={captionFileInputRef}
+        type="file"
+        accept=".vtt,.srt,text/vtt,application/x-subrip"
+        className="sr-only"
+        onChange={handleCaptionFileChange}
+      />
       <div className={`flex items-center w-full ${rowSizing}`}>
         {recordMode && (
           <button
@@ -415,13 +424,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               accept="audio/*,.webm,.ogg,.opus,.mp3,.wav,.m4a,.mp4,.aac"
               className="sr-only"
               onChange={handleAudioFileChange}
-            />
-            <input
-              ref={captionFileInputRef}
-              type="file"
-              accept=".vtt,.srt,text/vtt,application/x-subrip"
-              className="sr-only"
-              onChange={handleCaptionFileChange}
             />
             {isCameraSupported ? (
               <button
