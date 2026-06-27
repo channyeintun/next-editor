@@ -3,8 +3,8 @@
 ## Tasks
 
 - [x] 1. Scaffold Vite + React + TS app in `tube/` with Tailwind v4 (bun)
-- [ ] 2. Add `src/types.ts` (Lesson) and `src/lib/lessons.ts` (typed fetch)
-- [ ] 3. Add `src/lib/links.ts` (buildPlayUrl, resolveThumb)
+- [x] 2. Add `src/types.ts` (Lesson) and `src/lib/lessons.ts` (typed fetch)
+- [x] 3. Add `src/lib/links.ts` (buildPlayUrl, resolveThumb)
 - [ ] 4. Build LessonCard, LessonGrid, Header, Footer components
 - [ ] 5. Wire App.tsx (Header + Grid + Footer, loading/empty/error states)
 - [ ] 6. Seed public/lessons.json with introduction lesson + copy .ne/.vtt files
