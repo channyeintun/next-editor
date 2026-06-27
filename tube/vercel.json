@@ -1,0 +1,14 @@
+{
+  "installCommand": "bun install",
+  "buildCommand": "bun run build",
+  "headers": [
+    {
+      "source": "/(.*)\\.ne",
+      "headers": [{ "key": "Access-Control-Allow-Origin", "value": "*" }]
+    },
+    {
+      "source": "/(.*)\\.vtt",
+      "headers": [{ "key": "Access-Control-Allow-Origin", "value": "*" }]
+    }
+  ]
+}
