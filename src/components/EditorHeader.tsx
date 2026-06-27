@@ -149,7 +149,7 @@ function PreviewHeaderButton() {
   );
 }
 
-function WorkspaceSettingsButton() {
+function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boolean }) {
   const [draftValue, setDraftValue] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
@@ -388,150 +388,154 @@ function WorkspaceSettingsButton() {
               role="menu"
               className="absolute right-0 top-full z-2147483647 mt-2 w-56 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
             >
-              <div
-                className="relative"
-                onMouseEnter={() => setIsStarterSubmenuOpen(true)}
-                onMouseLeave={() => setIsStarterSubmenuOpen(false)}
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  aria-haspopup="menu"
-                  aria-expanded={isStarterSubmenuOpen}
-                  onClick={() => setIsStarterSubmenuOpen((current) => !current)}
-                  className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
-                    isStarterSubmenuOpen
-                      ? "bg-slate-700 text-white"
-                      : "text-slate-200 hover:bg-slate-700 hover:text-white"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <LayoutTemplate size={14} aria-hidden="true" />
-                    Starter Template
-                  </span>
-                  <ChevronRight
-                    size={14}
-                    aria-hidden="true"
-                    className={isStarterSubmenuOpen ? "text-slate-300" : "text-slate-500"}
-                  />
-                </button>
-
-                {isStarterSubmenuOpen ? (
-                  // Flush against the parent (no horizontal gap) so the cursor can
-                  // travel into the flyout without crossing a dead zone that would
-                  // trip the wrapper's onMouseLeave and close it.
+              {showImportExport ? (
+                <>
                   <div
-                    role="menu"
-                    aria-label="Starter templates"
-                    className="absolute right-full top-0 z-2147483647 w-52 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
+                    className="relative"
+                    onMouseEnter={() => setIsStarterSubmenuOpen(true)}
+                    onMouseLeave={() => setIsStarterSubmenuOpen(false)}
                   >
-                    {LESSON_TYPE_OPTIONS.map((option) => {
-                      const isActive = option.value === lessonType;
+                    <button
+                      type="button"
+                      role="menuitem"
+                      aria-haspopup="menu"
+                      aria-expanded={isStarterSubmenuOpen}
+                      onClick={() => setIsStarterSubmenuOpen((current) => !current)}
+                      className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+                        isStarterSubmenuOpen
+                          ? "bg-slate-700 text-white"
+                          : "text-slate-200 hover:bg-slate-700 hover:text-white"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <LayoutTemplate size={14} aria-hidden="true" />
+                        Starter Template
+                      </span>
+                      <ChevronRight
+                        size={14}
+                        aria-hidden="true"
+                        className={isStarterSubmenuOpen ? "text-slate-300" : "text-slate-500"}
+                      />
+                    </button>
 
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={isActive}
-                          onClick={() => {
-                            void handleSelectLessonType(option.value);
-                          }}
-                          className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
-                            isActive
-                              ? "bg-slate-700 text-white"
-                              : "text-slate-200 hover:bg-slate-700 hover:text-white"
-                          }`}
-                        >
-                          <span>{option.label}</span>
-                          {isActive ? (
-                            <span className="rounded-full bg-slate-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-200">
-                              Active
-                            </span>
-                          ) : null}
-                        </button>
-                      );
-                    })}
+                    {isStarterSubmenuOpen ? (
+                      // Flush against the parent (no horizontal gap) so the cursor can
+                      // travel into the flyout without crossing a dead zone that would
+                      // trip the wrapper's onMouseLeave and close it.
+                      <div
+                        role="menu"
+                        aria-label="Starter templates"
+                        className="absolute right-full top-0 z-2147483647 w-52 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
+                      >
+                        {LESSON_TYPE_OPTIONS.map((option) => {
+                          const isActive = option.value === lessonType;
+
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={isActive}
+                              onClick={() => {
+                                void handleSelectLessonType(option.value);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+                                isActive
+                                  ? "bg-slate-700 text-white"
+                                  : "text-slate-200 hover:bg-slate-700 hover:text-white"
+                              }`}
+                            >
+                              <span>{option.label}</span>
+                              {isActive ? (
+                                <span className="rounded-full bg-slate-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-200">
+                                  Active
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
 
-              <div className="my-1 h-px bg-slate-700" />
+                  <div className="my-1 h-px bg-slate-700" />
 
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  void handleCreateNewEditor();
-                }}
-                className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-              >
-                <span className="flex items-center gap-2">
-                  <FilePlus2 size={14} aria-hidden="true" />
-                  New Editor
-                </span>
-              </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      void handleCreateNewEditor();
+                    }}
+                    className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FilePlus2 size={14} aria-hidden="true" />
+                      New Editor
+                    </span>
+                  </button>
 
-              <div className="my-1 h-px bg-slate-700" />
+                  <div className="my-1 h-px bg-slate-700" />
 
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  void handleImportRecording();
-                }}
-                className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-              >
-                <span className="flex items-center gap-2">
-                  <FileDown size={14} aria-hidden="true" />
-                  Import Recording (.ne)
-                </span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  void handleExportRecording();
-                }}
-                disabled={!currentRecording}
-                className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
-                  currentRecording
-                    ? "text-slate-200 hover:bg-slate-700 hover:text-white"
-                    : "cursor-not-allowed text-slate-500"
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <FileUp size={14} aria-hidden="true" />
-                  Export Recording (.ne)
-                </span>
-              </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      void handleImportRecording();
+                    }}
+                    className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileDown size={14} aria-hidden="true" />
+                      Import Recording (.ne)
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      void handleExportRecording();
+                    }}
+                    disabled={!currentRecording}
+                    className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+                      currentRecording
+                        ? "text-slate-200 hover:bg-slate-700 hover:text-white"
+                        : "cursor-not-allowed text-slate-500"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileUp size={14} aria-hidden="true" />
+                      Export Recording (.ne)
+                    </span>
+                  </button>
 
-              <div className="my-1 h-px bg-slate-700" />
+                  <div className="my-1 h-px bg-slate-700" />
 
-              {lessonRunsInWebContainer(lessonType) ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={handleEditEnvironment}
-                  className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-                >
-                  <span className="flex items-center gap-2">
-                    <Variable size={14} aria-hidden="true" />
-                    Edit Environment
-                  </span>
-                </button>
+                  {lessonRunsInWebContainer(lessonType) ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleEditEnvironment}
+                      className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Variable size={14} aria-hidden="true" />
+                        Edit Environment
+                      </span>
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={openImportDialog}
+                    className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileArchive size={14} aria-hidden="true" />
+                      Import Project (.zip)
+                    </span>
+                  </button>
+                </>
               ) : null}
-              <button
-                type="button"
-                role="menuitem"
-                onClick={openImportDialog}
-                className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-              >
-                <span className="flex items-center gap-2">
-                  <FileArchive size={14} aria-hidden="true" />
-                  Import Project (.zip)
-                </span>
-              </button>
               <button
                 type="button"
                 role="menuitem"
@@ -546,22 +550,26 @@ function WorkspaceSettingsButton() {
                 </span>
               </button>
 
-              <div className="my-1 h-px bg-slate-700" />
+              {showImportExport ? (
+                <>
+                  <div className="my-1 h-px bg-slate-700" />
 
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setIsMenuOpen(false);
-                  startTour({ force: true });
-                }}
-                className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-              >
-                <span className="flex items-center gap-2">
-                  <Compass size={14} aria-hidden="true" />
-                  Take a Tour
-                </span>
-              </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      startTour({ force: true });
+                    }}
+                    className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Compass size={14} aria-hidden="true" />
+                      Take a Tour
+                    </span>
+                  </button>
+                </>
+              ) : null}
             </div>
           </>
         ) : null}
@@ -644,7 +652,7 @@ function EditorHeader({ showImportExport }: EditorHeaderProps) {
         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
       </div>
       <div className="flex items-center gap-2">
-        {showImportExport && <WorkspaceSettingsButton />}
+        <WorkspaceSettingsButton showImportExport={showImportExport} />
         <div className="h-4 w-px bg-slate-700 mx-1" />
         <div className="flex items-center gap-2">
           {showImportExport ? <SlidesButton /> : null}
