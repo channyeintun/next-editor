@@ -164,6 +164,19 @@ export const selectResult = (c: ApiClientStoreContext): ApiClientResult | null =
 export const selectHistory = (c: ApiClientStoreContext): ApiClientHistoryEntry[] => c.history;
 export const selectRequestTab = (c: ApiClientStoreContext): ApiClientRequestTab => c.requestTab;
 
+/** Collapse the editable header rows into the enabled, non-empty header map that
+ *  is actually sent (and recorded). */
+export function buildHeaderRecord(headers: ApiClientHeader[]): Record<string, string> {
+  const record: Record<string, string> = {};
+  for (const header of headers) {
+    const key = header.key.trim();
+    if (header.enabled && key) {
+      record[key] = header.value;
+    }
+  }
+  return record;
+}
+
 /** Maps a recorded (flat) result back into the store's nested result shape, used
  *  when replaying a recording's API client interactions. */
 export function recordedResultToStoreResult(recorded: ApiClientRecordedResult): ApiClientResult {

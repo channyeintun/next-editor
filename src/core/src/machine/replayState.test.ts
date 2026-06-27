@@ -196,6 +196,38 @@ describe("replayState", () => {
     });
   });
 
+  it("replays the in-progress request draft (body) before it is sent", () => {
+    const previewEvents: PreviewEvent[] = [
+      { type: "api_client_mode", timestamp: 0, size: "medium", activeMode: "api" },
+      {
+        type: "api_client_draft",
+        timestamp: 100,
+        size: "medium",
+        apiClientRequest: {
+          method: "POST",
+          path: "/api/todos",
+          headers: { "content-type": "application/json" },
+          body: '{"title":"Ship it"}',
+        },
+      },
+    ];
+
+    const atDraft = getPreviewReplayResult({
+      previewEvents,
+      currentTime: 150,
+      lastAppliedIndex: -1,
+      lastAppliedState: undefined,
+      isSeeking: true,
+    });
+
+    const api = atDraft.appliedStates[0].apiClientState;
+    expect(atDraft.appliedStates[0].activeMode).toBe("api");
+    expect(api?.request?.body).toBe('{"title":"Ship it"}');
+    expect(api?.request?.method).toBe("POST");
+    // No response yet — just the composed draft.
+    expect(api?.result).toBeUndefined();
+  });
+
   it("carries the request tab (headers/body) through replay and seeking", () => {
     const previewEvents: PreviewEvent[] = [
       { type: "api_client_mode", timestamp: 0, size: "medium", activeMode: "api" },

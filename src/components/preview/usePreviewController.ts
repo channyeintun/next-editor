@@ -42,6 +42,7 @@ import {
 } from "./previewIframeUtils";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
 import {
+  buildHeaderRecord,
   recordedResultToStoreResult,
   storeResultToRecorded,
   type ApiClientHeader,
@@ -434,6 +435,58 @@ export function usePreviewController(): PreviewController {
       handlePreviewEventRef.current(event);
     }
   };
+
+  const emitPreviewEventRef = useRef(emitPreviewEvent);
+  emitPreviewEventRef.current = emitPreviewEvent;
+
+  // Record the in-progress request draft (method/path/headers/body) as it is
+  // edited — debounced — so replay shows the request being composed (e.g. the
+  // body on the Body tab) rather than only the values captured at Send.
+  const draftSignatureRef = useRef<string | null>(null);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const subscription = apiClientStore.subscribe((snapshot) => {
+      const context = snapshot.context;
+      const signature = JSON.stringify({
+        method: context.method,
+        path: context.path,
+        headers: context.headers,
+        body: context.body,
+      });
+
+      if (signature === draftSignatureRef.current) {
+        return;
+      }
+      draftSignatureRef.current = signature;
+
+      if (!isRecordingRef.current) {
+        return;
+      }
+
+      if (timer) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(() => {
+        const current = apiClientStore.getSnapshot().context;
+        emitPreviewEventRef.current("api_client_draft", {
+          apiClientRequest: {
+            method: current.method,
+            path: current.path,
+            headers: buildHeaderRecord(current.headers),
+            body: current.method === "GET" ? undefined : current.body || undefined,
+          },
+        });
+      }, 250);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [apiClientStore]);
 
   usePreviewMessageBridge({
     iframeRef,

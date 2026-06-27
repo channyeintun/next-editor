@@ -45,6 +45,7 @@ function mergePreviewEventState(
   // response implies API mode even if the explicit mode-switch event wasn't
   // captured (e.g. the user was already in API mode when recording started).
   const impliesApiMode =
+    previewEvent.type === "api_client_draft" ||
     previewEvent.type === "api_client_request" ||
     previewEvent.type === "api_client_response" ||
     previewEvent.type === "api_client_request_tab" ||
@@ -52,7 +53,14 @@ function mergePreviewEventState(
   const resolvedActiveMode = impliesApiMode ? "api" : nextActiveMode;
 
   let nextApiClientState = previousState?.apiClientState;
-  if (previewEvent.type === "api_client_request") {
+  if (previewEvent.type === "api_client_draft" && previewEvent.apiClientRequest) {
+    // The request being composed (method/path/headers/body), recorded as it is
+    // edited so replay shows the body/headers before Send — not just at Send.
+    nextApiClientState = {
+      ...previousState?.apiClientState,
+      request: previewEvent.apiClientRequest,
+    };
+  } else if (previewEvent.type === "api_client_request") {
     nextApiClientState = {
       request: previewEvent.apiClientRequest,
       sending: true,

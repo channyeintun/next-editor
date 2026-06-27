@@ -206,6 +206,7 @@ export interface PreviewEvent {
     | "preview_refresh"
     | "preview_resize"
     | "api_client_mode"
+    | "api_client_draft"
     | "api_client_request"
     | "api_client_response"
     | "api_client_request_tab"

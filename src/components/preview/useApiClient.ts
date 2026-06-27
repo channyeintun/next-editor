@@ -5,7 +5,7 @@ import {
   type ApiClientResultPayload,
 } from "../../utils/apiClientBridge";
 import type { ApiClientRecordedRequest, ApiClientRecordedResult } from "../../types/slides";
-import { recordedResultToStoreResult } from "../../stores/apiClientStore";
+import { buildHeaderRecord, recordedResultToStoreResult } from "../../stores/apiClientStore";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -90,12 +90,7 @@ export function useApiClient({
     }
 
     const id = generateRequestId();
-    const headerRecord: Record<string, string> = {};
-    for (const header of headers) {
-      if (header.enabled && header.key.trim()) {
-        headerRecord[header.key.trim()] = header.value;
-      }
-    }
+    const headerRecord = buildHeaderRecord(headers);
 
     const requestBody = method === "GET" ? undefined : body || undefined;
 
