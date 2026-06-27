@@ -47,7 +47,7 @@ interface UsePreviewPlaybackRegistrationOptions {
   rafRef: RefObject<number | null>;
   replayContainerRef: RefObject<HTMLDivElement | null>;
   onActiveModeChange?: (mode: PreviewActiveMode) => void;
-  onApiClientStateChange?: (state: ApiClientReplayState | undefined) => void;
+  onApiClientStateChange?: (state: ApiClientReplayState) => void;
 }
 
 function getIframeDocumentAndWindow(iframe: HTMLIFrameElement): {
@@ -270,7 +270,7 @@ export function usePreviewPlaybackRegistration({
         onActiveModeChange?.(previewState.activeMode);
       }
 
-      if (previewState.apiClientState !== undefined || previewState.activeMode === "browser") {
+      if (previewState.apiClientState !== undefined) {
         onApiClientStateChange?.(previewState.apiClientState);
       }
 

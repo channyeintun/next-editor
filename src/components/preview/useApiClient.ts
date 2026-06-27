@@ -142,8 +142,14 @@ export function useApiClient({
           error: { error: "Request timed out", durationMs: REQUEST_TIMEOUT_MS },
         },
       });
+      // Record the timeout too, so replay doesn't show a request stuck "sending".
+      onResponseReceived?.({
+        ok: false,
+        error: "Request timed out",
+        durationMs: REQUEST_TIMEOUT_MS,
+      });
     }, REQUEST_TIMEOUT_MS);
-  }, [clearPending, iframeRef, onRequestSent, runtimePreviewUrl, store]);
+  }, [clearPending, iframeRef, onRequestSent, onResponseReceived, runtimePreviewUrl, store]);
 
   return { send, handleResponse };
 }

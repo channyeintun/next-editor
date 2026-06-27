@@ -39,6 +39,7 @@ import {
   type PreviewScrollPosition,
 } from "./previewIframeUtils";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
+import type { ApiClientResult, HttpMethod } from "../../stores/apiClientStore";
 import { hasRrwebPreviewEvents } from "./rrwebPreview";
 import { useApiClient } from "./useApiClient";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
@@ -91,8 +92,6 @@ export interface PreviewController {
   handleTransitionComplete: () => void;
   setActiveMode: (mode: PreviewActiveMode) => void;
   sendApiClientRequest: () => void;
-  emitApiClientRequest: (request: ApiClientRecordedRequest) => void;
-  emitApiClientResponse: (result: ApiClientRecordedResult) => void;
 }
 
 /** Pointer coordinates from a mouse or touch event (React or native). */
@@ -290,6 +289,10 @@ export function usePreviewController(): PreviewController {
   const apiClientStore = useApiClientStoreInstance();
   const apiClientStoreRef = useRef(apiClientStore);
   apiClientStoreRef.current = apiClientStore;
+  // Replay re-applies preview state at many timeline points and carries API state
+  // forward across unrelated events, so dedupe by content to apply each distinct
+  // recorded state exactly once.
+  const lastAppliedApiSignatureRef = useRef<string | null>(null);
 
   const apiClient = useApiClient({
     iframeRef,
@@ -628,28 +631,38 @@ export function usePreviewController(): PreviewController {
     replayContainerRef,
     onActiveModeChange: setActiveMode,
     onApiClientStateChange: (apiState) => {
-      const store = apiClientStoreRef.current;
-      if (!store) return;
-      if (!apiState) {
-        store.trigger.reset();
+      const signature = JSON.stringify(apiState);
+      if (signature === lastAppliedApiSignatureRef.current) {
         return;
       }
-      if (apiState.request) {
-        store.trigger.setMethod({
-          method: apiState.request.method as import("../../stores/apiClientStore").HttpMethod,
-        });
-        store.trigger.setPath({ path: apiState.request.path });
-        store.trigger.setBody({ body: apiState.request.body ?? "" });
-      }
-      if (apiState.sending) {
-        store.trigger.markSending();
-      }
-      if (apiState.result) {
-        const result = apiState.result.ok
-          ? { ok: true as const, response: apiState.result }
-          : { ok: false as const, error: apiState.result };
-        store.trigger.receiveResult({ id: "replay", result });
-      }
+      lastAppliedApiSignatureRef.current = signature;
+
+      const recordedResult = apiState.result;
+      const result: ApiClientResult | null = recordedResult
+        ? recordedResult.ok
+          ? {
+              ok: true,
+              response: {
+                status: recordedResult.status,
+                statusText: recordedResult.statusText,
+                headers: recordedResult.headers,
+                body: recordedResult.body,
+                durationMs: recordedResult.durationMs,
+              },
+            }
+          : {
+              ok: false,
+              error: { error: recordedResult.error, durationMs: recordedResult.durationMs },
+            }
+        : null;
+
+      apiClientStoreRef.current.trigger.applyReplayState({
+        method: (apiState.request?.method ?? "GET") as HttpMethod,
+        path: apiState.request?.path ?? "/",
+        body: apiState.request?.body ?? "",
+        sending: apiState.sending ?? false,
+        result,
+      });
     },
   });
 
@@ -1120,11 +1133,5 @@ export function usePreviewController(): PreviewController {
       emitPreviewEvent("api_client_mode", { activeMode: mode });
     },
     sendApiClientRequest: apiClient.send,
-    emitApiClientRequest: (request: ApiClientRecordedRequest) => {
-      emitPreviewEvent("api_client_request", { apiClientRequest: request });
-    },
-    emitApiClientResponse: (result: ApiClientRecordedResult) => {
-      emitPreviewEvent("api_client_response", { apiClientResult: result });
-    },
   };
 }

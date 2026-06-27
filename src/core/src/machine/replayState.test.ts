@@ -125,6 +125,92 @@ describe("replayState", () => {
     });
   });
 
+  it("carries API client request/response state through replay and seeking", () => {
+    const previewEvents: PreviewEvent[] = [
+      { type: "api_client_mode", timestamp: 0, size: "medium", activeMode: "api" },
+      {
+        type: "api_client_request",
+        timestamp: 100,
+        size: "medium",
+        apiClientRequest: { method: "POST", path: "/api/todos", headers: {}, body: '{"x":1}' },
+      },
+      {
+        type: "api_client_response",
+        timestamp: 200,
+        size: "medium",
+        apiClientResult: {
+          ok: true,
+          status: 201,
+          statusText: "Created",
+          headers: [["content-type", "application/json"]],
+          body: '{"id":1}',
+          durationMs: 12,
+        },
+      },
+      { type: "preview_scroll", timestamp: 300, size: "medium", scrollTop: 40 },
+    ];
+
+    // Seek between request and response: request present, still sending.
+    const mid = getPreviewReplayResult({
+      previewEvents,
+      currentTime: 150,
+      lastAppliedIndex: -1,
+      lastAppliedState: undefined,
+      isSeeking: true,
+    });
+    expect(mid.appliedStates[0].activeMode).toBe("api");
+    expect(mid.appliedStates[0].apiClientState).toEqual({
+      request: { method: "POST", path: "/api/todos", headers: {}, body: '{"x":1}' },
+      sending: true,
+    });
+
+    // Seek past the unrelated scroll event: API state is carried forward intact
+    // (the response is retained, not dropped or duplicated).
+    const afterScroll = getPreviewReplayResult({
+      previewEvents,
+      currentTime: 350,
+      lastAppliedIndex: -1,
+      lastAppliedState: undefined,
+      isSeeking: true,
+    });
+    expect(afterScroll.appliedStates[0].apiClientState).toEqual({
+      request: { method: "POST", path: "/api/todos", headers: {}, body: '{"x":1}' },
+      sending: false,
+      result: {
+        ok: true,
+        status: 201,
+        statusText: "Created",
+        headers: [["content-type", "application/json"]],
+        body: '{"id":1}',
+        durationMs: 12,
+      },
+    });
+  });
+
+  it("clears API client state when replay switches back to browser mode", () => {
+    const previewEvents: PreviewEvent[] = [
+      {
+        type: "api_client_request",
+        timestamp: 0,
+        size: "medium",
+        activeMode: "api",
+        apiClientRequest: { method: "GET", path: "/api/time", headers: {}, body: undefined },
+      },
+      { type: "api_client_mode", timestamp: 100, size: "medium", activeMode: "browser" },
+    ];
+
+    const afterSwitch = getPreviewReplayResult({
+      previewEvents,
+      currentTime: 150,
+      lastAppliedIndex: -1,
+      lastAppliedState: undefined,
+      isSeeking: true,
+    });
+
+    expect(afterSwitch.appliedStates[0].activeMode).toBe("browser");
+    expect(afterSwitch.appliedStates[0].apiClientState).toBeUndefined();
+  });
+
   it("skips equal workspace snapshots but reapplies when seeking backward", () => {
     const firstSnapshot = createWorkspaceSnapshot("first");
     const secondSnapshot = createWorkspaceSnapshot("second");
