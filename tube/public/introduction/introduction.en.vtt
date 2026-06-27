@@ -1,0 +1,127 @@
+WEBVTT
+
+00:03.150 --> 00:07.501
+Hello everyone welcome to nexteditor.dev Today I would
+
+00:07.501 --> 00:12.163
+like to show you a project that I implemented like a social
+
+00:12.163 --> 00:17.040
+newsfeed application with infinite scrolling.
+
+00:17.040 --> 00:20.675
+Before looking at the implementation, let me quickly walk
+
+00:20.675 --> 00:24.310
+through the package dot JSON file and introduce the tech
+
+00:24.310 --> 00:27.940
+stack used in this project.
+
+00:29.230 --> 00:33.946
+This project is built with React and TypeScript. We use
+
+00:33.946 --> 00:38.745
+Vite for development and built performance for data fetching and
+
+00:38.745 --> 00:43.600
+state management, we use TanStack React Query.
+
+00:43.600 --> 00:48.903
+For infinite scrolling and optimized list rendering we use
+
+00:48.903 --> 00:54.115
+TanStack React Virtual and axios is for API communication.
+
+00:54.115 --> 00:58.490
+Now the project is already rendering.
+
+00:58.490 --> 01:06.050
+So uh, I will minimize the console and expand the preview.
+
+01:06.050 --> 01:12.230
+So you can open the preview UI from this button.
+
+01:12.680 --> 01:17.691
+So we can focus on the application UI. As you can see, this
+
+01:17.691 --> 01:22.703
+is social newsfeed interface with infinite scrolling. Now
+
+01:22.703 --> 01:26.730
+let's move to the implementation.
+
+01:26.730 --> 01:32.750
+First, let's open App.tsx file.
+
+01:32.750 --> 01:38.150
+App.tsx is the main entry point of the application.
+
+01:38.150 --> 01:43.520
+Here we call the useTrendingStatuses custom hook to fetch
+
+01:43.520 --> 01:48.440
+trending statuses and manage timeline data.
+
+01:48.440 --> 01:54.087
+Then we pass the return data into TrendingStatusList
+
+01:54.087 --> 01:59.255
+to display the newsfeed. Next, let's open the use
+
+01:59.255 --> 02:03.170
+trending statuses hook.
+
+02:04.500 --> 02:09.980
+OK this custom hook handle data fetching and pagination?
+
+02:09.980 --> 02:16.240
+Here we use use infinite query from TanStack React Query.
+
+02:16.240 --> 02:21.980
+To load data page by page and support infinite scrolling.
+
+02:21.980 --> 02:25.810
+We also manage loading and error.
+
+02:25.810 --> 02:28.580
+And pagination states.
+
+02:28.580 --> 02:33.410
+Now let's open the trending status list component. This
+
+02:33.410 --> 02:38.740
+component is responsible for rendering the newsfeed.
+
+02:38.740 --> 02:43.526
+To improve performance we use tanstack react virtual so only
+
+02:43.526 --> 02:48.180
+visible items are rendered on the screen.
+
+02:48.180 --> 02:54.540
+When user's scrolling, more data is loaded automatically.
+
+02:54.540 --> 03:01.010
+And for this card design we separate the component
+
+03:01.010 --> 03:07.430
+Post Card, so let's see the PostCard component.
+
+03:07.430 --> 03:11.925
+This uh this component is responsible for rendering each
+
+03:11.925 --> 03:16.657
+individual post design like this. Separating components and
+
+03:16.657 --> 03:22.680
+hook helps keep the project clean and maintainable.
+
+03:23.340 --> 03:28.107
+OK, that's a brief overview of the implementation in our
+
+03:28.107 --> 03:30.800
+NextEditor.dev.
+
+03:30.800 --> 03:34.160
+Thank you for watching.
