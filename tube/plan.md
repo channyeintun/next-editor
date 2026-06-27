@@ -26,8 +26,8 @@ main app for WebContainer) covers `/learn` automatically.
 - Fast gallery of recorded lessons, shipped as part of the existing app at `/learn`.
 - Lessons authored manually: drop a folder into the main app's `public/lessons/`,
   add an entry to `public/lessons.json`. No CMS, no database.
-- Cards open the _real_ editor embedded in an iframe (read-only playback by
-  default); the gallery itself never parses or plays `.ne`.
+- Cards open the _real_ editor component directly (read-only playback by default);
+  the gallery itself never parses or plays `.ne`.
 - Recording stays exclusively on `/code` (no record UI in the gallery).
 
 **Non-goals (v1)**
@@ -143,11 +143,13 @@ Fetched at runtime (so editing the JSON needs no rebuild). Keep it a flat list.
 }
 ```
 
-Runtime URL construction (in `tube/src/lib/links.ts`):
+Runtime paths:
 
-- thumbnail `src` = `/<thumbnail>` (same-origin).
-- iframe `src` = `/code?url=${encodeURIComponent("/" + lesson.ne)}&readOnly=true&deferRuntimeAutostart=true`
-  — a plain same-origin path; the editor fetches the `.ne` from this origin.
+- thumbnail `src` = `/<thumbnail>` (same-origin; `resolveThumb` in
+  `tube/src/lib/links.ts`).
+- the recording is passed to the editor as a prop:
+  `<Editor recordingUrl={"/" + lesson.ne} />` — a same-origin path fetched from this
+  origin. No `?url=` query param.
 
 ---
 
@@ -159,12 +161,13 @@ own**:
 
 - React 19 + TypeScript + Tailwind v4 utility classes (compiled by the main app;
   `src/index.css` adds `@source "../tube/src"` so Tailwind scans the package).
-- **lucide-react** for icons (a peer dep, already in the main app).
+- **lucide-react** for icons + **react-router** `Link`/hooks (peer deps, already in
+  the main app).
 - Resolution: tsconfig `paths` + Vite `resolve.alias` map `@next-editor/tube` →
-  `tube/src/index.tsx`.
+  `tube/src/index.tsx`, and `@app/*` → the main app's `src/*` (for the `Editor`).
 
 No `.ne` decoding deps, no WebContainer, no xstate in the package itself — those run
-inside the embedded `/code` iframe.
+inside the lazy-loaded `Editor` it renders.
 
 ---
 
