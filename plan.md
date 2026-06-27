@@ -1,130 +1,135 @@
-# Plan: First-run product tour with driver.js
+# Plan: driver.js-style landing page sections
 
-Add a guided product tour that highlights the four primary actions of the editor, shown
-automatically on a user's first visit to `/code` and replayable on demand.
+Add four new sections to the landing page, modeled on the information structure of
+https://driverjs.com/. Everything lands in **`src/components/LandingPage.tsx`** (single-file
+component today) between the existing feature-cards grid and the `<footer>`.
 
-Tour targets, in order:
+New sections, in order:
 
-1. **Start recording** button — `src/components/MediaControls.tsx`
-2. **Settings** button (header) — `src/components/EditorHeader.tsx` (`WorkspaceSettingsButton`)
-3. **Preview toggle** button (header) — `src/components/EditorHeader.tsx` (`PreviewHeaderButton`)
-4. **Docked runner toggle** button — `src/components/TerminalPanel.tsx` (dock collapse/expand)
+1. **"Works with any stack" animation section** — the analogue of driver.js's _"Works with any
+   framework or library, or even with vanilla JavaScript"_ animated row.
+2. **Use Cases** — a grid of concrete scenarios Next Editor is good for.
+3. **MIT Licensed / Free for everyone, forever** — license + pricing reassurance band.
+4. **"Star on GitHub"** CTA with a live star count, plus a GitHub-star button.
 
-## Package manager
+## Constraints discovered in the codebase (do not skip)
 
-This repo uses **bun** (`bun.lock`). Use `bun add`, never npm/yarn/pnpm.
+### No new dependencies needed
 
-```bash
-bun add driver.js
-```
+- Icons: use **`lucide-react`** (already imported in `LandingPage.tsx`: `Maximize`, `Play`, etc.).
+  The GitHub mark already exists as inline SVG in `src/components/Navbar.tsx:27` — copy that path,
+  do **not** add an icon package.
+- Animation: there is **no `framer-motion`** in this project. Scroll-reveal is done with a plain
+  `IntersectionObserver` — see the `featuresRef` / `featuresInView` pattern in
+  `LandingPage.tsx:26-40`. Reuse that pattern (or a small generic hook) for any new reveal.
+  CSS keyframe animations (`animate-[fade-up_…]`, `animate-[draw_…]`) are defined in `src/index.css`
+  and already used inline — prefer these over JS animation.
 
-`driver.js` is ~5KB, zero-dependency, and framework-agnostic. Import its CSS once.
+### Design tokens (already defined in `src/index.css`, lines 36-43) — use them, don't hardcode
 
-## Hard constraints discovered in the codebase (do not skip)
+- Fonts: `font-machina` (headings, uppercase display), `font-telegraf` (body).
+- Colors: `pinata-purple #6d57ff`, `pinata-cyan #4de5d6`, `pinata-green #3ace8c`,
+  `pinata-orange #ff8f33`, `pinata-yellow #ffd255`. Page bg is `#11141c`; cards use
+  `bg-[#181d24]/90 border border-slate-800 rounded-4xl`. Match this exactly so the new sections
+  read as part of the existing page.
 
-### Constraint A — defensive step building (all four targets normally exist)
+### GitHub repo
 
-Every lesson type runs in a WebContainer — `WEB_CONTAINER_LESSON_TYPES` in
-`src/types/workspace.ts` includes `html-css` along with react/vue/solid/svelte/htmx-express/express-ts.
-So `TerminalPanel` (and its runner-toggle button) is mounted for the default `html-css` workspace too,
-and all four `data-tour` targets are present on a normal first visit. Expect **4 steps**.
+- The repo is **`channyeintun/next-editor`** (`src/components/Navbar.tsx:21`). Use this for both the
+  star link and the star-count API call.
+- License is **MIT**, `Copyright (c) 2026 Chan Nyein Tun` (`LICENSE`). The footer already says
+  `© 2026 Next Editor`.
 
-Still build the step list defensively at runtime: query each `data-tour` selector and drop any step
-whose element is `null`, so the tour degrades gracefully if a target is genuinely absent (e.g. a
-`readOnly` embed hides the record controls, or markup changes later). Do not hand driver.js a fixed
-array that assumes every element is on screen — a missing target makes driver.js center a popover with
-no highlight.
+### Templates / stacks to feature
 
-### Constraint B — first-visit gate + replay
+The "works with any stack" section should mirror the real starter templates (from the README and the
+editor header): **HTML/CSS, React, Vue, Solid, Svelte, HTMX + Express, Node/Express (TS)**.
+`WEB_CONTAINER_LESSON_TYPES` lives in `src/types/workspace.ts` if an authoritative list is wanted.
 
-- Show the tour automatically only the first time, gated by a persisted flag.
-- For the persisted "seen" flag, a single `localStorage` key (e.g. `next-editor.tour.v1.seen`)
-  read/written directly is acceptable here — this is not reactive shared state, so it does **not**
-  need an `@xstate/store-react` store. (Project convention discourages _new_ localStorage+CustomEvent
-  _plumbing_ for shared/reactive state; a one-shot boolean flag is fine.)
-- Provide a manual replay entry point: add a **"Take a tour"** menu item to the settings dropdown
-  in `EditorHeader.tsx` (`WorkspaceSettingsButton`), styled like the existing `role="menuitem"`
-  buttons, that calls the tour's `start()` and ignores the seen-flag.
+---
 
-## Implementation steps
+## Section 1 — "Works with any stack" animated row
 
-### 1. Add stable hooks on the four targets
+driver.js shows a sentence with the framework name cycling. Our version:
 
-Add a `data-tour="<id>"` attribute to each target so the tour selects by a stable hook rather than
-brittle class chains. Keep existing `aria-*`/`title` attributes intact.
+> **"Record lessons for any stack — React, Vue, Solid, Svelte, HTMX, or plain HTML/CSS."**
 
-- `MediaControls.tsx` — the record `<button>` (around line 346, the one with title
-  `Start Recording`/`Stop Recording`/`New Recording`): add `data-tour="record"`.
-- `EditorHeader.tsx` — `WorkspaceSettingsButton`'s `<button>` (the `Settings` icon, ~line 368):
-  add `data-tour="settings"`.
-- `EditorHeader.tsx` — `PreviewHeaderButton`'s `<button>` (~line 128): add `data-tour="preview"`.
-- `TerminalPanel.tsx` — the dock collapse/expand `<button>` (~line 528, aria-label
-  "Expand/Collapse runtime dock"): add `data-tour="runner"`.
+Implementation options (pick the simpler one):
 
-### 2. Create the tour driver module
+- **Cycling word** (closest to driver.js): a single highlighted slot that swaps the framework name
+  on an interval with a short fade/slide. Drive it with `useState` + `setInterval` cycling an array
+  of names; apply the existing `animate-[fade-up_…]` keyframe on each change via a `key` bump.
+  Respect `prefers-reduced-motion` (the page already uses `motion-reduce:` utilities — mirror that).
+- **Logo strip** (simpler, robust): a centered row of framework name pills / inline SVG logos that
+  fade up in sequence when scrolled into view (`IntersectionObserver`, staggered with
+  `[animation-delay]`). No external logo assets — render the names as styled pills using the pinata
+  colors, or small inline SVGs if desired.
 
-New file: `src/components/tour/productTour.ts` (plain module, not a component).
+Recommended: cycling word for the headline + a static pill row beneath it.
 
-Responsibilities:
+Heading style: `font-machina`, uppercase, large; body `font-telegraf text-slate-400`.
 
-- Lazy-create a `driver({...})` instance from `driver.js`.
-- Export `buildTourSteps()` that returns only the steps whose `document.querySelector('[data-tour="..."]')`
-  resolves to an element, in the fixed order above.
-- Export `startTour({ force }: { force?: boolean })`:
-  - If `!force` and the seen-flag is already set, return early.
-  - Build steps; if zero steps, return.
-  - Drive the tour; on completion/close, set the seen-flag.
-- Export `hasSeenTour()` / `markTourSeen()` helpers over the `localStorage` key.
+## Section 2 — Use Cases
 
-Step copy (concise, one sentence each):
+A responsive grid (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8`) of cards reusing the existing
+card shell (`bg-[#181d24]/90 border border-slate-800 p-8 rounded-4xl`). Each card: a colored
+lucide icon tile (same `rounded-2xl size-12` treatment as the numbered feature cards at
+`LandingPage.tsx:351-356`, but with an icon instead of a number), a `font-machina` title, and a
+`text-slate-400` description.
 
-- record: "Click here to start (or stop) recording your coding session."
-- settings: "Open settings to switch starter templates, manage env vars, and import/export."
-- preview: "Toggle the live preview panel to see your project render as you type."
-- runner: "Toggle the runner dock here to show or hide the terminal and dev-server output."
+Suggested use cases (6 cards):
 
-driver.js config: `showProgress: true`, `allowClose: true`, `overlayOpacity: ~0.6`,
-`stagePadding`/`stageRadius` small for the icon buttons, `popoverClass` for theme matching (optional).
+1. **Interactive tutorials** — turn a real coding session into a step-through lesson.
+2. **Course & workshop content** — build replayable lessons learners explore in the browser.
+3. **Documentation & guides** — embed a live `/code?url=…` recording instead of static GIFs.
+4. **Onboarding** — walk new teammates through a codebase change as it happened.
+5. **Conference talks & demos** — present with synced slides (reveal.js) and narration.
+6. **Async code reviews / bug repros** — record the exact edits and runtime state, share a link.
 
-### 3. Auto-start on first visit
+Pull copy from the README "Overview"/"Current Capabilities" so claims stay accurate (slides, audio,
+captions, `.ne` sharing, WebContainer runtime). Cycle through the five pinata colors for icon tiles.
 
-In `EditorLayout` (`src/components/Editor.tsx`), add a `useEffect` that:
+## Section 3 — MIT Licensed / Free for everyone, forever
 
-- Runs once after mount, **after** `urlLoading` is false (don't fire while the loading spinner is up).
-- Defers one frame (e.g. `requestAnimationFrame` or a short `setTimeout`) so header/controls have
-  painted and the `data-tour` targets exist.
-- Calls `startTour({ force: false })`.
+A centered band (no card, or one wide highlighted card) echoing driver.js's reassurance section:
 
-Guard against React 19 StrictMode double-invoke (a ref flag) so the tour isn't started twice in dev.
+- Big `font-machina` headline: **"Free for everyone, forever"**.
+- Sub-line: **"MIT Licensed."** with a short sentence: open source, no account required, self-hostable
+  (`SELF_HOSTING.md` exists — can link it or the GitHub repo).
+- Optional small badges: `MIT`, `Open Source`, `No sign-up` rendered as pinata-colored pills.
+- Keep it visually distinct: e.g. a subtle radial-gradient blob like the hero
+  (`LandingPage.tsx:98-102`) or a `pinata-purple`/`pinata-cyan` accent border.
 
-### 4. Manual replay entry in settings menu
+## Section 4 — "Star on GitHub" CTA + live star count
 
-In `EditorHeader.tsx` `WorkspaceSettingsButton`, add a `role="menuitem"` button (with a suitable
-lucide icon, e.g. `Compass` or `HelpCircle`) labeled **"Take a tour"** that does
-`setIsMenuOpen(false)` then `startTour({ force: true })`. Place it near "New Editor" with the existing
-divider styling.
+- A prominent **"Star on GitHub"** button linking to `https://github.com/channyeintun/next-editor`
+  (`target="_blank" rel="noopener noreferrer"`). Style like the hero CTA
+  (`LandingPage.tsx:154-159`: `rounded-full bg-slate-950 text-white … hover:scale-105`) but include
+  the inline GitHub mark + a star (`Star` from lucide-react) and the count.
+- **Live star count**: fetch on mount.
+  - Endpoint: `https://api.github.com/repos/channyeintun/next-editor` → `stargazers_count`.
+  - Use `useEffect` + `fetch`, store in state, and **render nothing (or just the button without a
+    number) until loaded**. The GitHub unauthenticated API is rate-limited (60 req/hr/IP) and may
+    fail — wrap in try/catch and fall back gracefully (hide the number; never block the button).
+  - Format large numbers (e.g. `1.2k`) with a tiny helper.
+  - For a one-off page fetch, local `useState` in `LandingPage` is fine (no new global store).
 
-### 5. Theming
+Place this CTA last, just above the `<footer>`. Optionally also surface the star count on the existing
+Navbar GitHub button (`src/components/Navbar.tsx:20-34`) — note it but keep scope tight.
 
-Import `driver.js/dist/driver.css` once (e.g. at the top of `productTour.ts` or in `App.css`/entry).
-Optionally add a small dark-theme override (`.driver-popover` background `#151821`, slate text/borders)
-to match the editor chrome, mirroring the palette used in `EditorHeader.tsx`
-(`bg-[#151821]`, `border-slate-700`, `text-slate-200`).
+---
 
-## Verification
+## Verification (per project memory — do NOT use the preview browser)
 
-- `bunx tsc --noEmit` (or the project's typecheck) passes.
-- Default `html-css` workspace: tour runs with all **4** steps (record, settings, preview, runner),
-  each highlighting a real element, no console error.
-- `readOnly` embed (record controls hidden): tour gracefully drops the missing step instead of
-  pointing at nothing.
-- Reload after completing the tour once: it does **not** auto-start again.
-- "Take a tour" always restarts it regardless of the seen-flag.
-- Per project convention, do **not** use Claude's preview browser to verify UI — rely on typecheck +
-  the user eyeballing it.
+- `bunx tsc --noEmit` (or the project's typecheck script) must pass — this is the primary gate.
+- Run the test suite with **`npx vp test run`** (per memory; not bare vitest) if any logic is added.
+- Use **bun** for any dependency work (`bun add …`) — but this plan needs **no new deps**.
+- Let the user eyeball the UI in their own browser; do not launch Claude's preview/verify flow for
+  this project.
 
-## Out of scope
+## Out of scope / notes
 
-- No backend/persistence beyond the single localStorage flag.
-- No analytics on tour completion.
-- No mobile-specific tour (the editor route is desktop-oriented).
+- Don't restructure the hero or the existing 3 feature cards — only append new sections.
+- Keep mobile in mind: the page already guards a heavy iframe behind `isMobileBrowser()`; the new
+  sections are static/light and need no such guard, but verify the grids collapse to one column.
+- If the cycling-word animation feels risky, ship the static pill row first; it's the safe default.
