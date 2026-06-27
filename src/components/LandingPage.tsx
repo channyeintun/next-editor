@@ -492,10 +492,10 @@ const LandingPage = () => {
         </div>
         <div className="max-w-4xl mx-auto">
           <h2 className="text-3xl md:text-5xl font-machina uppercase tracking-tight mb-6">
-            Works with{" "}
+            <span className="block">Works with</span>
             <span
               key={frameworkIndex}
-              className="inline-block text-pinata-cyan animate-[fade-up_0.4s_cubic-bezier(0.22,1,0.36,1)_forwards] motion-reduce:animate-none"
+              className="block text-pinata-cyan animate-[fade-up_0.4s_cubic-bezier(0.22,1,0.36,1)_forwards] motion-reduce:animate-none"
               style={{ color: FRAMEWORK_COLORS[FRAMEWORKS[frameworkIndex]] }}
             >
               {FRAMEWORKS[frameworkIndex]}
