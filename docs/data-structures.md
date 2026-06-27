@@ -19,6 +19,8 @@ classDiagram
         +workspaceEvents?: WorkspaceRecordingEvent[]
         +runtimeEvents?: RuntimeRecordingEvent[]
         +cursorEvents?: CursorRecordingEvent[]
+        +captions?: CaptionTrack[]
+        +captionFiles?: string[]
         +slides?: Slide[]
         +audioBlob?: Blob | AudioPlaceholder
         +audioSource?: RecordingAudioSource
@@ -50,6 +52,8 @@ interface Recording {
   workspaceEvents?: WorkspaceRecordingEvent[];
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];
+  captions?: CaptionTrack[]; // parsed subtitle tracks carried inline
+  captionFiles?: string[]; // sibling .vtt/.srt filenames a hosted .ne declares
   slides?: Slide[];
   audioBlob?: Blob | AudioPlaceholder;
   audioSource?: "microphone" | "external";
@@ -71,6 +75,8 @@ Notable current fields:
 - `previewPatchBatches` carries the incremental rrweb events that play after that seed.
 - `cursorEvents` gives higher-fidelity cursor playback than relying on frame snapshots alone.
 - `cameraStartOffsetMs` compensates for `getUserMedia` warmup so camera playback stays aligned.
+- `captions` carries parsed subtitle tracks inline; `captionFiles` instead names sibling `.vtt`/`.srt` files that a hosted recording loads at play time.
+- API client request/response data is not a top-level recording field — it travels inside `previewEvents` (see [Preview Replay Data](#preview-replay-data) and [API Client Data](#api-client-data)).
 
 ## Frame Data
 
@@ -141,6 +147,79 @@ coupled — restoring recorded preview state without a fresh runtime rerun or a 
 point. `PREVIEW_RRWEB_FORMAT_VERSION` is `2` (bumped from the legacy custom-op format `1`,
 whose separate DOM-patch path has been removed).
 
+## Caption Data
+
+Subtitles are stored as parsed caption tracks rather than raw subtitle files. The parser
+(`src/captions/parseCaptions.ts`) accepts WebVTT and SubRip, strips cue tags, and
+normalizes/sorts cues; the language is inferred from the filename suffix
+(e.g. `lesson.es.vtt` → `es`).
+
+```ts
+interface CaptionWord {
+  start: number; // ms
+  end: number; // ms
+  text: string;
+}
+
+interface CaptionCue {
+  start: number; // ms, relative to the recording timeline
+  end: number; // ms
+  text: string;
+  words?: CaptionWord[]; // optional word-level timing
+}
+
+interface CaptionTrack {
+  id: string;
+  language: string; // BCP-47-ish tag, e.g. "en" or "pt-BR"
+  label?: string;
+  cues: CaptionCue[];
+  default?: boolean;
+}
+```
+
+- A recording can carry multiple tracks. `CaptionsOverlay` picks the track matching the
+  viewer's preferred language, otherwise the `default` track, otherwise the first.
+- The active cue is found by binary search over `cues` against the live timeline time, so
+  caption lookup stays cheap on every tick.
+- Caption enabled-state and language preference are persisted in `localStorage` by the
+  caption store (`src/stores/captionStore.ts`), independent of any single recording.
+- On the container, captions are either inlined as `captions` or referenced by
+  `captionFiles`; sibling files are fetched relative to the `.ne` URL during URL loading.
+
+## API Client Data
+
+Runtime lessons include an in-preview HTTP API client. Its interactions are recorded as
+`PreviewEvent`s (not a separate top-level channel) so they replay on the same preview
+timeline as DOM snapshots. The recorded shapes are flat (no live UI state):
+
+```ts
+interface ApiClientRecordedRequest {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body: string | undefined;
+}
+
+type ApiClientRecordedResult =
+  | {
+      ok: true;
+      status: number;
+      statusText: string;
+      headers: [string, string][];
+      body: string;
+      durationMs: number;
+    }
+  | { ok: false; error: string; durationMs: number };
+```
+
+The relevant `PreviewEvent.type` values are `api_client_mode` (browser ↔ API toggle),
+`api_client_request`, `api_client_response`, `api_client_request_tab` (headers ↔ body tab),
+and `api_client_inspect_history`. At replay time these are folded into an
+`ApiClientReplayState` (`request`, `result`, `sending`, `history`) on `PreviewState`, which
+drives a read-only rendering of the panel. Live capture and replay share the same flat
+result shape, so a recorded response is reused verbatim for both the store update and the
+recording callback.
+
 ## Audio And Camera Data
 
 ```ts
@@ -197,6 +276,7 @@ At the container level, SCR3 metadata includes:
 - `audioStartOffsetMs`
 - `cameraStartOffsetMs`
 - `cameraFile` / `cameraUrl` when the camera video is stored as a sibling file instead of inline
+- `captions` (inline parsed tracks) and/or `captionFiles` (sibling `.vtt`/`.srt` references)
 
 Segments then carry append-only, time-clustered payloads for frames, events, audio, and camera data.
 

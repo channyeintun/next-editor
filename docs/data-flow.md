@@ -85,6 +85,7 @@ Key points:
 
 - Frames are compressed incrementally during capture.
 - Preview replay data is captured with rrweb: a seed document (Meta + FullSnapshot) plus later patch batches of incremental rrweb events.
+- API client interactions on a runtime lesson are captured as preview events: switching to API mode, each request, its response (or timeout), request-tab switches, and history inspections all land on the timeline.
 - Workspace and runtime snapshots are captured alongside timed events so playback can restore the full lesson context.
 - If `recordingStreamSink` is configured, the provider forwards a live SCR3 stream while capture is in progress.
 
@@ -156,6 +157,17 @@ The shipped URL loader supports both same-origin and cross-origin recording URLs
 - Same-origin files are fetched directly.
 - Cross-origin URLs try `/api/proxy?url=...` first and fall back to direct fetch if the proxy is missing.
 - When the response body is streamable, the loader sniffs raw SCR3 bytes vs base64 text, decodes progressively, and uses `extendRecording` for later prefixes.
+- After the recording loads, the loader resolves any `captionFiles` the recording declares relative to the `.ne` URL, fetches and parses each one, and adds it via `addCaptionTrack`. Captions are never inferred from sibling filenames — HTTP exposes no directory listing.
+
+## API Client Transport
+
+The API client does not call the runtime server over the network from the host page.
+Instead `useApiClient` posts the composed request into the preview iframe through a
+same-origin message bridge (`src/utils/apiClientBridge.ts`): a tiny proxy script injected
+into the preview `fetch`es the path inside the iframe and posts the response back to the
+parent. Because the request runs in the iframe's origin there is no CORS, and the host only
+ever sees a serialized request/response pair — which is exactly what gets recorded and
+replayed.
 
 ## Where To Look Next
 

@@ -34,9 +34,9 @@ flowchart TB
 Core responsibilities:
 
 - Maintain the editor machine and playback timeline.
-- Capture editor frames, cursor samples, preview events, rrweb preview snapshots, workspace events, and runtime events.
+- Capture editor frames, cursor samples, preview events (including API client requests/responses), rrweb preview snapshots, workspace events, and runtime events.
 - Normalize recordings into the `Recording` shape used across the app.
-- Expose stable controls such as `startRecording`, `play`, `seekTo`, `loadRecording`, and `extendRecording`.
+- Expose stable controls such as `startRecording`, `play`, `seekTo`, `loadRecording`, `extendRecording`, and caption-track management (`addCaptionTrack` / `removeCaptionTrack`).
 
 The app layer is responsible for React composition, WebContainer integration, IndexedDB persistence, import/export UI, and route-level behavior.
 
@@ -57,6 +57,7 @@ Key exports:
 - `Recording`, `EditorFrame`, `EditorState`
 - `RecordingStreamSink`, `UseNextEditorConfig`, `UseNextEditorReturn`
 - Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`
+- Caption types such as `CaptionTrack`, `CaptionCue`, and `CaptionWord`
 
 The core module also re-exports app-level components such as `CodeEditor`, `MediaControls`, `Preview`, and `SlidePanel`, but the recording and playback logic lives underneath those components in the machine and hook layer.
 

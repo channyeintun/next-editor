@@ -6,7 +6,7 @@
   <h1>Interactive Code Recording & Replay</h1>
 </div>
 
-Next Editor is a browser-based lesson editor and replay engine for real coding projects. It combines a Monaco editor, a multi-file workspace with local asset upload, WebContainer-backed runtime playback for framework and Node lessons, static preview for HTML/CSS lessons, rrweb-driven preview capture and replay, synchronized slides, optional instructor camera capture, and streamed `.ne` recordings that can begin playback before the full file has downloaded.
+Next Editor is a browser-based lesson editor and replay engine for real coding projects. It combines a Monaco editor, a multi-file workspace with local asset upload, WebContainer-backed runtime playback for framework and Node lessons, static preview for HTML/CSS lessons, rrweb-driven preview capture and replay, an in-preview HTTP API client for exercising runtime endpoints, synchronized slides, time-synced subtitles (captions), optional instructor camera capture, and streamed `.ne` recordings that can begin playback before the full file has downloaded.
 
 ## Overview
 
@@ -16,7 +16,9 @@ Next Editor is a browser-based lesson editor and replay engine for real coding p
   - Runtime lessons (React, Vue, Solid, Svelte, HTMX + Express) run inside WebContainers with preview, terminal, and runtime dock state captured into the recording timeline.
   - The HTML/CSS lesson renders a lightweight static preview from local HTML, CSS, and JavaScript files.
 - Runtime preview is recorded and replayed with rrweb: the live DOM, scroll, input, and pointer all ride a single event stream, replayed by an rrweb `Replayer` driven from the recording timeline.
-- Recording captures more than text deltas: it stores workspace changes, rrweb preview snapshots, slide events, cursor motion, runtime events, audio, and optional camera video.
+- Runtime lessons also include an API client mode: a built-in HTTP client that sends requests to the running server inside the preview iframe (same-origin, no CORS) and records each request/response so they replay on the timeline.
+- Subtitles (captions) can be imported from `.vtt`/`.srt` files or shipped alongside a hosted `.ne`, and render as a time-synced overlay with per-language track selection.
+- Recording captures more than text deltas: it stores workspace changes, rrweb preview snapshots, API client requests/responses, slide events, cursor motion, runtime events, audio, and optional camera video.
 - Playback restores the recorded project state and replays it from a single timeline.
 - Import and export use the SCR3 `.ne` container.
 - Progressive loading lets `/code?url=...` start playing a recording from a partial download.
@@ -29,7 +31,9 @@ Next Editor is a browser-based lesson editor and replay engine for real coding p
 - Runtime-backed preview for framework and package-based Node lessons.
 - Static preview mode for HTML/CSS lessons.
 - rrweb-based capture and replay of the runtime preview (DOM, scroll, input, and pointer in one event stream).
-- Timeline replay for frames, cursor motion, slide transitions, preview snapshots, workspace events, and runtime events.
+- In-preview HTTP API client for runtime lessons: method/path/headers/body composer, response viewer with status, timing, and size, and a request history — all captured and replayed.
+- Timeline replay for frames, cursor motion, slide transitions, preview snapshots, API client requests/responses, workspace events, and runtime events.
+- Subtitle (caption) overlay with `.vtt`/`.srt` import, hosted sibling caption files, multi-track language selection, and RTL support.
 - Variable-speed playback with pitch-preserving audio.
 - Portable `.ne` export and import.
 - Optional instructor camera recording with synced playback overlay.
@@ -103,9 +107,9 @@ vp preview
 
 ## Recording And Storage Model
 
-Next Editor records a timeline of delta-compressed editor frames plus timed side-channel events for slides, preview state, rrweb preview snapshots, workspace mutations, runtime events, cursor samples, audio, and optional camera video.
+Next Editor records a timeline of delta-compressed editor frames plus timed side-channel events for slides, preview state, rrweb preview snapshots, API client requests/responses, workspace mutations, runtime events, cursor samples, audio, and optional camera video.
 
-Recordings use the SCR3 `.ne` container. The shipped exporter currently emits base64-wrapped SCR3 for portability, and the loader also accepts raw SCR3 byte streams. SCR3 is append-only and prefix-decodable, which enables progressive playback from an incomplete download and live forwarding through `recordingStreamSink`.
+Recordings use the SCR3 `.ne` container. The shipped exporter currently emits base64-wrapped SCR3 for portability, and the loader also accepts raw SCR3 byte streams. SCR3 is append-only and prefix-decodable, which enables progressive playback from an incomplete download and live forwarding through `recordingStreamSink`. Caption tracks ride along in the SCR3 metadata, either inlined as parsed cues or referenced by `captionFiles` so a hosted `.ne` can load sibling `.vtt`/`.srt` files.
 
 ## Streaming And Camera Notes
 
@@ -113,6 +117,19 @@ Recordings use the SCR3 `.ne` container. The shipped exporter currently emits ba
 - Finalized SCR3 recordings are written in time-cluster order, so frames, events, audio, and camera fragments all arrive as useful timeline prefixes.
 - The audio playback actor can reattach a growing contiguous blob snapshot as more audio fragments arrive during progressive playback.
 - Camera capture is optional. Playback uses `cameraStartOffsetMs` to align the overlay video with the main timeline.
+
+## Subtitles (Captions)
+
+- Captions are imported from `.vtt` (WebVTT) or `.srt` (SubRip) files through the captions control in the media bar; the parser detects the format, strips cue tags, and normalizes/sorts cues.
+- The track language is inferred from the filename (e.g. `lesson.es.vtt` → `es`), and multiple tracks can be loaded — the captions button switches into a language menu when more than one track is present.
+- `CaptionsOverlay` renders the active cue against the live timeline, with binary-search cue lookup, right-to-left layout for RTL languages, and on/off plus language preference persisted in `localStorage`.
+- Hosted recordings can declare sibling caption files via `captionFiles` in the SCR3 metadata; `useUrlLoader` resolves and fetches them relative to the `.ne` URL (captions are never guessed from sibling filenames).
+
+## API Client
+
+- Runtime lessons (any WebContainer-backed stack — React, Vue, Solid, Svelte, HTMX + Express, Node) expose an **API** mode toggle in the preview chrome alongside the browser view.
+- The panel composes a request (method, path, headers, JSON/text body) and posts it into the running preview iframe through a same-origin message bridge, so requests hit the live server without CORS. Responses show status, status text, headers, body (pretty-printed when JSON), duration, and size, plus a request history you can re-inspect.
+- Each sent request, received response, request-tab switch, and history inspection is recorded as a preview event, so the API client interactions replay deterministically from the timeline without re-running the server.
 
 ## Learn More
 

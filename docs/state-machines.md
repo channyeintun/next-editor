@@ -218,6 +218,13 @@ The machine keeps replay progress in context so it can apply large recordings ef
 
 These indices are preserved across `EXTEND_RECORDING`, which is the critical detail for streaming playback.
 
+`PREVIEW_EVENT` is the single channel for runtime-preview state, including the API client:
+its `api_client_mode`, `api_client_request`, `api_client_response`, `api_client_request_tab`,
+and `api_client_inspect_history` variants are applied through the same preview replay cursor
+as DOM snapshots. Caption tracks are managed out of band — `ADD_CAPTION_TRACK` /
+`REMOVE_CAPTION_TRACK` mutate the loaded recording's `captions` directly (e.g. from a
+`.vtt`/`.srt` import or sibling-file load) rather than riding the timeline.
+
 ## Key Events
 
 Representative machine events:
@@ -238,6 +245,8 @@ type EditorMachineEvent =
   | { type: "PREVIEW_EVENT"; event: PreviewEvent }
   | { type: "WORKSPACE_EVENT"; event: WorkspaceRecordingEvent }
   | { type: "RUNTIME_EVENT"; event: RuntimeRecordingEvent }
+  | { type: "ADD_CAPTION_TRACK"; track: CaptionTrack }
+  | { type: "REMOVE_CAPTION_TRACK"; trackId: string }
   | { type: "STARTED"; mediaRecorder: MediaRecorder; mimeType: string }
   | { type: "STOPPED"; blob: Blob }
   | { type: "CAMERA_CHUNK"; chunk: Blob }

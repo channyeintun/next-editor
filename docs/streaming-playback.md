@@ -202,6 +202,10 @@ effective duration in your UI.
 - **Camera follows the same progressive pattern through `CameraOverlay`.** Prefix decode rebuilds a
   larger `cameraBlob`, and the overlay swaps to the new object URL while still deriving video time
   from `timeline.currentTime - cameraStartOffsetMs`.
+- **Captions load out of band.** Inline `captions` arrive with the SCR3 metadata prefix; sibling
+  `captionFiles` are fetched separately (relative to the `.ne` URL) and merged via `addCaptionTrack`
+  once available, so a long download shows captions as soon as the small sidecar resolves rather than
+  waiting on the full recording.
 
 ---
 
