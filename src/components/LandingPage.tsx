@@ -16,7 +16,17 @@ import Navbar from "./Navbar";
 import { useState, useEffect, useRef } from "react";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
 
-const FRAMEWORKS = ["React", "Vue", "Solid", "Svelte", "HTMX", "HTML/CSS", "Node.js"] as const;
+const FRAMEWORKS = [
+  "React",
+  "Vue",
+  "Solid",
+  "Svelte",
+  "HTMX",
+  "Express",
+  "TypeScript",
+  "HTML/CSS",
+  "Node.js",
+] as const;
 
 const FRAMEWORK_COLORS: Record<string, string> = {
   React: "#4de5d6",
@@ -24,8 +34,10 @@ const FRAMEWORK_COLORS: Record<string, string> = {
   Solid: "#6d57ff",
   Svelte: "#ff8f33",
   HTMX: "#ffd255",
-  "HTML/CSS": "#4de5d6",
-  "Node.js": "#3ace8c",
+  Express: "#ff8f33",
+  TypeScript: "#4de5d6",
+  "HTML/CSS": "#3ace8c",
+  "Node.js": "#6d57ff",
 };
 
 const USE_CASES = [
