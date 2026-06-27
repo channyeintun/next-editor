@@ -63,19 +63,25 @@ plumbing, use the patterns already here:
 
 ## UX shape: the preview panel has two modes
 
-The preview panel becomes a single surface with **two view modes**, toggled by a
-segmented control in its header (`PreviewChrome`). The same dock/float/resize chrome
-hosts both — we are not adding a second panel.
+The preview panel becomes a single surface hosting **two distinct frames**, chosen
+by a top-level **frame selector** at the left of `PreviewChrome`'s toolbar. The same
+dock/float/resize chrome hosts both — we are not adding a second panel. The selector
+is a true frame switch, **not** a control nested under the browser preview: each
+frame owns its own chrome.
 
-- **Mode 1 — Browser** (default): today's runtime/preview iframe, unchanged.
-- **Mode 2 — API**: the new API client view (request line, headers/body, response,
-  history).
+- **Frame 1 — Preview** (default): today's runtime/preview iframe with its browser
+  nav (back/forward/refresh/address bar/console).
+- **Frame 2 — API**: the new API client view (request line, headers/body, response,
+  history) — its request line is the frame's own header.
 
 Mode rules:
 
-- The mode toggle only appears when `lessonRunsInWebContainer(lessonType)` is true
-  and the runtime is `ready`. Otherwise the panel is Browser-only and behaves
-  exactly as today (no toggle shown).
+- The frame selector only appears when `lessonRunsInWebContainer(lessonType)` is true
+  and the runtime is `ready`. Otherwise the panel is Preview-only and behaves exactly
+  as today (no selector shown).
+- The browser-only chrome (back/forward/refresh/address bar/console) renders **only**
+  in the Preview frame; in the API frame it is gone. The window controls (float/dock/
+  close) are shared across both frames.
 - Switching to **API** hides the iframe but keeps it **mounted** — the runtime
   preview state and the fetch-proxy transport (which lives inside that iframe) must
   survive the mode switch. Switching back to **Browser** reveals it untouched.

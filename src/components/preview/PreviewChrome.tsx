@@ -154,55 +154,96 @@ function PreviewToolbar({
   return (
     <div className="shrink-0 border-b border-slate-800 bg-[#242938]">
       <div className="flex h-10.5 items-center gap-2 px-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
-          aria-label="Go back in preview"
-          title="Go back in preview"
-        >
-          <ArrowLeft size={18} />
-        </button>
+        {showModeToggle && onModeChange ? (
+          <div
+            role="tablist"
+            aria-label="Preview frame"
+            className="inline-flex shrink-0 rounded-md bg-[#1a1e27] p-0.5"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeMode === "browser"}
+              onClick={() => onModeChange("browser")}
+              className={`rounded-[5px] px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                activeMode === "browser"
+                  ? "bg-slate-700 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Preview
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeMode === "api"}
+              onClick={() => onModeChange("api")}
+              className={`rounded-[5px] px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                activeMode === "api"
+                  ? "bg-slate-700 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              API
+            </button>
+          </div>
+        ) : null}
 
-        <button
-          type="button"
-          onClick={onForward}
-          className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
-          aria-label="Go forward in preview"
-          title="Go forward in preview"
-        >
-          <ArrowRight size={18} />
-        </button>
+        {activeMode === "browser" ? (
+          <>
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
+              aria-label="Go back in preview"
+              title="Go back in preview"
+            >
+              <ArrowLeft size={18} />
+            </button>
 
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
-          aria-label="Refresh preview"
-          title="Refresh preview"
-        >
-          <RotateCw size={16} className={isRefreshing ? "animate-spin" : undefined} />
-        </button>
+            <button
+              type="button"
+              onClick={onForward}
+              className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
+              aria-label="Go forward in preview"
+              title="Go forward in preview"
+            >
+              <ArrowRight size={18} />
+            </button>
 
-        <div
-          className="flex h-6 min-w-0 flex-1 items-center rounded-lg border border-slate-950/70 bg-[#1e2430] px-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
-          title={previewAddressTitle}
-          aria-label="Preview address"
-        >
-          <span className="truncate font-mono text-[13px] font-semibold leading-none text-slate-300">
-            {previewAddressLabel}
-          </span>
-        </div>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-md text-slate-100 transition-colors hover:bg-slate-700 hover:text-white"
+              aria-label="Refresh preview"
+              title="Refresh preview"
+            >
+              <RotateCw size={16} className={isRefreshing ? "animate-spin" : undefined} />
+            </button>
 
-        <button
-          type="button"
-          onClick={onOpenConsole}
-          className="inline-flex size-6.5 shrink-0 items-center justify-center rounded-md border border-slate-800 bg-[#263346] text-sky-300 transition-colors hover:border-sky-500/60 hover:bg-[#2b3f58] hover:text-sky-100"
-          aria-label="Open preview console"
-          title="Open preview console"
-        >
-          <SquareTerminal size={16} />
-        </button>
+            <div
+              className="flex h-6 min-w-0 flex-1 items-center rounded-lg border border-slate-950/70 bg-[#1e2430] px-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+              title={previewAddressTitle}
+              aria-label="Preview address"
+            >
+              <span className="truncate font-mono text-[13px] font-semibold leading-none text-slate-300">
+                {previewAddressLabel}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={onOpenConsole}
+              className="inline-flex size-6.5 shrink-0 items-center justify-center rounded-md border border-slate-800 bg-[#263346] text-sky-300 transition-colors hover:border-sky-500/60 hover:bg-[#2b3f58] hover:text-sky-100"
+              aria-label="Open preview console"
+              title="Open preview console"
+            >
+              <SquareTerminal size={16} />
+            </button>
+          </>
+        ) : (
+          <div className="flex-1" />
+        )}
 
         <div ref={menuRef} className="relative shrink-0">
           <button
@@ -249,35 +290,6 @@ function PreviewToolbar({
           ) : null}
         </div>
       </div>
-
-      {showModeToggle && onModeChange ? (
-        <div className="flex items-center border-t border-slate-800/60 px-3 py-1">
-          <div className="inline-flex rounded-md bg-[#1a1e27] p-0.5">
-            <button
-              type="button"
-              onClick={() => onModeChange("browser")}
-              className={`rounded-[5px] px-3 py-1 text-[11px] font-semibold transition-colors ${
-                activeMode === "browser"
-                  ? "bg-slate-700 text-white shadow-sm"
-                  : "text-slate-500 hover:text-slate-300"
-              }`}
-            >
-              Browser
-            </button>
-            <button
-              type="button"
-              onClick={() => onModeChange("api")}
-              className={`rounded-[5px] px-3 py-1 text-[11px] font-semibold transition-colors ${
-                activeMode === "api"
-                  ? "bg-slate-700 text-white shadow-sm"
-                  : "text-slate-500 hover:text-slate-300"
-              }`}
-            >
-              API
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
