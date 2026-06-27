@@ -49,6 +49,7 @@ export default function SlidesButton() {
   return (
     <div className="relative">
       <button
+        data-tour="slides"
         type="button"
         onClick={() => {
           if (showPresentationToggle) {
