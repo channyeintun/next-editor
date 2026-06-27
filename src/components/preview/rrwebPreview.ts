@@ -15,11 +15,6 @@ import type {
 // the message bridge wiring does not have to change, only the payload shape.
 export const RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_INITIAL_DOCUMENT";
 export const RUNTIME_PATCH_BATCH_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_PATCH_BATCH";
-// Host → preview: force a fresh rrweb FullSnapshot now. Used when a frame becomes
-// the active one again (e.g. switching back from the API client) so replay rebuilds
-// this surface at that point in the timeline rather than keeping the other frame's
-// last snapshot on screen.
-export const RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_TAKE_SNAPSHOT";
 
 // Format version carried on every rrweb-format preview record. Bumped from the
 // legacy custom-op format (1) so records are unambiguously rrweb (2).
@@ -112,7 +107,6 @@ export function createRrwebPreviewRecorderScript({
 
       var initialDocumentMessageType = ${JSON.stringify(RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE)};
       var patchBatchMessageType = ${JSON.stringify(RUNTIME_PATCH_BATCH_MESSAGE_TYPE)};
-      var takeSnapshotMessageType = ${JSON.stringify(RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE)};
       var version = ${JSON.stringify(PREVIEW_RRWEB_FORMAT_VERSION)};
       var fullSnapshotType = ${JSON.stringify(RRWEB_EVENT_TYPE_FULL_SNAPSHOT)};
       var incrementalType = ${JSON.stringify(RRWEB_EVENT_TYPE_INCREMENTAL_SNAPSHOT)};
@@ -257,18 +251,6 @@ export function createRrwebPreviewRecorderScript({
           });
         } catch (e) {}
       }
-
-      // Host can force a fresh FullSnapshot (e.g. when this frame becomes active
-      // again), which flows through emit() into the patch stream so replay rebuilds
-      // this surface at that timeline point.
-      window.addEventListener('message', function(event) {
-        if (!event.data || event.data.type !== takeSnapshotMessageType) return;
-        try {
-          if (sentInitial && window.rrweb && typeof window.rrweb.takeFullSnapshot === 'function') {
-            window.rrweb.takeFullSnapshot();
-          }
-        } catch (e) {}
-      });
 
       // Snapshot a fully-parsed document so the FullSnapshot is complete; later
       // mutations stream as incremental events.

@@ -1,14 +1,11 @@
-import { useEffect } from "react";
+import { lazy, useEffect } from "react";
 import { PreviewChrome } from "./preview/PreviewChrome";
 import { RuntimePreviewRenderer } from "./preview/RuntimePreviewRenderer";
 import { usePreviewController } from "./preview/usePreviewController";
-import { createApiClientDocument } from "./preview/apiClientDocument";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 
-// Built once — a static self-contained document with the API client app + the
-// rrweb recorder inlined. Rendered as the API-client iframe's `srcdoc`.
-const API_CLIENT_SRCDOC = createApiClientDocument();
+const ApiClientPanel = lazy(() => import("./preview/ApiClientPanel"));
 
 function Preview() {
   const controller = usePreviewController();
@@ -79,20 +76,17 @@ function Preview() {
       showModeToggle={controller.showModeToggle}
       onModeChange={controller.setActiveMode}
     >
-      {/* The runtime iframe stays mounted and its `display` never changes —
-          toggling that would reload the cross-origin frame and lose its state. The
-          API client is its own rrweb-recorded iframe, mounted only while it is the
-          active frame so its rrweb stream never interleaves with the preview's. */}
+      {/* The iframe stays mounted and its `display` never changes — toggling that
+          would reload the cross-origin runtime frame and lose its state. In API
+          mode the panel sits on top as an opaque overlay instead. */}
       {previewRenderer}
-      {isApiMode && !controller.isRrwebReplayActive ? (
-        <iframe
-          ref={controller.apiIframeRef}
-          srcDoc={API_CLIENT_SRCDOC}
-          onLoad={controller.notifyApiClientReady}
-          title="API Client"
-          sandbox="allow-scripts allow-same-origin"
-          className="absolute inset-0 z-10 block size-full border-0 bg-[#1a1e27]"
-        />
+      {isApiMode ? (
+        <div className="absolute inset-0 z-10">
+          <ApiClientPanel
+            onSend={controller.sendApiClientRequest}
+            runtimeReady={controller.isRuntimeReady}
+          />
+        </div>
       ) : null}
     </PreviewChrome>
   );
