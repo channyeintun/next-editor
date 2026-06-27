@@ -1,14 +1,18 @@
 import { Clock, User } from "lucide-react";
 import type { Lesson } from "../types";
-import { buildPlayUrl, resolveThumb } from "../lib/links";
+import { resolveThumb } from "../lib/links";
 
-export default function LessonCard({ lesson }: { lesson: Lesson }) {
-  const playUrl = buildPlayUrl(lesson);
+interface LessonCardProps {
+  lesson: Lesson;
+  onPlay: (lesson: Lesson) => void;
+}
 
+export default function LessonCard({ lesson, onPlay }: LessonCardProps) {
   return (
-    <a
-      href={playUrl}
-      className="group block overflow-hidden rounded-xl bg-white/5 transition-all hover:bg-white/10 hover:shadow-lg hover:shadow-black/20"
+    <button
+      type="button"
+      onClick={() => onPlay(lesson)}
+      className="group block w-full overflow-hidden rounded-xl bg-white/5 text-left transition-all hover:bg-white/10 hover:shadow-lg hover:shadow-black/20"
     >
       <div className="relative aspect-video overflow-hidden bg-slate-800">
         <img
@@ -42,6 +46,6 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
           )}
         </div>
       </div>
-    </a>
+    </button>
   );
 }
