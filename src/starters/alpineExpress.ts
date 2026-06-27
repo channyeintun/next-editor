@@ -16,7 +16,7 @@ export function createStarterAlpineExpressWorkspace(): WorkspaceProject {
             start: "node server.js",
           },
           dependencies: {
-            express: "^5.1.0",
+            express: "^5.2.1",
           },
         },
         null,
@@ -64,7 +64,7 @@ app.listen(port, "0.0.0.0", () => {
       defer
       src="https://cdn.jsdelivr.net/npm/@imacrayon/alpine-ajax@0.12.7/dist/cdn.min.js"
     ></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.15.12/dist/cdn.min.js"></script>
     <title>Alpine AJAX + Express Lesson</title>
   </head>
   <body>
