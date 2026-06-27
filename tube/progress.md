@@ -9,4 +9,4 @@
 - [x] 5. Wire App.tsx (Header + Grid + Footer, loading/empty/error states)
 - [x] 6. Seed public/lessons.json with introduction lesson + copy .ne/.vtt files
 - [x] 7. Add .env.example and vercel.json with CORS headers
-- [ ] 8. Final build verification + lint
+- [x] 8. Final build verification + lint
