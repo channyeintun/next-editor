@@ -279,6 +279,12 @@ const LandingPage = () => {
                     >
                       Start creating
                     </Link>
+                    <Link
+                      to="/learn"
+                      className="px-10 py-4 rounded-full border-2 border-slate-950 text-slate-950 text-lg font-semibold hover:bg-slate-950 hover:text-white hover:scale-105 active:scale-95 transition-all"
+                    >
+                      Watch lessons
+                    </Link>
                   </div>
                 </div>
 
