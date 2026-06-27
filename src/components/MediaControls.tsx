@@ -344,6 +344,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
       <div className={`flex items-center w-full ${rowSizing}`}>
         {recordMode && (
           <button
+            data-tour="record"
             onClick={handleRecordButtonClick}
             disabled={isPlaying}
             className={`flex items-center justify-center transition-colors relative pointer-events-auto ${isPlaying ? "opacity-50 cursor-not-allowed" : "hover:opacity-80 cursor-pointer"}`}

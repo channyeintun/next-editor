@@ -523,6 +523,7 @@ function TerminalPanel({ large = false }: TerminalPanelProps) {
           </button>
 
           <button
+            data-tour="runner"
             type="button"
             disabled={isPlaybackSnapshotActive}
             onClick={() => setIsCollapsed(!runtimePanelStore.getSnapshot().context.isCollapsed)}

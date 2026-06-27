@@ -126,6 +126,7 @@ function PreviewHeaderButton() {
 
   return (
     <button
+      data-tour="preview"
       type="button"
       aria-label={isOpen ? "Close preview" : "Open preview"}
       aria-pressed={isOpen}
@@ -366,6 +367,7 @@ function WorkspaceSettingsButton() {
     <>
       <div className={`relative ${isMenuOpen ? "z-2147483647" : ""}`}>
         <button
+          data-tour="settings"
           type="button"
           aria-label="Open workspace settings"
           aria-expanded={isMenuOpen}
