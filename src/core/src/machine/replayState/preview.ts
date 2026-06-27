@@ -40,20 +40,34 @@ function mergePreviewEventState(
   const carriedScrollLeft = previewEvent.scrollLeft ?? previousState?.scrollLeft;
   const nextActiveMode = previewEvent.activeMode ?? previousState?.activeMode;
 
+  // API client interactions inherently happen in the API frame, so a request or
+  // response implies API mode even if the explicit mode-switch event wasn't
+  // captured (e.g. the user was already in API mode when recording started).
+  const impliesApiMode =
+    previewEvent.type === "api_client_request" || previewEvent.type === "api_client_response";
+  const resolvedActiveMode = impliesApiMode ? "api" : nextActiveMode;
+
   let nextApiClientState = previousState?.apiClientState;
   if (previewEvent.type === "api_client_request") {
     nextApiClientState = {
       request: previewEvent.apiClientRequest,
       sending: true,
+      history: previousState?.apiClientState?.history,
     };
-  } else if (previewEvent.type === "api_client_response") {
+  } else if (previewEvent.type === "api_client_response" && previewEvent.apiClientResult) {
+    const previousApiClientState = previousState?.apiClientState;
+    const historyEntry = {
+      id: String(previewEvent.timestamp),
+      request: previousApiClientState?.request,
+      result: previewEvent.apiClientResult,
+    };
     nextApiClientState = {
-      ...nextApiClientState,
+      request: previousApiClientState?.request,
       result: previewEvent.apiClientResult,
       sending: false,
+      // Newest first, matching the live store; cap mirrors the store's MAX_HISTORY.
+      history: [historyEntry, ...(previousApiClientState?.history ?? [])].slice(0, 25),
     };
-  } else if (previewEvent.type === "api_client_mode" && previewEvent.activeMode === "browser") {
-    nextApiClientState = undefined;
   }
 
   const appliedState: PreviewState = {
@@ -65,7 +79,7 @@ function mergePreviewEventState(
     refreshKey:
       previewEvent.type === "preview_refresh" ? previewEvent.timestamp : previousState?.refreshKey,
     currentInteraction: previewEvent.interaction,
-    activeMode: nextActiveMode,
+    activeMode: resolvedActiveMode,
     apiClientState: nextApiClientState,
   };
 
@@ -84,7 +98,7 @@ function mergePreviewEventState(
       scrollTop: carriedScrollTop,
       scrollLeft: carriedScrollLeft,
       currentInteraction: undefined,
-      activeMode: nextActiveMode,
+      activeMode: resolvedActiveMode,
       apiClientState: nextApiClientState,
     },
   };

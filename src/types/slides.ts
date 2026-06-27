@@ -156,10 +156,17 @@ export type ApiClientRecordedResult = ApiClientRecordedResponse | ApiClientRecor
 
 export type PreviewActiveMode = "browser" | "api";
 
+export interface ApiClientReplayHistoryEntry {
+  id: string;
+  request?: ApiClientRecordedRequest;
+  result: ApiClientRecordedResult;
+}
+
 export interface ApiClientReplayState {
   request?: ApiClientRecordedRequest;
   result?: ApiClientRecordedResult;
   sending?: boolean;
+  history?: ApiClientReplayHistoryEntry[];
 }
 
 export interface PreviewState {

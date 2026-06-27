@@ -162,10 +162,11 @@ describe("replayState", () => {
     expect(mid.appliedStates[0].apiClientState).toEqual({
       request: { method: "POST", path: "/api/todos", headers: {}, body: '{"x":1}' },
       sending: true,
+      history: undefined,
     });
 
     // Seek past the unrelated scroll event: API state is carried forward intact
-    // (the response is retained, not dropped or duplicated).
+    // (the response is retained, not dropped or duplicated) and history is built.
     const afterScroll = getPreviewReplayResult({
       previewEvents,
       currentTime: 350,
@@ -173,21 +174,51 @@ describe("replayState", () => {
       lastAppliedState: undefined,
       isSeeking: true,
     });
+    const result = {
+      ok: true as const,
+      status: 201,
+      statusText: "Created",
+      headers: [["content-type", "application/json"]] as [string, string][],
+      body: '{"id":1}',
+      durationMs: 12,
+    };
     expect(afterScroll.appliedStates[0].apiClientState).toEqual({
       request: { method: "POST", path: "/api/todos", headers: {}, body: '{"x":1}' },
       sending: false,
-      result: {
-        ok: true,
-        status: 201,
-        statusText: "Created",
-        headers: [["content-type", "application/json"]],
-        body: '{"id":1}',
-        durationMs: 12,
-      },
+      result,
+      history: [
+        {
+          id: "200",
+          request: { method: "POST", path: "/api/todos", headers: {}, body: '{"x":1}' },
+          result,
+        },
+      ],
     });
   });
 
-  it("clears API client state when replay switches back to browser mode", () => {
+  it("implies API mode from a request even without a recorded mode switch", () => {
+    // Recording started while already in API mode, so no api_client_mode event.
+    const previewEvents: PreviewEvent[] = [
+      {
+        type: "api_client_request",
+        timestamp: 0,
+        size: "medium",
+        apiClientRequest: { method: "GET", path: "/api/time", headers: {}, body: undefined },
+      },
+    ];
+
+    const result = getPreviewReplayResult({
+      previewEvents,
+      currentTime: 50,
+      lastAppliedIndex: -1,
+      lastAppliedState: undefined,
+      isSeeking: true,
+    });
+
+    expect(result.appliedStates[0].activeMode).toBe("api");
+  });
+
+  it("keeps API client state (incl. history) when replay switches back to browser mode", () => {
     const previewEvents: PreviewEvent[] = [
       {
         type: "api_client_request",
@@ -195,6 +226,19 @@ describe("replayState", () => {
         size: "medium",
         activeMode: "api",
         apiClientRequest: { method: "GET", path: "/api/time", headers: {}, body: undefined },
+      },
+      {
+        type: "api_client_response",
+        timestamp: 50,
+        size: "medium",
+        apiClientResult: {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          headers: [],
+          body: "12:00",
+          durationMs: 5,
+        },
       },
       { type: "api_client_mode", timestamp: 100, size: "medium", activeMode: "browser" },
     ];
@@ -207,8 +251,11 @@ describe("replayState", () => {
       isSeeking: true,
     });
 
+    // Like the live store, history/result survive a mode switch (the panel is just
+    // hidden in browser mode), so switching back to API still shows them.
     expect(afterSwitch.appliedStates[0].activeMode).toBe("browser");
-    expect(afterSwitch.appliedStates[0].apiClientState).toBeUndefined();
+    expect(afterSwitch.appliedStates[0].apiClientState?.history).toHaveLength(1);
+    expect(afterSwitch.appliedStates[0].apiClientState?.result).toBeDefined();
   });
 
   it("skips equal workspace snapshots but reapplies when seeking backward", () => {

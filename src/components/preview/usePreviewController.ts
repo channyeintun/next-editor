@@ -39,7 +39,12 @@ import {
   type PreviewScrollPosition,
 } from "./previewIframeUtils";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
-import { recordedResultToStoreResult, type HttpMethod } from "../../stores/apiClientStore";
+import {
+  recordedResultToStoreResult,
+  type ApiClientHeader,
+  type ApiClientHistoryEntry,
+  type HttpMethod,
+} from "../../stores/apiClientStore";
 import { hasRrwebPreviewEvents } from "./rrwebPreview";
 import { useApiClient } from "./useApiClient";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
@@ -637,12 +642,26 @@ export function usePreviewController(): PreviewController {
       }
       lastAppliedApiSignatureRef.current = signature;
 
+      const request = apiState.request;
+      const headers: ApiClientHeader[] = request
+        ? Object.entries(request.headers).map(([key, value]) => ({ key, value, enabled: true }))
+        : [];
+      const history: ApiClientHistoryEntry[] = (apiState.history ?? []).map((entry) => ({
+        id: entry.id,
+        method: (entry.request?.method ?? "GET") as HttpMethod,
+        path: entry.request?.path ?? "/",
+        result: recordedResultToStoreResult(entry.result),
+        timestamp: 0,
+      }));
+
       apiClientStore.trigger.applyReplayState({
-        method: (apiState.request?.method ?? "GET") as HttpMethod,
-        path: apiState.request?.path ?? "/",
-        body: apiState.request?.body ?? "",
+        method: (request?.method ?? "GET") as HttpMethod,
+        path: request?.path ?? "/",
+        body: request?.body ?? "",
+        headers,
         sending: apiState.sending ?? false,
         result: apiState.result ? recordedResultToStoreResult(apiState.result) : null,
+        history,
       });
     },
   });
@@ -892,8 +911,11 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
+    // Capture the active frame at recording start so replay opens in the right
+    // mode even when the user was already in the API frame before pressing record.
+    emitPreviewEvent("api_client_mode", { activeMode });
     handleRefresh();
-  }, [handleRefresh, isPlaying, isRecording]);
+  }, [activeMode, emitPreviewEvent, handleRefresh, isPlaying, isRecording]);
 
   const handleResizeStart = (event: ReactMouseEvent | ReactTouchEvent) => {
     if ("button" in event && event.button !== 0) {

@@ -118,7 +118,7 @@ export function createApiClientStore() {
         result: event.entry.result,
       }),
 
-      // Replay-only: replace the visible request/response without touching history.
+      // Replay-only: replace the whole visible request/response/history at once.
       // Playback re-applies state at many timeline points, so this must be a plain
       // overwrite (unlike `receiveResult`, which appends a history entry every call).
       applyReplayState: (
@@ -127,16 +127,20 @@ export function createApiClientStore() {
           method: HttpMethod;
           path: string;
           body: string;
+          headers: ApiClientHeader[];
           sending: boolean;
           result: ApiClientResult | null;
+          history: ApiClientHistoryEntry[];
         },
       ) => ({
         ...context,
         method: event.method,
         path: event.path,
         body: event.body,
+        headers: event.headers,
         sending: event.sending,
         result: event.result,
+        history: event.history,
       }),
 
       reset: () => initialContext(),
