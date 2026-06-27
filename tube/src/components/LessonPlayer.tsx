@@ -41,7 +41,7 @@ export default function LessonPlayer({ lesson, onClose }: LessonPlayerProps) {
           src={buildPlayUrl(lesson)}
           title={lesson.title}
           className="size-full rounded-xl border border-white/10 bg-slate-950"
-          allow="fullscreen; clipboard-read; clipboard-write"
+          allow="cross-origin-isolated; fullscreen; clipboard-read; clipboard-write"
         />
       </div>
     </div>

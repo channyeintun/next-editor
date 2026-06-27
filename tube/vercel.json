@@ -3,12 +3,19 @@
   "buildCommand": "bun run build",
   "headers": [
     {
-      "source": "/(.*)\\.ne",
-      "headers": [{ "key": "Access-Control-Allow-Origin", "value": "*" }]
-    },
-    {
-      "source": "/(.*)\\.vtt",
-      "headers": [{ "key": "Access-Control-Allow-Origin", "value": "*" }]
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+        { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }
+      ]
     }
+  ],
+  "rewrites": [
+    { "source": "/code", "destination": "https://nexteditor.dev/code" },
+    { "source": "/code/:path*", "destination": "https://nexteditor.dev/code/:path*" },
+    { "source": "/assets/:path*", "destination": "https://nexteditor.dev/assets/:path*" },
+    { "source": "/fonts/:path*", "destination": "https://nexteditor.dev/fonts/:path*" },
+    { "source": "/logo.svg", "destination": "https://nexteditor.dev/logo.svg" },
+    { "source": "/logo.png", "destination": "https://nexteditor.dev/logo.png" }
   ]
 }

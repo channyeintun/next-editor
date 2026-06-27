@@ -33,17 +33,19 @@ or built with the main app.
 
 ## 2. The link contract (most important part)
 
-A card's "play" link is:
+> **Updated:** lessons open in an **embedded iframe** (see `LessonPlayer`), not by
+> navigating away, and the editor is served **same-origin** via reverse proxy
+> (B1 — see §9). The iframe `src` is therefore a same-origin path:
 
 ```
-https://nexteditor.dev/code?url=<ENCODED_NE_URL>&readOnly=true
+/code?url=<ENCODED_NE_PATH>&readOnly=true&deferRuntimeAutostart=true
 ```
 
-Where `<ENCODED_NE_URL>` is the `encodeURIComponent(...)` of the absolute URL of
-the lesson's `.ne` file, e.g.:
+Where `<ENCODED_NE_PATH>` is `encodeURIComponent("/lessons/<slug>/<slug>.ne")`,
+e.g.:
 
 ```
-https://nexteditor.dev/code?url=https%3A%2F%2Ftube.nexteditor.dev%2Fintroduction%2Fintroduction.ne&readOnly=true
+/code?url=%2Flessons%2Fintroduction%2Fintroduction.ne&readOnly=true&deferRuntimeAutostart=true
 ```
 
 Verified against the main app:
@@ -60,26 +62,23 @@ Verified against the main app:
 
 ---
 
-## 3. Cross-origin requirements (do not skip)
+## 3. Origin model (B1 — same-origin, no CORS)
 
-Because `.ne` (and `.vtt`) files are served from `tube.nexteditor.dev` but fetched
-by a page on `nexteditor.dev`, the requests are **cross-origin**:
+The editor is reverse-proxied under `tube.nexteditor.dev` (see §9), so the iframe,
+the editor's assets, and the `.ne`/`.vtt` files are **all same-origin**. That means:
 
-1. **CORS** — `tube.nexteditor.dev` must send `Access-Control-Allow-Origin` for the
-   `.ne` and `.vtt` files. Simplest: `Access-Control-Allow-Origin: *` on all static
-   assets. (The editor first tries `nexteditor.dev/api/proxy?url=...`; on Vercel
-   that path 404s and the loader falls back to a direct cross-origin `fetch`, which
-   then needs CORS.)
-2. **Captions are fetched directly (not via proxy)** — `.vtt` files also need CORS.
-3. **COEP note** — the editor page runs under `Cross-Origin-Embedder-Policy:
-require-corp` (for WebContainer). This gates _subresource tags_ (img/script), not
-   `fetch()` responses, so CORS alone is sufficient for `.ne`/`.vtt`. The tube site
-   itself does **not** need COEP/COOP headers.
+- **No CORS** needed on `.ne`/`.vtt` — the proxied editor fetches them from this
+  same origin directly.
+- **Cross-origin isolation works** — `COOP: same-origin` + `COEP: require-corp` on
+  the tube origin make it cross-origin isolated; a same-origin iframe inherits it,
+  so WebContainer (`SharedArrayBuffer`) can boot for live run/edit.
+- The only genuinely cross-origin resources are the editor's own WebContainer CDN
+  calls (`*.staticblitz.com`), which already serve COEP-compatible headers (they
+  work for the editor today).
 
-> Alternative if CORS proves annoying: host the `.ne`/`.vtt` files under
-> `nexteditor.dev` (same origin as the editor) and keep only the _gallery UI_ on
-> `tube.nexteditor.dev`. v1 assumes the CORS approach since the user wants lessons
-> to live with the tube site.
+> Why not a cross-origin iframe? Making a cross-origin iframe cross-origin-isolated
+> requires `COEP: require-corp` + `CORP: cross-origin` on the editor **and** CORP
+> on every tube subresource — brittle. Reverse-proxying side-steps all of it.
 
 ---
 
@@ -224,31 +223,50 @@ tube/
 
 ---
 
-## 9. Deployment
+## 9. Deployment — B1: reverse-proxy the editor under the tube origin
 
-- Separate Vercel project (or Caddy site) bound to `tube.nexteditor.dev`.
-- Static build (`bun run build` → `dist/`).
-- **Headers:** add `Access-Control-Allow-Origin: *` for `.ne` and `.vtt` (and it's
-  fine to apply broadly to static assets). On Vercel, via `vercel.json` `headers`.
-  Do **not** copy the main app's COEP/COOP headers here — they're unnecessary and
-  COEP could complicate thumbnail loading.
-- SPA fallback rewrite to `/index.html` only if a client-side detail route is added;
-  not required for the single-page v1.
+The lesson is **embedded in an iframe** (no navigating away), and the embed must
+support **live run + edit** (WebContainer), which requires **cross-origin
+isolation** (`COOP: same-origin` + `COEP: require-corp`, for `SharedArrayBuffer`).
+A _cross-origin_ iframe can't be made isolated without fragile per-asset CORP
+headers — so instead we make the editor **same-origin** with the gallery by
+reverse-proxying it under `tube.nexteditor.dev`. Same-origin iframes inherit
+isolation automatically, and proxied assets are delivered as this origin (so COEP
+is satisfied with no CORS/CORP juggling).
 
-Example `vercel.json`:
+> Read-only **playback** alone does _not_ need WebContainer — the preview/terminal
+> replay via rrweb, and the editor already gates WebContainer auto-boot off when
+> `crossOriginIsolated` is false. B1 is what additionally enables the
+> run-it-yourself capability inside the embed.
 
-```jsonc
-{
-  "installCommand": "bun install",
-  "buildCommand": "bun run build",
-  "headers": [
-    {
-      "source": "/(.*)\\.(ne|vtt)",
-      "headers": [{ "key": "Access-Control-Allow-Origin", "value": "*" }],
-    },
-  ],
-}
-```
+Routing on `tube.nexteditor.dev` (all responses carry the isolation headers):
+
+| Path                                        | Served by                           |
+| ------------------------------------------- | ----------------------------------- |
+| `/code`, `/assets/*`, `/fonts/*`, `/logo.*` | **reverse-proxy → editor upstream** |
+| `/lessons/*` (`.ne`/`.vtt`/thumbnails)      | tube static (same-origin)           |
+| `/gallery-assets/*` (gallery bundles)       | tube static                         |
+| `/`, `/lessons.json`, `/favicon.png`        | tube static                         |
+
+Key build/config choices that make this collision-free:
+
+- Tube builds its bundles into **`/gallery-assets/`** (`build.assetsDir`) so they
+  never shadow the editor's `/assets/*`.
+- Lesson files live under **`/lessons/`** so a lesson slug can't shadow an editor
+  root path.
+- The iframe `src` is **same-origin**: `/code?url=/lessons/<slug>/<slug>.ne&readOnly=true&deferRuntimeAutostart=true`.
+  `VITE_EDITOR_BASE` stays empty in production.
+
+Production config lives in:
+
+- [`Caddyfile`](./Caddyfile) — set `EDITOR_UPSTREAM` (e.g. `https://nexteditor.dev`).
+- [`vercel.json`](./vercel.json) — `rewrites` proxy the editor paths (edit the
+  destination host) + `headers` apply COOP/COEP origin-wide.
+
+**Local dev** (real same-origin isolation): build + preview the editor in the repo
+root (`bun run build && bun run preview` → `:4173`), then `bun run dev` in `tube/`
+(`:5174`). Vite's `server.proxy` forwards the editor paths to `:4173` and serves
+the isolation headers; `.env` holds `VITE_EDITOR_PROXY_TARGET`.
 
 ---
 
