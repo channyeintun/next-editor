@@ -37,7 +37,7 @@ export default function LessonDetailRoute() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-slate-950 text-slate-300">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-[#11141c] font-telegraf text-slate-300">
       {status === "loading" ? (
         <p className="text-sm">Loading lesson…</p>
       ) : (
@@ -47,7 +47,7 @@ export default function LessonDetailRoute() {
           </p>
           <Link
             to="/learn"
-            className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/20"
+            className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
           >
             Back to lessons
           </Link>
