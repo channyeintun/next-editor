@@ -129,17 +129,27 @@
   border-color: #475569;
 }
 
-.driver-popover.ne-tour-popover .driver-popover-next-btn,
-.driver-popover.ne-tour-popover .driver-popover-close-btn {
+.driver-popover.ne-tour-popover .driver-popover-next-btn {
   background-color: #10c776;
   color: #0f172a;
   border: none;
   text-shadow: none;
 }
 
-.driver-popover.ne-tour-popover .driver-popover-next-btn:hover,
-.driver-popover.ne-tour-popover .driver-popover-close-btn:hover {
+.driver-popover.ne-tour-popover .driver-popover-next-btn:hover {
   background-color: #34d399;
+}
+
+/* The close affordance is the small corner "×" — keep it a subtle icon, not a
+   filled button. */
+.driver-popover.ne-tour-popover .driver-popover-close-btn {
+  color: #64748b;
+  background-color: transparent;
+  text-shadow: none;
+}
+
+.driver-popover.ne-tour-popover .driver-popover-close-btn:hover {
+  color: #f1f5f9;
 }
 
 .driver-popover.ne-tour-popover .driver-popover-arrow-side-left.driver-popover-arrow,

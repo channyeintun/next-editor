@@ -40,17 +40,22 @@ export function EditorLayout() {
   const tourStartedRef = useRef(false);
 
   useEffect(() => {
-    if (urlLoading || tourStartedRef.current) {
+    // Don't tour inside read-only embeds (the landing-page demo iframe), and wait
+    // until any URL-driven recording load has finished.
+    if (urlLoading || readOnly || tourStartedRef.current) {
       return;
     }
 
+    // Defer one frame so the lazily-mounted editor chrome (header, runner dock)
+    // has painted before we query the `data-tour` targets. The frame is left to
+    // fire on its own — cancelling it in cleanup would let StrictMode's dev
+    // double-invoke abort the tour entirely (run #1 schedules, cleanup cancels,
+    // run #2 short-circuits on the ref), so the tour would never auto-start.
     tourStartedRef.current = true;
-    const frameId = requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
       startTour();
     });
-
-    return () => cancelAnimationFrame(frameId);
-  }, [urlLoading]);
+  }, [urlLoading, readOnly]);
 
   return (
     <div className="h-dvh flex flex-col text-white overflow-hidden" data-cursor-replay-target="app">

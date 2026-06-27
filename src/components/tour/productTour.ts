@@ -3,30 +3,30 @@ import "driver.js/dist/driver.css";
 
 const TOUR_SEEN_KEY = "next-editor.tour.v1.seen";
 
-const TOUR_STEPS: Array<DriveStep & { selector: string }> = [
+const TOUR_STEPS: Array<DriveStep & { element: string }> = [
   {
-    selector: '[data-tour="record"]',
+    element: '[data-tour="record"]',
     popover: {
       title: "Record",
       description: "Click here to start (or stop) recording your coding session.",
     },
   },
   {
-    selector: '[data-tour="settings"]',
+    element: '[data-tour="settings"]',
     popover: {
       title: "Settings",
       description: "Open settings to switch starter templates, manage env vars, and import/export.",
     },
   },
   {
-    selector: '[data-tour="preview"]',
+    element: '[data-tour="preview"]',
     popover: {
       title: "Preview",
       description: "Toggle the live preview panel to see your project render as you type.",
     },
   },
   {
-    selector: '[data-tour="runner"]',
+    element: '[data-tour="runner"]',
     popover: {
       title: "Runner",
       description:
@@ -36,7 +36,7 @@ const TOUR_STEPS: Array<DriveStep & { selector: string }> = [
 ];
 
 function buildTourSteps(): DriveStep[] {
-  return TOUR_STEPS.filter((step) => document.querySelector(step.selector));
+  return TOUR_STEPS.filter((step) => document.querySelector(step.element));
 }
 
 export function hasSeenTour(): boolean {
