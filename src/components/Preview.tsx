@@ -1,4 +1,4 @@
-import { lazy, useEffect, useMemo } from "react";
+import { lazy, useEffect } from "react";
 import { PreviewChrome } from "./preview/PreviewChrome";
 import { RuntimePreviewRenderer } from "./preview/RuntimePreviewRenderer";
 import { usePreviewController } from "./preview/usePreviewController";
@@ -6,6 +6,19 @@ import { useCollapseTransition } from "../hooks/useCollapseTransition";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 
 const ApiClientPanel = lazy(() => import("./preview/ApiClientPanel"));
+
+/** The API client shows the runtime origin as a read-only prefix on the path input. */
+function formatPreviewOriginLabel(runtimePreviewUrl: string | null): string {
+  if (!runtimePreviewUrl) {
+    return "";
+  }
+
+  try {
+    return new URL(runtimePreviewUrl).host;
+  } catch {
+    return "";
+  }
+}
 
 function Preview() {
   const controller = usePreviewController();
@@ -32,15 +45,7 @@ function Preview() {
   }, [controller.isResizing]);
 
   const isApiMode = controller.activeMode === "api";
-
-  const previewOriginLabel = useMemo(() => {
-    if (!controller.runtimePreviewUrl) return "";
-    try {
-      return new URL(controller.runtimePreviewUrl).host;
-    } catch {
-      return "";
-    }
-  }, [controller.runtimePreviewUrl]);
+  const previewOriginLabel = formatPreviewOriginLabel(controller.runtimePreviewUrl);
 
   // Docked: render while open, and keep rendering through the slide-out
   // (`isMounted` stays true until the panel is offscreen). Floating mounts/unmounts
@@ -85,12 +90,17 @@ function Preview() {
       showModeToggle={controller.showModeToggle}
       onModeChange={controller.setActiveMode}
     >
-      <div className={isApiMode ? "hidden" : "contents"}>{previewRenderer}</div>
+      {/* The iframe stays mounted and its `display` never changes — toggling that
+          would reload the cross-origin runtime frame and lose its state. In API
+          mode the panel sits on top as an opaque overlay instead. */}
+      {previewRenderer}
       {isApiMode ? (
-        <ApiClientPanel
-          onSend={controller.sendApiClientRequest}
-          previewOriginLabel={previewOriginLabel}
-        />
+        <div className="absolute inset-0 z-10">
+          <ApiClientPanel
+            onSend={controller.sendApiClientRequest}
+            previewOriginLabel={previewOriginLabel}
+          />
+        </div>
       ) : null}
     </PreviewChrome>
   );

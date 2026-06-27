@@ -88,9 +88,6 @@ export interface PreviewController {
   handleTransitionStart: () => void;
   handleTransitionComplete: () => void;
   setActiveMode: (mode: PreviewActiveMode) => void;
-  handleApiClientResponse: (
-    payload: import("../../utils/apiClientBridge").ApiClientResultPayload,
-  ) => void;
   sendApiClientRequest: () => void;
 }
 
@@ -1025,6 +1022,19 @@ export function usePreviewController(): PreviewController {
     };
   }, [panelMode, isOpen, forceIframeRepaint]);
 
+  // Returning to browser mode uncovers the runtime iframe; if Chromium occlusion-
+  // culled it while the API panel overlay was on top, nudge a repaint so it isn't
+  // left blank. No-op for same-origin previews and idempotent.
+  useEffect(() => {
+    if (activeMode !== "browser" || !isOpen) {
+      return;
+    }
+
+    const raf = requestAnimationFrame(forceIframeRepaint);
+
+    return () => cancelAnimationFrame(raf);
+  }, [activeMode, isOpen, forceIframeRepaint]);
+
   return {
     containerRef,
     iframeRef,
@@ -1056,7 +1066,6 @@ export function usePreviewController(): PreviewController {
     handleTransitionStart,
     handleTransitionComplete,
     setActiveMode,
-    handleApiClientResponse: apiClient.handleResponse,
     sendApiClientRequest: apiClient.send,
   };
 }

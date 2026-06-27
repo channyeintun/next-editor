@@ -1,18 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useSelector } from "@xstate/store-react";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
 import {
   API_CLIENT_REQUEST_MESSAGE_TYPE,
   type ApiClientResultPayload,
 } from "../../utils/apiClientBridge";
-import {
-  selectBody,
-  selectHeaders,
-  selectMethod,
-  selectPath,
-  selectSending,
-  type ApiClientResult,
-} from "../../stores/apiClientStore";
+import type { ApiClientResult } from "../../stores/apiClientStore";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -26,13 +18,15 @@ interface UseApiClientOptions {
   runtimePreviewUrl: string | null;
 }
 
+/**
+ * Drives the API client transport: posts a request into the runtime preview
+ * iframe (same-origin, so no CORS) and resolves the matching response from the
+ * message bridge. The draft request is read from the store snapshot at send
+ * time rather than via selectors, so this hook subscribes to nothing — keeping
+ * `usePreviewController` from re-rendering on every keystroke in the panel.
+ */
 export function useApiClient({ iframeRef, runtimePreviewUrl }: UseApiClientOptions) {
   const store = useApiClientStoreInstance();
-  const method = useSelector(store, (s) => selectMethod(s.context));
-  const path = useSelector(store, (s) => selectPath(s.context));
-  const headers = useSelector(store, (s) => selectHeaders(s.context));
-  const body = useSelector(store, (s) => selectBody(s.context));
-  const sending = useSelector(store, (s) => selectSending(s.context));
 
   const pendingIdRef = useRef<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,15 +74,17 @@ export function useApiClient({ iframeRef, runtimePreviewUrl }: UseApiClientOptio
 
   const send = useCallback(() => {
     const iframe = iframeRef.current;
+    const { method, path, headers, body, sending } = store.getSnapshot().context;
+
     if (!iframe?.contentWindow || !runtimePreviewUrl || sending) {
       return;
     }
 
     const id = generateRequestId();
     const headerRecord: Record<string, string> = {};
-    for (const h of headers) {
-      if (h.enabled && h.key.trim()) {
-        headerRecord[h.key.trim()] = h.value;
+    for (const header of headers) {
+      if (header.enabled && header.key.trim()) {
+        headerRecord[header.key.trim()] = header.value;
       }
     }
 
@@ -126,7 +122,7 @@ export function useApiClient({ iframeRef, runtimePreviewUrl }: UseApiClientOptio
         },
       });
     }, REQUEST_TIMEOUT_MS);
-  }, [body, clearPending, headers, iframeRef, method, path, runtimePreviewUrl, sending, store]);
+  }, [clearPending, iframeRef, runtimePreviewUrl, store]);
 
-  return { send, handleResponse, sending };
+  return { send, handleResponse };
 }
