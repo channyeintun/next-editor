@@ -39,7 +39,7 @@ import {
   type PreviewScrollPosition,
 } from "./previewIframeUtils";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
-import type { ApiClientResult, HttpMethod } from "../../stores/apiClientStore";
+import { recordedResultToStoreResult, type HttpMethod } from "../../stores/apiClientStore";
 import { hasRrwebPreviewEvents } from "./rrwebPreview";
 import { useApiClient } from "./useApiClient";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
@@ -286,9 +286,9 @@ export function usePreviewController(): PreviewController {
     }
   }, [activeMode, showModeToggle]);
 
+  // The store instance is created once in its provider, so it is referentially
+  // stable and safe to close over directly (no ref indirection needed).
   const apiClientStore = useApiClientStoreInstance();
-  const apiClientStoreRef = useRef(apiClientStore);
-  apiClientStoreRef.current = apiClientStore;
   // Replay re-applies preview state at many timeline points and carries API state
   // forward across unrelated events, so dedupe by content to apply each distinct
   // recorded state exactly once.
@@ -637,31 +637,12 @@ export function usePreviewController(): PreviewController {
       }
       lastAppliedApiSignatureRef.current = signature;
 
-      const recordedResult = apiState.result;
-      const result: ApiClientResult | null = recordedResult
-        ? recordedResult.ok
-          ? {
-              ok: true,
-              response: {
-                status: recordedResult.status,
-                statusText: recordedResult.statusText,
-                headers: recordedResult.headers,
-                body: recordedResult.body,
-                durationMs: recordedResult.durationMs,
-              },
-            }
-          : {
-              ok: false,
-              error: { error: recordedResult.error, durationMs: recordedResult.durationMs },
-            }
-        : null;
-
-      apiClientStoreRef.current.trigger.applyReplayState({
+      apiClientStore.trigger.applyReplayState({
         method: (apiState.request?.method ?? "GET") as HttpMethod,
         path: apiState.request?.path ?? "/",
         body: apiState.request?.body ?? "",
         sending: apiState.sending ?? false,
-        result,
+        result: apiState.result ? recordedResultToStoreResult(apiState.result) : null,
       });
     },
   });

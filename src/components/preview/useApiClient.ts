@@ -5,7 +5,7 @@ import {
   type ApiClientResultPayload,
 } from "../../utils/apiClientBridge";
 import type { ApiClientRecordedRequest, ApiClientRecordedResult } from "../../types/slides";
-import type { ApiClientResult } from "../../stores/apiClientStore";
+import { recordedResultToStoreResult } from "../../stores/apiClientStore";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -59,24 +59,8 @@ export function useApiClient({
 
       clearPending();
 
-      const result: ApiClientResult = payload.ok
-        ? {
-            ok: true,
-            response: {
-              status: payload.status,
-              statusText: payload.statusText,
-              headers: payload.headers,
-              body: payload.body,
-              durationMs: payload.durationMs,
-            },
-          }
-        : {
-            ok: false,
-            error: { error: payload.error, durationMs: payload.durationMs },
-          };
-
-      store.trigger.receiveResult({ id: payload.id, result });
-
+      // `payload` is the recorded (flat) result shape plus an `id`; reuse it for
+      // both the live store update and the recording callback.
       const recordedResult: ApiClientRecordedResult = payload.ok
         ? {
             ok: true,
@@ -87,6 +71,11 @@ export function useApiClient({
             durationMs: payload.durationMs,
           }
         : { ok: false, error: payload.error, durationMs: payload.durationMs };
+
+      store.trigger.receiveResult({
+        id: payload.id,
+        result: recordedResultToStoreResult(recordedResult),
+      });
       onResponseReceived?.(recordedResult);
     },
     [clearPending, onResponseReceived, store],

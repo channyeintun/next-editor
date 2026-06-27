@@ -1,4 +1,5 @@
 import { createStore } from "@xstate/store-react";
+import type { ApiClientRecordedResult } from "../types/slides";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -152,3 +153,20 @@ export const selectBody = (c: ApiClientStoreContext): string => c.body;
 export const selectSending = (c: ApiClientStoreContext): boolean => c.sending;
 export const selectResult = (c: ApiClientStoreContext): ApiClientResult | null => c.result;
 export const selectHistory = (c: ApiClientStoreContext): ApiClientHistoryEntry[] => c.history;
+
+/** Maps a recorded (flat) result back into the store's nested result shape, used
+ *  when replaying a recording's API client interactions. */
+export function recordedResultToStoreResult(recorded: ApiClientRecordedResult): ApiClientResult {
+  return recorded.ok
+    ? {
+        ok: true,
+        response: {
+          status: recorded.status,
+          statusText: recorded.statusText,
+          headers: recorded.headers,
+          body: recorded.body,
+          durationMs: recorded.durationMs,
+        },
+      }
+    : { ok: false, error: { error: recorded.error, durationMs: recorded.durationMs } };
+}
