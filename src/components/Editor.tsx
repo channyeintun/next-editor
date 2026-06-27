@@ -1,4 +1,4 @@
-import { lazy } from "react";
+import { lazy, useEffect, useRef } from "react";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
@@ -21,6 +21,7 @@ import CursorComponent from "./Cursor.tsx";
 import LoadingSpinner from "./LoadingSpinner.tsx";
 import { ApiClientStoreProvider } from "../contexts/ApiClientStoreContext";
 import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
+import { startTour } from "./tour/productTour";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
 const TerminalPanel = lazy(() => import("./TerminalPanel"));
@@ -35,6 +36,21 @@ export function EditorLayout() {
   const readOnly = urlParams.get("readOnly") === "true";
   // Enlarge the playback controls for small embeds (e.g. a scaled-down demo iframe).
   const largeControls = urlParams.get("largeControls") === "true";
+
+  const tourStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (urlLoading || tourStartedRef.current) {
+      return;
+    }
+
+    tourStartedRef.current = true;
+    const frameId = requestAnimationFrame(() => {
+      startTour();
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [urlLoading]);
 
   return (
     <div className="h-dvh flex flex-col text-white overflow-hidden" data-cursor-replay-target="app">
