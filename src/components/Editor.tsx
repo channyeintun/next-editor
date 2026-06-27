@@ -19,7 +19,6 @@ import CameraOverlay from "./CameraOverlay";
 import CaptionsOverlay from "./CaptionsOverlay";
 import CursorComponent from "./Cursor.tsx";
 import LoadingSpinner from "./LoadingSpinner.tsx";
-import { ApiClientStoreProvider } from "../contexts/ApiClientStoreContext";
 import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
@@ -68,15 +67,13 @@ export default function Editor() {
           <RuntimePanelStoreProvider>
             <PreviewAdapterHandleProvider>
               <CaptionStoreProvider>
-                <ApiClientStoreProvider>
-                  <NextEditorProvider>
-                    <SlidesProvider>
-                      <PreviewPanelProvider>
-                        <EditorLayout />
-                      </PreviewPanelProvider>
-                    </SlidesProvider>
-                  </NextEditorProvider>
-                </ApiClientStoreProvider>
+                <NextEditorProvider>
+                  <SlidesProvider>
+                    <PreviewPanelProvider>
+                      <EditorLayout />
+                    </PreviewPanelProvider>
+                  </SlidesProvider>
+                </NextEditorProvider>
               </CaptionStoreProvider>
             </PreviewAdapterHandleProvider>
           </RuntimePanelStoreProvider>

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   type RefObject,
   useRef,
@@ -6,6 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type TouchEvent as ReactTouchEvent,
 } from "react";
+import { API_CLIENT_READY_MESSAGE_TYPE } from "../../utils/apiClientBridge";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
 import { usePreviewAdapterHandle } from "../../contexts/PreviewAdapterHandleContext";
 import { useRuntimePanelStore } from "../../contexts/RuntimePanelStoreContext";
@@ -35,8 +37,7 @@ import {
   patchIframeContentFromHtml,
   type PreviewScrollPosition,
 } from "./previewIframeUtils";
-import { hasRrwebPreviewEvents } from "./rrwebPreview";
-import { useApiClient } from "./useApiClient";
+import { hasRrwebPreviewEvents, RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
 import { usePreviewMessageBridge } from "./usePreviewMessageBridge";
 import { usePreviewPlaybackRegistration } from "./usePreviewPlaybackRegistration";
@@ -60,6 +61,7 @@ export type PreviewActiveMode = "browser" | "api";
 export interface PreviewController {
   containerRef: RefObject<HTMLDivElement | null>;
   iframeRef: RefObject<HTMLIFrameElement | null>;
+  apiIframeRef: RefObject<HTMLIFrameElement | null>;
   replayContainerRef: RefObject<HTMLDivElement | null>;
   isRrwebReplayActive: boolean;
   size: PreviewSize;
@@ -74,7 +76,6 @@ export interface PreviewController {
   previewAddressTitle: string;
   activeMode: PreviewActiveMode;
   showModeToggle: boolean;
-  isRuntimeReady: boolean;
   handleClose: () => void;
   handleFloat: () => void;
   handleDock: () => void;
@@ -88,7 +89,7 @@ export interface PreviewController {
   handleTransitionStart: () => void;
   handleTransitionComplete: () => void;
   setActiveMode: (mode: PreviewActiveMode) => void;
-  sendApiClientRequest: () => void;
+  notifyApiClientReady: () => void;
 }
 
 /** Pointer coordinates from a mouse or touch event (React or native). */
@@ -156,6 +157,7 @@ export function usePreviewController(): PreviewController {
   const [activeMode, setActiveMode] = useState<PreviewActiveMode>("browser");
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const apiIframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const replayContainerRef = useRef<HTMLDivElement>(null);
 
@@ -283,10 +285,34 @@ export function usePreviewController(): PreviewController {
     }
   }, [activeMode, showModeToggle]);
 
-  const apiClient = useApiClient({
-    iframeRef,
-    runtimePreviewUrl: effectiveRuntimePreviewUrl,
-  });
+  // Tell the API client iframe whether the server is up (it gates Send / shows a
+  // waiting banner). Posted on readiness changes and whenever the frame (re)loads.
+  const notifyApiClientReady = useCallback(() => {
+    apiIframeRef.current?.contentWindow?.postMessage(
+      { type: API_CLIENT_READY_MESSAGE_TYPE, payload: { ready: isRuntimeReady } },
+      "*",
+    );
+  }, [isRuntimeReady]);
+
+  useEffect(() => {
+    notifyApiClientReady();
+  }, [notifyApiClientReady, activeMode]);
+
+  // Leaving the API frame: ask the runtime preview's recorder for a fresh
+  // FullSnapshot so replay rebuilds the preview at this point on the timeline
+  // instead of keeping the API client's last snapshot on screen.
+  const previousActiveModeRef = useRef(activeMode);
+  useEffect(() => {
+    const previousMode = previousActiveModeRef.current;
+    previousActiveModeRef.current = activeMode;
+
+    if (previousMode === "api" && activeMode === "browser") {
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE },
+        "*",
+      );
+    }
+  }, [activeMode]);
 
   isRecordingRef.current = isRecording;
   handlePreviewEventRef.current = handlePreviewEvent;
@@ -400,6 +426,7 @@ export function usePreviewController(): PreviewController {
 
   usePreviewMessageBridge({
     iframeRef,
+    apiIframeRef,
     effectiveRuntimePreviewUrl,
     isRecordingRef,
     handlePreviewEventRef,
@@ -416,7 +443,6 @@ export function usePreviewController(): PreviewController {
     sizeRef,
     onConsoleMessage: (msg: string) => consoleAppender.current?.(msg),
     onRouteChange: applyPreviewRoute,
-    onApiClientResponse: apiClient.handleResponse,
   });
 
   const updateIframeContent = (
@@ -1043,6 +1069,7 @@ export function usePreviewController(): PreviewController {
   return {
     containerRef,
     iframeRef,
+    apiIframeRef,
     replayContainerRef,
     isRrwebReplayActive,
     size,
@@ -1057,7 +1084,6 @@ export function usePreviewController(): PreviewController {
     previewAddressTitle: previewAddress.title,
     activeMode,
     showModeToggle,
-    isRuntimeReady,
     handleClose,
     handleFloat,
     handleDock,
@@ -1071,6 +1097,6 @@ export function usePreviewController(): PreviewController {
     handleTransitionStart,
     handleTransitionComplete,
     setActiveMode,
-    sendApiClientRequest: apiClient.send,
+    notifyApiClientReady,
   };
 }

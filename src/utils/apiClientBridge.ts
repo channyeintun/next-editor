@@ -1,5 +1,8 @@
 export const API_CLIENT_REQUEST_MESSAGE_TYPE = "API_CLIENT_REQUEST";
 export const API_CLIENT_RESPONSE_MESSAGE_TYPE = "API_CLIENT_RESPONSE";
+// Parent → API client iframe: whether the runtime server is up and requests can
+// be sent. The iframe toggles a "waiting for the server" banner / Send button.
+export const API_CLIENT_READY_MESSAGE_TYPE = "API_CLIENT_READY";
 
 export interface ApiClientRequestPayload {
   id: string;

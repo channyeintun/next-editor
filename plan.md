@@ -212,11 +212,21 @@ Notes:
 - [ ] `activeMode` in `usePreviewController`; keep iframe mounted in `api` mode.
 - [ ] Seed the `htmx-express` starter expectation: `GET /api/time` works end-to-end.
 
-### Phase 5 — Record / replay (optional, follow-up)
+### Phase 5 — Record / replay via rrweb
 
-- [ ] Emit an `api_client_request` `PreviewEvent` (request + response) so recorded
-      lessons replay the call on timeline; extend the recorded-event types and the
-      replay path. Deferred so Phases 1–4 ship a working live tool first.
+Rather than inventing a new recorded-event stream in the codec, the API client is
+rebuilt as **its own rrweb-recorded iframe** so the existing preview record/replay
+pipeline captures it for free (rrweb records rendered DOM; the request fields and
+rendered response are DOM, so they replay with no live server).
+
+- [x] Rebuild the panel as a self-contained `srcdoc` document (plain DOM + a regex
+      JSON highlighter — no React/Monaco, which an iframe can't cheaply reuse and
+      which rrweb records poorly) with the rrweb recorder inlined.
+- [x] Requests tunnel out via postMessage → runtime preview iframe's fetch proxy →
+      response relayed back and rendered into the API iframe's DOM (rrweb captures it).
+- [x] Replay rides the merged rrweb stream unchanged; an on-demand `takeFullSnapshot`
+      lets the preview re-snapshot when the API frame is closed so replay switches back.
+- [x] Removes the Phase 2–3 React panel + parent store; keeps the Phase 1 transport.
 
 ---
 

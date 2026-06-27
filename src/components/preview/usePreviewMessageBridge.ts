@@ -8,8 +8,8 @@ import {
   type PreviewSize,
 } from "../../types/slides";
 import {
+  API_CLIENT_REQUEST_MESSAGE_TYPE,
   API_CLIENT_RESPONSE_MESSAGE_TYPE,
-  type ApiClientResultPayload,
 } from "../../utils/apiClientBridge";
 import {
   IFRAME_CONSOLE_MESSAGE_TYPE,
@@ -29,6 +29,7 @@ import {
 
 interface UsePreviewMessageBridgeOptions {
   iframeRef: RefObject<HTMLIFrameElement | null>;
+  apiIframeRef?: RefObject<HTMLIFrameElement | null>;
   effectiveRuntimePreviewUrl: string | null;
   isRecordingRef: RefObject<boolean>;
   handlePreviewEventRef: RefObject<((event: PreviewEvent) => void) | null>;
@@ -45,7 +46,6 @@ interface UsePreviewMessageBridgeOptions {
   sizeRef: RefObject<PreviewSize>;
   onConsoleMessage: (message: string) => void;
   onRouteChange: (route: string) => void;
-  onApiClientResponse?: (payload: ApiClientResultPayload) => void;
 }
 
 function formatPreviewConsoleMessage(payload: unknown): string | null {
@@ -147,6 +147,7 @@ function createValidatedPatchBatch(payload: unknown): PreviewDomPatchBatch | nul
 
 export function usePreviewMessageBridge({
   iframeRef,
+  apiIframeRef,
   effectiveRuntimePreviewUrl,
   isRecordingRef,
   handlePreviewEventRef,
@@ -163,33 +164,22 @@ export function usePreviewMessageBridge({
   sizeRef,
   onConsoleMessage,
   onRouteChange,
-  onApiClientResponse,
 }: UsePreviewMessageBridgeOptions) {
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) {
+      const previewWindow = iframeRef.current?.contentWindow;
+      const apiWindow = apiIframeRef?.current?.contentWindow;
+      const fromApiClient = Boolean(apiWindow) && event.source === apiWindow;
+
+      if (event.source !== previewWindow && !fromApiClient) {
         return;
       }
 
       const { type, payload } = event.data || {};
-      if (type === IFRAME_CONSOLE_MESSAGE_TYPE) {
-        const message = formatPreviewConsoleMessage(payload);
 
-        if (message) {
-          onConsoleMessage(message);
-        }
-
-        return;
-      }
-
-      if (type === API_CLIENT_RESPONSE_MESSAGE_TYPE) {
-        if (payload && typeof payload.id === "string" && onApiClientResponse) {
-          onApiClientResponse(payload as ApiClientResultPayload);
-        }
-
-        return;
-      }
-
+      // rrweb document/patch streams are recorded from BOTH frames (the runtime
+      // preview and the API client), so replay can switch between them on the
+      // single merged event stream — handle these before the source split.
       if (type === RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE) {
         const initialDocument = createValidatedInitialDocument(payload, effectiveRuntimePreviewUrl);
         if (!initialDocument) {
@@ -215,6 +205,39 @@ export function usePreviewMessageBridge({
 
         if (patchBatch && isRecordingRef.current && handlePreviewPatchBatchRef.current) {
           handlePreviewPatchBatchRef.current(patchBatch);
+        }
+
+        return;
+      }
+
+      // The API client frame's only non-rrweb message is an outbound request,
+      // relayed into the runtime preview iframe's same-origin fetch proxy (which
+      // sidesteps CORS). Nothing else from that frame concerns the host.
+      if (fromApiClient) {
+        if (type === API_CLIENT_REQUEST_MESSAGE_TYPE) {
+          previewWindow?.postMessage(event.data, "*");
+        }
+
+        return;
+      }
+
+      // --- Everything below is from the runtime preview iframe only. ---
+
+      if (type === IFRAME_CONSOLE_MESSAGE_TYPE) {
+        const message = formatPreviewConsoleMessage(payload);
+
+        if (message) {
+          onConsoleMessage(message);
+        }
+
+        return;
+      }
+
+      // The fetch proxy's response is relayed back to the API client frame, which
+      // renders it into its DOM (so rrweb records it for replay).
+      if (type === API_CLIENT_RESPONSE_MESSAGE_TYPE) {
+        if (payload && typeof payload.id === "string") {
+          apiWindow?.postMessage(event.data, "*");
         }
 
         return;
@@ -328,6 +351,7 @@ export function usePreviewMessageBridge({
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [
+    apiIframeRef,
     effectiveRuntimePreviewUrl,
     handlePreviewInitialDocumentRef,
     handlePreviewEventRef,
@@ -337,7 +361,6 @@ export function usePreviewMessageBridge({
     isUserScrollingRef,
     lastRuntimeSnapshotRef,
     lastPreviewInitialDocumentRef,
-    onApiClientResponse,
     onConsoleMessage,
     onRouteChange,
     pendingInteractionRef,
