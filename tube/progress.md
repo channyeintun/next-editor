@@ -25,3 +25,7 @@
       `public/lessons/` + `public/lessons.json`. Wired via tsconfig `paths` + Vite
       `resolve.alias` + Tailwind `@source` (not a bun workspace — bun's workspace
       mode drops a scoped `vite-plus` platform dep here). Verified tsc + lint + build.
+- [x] 13. Replace the iframe with the real `Editor` component. `LessonDetail`
+      lazy-loads `@app/components/Editor` (separate ~290KB chunk; gallery chunk ~9KB)
+      and `LearnPage` switches grid ↔ detail via the `?url=` search param. Removed
+      `LessonPlayer.tsx` and `buildPlayUrl`; added `@app/*` alias (tsconfig + Vite).

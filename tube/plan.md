@@ -1,9 +1,9 @@
 # NextEditor Tube — Implementation Plan
 
 A "YouTube for code lessons": a lesson **gallery** showing YouTube-style cards
-(thumbnail image only — no video on the card). Clicking a card opens the lesson in
-an **embedded NextEditor iframe** (read-only playback); because the editor is
-same-origin, viewers can also run/edit the code live (WebContainer).
+(thumbnail image only — no video on the card). Clicking a card opens a detail view
+that renders the real **`Editor`** component directly (read-only playback); because
+it's the same app, viewers can also run/edit the code live (WebContainer).
 
 **Architecture (B2 — `/learn` route, monorepo package).** `tube` is a workspace-style
 **package** (`@next-editor/tube`) living in the `tube/` folder. The main app mounts
@@ -40,53 +40,49 @@ main app for WebContainer) covers `/learn` automatically.
 
 ## 2. The link contract (most important part)
 
-Lessons open in an **embedded iframe** (see `LessonPlayer`), not by navigating away.
-The gallery runs at `/learn` in the same app as the editor, so the iframe `src` is a
-plain same-origin path:
+No iframe. The gallery and the editor are the **same app**, so `LessonDetail` renders
+the `Editor` component directly (lazy-loaded). The `Editor` is URL-driven, so opening
+a lesson just sets the same search params it already understands, on the `/learn`
+route:
 
 ```
-/code?url=<ENCODED_NE_PATH>&readOnly=true&deferRuntimeAutostart=true
+/learn?url=/lessons/<slug>/<slug>.ne&readOnly=true&deferRuntimeAutostart=true&title=<title>
 ```
 
-Where `<ENCODED_NE_PATH>` is `encodeURIComponent("/lessons/<slug>/<slug>.ne")`,
-e.g.:
+`LearnPage` reads `?url=`: present → render `LessonDetail` (the `Editor` + a back
+button); absent → render the card grid. Selecting a card calls
+`setSearchParams({ url, readOnly: "true", … })`; the back button clears them.
 
-```
-/code?url=%2Flessons%2Fintroduction%2Fintroduction.ne&readOnly=true&deferRuntimeAutostart=true
-```
-
-Verified against the main app:
+How the `Editor` consumes these (unchanged in the main app):
 
 - `readOnly=true` → playback mode: hides import/export, disables record mode, skips
   the product tour. (`src/components/Editor.tsx`)
-- `url=...` → loaded via `useUrlLoader`; relative URLs resolve against the editor's
-  origin, absolute (cross-origin) URLs are fetched directly (with a `/api/proxy`
-  attempt first that harmlessly falls back). (`src/hooks/useUrlQuery.ts`,
-  `src/hooks/useUrlLoader.ts`)
-
-> Optionally add `&largeControls=true` if a lesson is meant to be viewed in a
-> reduced/embedded context — not needed for normal full-page playback.
+- `url=...` → loaded via `useUrlQuery`/`useUrlLoader`; a same-origin path is fetched
+  from this origin directly.
+- `deferRuntimeAutostart=true` → defer the heavy runtime boot (matches the landing
+  demo).
 
 ---
 
 ## 3. Origin model (B2 — one app, one origin)
 
-The gallery is a route (`/learn`) inside the editor app, so the gallery page, the
-editor (`/code`), and the lesson files are **all same-origin**. That means:
+The gallery is a route (`/learn`) inside the editor app, and the `Editor` renders in
+the same page (no iframe), so the gallery, the editor, and the lesson files are **all
+same-origin**. That means:
 
-- **No CORS, no reverse proxy** — the editor fetches `.ne`/`.vtt` from the same
-  origin directly.
+- **No CORS, no reverse proxy, no iframe** — the editor fetches `.ne`/`.vtt` from the
+  same origin directly.
 - **Cross-origin isolation already works** — the main app serves
   `COOP: same-origin` + `COEP: require-corp` on every response (for WebContainer),
-  so `/learn` is cross-origin isolated and the same-origin `/code` iframe inherits
-  it; WebContainer (`SharedArrayBuffer`) can boot for live run/edit.
+  so `/learn` (and the `Editor` it renders) is cross-origin isolated; WebContainer
+  (`SharedArrayBuffer`) can boot for live run/edit.
 - The only genuinely cross-origin resources are the editor's own WebContainer CDN
   calls (`*.staticblitz.com`), which already serve COEP-compatible headers.
 
 > Why not a separate `tube.nexteditor.dev` subdomain? A cross-origin iframe can't be
 > made cross-origin-isolated without `CORP` on every subresource (brittle), and a
-> reverse proxy adds an edge layer. Mounting at `/learn` on the existing origin is
-> the simplest correct option.
+> reverse proxy adds an edge layer. Mounting at `/learn` on the existing origin and
+> rendering the `Editor` directly is the simplest correct option.
 
 ---
 
@@ -182,15 +178,15 @@ tube/                        <- @next-editor/tube package (UI only, no build too
   package.json               <- name + peerDeps + exports ./src/index.tsx
   src/
     index.tsx                <- package entry: default export = LearnPage
-    LearnPage.tsx            <- Header + LessonGrid + Footer (mounted at /learn)
+    LearnPage.tsx            <- grid vs. detail switch (reads ?url= search param)
     lib/
       lessons.ts             <- fetch + type for /lessons.json
-      links.ts               <- buildPlayUrl(lesson), resolveThumb(lesson)
+      links.ts               <- resolveThumb(lesson)
     components/
       Header.tsx             <- logo + "Record your own" CTA to /code
-      LessonGrid.tsx         <- responsive grid + active-lesson player state
+      LessonGrid.tsx         <- responsive grid (onOpen callback)
       LessonCard.tsx         <- thumbnail-only YouTube-style card (onPlay callback)
-      LessonPlayer.tsx       <- full-screen overlay embedding the /code iframe
+      LessonDetail.tsx       <- lazy-renders @app Editor + back button
       SearchBar.tsx          <- client-side filter (title/tags)
       Footer.tsx
     types.ts                 <- Lesson type
@@ -198,8 +194,8 @@ tube/                        <- @next-editor/tube package (UI only, no build too
 (main app, repo root)
   src/router.tsx             <- adds the /learn route → import("@next-editor/tube")
   src/index.css              <- @source "../tube/src" (Tailwind scan)
-  tsconfig.json              <- paths: @next-editor/tube → tube/src/index.tsx
-  vite.config.ts             <- resolve.alias for @next-editor/tube
+  tsconfig.json              <- paths: @next-editor/tube → tube/src; @app/* → src/*
+  vite.config.ts             <- resolve.alias for @next-editor/tube and @app
   public/
     lessons.json
     lessons/<slug>/...       <- lesson folders (see §4)
@@ -214,14 +210,15 @@ tube/                        <- @next-editor/tube package (UI only, no build too
 - 16:9 thumbnail `<img loading="lazy">` with rounded corners; optional duration
   badge in the corner (from `lesson.duration`).
 - Below: title (2-line clamp), author + publishedAt meta row.
-- Entire card is a `<button onClick={() => onPlay(lesson)}>` — clicking opens the
-  `LessonPlayer` overlay (no navigation), not an `<a href>`.
+- Entire card is a `<button onClick={() => onPlay(lesson)}>` — clicking selects the
+  lesson (sets `/learn` search params), not an `<a href>`.
 - Hover: subtle scale/elevation, matching the main landing page's aesthetic.
 
-**`LessonPlayer`** (full-screen overlay)
+**`LessonDetail`** (full-screen detail view)
 
-- Renders `<iframe src={buildPlayUrl(lesson)} allow="cross-origin-isolated; …">`.
-- Esc / Close button dismisses it; locks body scroll while open.
+- Lazy-loads the host app's `Editor` (`lazy(() => import("@app/components/Editor"))`)
+  so the gallery chunk stays tiny; the editor bundle downloads only on open.
+- Renders `<Editor />` (URL-driven, read-only) under a floating "back" button.
 
 **`LessonGrid`**
 
@@ -288,9 +285,9 @@ one origin — clicking a card embeds `/code` in the overlay and plays back.
 ## 11. Acceptance criteria
 
 - `/learn` lists all lessons from `lessons.json` as thumbnail-only cards.
-- Clicking a card opens the `LessonPlayer` overlay with the editor embedded in a
-  same-origin iframe (`/code?url=…&readOnly=true`), playing back read-only (no
-  record UI, import/export hidden).
+- Clicking a card shows `LessonDetail`, which renders the real `Editor` directly
+  (lazy-loaded, driven by `?url=…&readOnly=true`), playing back read-only (no record
+  UI, import/export hidden). The Editor is a separate chunk — the gallery stays tiny.
 - Captions appear during playback (given a correctly authored `.ne`).
 - The embed is cross-origin isolated, so viewers can run/edit the code live.
 - Adding a lesson requires only: new `public/lessons/<slug>/` folder + one

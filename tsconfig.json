@@ -20,7 +20,9 @@
       ],
       // Resolve the tube workspace package to its source so it's compiled as
       // first-class app code (JSX transform, Tailwind scan, type-checked).
-      "@next-editor/tube": ["./tube/src/index.tsx"]
+      "@next-editor/tube": ["./tube/src/index.tsx"],
+      // Lets the tube package import the app's Editor for the /learn detail view.
+      "@app/*": ["./src/*"]
     },
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",

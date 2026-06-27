@@ -35,6 +35,8 @@ export default defineConfig({
       // app's JSX/Tailwind/React-Compiler pipeline (not pre-bundled from
       // node_modules). Mounted at the /learn route.
       "@next-editor/tube": fileURLToPath(new URL("./tube/src/index.tsx", import.meta.url)),
+      // Lets the tube package import the app's Editor for the /learn detail view.
+      "@app": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
   worker: {
