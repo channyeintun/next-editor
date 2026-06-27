@@ -39,6 +39,7 @@ function mergePreviewEventState(
   const carriedScrollTop = previewEvent.scrollTop ?? previousState?.scrollTop;
   const carriedScrollLeft = previewEvent.scrollLeft ?? previousState?.scrollLeft;
   const nextActiveMode = previewEvent.activeMode ?? previousState?.activeMode;
+  const nextRequestTab = previewEvent.requestTab ?? previousState?.requestTab;
 
   // API client interactions inherently happen in the API frame, so a request or
   // response implies API mode even if the explicit mode-switch event wasn't
@@ -80,6 +81,7 @@ function mergePreviewEventState(
       previewEvent.type === "preview_refresh" ? previewEvent.timestamp : previousState?.refreshKey,
     currentInteraction: previewEvent.interaction,
     activeMode: resolvedActiveMode,
+    requestTab: nextRequestTab,
     apiClientState: nextApiClientState,
   };
 
@@ -99,6 +101,7 @@ function mergePreviewEventState(
       scrollLeft: carriedScrollLeft,
       currentInteraction: undefined,
       activeMode: resolvedActiveMode,
+      requestTab: nextRequestTab,
       apiClientState: nextApiClientState,
     },
   };

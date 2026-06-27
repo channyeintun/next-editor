@@ -150,6 +150,7 @@ export interface ApiClientRecordedError {
 export type ApiClientRecordedResult = ApiClientRecordedResponse | ApiClientRecordedError;
 
 export type PreviewActiveMode = "browser" | "api";
+export type ApiClientRequestTab = "headers" | "body";
 
 export interface ApiClientReplayHistoryEntry {
   id: string;
@@ -175,6 +176,7 @@ export interface PreviewState {
   refreshKey?: number;
   currentInteraction?: IframeInteractionEvent;
   activeMode?: PreviewActiveMode;
+  requestTab?: ApiClientRequestTab;
   apiClientState?: ApiClientReplayState;
 }
 
@@ -193,7 +195,8 @@ export interface PreviewEvent {
     | "preview_resize"
     | "api_client_mode"
     | "api_client_request"
-    | "api_client_response";
+    | "api_client_response"
+    | "api_client_request_tab";
   timestamp: number;
   size?: PreviewSize;
   isOpen?: boolean;
@@ -204,6 +207,7 @@ export interface PreviewEvent {
   scrollLeft?: number;
   interaction?: IframeInteractionEvent;
   activeMode?: PreviewActiveMode;
+  requestTab?: ApiClientRequestTab;
   apiClientRequest?: ApiClientRecordedRequest;
   apiClientResult?: ApiClientRecordedResult;
 }

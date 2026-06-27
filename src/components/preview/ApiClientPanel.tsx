@@ -9,14 +9,14 @@ import {
   selectHistory,
   selectMethod,
   selectPath,
+  selectRequestTab,
   selectResult,
   selectSending,
   type HttpMethod,
 } from "../../stores/apiClientStore";
+import type { ApiClientRequestTab } from "../../types/slides";
 
 const HTTP_METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
-
-type RequestTab = "headers" | "body";
 
 const METHOD_COLORS: Record<HttpMethod, string> = {
   GET: "text-emerald-400",
@@ -64,9 +64,14 @@ function detectLanguage(headers: [string, string][], body: string): string {
 interface ApiClientPanelProps {
   onSend: () => void;
   runtimeReady: boolean;
+  onRequestTabChange?: (tab: ApiClientRequestTab) => void;
 }
 
-export default function ApiClientPanel({ onSend, runtimeReady }: ApiClientPanelProps) {
+export default function ApiClientPanel({
+  onSend,
+  runtimeReady,
+  onRequestTabChange,
+}: ApiClientPanelProps) {
   const store = useApiClientStoreInstance();
   const method = useSelector(store, (s) => selectMethod(s.context));
   const path = useSelector(store, (s) => selectPath(s.context));
@@ -75,8 +80,12 @@ export default function ApiClientPanel({ onSend, runtimeReady }: ApiClientPanelP
   const sending = useSelector(store, (s) => selectSending(s.context));
   const result = useSelector(store, (s) => selectResult(s.context));
   const history = useSelector(store, (s) => selectHistory(s.context));
+  const activeTab = useSelector(store, (s) => selectRequestTab(s.context));
 
-  const [activeTab, setActiveTab] = useState<RequestTab>("headers");
+  const selectTab = (tab: ApiClientRequestTab) => {
+    store.trigger.setRequestTab({ tab });
+    onRequestTabChange?.(tab);
+  };
 
   const canSend = runtimeReady && !sending;
 
@@ -135,11 +144,11 @@ export default function ApiClientPanel({ onSend, runtimeReady }: ApiClientPanelP
 
       {/* Request tabs */}
       <div className="flex items-center gap-1 border-b border-slate-800 px-3">
-        <TabButton active={activeTab === "headers"} onClick={() => setActiveTab("headers")}>
+        <TabButton active={activeTab === "headers"} onClick={() => selectTab("headers")}>
           Headers{headers.length > 0 ? ` (${headers.length})` : ""}
         </TabButton>
         {method !== "GET" ? (
-          <TabButton active={activeTab === "body"} onClick={() => setActiveTab("body")}>
+          <TabButton active={activeTab === "body"} onClick={() => selectTab("body")}>
             Body
           </TabButton>
         ) : null}

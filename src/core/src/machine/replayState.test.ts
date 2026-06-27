@@ -196,6 +196,34 @@ describe("replayState", () => {
     });
   });
 
+  it("carries the request tab (headers/body) through replay and seeking", () => {
+    const previewEvents: PreviewEvent[] = [
+      { type: "api_client_mode", timestamp: 0, size: "medium", activeMode: "api" },
+      { type: "api_client_request_tab", timestamp: 100, size: "medium", requestTab: "body" },
+      { type: "preview_scroll", timestamp: 200, size: "medium", scrollTop: 20 },
+      { type: "api_client_request_tab", timestamp: 300, size: "medium", requestTab: "headers" },
+    ];
+
+    const onBody = getPreviewReplayResult({
+      previewEvents,
+      currentTime: 250,
+      lastAppliedIndex: -1,
+      lastAppliedState: undefined,
+      isSeeking: true,
+    });
+    // Carried across the unrelated scroll event.
+    expect(onBody.appliedStates[0].requestTab).toBe("body");
+
+    const backToHeaders = getPreviewReplayResult({
+      previewEvents,
+      currentTime: 350,
+      lastAppliedIndex: -1,
+      lastAppliedState: undefined,
+      isSeeking: true,
+    });
+    expect(backToHeaders.appliedStates[0].requestTab).toBe("headers");
+  });
+
   it("implies API mode from a request even without a recorded mode switch", () => {
     // Recording started while already in API mode, so no api_client_mode event.
     const previewEvents: PreviewEvent[] = [

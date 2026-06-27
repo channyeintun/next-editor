@@ -5,6 +5,7 @@ import type {
 } from "../../stores/previewAdapterHandle";
 import type {
   ApiClientReplayState,
+  ApiClientRequestTab,
   IframeInteractionEvent,
   PreviewActiveMode,
   PreviewPanelMode,
@@ -47,6 +48,7 @@ interface UsePreviewPlaybackRegistrationOptions {
   rafRef: RefObject<number | null>;
   replayContainerRef: RefObject<HTMLDivElement | null>;
   onActiveModeChange?: (mode: PreviewActiveMode) => void;
+  onRequestTabChange?: (tab: ApiClientRequestTab) => void;
   onApiClientStateChange?: (state: ApiClientReplayState) => void;
 }
 
@@ -98,6 +100,7 @@ export function usePreviewPlaybackRegistration({
   rafRef,
   replayContainerRef,
   onActiveModeChange,
+  onRequestTabChange,
   onApiClientStateChange,
 }: UsePreviewPlaybackRegistrationOptions) {
   const targetScrollInteractionRef = useRef<IframeInteractionEvent | null>(null);
@@ -268,6 +271,10 @@ export function usePreviewPlaybackRegistration({
 
       if (previewState.activeMode !== undefined) {
         onActiveModeChange?.(previewState.activeMode);
+      }
+
+      if (previewState.requestTab !== undefined) {
+        onRequestTabChange?.(previewState.requestTab);
       }
 
       if (previewState.apiClientState !== undefined) {

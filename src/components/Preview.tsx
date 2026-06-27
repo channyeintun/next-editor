@@ -85,6 +85,7 @@ function Preview() {
           <ApiClientPanel
             onSend={controller.sendApiClientRequest}
             runtimeReady={controller.isRuntimeReady}
+            onRequestTabChange={controller.recordApiClientTab}
           />
         </div>
       ) : null}

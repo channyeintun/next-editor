@@ -24,6 +24,7 @@ import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRunti
 import type {
   ApiClientRecordedRequest,
   ApiClientRecordedResult,
+  ApiClientRequestTab,
   IframeInteractionEvent,
   PreviewActiveMode,
   PreviewDomPatchBatch,
@@ -97,6 +98,7 @@ export interface PreviewController {
   handleTransitionComplete: () => void;
   setActiveMode: (mode: PreviewActiveMode) => void;
   sendApiClientRequest: () => void;
+  recordApiClientTab: (tab: ApiClientRequestTab) => void;
 }
 
 /** Pointer coordinates from a mouse or touch event (React or native). */
@@ -402,6 +404,7 @@ export function usePreviewController(): PreviewController {
       scrollLeft?: number;
       interaction?: IframeInteractionEvent;
       activeMode?: PreviewActiveMode;
+      requestTab?: ApiClientRequestTab;
       apiClientRequest?: ApiClientRecordedRequest;
       apiClientResult?: ApiClientRecordedResult;
     },
@@ -419,6 +422,7 @@ export function usePreviewController(): PreviewController {
         scrollLeft: options?.scrollLeft,
         interaction: options?.interaction,
         activeMode: options?.activeMode,
+        requestTab: options?.requestTab,
         apiClientRequest: options?.apiClientRequest,
         apiClientResult: options?.apiClientResult,
       };
@@ -635,6 +639,7 @@ export function usePreviewController(): PreviewController {
     rafRef,
     replayContainerRef,
     onActiveModeChange: setActiveMode,
+    onRequestTabChange: (tab) => apiClientStore.trigger.setRequestTab({ tab }),
     onApiClientStateChange: (apiState) => {
       const signature = JSON.stringify(apiState);
       if (signature === lastAppliedApiSignatureRef.current) {
@@ -1136,5 +1141,8 @@ export function usePreviewController(): PreviewController {
       emitPreviewEvent("api_client_mode", { activeMode: mode });
     },
     sendApiClientRequest: apiClient.send,
+    recordApiClientTab: (tab: ApiClientRequestTab) => {
+      emitPreviewEvent("api_client_request_tab", { requestTab: tab });
+    },
   };
 }

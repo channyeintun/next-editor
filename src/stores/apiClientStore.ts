@@ -1,5 +1,5 @@
 import { createStore } from "@xstate/store-react";
-import type { ApiClientRecordedResult } from "../types/slides";
+import type { ApiClientRecordedResult, ApiClientRequestTab } from "../types/slides";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -39,6 +39,7 @@ export interface ApiClientStoreContext {
   path: string;
   headers: ApiClientHeader[];
   body: string;
+  requestTab: ApiClientRequestTab;
   sending: boolean;
   result: ApiClientResult | null;
   history: ApiClientHistoryEntry[];
@@ -52,6 +53,7 @@ function initialContext(): ApiClientStoreContext {
     path: "/",
     headers: [],
     body: "",
+    requestTab: "headers",
     sending: false,
     result: null,
     history: [],
@@ -70,6 +72,9 @@ export function createApiClientStore() {
 
       setBody: (context, event: { body: string }) =>
         event.body === context.body ? context : { ...context, body: event.body },
+
+      setRequestTab: (context, event: { tab: ApiClientRequestTab }) =>
+        event.tab === context.requestTab ? context : { ...context, requestTab: event.tab },
 
       addHeader: (context) => ({
         ...context,
@@ -157,6 +162,7 @@ export const selectBody = (c: ApiClientStoreContext): string => c.body;
 export const selectSending = (c: ApiClientStoreContext): boolean => c.sending;
 export const selectResult = (c: ApiClientStoreContext): ApiClientResult | null => c.result;
 export const selectHistory = (c: ApiClientStoreContext): ApiClientHistoryEntry[] => c.history;
+export const selectRequestTab = (c: ApiClientStoreContext): ApiClientRequestTab => c.requestTab;
 
 /** Maps a recorded (flat) result back into the store's nested result shape, used
  *  when replaying a recording's API client interactions. */
