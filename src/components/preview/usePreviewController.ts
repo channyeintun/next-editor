@@ -36,6 +36,7 @@ import {
   type PreviewScrollPosition,
 } from "./previewIframeUtils";
 import { hasRrwebPreviewEvents } from "./rrwebPreview";
+import { useApiClient } from "./useApiClient";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
 import { usePreviewMessageBridge } from "./usePreviewMessageBridge";
 import { usePreviewPlaybackRegistration } from "./usePreviewPlaybackRegistration";
@@ -54,6 +55,8 @@ import {
   refreshRuntimePreview,
 } from "./runtimePreview";
 
+export type PreviewActiveMode = "browser" | "api";
+
 export interface PreviewController {
   containerRef: RefObject<HTMLDivElement | null>;
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -69,6 +72,9 @@ export interface PreviewController {
   disablePointerEvents: boolean;
   previewAddressLabel: string;
   previewAddressTitle: string;
+  activeMode: PreviewActiveMode;
+  showModeToggle: boolean;
+  runtimePreviewUrl: string | null;
   handleClose: () => void;
   handleFloat: () => void;
   handleDock: () => void;
@@ -81,6 +87,11 @@ export interface PreviewController {
   handleDockResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
   handleTransitionStart: () => void;
   handleTransitionComplete: () => void;
+  setActiveMode: (mode: PreviewActiveMode) => void;
+  handleApiClientResponse: (
+    payload: import("../../utils/apiClientBridge").ApiClientResultPayload,
+  ) => void;
+  sendApiClientRequest: () => void;
 }
 
 /** Pointer coordinates from a mouse or touch event (React or native). */
@@ -145,6 +156,7 @@ export function usePreviewController(): PreviewController {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [previewRoute, setPreviewRoute] = useState("/");
+  const [activeMode, setActiveMode] = useState<PreviewActiveMode>("browser");
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -260,6 +272,19 @@ export function usePreviewController(): PreviewController {
     runtimePreviewState.title,
     runtimePreviewState.description,
   );
+
+  const showModeToggle = lessonRunsInWebContainer(lessonType) && effectiveRuntimeStatus === "ready";
+
+  useEffect(() => {
+    if (!showModeToggle && activeMode !== "browser") {
+      setActiveMode("browser");
+    }
+  }, [activeMode, showModeToggle]);
+
+  const apiClient = useApiClient({
+    iframeRef,
+    runtimePreviewUrl: effectiveRuntimePreviewUrl,
+  });
 
   isRecordingRef.current = isRecording;
   handlePreviewEventRef.current = handlePreviewEvent;
@@ -389,6 +414,7 @@ export function usePreviewController(): PreviewController {
     sizeRef,
     onConsoleMessage: (msg: string) => consoleAppender.current?.(msg),
     onRouteChange: applyPreviewRoute,
+    onApiClientResponse: apiClient.handleResponse,
   });
 
   const updateIframeContent = (
@@ -1014,6 +1040,9 @@ export function usePreviewController(): PreviewController {
     disablePointerEvents: isTransitioning || isResizing,
     previewAddressLabel: previewAddress.label,
     previewAddressTitle: previewAddress.title,
+    activeMode,
+    showModeToggle,
+    runtimePreviewUrl: effectiveRuntimePreviewUrl,
     handleClose,
     handleFloat,
     handleDock,
@@ -1026,5 +1055,8 @@ export function usePreviewController(): PreviewController {
     handleDockResizeStart,
     handleTransitionStart,
     handleTransitionComplete,
+    setActiveMode,
+    handleApiClientResponse: apiClient.handleResponse,
+    sendApiClientRequest: apiClient.send,
   };
 }

@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { lazy, useEffect, useMemo } from "react";
 import { PreviewChrome } from "./preview/PreviewChrome";
 import { RuntimePreviewRenderer } from "./preview/RuntimePreviewRenderer";
 import { usePreviewController } from "./preview/usePreviewController";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
+
+const ApiClientPanel = lazy(() => import("./preview/ApiClientPanel"));
 
 function Preview() {
   const controller = usePreviewController();
@@ -29,6 +31,17 @@ function Preview() {
     return () => document.body.classList.remove("is-resizing-panel");
   }, [controller.isResizing]);
 
+  const isApiMode = controller.activeMode === "api";
+
+  const previewOriginLabel = useMemo(() => {
+    if (!controller.runtimePreviewUrl) return "";
+    try {
+      return new URL(controller.runtimePreviewUrl).host;
+    } catch {
+      return "";
+    }
+  }, [controller.runtimePreviewUrl]);
+
   // Docked: render while open, and keep rendering through the slide-out
   // (`isMounted` stays true until the panel is offscreen). Floating mounts/unmounts
   // directly with `isOpen`.
@@ -46,7 +59,7 @@ function Preview() {
     />
   );
 
-  const previewChrome = (
+  return (
     <PreviewChrome
       containerRef={controller.containerRef}
       size={controller.size}
@@ -68,12 +81,19 @@ function Preview() {
       onTransitionComplete={controller.handleTransitionComplete}
       previewAddressLabel={controller.previewAddressLabel}
       previewAddressTitle={controller.previewAddressTitle}
+      activeMode={controller.activeMode}
+      showModeToggle={controller.showModeToggle}
+      onModeChange={controller.setActiveMode}
     >
-      {previewRenderer}
+      <div className={isApiMode ? "hidden" : "contents"}>{previewRenderer}</div>
+      {isApiMode ? (
+        <ApiClientPanel
+          onSend={controller.sendApiClientRequest}
+          previewOriginLabel={previewOriginLabel}
+        />
+      ) : null}
     </PreviewChrome>
   );
-
-  return previewChrome;
 }
 
 export default Preview;

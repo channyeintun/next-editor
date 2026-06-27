@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import type { PreviewPanelMode, PreviewSize } from "../../types/slides";
+import type { PreviewActiveMode } from "./usePreviewController";
 import { isCustomPreviewSize } from "./previewSizeUtils";
 
 interface PreviewChromeProps {
@@ -45,6 +46,9 @@ interface PreviewChromeProps {
   onTransitionComplete: () => void;
   previewAddressLabel: string;
   previewAddressTitle: string;
+  activeMode?: PreviewActiveMode;
+  showModeToggle?: boolean;
+  onModeChange?: (mode: PreviewActiveMode) => void;
 }
 
 function getFloatingStyle(size: PreviewSize): CSSProperties {
@@ -92,6 +96,9 @@ interface PreviewToolbarProps {
   onRefresh: () => void;
   isRefreshing: boolean;
   onOpenConsole: () => void;
+  activeMode?: PreviewActiveMode;
+  showModeToggle?: boolean;
+  onModeChange?: (mode: PreviewActiveMode) => void;
 }
 
 function PreviewToolbar({
@@ -106,6 +113,9 @@ function PreviewToolbar({
   onRefresh,
   isRefreshing,
   onOpenConsole,
+  activeMode = "browser",
+  showModeToggle = false,
+  onModeChange,
 }: PreviewToolbarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -239,6 +249,35 @@ function PreviewToolbar({
           ) : null}
         </div>
       </div>
+
+      {showModeToggle && onModeChange ? (
+        <div className="flex items-center border-t border-slate-800/60 px-3 py-1">
+          <div className="inline-flex rounded-md bg-[#1a1e27] p-0.5">
+            <button
+              type="button"
+              onClick={() => onModeChange("browser")}
+              className={`rounded-[5px] px-3 py-1 text-[11px] font-semibold transition-colors ${
+                activeMode === "browser"
+                  ? "bg-slate-700 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              Browser
+            </button>
+            <button
+              type="button"
+              onClick={() => onModeChange("api")}
+              className={`rounded-[5px] px-3 py-1 text-[11px] font-semibold transition-colors ${
+                activeMode === "api"
+                  ? "bg-slate-700 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              API
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -311,6 +350,9 @@ export function PreviewChrome({
   onTransitionComplete,
   previewAddressLabel,
   previewAddressTitle,
+  activeMode,
+  showModeToggle,
+  onModeChange,
 }: PreviewChromeProps) {
   const content = (
     <>
@@ -326,6 +368,9 @@ export function PreviewChrome({
         onRefresh={onRefresh}
         isRefreshing={isRefreshing}
         onOpenConsole={onOpenConsole}
+        activeMode={activeMode}
+        showModeToggle={showModeToggle}
+        onModeChange={onModeChange}
       />
 
       <div className="relative min-h-0 flex-1 bg-white" data-cursor-replay-target="preview-content">
