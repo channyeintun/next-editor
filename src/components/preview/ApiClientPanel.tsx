@@ -63,9 +63,10 @@ function detectLanguage(headers: [string, string][], body: string): string {
 
 interface ApiClientPanelProps {
   onSend: () => void;
+  runtimeReady: boolean;
 }
 
-export default function ApiClientPanel({ onSend }: ApiClientPanelProps) {
+export default function ApiClientPanel({ onSend, runtimeReady }: ApiClientPanelProps) {
   const store = useApiClientStoreInstance();
   const method = useSelector(store, (s) => selectMethod(s.context));
   const path = useSelector(store, (s) => selectPath(s.context));
@@ -77,8 +78,10 @@ export default function ApiClientPanel({ onSend }: ApiClientPanelProps) {
 
   const [activeTab, setActiveTab] = useState<RequestTab>("headers");
 
+  const canSend = runtimeReady && !sending;
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !sending) {
+    if (e.key === "Enter" && canSend) {
       e.preventDefault();
       onSend();
     }
@@ -86,6 +89,14 @@ export default function ApiClientPanel({ onSend }: ApiClientPanelProps) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#1a1e27] text-sm text-slate-200">
+      {/* Waiting banner — the server isn't listening yet, so requests can't be sent. */}
+      {!runtimeReady ? (
+        <div className="flex items-center gap-2 border-b border-slate-800 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-300">
+          <Loader2 size={12} className="animate-spin" />
+          Waiting for the server to start…
+        </div>
+      ) : null}
+
       {/* Request line */}
       <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
         <select
@@ -113,8 +124,9 @@ export default function ApiClientPanel({ onSend }: ApiClientPanelProps) {
         <button
           type="button"
           onClick={onSend}
-          disabled={sending}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-sky-600 px-3 font-semibold text-white transition-colors hover:bg-sky-500 disabled:opacity-50"
+          disabled={!canSend}
+          title={runtimeReady ? undefined : "Waiting for the server to start"}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-sky-600 px-3 font-semibold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
           Send

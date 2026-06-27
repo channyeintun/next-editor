@@ -74,6 +74,7 @@ export interface PreviewController {
   previewAddressTitle: string;
   activeMode: PreviewActiveMode;
   showModeToggle: boolean;
+  isRuntimeReady: boolean;
   handleClose: () => void;
   handleFloat: () => void;
   handleDock: () => void;
@@ -269,7 +270,12 @@ export function usePreviewController(): PreviewController {
     runtimePreviewState.description,
   );
 
-  const showModeToggle = lessonRunsInWebContainer(lessonType) && effectiveRuntimeStatus === "ready";
+  // The frame selector is shown for every WebContainer lesson on a supported
+  // environment — independent of boot progress — so it doesn't "pop in" mid-boot.
+  // The API frame itself surfaces a "waiting for the server" state until the
+  // runtime is ready (see `isRuntimeReady`).
+  const showModeToggle = lessonRunsInWebContainer(lessonType) && isRuntimeSupported;
+  const isRuntimeReady = effectiveRuntimeStatus === "ready";
 
   useEffect(() => {
     if (!showModeToggle && activeMode !== "browser") {
@@ -1051,6 +1057,7 @@ export function usePreviewController(): PreviewController {
     previewAddressTitle: previewAddress.title,
     activeMode,
     showModeToggle,
+    isRuntimeReady,
     handleClose,
     handleFloat,
     handleDock,

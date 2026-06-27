@@ -82,7 +82,10 @@ function Preview() {
       {previewRenderer}
       {isApiMode ? (
         <div className="absolute inset-0 z-10">
-          <ApiClientPanel onSend={controller.sendApiClientRequest} />
+          <ApiClientPanel
+            onSend={controller.sendApiClientRequest}
+            runtimeReady={controller.isRuntimeReady}
+          />
         </div>
       ) : null}
     </PreviewChrome>
