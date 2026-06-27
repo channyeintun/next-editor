@@ -85,8 +85,10 @@ app.get("/api/todos", (_req: Request, res: Response) => {
 });
 
 // POST /api/todos — add a todo from a JSON body like { "title": "..." }.
+// Send the header "Content-Type: application/json" so express.json() parses the
+// body; without it req.body is undefined, so read it defensively.
 app.post("/api/todos", (req: Request, res: Response) => {
-  const { title } = req.body as { title?: string };
+  const title = (req.body as { title?: string } | undefined)?.title;
 
   if (!title) {
     res.status(400).json({ error: "title is required" });
