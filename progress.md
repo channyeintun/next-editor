@@ -1,33 +1,25 @@
-# Captions Feature — Progress
+# API Client Feature — Progress
 
-## Phase 1: Model + Persistence ✅
+## Phase 1: Transport + bridge (no UI)
 
-- [x] Add caption types to `src/core/src/types.ts`
-- [x] Add `captions` field to `Recording` interface
-- [x] Add `captions` to `RecordingStreamMeta` in SCR3 format
-- [x] Wire captions through SCR3 encode
-- [x] Wire captions through SCR3 decode
-- [x] Add round-trip test in `recordingCodec.test.ts`
+- [ ] `apiClientBridge.ts`: message constants + `createApiClientProxyScript`
+- [ ] Inject proxy into `createRuntimePreviewScript`; add to snapshot strip list
+- [ ] `API_CLIENT_RESPONSE` branch in `usePreviewMessageBridge`
+- [ ] `apiClientBridge.test.ts` (script shape, marker guard, strip)
 
-## Phase 2: Parser ✅
+## Phase 2: Store + orchestration
 
-- [x] Create `src/captions/parseCaptions.ts` (VTT + SRT)
-- [x] Create `src/captions/parseCaptions.test.ts`
+- [ ] `apiClientStore.ts` + `ApiClientStoreContext.tsx` + provider wiring
+- [ ] `useApiClient.ts`: send/await/timeout/fallback
+- [ ] Store + hook tests
 
-## Phase 3: Import Wiring ✅
+## Phase 3: Panel UI
 
-- [x] Add `addCaptionTrack` / `removeCaptionTrack` events to `editorMachine`
-- [x] Surface actions through `useNextEditor` → actions context → provider
-- [x] Add "Import captions…" UI entry point
+- [ ] `ApiClientPanel.tsx` (request line, Headers/Body tabs, response, history)
+- [ ] Monaco for body + response viewer, reusing `monacoSetup.ts`
 
-## Phase 4: Playback Overlay ✅
+## Phase 4: Preview integration + gating
 
-- [x] Create `src/components/CaptionsOverlay.tsx`
-- [x] Mount in `Editor.tsx` as sibling of `CameraOverlay`
-
-## Phase 5: Controls (CC toggle + language menu + caption store) ✅
-
-- [x] Create `src/stores/captionStore.ts`
-- [x] Create `src/contexts/CaptionStoreContext.tsx`
-- [x] Wire caption store provider
-- [x] Add CC button + language menu in `MediaControls.tsx`
+- [ ] `Browser | API` mode toggle in `PreviewChrome`, gated on `lessonRunsInWebContainer` + runtime `ready`
+- [ ] `activeMode` in `usePreviewController`; keep iframe mounted in `api` mode
+- [ ] Seed the `htmx-express` starter expectation: `GET /api/time` works end-to-end
