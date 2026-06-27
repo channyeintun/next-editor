@@ -2,9 +2,9 @@
 
 A separate, standalone website ("a YouTube for code lessons") hosted at
 **`tube.nexteditor.dev`**. It is a lesson **gallery**: the home page shows
-YouTube-style cards (thumbnail image only — no video, no `.ne` iframe). Clicking a
-card opens the lesson in the existing NextEditor in **read-only playback mode** at
-`nexteditor.dev/code`.
+YouTube-style cards (thumbnail image only — no video on the card). Clicking a card
+opens the lesson in an **embedded NextEditor iframe** (read-only playback), with the
+editor served same-origin so viewers can also run/edit the code live (see §3, §9).
 
 This project lives in the `tube/` folder of the main `next-editor` repo for
 distribution convenience, but it is an **independent app** — it is not imported by
@@ -19,15 +19,16 @@ or built with the main app.
 - Static, fast, cheap-to-host gallery of recorded lessons.
 - Lessons authored manually: drop a folder into `public/`, add an entry to a JSON
   manifest. No CMS, no database.
-- Cards link out to the _real_ editor for playback; the tube site never embeds the
-  editor or plays `.ne` itself.
+- Cards open the _real_ editor embedded in an iframe (read-only playback by
+  default); the tube site itself never parses or plays `.ne`.
 - Recording stays exclusively on `nexteditor.dev/code` (no record UI here).
 
 **Non-goals (v1)**
 
 - No accounts, comments, likes, view counts, or uploads.
-- No server / backend. Pure static hosting.
-- No `.ne` parsing on this site — it only stores and links to the files.
+- No `.ne` parsing on this site — it only stores the files and embeds the editor.
+- No bespoke backend — but note B1 needs a reverse proxy at the edge (Caddy/Vercel
+  rewrites), not an application server.
 
 ---
 
@@ -86,7 +87,7 @@ the editor's assets, and the `.ne`/`.vtt` files are **all same-origin**. That me
 
 To add a lesson:
 
-1. Create a folder under `public/<slug>/` containing:
+1. Create a folder under `public/lessons/<slug>/` containing:
    - `<slug>.ne` — the recording (exported from `nexteditor.dev/code`).
    - `<slug>.<lang>.vtt` — one or more caption tracks (e.g. `introduction.en.vtt`).
    - `thumbnail.jpg` (or `.png`/`.webp`) — the card image (16:9 recommended).
@@ -97,20 +98,22 @@ To add a lesson:
    - Recommended convention: `captionFiles: ["<slug>.en.vtt"]` inside the recording.
 3. Add an entry to `public/lessons.json` (see schema below).
 
-Example tree:
+Example tree (lessons namespaced under `lessons/` so a slug can't shadow an editor
+root path like `/assets` or `/fonts`):
 
 ```
 public/
   lessons.json
-  introduction/
-    introduction.ne
-    introduction.en.vtt
-    thumbnail.jpg
-  react-state/
-    react-state.ne
-    react-state.en.vtt
-    react-state.my.vtt
-    thumbnail.webp
+  lessons/
+    introduction/
+      introduction.ne
+      introduction.en.vtt
+      thumbnail.svg
+    react-state/
+      react-state.ne
+      react-state.en.vtt
+      react-state.my.vtt
+      thumbnail.webp
 ```
 
 ---
@@ -126,8 +129,8 @@ Fetched at runtime (so editing the JSON needs no rebuild). Keep it a flat list.
       "slug": "introduction", // matches folder name
       "title": "Introduction to NextEditor",
       "description": "A short tour of recording and playback.",
-      "thumbnail": "introduction/thumbnail.jpg", // path under public/
-      "ne": "introduction/introduction.ne", // path under public/
+      "thumbnail": "lessons/introduction/thumbnail.svg", // path under public/
+      "ne": "lessons/introduction/introduction.ne", // path under public/
       "duration": "4:12", // optional, display-only string
       "tags": ["intro", "basics"], // optional, for filtering later
       "author": "Chan", // optional
@@ -137,14 +140,14 @@ Fetched at runtime (so editing the JSON needs no rebuild). Keep it a flat list.
 }
 ```
 
-Runtime URL construction (in the card component):
+Runtime URL construction (in `src/lib/links.ts`):
 
 - thumbnail `src` = `/<thumbnail>` (same-origin to the tube site).
-- `.ne` absolute URL = `https://tube.nexteditor.dev/<ne>` (use
-  `new URL(lesson.ne, window.location.origin).toString()` so localhost works too).
-- play link = `${EDITOR_BASE}/code?url=${encodeURIComponent(neAbsUrl)}&readOnly=true`
-  where `EDITOR_BASE` is an env-configurable base (`https://nexteditor.dev` in prod,
-  e.g. `http://localhost:5173` in dev).
+- iframe `src` = `${EDITOR_BASE}/code?url=${encodeURIComponent("/" + lesson.ne)}&readOnly=true&deferRuntimeAutostart=true`.
+  In production `EDITOR_BASE` is **empty** (same-origin B1), so `url` is a same-origin
+  path the proxied editor fetches from this origin. A non-empty `EDITOR_BASE` (a
+  cross-origin editor) instead sends an absolute URL back to this origin and would
+  require CORS on the `.ne`/`.vtt` files.
 
 ---
 
@@ -159,7 +162,8 @@ Mirror the main app so the user (and Sonnet 4.6) work in a familiar setup:
 - **bun** as package manager (repo convention — never npm/yarn/pnpm)
 - **lucide-react** for icons (matches main app)
 
-No `.ne` decoding deps, no WebContainer, no xstate — this is a thin static UI.
+No `.ne` decoding deps, no WebContainer, no xstate in tube itself — it's a thin
+static UI. (WebContainer runs inside the embedded editor iframe, not in tube.)
 
 ---
 
@@ -169,14 +173,16 @@ No `.ne` decoding deps, no WebContainer, no xstate — this is a thin static UI.
 tube/
   plan.md                  <- this file
   package.json
-  vite.config.ts
+  vite.config.ts           <- assetsDir=gallery-assets, COOP/COEP, dev editor proxy
   tsconfig.json
   index.html
-  .env.example             <- VITE_EDITOR_BASE=https://nexteditor.dev
+  .env.example             <- VITE_EDITOR_BASE (empty) + VITE_EDITOR_PROXY_TARGET
+  Caddyfile                <- prod reverse proxy + isolation headers
+  vercel.json              <- prod rewrites (editor proxy) + COOP/COEP headers
   public/
     lessons.json
     favicon.png
-    <slug>/...              <- lesson folders (see §4)
+    lessons/<slug>/...     <- lesson folders (see §4)
   src/
     main.tsx
     App.tsx
@@ -185,10 +191,11 @@ tube/
       lessons.ts           <- fetch + type for lessons.json
       links.ts             <- buildPlayUrl(lesson), resolveThumb(lesson)
     components/
-      Header.tsx           <- logo + "Record your own →" CTA to nexteditor.dev/code
-      LessonGrid.tsx       <- responsive grid of cards
-      LessonCard.tsx       <- thumbnail-only YouTube-style card
-      SearchBar.tsx        <- optional client-side filter (title/tags)
+      Header.tsx           <- logo + "Record your own →" CTA to /code
+      LessonGrid.tsx       <- responsive grid + active-lesson player state
+      LessonCard.tsx       <- thumbnail-only YouTube-style card (onPlay callback)
+      LessonPlayer.tsx     <- full-screen overlay embedding the editor iframe
+      SearchBar.tsx        <- client-side filter (title/tags)
       Footer.tsx
     types.ts               <- Lesson type
 ```
@@ -202,9 +209,14 @@ tube/
 - 16:9 thumbnail `<img loading="lazy">` with rounded corners; optional duration
   badge in the corner (from `lesson.duration`).
 - Below: title (2-line clamp), author + publishedAt meta row.
-- Entire card is an `<a href={playUrl} target="_blank" rel="noopener">` (or
-  same-tab — decide; YouTube uses same-tab, recommend same tab).
+- Entire card is a `<button onClick={() => onPlay(lesson)}>` — clicking opens the
+  `LessonPlayer` overlay (no navigation), not an `<a href>`.
 - Hover: subtle scale/elevation, matching the main landing page's aesthetic.
+
+**`LessonPlayer`** (full-screen overlay)
+
+- Renders `<iframe src={buildPlayUrl(lesson)} allow="cross-origin-isolated; …">`.
+- Esc / Close button dismisses it; locks body scroll while open.
 
 **`LessonGrid`**
 
@@ -272,6 +284,10 @@ the isolation headers; `.env` holds `VITE_EDITOR_PROXY_TARGET`.
 
 ## 10. Implementation steps (for Sonnet 4.6)
 
+> The original v1 sequence below (cross-origin links + CORS) has been superseded by
+> the embedded-iframe + same-origin reverse-proxy model in §2, §3, and §9. Steps
+> 1–6 still apply; steps 7–8 are replaced by the B1 env/proxy/header config.
+
 1. **Scaffold** the Vite + React + TS app in `tube/` (bun). Add Tailwind v4.
 2. Add `src/types.ts` (`Lesson`) and `src/lib/lessons.ts` (typed fetch of
    `/lessons.json`).
@@ -299,12 +315,15 @@ the isolation headers; `.env` holds `VITE_EDITOR_PROXY_TARGET`.
 ## 11. Acceptance criteria
 
 - Home page lists all lessons from `lessons.json` as thumbnail-only cards.
-- Clicking a card opens `nexteditor.dev/code?url=...&readOnly=true` and the lesson
-  plays back read-only (no record UI, import/export hidden).
+- Clicking a card opens the `LessonPlayer` overlay with the editor embedded in a
+  same-origin iframe (`/code?url=…&readOnly=true`), playing back read-only (no
+  record UI, import/export hidden).
 - Captions appear during playback (given a correctly authored `.ne`).
-- Adding a lesson requires only: new `public/<slug>/` folder + one `lessons.json`
-  entry — no code changes.
-- No backend; deploys as static files to `tube.nexteditor.dev`.
+- The embed is cross-origin isolated, so viewers can run/edit the code live.
+- Adding a lesson requires only: new `public/lessons/<slug>/` folder + one
+  `lessons.json` entry — no code changes.
+- No application backend; deploys as static files + an edge reverse proxy
+  (Caddy/Vercel) to `tube.nexteditor.dev`.
 
 ---
 
