@@ -17,7 +17,10 @@
       // type to `any`. Point that exact specifier at the real declarations.
       "monaco-editor/esm/vs/editor/editor.api": [
         "./node_modules/monaco-editor/esm/vs/editor/editor.api.d.ts"
-      ]
+      ],
+      // Resolve the tube workspace package to its source so it's compiled as
+      // first-class app code (JSX transform, Tailwind scan, type-checked).
+      "@next-editor/tube": ["./tube/src/index.tsx"]
     },
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",

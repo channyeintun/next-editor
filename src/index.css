@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* The /learn gallery lives in the tube workspace package; scan it for classes. */
+@source "../tube/src";
+
 @font-face {
   font-family: "PP Neue Machina Inktrap Ultrabold";
   src: url("/fonts/pp-neue-machina-inktrap-ultrabold.woff2") format("woff2");

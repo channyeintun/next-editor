@@ -1,14 +1,21 @@
 # NextEditor Tube — Implementation Plan
 
-A separate, standalone website ("a YouTube for code lessons") hosted at
-**`tube.nexteditor.dev`**. It is a lesson **gallery**: the home page shows
-YouTube-style cards (thumbnail image only — no video on the card). Clicking a card
-opens the lesson in an **embedded NextEditor iframe** (read-only playback), with the
-editor served same-origin so viewers can also run/edit the code live (see §3, §9).
+A "YouTube for code lessons": a lesson **gallery** showing YouTube-style cards
+(thumbnail image only — no video on the card). Clicking a card opens the lesson in
+an **embedded NextEditor iframe** (read-only playback); because the editor is
+same-origin, viewers can also run/edit the code live (WebContainer).
 
-This project lives in the `tube/` folder of the main `next-editor` repo for
-distribution convenience, but it is an **independent app** — it is not imported by
-or built with the main app.
+**Architecture (B2 — `/learn` route, monorepo package).** `tube` is a workspace-style
+**package** (`@next-editor/tube`) living in the `tube/` folder. The main app mounts
+its `LearnPage` at the **`/learn`** route, so the gallery, the editor (`/code`), and
+the lesson files are all served from **one origin** by the existing app — no
+subdomain, no reverse proxy, no CORS. Cross-origin isolation (already set by the
+main app for WebContainer) covers `/learn` automatically.
+
+> tube is resolved to its source via a tsconfig `paths` entry + a Vite
+> `resolve.alias` (not a bun workspace — bun's workspace mode drops a scoped
+> platform dep of `vite-plus` in this repo). It's still a self-contained package
+> with its own `package.json`; only the resolution mechanism differs.
 
 ---
 
@@ -16,27 +23,26 @@ or built with the main app.
 
 **Goals**
 
-- Static, fast, cheap-to-host gallery of recorded lessons.
-- Lessons authored manually: drop a folder into `public/`, add an entry to a JSON
-  manifest. No CMS, no database.
+- Fast gallery of recorded lessons, shipped as part of the existing app at `/learn`.
+- Lessons authored manually: drop a folder into the main app's `public/lessons/`,
+  add an entry to `public/lessons.json`. No CMS, no database.
 - Cards open the _real_ editor embedded in an iframe (read-only playback by
-  default); the tube site itself never parses or plays `.ne`.
-- Recording stays exclusively on `nexteditor.dev/code` (no record UI here).
+  default); the gallery itself never parses or plays `.ne`.
+- Recording stays exclusively on `/code` (no record UI in the gallery).
 
 **Non-goals (v1)**
 
 - No accounts, comments, likes, view counts, or uploads.
-- No `.ne` parsing on this site — it only stores the files and embeds the editor.
-- No bespoke backend — but note B1 needs a reverse proxy at the edge (Caddy/Vercel
-  rewrites), not an application server.
+- No `.ne` parsing in the gallery — it only links to lesson files and embeds `/code`.
+- No new backend or separate deploy — it builds and ships with the main app.
 
 ---
 
 ## 2. The link contract (most important part)
 
-> **Updated:** lessons open in an **embedded iframe** (see `LessonPlayer`), not by
-> navigating away, and the editor is served **same-origin** via reverse proxy
-> (B1 — see §9). The iframe `src` is therefore a same-origin path:
+Lessons open in an **embedded iframe** (see `LessonPlayer`), not by navigating away.
+The gallery runs at `/learn` in the same app as the editor, so the iframe `src` is a
+plain same-origin path:
 
 ```
 /code?url=<ENCODED_NE_PATH>&readOnly=true&deferRuntimeAutostart=true
@@ -63,46 +69,48 @@ Verified against the main app:
 
 ---
 
-## 3. Origin model (B1 — same-origin, no CORS)
+## 3. Origin model (B2 — one app, one origin)
 
-The editor is reverse-proxied under `tube.nexteditor.dev` (see §9), so the iframe,
-the editor's assets, and the `.ne`/`.vtt` files are **all same-origin**. That means:
+The gallery is a route (`/learn`) inside the editor app, so the gallery page, the
+editor (`/code`), and the lesson files are **all same-origin**. That means:
 
-- **No CORS** needed on `.ne`/`.vtt` — the proxied editor fetches them from this
-  same origin directly.
-- **Cross-origin isolation works** — `COOP: same-origin` + `COEP: require-corp` on
-  the tube origin make it cross-origin isolated; a same-origin iframe inherits it,
-  so WebContainer (`SharedArrayBuffer`) can boot for live run/edit.
+- **No CORS, no reverse proxy** — the editor fetches `.ne`/`.vtt` from the same
+  origin directly.
+- **Cross-origin isolation already works** — the main app serves
+  `COOP: same-origin` + `COEP: require-corp` on every response (for WebContainer),
+  so `/learn` is cross-origin isolated and the same-origin `/code` iframe inherits
+  it; WebContainer (`SharedArrayBuffer`) can boot for live run/edit.
 - The only genuinely cross-origin resources are the editor's own WebContainer CDN
-  calls (`*.staticblitz.com`), which already serve COEP-compatible headers (they
-  work for the editor today).
+  calls (`*.staticblitz.com`), which already serve COEP-compatible headers.
 
-> Why not a cross-origin iframe? Making a cross-origin iframe cross-origin-isolated
-> requires `COEP: require-corp` + `CORP: cross-origin` on the editor **and** CORP
-> on every tube subresource — brittle. Reverse-proxying side-steps all of it.
+> Why not a separate `tube.nexteditor.dev` subdomain? A cross-origin iframe can't be
+> made cross-origin-isolated without `CORP` on every subresource (brittle), and a
+> reverse proxy adds an edge layer. Mounting at `/learn` on the existing origin is
+> the simplest correct option.
 
 ---
 
 ## 4. Lesson authoring workflow (manual)
 
-To add a lesson:
+Lesson files live in the **main app's** `public/` (it's the server that hosts both
+the gallery and the editor).
 
-1. Create a folder under `public/lessons/<slug>/` containing:
-   - `<slug>.ne` — the recording (exported from `nexteditor.dev/code`).
+1. Create a folder under `public/lessons/<slug>/` (repo root `public/`) containing:
+   - `<slug>.ne` — the recording (exported from `/code`).
    - `<slug>.<lang>.vtt` — one or more caption tracks (e.g. `introduction.en.vtt`).
-   - `thumbnail.jpg` (or `.png`/`.webp`) — the card image (16:9 recommended).
+   - `thumbnail.jpg` (or `.png`/`.webp`/`.svg`) — the card image (16:9 recommended).
 2. **Make sure the `.ne` declares its captions.** Captions auto-load only if the
    recording's `captionFiles` field lists the sibling VTTs (resolved relative to the
    `.ne` URL). If a recording was exported without it, the `.vtt` won't show during
-   playback. Document this clearly for authors.
+   playback.
    - Recommended convention: `captionFiles: ["<slug>.en.vtt"]` inside the recording.
 3. Add an entry to `public/lessons.json` (see schema below).
 
-Example tree (lessons namespaced under `lessons/` so a slug can't shadow an editor
-root path like `/assets` or `/fonts`):
+Example tree (in the repo-root `public/`; lessons namespaced under `lessons/` so a
+slug can't shadow an editor root path like `/assets` or `/fonts`):
 
 ```
-public/
+public/                      <- main app public/ (served at the origin root)
   lessons.json
   lessons/
     introduction/
@@ -140,64 +148,61 @@ Fetched at runtime (so editing the JSON needs no rebuild). Keep it a flat list.
 }
 ```
 
-Runtime URL construction (in `src/lib/links.ts`):
+Runtime URL construction (in `tube/src/lib/links.ts`):
 
-- thumbnail `src` = `/<thumbnail>` (same-origin to the tube site).
-- iframe `src` = `${EDITOR_BASE}/code?url=${encodeURIComponent("/" + lesson.ne)}&readOnly=true&deferRuntimeAutostart=true`.
-  In production `EDITOR_BASE` is **empty** (same-origin B1), so `url` is a same-origin
-  path the proxied editor fetches from this origin. A non-empty `EDITOR_BASE` (a
-  cross-origin editor) instead sends an absolute URL back to this origin and would
-  require CORS on the `.ne`/`.vtt` files.
+- thumbnail `src` = `/<thumbnail>` (same-origin).
+- iframe `src` = `/code?url=${encodeURIComponent("/" + lesson.ne)}&readOnly=true&deferRuntimeAutostart=true`
+  — a plain same-origin path; the editor fetches the `.ne` from this origin.
 
 ---
 
 ## 6. Tech stack
 
-Mirror the main app so the user (and Sonnet 4.6) work in a familiar setup:
+The `@next-editor/tube` package is a thin React UI compiled by the **main app's**
+build (Vite + React 19 + TS + Tailwind v4), so it has **no build tooling of its
+own**:
 
-- **Vite + React 19 + TypeScript**
-- **Tailwind CSS v4** (`@tailwindcss/vite`)
-- **react-router** (only needed if an on-site detail page is added later; v1 home is
-  a single page, so router is optional)
-- **bun** as package manager (repo convention — never npm/yarn/pnpm)
-- **lucide-react** for icons (matches main app)
+- React 19 + TypeScript + Tailwind v4 utility classes (compiled by the main app;
+  `src/index.css` adds `@source "../tube/src"` so Tailwind scans the package).
+- **lucide-react** for icons (a peer dep, already in the main app).
+- Resolution: tsconfig `paths` + Vite `resolve.alias` map `@next-editor/tube` →
+  `tube/src/index.tsx`.
 
-No `.ne` decoding deps, no WebContainer, no xstate in tube itself — it's a thin
-static UI. (WebContainer runs inside the embedded editor iframe, not in tube.)
+No `.ne` decoding deps, no WebContainer, no xstate in the package itself — those run
+inside the embedded `/code` iframe.
 
 ---
 
-## 7. Project structure (`tube/`)
+## 7. Project structure
 
 ```
-tube/
-  plan.md                  <- this file
-  package.json
-  vite.config.ts           <- assetsDir=gallery-assets, COOP/COEP, dev editor proxy
-  tsconfig.json
-  index.html
-  .env.example             <- VITE_EDITOR_BASE (empty) + VITE_EDITOR_PROXY_TARGET
-  Caddyfile                <- prod reverse proxy + isolation headers
-  vercel.json              <- prod rewrites (editor proxy) + COOP/COEP headers
+tube/                        <- @next-editor/tube package (UI only, no build tooling)
+  plan.md                    <- this file
+  progress.md
+  package.json               <- name + peerDeps + exports ./src/index.tsx
+  src/
+    index.tsx                <- package entry: default export = LearnPage
+    LearnPage.tsx            <- Header + LessonGrid + Footer (mounted at /learn)
+    lib/
+      lessons.ts             <- fetch + type for /lessons.json
+      links.ts               <- buildPlayUrl(lesson), resolveThumb(lesson)
+    components/
+      Header.tsx             <- logo + "Record your own" CTA to /code
+      LessonGrid.tsx         <- responsive grid + active-lesson player state
+      LessonCard.tsx         <- thumbnail-only YouTube-style card (onPlay callback)
+      LessonPlayer.tsx       <- full-screen overlay embedding the /code iframe
+      SearchBar.tsx          <- client-side filter (title/tags)
+      Footer.tsx
+    types.ts                 <- Lesson type
+
+(main app, repo root)
+  src/router.tsx             <- adds the /learn route → import("@next-editor/tube")
+  src/index.css              <- @source "../tube/src" (Tailwind scan)
+  tsconfig.json              <- paths: @next-editor/tube → tube/src/index.tsx
+  vite.config.ts             <- resolve.alias for @next-editor/tube
   public/
     lessons.json
-    favicon.png
-    lessons/<slug>/...     <- lesson folders (see §4)
-  src/
-    main.tsx
-    App.tsx
-    index.css              <- tailwind import
-    lib/
-      lessons.ts           <- fetch + type for lessons.json
-      links.ts             <- buildPlayUrl(lesson), resolveThumb(lesson)
-    components/
-      Header.tsx           <- logo + "Record your own →" CTA to /code
-      LessonGrid.tsx       <- responsive grid + active-lesson player state
-      LessonCard.tsx       <- thumbnail-only YouTube-style card (onPlay callback)
-      LessonPlayer.tsx     <- full-screen overlay embedding the editor iframe
-      SearchBar.tsx        <- client-side filter (title/tags)
-      Footer.tsx
-    types.ts               <- Lesson type
+    lessons/<slug>/...       <- lesson folders (see §4)
 ```
 
 ---
@@ -225,9 +230,8 @@ tube/
 
 **`Header`**
 
-- Left: NextEditor Tube logo (reuse `logo.svg` from main `public/`).
-- Right: a "Record your own →" button linking to `https://nexteditor.dev/code`
-  (recording lives only there).
+- Left: NextEditor Tube wordmark/logo.
+- Right: a "Record your own" button linking to `/code` (recording lives only there).
 
 **`SearchBar`** (optional, nice-to-have)
 
@@ -235,86 +239,55 @@ tube/
 
 ---
 
-## 9. Deployment — B1: reverse-proxy the editor under the tube origin
+## 9. Deployment — none of its own (ships with the main app)
 
-The lesson is **embedded in an iframe** (no navigating away), and the embed must
-support **live run + edit** (WebContainer), which requires **cross-origin
-isolation** (`COOP: same-origin` + `COEP: require-corp`, for `SharedArrayBuffer`).
-A _cross-origin_ iframe can't be made isolated without fragile per-asset CORP
-headers — so instead we make the editor **same-origin** with the gallery by
-reverse-proxying it under `tube.nexteditor.dev`. Same-origin iframes inherit
-isolation automatically, and proxied assets are delivered as this origin (so COEP
-is satisfied with no CORS/CORP juggling).
+There is **no separate deploy**. The gallery is the `/learn` route of the existing
+editor app, so building and deploying the main app ships it. Concretely:
 
-> Read-only **playback** alone does _not_ need WebContainer — the preview/terminal
-> replay via rrweb, and the editor already gates WebContainer auto-boot off when
-> `crossOriginIsolated` is false. B1 is what additionally enables the
-> run-it-yourself capability inside the embed.
+- The main app already serves `COOP: same-origin` + `COEP: require-corp` on every
+  response (for WebContainer). `/learn` is therefore cross-origin isolated, and the
+  same-origin `/code` iframe inherits it — live run/edit works with **zero extra
+  config**.
+- Lesson files are static assets in the main app's `public/` → served at the origin
+  root (`/lessons/...`, `/lessons.json`).
+- No CORS, no reverse proxy, no `tube.*` subdomain, no `Caddyfile`/`vercel.json` in
+  the package.
 
-Routing on `tube.nexteditor.dev` (all responses carry the isolation headers):
+> Read-only **playback** alone wouldn't even need isolation — the preview/terminal
+> replay via rrweb, and the editor gates WebContainer auto-boot off when
+> `crossOriginIsolated` is false. Same-origin `/learn` gives isolation for free, so
+> the run-it-yourself capability also works.
 
-| Path                                        | Served by                           |
-| ------------------------------------------- | ----------------------------------- |
-| `/code`, `/assets/*`, `/fonts/*`, `/logo.*` | **reverse-proxy → editor upstream** |
-| `/lessons/*` (`.ne`/`.vtt`/thumbnails)      | tube static (same-origin)           |
-| `/gallery-assets/*` (gallery bundles)       | tube static                         |
-| `/`, `/lessons.json`, `/favicon.png`        | tube static                         |
-
-Key build/config choices that make this collision-free:
-
-- Tube builds its bundles into **`/gallery-assets/`** (`build.assetsDir`) so they
-  never shadow the editor's `/assets/*`.
-- Lesson files live under **`/lessons/`** so a lesson slug can't shadow an editor
-  root path.
-- The iframe `src` is **same-origin**: `/code?url=/lessons/<slug>/<slug>.ne&readOnly=true&deferRuntimeAutostart=true`.
-  `VITE_EDITOR_BASE` stays empty in production.
-
-Production config lives in:
-
-- [`Caddyfile`](./Caddyfile) — set `EDITOR_UPSTREAM` (e.g. `https://nexteditor.dev`).
-- [`vercel.json`](./vercel.json) — `rewrites` proxy the editor paths (edit the
-  destination host) + `headers` apply COOP/COEP origin-wide.
-
-**Local dev** (real same-origin isolation): build + preview the editor in the repo
-root (`bun run build && bun run preview` → `:4173`), then `bun run dev` in `tube/`
-(`:5174`). Vite's `server.proxy` forwards the editor paths to `:4173` and serves
-the isolation headers; `.env` holds `VITE_EDITOR_PROXY_TARGET`.
+**Local dev:** just run the main app (`bun run dev`) and open `/learn`. One server,
+one origin — clicking a card embeds `/code` in the overlay and plays back.
 
 ---
 
-## 10. Implementation steps (for Sonnet 4.6)
+## 10. Implementation steps (history)
 
-> The original v1 sequence below (cross-origin links + CORS) has been superseded by
-> the embedded-iframe + same-origin reverse-proxy model in §2, §3, and §9. Steps
-> 1–6 still apply; steps 7–8 are replaced by the B1 env/proxy/header config.
+> Implemented across several iterations: (1) standalone Vite gallery → (2) embedded
+> iframe instead of navigation → (3) B1 reverse-proxy subdomain → **(4, current) B2
+> `/learn` route as a workspace-style package**. The current shape is what §2–§9
+> describe; the list below is the high-level path taken.
 
-1. **Scaffold** the Vite + React + TS app in `tube/` (bun). Add Tailwind v4.
-2. Add `src/types.ts` (`Lesson`) and `src/lib/lessons.ts` (typed fetch of
-   `/lessons.json`).
-3. Add `src/lib/links.ts`:
-   - `buildPlayUrl(lesson)` → editor read-only URL using `VITE_EDITOR_BASE` and
-     `encodeURIComponent` of the absolute `.ne` URL.
-   - `resolveThumb(lesson)` → `/<thumbnail>`.
-4. Build `LessonCard`, `LessonGrid`, `Header`, `Footer` (+ optional `SearchBar`).
-5. Wire `App.tsx` to render Header + Grid + Footer; handle loading/empty/error.
-6. Seed `public/lessons.json` with **one** real entry by copying the existing
-   `introduction.ne` + `introduction.en.vtt` from the main repo's `public/` into
-   `public/introduction/`, and add a `thumbnail.jpg`.
-   - Confirm `introduction.ne` declares `captionFiles: ["introduction.en.vtt"]`; if
-     not, re-export or note the limitation.
-7. Add `.env.example` (`VITE_EDITOR_BASE=https://nexteditor.dev`) and read it; in dev
-   point it at the local editor (`http://localhost:5173`).
-8. Add `vercel.json` with the CORS header for `.ne`/`.vtt`.
-9. **Manual verification** (user eyeballs UI — do not use a preview browser):
-   - `bun run dev`, see the card, click it, confirm it opens the editor in read-only
-     playback with audio + captions.
-   - `bun run build` succeeds and `bun run typecheck`/lint pass.
+1. Scaffold the gallery UI (cards, grid, search, player) with React + Tailwind.
+2. `types.ts` + `lib/lessons.ts` (typed `/lessons.json` fetch) + `lib/links.ts`
+   (`buildPlayUrl` same-origin `/code` URL, `resolveThumb`).
+3. `LessonPlayer` overlay embedding the `/code` iframe (Esc/close, scroll lock).
+4. Convert `tube` to the `@next-editor/tube` package (entry `src/index.tsx` →
+   `LearnPage`); remove all standalone app/build/deploy files.
+5. Mount at `/learn` in `src/router.tsx`; wire resolution via tsconfig `paths` +
+   Vite `resolve.alias`; add `@source "../tube/src"` for Tailwind.
+6. Move lesson assets into the main app's `public/lessons/` + `public/lessons.json`.
+7. Fix the main-app loader so a SPA-fallback proxy response can't masquerade as a
+   recording (`src/hooks/useUrlLoader.ts`) — relevant to any URL-loaded `.ne`.
+8. Verify: `tsc -b`, `vp lint`, `vp build` all pass; Tailwind scans the package.
 
 ---
 
 ## 11. Acceptance criteria
 
-- Home page lists all lessons from `lessons.json` as thumbnail-only cards.
+- `/learn` lists all lessons from `lessons.json` as thumbnail-only cards.
 - Clicking a card opens the `LessonPlayer` overlay with the editor embedded in a
   same-origin iframe (`/code?url=…&readOnly=true`), playing back read-only (no
   record UI, import/export hidden).
@@ -322,16 +295,15 @@ the isolation headers; `.env` holds `VITE_EDITOR_PROXY_TARGET`.
 - The embed is cross-origin isolated, so viewers can run/edit the code live.
 - Adding a lesson requires only: new `public/lessons/<slug>/` folder + one
   `lessons.json` entry — no code changes.
-- No application backend; deploys as static files + an edge reverse proxy
-  (Caddy/Vercel) to `tube.nexteditor.dev`.
+- No separate deploy or backend — it builds and ships with the main app.
 
 ---
 
 ## 12. Future enhancements (not v1)
 
 - Category/tag pages and search ranking.
-- Optional on-site detail route (`/lesson/<slug>`) with description + "Open in
-  editor" button (would need the SPA rewrite + react-router).
+- Optional on-site detail route (`/learn/<slug>`) with description + "Open in
+  editor" button (the main app's react-router is already available).
 - Auto-generate thumbnails from the first frame of a recording.
 - A small build script to validate `lessons.json` against the folders in `public/`
   (catch missing files / bad slugs in CI).

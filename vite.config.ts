@@ -29,6 +29,14 @@ export default defineConfig({
       ] as unknown as PluginOption[];
     }),
   ] as unknown as PluginOption[],
+  resolve: {
+    alias: {
+      // Compile the tube workspace package from source so it goes through the
+      // app's JSX/Tailwind/React-Compiler pipeline (not pre-bundled from
+      // node_modules). Mounted at the /learn route.
+      "@next-editor/tube": fileURLToPath(new URL("./tube/src/index.tsx", import.meta.url)),
+    },
+  },
   worker: {
     // ES-module workers tolerate the top-level await that vite-plugin-wasm emits
     // in the generated wasm module (the recording worker is already type:module).

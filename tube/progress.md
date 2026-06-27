@@ -16,7 +16,12 @@
 - [x] 9. Play in embedded iframe instead of navigating away (LessonPlayer overlay)
 - [x] 10. Fix main-app SCR3 error (SPA-fallback proxy response hijack) in
       `src/hooks/useUrlLoader.ts`
-- [x] 11. B1: serve editor same-origin via reverse proxy for cross-origin isolation
-      (live WebContainer). Same-origin iframe URL; lessons under `/lessons/`;
-      gallery bundles under `/gallery-assets/`; COOP/COEP headers; Caddyfile +
-      vercel.json proxy editor paths; Vite dev `server.proxy` for local testing.
+- [x] 11. B1 (superseded): serve editor same-origin via reverse-proxy subdomain.
+- [x] 12. B2 (current): convert `tube` to the `@next-editor/tube` package and mount
+      `LearnPage` at `/learn` in the main app — one origin, no proxy/CORS, isolation
+      inherited from the main app so live WebContainer works. Removed all standalone
+      app/build/deploy files (index.html, main.tsx, vite.config, tsconfig, Caddyfile,
+      vercel.json, .env\*, index.css). Lesson assets moved to the main app's
+      `public/lessons/` + `public/lessons.json`. Wired via tsconfig `paths` + Vite
+      `resolve.alias` + Tailwind `@source` (not a bun workspace — bun's workspace
+      mode drops a scoped `vite-plus` platform dep here). Verified tsc + lint + build.

@@ -162,4 +162,10 @@ export const router = createBrowserRouter([
     HydrateFallback: RouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
+  {
+    path: "/learn",
+    lazy: lazyRoute(() => import("@next-editor/tube"), "/learn"),
+    HydrateFallback: RouteHydrateFallback,
+    ErrorBoundary: RouteErrorBoundary,
+  },
 ]);

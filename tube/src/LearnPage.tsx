@@ -2,7 +2,7 @@ import Header from "./components/Header";
 import LessonGrid from "./components/LessonGrid";
 import Footer from "./components/Footer";
 
-export default function App() {
+export default function LearnPage() {
   return (
     <div className="flex min-h-dvh flex-col bg-slate-950 text-white">
       <Header />
