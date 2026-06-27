@@ -74,7 +74,6 @@ export interface PreviewController {
   previewAddressTitle: string;
   activeMode: PreviewActiveMode;
   showModeToggle: boolean;
-  runtimePreviewUrl: string | null;
   handleClose: () => void;
   handleFloat: () => void;
   handleDock: () => void;
@@ -1052,7 +1051,6 @@ export function usePreviewController(): PreviewController {
     previewAddressTitle: previewAddress.title,
     activeMode,
     showModeToggle,
-    runtimePreviewUrl: effectiveRuntimePreviewUrl,
     handleClose,
     handleFloat,
     handleDock,

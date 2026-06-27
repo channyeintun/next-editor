@@ -7,19 +7,6 @@ import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 
 const ApiClientPanel = lazy(() => import("./preview/ApiClientPanel"));
 
-/** The API client shows the runtime origin as a read-only prefix on the path input. */
-function formatPreviewOriginLabel(runtimePreviewUrl: string | null): string {
-  if (!runtimePreviewUrl) {
-    return "";
-  }
-
-  try {
-    return new URL(runtimePreviewUrl).host;
-  } catch {
-    return "";
-  }
-}
-
 function Preview() {
   const controller = usePreviewController();
   const { isPlaying } = useNextEditorMetadata();
@@ -45,7 +32,6 @@ function Preview() {
   }, [controller.isResizing]);
 
   const isApiMode = controller.activeMode === "api";
-  const previewOriginLabel = formatPreviewOriginLabel(controller.runtimePreviewUrl);
 
   // Docked: render while open, and keep rendering through the slide-out
   // (`isMounted` stays true until the panel is offscreen). Floating mounts/unmounts
@@ -96,10 +82,7 @@ function Preview() {
       {previewRenderer}
       {isApiMode ? (
         <div className="absolute inset-0 z-10">
-          <ApiClientPanel
-            onSend={controller.sendApiClientRequest}
-            previewOriginLabel={previewOriginLabel}
-          />
+          <ApiClientPanel onSend={controller.sendApiClientRequest} />
         </div>
       ) : null}
     </PreviewChrome>

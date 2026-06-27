@@ -63,10 +63,9 @@ function detectLanguage(headers: [string, string][], body: string): string {
 
 interface ApiClientPanelProps {
   onSend: () => void;
-  previewOriginLabel: string;
 }
 
-export default function ApiClientPanel({ onSend, previewOriginLabel }: ApiClientPanelProps) {
+export default function ApiClientPanel({ onSend }: ApiClientPanelProps) {
   const store = useApiClientStoreInstance();
   const method = useSelector(store, (s) => selectMethod(s.context));
   const path = useSelector(store, (s) => selectPath(s.context));
@@ -101,19 +100,15 @@ export default function ApiClientPanel({ onSend, previewOriginLabel }: ApiClient
           ))}
         </select>
 
-        <div className="flex min-w-0 flex-1 items-center rounded-md border border-slate-700 bg-[#242938]">
-          <span className="shrink-0 px-2 font-mono text-xs text-slate-500">
-            {previewOriginLabel}
-          </span>
-          <input
-            type="text"
-            value={path}
-            onChange={(e) => store.trigger.setPath({ path: e.target.value })}
-            onKeyDown={handleKeyDown}
-            placeholder="/api/endpoint"
-            className="h-8 min-w-0 flex-1 bg-transparent pr-2 font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none"
-          />
-        </div>
+        <input
+          type="text"
+          value={path}
+          onChange={(e) => store.trigger.setPath({ path: e.target.value })}
+          onKeyDown={handleKeyDown}
+          placeholder="/api/endpoint"
+          aria-label="Request path"
+          className="h-8 min-w-0 flex-1 rounded-md border border-slate-700 bg-[#242938] px-2.5 font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+        />
 
         <button
           type="button"
