@@ -22,7 +22,6 @@ import {
 import { IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE } from "../../utils/iframeInteractionCapture";
 import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRuntimeContext";
 import type {
-  ApiClientInspectedEntry,
   ApiClientRecordedRequest,
   ApiClientRecordedResult,
   ApiClientRequestTab,
@@ -44,8 +43,8 @@ import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext"
 import {
   buildHeaderRecord,
   recordedResultToStoreResult,
+  recordToHeaders,
   storeResultToRecorded,
-  type ApiClientHeader,
   type ApiClientHistoryEntry,
   type HttpMethod,
 } from "../../stores/apiClientStore";
@@ -411,7 +410,6 @@ export function usePreviewController(): PreviewController {
       requestTab?: ApiClientRequestTab;
       apiClientRequest?: ApiClientRecordedRequest;
       apiClientResult?: ApiClientRecordedResult;
-      apiClientInspect?: ApiClientInspectedEntry;
     },
   ) => {
     if (isRecordingRef.current && handlePreviewEventRef.current) {
@@ -430,7 +428,6 @@ export function usePreviewController(): PreviewController {
         requestTab: options?.requestTab,
         apiClientRequest: options?.apiClientRequest,
         apiClientResult: options?.apiClientResult,
-        apiClientInspect: options?.apiClientInspect,
       };
       handlePreviewEventRef.current(event);
     }
@@ -706,13 +703,12 @@ export function usePreviewController(): PreviewController {
       lastAppliedApiSignatureRef.current = signature;
 
       const request = apiState.request;
-      const headers: ApiClientHeader[] = request
-        ? Object.entries(request.headers).map(([key, value]) => ({ key, value, enabled: true }))
-        : [];
       const history: ApiClientHistoryEntry[] = (apiState.history ?? []).map((entry) => ({
         id: entry.id,
         method: (entry.request?.method ?? "GET") as HttpMethod,
         path: entry.request?.path ?? "/",
+        headers: recordToHeaders(entry.request?.headers ?? {}),
+        body: entry.request?.body ?? "",
         result: recordedResultToStoreResult(entry.result),
         timestamp: 0,
       }));
@@ -721,7 +717,7 @@ export function usePreviewController(): PreviewController {
         method: (request?.method ?? "GET") as HttpMethod,
         path: request?.path ?? "/",
         body: request?.body ?? "",
-        headers,
+        headers: request ? recordToHeaders(request.headers) : [],
         sending: apiState.sending ?? false,
         result: apiState.result ? recordedResultToStoreResult(apiState.result) : null,
         history,
@@ -1204,11 +1200,13 @@ export function usePreviewController(): PreviewController {
     },
     recordApiClientInspect: (entry: ApiClientHistoryEntry) => {
       emitPreviewEvent("api_client_inspect_history", {
-        apiClientInspect: {
+        apiClientRequest: {
           method: entry.method,
           path: entry.path,
-          result: storeResultToRecorded(entry.result),
+          headers: buildHeaderRecord(entry.headers),
+          body: entry.method === "GET" ? undefined : entry.body || undefined,
         },
+        apiClientResult: storeResultToRecorded(entry.result),
       });
     },
   };

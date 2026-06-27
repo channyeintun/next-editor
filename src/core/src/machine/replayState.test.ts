@@ -298,12 +298,18 @@ describe("replayState", () => {
           durationMs: 4,
         },
       },
-      // Inspect the older /api/a entry: method/path/result revert to it.
+      // Inspect the older /api/a entry: its full request + result are restored.
       {
         type: "api_client_inspect_history",
         timestamp: 200,
         size: "medium",
-        apiClientInspect: { method: "GET", path: "/api/a", result: firstResult },
+        apiClientRequest: {
+          method: "GET",
+          path: "/api/a",
+          headers: { "x-test": "1" },
+          body: undefined,
+        },
+        apiClientResult: firstResult,
       },
     ];
 
@@ -318,6 +324,7 @@ describe("replayState", () => {
     const api = afterInspect.appliedStates[0].apiClientState;
     expect(api?.request?.method).toBe("GET");
     expect(api?.request?.path).toBe("/api/a");
+    expect(api?.request?.headers).toEqual({ "x-test": "1" });
     expect(api?.result).toEqual(firstResult);
     // The two responses are still in history.
     expect(api?.history).toHaveLength(2);

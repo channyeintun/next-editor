@@ -30,6 +30,9 @@ export interface ApiClientHistoryEntry {
   id: string;
   method: HttpMethod;
   path: string;
+  // The full request, so inspecting an entry restores its headers/body too.
+  headers: ApiClientHeader[];
+  body: string;
   result: ApiClientResult;
   timestamp: number;
 }
@@ -109,6 +112,8 @@ export function createApiClientStore() {
           id: event.id,
           method: context.method,
           path: context.path,
+          headers: context.headers,
+          body: context.body,
           result: event.result,
           timestamp: Date.now(),
         };
@@ -120,6 +125,8 @@ export function createApiClientStore() {
         ...context,
         method: event.entry.method,
         path: event.entry.path,
+        headers: event.entry.headers,
+        body: event.entry.body,
         result: event.entry.result,
       }),
 
@@ -175,6 +182,11 @@ export function buildHeaderRecord(headers: ApiClientHeader[]): Record<string, st
     }
   }
   return record;
+}
+
+/** Expand a recorded header map back into editable rows (used on replay). */
+export function recordToHeaders(record: Record<string, string>): ApiClientHeader[] {
+  return Object.entries(record).map(([key, value]) => ({ key, value, enabled: true }));
 }
 
 /** Maps a recorded (flat) result back into the store's nested result shape, used

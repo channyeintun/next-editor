@@ -170,13 +170,6 @@ export interface ApiClientReplayState {
   history?: ApiClientReplayHistoryEntry[];
 }
 
-/** The method/path/result restored when a recorded session inspects a history entry. */
-export interface ApiClientInspectedEntry {
-  method: string;
-  path: string;
-  result: ApiClientRecordedResult;
-}
-
 export interface PreviewState {
   size: PreviewSize;
   isOpen?: boolean;
@@ -224,5 +217,4 @@ export interface PreviewEvent {
   requestTab?: ApiClientRequestTab;
   apiClientRequest?: ApiClientRecordedRequest;
   apiClientResult?: ApiClientRecordedResult;
-  apiClientInspect?: ApiClientInspectedEntry;
 }
