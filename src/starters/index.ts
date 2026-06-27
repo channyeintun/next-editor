@@ -10,7 +10,7 @@ import type { WorkspaceLessonType, WorkspaceProject } from "../types/workspace";
  * `html-css` and `react` are also imported statically by the workspace store
  * (they are the boot default and the empty-workspace fallback), so the bundler
  * keeps them in the main bundle — only `vue`, `solid`, `svelte`, `htmx-express`,
- * and `express-ts` become lazily loaded chunks.
+ * `alpine-express`, and `express-ts` become lazily loaded chunks.
  */
 const STARTER_LOADERS: Record<WorkspaceLessonType, () => Promise<() => WorkspaceProject>> = {
   "html-css": () => import("./htmlCss").then((module) => module.createStarterHtmlCssWorkspace),
@@ -20,6 +20,8 @@ const STARTER_LOADERS: Record<WorkspaceLessonType, () => Promise<() => Workspace
   svelte: () => import("./svelte").then((module) => module.createStarterSvelteWorkspace),
   "htmx-express": () =>
     import("./htmxExpress").then((module) => module.createStarterHtmxExpressWorkspace),
+  "alpine-express": () =>
+    import("./alpineExpress").then((module) => module.createStarterAlpineExpressWorkspace),
   "express-ts": () =>
     import("./expressTs").then((module) => module.createStarterExpressTsWorkspace),
 };

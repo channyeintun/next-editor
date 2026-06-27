@@ -77,6 +77,24 @@ describe("detectImportedLessonType", () => {
     );
   });
 
+  it("detects Alpine AJAX from a CDN reference over the bare-Express fallback", () => {
+    expect(
+      detectImportedLessonType({
+        ...withPackageJson({ dependencies: { express: "^5.1.0" } }),
+        "public/index.html": textFile(
+          "public/index.html",
+          '<script src="https://cdn.jsdelivr.net/npm/@imacrayon/alpine-ajax@0.12.0/dist/cdn.min.js"></script>',
+        ),
+      }),
+    ).toBe("alpine-express");
+
+    expect(
+      detectImportedLessonType(
+        withPackageJson({ dependencies: { "@imacrayon/alpine-ajax": "^0.12.0" } }),
+      ),
+    ).toBe("alpine-express");
+  });
+
   it("falls back to html-css without a manifest or recognized framework", () => {
     expect(detectImportedLessonType({})).toBe("html-css");
     expect(detectImportedLessonType(withPackageJson({ dependencies: { lodash: "^4.0.0" } }))).toBe(

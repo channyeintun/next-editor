@@ -91,6 +91,14 @@ export function createRootFolderStripper(filePaths: string[]): (path: string) =>
   return (path) => path.slice(prefix.length);
 }
 
+/** Whether any text HTML file in the project contains the given substring. */
+function htmlReferences(files: Record<string, WorkspaceFile>, needle: string): boolean {
+  return Object.values(files).some(
+    (file) =>
+      file.encoding !== "base64" && /\.html?$/i.test(file.path) && file.content.includes(needle),
+  );
+}
+
 /** Detect the closest supported framework from an imported project's manifest. */
 export function detectImportedLessonType(
   files: Record<string, WorkspaceFile>,
@@ -129,6 +137,13 @@ export function detectImportedLessonType(
 
     if (dependencies["htmx.org"]) {
       return "htmx-express";
+    }
+
+    // Alpine AJAX (like htmx) is usually pulled from a CDN rather than installed,
+    // so also sniff the HTML for its CDN reference — otherwise an Alpine project
+    // would fall through to the bare-Express branch below and be misdetected.
+    if (dependencies["@imacrayon/alpine-ajax"] || htmlReferences(files, "alpine-ajax")) {
+      return "alpine-express";
     }
 
     if (dependencies.express && (dependencies.tsx || dependencies["@types/express"])) {

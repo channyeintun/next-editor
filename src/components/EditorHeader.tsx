@@ -48,6 +48,7 @@ const LESSON_TYPE_OPTIONS: Array<{
   { value: "solid", label: "Solid" },
   { value: "svelte", label: "Svelte" },
   { value: "htmx-express", label: "HTMX + Express" },
+  { value: "alpine-express", label: "Alpine AJAX + Express" },
   { value: "express-ts", label: "Express + TypeScript" },
 ];
 

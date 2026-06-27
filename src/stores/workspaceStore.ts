@@ -199,6 +199,7 @@ const KNOWN_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "solid",
   "svelte",
   "htmx-express",
+  "alpine-express",
   "express-ts",
 ]);
 
