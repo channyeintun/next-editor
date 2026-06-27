@@ -45,7 +45,10 @@ function mergePreviewEventState(
   // response implies API mode even if the explicit mode-switch event wasn't
   // captured (e.g. the user was already in API mode when recording started).
   const impliesApiMode =
-    previewEvent.type === "api_client_request" || previewEvent.type === "api_client_response";
+    previewEvent.type === "api_client_request" ||
+    previewEvent.type === "api_client_response" ||
+    previewEvent.type === "api_client_request_tab" ||
+    previewEvent.type === "api_client_inspect_history";
   const resolvedActiveMode = impliesApiMode ? "api" : nextActiveMode;
 
   let nextApiClientState = previousState?.apiClientState;
@@ -68,6 +71,20 @@ function mergePreviewEventState(
       sending: false,
       // Newest first, matching the live store; cap mirrors the store's MAX_HISTORY.
       history: [historyEntry, ...(previousApiClientState?.history ?? [])].slice(0, 25),
+    };
+  } else if (previewEvent.type === "api_client_inspect_history" && previewEvent.apiClientInspect) {
+    // Inspecting a history entry restores its method/path/result (like the live
+    // store's selectFromHistory), keeping the current headers/body and history.
+    const previousApiClientState = previousState?.apiClientState;
+    const inspect = previewEvent.apiClientInspect;
+    const previousRequest = previousApiClientState?.request;
+    nextApiClientState = {
+      ...previousApiClientState,
+      request: previousRequest
+        ? { ...previousRequest, method: inspect.method, path: inspect.path }
+        : { method: inspect.method, path: inspect.path, headers: {}, body: undefined },
+      result: inspect.result,
+      sending: false,
     };
   }
 

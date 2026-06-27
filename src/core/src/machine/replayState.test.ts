@@ -224,6 +224,73 @@ describe("replayState", () => {
     expect(backToHeaders.appliedStates[0].requestTab).toBe("headers");
   });
 
+  it("restores a recorded history inspection (method/path/result) on replay", () => {
+    const firstResult = {
+      ok: true as const,
+      status: 200,
+      statusText: "OK",
+      headers: [] as [string, string][],
+      body: "first",
+      durationMs: 3,
+    };
+    const previewEvents: PreviewEvent[] = [
+      {
+        type: "api_client_request",
+        timestamp: 0,
+        size: "medium",
+        activeMode: "api",
+        apiClientRequest: {
+          method: "GET",
+          path: "/api/a",
+          headers: { "x-test": "1" },
+          body: undefined,
+        },
+      },
+      { type: "api_client_response", timestamp: 50, size: "medium", apiClientResult: firstResult },
+      {
+        type: "api_client_request",
+        timestamp: 100,
+        size: "medium",
+        apiClientRequest: { method: "POST", path: "/api/b", headers: {}, body: "{}" },
+      },
+      {
+        type: "api_client_response",
+        timestamp: 150,
+        size: "medium",
+        apiClientResult: {
+          ok: true,
+          status: 201,
+          statusText: "Created",
+          headers: [],
+          body: "second",
+          durationMs: 4,
+        },
+      },
+      // Inspect the older /api/a entry: method/path/result revert to it.
+      {
+        type: "api_client_inspect_history",
+        timestamp: 200,
+        size: "medium",
+        apiClientInspect: { method: "GET", path: "/api/a", result: firstResult },
+      },
+    ];
+
+    const afterInspect = getPreviewReplayResult({
+      previewEvents,
+      currentTime: 250,
+      lastAppliedIndex: -1,
+      lastAppliedState: undefined,
+      isSeeking: true,
+    });
+
+    const api = afterInspect.appliedStates[0].apiClientState;
+    expect(api?.request?.method).toBe("GET");
+    expect(api?.request?.path).toBe("/api/a");
+    expect(api?.result).toEqual(firstResult);
+    // The two responses are still in history.
+    expect(api?.history).toHaveLength(2);
+  });
+
   it("implies API mode from a request even without a recorded mode switch", () => {
     // Recording started while already in API mode, so no api_client_mode event.
     const previewEvents: PreviewEvent[] = [

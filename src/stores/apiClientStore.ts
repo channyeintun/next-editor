@@ -180,3 +180,18 @@ export function recordedResultToStoreResult(recorded: ApiClientRecordedResult): 
       }
     : { ok: false, error: { error: recorded.error, durationMs: recorded.durationMs } };
 }
+
+/** Inverse of {@link recordedResultToStoreResult}: flattens a store result for
+ *  recording (e.g. when a history entry is inspected during a capture). */
+export function storeResultToRecorded(result: ApiClientResult): ApiClientRecordedResult {
+  return result.ok
+    ? {
+        ok: true,
+        status: result.response.status,
+        statusText: result.response.statusText,
+        headers: result.response.headers,
+        body: result.response.body,
+        durationMs: result.response.durationMs,
+      }
+    : { ok: false, error: result.error.error, durationMs: result.error.durationMs };
+}

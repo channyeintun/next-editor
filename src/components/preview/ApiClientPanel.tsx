@@ -12,6 +12,7 @@ import {
   selectRequestTab,
   selectResult,
   selectSending,
+  type ApiClientHistoryEntry,
   type HttpMethod,
 } from "../../stores/apiClientStore";
 import type { ApiClientRequestTab } from "../../types/slides";
@@ -65,12 +66,14 @@ interface ApiClientPanelProps {
   onSend: () => void;
   runtimeReady: boolean;
   onRequestTabChange?: (tab: ApiClientRequestTab) => void;
+  onInspectHistory?: (entry: ApiClientHistoryEntry) => void;
 }
 
 export default function ApiClientPanel({
   onSend,
   runtimeReady,
   onRequestTabChange,
+  onInspectHistory,
 }: ApiClientPanelProps) {
   const store = useApiClientStoreInstance();
   const method = useSelector(store, (s) => selectMethod(s.context));
@@ -225,7 +228,10 @@ export default function ApiClientPanel({
               <button
                 key={entry.id}
                 type="button"
-                onClick={() => store.trigger.selectFromHistory({ entry })}
+                onClick={() => {
+                  store.trigger.selectFromHistory({ entry });
+                  onInspectHistory?.(entry);
+                }}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-800"
               >
                 <span className={`font-mono text-[11px] font-bold ${METHOD_COLORS[entry.method]}`}>

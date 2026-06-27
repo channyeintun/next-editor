@@ -22,6 +22,7 @@ import {
 import { IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE } from "../../utils/iframeInteractionCapture";
 import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRuntimeContext";
 import type {
+  ApiClientInspectedEntry,
   ApiClientRecordedRequest,
   ApiClientRecordedResult,
   ApiClientRequestTab,
@@ -42,6 +43,7 @@ import {
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
 import {
   recordedResultToStoreResult,
+  storeResultToRecorded,
   type ApiClientHeader,
   type ApiClientHistoryEntry,
   type HttpMethod,
@@ -99,6 +101,7 @@ export interface PreviewController {
   setActiveMode: (mode: PreviewActiveMode) => void;
   sendApiClientRequest: () => void;
   recordApiClientTab: (tab: ApiClientRequestTab) => void;
+  recordApiClientInspect: (entry: ApiClientHistoryEntry) => void;
 }
 
 /** Pointer coordinates from a mouse or touch event (React or native). */
@@ -407,6 +410,7 @@ export function usePreviewController(): PreviewController {
       requestTab?: ApiClientRequestTab;
       apiClientRequest?: ApiClientRecordedRequest;
       apiClientResult?: ApiClientRecordedResult;
+      apiClientInspect?: ApiClientInspectedEntry;
     },
   ) => {
     if (isRecordingRef.current && handlePreviewEventRef.current) {
@@ -425,6 +429,7 @@ export function usePreviewController(): PreviewController {
         requestTab: options?.requestTab,
         apiClientRequest: options?.apiClientRequest,
         apiClientResult: options?.apiClientResult,
+        apiClientInspect: options?.apiClientInspect,
       };
       handlePreviewEventRef.current(event);
     }
@@ -1143,6 +1148,15 @@ export function usePreviewController(): PreviewController {
     sendApiClientRequest: apiClient.send,
     recordApiClientTab: (tab: ApiClientRequestTab) => {
       emitPreviewEvent("api_client_request_tab", { requestTab: tab });
+    },
+    recordApiClientInspect: (entry: ApiClientHistoryEntry) => {
+      emitPreviewEvent("api_client_inspect_history", {
+        apiClientInspect: {
+          method: entry.method,
+          path: entry.path,
+          result: storeResultToRecorded(entry.result),
+        },
+      });
     },
   };
 }

@@ -86,6 +86,7 @@ function Preview() {
             onSend={controller.sendApiClientRequest}
             runtimeReady={controller.isRuntimeReady}
             onRequestTabChange={controller.recordApiClientTab}
+            onInspectHistory={controller.recordApiClientInspect}
           />
         </div>
       ) : null}
