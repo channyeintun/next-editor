@@ -38,6 +38,24 @@ function mergePreviewEventState(
   const nextMode = previewEvent.mode ?? previousState?.mode;
   const carriedScrollTop = previewEvent.scrollTop ?? previousState?.scrollTop;
   const carriedScrollLeft = previewEvent.scrollLeft ?? previousState?.scrollLeft;
+  const nextActiveMode = previewEvent.activeMode ?? previousState?.activeMode;
+
+  let nextApiClientState = previousState?.apiClientState;
+  if (previewEvent.type === "api_client_request") {
+    nextApiClientState = {
+      request: previewEvent.apiClientRequest,
+      sending: true,
+    };
+  } else if (previewEvent.type === "api_client_response") {
+    nextApiClientState = {
+      ...nextApiClientState,
+      result: previewEvent.apiClientResult,
+      sending: false,
+    };
+  } else if (previewEvent.type === "api_client_mode" && previewEvent.activeMode === "browser") {
+    nextApiClientState = undefined;
+  }
+
   const appliedState: PreviewState = {
     size: previewEvent.size ?? previousState?.size ?? "small",
     content: previewEvent.content ?? previousState?.content,
@@ -47,6 +65,8 @@ function mergePreviewEventState(
     refreshKey:
       previewEvent.type === "preview_refresh" ? previewEvent.timestamp : previousState?.refreshKey,
     currentInteraction: previewEvent.interaction,
+    activeMode: nextActiveMode,
+    apiClientState: nextApiClientState,
   };
 
   if (nextIsOpen !== undefined) {
@@ -61,11 +81,11 @@ function mergePreviewEventState(
     appliedState,
     retainedState: {
       ...appliedState,
-      // Continuity state keeps the scroll so later events and seeks resolve from
-      // the true position even though the mode-change event itself didn't apply it.
       scrollTop: carriedScrollTop,
       scrollLeft: carriedScrollLeft,
       currentInteraction: undefined,
+      activeMode: nextActiveMode,
+      apiClientState: nextApiClientState,
     },
   };
 }

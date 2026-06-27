@@ -4,6 +4,7 @@ import {
   API_CLIENT_REQUEST_MESSAGE_TYPE,
   type ApiClientResultPayload,
 } from "../../utils/apiClientBridge";
+import type { ApiClientRecordedRequest, ApiClientRecordedResult } from "../../types/slides";
 import type { ApiClientResult } from "../../stores/apiClientStore";
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -16,6 +17,8 @@ function generateRequestId(): string {
 interface UseApiClientOptions {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
   runtimePreviewUrl: string | null;
+  onRequestSent?: (request: ApiClientRecordedRequest) => void;
+  onResponseReceived?: (result: ApiClientRecordedResult) => void;
 }
 
 /**
@@ -25,7 +28,12 @@ interface UseApiClientOptions {
  * time rather than via selectors, so this hook subscribes to nothing — keeping
  * `usePreviewController` from re-rendering on every keystroke in the panel.
  */
-export function useApiClient({ iframeRef, runtimePreviewUrl }: UseApiClientOptions) {
+export function useApiClient({
+  iframeRef,
+  runtimePreviewUrl,
+  onRequestSent,
+  onResponseReceived,
+}: UseApiClientOptions) {
   const store = useApiClientStoreInstance();
 
   const pendingIdRef = useRef<string | null>(null);
@@ -68,8 +76,20 @@ export function useApiClient({ iframeRef, runtimePreviewUrl }: UseApiClientOptio
           };
 
       store.trigger.receiveResult({ id: payload.id, result });
+
+      const recordedResult: ApiClientRecordedResult = payload.ok
+        ? {
+            ok: true,
+            status: payload.status,
+            statusText: payload.statusText,
+            headers: payload.headers,
+            body: payload.body,
+            durationMs: payload.durationMs,
+          }
+        : { ok: false, error: payload.error, durationMs: payload.durationMs };
+      onResponseReceived?.(recordedResult);
     },
-    [clearPending, store],
+    [clearPending, onResponseReceived, store],
   );
 
   const send = useCallback(() => {
@@ -92,6 +112,7 @@ export function useApiClient({ iframeRef, runtimePreviewUrl }: UseApiClientOptio
 
     pendingIdRef.current = id;
     store.trigger.markSending();
+    onRequestSent?.({ method, path, headers: headerRecord, body: requestBody });
 
     let origin: string;
     try {
@@ -122,7 +143,7 @@ export function useApiClient({ iframeRef, runtimePreviewUrl }: UseApiClientOptio
         },
       });
     }, REQUEST_TIMEOUT_MS);
-  }, [clearPending, iframeRef, runtimePreviewUrl, store]);
+  }, [clearPending, iframeRef, onRequestSent, runtimePreviewUrl, store]);
 
   return { send, handleResponse };
 }

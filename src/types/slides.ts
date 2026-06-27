@@ -130,6 +130,38 @@ export interface PreviewDomPatchBatch {
   events?: PreviewRecordedEvent[];
 }
 
+export interface ApiClientRecordedRequest {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body: string | undefined;
+}
+
+export interface ApiClientRecordedResponse {
+  ok: true;
+  status: number;
+  statusText: string;
+  headers: [string, string][];
+  body: string;
+  durationMs: number;
+}
+
+export interface ApiClientRecordedError {
+  ok: false;
+  error: string;
+  durationMs: number;
+}
+
+export type ApiClientRecordedResult = ApiClientRecordedResponse | ApiClientRecordedError;
+
+export type PreviewActiveMode = "browser" | "api";
+
+export interface ApiClientReplayState {
+  request?: ApiClientRecordedRequest;
+  result?: ApiClientRecordedResult;
+  sending?: boolean;
+}
+
 export interface PreviewState {
   size: PreviewSize;
   isOpen?: boolean;
@@ -139,8 +171,9 @@ export interface PreviewState {
   scrollTop?: number;
   scrollLeft?: number;
   refreshKey?: number;
-  // Current interaction being replayed (for visualization)
   currentInteraction?: IframeInteractionEvent;
+  activeMode?: PreviewActiveMode;
+  apiClientState?: ApiClientReplayState;
 }
 
 export interface PreviewEvent {
@@ -155,7 +188,10 @@ export interface PreviewEvent {
     | "preview_interaction"
     | "preview_route_change"
     | "preview_refresh"
-    | "preview_resize";
+    | "preview_resize"
+    | "api_client_mode"
+    | "api_client_request"
+    | "api_client_response";
   timestamp: number;
   size?: PreviewSize;
   isOpen?: boolean;
@@ -165,4 +201,7 @@ export interface PreviewEvent {
   scrollTop?: number;
   scrollLeft?: number;
   interaction?: IframeInteractionEvent;
+  activeMode?: PreviewActiveMode;
+  apiClientRequest?: ApiClientRecordedRequest;
+  apiClientResult?: ApiClientRecordedResult;
 }

@@ -18,8 +18,7 @@ import {
   SquareTerminal,
   X,
 } from "lucide-react";
-import type { PreviewPanelMode, PreviewSize } from "../../types/slides";
-import type { PreviewActiveMode } from "./usePreviewController";
+import type { PreviewActiveMode, PreviewPanelMode, PreviewSize } from "../../types/slides";
 import { isCustomPreviewSize } from "./previewSizeUtils";
 
 interface PreviewChromeProps {

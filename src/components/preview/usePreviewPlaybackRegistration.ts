@@ -4,7 +4,9 @@ import type {
   PreviewPatchReplayInput,
 } from "../../stores/previewAdapterHandle";
 import type {
+  ApiClientReplayState,
   IframeInteractionEvent,
+  PreviewActiveMode,
   PreviewPanelMode,
   PreviewSize,
   PreviewState,
@@ -44,6 +46,8 @@ interface UsePreviewPlaybackRegistrationOptions {
   targetScrollRef: RefObject<PreviewScrollPosition | null>;
   rafRef: RefObject<number | null>;
   replayContainerRef: RefObject<HTMLDivElement | null>;
+  onActiveModeChange?: (mode: PreviewActiveMode) => void;
+  onApiClientStateChange?: (state: ApiClientReplayState | undefined) => void;
 }
 
 function getIframeDocumentAndWindow(iframe: HTMLIFrameElement): {
@@ -93,6 +97,8 @@ export function usePreviewPlaybackRegistration({
   targetScrollRef,
   rafRef,
   replayContainerRef,
+  onActiveModeChange,
+  onApiClientStateChange,
 }: UsePreviewPlaybackRegistrationOptions) {
   const targetScrollInteractionRef = useRef<IframeInteractionEvent | null>(null);
   // rrweb replay: the Replayer owns the recorded DOM + scroll + input in one
@@ -259,6 +265,14 @@ export function usePreviewPlaybackRegistration({
         isOpen: previewState.isOpen,
         mode: previewState.mode,
       });
+
+      if (previewState.activeMode !== undefined) {
+        onActiveModeChange?.(previewState.activeMode);
+      }
+
+      if (previewState.apiClientState !== undefined || previewState.activeMode === "browser") {
+        onApiClientStateChange?.(previewState.apiClientState);
+      }
 
       if (!isPlaybackPreviewActive) {
         return;

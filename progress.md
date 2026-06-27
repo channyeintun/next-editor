@@ -23,3 +23,11 @@
 - [x] `Browser | API` mode toggle in `PreviewChrome`, gated on `lessonRunsInWebContainer` + runtime `ready`
 - [x] `activeMode` in `usePreviewController`; keep iframe mounted in `api` mode
 - [x] Wire ApiClientPanel + useApiClient send/response through controller and message bridge
+
+## Phase 5: Record/replay via event-stream ✅
+
+- [x] Add `api_client_mode` / `api_client_request` / `api_client_response` event types to `PreviewEvent`
+- [x] Add `ApiClientRecordedRequest/Result` types, `activeMode`/`apiClientState` to `PreviewState`
+- [x] Extend `mergePreviewEventState` to carry API client state during replay
+- [x] Emit recording events: mode switch, request sent, response received
+- [x] Apply replayed state during playback via `usePreviewPlaybackRegistration`

@@ -22,7 +22,10 @@ import {
 import { IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE } from "../../utils/iframeInteractionCapture";
 import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRuntimeContext";
 import type {
+  ApiClientRecordedRequest,
+  ApiClientRecordedResult,
   IframeInteractionEvent,
+  PreviewActiveMode,
   PreviewDomPatchBatch,
   PreviewEvent,
   PreviewInitialDocument,
@@ -35,6 +38,7 @@ import {
   patchIframeContentFromHtml,
   type PreviewScrollPosition,
 } from "./previewIframeUtils";
+import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
 import { hasRrwebPreviewEvents } from "./rrwebPreview";
 import { useApiClient } from "./useApiClient";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
@@ -54,8 +58,6 @@ import {
   normalizePreviewRoute,
   refreshRuntimePreview,
 } from "./runtimePreview";
-
-export type PreviewActiveMode = "browser" | "api";
 
 export interface PreviewController {
   containerRef: RefObject<HTMLDivElement | null>;
@@ -89,6 +91,8 @@ export interface PreviewController {
   handleTransitionComplete: () => void;
   setActiveMode: (mode: PreviewActiveMode) => void;
   sendApiClientRequest: () => void;
+  emitApiClientRequest: (request: ApiClientRecordedRequest) => void;
+  emitApiClientResponse: (result: ApiClientRecordedResult) => void;
 }
 
 /** Pointer coordinates from a mouse or touch event (React or native). */
@@ -283,9 +287,19 @@ export function usePreviewController(): PreviewController {
     }
   }, [activeMode, showModeToggle]);
 
+  const apiClientStore = useApiClientStoreInstance();
+  const apiClientStoreRef = useRef(apiClientStore);
+  apiClientStoreRef.current = apiClientStore;
+
   const apiClient = useApiClient({
     iframeRef,
     runtimePreviewUrl: effectiveRuntimePreviewUrl,
+    onRequestSent: (request) => {
+      emitPreviewEvent("api_client_request", { apiClientRequest: request });
+    },
+    onResponseReceived: (result) => {
+      emitPreviewEvent("api_client_response", { apiClientResult: result });
+    },
   });
 
   isRecordingRef.current = isRecording;
@@ -379,6 +393,9 @@ export function usePreviewController(): PreviewController {
       scrollTop?: number;
       scrollLeft?: number;
       interaction?: IframeInteractionEvent;
+      activeMode?: PreviewActiveMode;
+      apiClientRequest?: ApiClientRecordedRequest;
+      apiClientResult?: ApiClientRecordedResult;
     },
   ) => {
     if (isRecordingRef.current && handlePreviewEventRef.current) {
@@ -393,6 +410,9 @@ export function usePreviewController(): PreviewController {
         scrollTop: options?.scrollTop,
         scrollLeft: options?.scrollLeft,
         interaction: options?.interaction,
+        activeMode: options?.activeMode,
+        apiClientRequest: options?.apiClientRequest,
+        apiClientResult: options?.apiClientResult,
       };
       handlePreviewEventRef.current(event);
     }
@@ -606,6 +626,31 @@ export function usePreviewController(): PreviewController {
     targetScrollRef,
     rafRef,
     replayContainerRef,
+    onActiveModeChange: setActiveMode,
+    onApiClientStateChange: (apiState) => {
+      const store = apiClientStoreRef.current;
+      if (!store) return;
+      if (!apiState) {
+        store.trigger.reset();
+        return;
+      }
+      if (apiState.request) {
+        store.trigger.setMethod({
+          method: apiState.request.method as import("../../stores/apiClientStore").HttpMethod,
+        });
+        store.trigger.setPath({ path: apiState.request.path });
+        store.trigger.setBody({ body: apiState.request.body ?? "" });
+      }
+      if (apiState.sending) {
+        store.trigger.markSending();
+      }
+      if (apiState.result) {
+        const result = apiState.result.ok
+          ? { ok: true as const, response: apiState.result }
+          : { ok: false as const, error: apiState.result };
+        store.trigger.receiveResult({ id: "replay", result });
+      }
+    },
   });
 
   usePreviewInteractionCapture({
@@ -1070,7 +1115,16 @@ export function usePreviewController(): PreviewController {
     handleDockResizeStart,
     handleTransitionStart,
     handleTransitionComplete,
-    setActiveMode,
+    setActiveMode: (mode: PreviewActiveMode) => {
+      setActiveMode(mode);
+      emitPreviewEvent("api_client_mode", { activeMode: mode });
+    },
     sendApiClientRequest: apiClient.send,
+    emitApiClientRequest: (request: ApiClientRecordedRequest) => {
+      emitPreviewEvent("api_client_request", { apiClientRequest: request });
+    },
+    emitApiClientResponse: (result: ApiClientRecordedResult) => {
+      emitPreviewEvent("api_client_response", { apiClientResult: result });
+    },
   };
 }
