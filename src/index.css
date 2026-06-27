@@ -93,12 +93,10 @@ body {
 
 @keyframes draw {
   from {
-    stroke-dasharray: 0 200;
-    stroke-dashoffset: 0;
+    stroke-dashoffset: 200;
   }
 
   to {
-    stroke-dasharray: 200 200;
     stroke-dashoffset: 0;
   }
 }

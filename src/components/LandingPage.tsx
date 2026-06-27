@@ -87,19 +87,36 @@ function useInView(threshold = 0.1) {
   const ref = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(false);
   useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setInView(true);
-          observer.disconnect();
-        }
-      },
-      { threshold },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
+    let cancelled = false;
+    let observer: IntersectionObserver | undefined;
+    const arm = () => {
+      const node = ref.current;
+      if (cancelled || !node) return;
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            setInView(true);
+            observer?.disconnect();
+          }
+        },
+        { threshold },
+      );
+      observer.observe(node);
+    };
+    // Wait for web fonts to settle before observing: `font-display: block`
+    // swaps the heading font in after load, and that reflow can briefly scroll
+    // a below-the-fold section into view and fire a false reveal (gradient
+    // flashes in, then vanishes as the layout settles).
+    const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
+    if (fonts?.ready) {
+      fonts.ready.then(() => requestAnimationFrame(arm));
+    } else {
+      arm();
+    }
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+    };
   }, [threshold]);
   return { ref, inView };
 }
@@ -129,6 +146,10 @@ const LandingPage = () => {
   const [isMobile] = useState(() => isMobileBrowser());
   const [frameworkIndex, setFrameworkIndex] = useState(0);
   const [starCount, setStarCount] = useState<number | null>(null);
+  // The demo iframe boots a full second editor and saturates the main thread,
+  // which makes the hero's intro animations (underline draw, fade-up) stutter.
+  // Hold off until the thread is idle so those run smoothly first.
+  const [demoReady, setDemoReady] = useState(false);
 
   // Reveal each section once it scrolls into view (replaces motion's whileInView).
   const featuresSection = useInView();
@@ -136,6 +157,28 @@ const LandingPage = () => {
   const useCasesSection = useInView();
   const licenseSection = useInView();
   const starSection = useInView();
+
+  useEffect(() => {
+    if (isMobile) return;
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    let idle: number | undefined;
+    // Clear the hero's ~1.3s intro-animation window, then boot the iframe at the
+    // next idle moment so the draw runs uncontended and the demo still loads promptly.
+    const timer = window.setTimeout(() => {
+      if (w.requestIdleCallback) {
+        idle = w.requestIdleCallback(() => setDemoReady(true), { timeout: 1000 });
+      } else {
+        setDemoReady(true);
+      }
+    }, 1400);
+    return () => {
+      clearTimeout(timer);
+      if (idle !== undefined) w.cancelIdleCallback?.(idle);
+    };
+  }, [isMobile]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -253,17 +296,19 @@ const LandingPage = () => {
                           d="M2 12C40 13 80 13 120 12C160 11 185 9 198 5"
                           stroke="currentColor"
                           strokeWidth="4"
+                          strokeDasharray="200"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_forwards] will-change-[stroke-dasharray]"
+                          className="animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_both] motion-reduce:animate-none will-change-[stroke-dashoffset]"
                         />
                         <path
                           d="M5 16C50 18 100 18 140 17C170 16 190 14 195 10"
                           stroke="currentColor"
                           strokeWidth="2.5"
+                          strokeDasharray="200"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_0.15s_forwards] will-change-[stroke-dasharray]"
+                          className="animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_0.15s_both] motion-reduce:animate-none will-change-[stroke-dashoffset]"
                           opacity="0.8"
                         />
                       </svg>
@@ -362,7 +407,7 @@ const LandingPage = () => {
                             <p className="text-sm text-slate-400">Tap to open the full editor</p>
                           </div>
                         </a>
-                      ) : (
+                      ) : demoReady ? (
                         <iframe
                           src={DEMO_IFRAME_SRC}
                           className="absolute border-0 origin-top-left"
@@ -375,6 +420,10 @@ const LandingPage = () => {
                           }}
                           title="Next Editor Live Demo"
                         />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="size-8 rounded-full border-2 border-white/15 border-t-pinata-cyan animate-spin motion-reduce:animate-none" />
+                        </div>
                       )}
                       {isFullscreen && (
                         <button
@@ -450,17 +499,19 @@ const LandingPage = () => {
                               d="M2 12C20 13 40 13 60 12C80 11 92 9 98 5"
                               stroke="currentColor"
                               strokeWidth="4"
+                              strokeDasharray="200"
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_forwards] will-change-[stroke-dasharray]"
+                              className="animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_both] motion-reduce:animate-none will-change-[stroke-dashoffset]"
                             />
                             <path
                               d="M5 16C25 18 50 18 70 17C85 16 95 14 97 10"
                               stroke="currentColor"
                               strokeWidth="2.5"
+                              strokeDasharray="200"
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              className="origin-left animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_0.15s_forwards] will-change-[stroke-dasharray]"
+                              className="animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_0.15s_both] motion-reduce:animate-none will-change-[stroke-dashoffset]"
                             />
                           </svg>
                         </span>
@@ -491,16 +542,15 @@ const LandingPage = () => {
       </main>
 
       {/* Section 1 — Works with any stack */}
-      <section
-        ref={stacksSection.ref}
-        className={`relative py-24 px-6 text-center transition-opacity duration-1000 motion-reduce:transition-none ${
-          stacksSection.inView ? "opacity-100" : "opacity-0"
-        }`}
-      >
+      <section ref={stacksSection.ref} className="relative py-24 px-6 text-center">
         <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
           <div className="absolute top-[20%] left-[50%] -translate-x-1/2 size-100 md:size-175 bg-[radial-gradient(circle,hsla(248,100%,67%,0.15)_0%,hsla(248,100%,67%,0)_70%)] rounded-full" />
         </div>
-        <div className="max-w-4xl mx-auto">
+        <div
+          className={`max-w-4xl mx-auto transition-opacity duration-1000 motion-reduce:transition-none ${
+            stacksSection.inView ? "opacity-100" : "opacity-0"
+          }`}
+        >
           <h2 className="text-3xl md:text-5xl font-machina uppercase tracking-tight mb-6">
             <span className="block">Works with</span>
             <span
@@ -569,10 +619,6 @@ const LandingPage = () => {
           licenseSection.inView ? "opacity-100" : "opacity-0"
         }`}
       >
-        <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
-          <div className="absolute top-[30%] left-[20%] size-75 md:size-125 bg-[radial-gradient(circle,hsla(174,76%,60%,0.12)_0%,hsla(174,76%,60%,0)_70%)] rounded-full" />
-          <div className="absolute bottom-[20%] right-[15%] size-62.5 md:size-100 bg-[radial-gradient(circle,hsla(248,100%,67%,0.12)_0%,hsla(248,100%,67%,0)_70%)] rounded-full" />
-        </div>
         <div className="max-w-3xl mx-auto">
           <h2 className="text-4xl md:text-6xl font-machina uppercase tracking-tight mb-6">
             Free for everyone,
