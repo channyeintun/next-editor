@@ -164,6 +164,10 @@ impl Heap {
 unsafe impl GlobalAlloc for Heap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // Blocks are 8-aligned; every type used here (u8/i32/usize) needs <= 8.
+        // Guard the assumption so an align-16+ type added later fails loudly in
+        // debug rather than handing back an under-aligned block (compiled out of
+        // the release wasm).
+        debug_assert!(layout.align() <= ALIGN);
         self.raw_alloc(layout.size()) as *mut u8
     }
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
@@ -175,6 +179,11 @@ unsafe impl GlobalAlloc for Heap {
 // Constants and result packing.
 // ---------------------------------------------------------------------------
 const ERR: u64 = 0xffff_ffff_ffff_ffff;
+
+// Buffers must stay under this so `(len << 2) | type` fits a u32 without silently
+// truncating (see SIZE BOUND). An op's length never exceeds its buffer's, so
+// bounding the buffers bounds every tag.
+const MAX_BUF: usize = 1 << 30;
 
 // Op tags (also the low 2 bits of each serialized op):
 //   EQUAL  — copy `len` bytes from the source at the apply cursor
@@ -399,7 +408,9 @@ fn diff_bisect(ops: &mut Ops, a: &[u8], b: &[u8]) {
         d += 1;
     }
 
-    // No middle snake (only reachable if the inputs share no bytes): full replace.
+    // Fallthrough: emit a full replace (a correct, if suboptimal, diff). In the
+    // reference this is the deadline branch; with no deadline here the middle
+    // snake is always found within max_d, so this is effectively unreachable.
     ops.emit(DELETE, 0, a.len());
     ops.emit(INSERT, b.as_ptr() as usize, b.len());
 }
@@ -471,6 +482,9 @@ pub extern "C" fn freeBuf(ptr: u32) {
 // ---------------------------------------------------------------------------
 #[no_mangle]
 pub extern "C" fn diffDelta(a_ptr: u32, a_len: u32, b_ptr: u32, b_len: u32) -> u64 {
+    if a_len as usize >= MAX_BUF || b_len as usize >= MAX_BUF {
+        return ERR;
+    }
     let a = unsafe { core::slice::from_raw_parts(a_ptr as *const u8, a_len as usize) };
     let b = unsafe { core::slice::from_raw_parts(b_ptr as *const u8, b_len as usize) };
 
