@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
+  Download,
+  FileArchive,
+  FileDown,
+  FileUp,
+  FilePlus2,
+  LayoutTemplate,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   Settings,
+  Variable,
 } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
@@ -393,7 +400,10 @@ function WorkspaceSettingsButton() {
                       : "text-slate-200 hover:bg-slate-700 hover:text-white"
                   }`}
                 >
-                  <span>Starter Template</span>
+                  <span className="flex items-center gap-2">
+                    <LayoutTemplate size={14} aria-hidden="true" />
+                    Starter Template
+                  </span>
                   <ChevronRight
                     size={14}
                     aria-hidden="true"
@@ -451,7 +461,10 @@ function WorkspaceSettingsButton() {
                 }}
                 className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
               >
-                New Editor
+                <span className="flex items-center gap-2">
+                  <FilePlus2 size={14} aria-hidden="true" />
+                  New Editor
+                </span>
               </button>
 
               <div className="my-1 h-px bg-slate-700" />
@@ -464,7 +477,10 @@ function WorkspaceSettingsButton() {
                 }}
                 className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
               >
-                Import Recording (.ne)
+                <span className="flex items-center gap-2">
+                  <FileDown size={14} aria-hidden="true" />
+                  Import Recording (.ne)
+                </span>
               </button>
               <button
                 type="button"
@@ -479,7 +495,10 @@ function WorkspaceSettingsButton() {
                     : "cursor-not-allowed text-slate-500"
                 }`}
               >
-                Export Recording (.ne)
+                <span className="flex items-center gap-2">
+                  <FileUp size={14} aria-hidden="true" />
+                  Export Recording (.ne)
+                </span>
               </button>
 
               <div className="my-1 h-px bg-slate-700" />
@@ -491,7 +510,10 @@ function WorkspaceSettingsButton() {
                   onClick={handleEditEnvironment}
                   className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
                 >
-                  Edit Environment
+                  <span className="flex items-center gap-2">
+                    <Variable size={14} aria-hidden="true" />
+                    Edit Environment
+                  </span>
                 </button>
               ) : null}
               <button
@@ -500,7 +522,10 @@ function WorkspaceSettingsButton() {
                 onClick={openImportDialog}
                 className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
               >
-                Import Project (.zip)
+                <span className="flex items-center gap-2">
+                  <FileArchive size={14} aria-hidden="true" />
+                  Import Project (.zip)
+                </span>
               </button>
               <button
                 type="button"
@@ -510,7 +535,10 @@ function WorkspaceSettingsButton() {
                 }}
                 className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
               >
-                Download As Zip
+                <span className="flex items-center gap-2">
+                  <Download size={14} aria-hidden="true" />
+                  Download As Zip
+                </span>
               </button>
             </div>
           </>
