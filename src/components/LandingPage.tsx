@@ -24,8 +24,10 @@ const FRAMEWORKS = [
   "HTMX",
   "Express",
   "TypeScript",
+  "JavaScript",
   "HTML/CSS",
   "Node.js",
+  "any JS/TS framework",
 ] as const;
 
 const FRAMEWORK_COLORS: Record<string, string> = {
@@ -36,8 +38,10 @@ const FRAMEWORK_COLORS: Record<string, string> = {
   HTMX: "#ffd255",
   Express: "#ff8f33",
   TypeScript: "#4de5d6",
+  JavaScript: "#ffd255",
   "HTML/CSS": "#3ace8c",
   "Node.js": "#6d57ff",
+  "any JS/TS framework": "#6d57ff",
 };
 
 const USE_CASES = [
