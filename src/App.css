@@ -95,3 +95,56 @@
 .floating-play-button:active {
   transform: translate(-50%, -50%) scale(0.95);
 }
+
+/* driver.js dark theme overrides */
+.driver-popover.ne-tour-popover {
+  background-color: #151821;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+}
+
+.driver-popover.ne-tour-popover .driver-popover-title {
+  color: #f1f5f9;
+  font-size: 14px;
+}
+
+.driver-popover.ne-tour-popover .driver-popover-description {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.driver-popover.ne-tour-popover .driver-popover-progress-text {
+  color: #64748b;
+}
+
+.driver-popover.ne-tour-popover .driver-popover-prev-btn {
+  color: #94a3b8;
+  border: 1px solid #334155;
+  background-color: transparent;
+  text-shadow: none;
+}
+
+.driver-popover.ne-tour-popover .driver-popover-prev-btn:hover {
+  color: #f1f5f9;
+  border-color: #475569;
+}
+
+.driver-popover.ne-tour-popover .driver-popover-next-btn,
+.driver-popover.ne-tour-popover .driver-popover-close-btn {
+  background-color: #10c776;
+  color: #0f172a;
+  border: none;
+  text-shadow: none;
+}
+
+.driver-popover.ne-tour-popover .driver-popover-next-btn:hover,
+.driver-popover.ne-tour-popover .driver-popover-close-btn:hover {
+  background-color: #34d399;
+}
+
+.driver-popover.ne-tour-popover .driver-popover-arrow-side-left.driver-popover-arrow,
+.driver-popover.ne-tour-popover .driver-popover-arrow-side-right.driver-popover-arrow,
+.driver-popover.ne-tour-popover .driver-popover-arrow-side-top.driver-popover-arrow,
+.driver-popover.ne-tour-popover .driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-color: #334155;
+}
