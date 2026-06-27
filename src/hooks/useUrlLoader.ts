@@ -119,7 +119,16 @@ async function fetchNextEditorUrl(url: string): Promise<Response> {
   try {
     const proxyResponse = await fetch(proxyUrl);
 
-    if (proxyResponse.ok || !MISSING_PROXY_STATUS_CODES.has(proxyResponse.status)) {
+    // Hosts without a real `/api/proxy` endpoint (static/SPA deploys) rewrite the
+    // unknown path to the app shell and answer 200 with `text/html`. That HTML is
+    // not a recording, so treat it as "proxy unavailable" and fall through to the
+    // direct cross-origin fetch (which needs CORS on the recording's host).
+    const isSpaFallback = (proxyResponse.headers.get("content-type") ?? "").includes("text/html");
+
+    if (
+      !isSpaFallback &&
+      (proxyResponse.ok || !MISSING_PROXY_STATUS_CODES.has(proxyResponse.status))
+    ) {
       return proxyResponse;
     }
   } catch (error) {
