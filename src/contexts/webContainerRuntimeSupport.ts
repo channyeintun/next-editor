@@ -18,6 +18,7 @@ import {
 } from "../types/workspace";
 import { createRrwebPreviewRecorderScript } from "../components/preview/rrwebPreview";
 import { createIframeConsoleBridgeScript } from "../utils/iframeConsoleBridge";
+import { createApiClientProxyScript } from "../utils/apiClientBridge";
 import { createIframeInteractionCaptureScript } from "../utils/iframeInteractionCapture";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
 
@@ -43,6 +44,7 @@ const RUNTIME_SNAPSHOT_SCRIPT_MARKER = "__NEXT_EDITOR_RUNTIME_SNAPSHOT__";
 const RUNTIME_CONSOLE_BRIDGE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_CONSOLE_BRIDGE__";
 const RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_INTERACTION_CAPTURE__";
 const RUNTIME_RRWEB_RECORD_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_RRWEB_RECORD__";
+const RUNTIME_API_CLIENT_PROXY_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_API_CLIENT_PROXY__";
 const RUNTIME_IMPORT_IGNORED_ROOTS = new Set([".git", "node_modules"]);
 
 const sharedWebContainerState: {
@@ -172,13 +174,15 @@ export function createRuntimePreviewScript(): string {
     setupMarker: RUNTIME_RRWEB_RECORD_SETUP_MARKER,
   });
 
+  const apiClientProxyScript = createApiClientProxyScript(RUNTIME_API_CLIENT_PROXY_SETUP_MARKER);
+
   const snapshotScript = `(function(){const marker=${JSON.stringify(
     RUNTIME_SNAPSHOT_SCRIPT_MARKER,
   )};if(window[marker])return;window[marker]=true;const messageType=${JSON.stringify(
     RUNTIME_SNAPSHOT_MESSAGE_TYPE,
   )};${consoleBridgeScript}${interactionCaptureScript}const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML.replace(/<script[\\s\\S]*?<\\/script>/gi,"")}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();`;
 
-  return `${rrwebRecordScript}\n${snapshotScript}`;
+  return `${rrwebRecordScript}\n${apiClientProxyScript}\n${snapshotScript}`;
 }
 
 function getNormalizedProjectFiles(project: WorkspaceProject | null): Map<string, WorkspaceFile> {
@@ -197,7 +201,8 @@ function getNormalizedProjectFiles(project: WorkspaceProject | null): Map<string
 function stripRuntimeSnapshotScript(content: string): string {
   return content
     .replace(/\s*<script data-next-editor-rrweb-record>[\s\S]*?<\/script>\s*/g, "\n")
-    .replace(/\s*<script data-next-editor-runtime-snapshot>[\s\S]*?<\/script>\s*/g, "\n");
+    .replace(/\s*<script data-next-editor-runtime-snapshot>[\s\S]*?<\/script>\s*/g, "\n")
+    .replace(/\s*<script data-next-editor-api-client-proxy>[\s\S]*?<\/script>\s*/g, "\n");
 }
 
 function shouldIgnoreRuntimeImportPath(path: string): boolean {

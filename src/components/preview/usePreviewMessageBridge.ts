@@ -8,6 +8,10 @@ import {
   type PreviewSize,
 } from "../../types/slides";
 import {
+  API_CLIENT_RESPONSE_MESSAGE_TYPE,
+  type ApiClientResultPayload,
+} from "../../utils/apiClientBridge";
+import {
   IFRAME_CONSOLE_MESSAGE_TYPE,
   isIframeConsoleMethod,
   type IframeConsoleMessagePayload,
@@ -41,6 +45,7 @@ interface UsePreviewMessageBridgeOptions {
   sizeRef: RefObject<PreviewSize>;
   onConsoleMessage: (message: string) => void;
   onRouteChange: (route: string) => void;
+  onApiClientResponse?: (payload: ApiClientResultPayload) => void;
 }
 
 function formatPreviewConsoleMessage(payload: unknown): string | null {
@@ -158,6 +163,7 @@ export function usePreviewMessageBridge({
   sizeRef,
   onConsoleMessage,
   onRouteChange,
+  onApiClientResponse,
 }: UsePreviewMessageBridgeOptions) {
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -171,6 +177,14 @@ export function usePreviewMessageBridge({
 
         if (message) {
           onConsoleMessage(message);
+        }
+
+        return;
+      }
+
+      if (type === API_CLIENT_RESPONSE_MESSAGE_TYPE) {
+        if (payload && typeof payload.id === "string" && onApiClientResponse) {
+          onApiClientResponse(payload as ApiClientResultPayload);
         }
 
         return;
@@ -323,6 +337,7 @@ export function usePreviewMessageBridge({
     isUserScrollingRef,
     lastRuntimeSnapshotRef,
     lastPreviewInitialDocumentRef,
+    onApiClientResponse,
     onConsoleMessage,
     onRouteChange,
     pendingInteractionRef,
