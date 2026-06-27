@@ -32,7 +32,7 @@ export function RuntimePreviewRenderer({
       ref={iframeRef}
       className={`absolute inset-0 block border-0 bg-transparent align-middle size-full ${disablePointerEvents ? "pointer-events-none" : ""}`}
       title="Runtime Preview"
-      sandbox="allow-scripts allow-same-origin"
+      sandbox="allow-scripts allow-same-origin allow-forms"
       data-cursor-replay-target="preview-frame"
     />
   );

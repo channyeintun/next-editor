@@ -62,7 +62,7 @@ app.listen(port, "0.0.0.0", () => {
          re-execute on a merge. -->
     <script
       defer
-      src="https://cdn.jsdelivr.net/npm/@imacrayon/alpine-ajax@0.12.0/dist/cdn.min.js"
+      src="https://cdn.jsdelivr.net/npm/@imacrayon/alpine-ajax@0.12.7/dist/cdn.min.js"
     ></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
     <title>Alpine AJAX + Express Lesson</title>
