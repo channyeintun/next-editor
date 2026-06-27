@@ -116,14 +116,18 @@ const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true&la
 
 const LandingPage = () => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const featuresRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [featuresInView, setFeaturesInView] = useState(false);
+  // The demo iframe boots a SECOND full copy of the editor (Monaco + recording
+  // decode + rrweb replay + audio). On mobile that runs alongside this page and
+  // its replay buffers grow until iOS Safari reloads then kills the tab. Render a
+  // static tap-to-open card there instead, so the landing page stays light.
   const [isMobile] = useState(() => isMobileBrowser());
   const [frameworkIndex, setFrameworkIndex] = useState(0);
   const [starCount, setStarCount] = useState<number | null>(null);
 
+  // Reveal each section once it scrolls into view (replaces motion's whileInView).
+  const featuresSection = useInView();
   const stacksSection = useInView();
   const useCasesSection = useInView();
   const licenseSection = useInView();
@@ -151,22 +155,6 @@ const LandingPage = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    const node = featuresRef.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setFeaturesInView(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.1 },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -397,9 +385,9 @@ const LandingPage = () => {
           </div>
 
           <div
-            ref={featuresRef}
+            ref={featuresSection.ref}
             className={`grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl mt-12 transition-opacity duration-1000 delay-400 motion-reduce:transition-none ${
-              featuresInView ? "opacity-100" : "opacity-0"
+              featuresSection.inView ? "opacity-100" : "opacity-0"
             }`}
           >
             {[
