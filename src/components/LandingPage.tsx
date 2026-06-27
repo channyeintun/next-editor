@@ -148,10 +148,6 @@ const LandingPage = () => {
   const [isMobile] = useState(() => isMobileBrowser());
   const [frameworkIndex, setFrameworkIndex] = useState(0);
   const [starCount, setStarCount] = useState<number | null>(null);
-  // The demo iframe boots a full second editor and saturates the main thread,
-  // which makes the hero's intro animations (underline draw, fade-up) stutter.
-  // Hold off until the thread is idle so those run smoothly first.
-  const [demoReady, setDemoReady] = useState(false);
 
   // Reveal each section once it scrolls into view (replaces motion's whileInView).
   const featuresSection = useInView();
@@ -159,28 +155,6 @@ const LandingPage = () => {
   const useCasesSection = useInView();
   const licenseSection = useInView();
   const starSection = useInView();
-
-  useEffect(() => {
-    if (isMobile) return;
-    const w = window as Window & {
-      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
-      cancelIdleCallback?: (handle: number) => void;
-    };
-    let idle: number | undefined;
-    // Clear the hero's ~1.3s intro-animation window, then boot the iframe at the
-    // next idle moment so the draw runs uncontended and the demo still loads promptly.
-    const timer = window.setTimeout(() => {
-      if (w.requestIdleCallback) {
-        idle = w.requestIdleCallback(() => setDemoReady(true), { timeout: 1000 });
-      } else {
-        setDemoReady(true);
-      }
-    }, 1400);
-    return () => {
-      clearTimeout(timer);
-      if (idle !== undefined) w.cancelIdleCallback?.(idle);
-    };
-  }, [isMobile]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -298,19 +272,15 @@ const LandingPage = () => {
                           d="M2 12C40 13 80 13 120 12C160 11 185 9 198 5"
                           stroke="currentColor"
                           strokeWidth="4"
-                          strokeDasharray="200"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          className="animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_both] motion-reduce:animate-none will-change-[stroke-dashoffset]"
                         />
                         <path
                           d="M5 16C50 18 100 18 140 17C170 16 190 14 195 10"
                           stroke="currentColor"
                           strokeWidth="2.5"
-                          strokeDasharray="200"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          className="animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_0.15s_both] motion-reduce:animate-none will-change-[stroke-dashoffset]"
                           opacity="0.8"
                         />
                       </svg>
@@ -409,7 +379,7 @@ const LandingPage = () => {
                             <p className="text-sm text-slate-400">Tap to open the full editor</p>
                           </div>
                         </a>
-                      ) : demoReady ? (
+                      ) : (
                         <iframe
                           src={DEMO_IFRAME_SRC}
                           className="absolute border-0 origin-top-left"
@@ -422,10 +392,6 @@ const LandingPage = () => {
                           }}
                           title="Next Editor Live Demo"
                         />
-                      ) : (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="size-8 rounded-full border-2 border-white/15 border-t-pinata-cyan animate-spin motion-reduce:animate-none" />
-                        </div>
                       )}
                       {isFullscreen && (
                         <button
@@ -501,19 +467,15 @@ const LandingPage = () => {
                               d="M2 12C20 13 40 13 60 12C80 11 92 9 98 5"
                               stroke="currentColor"
                               strokeWidth="4"
-                              strokeDasharray="200"
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              className="animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_both] motion-reduce:animate-none will-change-[stroke-dashoffset]"
                             />
                             <path
                               d="M5 16C25 18 50 18 70 17C85 16 95 14 97 10"
                               stroke="currentColor"
                               strokeWidth="2.5"
-                              strokeDasharray="200"
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              className="animate-[draw_1.3s_cubic-bezier(0.65,0,0.35,1)_0.15s_both] motion-reduce:animate-none will-change-[stroke-dashoffset]"
                             />
                           </svg>
                         </span>

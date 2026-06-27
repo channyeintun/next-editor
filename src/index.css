@@ -91,16 +91,6 @@ body {
   }
 }
 
-@keyframes draw {
-  from {
-    stroke-dashoffset: 200;
-  }
-
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
 @keyframes fade-up {
   from {
     opacity: 0;
