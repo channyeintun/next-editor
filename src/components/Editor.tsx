@@ -26,16 +26,30 @@ import { startTour } from "./tour/productTour";
 const CodeEditor = lazy(() => import("./CodeEditor"));
 const TerminalPanel = lazy(() => import("./TerminalPanel"));
 
-export function EditorLayout() {
-  const { isLoading: urlLoading } = useUrlQuery();
+export interface EditorProps {
+  /** Force read-only playback (hides import/export, record mode, tour). Falls back
+   *  to the `?readOnly=true` query param when omitted. */
+  readOnly?: boolean;
+  /** Recording to load (`.ne` path or URL). Overrides the `?url=` query param. */
+  recordingUrl?: string;
+  /** Enlarge playback controls for small embeds. Falls back to `?largeControls=true`. */
+  largeControls?: boolean;
+}
+
+export function EditorLayout({
+  readOnly: readOnlyProp,
+  recordingUrl,
+  largeControls: largeControlsProp,
+}: EditorProps = {}) {
+  const { isLoading: urlLoading } = useUrlQuery(recordingUrl);
   const { isDragging } = useDragAndDropUrl();
   const lessonType = useWorkspaceLessonType();
 
-  // Check URL for showImportExport parameter (defaults to true if not specified)
+  // Props win; otherwise fall back to URL params so the /code route keeps working.
   const urlParams = new URLSearchParams(window.location.search);
-  const readOnly = urlParams.get("readOnly") === "true";
+  const readOnly = readOnlyProp ?? urlParams.get("readOnly") === "true";
   // Enlarge the playback controls for small embeds (e.g. a scaled-down demo iframe).
-  const largeControls = urlParams.get("largeControls") === "true";
+  const largeControls = largeControlsProp ?? urlParams.get("largeControls") === "true";
 
   const tourStartedRef = useRef(false);
 
@@ -81,7 +95,7 @@ export function EditorLayout() {
   );
 }
 
-export default function Editor() {
+export default function Editor(props: EditorProps = {}) {
   return (
     <WorkspaceProvider>
       <WebContainerRuntimeProvider>
@@ -93,7 +107,7 @@ export default function Editor() {
                   <NextEditorProvider>
                     <SlidesProvider>
                       <PreviewPanelProvider>
-                        <EditorLayout />
+                        <EditorLayout {...props} />
                       </PreviewPanelProvider>
                     </SlidesProvider>
                   </NextEditorProvider>

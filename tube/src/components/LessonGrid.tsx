@@ -4,7 +4,7 @@ import { fetchLessons } from "../lib/lessons";
 import LessonCard from "./LessonCard";
 import SearchBar from "./SearchBar";
 
-export default function LessonGrid({ onOpen }: { onOpen: (lesson: Lesson) => void }) {
+export default function LessonGrid() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export default function LessonGrid({ onOpen }: { onOpen: (lesson: Lesson) => voi
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((lesson) => (
-            <LessonCard key={lesson.slug} lesson={lesson} onPlay={onOpen} />
+            <LessonCard key={lesson.slug} lesson={lesson} />
           ))}
         </div>
       )}

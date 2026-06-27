@@ -40,27 +40,26 @@ main app for WebContainer) covers `/learn` automatically.
 
 ## 2. The link contract (most important part)
 
-No iframe. The gallery and the editor are the **same app**, so `LessonDetail` renders
-the `Editor` component directly (lazy-loaded). The `Editor` is URL-driven, so opening
-a lesson just sets the same search params it already understands, on the `/learn`
-route:
+No iframe, and **no editor query params**. The gallery and the editor are the **same
+app**, so the detail view renders the `Editor` component directly (lazy-loaded) and
+drives it through **props**, not the URL.
 
-```
-/learn?url=/lessons/<slug>/<slug>.ne&readOnly=true&deferRuntimeAutostart=true&title=<title>
-```
+- Routes: `/learn` (grid) and **`/learn/:slug`** (detail). Cards are `<Link
+to="/learn/<slug>">` — clean, shareable, middle-click-to-new-tab.
+- `LessonDetailRoute` resolves `:slug` → the lesson (from `lessons.json`) and renders
+  `<Editor readOnly recordingUrl={"/" + lesson.ne} />`.
 
-`LearnPage` reads `?url=`: present → render `LessonDetail` (the `Editor` + a back
-button); absent → render the card grid. Selecting a card calls
-`setSearchParams({ url, readOnly: "true", … })`; the back button clears them.
+`Editor` accepts optional props (added to the main app) and **falls back to URL
+params** when they're omitted, so the existing `/code` route is unchanged:
 
-How the `Editor` consumes these (unchanged in the main app):
+| Prop            | Fallback (when prop omitted) | Effect                                         |
+| --------------- | ---------------------------- | ---------------------------------------------- |
+| `readOnly`      | `?readOnly=true`             | playback mode (no import/export, record, tour) |
+| `recordingUrl`  | `?url=`                      | the `.ne` to load (via `useUrlQuery`)          |
+| `largeControls` | `?largeControls=true`        | enlarged playback controls                     |
 
-- `readOnly=true` → playback mode: hides import/export, disables record mode, skips
-  the product tour. (`src/components/Editor.tsx`)
-- `url=...` → loaded via `useUrlQuery`/`useUrlLoader`; a same-origin path is fetched
-  from this origin directly.
-- `deferRuntimeAutostart=true` → defer the heavy runtime boot (matches the landing
-  demo).
+> The detail URL is just `/learn/introduction` — no `?url=…&readOnly=…` clutter.
+> (`deferRuntimeAutostart` was a dead param and has been dropped.)
 
 ---
 
@@ -177,22 +176,25 @@ tube/                        <- @next-editor/tube package (UI only, no build too
   progress.md
   package.json               <- name + peerDeps + exports ./src/index.tsx
   src/
-    index.tsx                <- package entry: default export = LearnPage
-    LearnPage.tsx            <- grid vs. detail switch (reads ?url= search param)
+    index.tsx                <- package entry: default=LearnPage, LessonDetailRoute
+    LearnPage.tsx            <- grid page (/learn)
     lib/
       lessons.ts             <- fetch + type for /lessons.json
       links.ts               <- resolveThumb(lesson)
     components/
       Header.tsx             <- logo + "Record your own" CTA to /code
-      LessonGrid.tsx         <- responsive grid (onOpen callback)
-      LessonCard.tsx         <- thumbnail-only YouTube-style card (onPlay callback)
-      LessonDetail.tsx       <- lazy-renders @app Editor + back button
+      LessonGrid.tsx         <- responsive grid + search
+      LessonCard.tsx         <- thumbnail-only card; <Link to="/learn/:slug">
+      LessonDetailRoute.tsx  <- /learn/:slug → resolve slug → lesson
+      LessonDetail.tsx       <- lazy-renders @app Editor (readOnly prop) + back link
       SearchBar.tsx          <- client-side filter (title/tags)
       Footer.tsx
     types.ts                 <- Lesson type
 
 (main app, repo root)
-  src/router.tsx             <- adds the /learn route → import("@next-editor/tube")
+  src/router.tsx             <- /learn + /learn/:slug routes → @next-editor/tube
+  src/components/Editor.tsx  <- EditorProps (readOnly/recordingUrl/largeControls)
+  src/hooks/useUrlQuery.ts   <- accepts an override url (recordingUrl prop)
   src/index.css              <- @source "../tube/src" (Tailwind scan)
   tsconfig.json              <- paths: @next-editor/tube → tube/src; @app/* → src/*
   vite.config.ts             <- resolve.alias for @next-editor/tube and @app
@@ -210,15 +212,19 @@ tube/                        <- @next-editor/tube package (UI only, no build too
 - 16:9 thumbnail `<img loading="lazy">` with rounded corners; optional duration
   badge in the corner (from `lesson.duration`).
 - Below: title (2-line clamp), author + publishedAt meta row.
-- Entire card is a `<button onClick={() => onPlay(lesson)}>` — clicking selects the
-  lesson (sets `/learn` search params), not an `<a href>`.
+- Entire card is a `<Link to="/learn/<slug>">` — shareable URL, middle-clickable.
 - Hover: subtle scale/elevation, matching the main landing page's aesthetic.
+
+**`LessonDetailRoute`** (`/learn/:slug`)
+
+- Resolves `:slug` → lesson from `lessons.json`; loading / not-found / error states.
 
 **`LessonDetail`** (full-screen detail view)
 
 - Lazy-loads the host app's `Editor` (`lazy(() => import("@app/components/Editor"))`)
   so the gallery chunk stays tiny; the editor bundle downloads only on open.
-- Renders `<Editor />` (URL-driven, read-only) under a floating "back" button.
+- Renders `<Editor readOnly recordingUrl={"/" + lesson.ne} />` (props, not URL params)
+  under a floating "back" `<Link>`.
 
 **`LessonGrid`**
 
@@ -285,9 +291,10 @@ one origin — clicking a card embeds `/code` in the overlay and plays back.
 ## 11. Acceptance criteria
 
 - `/learn` lists all lessons from `lessons.json` as thumbnail-only cards.
-- Clicking a card shows `LessonDetail`, which renders the real `Editor` directly
-  (lazy-loaded, driven by `?url=…&readOnly=true`), playing back read-only (no record
-  UI, import/export hidden). The Editor is a separate chunk — the gallery stays tiny.
+- Clicking a card navigates to `/learn/<slug>` (clean URL, no query params) which
+  renders the real `Editor` directly (lazy-loaded), driven by **props**
+  (`readOnly`, `recordingUrl`) — read-only playback, no record UI/import/export.
+  The Editor is a separate chunk — the gallery stays tiny.
 - Captions appear during playback (given a correctly authored `.ne`).
 - The embed is cross-origin isolated, so viewers can run/edit the code live.
 - Adding a lesson requires only: new `public/lessons/<slug>/` folder + one

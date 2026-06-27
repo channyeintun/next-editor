@@ -168,4 +168,13 @@ export const router = createBrowserRouter([
     HydrateFallback: RouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
+  {
+    path: "/learn/:slug",
+    lazy: lazyRoute(
+      () => import("@next-editor/tube").then((m) => ({ default: m.LessonDetailRoute })),
+      "/learn/:slug",
+    ),
+    HydrateFallback: RouteHydrateFallback,
+    ErrorBoundary: RouteErrorBoundary,
+  },
 ]);

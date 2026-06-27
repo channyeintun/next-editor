@@ -26,6 +26,12 @@
       `resolve.alias` + Tailwind `@source` (not a bun workspace — bun's workspace
       mode drops a scoped `vite-plus` platform dep here). Verified tsc + lint + build.
 - [x] 13. Replace the iframe with the real `Editor` component. `LessonDetail`
-      lazy-loads `@app/components/Editor` (separate ~290KB chunk; gallery chunk ~9KB)
-      and `LearnPage` switches grid ↔ detail via the `?url=` search param. Removed
-      `LessonPlayer.tsx` and `buildPlayUrl`; added `@app/*` alias (tsconfig + Vite).
+      lazy-loads `@app/components/Editor` (separate ~290KB chunk; gallery chunk ~9KB).
+      Removed `LessonPlayer.tsx` and `buildPlayUrl`; added `@app/*` alias (tsconfig +
+      Vite).
+- [x] 14. Drive the editor via props, not URL params. Added `EditorProps`
+      (`readOnly`, `recordingUrl`, `largeControls`) to `src/components/Editor.tsx`
+      with URL-param fallback (so `/code` is unchanged); `useUrlQuery` takes an
+      override url. Detail view is now the clean path route `/learn/:slug`
+      (`LessonDetailRoute` resolves slug → lesson); cards are `<Link>`s. No editor
+      query params in the URL. Dropped the dead `deferRuntimeAutostart` param.

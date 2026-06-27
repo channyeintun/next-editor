@@ -2,12 +2,14 @@ import { useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { useUrlLoader } from "./useUrlLoader";
 
-export const useUrlQuery = () => {
+export const useUrlQuery = (overrideUrl?: string) => {
   const { fetchNextEditorFile, isLoading } = useUrlLoader();
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    const url = searchParams.get("url");
+    // An explicit override (e.g. the /learn detail view passing a recording via a
+    // prop) takes precedence over the `?url=` query param.
+    const url = overrideUrl ?? searchParams.get("url");
 
     if (url) {
       // Decode URL in case it was URL encoded
@@ -25,7 +27,7 @@ export const useUrlQuery = () => {
         console.error("Failed to load from URL query:", error);
       });
     }
-  }, [searchParams, fetchNextEditorFile]); // Only react to changes in searchParams
+  }, [searchParams, fetchNextEditorFile, overrideUrl]);
 
   return { isLoading };
 };
