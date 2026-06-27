@@ -1,8 +1,100 @@
-import { Maximize, Minimize, Play, SquareArrowOutUpRight } from "lucide-react";
+import {
+  Maximize,
+  Minimize,
+  Play,
+  SquareArrowOutUpRight,
+  BookOpen,
+  GraduationCap,
+  FileText,
+  Users,
+  Presentation,
+  Bug,
+  Star,
+} from "lucide-react";
 import { Link } from "react-router";
 import Navbar from "./Navbar";
 import { useState, useEffect, useRef } from "react";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
+
+const FRAMEWORKS = ["React", "Vue", "Solid", "Svelte", "HTMX", "HTML/CSS", "Node.js"] as const;
+
+const FRAMEWORK_COLORS: Record<string, string> = {
+  React: "#4de5d6",
+  Vue: "#3ace8c",
+  Solid: "#6d57ff",
+  Svelte: "#ff8f33",
+  HTMX: "#ffd255",
+  "HTML/CSS": "#4de5d6",
+  "Node.js": "#3ace8c",
+};
+
+const USE_CASES = [
+  {
+    icon: BookOpen,
+    title: "Interactive Tutorials",
+    desc: "Turn a real coding session into a step-through lesson learners can explore directly in the browser.",
+    color: "#6d57ff",
+  },
+  {
+    icon: GraduationCap,
+    title: "Courses & Workshops",
+    desc: "Build replayable lessons with synced audio narration, captions, and slides — no video editing needed.",
+    color: "#4de5d6",
+  },
+  {
+    icon: FileText,
+    title: "Documentation & Guides",
+    desc: "Embed a live recording instead of static GIFs. Viewers replay every edit and preview in context.",
+    color: "#3ace8c",
+  },
+  {
+    icon: Users,
+    title: "Onboarding",
+    desc: "Walk new teammates through a codebase change exactly as it happened — every file, every keystroke.",
+    color: "#ff8f33",
+  },
+  {
+    icon: Presentation,
+    title: "Conference Talks & Demos",
+    desc: "Present with synced reveal.js slides, live runtime preview, and narration — all from one .ne file.",
+    color: "#ffd255",
+  },
+  {
+    icon: Bug,
+    title: "Code Reviews & Bug Repros",
+    desc: "Record the exact edits and runtime state, share a link. Reviewers replay the full context.",
+    color: "#6d57ff",
+  },
+] as const;
+
+function useInView(threshold = 0.1) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { threshold },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [threshold]);
+  return { ref, inView };
+}
+
+function formatStarCount(count: number): string {
+  if (count >= 1000) return `${(count / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(count);
+}
+
+const GITHUB_SVG_PATH =
+  "M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z";
 
 const DEMO_IFRAME_WIDTH = 1440;
 const DEMO_IFRAME_HEIGHT = 900;
@@ -16,13 +108,39 @@ const LandingPage = () => {
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [featuresInView, setFeaturesInView] = useState(false);
-  // The demo iframe boots a SECOND full copy of the editor (Monaco + recording
-  // decode + rrweb replay + audio). On mobile that runs alongside this page and
-  // its replay buffers grow until iOS Safari reloads then kills the tab. Render a
-  // static tap-to-open card there instead, so the landing page stays light.
   const [isMobile] = useState(() => isMobileBrowser());
+  const [frameworkIndex, setFrameworkIndex] = useState(0);
+  const [starCount, setStarCount] = useState<number | null>(null);
 
-  // Reveal the feature cards once they scroll into view (replaces motion's whileInView).
+  const stacksSection = useInView();
+  const useCasesSection = useInView();
+  const licenseSection = useInView();
+  const starSection = useInView();
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (mq.matches) return;
+    const id = setInterval(() => {
+      setFrameworkIndex((i) => (i + 1) % FRAMEWORKS.length);
+    }, 2000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("https://api.github.com/repos/channyeintun/next-editor")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && typeof data.stargazers_count === "number") {
+          setStarCount(data.stargazers_count);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     const node = featuresRef.current;
     if (!node) return;
@@ -361,6 +479,150 @@ const LandingPage = () => {
           </div>
         </div>
       </main>
+
+      {/* Section 1 — Works with any stack */}
+      <section
+        ref={stacksSection.ref}
+        className={`relative py-24 px-6 text-center transition-opacity duration-1000 motion-reduce:transition-none ${
+          stacksSection.inView ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+          <div className="absolute top-[20%] left-[50%] -translate-x-1/2 size-100 md:size-175 bg-[radial-gradient(circle,hsla(248,100%,67%,0.15)_0%,hsla(248,100%,67%,0)_70%)] rounded-full" />
+        </div>
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-3xl md:text-5xl font-machina uppercase tracking-tight mb-6">
+            Works with{" "}
+            <span
+              key={frameworkIndex}
+              className="inline-block text-pinata-cyan animate-[fade-up_0.4s_cubic-bezier(0.22,1,0.36,1)_forwards] motion-reduce:animate-none"
+              style={{ color: FRAMEWORK_COLORS[FRAMEWORKS[frameworkIndex]] }}
+            >
+              {FRAMEWORKS[frameworkIndex]}
+            </span>
+          </h2>
+          <p className="text-lg md:text-xl text-slate-400 font-telegraf mb-12 max-w-2xl mx-auto">
+            Record lessons for any stack — or even with vanilla HTML, CSS, and JavaScript.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3">
+            {FRAMEWORKS.map((name) => (
+              <span
+                key={name}
+                className="px-4 py-2 rounded-full border border-slate-700 bg-[#181d24]/90 text-sm font-telegraf text-slate-300 hover:border-slate-500 transition-colors"
+              >
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Section 2 — Use Cases */}
+      <section
+        ref={useCasesSection.ref}
+        className={`py-24 px-6 transition-opacity duration-1000 motion-reduce:transition-none ${
+          useCasesSection.inView ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl md:text-5xl font-machina uppercase tracking-tight text-center mb-4">
+            Use Cases
+          </h2>
+          <p className="text-lg text-slate-400 font-telegraf text-center mb-16 max-w-2xl mx-auto">
+            From interactive tutorials to async code reviews — Next Editor fits wherever you need to
+            show, not just tell.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {USE_CASES.map((uc) => (
+              <div
+                key={uc.title}
+                className="bg-[#181d24]/90 border border-slate-800 p-8 rounded-4xl text-left hover:border-slate-700 transition-colors will-change-[border-color,background-color]"
+              >
+                <div
+                  style={{ backgroundColor: uc.color }}
+                  className="rounded-2xl mb-6 flex items-center justify-center size-12"
+                >
+                  <uc.icon className="size-6 text-slate-950" />
+                </div>
+                <h3 className="text-2xl font-machina mb-4">{uc.title}</h3>
+                <p className="text-slate-400 leading-relaxed">{uc.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Section 3 — MIT Licensed / Free for everyone, forever */}
+      <section
+        ref={licenseSection.ref}
+        className={`relative py-24 px-6 text-center transition-opacity duration-1000 motion-reduce:transition-none ${
+          licenseSection.inView ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+          <div className="absolute top-[30%] left-[20%] size-75 md:size-125 bg-[radial-gradient(circle,hsla(174,76%,60%,0.12)_0%,hsla(174,76%,60%,0)_70%)] rounded-full" />
+          <div className="absolute bottom-[20%] right-[15%] size-62.5 md:size-100 bg-[radial-gradient(circle,hsla(248,100%,67%,0.12)_0%,hsla(248,100%,67%,0)_70%)] rounded-full" />
+        </div>
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-4xl md:text-6xl font-machina uppercase tracking-tight mb-6">
+            Free for everyone,
+            <br />
+            forever
+          </h2>
+          <p className="text-lg md:text-xl text-slate-400 font-telegraf mb-10 max-w-xl mx-auto">
+            Open source under the MIT License. No account required. Self-hostable.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3">
+            {[
+              { label: "MIT License", color: "border-pinata-purple text-pinata-purple" },
+              { label: "Open Source", color: "border-pinata-cyan text-pinata-cyan" },
+              { label: "No Sign-up", color: "border-pinata-green text-pinata-green" },
+              { label: "Self-hostable", color: "border-pinata-orange text-pinata-orange" },
+            ].map((badge) => (
+              <span
+                key={badge.label}
+                className={`px-5 py-2 rounded-full border text-sm font-semibold font-telegraf ${badge.color}`}
+              >
+                {badge.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Section 4 — Star on GitHub */}
+      <section
+        ref={starSection.ref}
+        className={`py-24 px-6 text-center transition-opacity duration-1000 motion-reduce:transition-none ${
+          starSection.inView ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-machina uppercase tracking-tight mb-4">
+            Like what you see?
+          </h2>
+          <p className="text-lg text-slate-400 font-telegraf mb-10">
+            Star us on GitHub and help spread the word.
+          </p>
+          <a
+            href="https://github.com/channyeintun/next-editor"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-3 px-10 py-4 rounded-full bg-white text-slate-950 text-lg font-semibold hover:scale-105 active:scale-95 transition-all shadow-xl"
+          >
+            <svg className="size-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path fillRule="evenodd" d={GITHUB_SVG_PATH} clipRule="evenodd" />
+            </svg>
+            <span>Star on GitHub</span>
+            <Star className="size-5 fill-pinata-yellow text-pinata-yellow" />
+            {starCount !== null && (
+              <span className="ml-1 px-2.5 py-0.5 rounded-full bg-slate-950/10 text-sm font-bold">
+                {formatStarCount(starCount)}
+              </span>
+            )}
+          </a>
+        </div>
+      </section>
 
       <footer className="border-t border-slate-900 py-12 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
