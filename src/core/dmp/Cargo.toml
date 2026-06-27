@@ -1,0 +1,28 @@
+# next-editor-dmp — diff-match-patch (Myers) codec compiled to a tiny,
+# zero-import WebAssembly module. Replaces the AssemblyScript implementation
+# that lived in ../assembly. See README.md for the why.
+#
+# Standalone crate (empty [workspace] so it is not absorbed by any ancestor
+# workspace; this is a bun/TS repo with no root Cargo.toml).
+[package]
+name = "next-editor-dmp"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+# cdylib so wasm-ld emits a WebAssembly module (and exports `memory`).
+crate-type = ["cdylib"]
+name = "next_editor_dmp"
+
+# opt-level = 3 + LTO: the point of moving off AssemblyScript is the LLVM
+# backend's faster code on the Myers inner loops. wasm-opt shrinks the result
+# afterwards (see scripts/build-dmp-wasm.mjs).
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[workspace]

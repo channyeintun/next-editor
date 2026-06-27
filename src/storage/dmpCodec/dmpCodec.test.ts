@@ -7,13 +7,13 @@ import { instantiateDmpCodec } from "./dmpCodec";
 // gitignored, so skip rather than fail when it hasn't been built locally/in CI.
 // Resolve from the project root (vitest cwd); import.meta.url isn't a file: URL
 // under the test transform.
-const wasmPath = resolve(process.cwd(), "src/core/assembly/build/next-editor-dmp.wasm");
+const wasmPath = resolve(process.cwd(), "src/core/dmp/build/next-editor-dmp.wasm");
 const hasArtifact = existsSync(wasmPath);
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-describe.skipIf(!hasArtifact)("dmp codec (diff-match-patch in AssemblyScript)", () => {
+describe.skipIf(!hasArtifact)("dmp codec (diff-match-patch in Rust)", () => {
   const load = () => instantiateDmpCodec(readFileSync(wasmPath));
 
   it("round-trips a single contiguous edit with a compact delta", async () => {

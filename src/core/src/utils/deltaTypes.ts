@@ -18,7 +18,7 @@ import type { WorkspaceRecordingEvent } from "../../../types/workspace";
  * transforms the previous frame's content into this frame's content. Unlike the
  * former prefix/suffix model it stays compact across multiple, non-contiguous
  * edits. Produced/consumed only by createContentDelta/applyContentDelta, which
- * round-trip it through the AssemblyScript WASM codec; msgpack stores it as a
+ * round-trip it through the Rust WASM codec; msgpack stores it as a
  * binary blob.
  */
 export interface ContentDelta {

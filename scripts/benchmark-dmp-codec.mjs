@@ -1,4 +1,4 @@
-// Benchmarks the AssemblyScript diff-match-patch codec against the prefix/suffix
+// Benchmarks the Rust diff-match-patch codec against the prefix/suffix
 // ("affix") content-delta model it replaced, on recording-shaped payloads.
 //
 //   * diff-match-patch DiffToDelta vs the affix prefix/suffix model
@@ -20,7 +20,7 @@ const kb = (bytes) => `${fmt(bytes / 1024)} KB`;
 // Load the zero-import codec directly (no fetch/import object needed).
 // ---------------------------------------------------------------------------
 const wasmPath = fileURLToPath(
-  new URL("../src/core/assembly/build/next-editor-dmp.wasm", import.meta.url),
+  new URL("../src/core/dmp/build/next-editor-dmp.wasm", import.meta.url),
 );
 const { instance } = await WebAssembly.instantiate(readFileSync(wasmPath), {});
 const ex = instance.exports;
@@ -113,7 +113,7 @@ const cases = [
   },
 ];
 
-console.log("\n# Content delta: diff-match-patch (AssemblyScript) vs affix model\n");
+console.log("\n# Content delta: diff-match-patch (Rust) vs affix model\n");
 const rows = [];
 for (const c of cases) {
   const aBytes = enc.encode(c.prev);

@@ -8,7 +8,7 @@ import { installDmpCodec, instantiateDmpCodec } from "./src/storage/dmpCodec/dmp
 // built artifact's bytes. It is a reproducible build (`bun run build:wasm`); fail
 // loudly with a clear instruction if it's missing rather than letting every codec
 // test throw an opaque "dmp codec not loaded".
-const dmpCodecPath = resolve(process.cwd(), "src/core/assembly/build/next-editor-dmp.wasm");
+const dmpCodecPath = resolve(process.cwd(), "src/core/dmp/build/next-editor-dmp.wasm");
 if (!existsSync(dmpCodecPath)) {
   throw new Error(
     `dmp codec artifact missing at ${dmpCodecPath}. Run \`bun run build:wasm\` before testing.`,

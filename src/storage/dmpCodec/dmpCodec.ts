@@ -1,8 +1,9 @@
-// App-facing wrapper around the AssemblyScript diff-match-patch WASM module.
+// App-facing wrapper around the Rust diff-match-patch WASM module.
 //
-// The module is a pure-compute, **zero-import** WASM (see src/core/assembly) — a
-// TinyGo/WASI module can never be, because its runtime always needs host imports.
-// That zero-import shape lets us use the WASM-ESM integration directly: a plain
+// The module is a pure-compute, **zero-import** WASM (see src/core/dmp) — a
+// Go/TinyGo/WASI module can never be, because its runtime always needs host
+// imports; Rust on wasm32-unknown-unknown can. That zero-import shape lets us use
+// the WASM-ESM integration directly: a plain
 // `import("…wasm")` instantiates the module (no import object) and hands back its
 // exports. `loadDmpCodec()` uses the *dynamic* form so the wasm code-splits into
 // its own lazy chunk and doesn't pull top-level await into the main graph; the
@@ -17,7 +18,7 @@
 // WebAssembly calls are synchronous, so once the module is instantiated the
 // codec methods are plain sync calls — only `loadDmpCodec()` is async. All data
 // crosses through linear memory using the module's alloc/pack ABI (see
-// src/core/assembly/README.md).
+// src/core/dmp/README.md).
 
 interface DmpExports {
   memory: WebAssembly.Memory;
@@ -128,7 +129,7 @@ export function loadDmpCodec(): Promise<DmpCodec> {
   cached ??= (async () => {
     // Bare WASM-ESM import: Vite instantiates the (zero-import) module and the
     // returned namespace *is* its exports.
-    const wasm = await import("../../core/assembly/build/next-editor-dmp.wasm");
+    const wasm = await import("../../core/dmp/build/next-editor-dmp.wasm");
     const codec = bind(wasm as unknown as DmpExports);
     current = codec;
     return codec;

@@ -1,4 +1,4 @@
-# Recording codec evolution: AssemblyScript → TinyGo → AssemblyScript
+# Recording codec evolution: AssemblyScript → TinyGo → AssemblyScript → Rust
 
 A decision record for the recording codec's two primitives — **content diff**
 (turn frame _N-1_'s text into frame _N_'s) and **payload compression** (shrink
@@ -13,11 +13,14 @@ that settled it, so the loop isn't accidentally re-run.
 | **1. AssemblyScript (affix)** | prefix/suffix "affix"    | fflate (zlib) | AS affix helpers      | **357 B**   | yes (zero imports)             |
 | **2. Go / TinyGo**            | go-diff (Myers)          | zstd          | TinyGo wasip1 reactor | **0.72 MB** | **no** (needs WASI)            |
 | **3. AssemblyScript (dmp)**   | diff-match-patch (Myers) | fflate (zlib) | AS dmp module         | **6.6 KB**  | yes (zero imports)             |
+| **4. Rust (dmp)**             | diff-match-patch (Myers) | fflate (zlib) | Rust `no_std` module  | **6.7 KB**  | yes (zero imports)             |
 
 **The lesson:** the recording-size win was always the **diff algorithm** (Myers
 vs affix), never the **language**. Phase 2 conflated the two — it adopted a heavy
 runtime to get a better diff that AssemblyScript could have produced all along.
-Phase 3 keeps the better diff and drops the runtime.
+Phase 3 keeps the better diff and drops the runtime. Phase 4 keeps the format
+byte-identical and swaps only the source language, for the LLVM backend's faster
+Myers loops at the same size and the same zero-import property.
 
 ---
 
@@ -101,11 +104,61 @@ imports (see "Loading", below).
 
 ---
 
+## Phase 4 — Rust (diff-match-patch), same format
+
+The diff-match-patch port moved from AssemblyScript to **Rust** (`no_std`,
+`wasm32-unknown-unknown`) in `src/core/dmp`.
+
+- **Diff:** the same Myers middle-snake algorithm, ported faithfully so the delta
+  byte format is **identical** to Phase 3. `ContentDelta = { delta: Uint8Array }`
+  is unchanged; the host wrapper in `src/storage/dmpCodec/` is unchanged.
+- **Compression:** still fflate.
+- **WASM:** `src/core/dmp/build/next-editor-dmp.wasm`, **~6.7 KB, zero imports**
+  (`WebAssembly.Module.imports()` is `[]`), committed. Built with `bun run
+build:wasm` → `cargo build` (opt-level=3 + LTO) then `wasm-opt -all -O3`. Stays
+  import-free via `#![no_std]` + a panic handler that traps (`unreachable`), a
+  self-contained `memory.grow` allocator, and the `-unknown` (non-WASI) target.
+
+**Why:** the LLVM backend produces faster Myers inner loops, at effectively the
+same artifact size and the same zero-import property. Rust is the first
+non-AssemblyScript language in this history that _can_ stay import-free
+(Go/TinyGo never could).
+
+**Benchmark (Rust vs the AssemblyScript module it replaced).** Point-in-time, one
+machine (Apple Silicon, Node 24), median of 3 × 2000 iterations through the same
+host wrapper; ratio > 1 means Rust is faster. This was a one-off migration
+measurement — the AS module is gone, so it isn't reproducible from the repo (the
+committed `benchmark:dmp-codec` only compares delta _size_ vs the affix model).
+
+| Operation                | AssemblyScript | Rust     | Rust speedup |
+| ------------------------ | -------------- | -------- | ------------ |
+| `diffDelta`, contiguous  | ~34.5 ms       | ~31.4 ms | **~1.1×**    |
+| `diffDelta`, scattered   | ~87 ms         | ~32 ms   | **~2.7×**    |
+| `applyDelta`, contiguous | ~4.7 ms        | ~6.6 ms  | ~0.7×        |
+| `applyDelta`, scattered  | ~2.4 ms        | ~2.7 ms  | ~0.9×        |
+| Artifact size            | 6633 B         | 6670 B   | ≈parity      |
+
+The win is on `diffDelta` — which runs hot during recording, on every content
+change — and is largest exactly on scattered, non-contiguous edits (the case this
+codec exists for). `applyDelta` is a few hundred ns slower per call in the
+microbench (copy-bound, and the JS-side `slice` out of linear memory dominates
+equally for both); it runs only at replay and is single-µs in absolute terms, so
+it is not a meaningful regression. Enabling the `bulk-memory` target feature did
+**not** improve `applyDelta` and grew the binary ~530 B, so it is left off.
+
+**What it cost:** a Rust toolchain (`rustup target add wasm32-unknown-unknown` +
+`wasm-opt`) is now needed to **regenerate** the artifact. The `.wasm` is still
+committed, so tests, Vercel, and contributors who don't touch the codec need no
+Rust. Because the delta format is byte-identical, existing recordings decode
+unchanged — no migration.
+
+---
+
 ## Current state
 
 - **Diff:** `getDmpCodec().diffDelta(a, b)` / `applyDelta(a, delta)`, wired into
   `createContentDelta` / `applyContentDelta` in `frameDelta.ts`. ABI and op
-  format documented in [`../assembly/README.md`](../assembly/README.md).
+  format documented in [`../dmp/README.md`](../dmp/README.md).
 - **Compression:** fflate, in `streamingRecordingCodec/format.ts` + `decode.ts`.
 - **The JS prefix/suffix helpers survive** (`findCommonPrefixLength` /
   `findCommonSuffixLength` in `frameDelta.ts`, backed by pure-JS

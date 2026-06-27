@@ -23,7 +23,7 @@ dist-ssr
 .vite-hooks/_/
 tmp/
 
-# AssemblyScript diff-match-patch codec (bun run build:wasm). The .wasm artifact
-# is committed (tiny, ~7 KB) so tests and Vercel use it without a build step; the
-# .wat is a debug disassembly and is not.
-src/core/assembly/build/*.wat
+# Rust diff-match-patch codec (bun run build:wasm). The .wasm artifact is
+# committed (tiny, ~6.5 KB) so tests and Vercel use it without a Rust toolchain;
+# the Cargo build directory is not.
+src/core/dmp/target/

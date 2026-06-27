@@ -74,13 +74,13 @@ interface DeltaRecording {
 
 To compute `ContentDelta` compactly:
 
-1.  **AssemblyScript core**: `diffDelta(a, b)` / `applyDelta(a, delta)` are a diff-match-patch (Myers middle-snake) implementation in AssemblyScript, compiled to a tiny **zero-import** WebAssembly module (`src/core/assembly/`, ~7 KB). `createContentDelta` / `applyContentDelta` in `frameDelta.ts` round-trip the delta through it (loaded via the host wrapper in `src/storage/dmpCodec/`).
+1.  **Rust core**: `diffDelta(a, b)` / `applyDelta(a, delta)` are a diff-match-patch (Myers middle-snake) implementation in Rust (`no_std`), compiled to a tiny **zero-import** WebAssembly module (`src/core/dmp/`, ~6.7 KB). `createContentDelta` / `applyContentDelta` in `frameDelta.ts` round-trip the delta through it (loaded via the host wrapper in `src/storage/dmpCodec/`).
 2.  **Why Myers, not affix**: the earlier prefix/suffix model bloated to near-keyframe size whenever an edit touched both ends of the document; the Myers diff stays small across scattered, non-contiguous edits.
 3.  **Performance & UTF-8 safety**: Wasm diffs the raw UTF-8 bytes directly (predictable, fast). `applyDelta` reconstructs the target bytes exactly, so the round-trip is byte-exact and can never split a multi-byte character.
 
 > **Note:** the prefix/suffix helpers `findCommonPrefixLength` / `findCommonSuffixLength` (in `frameDelta.ts`, backed by the pure-JS `stringAffix.ts`) are **not** WebAssembly and are **no longer used for `ContentDelta`**. The original AssemblyScript affix module was removed when the codec moved to diff-match-patch. These JS helpers remain only to compute a minimal edit range when applying content to the live Monaco editor (`editorDiff.ts`).
 
-> The codec's implementation language has changed three times (AssemblyScript affix → Go/TinyGo zstd+go-diff → AssemblyScript diff-match-patch). See [`codec-history.md`](./codec-history.md) for the rationale behind each move.
+> The codec's implementation language has changed four times (AssemblyScript affix → Go/TinyGo zstd+go-diff → AssemblyScript diff-match-patch → Rust diff-match-patch). See [`codec-history.md`](./codec-history.md) for the rationale behind each move.
 
 ### Position/Selection compression
 
