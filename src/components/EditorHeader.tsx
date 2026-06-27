@@ -39,6 +39,7 @@ const LESSON_TYPE_OPTIONS: Array<{
   { value: "solid", label: "Solid" },
   { value: "svelte", label: "Svelte" },
   { value: "htmx-express", label: "HTMX + Express" },
+  { value: "express-ts", label: "Express + TypeScript" },
 ];
 
 const HEADER_ICON_BUTTON_CLASS =

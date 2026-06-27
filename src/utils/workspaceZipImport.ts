@@ -127,7 +127,15 @@ export function detectImportedLessonType(
       return "react";
     }
 
-    if (dependencies.express || dependencies["htmx.org"]) {
+    if (dependencies["htmx.org"]) {
+      return "htmx-express";
+    }
+
+    if (dependencies.express && (dependencies.tsx || dependencies["@types/express"])) {
+      return "express-ts";
+    }
+
+    if (dependencies.express) {
       return "htmx-express";
     }
   } catch {
