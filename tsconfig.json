@@ -41,5 +41,5 @@
   },
   // The diff-match-patch codec lives in src/core/dmp as a Rust crate (no .ts),
   // so tsc ignores it; no exclude needed.
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "tube/src"]
 }
