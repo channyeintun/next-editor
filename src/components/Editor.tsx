@@ -34,12 +34,16 @@ export interface EditorProps {
   recordingUrl?: string;
   /** Enlarge playback controls for small embeds. Falls back to `?largeControls=true`. */
   largeControls?: boolean;
+  /** Fill the parent (`h-full`) instead of the viewport (`h-dvh`), so the editor can
+   *  sit below other chrome (e.g. the /learn detail header). Defaults to viewport. */
+  fill?: boolean;
 }
 
 export function EditorLayout({
   readOnly: readOnlyProp,
   recordingUrl,
   largeControls: largeControlsProp,
+  fill = false,
 }: EditorProps = {}) {
   const { isLoading: urlLoading } = useUrlQuery(recordingUrl);
   const { isDragging } = useDragAndDropUrl();
@@ -72,7 +76,10 @@ export function EditorLayout({
   }, [urlLoading, readOnly]);
 
   return (
-    <div className="h-dvh flex flex-col text-white overflow-hidden" data-cursor-replay-target="app">
+    <div
+      className={`${fill ? "h-full" : "h-dvh"} flex flex-col text-white overflow-hidden`}
+      data-cursor-replay-target="app"
+    >
       <div className="flex-1 relative overflow-hidden" data-cursor-replay-target="editor-surface">
         <CodeEditor showImportExport={!readOnly} />
         <CursorComponent />
