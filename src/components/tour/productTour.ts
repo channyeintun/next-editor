@@ -12,6 +12,27 @@ const TOUR_STEPS: Array<DriveStep & { element: string }> = [
     },
   },
   {
+    element: '[data-tour="mic"]',
+    popover: {
+      title: "Microphone",
+      description: "Record audio from your microphone while coding.",
+    },
+  },
+  {
+    element: '[data-tour="audio-file"]',
+    popover: {
+      title: "Audio File",
+      description: "Use a pre-recorded audio file instead of the microphone.",
+    },
+  },
+  {
+    element: '[data-tour="camera"]',
+    popover: {
+      title: "Camera",
+      description: "Toggle camera recording to overlay your webcam on the session.",
+    },
+  },
+  {
     element: '[data-tour="settings"]',
     popover: {
       title: "Settings",

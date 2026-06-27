@@ -375,6 +375,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
           <div className="flex min-w-0 items-center gap-2 pointer-events-auto">
             <div className="inline-flex h-7 overflow-hidden rounded-full border border-slate-700 bg-slate-900/90 p-0.5 text-xs font-semibold text-slate-400 shadow-sm">
               <button
+                data-tour="mic"
                 type="button"
                 onClick={handleSelectMicrophoneAudio}
                 aria-pressed={recordingAudioSource === "microphone"}
@@ -389,6 +390,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 <span className="hidden sm:inline">Mic</span>
               </button>
               <button
+                data-tour="audio-file"
                 type="button"
                 onClick={handleSelectExternalAudio}
                 aria-pressed={recordingAudioSource === "external"}
@@ -428,6 +430,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
             />
             {isCameraSupported ? (
               <button
+                data-tour="camera"
                 type="button"
                 onClick={handleToggleCameraForNextRecording}
                 aria-pressed={enableCameraForNextRecording}
