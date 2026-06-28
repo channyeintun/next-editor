@@ -1158,6 +1158,9 @@ export const selectWorkspaceLessonType = (context: WorkspaceState): WorkspaceLes
 export const selectWorkspaceProjectName = (context: WorkspaceState): string =>
   context.isInitialized ? context.projectName : "Untitled";
 
+export const selectWorkspaceProjectId = (context: WorkspaceState): string =>
+  context.isInitialized ? context.project.id : "";
+
 export const selectWorkspaceProjectVersion = (context: WorkspaceState): number =>
   context.projectVersion;
 

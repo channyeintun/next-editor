@@ -26,6 +26,7 @@ import {
   useWorkspaceFileCount,
   useWorkspaceActions,
   useWorkspaceLessonType,
+  useWorkspaceProjectId,
   useWorkspaceProjectName,
   useWorkspaceSyncVersion,
 } from "../hooks/useWorkspace";
@@ -49,11 +50,13 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     loadProject,
   } = useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
+  const projectId = useWorkspaceProjectId();
   const projectName = useWorkspaceProjectName();
   const syncVersion = useWorkspaceSyncVersion();
   const fileCount = useWorkspaceFileCount();
   const hasRunInitCommandRef = useRef(false);
   const hasAutoStartedRef = useRef(false);
+  const loadedProjectIdRef = useRef<string | null>(null);
   const reverseSyncTimeoutRef = useRef<number | null>(null);
   const lessonTypeRef = useRef(lessonType);
   const runnerConfigRef = useRef<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
@@ -461,6 +464,26 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     onLessonTypeChange();
   }, [lessonType]);
 
+  const onProjectChange = useEffectEvent(() => {
+    // A different project was loaded — an imported `.ne` recording, a starter
+    // switch, or a `?url=` lesson. The WebContainer is a shared singleton, so it
+    // still holds the *previous* project's node_modules, and `hasRunInitCommandRef`
+    // is still set from that install. Without a reset, `prepareRuntime` skips
+    // `npm install` and `npm run dev` then fails with "command not found" for the
+    // new project's dev binary (vite/tsx/...) that was never installed. Tearing
+    // the runtime down forces a clean boot + reinstall for the new project.
+    if (loadedProjectIdRef.current !== null && loadedProjectIdRef.current !== projectId) {
+      resetRuntime();
+      hasAutoStartedRef.current = false;
+    }
+
+    loadedProjectIdRef.current = projectId;
+  });
+
+  useEffect(() => {
+    onProjectChange();
+  }, [projectId]);
+
   const onAutoStart = useEffectEvent(() => {
     hasAutoStartedRef.current = true;
     void startRuntime();
@@ -481,7 +504,14 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     }
 
     onAutoStart();
-  }, [fileCount, lessonType, isSupported, runnerConfig.enabled, runnerConfig.runOnStartup]);
+  }, [
+    fileCount,
+    lessonType,
+    isSupported,
+    projectId,
+    runnerConfig.enabled,
+    runnerConfig.runOnStartup,
+  ]);
 
   useEffect(() => {
     hasRunInitCommandRef.current = false;
