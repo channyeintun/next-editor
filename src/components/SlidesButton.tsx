@@ -4,7 +4,13 @@ import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEdi
 import { useSlidesContext } from "../contexts/SlidesContext";
 import SlidesManager from "./SlidesManager";
 
-export default function SlidesButton() {
+export default function SlidesButton({
+  presentationToggleOnly = false,
+}: {
+  /** Force the button into slide-visibility-toggle mode and hide the manager
+   *  (used in read-only mode, where editing the deck isn't available). */
+  presentationToggleOnly?: boolean;
+}) {
   const { pause } = useNextEditorActions();
   const { isRecording, isPlaying, usesPlaybackModel } = useNextEditorMetadata();
   const [showManager, setShowManager] = useState(false);
@@ -20,7 +26,8 @@ export default function SlidesButton() {
 
   const hasSlides = slides.length > 0;
   // In recording/playback/presentation states, this button should only act as a slide visibility toggle.
-  const showPresentationToggle = usesPlaybackModel || isRecording || previewState.isOpen;
+  const showPresentationToggle =
+    presentationToggleOnly || usesPlaybackModel || isRecording || previewState.isOpen;
   const isPresentationVisible = previewState.isOpen && previewState.isMaximized === true;
 
   useEffect(() => {
@@ -45,6 +52,12 @@ export default function SlidesButton() {
 
     openPresentation();
   };
+
+  // Read-only/toggle-only mode is purely for showing an existing deck, so there's
+  // nothing to render when the project has no slides.
+  if (presentationToggleOnly && !hasSlides) {
+    return null;
+  }
 
   return (
     <div className="relative">

@@ -510,19 +510,6 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
                   <div className="my-1 h-px bg-slate-700" />
 
-                  {lessonRunsInWebContainer(lessonType) ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={handleEditEnvironment}
-                      className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Variable size={14} aria-hidden="true" />
-                        Edit Environment
-                      </span>
-                    </button>
-                  ) : null}
                   <button
                     type="button"
                     role="menuitem"
@@ -535,6 +522,19 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
                     </span>
                   </button>
                 </>
+              ) : null}
+              {lessonRunsInWebContainer(lessonType) ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleEditEnvironment}
+                  className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
+                >
+                  <span className="flex items-center gap-2">
+                    <Variable size={14} aria-hidden="true" />
+                    Edit Environment
+                  </span>
+                </button>
               ) : null}
               <button
                 type="button"
@@ -655,7 +655,7 @@ function EditorHeader({ showImportExport }: EditorHeaderProps) {
         <WorkspaceSettingsButton showImportExport={showImportExport} />
         <div className="h-4 w-px bg-slate-700 mx-1" />
         <div className="flex items-center gap-2">
-          {showImportExport ? <SlidesButton /> : null}
+          <SlidesButton presentationToggleOnly={!showImportExport} />
           <PreviewHeaderButton />
         </div>
       </div>
