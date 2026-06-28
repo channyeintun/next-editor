@@ -7,6 +7,9 @@
     ".": "./src/index.tsx"
   },
   "peerDependencies": {
+    "@tanstack/react-query": "*",
+    "@tanstack/react-virtual": "*",
+    "axios": "*",
     "lucide-react": "*",
     "react": "*",
     "react-dom": "*"
