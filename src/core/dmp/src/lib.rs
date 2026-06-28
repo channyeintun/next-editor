@@ -246,10 +246,29 @@ impl Ops {
 
 // ---------------------------------------------------------------------------
 // Common affix lengths over raw byte ranges.
+//
+// For this codec's workload — content-deltas between consecutive editor states,
+// usually a single edit inside an otherwise unchanged document — these affix
+// scans, not the bisect, dominate: their cost is linear in document size while
+// the changed middle handed to diff_bisect is tiny. So they compare 8 bytes at a
+// time (wasm permits unaligned i64 loads) and fall back to a byte loop only for
+// the final partial word and to pinpoint the mismatch. Equality is the only test,
+// so the computed length is identical to a byte-by-byte scan and the emitted
+// delta stays byte-for-byte unchanged.
 // ---------------------------------------------------------------------------
+const WORD: usize = 8;
+
 fn common_prefix(a: &[u8], b: &[u8]) -> usize {
     let n = a.len().min(b.len());
     let mut i = 0;
+    while i + WORD <= n {
+        let x = unsafe { (a.as_ptr().add(i) as *const u64).read_unaligned() };
+        let y = unsafe { (b.as_ptr().add(i) as *const u64).read_unaligned() };
+        if x != y {
+            break;
+        }
+        i += WORD;
+    }
     while i < n && a[i] == b[i] {
         i += 1;
     }
@@ -257,9 +276,19 @@ fn common_prefix(a: &[u8], b: &[u8]) -> usize {
 }
 
 fn common_suffix(a: &[u8], b: &[u8]) -> usize {
-    let n = a.len().min(b.len());
+    let (alen, blen) = (a.len(), b.len());
+    let n = alen.min(blen);
     let mut i = 0;
-    while i < n && a[a.len() - 1 - i] == b[b.len() - 1 - i] {
+    while i + WORD <= n {
+        // The word ending `i` bytes from the end of each slice.
+        let x = unsafe { (a.as_ptr().add(alen - i - WORD) as *const u64).read_unaligned() };
+        let y = unsafe { (b.as_ptr().add(blen - i - WORD) as *const u64).read_unaligned() };
+        if x != y {
+            break;
+        }
+        i += WORD;
+    }
+    while i < n && a[alen - 1 - i] == b[blen - 1 - i] {
         i += 1;
     }
     i
