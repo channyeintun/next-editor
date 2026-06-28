@@ -787,7 +787,13 @@ export const editorMachine = setup({
         lastAppliedSlideEventIndex: -1,
         lastAppliedPreviewEventIndex: -1,
         lastAppliedPreviewPatchBatchIndex: -1,
-        lastAppliedWorkspaceEventIndex: -1,
+        // NOTE: `lastAppliedWorkspaceEventIndex` is intentionally NOT reset here.
+        // Panel widths (sidebar/preview dock) replay as relative deltas folded
+        // into the *live* width, so the net delta is computed between the last
+        // applied index and the seek target. Resetting to -1 would re-sum every
+        // delta from the start and add it on top of the already-applied width,
+        // so repeated seeks make the panels grow/shrink without bound. Keeping
+        // the true index lets the replay reverse/advance the exact net delta.
         lastAppliedRuntimeEventIndex: -1,
       };
     }),
@@ -913,7 +919,9 @@ export const editorMachine = setup({
       lastAppliedPreviewEventIndex: -1,
       lastAppliedPreviewPatchBatchIndex: -1,
       lastAppliedSlideEventIndex: -1,
-      lastAppliedWorkspaceEventIndex: -1,
+      // Kept (not reset to -1) so the relative panel-width deltas rewind from the
+      // current index back to the start instead of re-summing from scratch onto
+      // the live width. See the note in `seekToTime`.
       lastAppliedRuntimeEventIndex: -1,
       lastAppliedPreviewState: undefined,
     })),
@@ -925,7 +933,8 @@ export const editorMachine = setup({
       lastAppliedPreviewEventIndex: -1,
       lastAppliedPreviewPatchBatchIndex: -1,
       lastAppliedSlideEventIndex: -1,
-      lastAppliedWorkspaceEventIndex: -1,
+      // Kept (not reset to -1) so resuming/replaying does not re-apply the panel-
+      // width deltas on top of the already-applied width. See `seekToTime`.
       lastAppliedRuntimeEventIndex: -1,
       lastAppliedPreviewState: undefined,
     })),

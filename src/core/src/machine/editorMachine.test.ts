@@ -402,6 +402,70 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  it("does not accumulate panel width deltas when seeking repeatedly", async () => {
+    // Panel widths replay as relative deltas folded into the live width, so the
+    // replay must apply only the *net* delta between the last-applied event and
+    // the seek target. A regression here re-summed every delta from the start on
+    // each seek, so the sidebar grew without bound as the user scrubbed.
+    let liveWidth = 200;
+    // Mirror NextEditorProvider: the live snapshot getter never carries width deltas.
+    let currentWorkspace: WorkspaceRecordingSnapshot = createWorkspaceSnapshot("outside");
+
+    const recording: Recording = {
+      ...createRecording(),
+      workspaceEvents: [
+        { timestamp: 0, snapshot: { ...createWorkspaceSnapshot("w0"), sidebarWidthDelta: 0 } },
+        { timestamp: 100, snapshot: { ...createWorkspaceSnapshot("w1"), sidebarWidthDelta: 40 } },
+        { timestamp: 200, snapshot: { ...createWorkspaceSnapshot("w2"), sidebarWidthDelta: 30 } },
+      ],
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        getWorkspaceSnapshot: () => currentWorkspace,
+        applyWorkspaceSnapshot: (snapshot) => {
+          if (typeof snapshot.sidebarWidthDelta === "number") {
+            liveWidth += snapshot.sidebarWidthDelta;
+          }
+          currentWorkspace = {
+            activeFilePath: snapshot.activeFilePath,
+            collapsedFolders: snapshot.collapsedFolders,
+            sidebarScrollTop: snapshot.sidebarScrollTop,
+            project: snapshot.project,
+          };
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    // Loading applies the initial event (delta 0), leaving the base width.
+    expect(liveWidth).toBe(200);
+
+    actor.send({ type: "SEEK", time: 200 });
+    expect(liveWidth).toBe(270); // 200 + 40 + 30
+
+    // Seeking to the same time again must be a no-op, not re-add the deltas.
+    actor.send({ type: "SEEK", time: 200 });
+    actor.send({ type: "SEEK", time: 200 });
+    expect(liveWidth).toBe(270);
+
+    // Seeking backward rewinds the exact net delta...
+    actor.send({ type: "SEEK", time: 100 });
+    expect(liveWidth).toBe(240); // 270 - 30
+
+    actor.send({ type: "SEEK", time: 0 });
+    expect(liveWidth).toBe(200); // back to the base width
+
+    // ...and seeking forward again lands on the same absolute width, not a drift.
+    actor.send({ type: "SEEK", time: 200 });
+    expect(liveWidth).toBe(270);
+
+    actor.stop();
+  });
+
   it("waits for Monaco model sync before applying frames after replayed file switches", async () => {
     const editor = new MockEditor(new MockTextModel("outside"));
     const firstWorkspace = createTwoFileWorkspaceSnapshot("a.ts", "a-snapshot", "b-before-open");
