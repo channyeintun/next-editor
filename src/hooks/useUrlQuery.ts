@@ -1,33 +1,59 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { useUrlLoader } from "./useUrlLoader";
 
 export const useUrlQuery = (overrideUrl?: string) => {
-  const { fetchNextEditorFile, isLoading } = useUrlLoader();
+  const { fetchNextEditorFile, isLoading, error, clearError } = useUrlLoader();
   const [searchParams] = useSearchParams();
+  // Remember the last resolved URL so Retry can re-run the same load without
+  // re-deriving it from params (which may have changed in the meantime).
+  const lastUrlRef = useRef<string | null>(null);
 
-  useEffect(() => {
+  const resolveUrl = useCallback((): string | null => {
     // An explicit override (e.g. the /learn detail view passing a recording via a
     // prop) takes precedence over the `?url=` query param.
     const url = overrideUrl ?? searchParams.get("url");
-
-    if (url) {
-      // Decode URL in case it was URL encoded
-      const decodedUrl = decodeURIComponent(url);
-
-      // Convert relative URLs to absolute URLs for same origin
-      let fullUrl = decodedUrl;
-      if (!decodedUrl.startsWith("http://") && !decodedUrl.startsWith("https://")) {
-        // It's a relative URL, make it absolute with current origin
-        const origin = window.location.origin;
-        fullUrl = decodedUrl.startsWith("/") ? `${origin}${decodedUrl}` : `${origin}/${decodedUrl}`;
-      }
-
-      fetchNextEditorFile(fullUrl).catch((error) => {
-        console.error("Failed to load from URL query:", error);
-      });
+    if (!url) {
+      return null;
     }
-  }, [searchParams, fetchNextEditorFile, overrideUrl]);
 
-  return { isLoading };
+    // Decode URL in case it was URL encoded
+    const decodedUrl = decodeURIComponent(url);
+
+    // Convert relative URLs to absolute URLs for same origin
+    if (decodedUrl.startsWith("http://") || decodedUrl.startsWith("https://")) {
+      return decodedUrl;
+    }
+    const origin = window.location.origin;
+    return decodedUrl.startsWith("/") ? `${origin}${decodedUrl}` : `${origin}/${decodedUrl}`;
+  }, [overrideUrl, searchParams]);
+
+  const load = useCallback(
+    (fullUrl: string) => {
+      lastUrlRef.current = fullUrl;
+      // The loader records the failure in its `error` state; the catch only keeps the
+      // rejected promise from surfacing as an unhandled rejection.
+      fetchNextEditorFile(fullUrl).catch((err) => {
+        console.error("Failed to load from URL query:", err);
+      });
+    },
+    [fetchNextEditorFile],
+  );
+
+  useEffect(() => {
+    const fullUrl = resolveUrl();
+    if (fullUrl) {
+      load(fullUrl);
+    }
+  }, [resolveUrl, load]);
+
+  const retry = useCallback(() => {
+    const fullUrl = lastUrlRef.current ?? resolveUrl();
+    if (fullUrl) {
+      clearError();
+      load(fullUrl);
+    }
+  }, [resolveUrl, load, clearError]);
+
+  return { isLoading, error, retry };
 };

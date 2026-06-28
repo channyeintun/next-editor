@@ -140,6 +140,9 @@ async function fetchNextEditorUrl(url: string): Promise<Response> {
 
 export const useUrlLoader = () => {
   const [isLoading, setIsLoading] = useState(false);
+  // Surfaces a human-readable load failure to the UI instead of a blocking `alert()`,
+  // so callers can render an inline, themeable error panel (with retry) in context.
+  const [error, setError] = useState<string | null>(null);
   const { loadRecording, extendRecording, addCaptionTrack } = useNextEditorActions();
 
   const isNextEditorUrl = (url: string): boolean => {
@@ -160,6 +163,7 @@ export const useUrlLoader = () => {
         : recording;
     try {
       setIsLoading(true);
+      setError(null);
       if (file.name.endsWith(".ne")) {
         const bytes = new Uint8Array(await file.arrayBuffer());
 
@@ -196,9 +200,9 @@ export const useUrlLoader = () => {
           loadRecording(attachVideo(recordings[0]));
         }
       }
-    } catch (error) {
-      console.error("Failed to import file:", error);
-      alert(`Failed to import file: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } catch (err) {
+      console.error("Failed to import file:", err);
+      setError(`Failed to import file: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setIsLoading(false);
     }
@@ -379,6 +383,7 @@ export const useUrlLoader = () => {
 
     try {
       setIsLoading(true);
+      setError(null);
       const response = await fetchNextEditorUrl(url);
 
       if (!response.ok) {
@@ -414,10 +419,10 @@ export const useUrlLoader = () => {
           for (const track of tracks) addCaptionTrack(track);
         })
         .catch(() => {});
-    } catch (error) {
-      console.error("Failed to load tutorial from URL:", error);
-      alert(`Failed to load tutorial: ${error instanceof Error ? error.message : "Unknown error"}`);
-      throw error;
+    } catch (err) {
+      console.error("Failed to load tutorial from URL:", err);
+      setError(`Failed to load tutorial: ${err instanceof Error ? err.message : "Unknown error"}`);
+      throw err;
     } finally {
       setIsLoading(false);
     }
@@ -428,5 +433,7 @@ export const useUrlLoader = () => {
     importNextEditorFile,
     isNextEditorUrl,
     isLoading,
+    error,
+    clearError: () => setError(null),
   };
 };

@@ -1,4 +1,5 @@
 import { lazy, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
@@ -19,6 +20,7 @@ import CameraOverlay from "./CameraOverlay";
 import CaptionsOverlay from "./CaptionsOverlay";
 import CursorComponent from "./Cursor.tsx";
 import LoadingSpinner from "./LoadingSpinner.tsx";
+import RecordingLoadError from "./RecordingLoadError.tsx";
 import { ApiClientStoreProvider } from "../contexts/ApiClientStoreContext";
 import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
 import { startTour } from "./tour/productTour";
@@ -45,22 +47,25 @@ export function EditorLayout({
   largeControls: largeControlsProp,
   fill = false,
 }: EditorProps = {}) {
-  const { isLoading: urlLoading } = useUrlQuery(recordingUrl);
-  const { isDragging } = useDragAndDropUrl();
+  const { isLoading: urlLoading, error: urlError, retry } = useUrlQuery(recordingUrl);
+  const { isDragging, error: dropError, clearError: clearDropError } = useDragAndDropUrl();
   const lessonType = useWorkspaceLessonType();
 
   // Props win; otherwise fall back to URL params so the /code route keeps working.
-  const urlParams = new URLSearchParams(window.location.search);
-  const readOnly = readOnlyProp ?? urlParams.get("readOnly") === "true";
+  // Read params through the router (not `window.location.search`) so we share one
+  // source of truth with the rest of the app and react to in-app param changes.
+  const [searchParams] = useSearchParams();
+  const readOnly = readOnlyProp ?? searchParams.get("readOnly") === "true";
   // Enlarge the playback controls for small embeds (e.g. a scaled-down demo iframe).
-  const largeControls = largeControlsProp ?? urlParams.get("largeControls") === "true";
+  const largeControls = largeControlsProp ?? searchParams.get("largeControls") === "true";
 
   const tourStartedRef = useRef(false);
 
   useEffect(() => {
     // Don't tour inside read-only embeds (the landing-page demo iframe), and wait
-    // until any URL-driven recording load has finished.
-    if (urlLoading || readOnly || tourStartedRef.current) {
+    // until any URL-driven recording load has finished. Skip the tour entirely when
+    // the load failed — the editor is showing an error panel, not a touchable surface.
+    if (urlLoading || urlError || readOnly || tourStartedRef.current) {
       return;
     }
 
@@ -73,7 +78,7 @@ export function EditorLayout({
     requestAnimationFrame(() => {
       startTour();
     });
-  }, [urlLoading, readOnly]);
+  }, [urlLoading, urlError, readOnly]);
 
   return (
     <div
@@ -87,17 +92,27 @@ export function EditorLayout({
         <CaptionsOverlay />
         {lessonRunsInWebContainer(lessonType) ? <TerminalPanel large={largeControls} /> : null}
         <SlidePanel />
+
+        {/* Loading / error overlays live inside the (relative) editor surface so they
+            center on the editor region in both viewport and `fill` layouts. */}
+        {urlLoading ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3">
+            <LoadingSpinner />
+            <p className="text-sm text-slate-400">Loading recording…</p>
+          </div>
+        ) : urlError ? (
+          <RecordingLoadError message={urlError} onRetry={retry} />
+        ) : dropError ? (
+          // A dropped file can't be re-fetched, so offer dismiss rather than retry.
+          <RecordingLoadError message={dropError} onDismiss={clearDropError} />
+        ) : null}
       </div>
 
       <MediaControls recordMode={!readOnly} large={largeControls} />
 
       <DragDropOverlay isDragging={isDragging} />
 
-      {urlLoading ? (
-        <LoadingSpinner className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-      ) : (
-        <FloatingPlayButton />
-      )}
+      {!urlLoading && !urlError && !dropError ? <FloatingPlayButton /> : null}
     </div>
   );
 }
