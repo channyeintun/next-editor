@@ -9,13 +9,22 @@ export default function LessonGrid() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
     fetchLessons()
-      .then(setLessons)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load lessons"))
-      .finally(() => setLoading(false));
-  }, []);
+      .then((data) => active && setLessons(data))
+      .catch(
+        (err) => active && setError(err instanceof Error ? err.message : "Failed to load lessons"),
+      )
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
 
   const filtered = query
     ? lessons.filter((l) => {
@@ -33,7 +42,18 @@ export default function LessonGrid() {
   }
 
   if (error) {
-    return <div className="flex justify-center py-20 text-red-400">{error}</div>;
+    return (
+      <div className="flex flex-col items-center gap-4 py-20 text-center">
+        <p className="text-red-400">{error}</p>
+        <button
+          type="button"
+          onClick={() => setAttempt((n) => n + 1)}
+          className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
+        >
+          Try again
+        </button>
+      </div>
+    );
   }
 
   return (
