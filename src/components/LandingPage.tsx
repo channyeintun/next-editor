@@ -134,7 +134,7 @@ const GITHUB_SVG_PATH =
 const DEMO_IFRAME_WIDTH = 1440;
 const DEMO_IFRAME_HEIGHT = 900;
 const DEFAULT_IFRAME_SCALE = 0.4513888888888889;
-const DEMO_URL = "/code?url=/introduction.ne";
+const DEMO_URL = "/code?url=/lessons/introduction/introduction.ne";
 const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true&largeControls=true`;
 
 const LandingPage = () => {
