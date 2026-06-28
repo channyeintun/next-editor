@@ -15,6 +15,7 @@ import { Link } from "react-router";
 import Navbar from "./Navbar";
 import { useState, useEffect, useRef } from "react";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
+import { useGitHubStars } from "../hooks/useGitHubStars";
 
 const FRAMEWORKS = [
   "React",
@@ -147,7 +148,7 @@ const LandingPage = () => {
   // static tap-to-open card there instead, so the landing page stays light.
   const [isMobile] = useState(() => isMobileBrowser());
   const [frameworkIndex, setFrameworkIndex] = useState(0);
-  const [starCount, setStarCount] = useState<number | null>(null);
+  const starCount = useGitHubStars();
 
   // Reveal each section once it scrolls into view (replaces motion's whileInView).
   const featuresSection = useInView();
@@ -163,21 +164,6 @@ const LandingPage = () => {
       setFrameworkIndex((i) => (i + 1) % FRAMEWORKS.length);
     }, 2000);
     return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("https://api.github.com/repos/channyeintun/next-editor")
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled && typeof data.stargazers_count === "number") {
-          setStarCount(data.stargazers_count);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   useEffect(() => {
