@@ -7,6 +7,8 @@ export interface Lesson {
   duration?: string;
   tags?: string[];
   author?: string;
+  /** Author's profile URL — makes the author name a link on the lesson card. */
+  authorUrl?: string;
   publishedAt?: string;
 }
 

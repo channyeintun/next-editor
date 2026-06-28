@@ -1,29 +1,5 @@
 import axios from "axios";
-import type { Lesson, LessonsManifest } from "../types";
-
-export const LESSONS_PAGE_SIZE = 12;
-
-const api = axios.create();
-
-// The lessons manifest is a single static file. Read it once per session and
-// dedupe behind this memo so both the paginated grid and a deep-linked detail
-// page share one network round-trip. A rejection clears the memo so a retry
-// refetches. TanStack Query layers result caching + the infinite-scroll
-// machinery on top; this just guarantees the file itself is fetched once.
-let manifest: Promise<Lesson[]> | null = null;
-
-function loadManifest(): Promise<Lesson[]> {
-  if (!manifest) {
-    manifest = api
-      .get<LessonsManifest>("/lessons.json")
-      .then((res) => res.data.lessons)
-      .catch((err) => {
-        manifest = null;
-        throw err;
-      });
-  }
-  return manifest;
-}
+import type { Lesson } from "../types";
 
 export interface LessonsPage {
   lessons: Lesson[];
@@ -31,21 +7,24 @@ export interface LessonsPage {
   nextPage: number | null;
 }
 
-// Client-side windowing over the static manifest — the single swap point for
-// real server pagination later: point this at `/api/lessons?page=${page}` and
-// return the server's cursor as `nextPage`. The hook and grid above it don't
-// change.
+// True pagination over static page shards emitted by the lessonsPagination Vite
+// plugin (see vite.config.ts): the client downloads only the page it's showing,
+// never the whole catalog. Swap point for a real backend: point this at
+// `/api/lessons?page=${page}` and return the server's cursor as nextPage.
 export async function fetchLessonsPage(page: number): Promise<LessonsPage> {
-  const all = await loadManifest();
-  const start = page * LESSONS_PAGE_SIZE;
-  const lessons = all.slice(start, start + LESSONS_PAGE_SIZE);
-  const hasMore = start + lessons.length < all.length;
-  return { lessons, nextPage: hasMore ? page + 1 : null };
+  const res = await axios.get<LessonsPage>(`/lessons/page-${page}.json`);
+  return res.data;
 }
 
-// Resolve a slug for the deep-linkable detail route. Returns null (not
-// undefined) when missing — Query rejects an undefined queryFn result.
+// One request per lesson for the deep-linkable detail route — no catalog scan.
+// Returns null (not undefined — Query rejects undefined) when the slug has no
+// shard, so the route can tell "not found" from a real fetch failure.
 export async function findLessonBySlug(slug: string): Promise<Lesson | null> {
-  const all = await loadManifest();
-  return all.find((l) => l.slug === slug) ?? null;
+  try {
+    const res = await axios.get<Lesson>(`/lessons/by-slug/${encodeURIComponent(slug)}.json`);
+    return res.data;
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+    throw err;
+  }
 }
