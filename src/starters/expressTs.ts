@@ -13,7 +13,7 @@ export function createStarterExpressTsWorkspace(): WorkspaceProject {
           type: "module",
           scripts: {
             // tsx runs the TypeScript entry directly (no build step) and reloads
-            // on save, so the WebContainer's `npm run dev` boots the API server.
+            // on save, so the WebContainer's `pnpm dev` boots the API server.
             dev: "tsx watch src/server.ts",
             start: "tsx src/server.ts",
           },

@@ -281,7 +281,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     saveProject();
     updateRunnerConfig({ enabled: true });
     // Imported projects ship their own dependencies, so tear the runtime down to
-    // force a fresh mount + `npm install` for the new project on next start.
+    // force a fresh mount + `pnpm install` for the new project on next start.
     resetRuntime();
   };
 
@@ -346,7 +346,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     saveProject();
     updateRunnerConfig({ enabled: true });
     // Each framework ships different dependencies, so tear the runtime down to
-    // force a fresh mount + `npm install` for the new project on next start.
+    // force a fresh mount + `pnpm install` for the new project on next start.
     resetRuntime();
   };
 

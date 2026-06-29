@@ -26,8 +26,8 @@ export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   enabled: true,
   runOnStartup: true,
   runOnFileSave: true,
-  initCommand: "npm install",
-  runCommand: "npm run dev",
+  initCommand: "pnpm install",
+  runCommand: "pnpm dev",
 };
 
 const WEBCONTAINER_VITE_PLUS_RUN_COMMAND = "npx vite --host 0.0.0.0 --configLoader native";

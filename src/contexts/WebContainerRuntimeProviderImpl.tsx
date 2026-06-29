@@ -469,7 +469,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     // switch, or a `?url=` lesson. The WebContainer is a shared singleton, so it
     // still holds the *previous* project's node_modules, and `hasRunInitCommandRef`
     // is still set from that install. Without a reset, `prepareRuntime` skips
-    // `npm install` and `npm run dev` then fails with "command not found" for the
+    // `pnpm install` and `pnpm dev` then fails with "command not found" for the
     // new project's dev binary (vite/tsx/...) that was never installed. Tearing
     // the runtime down forces a clean boot + reinstall for the new project.
     if (loadedProjectIdRef.current !== null && loadedProjectIdRef.current !== projectId) {
