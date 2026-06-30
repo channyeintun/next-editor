@@ -346,7 +346,7 @@ const CameraOverlay: React.FC = () => {
         onClick={handleRestore}
         title="Show camera"
         aria-label="Show camera"
-        className={`fixed top-0 z-999 flex h-14 w-7 cursor-pointer items-center justify-center bg-slate-950/90 text-white shadow-2xl shadow-slate-950/40 ring-2 ring-black/20 transition-colors hover:bg-slate-800 ${
+        className={`fixed top-0 flex h-14 w-7 cursor-pointer items-center justify-center bg-slate-950/90 text-white shadow-2xl shadow-slate-950/40 ring-2 ring-black/20 transition-colors hover:bg-slate-800 ${
           dockSide === "left"
             ? "left-0 rounded-r-full border border-l-0 border-white/25"
             : "right-0 rounded-l-full border border-r-0 border-white/25"
@@ -364,7 +364,7 @@ const CameraOverlay: React.FC = () => {
 
   return (
     <div
-      className="group fixed left-0 top-0 z-44 cursor-grab touch-none overflow-hidden border border-white/25 bg-slate-950 shadow-2xl shadow-slate-950/40 ring-2 ring-black/20 active:cursor-grabbing"
+      className="group fixed left-0 top-0 z-999 cursor-grab touch-none overflow-hidden border border-white/25 bg-slate-950 shadow-2xl shadow-slate-950/40 ring-2 ring-black/20 active:cursor-grabbing"
       style={{
         width: OVERLAY_WIDTH,
         height: OVERLAY_HEIGHT,
