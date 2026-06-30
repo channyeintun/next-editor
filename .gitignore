@@ -27,3 +27,4 @@ tmp/
 # committed (tiny, ~6.5 KB) so tests and Vercel use it without a Rust toolchain;
 # the Cargo build directory is not.
 src/core/dmp/target/
+.vercel
