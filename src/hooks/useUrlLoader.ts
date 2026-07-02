@@ -4,7 +4,10 @@ import {
   decodeBase64ToRecordings,
   decompressBinaryToRecordings,
 } from "../storage/recordingCodecClient";
-import { createStreamingRecordingReader } from "../storage/streamingRecordingCodec";
+import {
+  audioMimeFromFilename,
+  createStreamingRecordingReader,
+} from "../storage/streamingRecordingCodec";
 import { createImportedCameraObjectUrl } from "../storage/cameraVideoUrl";
 import { decodeBase64 } from "../core/src/utils/base64";
 import type { CaptionTrack, Recording } from "../core/src";
@@ -38,19 +41,32 @@ function startsWithScr3(bytes: Uint8Array): boolean {
 }
 
 /**
- * Resolve an external camera reference (`cameraFile`) into an absolute `cameraUrl` relative to the
- * original `.ne` URL, so a sibling video plays via a native `<video src>`. Resolves against the
- * user-facing `.ne` URL (not any same-origin proxy URL) so the video is fetched from its real host.
+ * Resolve external media references (`cameraFile` / `audioFile`) into absolute URLs relative to
+ * the original `.ne` URL, so a sibling video plays via a native `<video src>` and sibling audio
+ * can be fetched for playback. Resolves against the user-facing `.ne` URL (not any same-origin
+ * proxy URL) so the media is fetched from its real host.
  */
-function withResolvedCameraUrl(recording: Recording, baseUrl: string | undefined): Recording {
-  if (!recording.cameraFile || recording.cameraUrl || !baseUrl) {
+function withResolvedMediaUrls(recording: Recording, baseUrl: string | undefined): Recording {
+  if (!baseUrl) {
     return recording;
   }
-  try {
-    return { ...recording, cameraUrl: new URL(recording.cameraFile, baseUrl).toString() };
-  } catch {
-    return recording;
+
+  let resolved = recording;
+  if (recording.cameraFile && !recording.cameraUrl) {
+    try {
+      resolved = { ...resolved, cameraUrl: new URL(recording.cameraFile, baseUrl).toString() };
+    } catch {
+      // Unresolvable reference — play without camera.
+    }
   }
+  if (recording.audioFile && !recording.audioUrl) {
+    try {
+      resolved = { ...resolved, audioUrl: new URL(recording.audioFile, baseUrl).toString() };
+    } catch {
+      // Unresolvable reference — play without audio.
+    }
+  }
+  return resolved;
 }
 
 async function fetchVttFile(url: string): Promise<CaptionTrack | null> {
@@ -155,12 +171,19 @@ export const useUrlLoader = () => {
     }
   };
 
-  const importNextEditorFile = async (file: File, videoFile?: File) => {
-    // Attach a dropped sibling camera video as an object URL so playback streams it directly.
-    const attachVideo = (recording: Recording): Recording =>
-      recording.cameraFile && videoFile
-        ? { ...recording, cameraUrl: createImportedCameraObjectUrl(videoFile) }
-        : recording;
+  const importNextEditorFile = async (file: File, videoFile?: File, audioFile?: File) => {
+    // Attach dropped sibling media: camera video as an object URL so playback streams it
+    // directly, audio directly as the playback blob (a `File` is a `Blob`).
+    const attachVideo = (recording: Recording): Recording => {
+      let result = recording;
+      if (result.cameraFile && videoFile) {
+        result = { ...result, cameraUrl: createImportedCameraObjectUrl(videoFile) };
+      }
+      if (result.audioFile && audioFile && !(result.audioBlob instanceof Blob)) {
+        result = { ...result, audioBlob: audioFile };
+      }
+      return result;
+    };
     try {
       setIsLoading(true);
       setError(null);
@@ -218,7 +241,7 @@ export const useUrlLoader = () => {
     }
     const recordings = await decodeBase64ToRecordings(stripped);
     if (recordings.length > 0) {
-      const resolved = withResolvedCameraUrl(recordings[0], baseUrl);
+      const resolved = withResolvedMediaUrls(recordings[0], baseUrl);
       loadRecording(resolved);
       return resolved;
     }
@@ -235,7 +258,7 @@ export const useUrlLoader = () => {
 
     const recordings = await decompressBinaryToRecordings(bytes);
     if (recordings.length > 0) {
-      const resolved = withResolvedCameraUrl(recordings[0], baseUrl);
+      const resolved = withResolvedMediaUrls(recordings[0], baseUrl);
       loadRecording(resolved);
       return resolved;
     }
@@ -266,7 +289,7 @@ export const useUrlLoader = () => {
     const streamReader = createStreamingRecordingReader();
     let lastDecodeLength = 0;
     let loadedOnce = false;
-    let firstRecording: Recording | null = null;
+    let latestRecording: Recording | null = null;
 
     const applyRecording = (
       recording: Awaited<ReturnType<typeof decodeBase64ToRecordings>>[0] | null | undefined,
@@ -275,12 +298,14 @@ export const useUrlLoader = () => {
         return;
       }
 
-      const resolved = withResolvedCameraUrl(recording, baseUrl);
+      const resolved = withResolvedMediaUrls(recording, baseUrl);
+      // Track the newest decoded snapshot — the caller needs the *final* recording
+      // (for sibling captions/audio), not the first playable prefix.
+      latestRecording = resolved;
 
       if (!loadedOnce) {
         loadRecording(resolved);
         loadedOnce = true;
-        firstRecording = resolved;
         setIsLoading(false);
         return;
       }
@@ -373,7 +398,41 @@ export const useUrlLoader = () => {
     if (!loadedOnce) {
       throw new Error("No valid recording found in stream");
     }
-    return firstRecording;
+    return latestRecording;
+  };
+
+  /**
+   * Fetches a recording's external audio (a sibling file referenced by `audioFile` /
+   * `audioUrl`) and attaches it via `extendRecording`, which spawns/updates the playback
+   * audio actor. Runs after the `.ne` itself has fully loaded, so the audio bytes never
+   * flow through the progressive stream decoder — the whole point of externalizing them.
+   */
+  const attachExternalAudio = async (recording: Recording) => {
+    const url = recording.audioUrl;
+    if (!url || recording.audioBlob instanceof Blob) {
+      return;
+    }
+    try {
+      const response = await fetchNextEditorUrl(url);
+      if (!response.ok) {
+        console.warn(`External audio fetch failed (${response.status}): ${url}`);
+        return;
+      }
+      const raw = await response.blob();
+      if (raw.size === 0) {
+        return;
+      }
+      // Some hosts serve sibling audio without a usable content type; fall back to the
+      // extension-derived MIME so `decodeAudioData` and track metadata behave.
+      const type =
+        (raw.type && !raw.type.includes("text/html") ? raw.type : undefined) ??
+        audioMimeFromFilename(recording.audioFile ?? url) ??
+        "audio/webm";
+      const audioBlob = raw.type === type ? raw : new Blob([raw], { type });
+      extendRecording({ ...recording, audioBlob });
+    } catch (err) {
+      console.warn("Failed to fetch external audio:", err);
+    }
   };
 
   const fetchNextEditorFile = async (url: string) => {
@@ -419,6 +478,11 @@ export const useUrlLoader = () => {
           for (const track of tracks) addCaptionTrack(track);
         })
         .catch(() => {});
+
+      // Externalized audio loads out-of-band, after the (now tiny) `.ne` finished.
+      if (loaded) {
+        void attachExternalAudio(loaded);
+      }
     } catch (err) {
       console.error("Failed to load tutorial from URL:", err);
       setError(`Failed to load tutorial: ${err instanceof Error ? err.message : "Unknown error"}`);

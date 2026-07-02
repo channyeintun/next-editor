@@ -13,7 +13,7 @@ import type {
   SlideEvent,
 } from "../../core/src/slides";
 import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
-import { normalizeRecordingData } from "../../core/src/utils/editorState";
+import { normalizeDeltaFrame, normalizeRecordingData } from "../../core/src/utils/editorState";
 import type { RuntimeRecordingEvent } from "../../types/runtime";
 import type { WorkspaceRecordingEvent } from "../../types/workspace";
 import {
@@ -131,6 +131,13 @@ interface DecodedStreamState {
   meta: RecordingStreamMeta;
   formatVersion: number;
   streamFinalized: boolean;
+  /**
+   * True when frames were already normalized record-by-record as they were decoded
+   * (the incremental reader). Skips the whole-recording `normalizeRecordingData`
+   * pass, which deep-clones every frame and is O(n) per call — quadratic when run
+   * on every progressive-decode interval of a growing stream.
+   */
+  prenormalized?: boolean;
   hasSegments: boolean;
   maxSegmentTimeMs: number;
   frames: DeltaFrame[];
@@ -183,6 +190,9 @@ function assembleRecording(state: DecodedStreamState): Recording {
     audioBlob: state.audioBlob,
     audioSource: meta.audioSource,
     audioStartOffsetMs,
+    // Audio may live outside the stream — the header then carries only the reference.
+    audioFile: meta.audioFile,
+    audioUrl: meta.audioUrl,
     // Camera is always external — the stream carries only the reference/metadata, never bytes.
     cameraSource: meta.cameraSource,
     cameraStartOffsetMs,
@@ -215,12 +225,14 @@ function assembleRecording(state: DecodedStreamState): Recording {
         )
       : deriveRecordingMediaFragments(provisionalRecording, tracks, clusters);
 
-  return normalizeRecordingData({
+  const assembled: Recording = {
     ...provisionalRecording,
     tracks: tracks.length > 0 ? tracks : undefined,
     clusters: clusters.length > 0 ? clusters : undefined,
     mediaFragments: mediaFragments.length > 0 ? mediaFragments : undefined,
-  });
+  };
+
+  return state.prenormalized ? assembled : normalizeRecordingData(assembled);
 }
 
 function mediaFragmentFromSegment(
@@ -411,7 +423,9 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   const audioFragments: RecordingMediaFragment[] = [];
   const clusterMap = new Map<number, RecordingClusterMeta>();
 
+  const audioChunks: BlobPart[] = [];
   let audioBlob: Blob | undefined;
+  let audioBlobStale = false;
   let segmentCount = 0;
   let maxSegmentTimeMs = 0;
 
@@ -460,7 +474,10 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     let commit: () => void;
     switch (header.kind) {
       case SEGMENT_KIND.frames: {
-        const records = decodeRecords<DeltaFrame>(payload);
+        // Normalize each frame once, as it arrives. `getRecording()` then skips the
+        // whole-recording normalize pass (`prenormalized`), so progressive decoding
+        // stays O(total bytes) instead of re-cloning every frame per interval.
+        const records = decodeRecords<DeltaFrame>(payload).map(normalizeDeltaFrame);
         commit = () => frames.push(...records);
         break;
       }
@@ -502,12 +519,13 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       case SEGMENT_KIND.audioChunk: {
         // Copy out of the growable buffer (it may be reallocated on the next push).
         const chunk = payload.slice();
-        const type = meta.audioType || "audio/webm";
         const mediaMeta = meta;
         commit = () => {
-          audioBlob = audioBlob
-            ? new Blob([audioBlob, chunk], { type })
-            : new Blob([chunk], { type });
+          // Collect raw chunks; the Blob is (re)built flat in `getRecording()`. Nesting
+          // `new Blob([prev, chunk])` per segment builds a thousands-deep Blob chain over
+          // a long recording, making every later read progressively more expensive.
+          audioChunks.push(chunk);
+          audioBlobStale = true;
           audioFragments.push(mediaFragmentFromSegment(mediaMeta, "audio", header, chunk.length));
         };
         break;
@@ -585,13 +603,21 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     },
     getRecording() {
       if (!headerParsed || !meta) return null;
+      if (audioBlobStale) {
+        audioBlob = new Blob(audioChunks, { type: meta.audioType || "audio/webm" });
+        audioBlobStale = false;
+      }
       return assembleRecording({
         meta,
         formatVersion,
         streamFinalized: finalized,
+        // Frames were normalized at ingest; skip the whole-recording normalize pass.
+        prenormalized: true,
         hasSegments: segmentCount > 0,
         maxSegmentTimeMs: Math.max(meta.duration, maxSegmentTimeMs),
-        frames,
+        // Fresh array per snapshot so consumers keyed on reference see the growth;
+        // copying pointers is cheap, unlike the per-frame deep clone this replaces.
+        frames: frames.slice(),
         slideEvents,
         previewEvents,
         previewInitialDocuments,

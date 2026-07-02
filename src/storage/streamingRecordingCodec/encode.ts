@@ -4,6 +4,7 @@ import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
 import { isKeyframe } from "../../core/src/utils/deltaTypes";
 import { normalizeRecordingData } from "../../core/src/utils/editorState";
 import {
+  audioMimeFromFilename,
   buildFooterChunk,
   buildHeaderChunk,
   buildSegmentChunk,
@@ -287,7 +288,13 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
   const normalized = normalizeRecordingData(recording);
   const tracks = deriveRecordingTracks(normalized);
   const clusters = deriveRecordingClusters(normalized);
-  const audioFragments = await materializeMediaSegments(normalized, "audio", tracks, clusters);
+  // Externalized audio (a sibling file/URL) is never embedded — like camera, the stream
+  // carries only the reference and metadata in its header, keeping the `.ne` small.
+  const hasExternalAudio = Boolean(normalized.audioFile || normalized.audioUrl);
+  const audioFragments = hasExternalAudio
+    ? []
+    : await materializeMediaSegments(normalized, "audio", tracks, clusters);
+  const hasAudio = audioFragments.length > 0 || hasExternalAudio;
   // Camera video is never embedded in the stream — its bytes live in a separate file/blob. The
   // stream carries only the camera reference and metadata in its header.
   const hasCamera = Boolean(
@@ -309,9 +316,13 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     duration: normalized.duration,
     tracks,
     clusters,
-    audioType: audioFragments.length > 0 ? audioTrack?.mimeType || "audio/webm" : undefined,
-    audioSource: audioFragments.length > 0 ? normalized.audioSource : undefined,
-    audioStartOffsetMs: audioFragments.length > 0 ? normalized.audioStartOffsetMs : undefined,
+    audioType: hasAudio
+      ? audioTrack?.mimeType || audioMimeFromFilename(normalized.audioFile) || "audio/webm"
+      : undefined,
+    audioSource: hasAudio ? normalized.audioSource : undefined,
+    audioStartOffsetMs: hasAudio ? normalized.audioStartOffsetMs : undefined,
+    audioFile: normalized.audioFile,
+    audioUrl: normalized.audioUrl,
     cameraType: hasCamera
       ? cameraTrack?.mimeType || cameraMimeFromFilename(normalized.cameraFile) || "video/webm"
       : undefined,

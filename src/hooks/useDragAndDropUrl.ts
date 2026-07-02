@@ -35,7 +35,7 @@ export const useDragAndDropUrl = () => {
       e.preventDefault();
       setIsDragging(false);
 
-      // Handle file drops — accept a `.ne` plus an optional sibling camera video.
+      // Handle file drops — accept a `.ne` plus optional sibling camera video / audio files.
       const files = e.dataTransfer?.files;
       if (files && files.length > 0) {
         const dropped = Array.from(files);
@@ -43,12 +43,18 @@ export const useDragAndDropUrl = () => {
           (file) => file.name.endsWith(".png") || file.name.endsWith(".ne"),
         );
         if (neFile) {
+          const audioFile = dropped.find(
+            (file) =>
+              file !== neFile &&
+              (file.type.startsWith("audio/") || /\.(weba|ogg|m4a|mp3|wav)$/i.test(file.name)),
+          );
           const videoFile = dropped.find(
             (file) =>
               file !== neFile &&
+              file !== audioFile &&
               (file.type.startsWith("video/") || /\.(webm|mp4|mov)$/i.test(file.name)),
           );
-          await importNextEditorFile(neFile, videoFile);
+          await importNextEditorFile(neFile, videoFile, audioFile);
         }
       }
 

@@ -96,6 +96,10 @@ export interface RecordingStreamMeta {
   audioType?: string;
   audioSource?: RecordingAudioSource;
   audioStartOffsetMs?: number;
+  /** Sibling audio filename when audio bytes live outside the stream (see {@link Recording.audioFile}). */
+  audioFile?: string;
+  /** Resolved/absolute URL for external audio, when known at encode time. */
+  audioUrl?: string;
   cameraType?: string;
   cameraSource?: RecordingCameraSource;
   cameraStartOffsetMs?: number;
@@ -366,4 +370,36 @@ export function cameraExtensionFromMime(mimeType: string | undefined): string {
     }
   }
   return "webm";
+}
+
+// ----------------------------------------------------------------------------
+// External audio MIME <-> filename extension helpers
+// ----------------------------------------------------------------------------
+
+// `weba` (not `webm`) for audio/webm so a sibling audio file never collides with the
+// sibling camera video (`<name>.webm`) exported next to the same `.ne`.
+const AUDIO_MIME_BY_EXT: Record<string, string> = {
+  weba: "audio/webm",
+  ogg: "audio/ogg",
+  m4a: "audio/mp4",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+};
+
+/** Best-effort audio MIME type inferred from a sibling audio filename's extension. */
+export function audioMimeFromFilename(filename: string | undefined): string | undefined {
+  if (!filename) return undefined;
+  const ext = filename.split(".").pop()?.toLowerCase();
+  return ext ? AUDIO_MIME_BY_EXT[ext] : undefined;
+}
+
+/** Sibling audio file extension (no dot) for an audio blob's MIME type; defaults to `weba`. */
+export function audioExtensionFromMime(mimeType: string | undefined): string {
+  if (mimeType) {
+    const base = mimeType.split(";")[0].trim().toLowerCase();
+    for (const [ext, mime] of Object.entries(AUDIO_MIME_BY_EXT)) {
+      if (mime === base) return ext;
+    }
+  }
+  return "weba";
 }

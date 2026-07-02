@@ -640,7 +640,11 @@ export const editorMachine = setup({
     // only swap in the larger frames/events arrays and let the replay cursors catch up.
     extendRecording: assign(({ context, event }) => {
       if (event.type !== "EXTEND_RECORDING" || !context.recording) return {};
-      const recording = normalizeRecordingData(event.recording);
+      // Extended recordings come from the codec (streaming reader / decoder), which
+      // already normalized every frame. Re-normalizing here deep-cloned the entire
+      // growing frame array on each progressive-decode interval — O(n²) over a
+      // long download — for no behavioral difference.
+      const recording = event.recording;
       return {
         recording,
         timeline: {
@@ -1811,7 +1815,16 @@ export const editorMachine = setup({
                   },
                 });
                 enqueue.assign({ playbackAudioSpawned: true });
-              } else {
+              } else if (
+                audioState.finalized ||
+                self.getSnapshot().matches({ playback: "playing" })
+              ) {
+                // Each APPEND_FRAGMENT makes the audio actor decode the *entire*
+                // accumulated blob again (`decodeAudioData` over a growing buffer).
+                // During a progressive URL load that fired every download interval —
+                // quadratic decode work that pinned several cores on long recordings.
+                // Only pay for it when playback is actually running (audio must keep
+                // extending under the playhead) or on the final, complete blob.
                 enqueue.sendTo("audioPlayer", {
                   type: "APPEND_FRAGMENT",
                   blob: audioState.blob,

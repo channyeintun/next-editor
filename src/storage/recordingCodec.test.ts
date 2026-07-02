@@ -8,7 +8,7 @@ import {
   decodeRecordingStream,
   encodeRecordingToStream,
 } from "./streamingRecordingCodec";
-import { FLAG_HAS_CAMERA } from "./streamingRecordingCodec/format";
+import { FLAG_HAS_AUDIO, FLAG_HAS_CAMERA } from "./streamingRecordingCodec/format";
 
 function makeKeyframe(timestamp: number, content: string) {
   return {
@@ -185,6 +185,37 @@ describe("recordingCodec", () => {
     expect(streamed.cameraBlob).toBeUndefined();
     expect(oneShot.cameraBlob).toBeUndefined();
     expect(streamed.cameraSource).toBe("camera");
+  });
+
+  it("progressive snapshots reuse already-normalized frames instead of re-cloning them", async () => {
+    // Regression guard for the long-recording CPU spike: frames are normalized once at
+    // ingest, so successive getRecording() snapshots must hand back the *same* frame
+    // objects (reference-equal), not fresh deep clones of the whole growing array.
+    const recording = createRecording({
+      duration: 800,
+      frames: [makeKeyframe(0, "a\n"), makeKeyframe(500, "ab\n")],
+    });
+    const bytes = await encodeRecordingToStream(recording);
+
+    const reader = createStreamingRecordingReader();
+    // Withhold only the footer so every frame segment is decodable in the first snapshot.
+    const footerHoldback = 16;
+    reader.push(bytes.subarray(0, bytes.length - footerHoldback));
+    const early = reader.getRecording();
+    if (!early) throw new Error("Expected an early decoded snapshot");
+    expect(early.frames.length).toBeGreaterThan(0);
+
+    reader.push(bytes.subarray(bytes.length - footerHoldback));
+    const late = reader.getRecording();
+    if (!late) throw new Error("Expected a decoded recording");
+
+    // Snapshot arrays are fresh (so consumers see growth), but their frame objects are not.
+    expect(late.frames[0]).toBe(early.frames[0]);
+    expect(late.frames).not.toBe(early.frames);
+    const again = reader.getRecording();
+    if (!again) throw new Error("Expected a repeat snapshot");
+    expect(again.frames[0]).toBe(late.frames[0]);
+    expect(again.frames).not.toBe(late.frames);
   });
 
   it("decodes a replayable prefix before the footer arrives, then finalizes", async () => {
@@ -431,6 +462,67 @@ describe("recordingCodec", () => {
     const decoded = decodeRecordingStream(bytes);
 
     expect(decoded.captions).toBeUndefined();
+  });
+
+  it("externalizes audio as a sibling reference instead of inline chunks", async () => {
+    // A recording whose audio lives in its own file carries only an `audioFile` reference. The
+    // stream must still advertise an audio track but embed no audio bytes — this is what keeps
+    // long recordings' `.ne` files small.
+    const recording = createRecording({
+      duration: 800,
+      frames: [makeKeyframe(0, "a\n"), makeKeyframe(500, "ab\n")],
+      audioFile: "recording-1.weba",
+      audioSource: "microphone",
+      audioStartOffsetMs: 150,
+    });
+
+    const bytes = await encodeRecordingToStream(recording);
+
+    // Header still advertises an audio track via FLAG_HAS_AUDIO (flags u16 at byte offset 6)...
+    const flags = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint16(6, true);
+    expect(flags & FLAG_HAS_AUDIO).toBeTruthy();
+
+    const decoded = decodeRecordingStream(bytes);
+    expect(decoded.audioFile).toBe("recording-1.weba");
+    expect(decoded.audioSource).toBe("microphone");
+    expect(decoded.audioStartOffsetMs).toBe(150);
+    expect(decoded.tracks?.some((track) => track.kind === "audio")).toBe(true);
+    // ...but no audio bytes were embedded, so there is no reassembled blob.
+    expect(decoded.audioBlob).toBeUndefined();
+    expect(decoded.mediaFragments?.some((fragment) => fragment.trackId === "audio")).toBeFalsy();
+  });
+
+  it("does not embed audio bytes when a recording carries both a blob and an audioFile", async () => {
+    // Export sets `audioFile` and drops the blob, but the encoder must be safe against a caller
+    // passing both: the external reference wins and no inline chunks are written.
+    const recording = createRecording({
+      audioBlob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: "audio/webm" }),
+      audioFile: "recording-1.weba",
+      audioSource: "microphone",
+    });
+
+    const bytes = await encodeRecordingToStream(recording);
+    const decoded = decodeRecordingStream(bytes);
+
+    expect(decoded.audioFile).toBe("recording-1.weba");
+    expect(decoded.audioBlob).toBeUndefined();
+  });
+
+  it("round trips an externalized audio reference through the base64 .ne path", async () => {
+    const recording = createRecording({
+      audioFile: "my-recording.weba",
+      audioUrl: "https://example.com/my-recording.weba",
+      audioSource: "external",
+      audioStartOffsetMs: 40,
+    });
+
+    const encoded = await encodeRecordingToBase64Stream(recording);
+    const [decoded] = await decodeBase64ToRecordings(encoded);
+
+    expect(decoded.audioFile).toBe("my-recording.weba");
+    expect(decoded.audioUrl).toBe("https://example.com/my-recording.weba");
+    expect(decoded.audioStartOffsetMs).toBe(40);
+    expect(decoded.audioBlob).toBeUndefined();
   });
 
   it("round trips an externalized camera through the base64 .ne path", async () => {

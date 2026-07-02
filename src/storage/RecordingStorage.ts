@@ -11,7 +11,7 @@ import {
   encodeRecordingToStream,
   normalizeRecording,
 } from "./recordingCodecClient";
-import { cameraExtensionFromMime } from "./streamingRecordingCodec/format";
+import { audioExtensionFromMime, cameraExtensionFromMime } from "./streamingRecordingCodec/format";
 import { createImportedCameraObjectUrl } from "./cameraVideoUrl";
 
 interface StorageStats {
@@ -23,6 +23,11 @@ interface StorageStats {
 
 function stripExtension(filename: string): string {
   return filename.replace(/\.[^.]+$/, "");
+}
+
+/** True for companion files that are audio (by MIME, or by extension for `.weba` etc.). */
+export function isAudioFile(file: File): boolean {
+  return file.type.startsWith("audio/") || /\.(weba|ogg|m4a|mp3|wav)$/i.test(file.name);
 }
 
 /**
@@ -44,24 +49,32 @@ function hasMediaPayload(blob: unknown, sizeKey: "__audio_size" | "__camera_size
 }
 
 /**
- * Choose the camera video file that pairs with an imported `.ne`. Prefers an exact `cameraFile`
- * name match, then a basename match against the `.ne`, then the sole video file if only one was
- * provided. Returns null when nothing matches (the recording then plays without camera).
+ * Choose the media file that pairs with an imported `.ne`. Prefers an exact referenced-name
+ * match, then a basename match against the `.ne`, then the sole candidate if only one was
+ * provided. Returns null when nothing matches (the recording then plays without that media).
  */
+function pickCompanionFile(
+  candidates: File[],
+  neFileName: string,
+  referencedName: string | undefined,
+): File | null {
+  if (candidates.length === 0) return null;
+  if (referencedName) {
+    const exact = candidates.find((candidate) => candidate.name === referencedName);
+    if (exact) return exact;
+  }
+  const baseName = stripExtension(neFileName);
+  const byBase = candidates.find((candidate) => stripExtension(candidate.name) === baseName);
+  if (byBase) return byBase;
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
 export function pickCompanionVideo(
   videos: File[],
   neFileName: string,
   cameraFile: string | undefined,
 ): File | null {
-  if (videos.length === 0) return null;
-  if (cameraFile) {
-    const exact = videos.find((video) => video.name === cameraFile);
-    if (exact) return exact;
-  }
-  const baseName = stripExtension(neFileName);
-  const byBase = videos.find((video) => stripExtension(video.name) === baseName);
-  if (byBase) return byBase;
-  return videos.length === 1 ? videos[0] : null;
+  return pickCompanionFile(videos, neFileName, cameraFile);
 }
 
 /**
@@ -77,6 +90,22 @@ export function attachCompanionVideo(
   const video = pickCompanionVideo(videos, neFileName, recording.cameraFile);
   if (!video) return recording;
   return { ...recording, cameraUrl: createImportedCameraObjectUrl(video) };
+}
+
+/**
+ * Attach a companion audio file to a recording, when the recording references external audio
+ * (`audioFile`) and a matching file is present. The `File` is attached directly as `audioBlob`
+ * (a `File` is a `Blob`), so the existing blob playback path works unchanged.
+ */
+export function attachCompanionAudio(
+  recording: Recording,
+  audios: File[],
+  neFileName: string,
+): Recording {
+  if (!recording.audioFile || recording.audioBlob instanceof Blob) return recording;
+  const audio = pickCompanionFile(audios, neFileName, recording.audioFile);
+  if (!audio) return recording;
+  return { ...recording, audioBlob: audio };
 }
 
 /**
@@ -199,9 +228,10 @@ export class RecordingStorage {
   }
 
   /**
-   * Export a recording. Camera video is written to its own sibling file so the `.ne` stays small
-   * and the video can be range-streamed by a native `<video>` on load: a camera recording exports
-   * as two files (`<name>.ne` + `<name>.<ext>`), one without camera as a single `.ne`.
+   * Export a recording. Camera video and audio are each written to their own sibling file so the
+   * `.ne` stays small (audio dominates long recordings) and media can be streamed natively on
+   * load: a full recording exports as `<name>.ne` + `<name>.<video-ext>` + `<name>.<audio-ext>`;
+   * one without media as a single `.ne`.
    */
   async exportAsFile(recording: Recording, filename?: string): Promise<void> {
     try {
@@ -213,7 +243,16 @@ export class RecordingStorage {
       let videoName: string | null = null;
       if (cameraBlob) {
         videoName = `${baseFilename}.${cameraExtensionFromMime(cameraBlob.type)}`;
-        recordingToEncode = { ...recording, cameraBlob: undefined, cameraFile: videoName };
+        recordingToEncode = { ...recordingToEncode, cameraBlob: undefined, cameraFile: videoName };
+      }
+
+      // Externalize the audio blob the same way (`.weba` etc., so it never collides with the
+      // camera's `.webm`). The encoder then writes no inline `audioChunk` segments.
+      const audioBlob = recording.audioBlob instanceof Blob ? recording.audioBlob : null;
+      let audioName: string | null = null;
+      if (audioBlob && audioBlob.size > 0) {
+        audioName = `${baseFilename}.${audioExtensionFromMime(audioBlob.type)}`;
+        recordingToEncode = { ...recordingToEncode, audioBlob: undefined, audioFile: audioName };
       }
 
       const base64Data = await encodeRecordingToBase64Stream(recordingToEncode);
@@ -223,9 +262,14 @@ export class RecordingStorage {
       );
 
       if (cameraBlob && videoName) {
-        // Small gap so the browser doesn't collapse the two programmatic downloads into one.
+        // Small gap so the browser doesn't collapse consecutive programmatic downloads into one.
         await new Promise((resolve) => setTimeout(resolve, 150));
         this.downloadBlob(cameraBlob, videoName);
+      }
+
+      if (audioBlob && audioName) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        this.downloadBlob(audioBlob, audioName);
       }
     } catch (error) {
       throw new Error(
@@ -247,17 +291,18 @@ export class RecordingStorage {
   }
 
   /**
-   * Import recordings from a `.ne` file, optionally paired with a sibling camera video. The picker
-   * allows selecting both files together; the video is matched to the recording's `cameraFile` (or
-   * by basename) and exposed via an object URL on `cameraUrl`. A missing video is not an error —
-   * the recording loads and plays without the camera overlay.
+   * Import recordings from a `.ne` file, optionally paired with sibling media files. The picker
+   * allows selecting them together; the camera video is matched to the recording's `cameraFile`
+   * (or by basename) and exposed via an object URL on `cameraUrl`, and the audio file is matched
+   * to `audioFile` and attached as `audioBlob`. Missing media is not an error — the recording
+   * loads and plays without it.
    */
   importFromFile(): Promise<Recording[]> {
     return new Promise((resolve, reject) => {
       const input = document.createElement("input");
       input.type = "file";
       input.multiple = true;
-      input.accept = ".ne,.webm,.mp4,.mov,video/*";
+      input.accept = ".ne,.webm,.mp4,.mov,video/*,.weba,.ogg,.m4a,.mp3,.wav,audio/*";
 
       input.onchange = async (event) => {
         const files = Array.from((event.target as HTMLInputElement).files ?? []);
@@ -266,7 +311,9 @@ export class RecordingStorage {
           reject(new Error("No .ne file selected"));
           return;
         }
-        const videoFiles = files.filter((file) => file !== neFile);
+        const companions = files.filter((file) => file !== neFile);
+        const audioFiles = companions.filter(isAudioFile);
+        const videoFiles = companions.filter((file) => !isAudioFile(file));
 
         try {
           // Read file as text and validate it's not empty/undefined
@@ -295,9 +342,14 @@ export class RecordingStorage {
             return;
           }
 
-          // Attach the companion camera video (if provided) so playback streams it directly.
+          // Attach companion media (if provided): camera video streams via object URL,
+          // audio attaches as the playback blob.
           const withVideo = importedRecordings.map((recording) =>
-            attachCompanionVideo(recording, videoFiles, neFile.name),
+            attachCompanionAudio(
+              attachCompanionVideo(recording, videoFiles, neFile.name),
+              audioFiles,
+              neFile.name,
+            ),
           );
 
           // Don't save to localStorage to avoid quota issues with large files

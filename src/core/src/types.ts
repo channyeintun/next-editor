@@ -209,6 +209,16 @@ export interface Recording {
   audioSource?: RecordingAudioSource;
   /** Audio start offset (ms) between the recording origin and the first decodable audio byte. */
   audioStartOffsetMs?: number;
+  /**
+   * Sibling audio filename for audio stored outside the `.ne` (e.g. `recording-xyz.weba`).
+   * When set, the stream carries no inline `audioChunk` segments; the audio lives in its own file.
+   */
+  audioFile?: string;
+  /**
+   * Resolved URL for the external audio — a hosted sibling URL or an object URL created from an
+   * imported file. Playback fetches the audio from here when no `audioBlob` is attached.
+   */
+  audioUrl?: string;
   cameraBlob?: Blob | CameraPlaceholder;
   cameraSource?: RecordingCameraSource;
   /** Camera warmup offset (ms) between the recording origin and the first camera frame. */

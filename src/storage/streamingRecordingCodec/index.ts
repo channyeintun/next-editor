@@ -9,7 +9,14 @@
 // This module simply re-exports the public surface so callers keep importing from
 // "streamingRecordingCodec" unchanged.
 
-export { STREAM_MAGIC, SEGMENT_KIND, isStreamingRecording, readRecordTimestamp } from "./format";
+export {
+  STREAM_MAGIC,
+  SEGMENT_KIND,
+  isStreamingRecording,
+  readRecordTimestamp,
+  audioMimeFromFilename,
+  audioExtensionFromMime,
+} from "./format";
 export type { SegmentKind, RecordingStreamMeta } from "./format";
 
 export { createStreamingRecordingWriter, encodeRecordingToStream } from "./encode";
