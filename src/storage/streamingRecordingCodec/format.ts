@@ -27,17 +27,16 @@ import type { WorkspaceRecordingSnapshot } from "../../types/workspace";
 // Three independent "version" numbers exist; do not conflate them:
 //   * STREAM_MAGIC ("SCR3")     — container family marker (the file magic).
 //   * STREAM_FORMAT_VERSION (2) — on-wire byte layout of the segment headers.
-//                                 v1 used a 14-byte header; v2 uses 22 bytes.
-//   * meta.version (2 | 3)      — the Recording *schema* version carried inside
+//                                 The only supported layout; older layouts are
+//                                 rejected (no legacy compatibility).
+//   * meta.version (4)          — the Recording *schema* version carried inside
 //                                 the metadata, unrelated to the byte layout.
 //
 // Layout:
 //   Header:  "SCR3" | formatVersion u16 | flags u16 | metaLen u32 | meta bytes
 //            (meta bytes = deflate(msgpack(RecordingStreamMeta)))
-//   Segment v1: kind u8 | byteLength u32 | firstTimestampMs u32 |
-//               firstFrameIndex i32 | containsKeyframe u8 | payload (byteLength)
-//   Segment v2: kind u8 | byteLength u32 | startTimeMs u32 | endTimeMs u32 |
-//               firstFrameIndex i32 | clusterIndex u32 | flags u8 | payload
+//   Segment: kind u8 | byteLength u32 | startTimeMs u32 | endTimeMs u32 |
+//            firstFrameIndex i32 | clusterIndex u32 | flags u8 | payload
 //            (payload = deflate(msgpack(records[])); media fragments are raw bytes)
 //   Footer:  segmentCount u32 | index[count] | footerLen u32 | "SCR3"
 //            (index entry = kind u8 | byteOffset u32 | firstTs u32 | firstIdx i32)
@@ -58,8 +57,7 @@ const SEGMENT_FLAG_CONTAINS_KEYFRAME = 1 << 0;
 const SEGMENT_FLAG_IS_INIT = 1 << 1;
 
 export const HEADER_PREFIX_SIZE = 12;
-const LEGACY_SEGMENT_HEADER_SIZE = 14;
-const SEGMENT_HEADER_SIZE = 22;
+export const SEGMENT_HEADER_SIZE = 22;
 const INDEX_ENTRY_SIZE = 13;
 const FOOTER_TRAILER_SIZE = 8;
 const U32_MAX = 0xffffffff;
@@ -75,16 +73,14 @@ export const SEGMENT_KIND = {
   workspace: 5,
   runtime: 6,
   cursor: 7,
-  // 8 was `audioChunk` and 9 was `cameraChunk`. Media is now always stored externally (never
-  // inline in the stream) — audio as a sibling file referenced by `audioFile`/`audioUrl`, camera
-  // as a sibling video. Both kinds are retired and reserved — do not reuse 8 or 9 for new segment
-  // kinds, since older streams may still contain those chunks (now skipped as unknown on decode).
+  // Media is never stored inline in the stream — audio as a sibling file referenced by
+  // `audioFile`/`audioUrl`, camera as a sibling video. 8+ are free for future segment kinds.
 } as const;
 
 export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
 
 export interface RecordingStreamMeta {
-  version: 2 | 3;
+  version: 4;
   id: string;
   name: string;
   keyframeInterval: number;
@@ -263,13 +259,15 @@ export function isStreamingRecording(bytes: Uint8Array): boolean {
 export function parseHeader(bytes: Uint8Array): {
   meta: RecordingStreamMeta;
   headerEnd: number;
-  formatVersion: number;
 } {
   if (!isStreamingRecording(bytes)) {
     throw new Error("Invalid SCR3 stream: bad magic number");
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const formatVersion = view.getUint16(4, true);
+  if (formatVersion !== STREAM_FORMAT_VERSION) {
+    throw new Error(`Unsupported SCR3 format version: ${formatVersion}`);
+  }
   const metaLength = view.getUint32(8, true);
   const metaStart = HEADER_PREFIX_SIZE;
   const metaEnd = metaStart + metaLength;
@@ -277,7 +275,7 @@ export function parseHeader(bytes: Uint8Array): {
     throw new Error("Invalid SCR3 stream: bad header length");
   }
   const meta = msgpackDecode(unzlibSync(bytes.subarray(metaStart, metaEnd))) as RecordingStreamMeta;
-  return { meta, headerEnd: metaEnd, formatVersion };
+  return { meta, headerEnd: metaEnd };
 }
 
 export function findFooterStart(bytes: Uint8Array, headerEnd: number): number | null {
@@ -303,25 +301,14 @@ export function findFooterStart(bytes: Uint8Array, headerEnd: number): number | 
   return footerStart;
 }
 
-export function segmentHeaderSize(formatVersion: number): number {
-  return formatVersion < 2 ? LEGACY_SEGMENT_HEADER_SIZE : SEGMENT_HEADER_SIZE;
-}
-
-export function readSegmentHeader(
-  view: DataView,
-  offset: number,
-  formatVersion: number,
-): SegmentHeaderFields {
-  const isLegacy = formatVersion < 2;
+export function readSegmentHeader(view: DataView, offset: number): SegmentHeaderFields {
   const kind = view.getUint8(offset);
   const byteLength = view.getUint32(offset + 1, true);
   const startTimeMs = view.getUint32(offset + 5, true);
-  const endTimeMs = isLegacy ? startTimeMs : view.getUint32(offset + 9, true);
-  const firstFrameIndex = isLegacy
-    ? view.getInt32(offset + 9, true)
-    : view.getInt32(offset + 13, true);
-  const clusterIndex = isLegacy ? 0 : view.getUint32(offset + 17, true);
-  const flags = isLegacy ? view.getUint8(offset + 13) : view.getUint8(offset + 21);
+  const endTimeMs = view.getUint32(offset + 9, true);
+  const firstFrameIndex = view.getInt32(offset + 13, true);
+  const clusterIndex = view.getUint32(offset + 17, true);
+  const flags = view.getUint8(offset + 21);
   return {
     kind,
     byteLength,
@@ -329,8 +316,8 @@ export function readSegmentHeader(
     endTimeMs,
     firstFrameIndex,
     clusterIndex,
-    containsKeyframe: isLegacy ? flags === 1 : Boolean(flags & SEGMENT_FLAG_CONTAINS_KEYFRAME),
-    isInit: !isLegacy && Boolean(flags & SEGMENT_FLAG_IS_INIT),
+    containsKeyframe: Boolean(flags & SEGMENT_FLAG_CONTAINS_KEYFRAME),
+    isInit: Boolean(flags & SEGMENT_FLAG_IS_INIT),
   };
 }
 

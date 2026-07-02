@@ -181,12 +181,13 @@ export interface EditorFrame {
 
 /**
  * Complete recording with metadata
- * Version 3: uses frames array with keyframe + delta compression plus
- * workspace and runtime snapshots for multi-file mode.
+ * Version 4: keyframe + delta compressed frames (with mandatory base-integrity
+ * check ops in each content delta) plus workspace and runtime snapshots for
+ * multi-file mode. Older schema versions are not supported.
  */
 export interface Recording {
-  /** Recording schema version. Version 2 recordings remain supported on import. */
-  version: 2 | 3;
+  /** Recording schema version. Older versions are not decodable (no legacy support). */
+  version: 4;
   id: string;
   name: string;
   /** Delta compressed frames (keyframes + deltas) */
@@ -245,7 +246,7 @@ export interface Recording {
 /**
  * Sink for the live SCR3 recording byte stream (WebSocket / fetch ReadableStream /
  * callback). Receives append-only chunks as they are recorded and is closed when the
- * recording ends. The bytes form a valid SCR3 stream replayable via `decodeRecordingPrefix`.
+ * recording ends. The bytes form a valid SCR3 stream replayable via `decodeRecordingStream`.
  */
 export interface RecordingStreamSink {
   write(bytes: Uint8Array): void | Promise<void>;
@@ -266,7 +267,7 @@ export interface UseNextEditorConfig {
   /**
    * Optional sink for live, stream-compatible recording. When provided, the SCR3 byte
    * stream produced while recording is forwarded here as it is captured, so a remote
-   * consumer can tail and replay it with `decodeRecordingPrefix`. Inert when omitted.
+   * consumer can tail and replay it with `decodeRecordingStream`. Inert when omitted.
    */
   recordingStreamSink?: RecordingStreamSink;
 

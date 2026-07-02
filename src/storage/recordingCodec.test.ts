@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Recording } from "../core/src";
-import { decodeBase64 } from "../core/src/utils/base64";
 import { createFrameDelta, reconstructFrameAtIndex } from "../core/src/utils/frameDelta";
-import { decodeBase64ToRecordings, encodeRecordingToBase64Stream } from "./recordingCodec";
+import { decompressBinaryToRecordings } from "./recordingCodec";
 import {
   createStreamingRecordingReader,
   decodeRecordingStream,
@@ -34,7 +33,7 @@ function makeKeyframe(timestamp: number, content: string) {
 
 function createRecording(overrides: Partial<Recording> = {}): Recording {
   return {
-    version: 3,
+    version: 4,
     id: "recording-1",
     name: "Round trip recording",
     createdAt: 1_700_000_000_000,
@@ -75,30 +74,30 @@ describe("recordingCodec", () => {
     });
     const recording = createRecording({ audioBlob, audioSource: "external" });
 
-    const encoded = await encodeRecordingToBase64Stream(recording);
-    const [decoded] = await decodeBase64ToRecordings(encoded);
+    const encoded = await encodeRecordingToStream(recording);
+    const [decoded] = await decompressBinaryToRecordings(encoded);
 
     expect(decoded.id).toBe(recording.id);
-    expect(decoded.version).toBe(3);
+    expect(decoded.version).toBe(4);
     // Audio metadata survives, but the bytes live outside the `.ne` (sibling file / IDB blob).
     expect(decoded.audioSource).toBe("external");
     expect(decoded.audioBlob).toBeUndefined();
     expect(decoded.frames).toEqual(recording.frames);
   });
 
-  it("round trips a go-diff content delta through the zstd stream and reconstructs it", async () => {
+  it("round trips a dmp content delta through the stream and reconstructs it", async () => {
     const base = makeKeyframe(0, "line one\nline two\nline three\nline four\n");
-    // Two non-contiguous edits — the case the go-diff delta is meant to keep compact.
+    // Two non-contiguous edits — the case the Myers delta is meant to keep compact.
     const next = makeKeyframe(500, "LINE one\nline two\nline three\nLINE four\n");
     const deltaFrame = createFrameDelta(base, next);
     expect(deltaFrame.contentDelta?.delta).toBeInstanceOf(Uint8Array);
 
     const recording = createRecording({ duration: 800, frames: [base, deltaFrame] });
 
-    const encoded = await encodeRecordingToBase64Stream(recording);
-    const [decoded] = await decodeBase64ToRecordings(encoded);
+    const encoded = await encodeRecordingToStream(recording);
+    const [decoded] = await decompressBinaryToRecordings(encoded);
 
-    // The opaque delta must survive msgpack-bin + zstd byte-for-byte...
+    // The opaque delta must survive msgpack-bin + deflate byte-for-byte...
     expect(decoded.frames).toEqual(recording.frames);
     // ...and still reconstruct the edited content during replay.
     const reconstructed = reconstructFrameAtIndex(decoded.frames, 1);
@@ -208,49 +207,10 @@ describe("recordingCodec", () => {
     expect(reader.getRecording()?.streamFinalized).toBe(true);
   });
 
-  it("streams a base64-wrapped recording fed as aligned groups (the .ne text path)", async () => {
-    // The shipped `.ne` files are base64-wrapped SCR3 streams, so the loader decodes whole
-    // 4-char base64 groups into bytes and pushes them to the same incremental reader. This
-    // mirrors that path and asserts it reconstructs the recording identically.
-    const recording = createRecording({
-      duration: 800,
-      frames: [makeKeyframe(0, "a\n"), makeKeyframe(500, "ab\n")],
-      audioSource: "external",
-      audioBlob: new Blob([new Uint8Array([7, 8, 9])], { type: "audio/webm" }),
-    });
-
-    const base64 = await encodeRecordingToBase64Stream(recording);
-    const oneShot = (await decodeBase64ToRecordings(base64))[0];
-
-    const reader = createStreamingRecordingReader();
-    let cleanBase64 = "";
-    let decoded = 0;
-    const feed = () => {
-      const boundary = cleanBase64.length - (cleanBase64.length % 4);
-      if (boundary <= decoded) return;
-      const bytes = decodeBase64(cleanBase64.slice(decoded, boundary));
-      decoded = boundary;
-      if (bytes.length > 0) reader.push(bytes);
-    };
-
-    // Network slices of 7 chars (not a multiple of 4) stress the group alignment.
-    const SLICE = 7;
-    for (let offset = 0; offset < base64.length; offset += SLICE) {
-      cleanBase64 += base64.slice(offset, offset + SLICE).replace(/\s/g, "");
-      feed();
-    }
-    feed(); // final (padded) group
-
-    const streamed = reader.getRecording();
-    expect(streamed).not.toBeNull();
-    expect(reader.isFinalized()).toBe(true);
-    if (!streamed) throw new Error("Expected a streamed recording");
-
-    expect(streamed.frames).toEqual(oneShot.frames);
-    expect(streamed.duration).toBe(oneShot.duration);
-    expect(streamed.streamFinalized).toBe(true);
-    // Audio bytes are never part of the stream.
-    expect(streamed.audioBlob).toBeUndefined();
+  it("rejects bytes that are not an SCR3 stream", async () => {
+    await expect(decompressBinaryToRecordings(new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow(
+      /SCR3/,
+    );
   });
 
   it("externalizes camera as a sibling reference instead of inline chunks", async () => {
@@ -330,13 +290,13 @@ describe("recordingCodec", () => {
       ],
     });
 
-    const encoded = await encodeRecordingToBase64Stream(recording);
-    const [decoded] = await decodeBase64ToRecordings(encoded);
+    const encoded = await encodeRecordingToStream(recording);
+    const [decoded] = await decompressBinaryToRecordings(encoded);
 
     expect(decoded.captions).toEqual(recording.captions);
   });
 
-  it("round trips a recording without captions (backwards compat)", async () => {
+  it("round trips a recording without captions", async () => {
     const recording = createRecording();
 
     const bytes = await encodeRecordingToStream(recording);
@@ -389,7 +349,7 @@ describe("recordingCodec", () => {
     expect(decoded.audioBlob).toBeUndefined();
   });
 
-  it("round trips an externalized audio reference through the base64 .ne path", async () => {
+  it("round trips an externalized audio reference through the .ne path", async () => {
     const recording = createRecording({
       audioFile: "my-recording.weba",
       audioUrl: "https://example.com/my-recording.weba",
@@ -397,8 +357,8 @@ describe("recordingCodec", () => {
       audioStartOffsetMs: 40,
     });
 
-    const encoded = await encodeRecordingToBase64Stream(recording);
-    const [decoded] = await decodeBase64ToRecordings(encoded);
+    const encoded = await encodeRecordingToStream(recording);
+    const [decoded] = await decompressBinaryToRecordings(encoded);
 
     expect(decoded.audioFile).toBe("my-recording.weba");
     expect(decoded.audioUrl).toBe("https://example.com/my-recording.weba");
@@ -406,15 +366,15 @@ describe("recordingCodec", () => {
     expect(decoded.audioBlob).toBeUndefined();
   });
 
-  it("round trips an externalized camera through the base64 .ne path", async () => {
+  it("round trips an externalized camera through the .ne path", async () => {
     const recording = createRecording({
       cameraFile: "my-recording.webm",
       cameraSource: "camera",
       cameraStartOffsetMs: 80,
     });
 
-    const encoded = await encodeRecordingToBase64Stream(recording);
-    const [decoded] = await decodeBase64ToRecordings(encoded);
+    const encoded = await encodeRecordingToStream(recording);
+    const [decoded] = await decompressBinaryToRecordings(encoded);
 
     expect(decoded.cameraFile).toBe("my-recording.webm");
     expect(decoded.cameraStartOffsetMs).toBe(80);

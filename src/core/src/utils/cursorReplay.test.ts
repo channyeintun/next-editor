@@ -27,7 +27,7 @@ const createFrame = (
 });
 
 const createRecording = (frames: EditorFrame[]): Recording => ({
-  version: 3,
+  version: 4,
   id: "test",
   name: "Test",
   frames: compressFrames(frames),

@@ -2,9 +2,10 @@
 //
 // This is the recording codec's content-delta primitive: `diffDelta(a, b)`
 // produces an opaque, compact delta that `applyDelta(a, delta)` turns back into
-// `b`. It is a faithful port of the prior AssemblyScript module (../assembly)
-// and emits a **byte-identical** delta format, so deltas stored by older
-// (AssemblyScript-built) recordings still decode here unchanged.
+// `b`. The diff core is a faithful diff-match-patch port; the delta wire format
+// extends the original op stream with a mandatory leading CHECK op (base hash),
+// so every apply verifies it is running against the base it was diffed from.
+// Pre-CHECK deltas are not accepted (no legacy decoding).
 //
 // It is intentionally a pure-compute module with **zero host imports** — the
 // panic handler traps via the `unreachable` instruction instead of importing
@@ -17,8 +18,9 @@
 // ABI: all data crosses through linear `memory`. The host writes inputs into
 // buffers from `alloc`, calls a codec function, reads the packed `u64` result
 // `(ptr << 32) | len`, then releases buffers with `freeBuf`. A result of `0`
-// means empty; `ERR` (all ones) means failure (corrupt/mismatched delta). This
-// mirrors the AssemblyScript ABI so the JS host's reader is unchanged.
+// means empty; `ERR` (all ones) means a corrupt/truncated delta; `ERR_BASE`
+// (all ones minus one) means the delta is well-formed but the base does not
+// match its CHECK hash (a replay desync — the actionable error).
 //
 // SIZE BOUND: offsets and op lengths are u32 and the serialized op tag is
 // `(len << 2) | type`, so each buffer and each single op must stay under ~2^30
@@ -178,7 +180,14 @@ unsafe impl GlobalAlloc for Heap {
 // ---------------------------------------------------------------------------
 // Constants and result packing.
 // ---------------------------------------------------------------------------
+// Two distinct failure sentinels so the host can attribute the error:
+//   ERR      — structurally corrupt/truncated delta, or oversized input.
+//   ERR_BASE — the delta is well-formed but was applied to the wrong base
+//              (missing/failed CHECK op, or source-length mismatch).
+// Both are impossible ptr/len packs: a real pack's ptr is a heap address well
+// below 2^32 - 1.
 const ERR: u64 = 0xffff_ffff_ffff_ffff;
+const ERR_BASE: u64 = 0xffff_ffff_ffff_fffe;
 
 // Buffers must stay under this so `(len << 2) | type` fits a u32 without silently
 // truncating (see SIZE BOUND). An op's length never exceeds its buffer's, so
@@ -189,9 +198,26 @@ const MAX_BUF: usize = 1 << 30;
 //   EQUAL  — copy `len` bytes from the source at the apply cursor
 //   DELETE — skip `len` bytes of source
 //   INSERT — copy `len` literal bytes that follow in the delta
+//   CHECK  — `len` hash bytes follow (always 4: FNV-1a of the whole base).
+//            Mandatory first op of every delta; applyDelta refuses a delta
+//            whose base hash does not match (ERR_BASE), so applying against
+//            the wrong base fails loudly instead of silently corrupting.
 const EQUAL: u8 = 0;
 const DELETE: u8 = 1;
 const INSERT: u8 = 2;
+const CHECK: u8 = 3;
+const CHECK_HASH_LEN: usize = 4;
+
+// FNV-1a (32-bit) over the base bytes — tiny, allocation-free, and plenty to
+// catch a desynced replay base (this is integrity checking, not cryptography).
+fn fnv1a32(bytes: &[u8]) -> u32 {
+    let mut hash: u32 = 0x811c_9dc5;
+    for &byte in bytes {
+        hash ^= byte as u32;
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash
+}
 
 #[inline]
 fn pack(ptr: usize, len: usize) -> u64 {
@@ -520,7 +546,10 @@ pub extern "C" fn diffDelta(a_ptr: u32, a_len: u32, b_ptr: u32, b_len: u32) -> u
     let mut ops = Ops::new();
     diff_main(&mut ops, a, b);
 
-    let mut size = 0usize;
+    // Every delta starts with a mandatory CHECK op carrying the base hash, so a
+    // delta is never empty — even for identical or empty inputs.
+    let check_tag = ((CHECK_HASH_LEN as u32) << 2) | CHECK as u32;
+    let mut size = varint_size(check_tag) + CHECK_HASH_LEN;
     for i in 0..ops.kind.len() {
         let tag = ((ops.len[i] as u32) << 2) | ops.kind[i] as u32;
         size += varint_size(tag);
@@ -528,17 +557,14 @@ pub extern "C" fn diffDelta(a_ptr: u32, a_len: u32, b_ptr: u32, b_len: u32) -> u
             size += ops.len[i];
         }
     }
-    if size == 0 {
-        // `0` (empty result) is reserved for empty OUTPUT: applyDelta reads an
-        // empty delta as "produce nothing" and still requires the source to be
-        // fully consumed, so it only round-trips when a is empty too. Identical
-        // *non-empty* inputs do NOT reach here — they fall through to a compact
-        // EQUAL-only delta so applyDelta can copy the source back.
-        return 0;
-    }
 
     let out = unsafe { HEAP.raw_alloc(size) };
-    let mut o = out;
+    let mut o = unsafe { write_varint(out, check_tag) };
+    let base_hash = fnv1a32(a);
+    unsafe {
+        core::ptr::copy_nonoverlapping(base_hash.to_le_bytes().as_ptr(), o as *mut u8, CHECK_HASH_LEN);
+    }
+    o += CHECK_HASH_LEN;
     for i in 0..ops.kind.len() {
         let tag = ((ops.len[i] as u32) << 2) | ops.kind[i] as u32;
         o = unsafe { write_varint(o, tag) };
@@ -559,10 +585,31 @@ pub extern "C" fn applyDelta(a_ptr: u32, a_len: u32, d_ptr: u32, d_len: u32) -> 
     let d_ptr = d_ptr as usize;
     let d_end = d_ptr + d_len as usize;
 
-    // Pass 1: validate and size the output.
+    // Pass 1: validate and size the output. The first op MUST be the CHECK op —
+    // verify the base hash before trusting any EQUAL copy out of the source.
     let mut r = d_ptr;
     let mut out_len = 0usize;
     let mut src = 0usize;
+    {
+        let (tag, ok, next) = unsafe { read_varint(r, d_end) };
+        if !ok {
+            return ERR;
+        }
+        let kind = (tag & 3) as u8;
+        let len = (tag >> 2) as usize;
+        if kind != CHECK || len != CHECK_HASH_LEN || next + CHECK_HASH_LEN > d_end {
+            return ERR_BASE; // pre-check-op (legacy) or garbled delta head
+        }
+        let a = unsafe { core::slice::from_raw_parts(a_base as *const u8, a_len) };
+        let mut stored = [0u8; CHECK_HASH_LEN];
+        unsafe {
+            core::ptr::copy_nonoverlapping(next as *const u8, stored.as_mut_ptr(), CHECK_HASH_LEN);
+        }
+        if u32::from_le_bytes(stored) != fnv1a32(a) {
+            return ERR_BASE;
+        }
+        r = next + CHECK_HASH_LEN;
+    }
     while r < d_end {
         let (tag, ok, next) = unsafe { read_varint(r, d_end) };
         if !ok {
@@ -582,20 +629,21 @@ pub extern "C" fn applyDelta(a_ptr: u32, a_len: u32, d_ptr: u32, d_len: u32) -> 
                 return ERR;
             }
             src += len;
-        } else {
+        } else if kind == INSERT {
             if r + len > d_end {
                 return ERR;
             }
             r += len;
             out_len += len;
+        } else {
+            // A CHECK op is only valid as the delta's first op.
+            return ERR;
         }
     }
-    // A well-formed delta consumes exactly the whole source. This catches a
-    // wrong-*length* base and structurally invalid deltas — but NOT a same-length
-    // base whose bytes differ: EQUAL copies from the source cursor unconditionally.
-    // Base-content integrity is the caller's contract (see applyContentDelta).
+    // A well-formed delta consumes exactly the whole source. Combined with the
+    // hash check above, a wrong base of any length now fails loudly.
     if src != a_len {
-        return ERR;
+        return ERR_BASE;
     }
     if out_len == 0 {
         return 0;
@@ -603,8 +651,12 @@ pub extern "C" fn applyDelta(a_ptr: u32, a_len: u32, d_ptr: u32, d_len: u32) -> 
 
     let out = unsafe { HEAP.raw_alloc(out_len) };
 
-    // Pass 2: materialize.
+    // Pass 2: materialize (skipping the already-verified CHECK head).
     let mut r = d_ptr;
+    {
+        let (_tag, _ok, next) = unsafe { read_varint(r, d_end) };
+        r = next + CHECK_HASH_LEN;
+    }
     let mut o = out;
     let mut src = 0usize;
     while r < d_end {

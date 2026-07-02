@@ -88,7 +88,7 @@ const selection = {
 
 function createRecording(audioBlob?: Blob): Recording {
   return {
-    version: 3,
+    version: 4,
     id: "recording-1",
     name: "Recording 1",
     createdAt: 1,

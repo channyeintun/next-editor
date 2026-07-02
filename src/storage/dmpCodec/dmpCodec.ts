@@ -30,10 +30,25 @@ interface DmpExports {
 }
 
 export interface DmpCodec {
-  /** Opaque diff-match-patch delta that transforms `a` into `b`; consumed by {@link applyDelta}. */
+  /**
+   * Opaque diff-match-patch delta that transforms `a` into `b`; consumed by
+   * {@link applyDelta}. Always begins with a CHECK op carrying a hash of `a`.
+   */
   diffDelta(a: Uint8Array, b: Uint8Array): Uint8Array;
-  /** Reconstruct `b` from `a` and a delta produced by {@link diffDelta}. Throws on a bad/mismatched delta. */
+  /**
+   * Reconstruct `b` from `a` and a delta produced by {@link diffDelta}. Throws
+   * {@link DmpBaseMismatchError} when `a` is not the base the delta was diffed
+   * against, and a plain Error on a structurally corrupt delta.
+   */
   applyDelta(a: Uint8Array, delta: Uint8Array): Uint8Array;
+}
+
+/** Thrown by `applyDelta` when the base content fails the delta's CHECK hash. */
+export class DmpBaseMismatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DmpBaseMismatchError";
+  }
 }
 
 function bind(exports: DmpExports): DmpCodec {
@@ -45,12 +60,19 @@ function bind(exports: DmpExports): DmpCodec {
     return ptr;
   };
 
-  // The module returns an all-ones sentinel for failure; a packed (ptr=0,len=0)
-  // is a valid *empty* result.
-  const ERROR = 0xffffffffffffffffn;
+  // Failure sentinels (impossible ptr/len packs); a packed (ptr=0,len=0) is a
+  // valid *empty* result. ERR_BASE is the actionable one: the delta was applied
+  // against a base whose bytes don't match its CHECK hash (replay desync).
+  const ERR_CORRUPT = 0xffffffffffffffffn;
+  const ERR_BASE = 0xfffffffffffffffen;
   const read = (packed: bigint, label: string): Uint8Array => {
     const value = BigInt.asUintN(64, packed);
-    if (value === ERROR) throw new Error(`dmp codec: ${label} failed (corrupt/mismatched input?)`);
+    if (value === ERR_BASE) {
+      throw new DmpBaseMismatchError(
+        `dmp codec: ${label} base mismatch — delta applied against the wrong base content`,
+      );
+    }
+    if (value === ERR_CORRUPT) throw new Error(`dmp codec: ${label} failed (corrupt delta?)`);
     const ptr = Number(value >> 32n);
     const len = Number(value & 0xffffffffn);
     if (ptr === 0) return new Uint8Array(0);

@@ -22,9 +22,5 @@ export type { SegmentKind, RecordingStreamMeta } from "./format";
 export { createStreamingRecordingWriter, encodeRecordingToStream } from "./encode";
 export type { StreamingRecordingWriter } from "./encode";
 
-export {
-  decodeRecordingStream,
-  decodeRecordingPrefix,
-  createStreamingRecordingReader,
-} from "./decode";
+export { decodeRecordingStream, createStreamingRecordingReader } from "./decode";
 export type { StreamingRecordingReader } from "./decode";

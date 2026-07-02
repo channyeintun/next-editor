@@ -5,13 +5,15 @@ import {
   type StoredRecordingMetadata,
 } from "./IndexedDBRecordingStore";
 import {
-  decodeBase64ToRecordings,
   decompressBinaryToRecordings,
-  encodeRecordingToBase64Stream,
   encodeRecordingToStream,
   normalizeRecording,
 } from "./recordingCodecClient";
-import { audioExtensionFromMime, cameraExtensionFromMime } from "./streamingRecordingCodec/format";
+import {
+  audioExtensionFromMime,
+  cameraExtensionFromMime,
+  isStreamingRecording,
+} from "./streamingRecordingCodec/format";
 import { createImportedCameraObjectUrl } from "./cameraVideoUrl";
 
 interface StorageStats {
@@ -265,9 +267,10 @@ export class RecordingStorage {
         recordingToEncode = { ...recordingToEncode, audioBlob: undefined, audioFile: audioName };
       }
 
-      const base64Data = await encodeRecordingToBase64Stream(recordingToEncode);
+      // The `.ne` is the raw SCR3 byte stream — no base64 wrapping.
+      const streamBytes = await encodeRecordingToStream(recordingToEncode);
       this.downloadBlob(
-        new Blob([base64Data], { type: "application/octet-stream" }),
+        new Blob([streamBytes as BlobPart], { type: "application/octet-stream" }),
         `${baseFilename}.ne`,
       );
 
@@ -326,25 +329,17 @@ export class RecordingStorage {
         const videoFiles = companions.filter((file) => !isAudioFile(file));
 
         try {
-          // Read file as text and validate it's not empty/undefined
-          const text = await neFile.text();
-          const trimmedText = text.trim();
-          if (!trimmedText || trimmedText.length === 0) {
+          const bytes = new Uint8Array(await neFile.arrayBuffer());
+          if (bytes.length === 0) {
             reject(new Error("File appears to be empty or corrupted"));
             return;
           }
-
-          // Relaxed validation: Allow whitespace/newlines and check general format
-          // Strip whitespace for the check
-          const stripped = trimmedText.replace(/\s/g, "");
-          const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
-          if (!base64Pattern.test(stripped)) {
-            console.error("Import validation failed. Start of text:", trimmedText.substring(0, 50));
-            reject(new Error("File does not contain valid base64 data"));
+          if (!isStreamingRecording(bytes)) {
+            reject(new Error("File is not a valid .ne recording (bad SCR3 magic)"));
             return;
           }
 
-          const importedRecordings = await decodeBase64ToRecordings(stripped);
+          const importedRecordings = await decompressBinaryToRecordings(bytes);
 
           // Validate imported recordings
           if (!Array.isArray(importedRecordings) || importedRecordings.length === 0) {

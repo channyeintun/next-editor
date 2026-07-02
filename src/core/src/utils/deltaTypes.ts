@@ -91,7 +91,7 @@ export type DeltaFrame = Keyframe | FrameDelta;
  */
 export interface DeltaRecording {
   /** Recording schema version using delta-compressed frames. */
-  version: 2 | 3;
+  version: 4;
   id: string;
   name: string;
   /** Number of frames between keyframes */
@@ -124,7 +124,7 @@ export const DELTA_CONFIG = {
   /** Number of frames between keyframes (at 60fps, 120 = 2 seconds) */
   KEYFRAME_INTERVAL: 120,
   /** Format version identifier */
-  VERSION: 3 as const,
+  VERSION: 4 as const,
 } as const;
 
 /**
@@ -149,6 +149,6 @@ export function isDeltaRecording(recording: unknown): recording is DeltaRecordin
     typeof recording === "object" &&
     recording !== null &&
     "version" in recording &&
-    ((recording as DeltaRecording).version === 2 || (recording as DeltaRecording).version === 3)
+    (recording as DeltaRecording).version === 4
   );
 }

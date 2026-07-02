@@ -51,7 +51,7 @@ interface PendingStreamSegment {
  * small threshold, matching the SCR3 batching policy. Media bytes are never part of the stream —
  * audio and camera live in their own files/blobs, delivered outside this sink. The emitted bytes
  * are the same SCR3 stream the exporter produces, so a remote consumer can replay them with
- * `decodeRecordingPrefix`.
+ * `decodeRecordingStream`.
  */
 export class RecordingStreamBridge {
   private readonly writer: StreamingRecordingWriter = createStreamingRecordingWriter();
@@ -86,7 +86,7 @@ export class RecordingStreamBridge {
   start(session: RecordingSession, options: RecordingStreamBridgeStartOptions = {}): void {
     if (this.started) return;
     const meta: RecordingStreamMeta = {
-      version: 3,
+      version: 4,
       id: String(session.startedAt),
       name: `Recording ${session.startedAt}`,
       keyframeInterval: DELTA_CONFIG.KEYFRAME_INTERVAL,

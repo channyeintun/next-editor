@@ -20,8 +20,8 @@ import {
   isKnownSegmentKind,
   parseHeader,
   readSegmentHeader,
+  SEGMENT_HEADER_SIZE,
   SEGMENT_KIND,
-  segmentHeaderSize,
   STREAM_FORMAT_VERSION,
   type RecordingStreamMeta,
   type SegmentHeaderFields,
@@ -54,20 +54,14 @@ interface DecodedSegment {
   sequence: number;
 }
 
-function* walkSegments(
-  bytes: Uint8Array,
-  start: number,
-  end: number,
-  formatVersion: number,
-): Generator<DecodedSegment> {
+function* walkSegments(bytes: Uint8Array, start: number, end: number): Generator<DecodedSegment> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const headerSize = segmentHeaderSize(formatVersion);
   let offset = start;
   let sequence = 0;
 
-  while (offset + headerSize <= end) {
-    const header = readSegmentHeader(view, offset, formatVersion);
-    const payloadStart = offset + headerSize;
+  while (offset + SEGMENT_HEADER_SIZE <= end) {
+    const header = readSegmentHeader(view, offset);
+    const payloadStart = offset + SEGMENT_HEADER_SIZE;
     const payloadEnd = payloadStart + header.byteLength;
 
     // A segment that runs past the known end is a truncated tail — stop and wait.
@@ -107,7 +101,6 @@ function* walkSegments(
  */
 interface DecodedStreamState {
   meta: RecordingStreamMeta;
-  formatVersion: number;
   streamFinalized: boolean;
   /**
    * True when frames were already normalized record-by-record as they were decoded
@@ -135,7 +128,7 @@ interface DecodedStreamState {
  * progressively-decoded prefix and a one-shot decode of the same bytes match.
  */
 function assembleRecording(state: DecodedStreamState): Recording {
-  const { meta, formatVersion, streamFinalized } = state;
+  const { meta, streamFinalized } = state;
 
   const decodedDuration = Math.max(meta.duration, state.maxSegmentTimeMs);
   // Media bytes never live in the stream; audio/camera offsets come from meta alone.
@@ -182,7 +175,7 @@ function assembleRecording(state: DecodedStreamState): Recording {
       ? meta.clusters
           .map((cluster) => ({ ...cluster }))
           .sort((left, right) => left.index - right.index)
-      : formatVersion >= 2 && state.hasSegments
+      : state.hasSegments
         ? [...state.clusterSummaries].sort((left, right) => left.index - right.index)
         : deriveRecordingClusters(provisionalRecording);
 
@@ -204,7 +197,7 @@ function assembleRecording(state: DecodedStreamState): Recording {
 }
 
 function decodeSegments(bytes: Uint8Array): Recording {
-  const { meta, headerEnd, formatVersion } = parseHeader(bytes);
+  const { meta, headerEnd } = parseHeader(bytes);
   const footerStart = findFooterStart(bytes, headerEnd);
   const segmentsEnd = footerStart ?? bytes.length;
   const streamFinalized = footerStart !== null;
@@ -221,7 +214,7 @@ function decodeSegments(bytes: Uint8Array): Recording {
   let hasSegments = false;
   let maxSegmentTimeMs = meta.duration;
 
-  for (const segment of walkSegments(bytes, headerEnd, segmentsEnd, formatVersion)) {
+  for (const segment of walkSegments(bytes, headerEnd, segmentsEnd)) {
     hasSegments = true;
     maxSegmentTimeMs = Math.max(maxSegmentTimeMs, segment.startTimeMs, segment.endTimeMs);
     mergeClusterSummary(
@@ -270,7 +263,6 @@ function decodeSegments(bytes: Uint8Array): Recording {
 
   return assembleRecording({
     meta,
-    formatVersion,
     streamFinalized,
     hasSegments,
     maxSegmentTimeMs,
@@ -286,11 +278,12 @@ function decodeSegments(bytes: Uint8Array): Recording {
   });
 }
 
+/**
+ * Decodes a whole SCR3 buffer — or any prefix of one — into a `Recording`. A prefix
+ * (in-progress footer, truncated trailing segment) decodes tolerantly with
+ * `streamFinalized: false`, so callers can progressively decode a growing download.
+ */
 export function decodeRecordingStream(bytes: Uint8Array): Recording {
-  return decodeSegments(bytes);
-}
-
-export function decodeRecordingPrefix(bytes: Uint8Array): Recording {
   return decodeSegments(bytes);
 }
 
@@ -329,7 +322,6 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   let headerParsed = false;
   let meta: RecordingStreamMeta | null = null;
   let headerEnd = 0;
-  let formatVersion = STREAM_FORMAT_VERSION;
   let cursor = 0;
   let finalized = false;
 
@@ -373,7 +365,10 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     const metaEnd = HEADER_PREFIX_SIZE + metaLength;
     if (metaEnd > length) return; // header not fully downloaded yet
 
-    formatVersion = view.getUint16(4, true);
+    const formatVersion = view.getUint16(4, true);
+    if (formatVersion !== STREAM_FORMAT_VERSION) {
+      throw new Error(`Unsupported SCR3 format version: ${formatVersion}`);
+    }
     meta = msgpackDecode(
       unzlibSync(buffer.subarray(HEADER_PREFIX_SIZE, metaEnd)),
     ) as RecordingStreamMeta;
@@ -464,11 +459,10 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     }
     const segmentsEnd = footerStart ?? length;
     const view = new DataView(buffer.buffer, 0, length);
-    const headerSize = segmentHeaderSize(formatVersion);
 
-    while (cursor + headerSize <= segmentsEnd) {
-      const header = readSegmentHeader(view, cursor, formatVersion);
-      const payloadStart = cursor + headerSize;
+    while (cursor + SEGMENT_HEADER_SIZE <= segmentsEnd) {
+      const header = readSegmentHeader(view, cursor);
+      const payloadStart = cursor + SEGMENT_HEADER_SIZE;
       const payloadEnd = payloadStart + header.byteLength;
 
       if (payloadEnd > segmentsEnd) {
@@ -508,7 +502,6 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       if (!headerParsed || !meta) return null;
       return assembleRecording({
         meta,
-        formatVersion,
         streamFinalized: finalized,
         // Frames were normalized at ingest; skip the whole-recording normalize pass.
         prenormalized: true,

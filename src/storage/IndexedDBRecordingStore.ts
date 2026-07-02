@@ -2,7 +2,9 @@ import type { Recording } from "../core/src";
 import { requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
 
 const RECORDING_DATABASE_NAME = "next-editor-recordings-db";
-const RECORDING_DATABASE_VERSION = 4;
+// v5: recording schema renumbered to 4 (binary-only .ne, mandatory dmp check ops);
+// pre-v5 recordings are not retained (no legacy decoding).
+const RECORDING_DATABASE_VERSION = 5;
 const RECORDING_METADATA_STORE = "recording-metadata";
 const RECORDING_SEGMENTS_STORE = "recording-segments";
 // Media is stored outside the SCR3 byte stream, as standalone Blobs keyed by recording id.

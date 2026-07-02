@@ -509,7 +509,7 @@ export const editorMachine = setup({
       );
 
       const recording: Recording = {
-        version: 3,
+        version: 4,
         id: Date.now().toString(),
         name: `Recording ${Date.now()}`,
         createdAt: Date.now(),
