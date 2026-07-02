@@ -114,7 +114,8 @@ export function attachCompanionVideo(
 
 /**
  * Attach a companion audio file to a recording, when the recording references external audio
- * (`audioFile`) and a matching file is present. The `File` is attached directly as `audioBlob`
+ * (`audioFile`, or `audioSource === "external"` for older exports that omitted the filename)
+ * and a matching file is present. The `File` is attached directly as `audioBlob`
  * (a `File` is a `Blob`), so the existing blob playback path works unchanged.
  */
 export function attachCompanionAudio(
@@ -122,7 +123,8 @@ export function attachCompanionAudio(
   audios: File[],
   neFileName: string,
 ): Recording {
-  if (!recording.audioFile || recording.audioBlob instanceof Blob) return recording;
+  const declaresExternalAudio = recording.audioFile || recording.audioSource === "external";
+  if (!declaresExternalAudio || recording.audioBlob instanceof Blob) return recording;
   const audio = pickCompanionFile(audios, neFileName, recording.audioFile);
   if (!audio) return recording;
   return { ...recording, audioBlob: audio };

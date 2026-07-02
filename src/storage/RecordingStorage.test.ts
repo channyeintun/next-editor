@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Recording } from "../core/src";
 import type { StoredRecordingEntry, StoredRecordingMetadata } from "./IndexedDBRecordingStore";
 import { decompressBinaryToRecordings, encodeRecordingToStream } from "./recordingCodecClient";
-import { RecordingStorage } from "./RecordingStorage";
+import { attachCompanionAudio, RecordingStorage } from "./RecordingStorage";
 
 function createRecording(overrides: Partial<Recording> = {}): Recording {
   return {
@@ -157,6 +157,32 @@ function withStubbedStore(
   if (stubs.listMetadata) store.listMetadata = stubs.listMetadata;
   if (stubs.getEntry) store.getEntry = stubs.getEntry;
 }
+
+describe("attachCompanionAudio", () => {
+  it("matches a companion audio file by .ne basename when external audio is declared without a filename", () => {
+    // Older exports wrote `audioSource: "external"` without persisting `audioFile` — a
+    // basename-matching companion picked alongside the `.ne` must still attach.
+    const recording = createRecording({ audioSource: "external" });
+    const audio = new File([new Uint8Array([1, 2, 3]) as BlobPart], "introduction.weba", {
+      type: "audio/webm",
+    });
+
+    const attached = attachCompanionAudio(recording, [audio], "introduction.ne");
+
+    expect(attached.audioBlob).toBe(audio);
+  });
+
+  it("does not attach audio to a recording that declares no audio at all", () => {
+    const recording = createRecording();
+    const audio = new File([new Uint8Array([1]) as BlobPart], "introduction.weba", {
+      type: "audio/webm",
+    });
+
+    const attached = attachCompanionAudio(recording, [audio], "introduction.ne");
+
+    expect(attached.audioBlob).toBeUndefined();
+  });
+});
 
 describe("RecordingStorage lazy library loading", () => {
   afterEach(() => {

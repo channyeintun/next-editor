@@ -107,7 +107,12 @@ function parseEnvironmentInput(value: string): {
   };
 }
 
-/** True once a recording has any audio/camera media — either external already, or a blob that export will externalize. */
+/**
+ * True once a recording has any audio/camera media — either external already, or a blob that
+ * export will externalize. `audioSource === "external"` counts even without an `audioFile`/
+ * `audioUrl` reference: older exports declared external audio without persisting the sibling
+ * filename, and configuring a URL is exactly how such a recording gets its audio back.
+ */
 function recordingHasExternalMedia(recording: Recording | null): boolean {
   if (!recording) return false;
   const hasAudioBlob = recording.audioBlob instanceof Blob && recording.audioBlob.size > 0;
@@ -115,6 +120,7 @@ function recordingHasExternalMedia(recording: Recording | null): boolean {
   return Boolean(
     recording.audioFile ||
     recording.audioUrl ||
+    recording.audioSource === "external" ||
     recording.cameraFile ||
     recording.cameraUrl ||
     hasAudioBlob ||

@@ -41,15 +41,18 @@ function neBasenameMediaUrl(neUrl: string, ext: string): string | null {
  * stored sibling filename resolved against the `.ne` URL, (3) the `.ne` file's own basename
  * with the stored (or default) extension — covers the user renaming `lesson.ne`+`lesson.weba`
  * to `intro-01.ne`+`intro-01.weba` together. Returns `[]` when the recording declares no media
- * of this kind at all (never invents media that wasn't referenced).
+ * of this kind at all (never invents media that wasn't referenced). `declaredExternal` marks a
+ * kind the recording declares external without naming a file (`audioSource === "external"` from
+ * an older export that omitted `audioFile`) — the basename candidate still applies then.
  */
 function buildMediaCandidates(
   storedUrl: string | undefined,
   storedFile: string | undefined,
   baseUrl: string | undefined,
   defaultExt: string,
+  declaredExternal = false,
 ): string[] {
-  if (!storedUrl && !storedFile) {
+  if (!storedUrl && !storedFile && !declaredExternal) {
     return [];
   }
   const candidates: string[] = [];
@@ -261,7 +264,8 @@ export const useUrlLoader = () => {
       if (result.cameraFile && videoFile) {
         result = { ...result, cameraUrl: createImportedCameraObjectUrl(videoFile) };
       }
-      if (result.audioFile && audioFile && !(result.audioBlob instanceof Blob)) {
+      const declaresExternalAudio = result.audioFile || result.audioSource === "external";
+      if (declaresExternalAudio && audioFile && !(result.audioBlob instanceof Blob)) {
         result = { ...result, audioBlob: audioFile };
       }
       return result;
@@ -393,7 +397,13 @@ export const useUrlLoader = () => {
     if (recording.audioBlob instanceof Blob) {
       return null;
     }
-    const candidates = buildMediaCandidates(recording.audioUrl, recording.audioFile, neUrl, "weba");
+    const candidates = buildMediaCandidates(
+      recording.audioUrl,
+      recording.audioFile,
+      neUrl,
+      "weba",
+      recording.audioSource === "external",
+    );
     for (const url of candidates) {
       try {
         const response = await fetchNextEditorUrl(url);

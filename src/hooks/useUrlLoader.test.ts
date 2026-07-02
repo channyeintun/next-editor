@@ -163,6 +163,45 @@ describe("useUrlLoader", () => {
     expect(extended.audioBlob).toBeInstanceOf(Blob);
   });
 
+  it("resolves audio via the .ne basename when external audio is declared without a filename", async () => {
+    // Older exports wrote `audioSource: "external"` without persisting `audioFile`/`audioUrl`
+    // (the blob wasn't in memory at export time). The declaration alone must be enough to try
+    // the `.ne`-basename sibling — this is the real-world "drop `introduction.weba` next to
+    // `introduction.ne`" case.
+    const recording = createRecording({ audioSource: "external" });
+    const neBytes = await encodeRecordingToStream(recording);
+    const audioBytes = new Uint8Array([1, 2, 3, 4]);
+
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+      const url = targetUrl(typeof input === "string" ? input : input.toString());
+      if (url.endsWith(".ne")) {
+        return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+      }
+      if (url.endsWith("/intro-01.weba")) {
+        return fakeResponse(audioBytes, { ok: true, contentType: "audio/webm" });
+      }
+      return fakeResponse(null, { ok: false, status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const actions = makeActionsMock();
+    const extendRecordingMock = vi.mocked(actions.extendRecording);
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+
+    const { result } = renderHook(() => useUrlLoader(), { wrapper });
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+
+    await waitFor(() => {
+      expect(extendRecordingMock).toHaveBeenCalled();
+    });
+
+    const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
+    expect(extended.audioUrl).toBe("https://example.com/intro-01.weba");
+    expect(extended.audioBlob).toBeInstanceOf(Blob);
+  });
+
   it("never invents a basename candidate for media the recording didn't reference", async () => {
     const recording = createRecording();
     const neBytes = await encodeRecordingToStream(recording);
