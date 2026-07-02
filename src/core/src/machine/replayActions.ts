@@ -436,9 +436,9 @@ export const resetPlayback = ({
   lastAppliedPreviewEventIndex: -1,
   lastAppliedPreviewPatchBatchIndex: -1,
   lastAppliedSlideEventIndex: -1,
-  // Kept (not reset to -1) so the relative panel-width deltas rewind from the
-  // current index back to the start instead of re-summing from scratch onto
-  // the live width. See the note in `seekToTime`.
+  // `lastAppliedWorkspaceEventIndex` is deliberately omitted here (kept as-is): the
+  // relative panel-width deltas rewind from the current index back to the start
+  // instead of re-summing from scratch onto the live width. See `seekToTime`.
   lastAppliedRuntimeEventIndex: -1,
   lastAppliedPreviewState: undefined,
 });
@@ -450,8 +450,9 @@ export const invalidateAppliedPlaybackState = (): Partial<EditorMachineContext> 
   lastAppliedPreviewEventIndex: -1,
   lastAppliedPreviewPatchBatchIndex: -1,
   lastAppliedSlideEventIndex: -1,
-  // Kept (not reset to -1) so resuming/replaying does not re-apply the panel-
-  // width deltas on top of the already-applied width. See `seekToTime`.
+  // `lastAppliedWorkspaceEventIndex` is deliberately omitted here (kept as-is) so
+  // resuming/replaying does not re-apply the panel-width deltas on top of the
+  // already-applied width. See `seekToTime`.
   lastAppliedRuntimeEventIndex: -1,
   lastAppliedPreviewState: undefined,
 });
