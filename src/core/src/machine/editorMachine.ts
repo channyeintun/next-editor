@@ -1,42 +1,76 @@
 import { setup, assign, spawnChild, stopChild, enqueueActions, fromPromise } from "xstate";
-import type { SlideEvent, PreviewEvent } from "../slides";
-import type {
-  EditorMachineContext,
-  EditorMachineEvent,
-  EditorMachineInput,
-  RecordingSessionMediaFragment,
-} from "./types";
+import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
 import { createInitialContext } from "./types";
-import type { EditorFrame, MouseCursorPosition, Recording } from "../types";
-import type { RuntimeRecordingEvent } from "../../../types/runtime";
-import {
-  areWorkspaceSnapshotsEqual,
-  toSidebarWidthDeltaSnapshot,
-  type WorkspaceRecordingEvent,
-} from "../../../types/workspace";
-import {
-  reconstructFrameAtIndex,
-  applyFrameDelta,
-  findFrameIndexAtTime,
-  isKeyframe,
-} from "../utils/frameDelta";
-import { createFrameStreamEncoder, pushFrame } from "../utils/frameStreamEncoder";
+import type { MouseCursorPosition, Recording } from "../types";
 import { timelineMachine } from "./timelineMachine";
 import { audioRecordingActor, audioPlaybackActor } from "./audioActor";
 import { cameraRecordingActor } from "./cameraActor";
 import { mouseTrackingActor } from "./mouseTrackingActor";
-import { normalizeEditorFrame, normalizeRecordingData } from "../utils/editorState";
-import { isValidFrameState } from "../utils/validation";
 import { calculateDurationFromFileReader } from "../utils/audioDuration";
-import { arePreviewSizesEqual } from "../../../utils/equality";
 import {
-  getPreviewReplayResult,
-  getRuntimeReplayResult,
-  getSlideReplayResult,
-  getWorkspaceReplayResult,
-  isSeekReplayEvent,
-  resolveReplayTime,
-} from "./replayState";
+  APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS,
+  APPLY_REPLAY_STATE_ACTIONS,
+  APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS,
+  getPlaybackAudioState,
+  hasPlaybackAudio,
+  hasSpawnedPlaybackAudio,
+  RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
+  SET_EDITOR_REF_ACTIONS,
+  shouldRecordCamera,
+  syncPlaybackAudio,
+  SYNC_PAUSED_WORKSPACE_ACTIONS,
+} from "./editorMachineHelpers";
+import {
+  setCameraRecordingEnabled,
+  prepareExternalAudioRecording,
+  startExternalAudioPlayback,
+  storeExternalAudioDuration,
+  stopExternalAudioRecording,
+  initRecordingSession,
+  captureInitialFrame,
+  captureFrame,
+  capturePreviewRefreshFrame,
+  finalizeRecording,
+  notifyRecordingStart,
+  notifyRecordingStop,
+  storeAudioBlob,
+  storeAudioStarted,
+  storeCameraBlob,
+  captureAudioChunk,
+  storeCameraStarted,
+  handleCameraError,
+} from "./captureActions";
+import {
+  setRecording,
+  extendRecording,
+  applyFrameAtTime,
+  seekToTime,
+  setPlaybackSpeed,
+  setVolume,
+  clearCursorDecorations,
+  storeRecordedFrameAtPause,
+  adoptPlaybackWorkspaceAtPause,
+  restoreRecordedFrameFromPause,
+  resetPlayback,
+  invalidateAppliedPlaybackState,
+  detachPlaybackWorkspace,
+  reattachPlaybackWorkspace,
+  clearPendingPlaybackEditorSync,
+  invalidateRenderedPlaybackState,
+  clearRecording,
+  notifyPlaybackStart,
+  notifyPlaybackPause,
+  notifyPlaybackEnd,
+  notifySeek,
+  notifyFrame,
+  notifyPlaybackUpdate,
+  setEditorRef,
+  applyPreviewEventsAtTime,
+  applyPreviewPatchBatchesAtTime,
+  applyWorkspaceEventsAtTime,
+  applyRuntimeEventsAtTime,
+  applySlideEventsAtTime,
+} from "./replayActions";
 import {
   appendPreviewInitialDocument,
   appendPreviewPatchBatch,
@@ -45,29 +79,6 @@ import {
   appendSlideRecordingEvent,
   appendWorkspaceRecordingEvent,
 } from "./recordingSession";
-import {
-  APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS,
-  APPLY_REPLAY_STATE_ACTIONS,
-  APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS,
-  appendCursorEvent,
-  applyFrameState,
-  AUDIO_TRACK_ID,
-  buildMediaFragmentMetadata,
-  buildRecordingClusters,
-  buildTrackMetadata,
-  createFrame,
-  getLoadedRecordingPayload,
-  getPlaybackAudioState,
-  hasPlaybackAudio,
-  hasSpawnedPlaybackAudio,
-  MOUSE_FRAME_INTERVAL_MS,
-  RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
-  SET_EDITOR_REF_ACTIONS,
-  shouldRecordCamera,
-  syncPlaybackAudio,
-  SYNC_PAUSED_WORKSPACE_ACTIONS,
-  type CapturedViewStateRef,
-} from "./editorMachineHelpers";
 
 // ============================================================================
 // Editor State Machine
@@ -134,919 +145,60 @@ export const editorMachine = setup({
     },
   },
   actions: {
-    // Recording actions
-    setCameraRecordingEnabled: assign(({ context, event }) => {
-      if (event.type !== "START_RECORDING") return {};
-      return {
-        enableCameraRecording: event.enableCamera ?? context.enableCameraRecording,
-      };
-    }),
-
-    prepareExternalAudioRecording: assign(({ context, event }) => {
-      if (event.type !== "START_RECORDING" || !(event.audioBlob instanceof Blob)) {
-        return {};
-      }
-
-      return {
-        audio: {
-          ...context.audio,
-          blob: event.audioBlob,
-          element: null,
-          isRecording: true,
-          mediaRecorder: null,
-          chunks: [],
-          mimeType: event.audioBlob.type,
-          source: "external" as const,
-          externalDurationMs: null,
-        },
-      };
-    }),
-
-    startExternalAudioPlayback: enqueueActions(({ context, event, enqueue }) => {
-      if (event.type !== "START_RECORDING" || !(event.audioBlob instanceof Blob)) {
-        return;
-      }
-
-      enqueue.spawnChild("audioPlayback", {
-        id: "recordingAudioPlayer",
-        input: {
-          blob: event.audioBlob,
-          volume: context.timeline.volume,
-          playbackRate: 1,
-          startPositionMs: 0,
-        },
-      });
-      enqueue.sendTo("recordingAudioPlayer", { type: "PLAY" });
-    }),
-
-    storeExternalAudioDuration: assign(({ context, event }) => {
-      if (event.type !== "READY" || context.audio.source !== "external") {
-        return {};
-      }
-
-      const externalDurationMs = Number.isFinite(event.duration) ? event.duration : null;
-
-      if (
-        context.session &&
-        externalDurationMs !== null &&
-        context.session.audioFragments.length > 0
-      ) {
-        // In-place update of a constant-size element (index 0 always exists here), not a
-        // spread-append — consistent with the mutable-session invariant.
-        context.session.audioFragments[0] = {
-          ...context.session.audioFragments[0],
-          endTimeMs: context.audio.startOffsetMs + externalDurationMs,
-        };
-      }
-
-      return {
-        session: context.session,
-        sessionRevision: context.session ? context.sessionRevision + 1 : context.sessionRevision,
-        audio: {
-          ...context.audio,
-          externalDurationMs,
-        },
-      };
-    }),
-
-    stopExternalAudioRecording: assign(({ context }) => {
-      if (context.audio.source !== "external") return {};
-      return {
-        audio: {
-          ...context.audio,
-          isRecording: false,
-        },
-      };
-    }),
-
-    initRecordingSession: assign(({ context, event }) => {
-      const startedAt =
-        event.type === "STARTED" && Number.isFinite(event.startedAtMs)
-          ? event.startedAtMs
-          : Date.now();
-      const startedAtPerf =
-        event.type === "STARTED" && Number.isFinite(event.startedAtPerf)
-          ? event.startedAtPerf
-          : performance.now();
-      const slideEvents: SlideEvent[] = [];
-      const previewEvents: PreviewEvent[] = [];
-      const workspaceEvents: WorkspaceRecordingEvent[] = [];
-      const runtimeEvents: RuntimeRecordingEvent[] = [];
-      const initialMousePosition: MouseCursorPosition = { x: 0, y: 0, visible: false };
-      const externalAudioFragment =
-        context.audio.source === "external" && context.audio.blob
-          ? [
-              {
-                trackId: AUDIO_TRACK_ID,
-                startTimeMs: context.audio.startOffsetMs,
-                endTimeMs:
-                  typeof context.audio.externalDurationMs === "number" &&
-                  Number.isFinite(context.audio.externalDurationMs)
-                    ? context.audio.startOffsetMs + context.audio.externalDurationMs
-                    : context.audio.startOffsetMs,
-                blob: context.audio.blob,
-                mimeType: context.audio.mimeType || context.audio.blob.type || "audio/webm",
-              },
-            ]
-          : [];
-
-      // Capture initial slide state if open
-      const initialSlideState = context.getSlideState?.();
-      if (initialSlideState?.previewState?.isOpen) {
-        slideEvents.push({
-          type: "slide_open",
-          timestamp: 0,
-          slideId: initialSlideState.previewState.currentSlideId || undefined,
-          isMaximized: initialSlideState.previewState.isMaximized,
-          indexv: initialSlideState.previewState.indexv,
-        });
-      }
-
-      // Capture initial preview state
-      const initialPreviewState = context.getPreviewState?.();
-      if (initialPreviewState) {
-        previewEvents.push({
-          type: "preview_open",
-          timestamp: 0,
-          size: initialPreviewState.size,
-          isOpen: initialPreviewState.isOpen,
-          mode: initialPreviewState.mode,
-          content: initialPreviewState.content,
-          route: initialPreviewState.route,
-          scrollTop: initialPreviewState.scrollTop,
-          scrollLeft: initialPreviewState.scrollLeft,
-        });
-      }
-
-      const initialWorkspaceSnapshot = context.getWorkspaceSnapshot?.();
-      if (initialWorkspaceSnapshot) {
-        workspaceEvents.push({
-          timestamp: 0,
-          snapshot: toSidebarWidthDeltaSnapshot(initialWorkspaceSnapshot, 0),
-        });
-      }
-
-      const initialRuntimeSnapshot = context.getRuntimeSnapshot?.();
-      if (initialRuntimeSnapshot) {
-        runtimeEvents.push({
-          timestamp: 0,
-          snapshot: initialRuntimeSnapshot,
-        });
-      }
-
-      return {
-        session: {
-          startedAt,
-          startedAtPerf,
-          frames: [],
-          encoder: createFrameStreamEncoder(),
-          slideEvents,
-          previewEvents,
-          previewInitialDocuments: [],
-          previewPatchBatches: [],
-          workspaceEvents,
-          runtimeEvents,
-          cursorEvents: [{ timestamp: 0, ...initialMousePosition }],
-          // External (selected file) audio is fully known at start, so seed it as the single
-          // audio fragment. Microphone audio is appended as timeslice events. Camera video is
-          // never streamed inline — its blob is captured whole when the camera recorder stops.
-          audioFragments: externalAudioFragment,
-          lastMousePosition: initialMousePosition,
-        },
-        sessionRevision: 0,
-        lastCallbackFrameTimestamp: undefined,
-      };
-    }),
-
-    captureInitialFrame: assign(({ context }) => {
-      const session = context.session;
-      if (!session) return {};
-
-      const lastMousePosition = session.lastMousePosition || {
-        x: 0,
-        y: 0,
-        visible: false,
-      };
-
-      // Use createFrame for the initial frame to ensure it has all metadata
-      const editor = context.editorRefs.editor;
-      let initialFrame: EditorFrame;
-      let contentVersionId: number | undefined;
-      let modelUri: string | undefined;
-      let viewStateRef: CapturedViewStateRef | undefined;
-
-      if (editor) {
-        ({
-          frame: initialFrame,
-          contentVersionId,
-          modelUri,
-          viewStateRef,
-        } = createFrame(
-          editor,
-          0,
-          lastMousePosition,
-          context.getSlideState,
-          context.getPreviewState,
-        ));
-      } else {
-        initialFrame = {
-          timestamp: 0,
-          state: {
-            content: "",
-            selection: {
-              startLineNumber: 1,
-              startColumn: 1,
-              endLineNumber: 1,
-              endColumn: 1,
-              selectionStartLineNumber: 1,
-              selectionStartColumn: 1,
-              positionLineNumber: 1,
-              positionColumn: 1,
-            },
-            position: { lineNumber: 1, column: 1 },
-            viewState: null,
-            mouseCursor: lastMousePosition,
-          },
-        };
-      }
-
-      const { state: encoder, emitted } = pushFrame(session.encoder, initialFrame);
-
-      if (emitted) {
-        session.frames.push(emitted);
-      }
-      session.encoder = encoder;
-      session.lastCapturedContentVersionId = contentVersionId;
-      session.lastCapturedContentModelUri = modelUri;
-      session.lastCapturedViewStateRef = viewStateRef;
-
-      return {
-        session,
-        sessionRevision: context.sessionRevision + 1,
-        currentFrame: initialFrame,
-      };
-    }),
-
-    captureFrame: assign(({ context, event }) => {
-      const editor = context.editorRefs.editor;
-      if (!editor || !context.session) return {};
-
-      const timestamp = performance.now() - context.session.startedAtPerf;
-
-      const mousePosition =
-        event.type === "CAPTURE_FRAME" && event.mousePosition
-          ? event.mousePosition
-          : context.session.lastMousePosition;
-      const cursorAppended =
-        event.type === "CAPTURE_FRAME" && event.isMouseMovement
-          ? appendCursorEvent(context.session.cursorEvents, timestamp, mousePosition)
-          : false;
-
-      if (event.type === "CAPTURE_FRAME" && event.isMouseMovement) {
-        const lastFrame = context.session.encoder.lastFullFrame;
-        const lastMousePosition = context.session.lastMousePosition;
-        const visibilityChanged = lastMousePosition?.visible !== mousePosition?.visible;
-
-        if (
-          lastFrame &&
-          timestamp - lastFrame.timestamp < MOUSE_FRAME_INTERVAL_MS &&
-          !visibilityChanged
-        ) {
-          context.session.lastMousePosition = mousePosition;
-          return {
-            session: context.session,
-            sessionRevision: cursorAppended ? context.sessionRevision + 1 : context.sessionRevision,
-          };
-        }
-      }
-
-      const previousContent =
-        context.currentFrame &&
-        context.session.lastCapturedContentVersionId !== undefined &&
-        context.session.lastCapturedContentModelUri !== undefined
-          ? {
-              value: context.currentFrame.state.content,
-              versionId: context.session.lastCapturedContentVersionId,
-              modelUri: context.session.lastCapturedContentModelUri,
-            }
-          : undefined;
-
-      const { frame, contentVersionId, modelUri, viewStateRef } = createFrame(
-        editor,
-        timestamp,
-        mousePosition,
-        context.getSlideState,
-        context.getPreviewState,
-        previousContent,
-        context.session.lastCapturedViewStateRef,
-      );
-
-      const { state: encoder, emitted } = pushFrame(context.session.encoder, frame);
-
-      if (emitted) {
-        context.session.frames.push(emitted);
-      }
-      context.session.encoder = encoder;
-      context.session.lastMousePosition = mousePosition;
-      context.session.lastCapturedContentVersionId = contentVersionId;
-      context.session.lastCapturedContentModelUri = modelUri;
-      context.session.lastCapturedViewStateRef = viewStateRef;
-
-      return {
-        session: context.session,
-        sessionRevision: context.sessionRevision + 1,
-        currentFrame: frame,
-      };
-    }),
-
-    capturePreviewRefreshFrame: assign(({ context, event }) => {
-      if (event.type !== "PREVIEW_EVENT" || event.event.type !== "preview_refresh") {
-        return {};
-      }
-
-      const editor = context.editorRefs.editor;
-      if (!editor || !context.session) {
-        return {};
-      }
-
-      const timestamp = performance.now() - context.session.startedAtPerf;
-      const previousContent =
-        context.currentFrame &&
-        context.session.lastCapturedContentVersionId !== undefined &&
-        context.session.lastCapturedContentModelUri !== undefined
-          ? {
-              value: context.currentFrame.state.content,
-              versionId: context.session.lastCapturedContentVersionId,
-              modelUri: context.session.lastCapturedContentModelUri,
-            }
-          : undefined;
-
-      const { frame, contentVersionId, modelUri, viewStateRef } = createFrame(
-        editor,
-        timestamp,
-        context.session.lastMousePosition,
-        context.getSlideState,
-        context.getPreviewState,
-        previousContent,
-        context.session.lastCapturedViewStateRef,
-      );
-
-      if (frame.state.previewState) {
-        frame.state.previewState = {
-          ...frame.state.previewState,
-          content: event.event.content ?? frame.state.previewState.content,
-        };
-      }
-
-      const { state: encoder, emitted } = pushFrame(context.session.encoder, frame);
-
-      if (emitted) {
-        context.session.frames.push(emitted);
-      }
-      context.session.encoder = encoder;
-      context.session.lastCapturedContentVersionId = contentVersionId;
-      context.session.lastCapturedContentModelUri = modelUri;
-      context.session.lastCapturedViewStateRef = viewStateRef;
-
-      return {
-        session: context.session,
-        sessionRevision: context.sessionRevision + 1,
-        currentFrame: frame,
-      };
-    }),
-
-    finalizeRecording: assign(({ context, event }) => {
-      if (!context.session) return { recording: null };
-
-      // Base duration from session timing
-      const duration =
-        event.type === "FINISHED" &&
-        context.audio.source === "external" &&
-        typeof context.audio.externalDurationMs === "number" &&
-        Number.isFinite(context.audio.externalDurationMs)
-          ? Math.max(context.audio.externalDurationMs, 1)
-          : Math.max(performance.now() - context.session.startedAtPerf, 1);
-      const slides = context.getSlides?.();
-      const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() || undefined;
-      const workspaceSnapshot = currentWorkspaceSnapshot
-        ? toSidebarWidthDeltaSnapshot(currentWorkspaceSnapshot, 0)
-        : undefined;
-      const runtimeSnapshot = context.getRuntimeSnapshot?.() || undefined;
-
-      // Frames were compressed incrementally during capture.
-      const frames = context.session.frames;
-      const clusters = buildRecordingClusters(frames, duration);
-      const tracks = buildTrackMetadata({
-        durationMs: duration,
-        hasSlideEvents: context.session.slideEvents.length > 0,
-        hasPreviewEvents:
-          context.session.previewEvents.length > 0 ||
-          context.session.previewInitialDocuments.length > 0 ||
-          context.session.previewPatchBatches.length > 0,
-        hasWorkspaceEvents: context.session.workspaceEvents.length > 0,
-        hasRuntimeEvents: context.session.runtimeEvents.length > 0,
-        hasCursorEvents: context.session.cursorEvents.length > 0,
-        audioMimeType: context.audio.mimeType || context.audio.blob?.type,
-        audioSource: context.audio.source || undefined,
-        audioStartOffsetMs: context.audio.startOffsetMs,
-        hasAudio: context.session.audioFragments.length > 0 || Boolean(context.audio.blob),
-        cameraMimeType: context.camera.mimeType || context.camera.blob?.type,
-        cameraSource: context.camera.source || undefined,
-        cameraStartOffsetMs: context.camera.startOffsetMs,
-        hasCamera: Boolean(context.camera.blob),
-      });
-      const mediaFragments = buildMediaFragmentMetadata(
-        context.session.audioFragments,
-        clusters,
-        context.audio.source === "external" ? duration : undefined,
-      );
-
-      const recording: Recording = {
-        version: 4,
-        id: Date.now().toString(),
-        name: `Recording ${Date.now()}`,
-        createdAt: Date.now(),
-        frames,
-        keyframeInterval: 120,
-        slideEvents: context.session.slideEvents,
-        previewEvents: context.session.previewEvents,
-        previewInitialDocuments: context.session.previewInitialDocuments,
-        previewPatchBatches: context.session.previewPatchBatches,
-        workspaceEvents: context.session.workspaceEvents,
-        runtimeEvents: context.session.runtimeEvents,
-        cursorEvents: context.session.cursorEvents,
-        slides: slides,
-        tracks,
-        clusters: clusters.length > 0 ? clusters : undefined,
-        mediaFragments: mediaFragments.length > 0 ? mediaFragments : undefined,
-        duration,
-        audioBlob: context.audio.blob || undefined,
-        audioSource: context.audio.source || undefined,
-        audioStartOffsetMs: context.audio.blob ? context.audio.startOffsetMs : undefined,
-        cameraBlob: context.camera.blob || undefined,
-        cameraSource: context.camera.source || undefined,
-        cameraStartOffsetMs: context.camera.blob ? context.camera.startOffsetMs : undefined,
-        streamFinalized: true,
-        workspaceSnapshot,
-        runtimeSnapshot,
-      };
-
-      return {
-        recording,
-        session: null,
-        sessionRevision: 0,
-        audio: {
-          ...context.audio,
-          isRecording: false,
-          mediaRecorder: null,
-          source: null,
-          startOffsetMs: 0,
-          externalDurationMs: null,
-        },
-        camera: {
-          blob: null,
-          isRecording: false,
-          mimeType: "",
-          source: null,
-          startOffsetMs: 0,
-        },
-        timeline: {
-          ...context.timeline,
-          duration,
-        },
-        lastAppliedFrameIndex: -1,
-        lastAppliedPreviewEventIndex: -1,
-        lastAppliedPreviewPatchBatchIndex: -1,
-        lastAppliedSlideEventIndex: -1,
-        lastAppliedWorkspaceEventIndex: -1,
-        lastAppliedRuntimeEventIndex: -1,
-      };
-    }),
-
-    // Playback actions
-    setRecording: assign(({ context, event }) => {
-      const loaded = getLoadedRecordingPayload(context, event);
-      if (!loaded) return {};
-
-      const recording = normalizeRecordingData(loaded.recording);
-      const { duration } = loaded;
-
-      const initialWorkspaceEvent = recording.workspaceEvents?.[0];
-      const initialRuntimeEvent = recording.runtimeEvents?.[0];
-
-      if (recording.slides && context.applySlides) {
-        context.applySlides(recording.slides);
-      }
-
-      const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
-
-      if (initialWorkspaceEvent && context.applyWorkspaceSnapshot) {
-        if (
-          !currentWorkspaceSnapshot ||
-          !areWorkspaceSnapshotsEqual(currentWorkspaceSnapshot, initialWorkspaceEvent.snapshot)
-        ) {
-          context.applyWorkspaceSnapshot(initialWorkspaceEvent.snapshot);
-        }
-      } else if (
-        recording.workspaceSnapshot &&
-        context.applyWorkspaceSnapshot &&
-        (!currentWorkspaceSnapshot ||
-          !areWorkspaceSnapshotsEqual(currentWorkspaceSnapshot, recording.workspaceSnapshot))
-      ) {
-        context.applyWorkspaceSnapshot(recording.workspaceSnapshot);
-      }
-
-      if (initialRuntimeEvent && context.applyRuntimeSnapshot) {
-        context.applyRuntimeSnapshot(initialRuntimeEvent.snapshot);
-      } else if (recording.runtimeSnapshot && context.applyRuntimeSnapshot) {
-        context.applyRuntimeSnapshot(recording.runtimeSnapshot);
-      }
-
-      return {
-        recording,
-        hasManualWorkspaceOverride: false,
-        pendingPlaybackEditorSync: false,
-        playbackAudioSpawned: false,
-        timeline: {
-          currentTime: 0,
-          duration,
-          speed: 1,
-          volume: 1,
-          startedAt: 0,
-          pausedDuration: 0,
-          pausedAt: 0,
-        },
-        currentFrame: null,
-        lastCallbackFrameTimestamp: undefined,
-        lastAppliedFrameIndex: -1,
-        lastAppliedPreviewEventIndex: -1,
-        lastAppliedPreviewPatchBatchIndex: -1,
-        lastAppliedSlideEventIndex: -1,
-        lastAppliedWorkspaceEventIndex: initialWorkspaceEvent ? 0 : -1,
-        lastAppliedRuntimeEventIndex: initialRuntimeEvent ? 0 : -1,
-        lastAppliedPreviewState: undefined,
-      };
-    }),
-
-    // Streaming playback: replace the loaded recording with a longer prefix of the same SCR3
-    // stream. Because the stream is append-only, the new recording is a superset of the current
-    // one, so the already-applied playback indices, current time, and timeline stay valid — we
-    // only swap in the larger frames/events arrays and let the replay cursors catch up.
-    extendRecording: assign(({ context, event }) => {
-      if (event.type !== "EXTEND_RECORDING" || !context.recording) return {};
-      // Extended recordings come from the codec (streaming reader / decoder), which
-      // already normalized every frame. Re-normalizing here deep-cloned the entire
-      // growing frame array on each progressive-decode interval — O(n²) over a
-      // long download — for no behavioral difference.
-      const recording = event.recording;
-      return {
-        recording,
-        timeline: {
-          ...context.timeline,
-          duration: Math.max(context.timeline.currentTime, recording.duration),
-        },
-      };
-    }),
-
-    applyFrameAtTime: assign(({ context, event }) => {
-      const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } = context;
-      const currentTime =
-        event.type === "TICK"
-          ? event.currentTime
-          : event.type === "SEEK"
-            ? event.time
-            : context.timeline.currentTime;
-
-      if (!recording || !editorRefs.editor || context.pendingPlaybackEditorSync) {
-        return {};
-      }
-
-      const frames = recording.frames;
-      if (!frames?.length) return {};
-
-      const frameIndex = findFrameIndexAtTime(frames, currentTime, lastAppliedFrameIndex);
-
-      if (frameIndex === lastAppliedFrameIndex) {
-        return {};
-      }
-
-      let frame: EditorFrame | null = null;
-      const targetFrame = frames[frameIndex];
-      const latestWorkspaceEvent =
-        recording.workspaceEvents?.[context.lastAppliedWorkspaceEventIndex] ?? null;
-
-      if (latestWorkspaceEvent && targetFrame.timestamp < latestWorkspaceEvent.timestamp) {
-        return {
-          lastAppliedFrameIndex: frameIndex,
-          currentFrame: null,
-        };
-      }
-
-      if (isKeyframe(targetFrame)) {
-        // Keyframe: always use directly, most efficient
-        frame = targetFrame;
-      } else if (frameIndex === lastAppliedFrameIndex + 1 && currentFrame) {
-        // Consecutive delta: apply incrementally
-        frame = applyFrameDelta(currentFrame, targetFrame, frameIndex);
-      } else {
-        // Jump into delta: full reconstruction required
-        frame = reconstructFrameAtIndex(frames, frameIndex);
-      }
-
-      if (!frame || !frame.state || !isValidFrameState(frame.state)) {
-        return { lastAppliedFrameIndex: frameIndex };
-      }
-
-      const newCollection = applyFrameState(
-        editorRefs.editor,
-        frame,
-        editorRefs.cursorDecorationsCollection,
-        true,
-        currentFrame,
-      );
-
-      const updates: Partial<EditorMachineContext> = {
-        lastAppliedFrameIndex: frameIndex,
-        currentFrame: frame,
-      };
-
-      if (newCollection !== editorRefs.cursorDecorationsCollection) {
-        updates.editorRefs = {
-          ...editorRefs,
-          cursorDecorationsCollection: newCollection,
-        };
-      }
-
-      if (
-        frame.state.slideState &&
-        frame.state.currentSlideIndex !== undefined &&
-        context.applySlideState
-      ) {
-        // Check if this slide state has changed to prevent excessive re-renders
-        // We only do this check if we don't have separate slide events
-        if (!recording.slideEvents?.length) {
-          const prevSlideState = currentFrame?.state.slideState;
-          const prevSlideIndex = currentFrame?.state.currentSlideIndex;
-
-          const hasChanged =
-            !prevSlideState ||
-            frame.state.slideState.isOpen !== prevSlideState.isOpen ||
-            frame.state.slideState.currentSlideId !== prevSlideState.currentSlideId ||
-            frame.state.slideState.indexv !== prevSlideState.indexv ||
-            frame.state.currentSlideIndex !== prevSlideIndex;
-
-          if (hasChanged) {
-            context.applySlideState(frame.state.slideState, frame.state.currentSlideIndex);
-          }
-        }
-      }
-
-      if (
-        frame.state.previewState &&
-        context.applyPreviewState &&
-        !recording.previewEvents?.length
-      ) {
-        // Dedicated preview events capture preview UI state changes more
-        // accurately than editor frames, so only fall back to frame snapshots
-        // when no preview event stream exists.
-        const nextState = {
-          ...frame.state.previewState,
-          refreshKey: undefined,
-          currentInteraction: undefined,
-        };
-        const currentState = context.lastAppliedPreviewState;
-
-        if (
-          !currentState ||
-          !arePreviewSizesEqual(nextState.size, currentState.size) ||
-          nextState.isOpen !== currentState.isOpen ||
-          nextState.mode !== currentState.mode ||
-          nextState.content !== currentState.content ||
-          Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) > 1 ||
-          Math.abs((nextState.scrollLeft || 0) - (currentState.scrollLeft || 0)) > 1
-        ) {
-          context.applyPreviewState(nextState);
-          updates.lastAppliedPreviewState = nextState;
-        }
-      }
-
-      return updates;
-    }),
-
-    seekToTime: assign(({ context, event }) => {
-      if (event.type !== "SEEK") return {};
-      const clampedTime = Math.max(0, Math.min(event.time, context.timeline.duration));
-      return {
-        timeline: {
-          ...context.timeline,
-          currentTime: clampedTime,
-        },
-        lastAppliedFrameIndex: -1,
-        lastAppliedSlideEventIndex: -1,
-        lastAppliedPreviewEventIndex: -1,
-        lastAppliedPreviewPatchBatchIndex: -1,
-        // NOTE: `lastAppliedWorkspaceEventIndex` is intentionally NOT reset here.
-        // Panel widths (sidebar/preview dock) replay as relative deltas folded
-        // into the *live* width, so the net delta is computed between the last
-        // applied index and the seek target. Resetting to -1 would re-sum every
-        // delta from the start and add it on top of the already-applied width,
-        // so repeated seeks make the panels grow/shrink without bound. Keeping
-        // the true index lets the replay reverse/advance the exact net delta.
-        lastAppliedRuntimeEventIndex: -1,
-      };
-    }),
-
-    setPlaybackSpeed: assign(({ context, event }) => {
-      if (event.type !== "SET_SPEED") return {};
-      return {
-        timeline: {
-          ...context.timeline,
-          speed: event.speed,
-        },
-      };
-    }),
-
-    setVolume: assign(({ context, event }) => {
-      if (event.type !== "SET_VOLUME") return {};
-      return {
-        timeline: {
-          ...context.timeline,
-          volume: Math.max(0, Math.min(1, event.volume)),
-        },
-      };
-    }),
-
-    clearCursorDecorations: assign(({ context }) => {
-      const { editorRefs } = context;
-      if (editorRefs.cursorDecorationsCollection) {
-        editorRefs.cursorDecorationsCollection.clear();
-      }
-      return {
-        editorRefs: {
-          ...editorRefs,
-          cursorDecorationsCollection: null,
-        },
-      };
-    }),
-
-    storeRecordedFrameAtPause: assign(({ context }) => {
-      return {
-        recordedFrameAtPause: context.currentFrame,
-      };
-    }),
-
-    adoptPlaybackWorkspaceAtPause: ({ context }) => {
-      const currentSnapshot = context.getWorkspaceSnapshot?.();
-      const activeFilePath = currentSnapshot?.activeFilePath;
-      const currentFile = activeFilePath
-        ? currentSnapshot?.project.files[activeFilePath]
-        : undefined;
-      const pausedContent = context.currentFrame?.state?.content;
-
-      if (
-        !currentSnapshot ||
-        !context.applyWorkspaceSnapshot ||
-        !activeFilePath ||
-        !currentFile ||
-        pausedContent === undefined
-      ) {
-        return;
-      }
-
-      if (currentFile.content === pausedContent) {
-        context.applyWorkspaceSnapshot(currentSnapshot);
-        return;
-      }
-
-      context.applyWorkspaceSnapshot({
-        ...currentSnapshot,
-        project: {
-          ...currentSnapshot.project,
-          files: {
-            ...currentSnapshot.project.files,
-            [activeFilePath]: {
-              ...currentFile,
-              content: pausedContent,
-            },
-          },
-        },
-      });
-    },
-
-    restoreRecordedFrameFromPause: ({ context }) => {
-      const { editorRefs, hasManualWorkspaceOverride, recordedFrameAtPause } = context;
-      if (
-        hasManualWorkspaceOverride ||
-        !editorRefs.editor ||
-        !recordedFrameAtPause ||
-        !recordedFrameAtPause.state
-      ) {
-        return;
-      }
-
-      // Force restore the exact recorded frame by setting all state directly
-      try {
-        const normalizedFrame = normalizeEditorFrame(recordedFrameAtPause);
-        const model = editorRefs.editor.getModel();
-        if (model) {
-          model.setValue(normalizedFrame.state.content);
-        }
-        if (normalizedFrame.state.viewState) {
-          editorRefs.editor.restoreViewState(normalizedFrame.state.viewState);
-        }
-        editorRefs.editor.setPosition(normalizedFrame.state.position);
-        editorRefs.editor.setSelection(normalizedFrame.state.selection);
-      } catch (error) {
-        console.error("Error restoring recorded frame from pause:", error);
-      }
-    },
-
-    resetPlayback: assign(({ context }) => ({
-      hasManualWorkspaceOverride: false,
-      pendingPlaybackEditorSync: false,
-      timeline: {
-        ...context.timeline,
-        currentTime: 0,
-        startedAt: 0,
-        pausedDuration: 0,
-        pausedAt: 0,
-      },
-      currentFrame: null,
-      lastCallbackFrameTimestamp: undefined,
-      lastAppliedFrameIndex: -1,
-      lastAppliedPreviewEventIndex: -1,
-      lastAppliedPreviewPatchBatchIndex: -1,
-      lastAppliedSlideEventIndex: -1,
-      // Kept (not reset to -1) so the relative panel-width deltas rewind from the
-      // current index back to the start instead of re-summing from scratch onto
-      // the live width. See the note in `seekToTime`.
-      lastAppliedRuntimeEventIndex: -1,
-      lastAppliedPreviewState: undefined,
-    })),
-
-    invalidateAppliedPlaybackState: assign(() => ({
-      currentFrame: null,
-      lastCallbackFrameTimestamp: undefined,
-      lastAppliedFrameIndex: -1,
-      lastAppliedPreviewEventIndex: -1,
-      lastAppliedPreviewPatchBatchIndex: -1,
-      lastAppliedSlideEventIndex: -1,
-      // Kept (not reset to -1) so resuming/replaying does not re-apply the panel-
-      // width deltas on top of the already-applied width. See `seekToTime`.
-      lastAppliedRuntimeEventIndex: -1,
-      lastAppliedPreviewState: undefined,
-    })),
-
-    detachPlaybackWorkspace: assign(() => ({
-      hasManualWorkspaceOverride: true,
-      pendingPlaybackEditorSync: false,
-      currentFrame: null,
-      lastAppliedFrameIndex: -1,
-      lastAppliedPreviewEventIndex: -1,
-      lastAppliedPreviewPatchBatchIndex: -1,
-      lastAppliedSlideEventIndex: -1,
-      lastAppliedWorkspaceEventIndex: -1,
-      lastAppliedRuntimeEventIndex: -1,
-      lastAppliedPreviewState: undefined,
-    })),
-
-    reattachPlaybackWorkspace: assign(({ context }) => ({
-      hasManualWorkspaceOverride: false,
-      pendingPlaybackEditorSync: context.hasManualWorkspaceOverride,
-    })),
-
-    clearPendingPlaybackEditorSync: assign(() => ({
-      pendingPlaybackEditorSync: false,
-    })),
-
-    // Editor/model swaps only invalidate Monaco-rendered frame state. Keep the
-    // dedicated preview/slide replay cursors stable so file switches do not
-    // replay their full history.
-    invalidateRenderedPlaybackState: assign(() => ({
-      currentFrame: null,
-      lastAppliedFrameIndex: -1,
-    })),
-
-    clearRecording: assign({
-      hasManualWorkspaceOverride: false,
-      pendingPlaybackEditorSync: false,
-      recording: null,
-      currentFrame: null,
-      lastCallbackFrameTimestamp: undefined,
-      lastAppliedFrameIndex: -1,
-      lastAppliedPreviewEventIndex: -1,
-      lastAppliedPreviewPatchBatchIndex: -1,
-      lastAppliedSlideEventIndex: -1,
-      lastAppliedWorkspaceEventIndex: -1,
-      lastAppliedRuntimeEventIndex: -1,
-      lastAppliedPreviewState: undefined,
-      timeline: ({ context }) => ({
-        ...context.timeline,
-        currentTime: 0,
-        duration: 0,
-      }),
-    }),
-
+    // Recording (capture-side) actions — bodies live in captureActions.ts, wrapped
+    // here so `setup()` can infer this machine's exact context/event/actor types.
+    setCameraRecordingEnabled: assign(setCameraRecordingEnabled),
+    prepareExternalAudioRecording: assign(prepareExternalAudioRecording),
+    startExternalAudioPlayback: enqueueActions(startExternalAudioPlayback),
+    storeExternalAudioDuration: assign(storeExternalAudioDuration),
+    stopExternalAudioRecording: assign(stopExternalAudioRecording),
+    initRecordingSession: assign(initRecordingSession),
+    captureInitialFrame: assign(captureInitialFrame),
+    captureFrame: assign(captureFrame),
+    capturePreviewRefreshFrame: assign(capturePreviewRefreshFrame),
+    finalizeRecording: assign(finalizeRecording),
+    notifyRecordingStart,
+    notifyRecordingStop,
+    storeAudioBlob: assign(storeAudioBlob),
+    storeAudioStarted: assign(storeAudioStarted),
+    storeCameraBlob: assign(storeCameraBlob),
+    captureAudioChunk: assign(captureAudioChunk),
+    storeCameraStarted: assign(storeCameraStarted),
+    handleCameraError: assign(handleCameraError),
+
+    // Playback (replay-side) actions — bodies live in replayActions.ts, wrapped
+    // here so `setup()` can infer this machine's exact context/event/actor types.
+    setRecording: assign(setRecording),
+    extendRecording: assign(extendRecording),
+    applyFrameAtTime: assign(applyFrameAtTime),
+    seekToTime: assign(seekToTime),
+    setPlaybackSpeed: assign(setPlaybackSpeed),
+    setVolume: assign(setVolume),
+    clearCursorDecorations: assign(clearCursorDecorations),
+    storeRecordedFrameAtPause: assign(storeRecordedFrameAtPause),
+    adoptPlaybackWorkspaceAtPause,
+    restoreRecordedFrameFromPause,
+    resetPlayback: assign(resetPlayback),
+    invalidateAppliedPlaybackState: assign(invalidateAppliedPlaybackState),
+    detachPlaybackWorkspace: assign(detachPlaybackWorkspace),
+    reattachPlaybackWorkspace: assign(reattachPlaybackWorkspace),
+    clearPendingPlaybackEditorSync: assign(clearPendingPlaybackEditorSync),
+    invalidateRenderedPlaybackState: assign(invalidateRenderedPlaybackState),
+    clearRecording: assign(clearRecording),
+    notifyPlaybackStart,
+    notifyPlaybackPause,
+    notifyPlaybackEnd,
+    notifySeek,
+    notifyFrame: assign(notifyFrame),
+    notifyPlaybackUpdate,
+    setEditorRef: assign(setEditorRef),
+    applyPreviewEventsAtTime: assign(applyPreviewEventsAtTime),
+    applyPreviewPatchBatchesAtTime: assign(applyPreviewPatchBatchesAtTime),
+    applyWorkspaceEventsAtTime: assign(applyWorkspaceEventsAtTime),
+    applyRuntimeEventsAtTime: assign(applyRuntimeEventsAtTime),
+    applySlideEventsAtTime: assign(applySlideEventsAtTime),
+
+    // Shared/general — neither pure capture nor pure replay
     setError: assign(({ event }) => {
       if (event.type !== "LOAD_FAILED") return {};
       return { error: event.error };
@@ -1054,325 +206,11 @@ export const editorMachine = setup({
 
     clearError: assign({ error: null }),
 
-    notifyRecordingStart: ({ context }) => {
-      context.onRecordingStart?.();
-    },
-
-    notifyRecordingStop: ({ context }) => {
-      if (context.recording) {
-        context.onRecordingStop?.(context.recording);
-      }
-    },
-
-    notifyPlaybackStart: ({ context }) => {
-      context.onPlaybackStart?.();
-    },
-
-    notifyPlaybackPause: ({ context }) => {
-      context.onPlaybackPause?.();
-    },
-
-    notifyPlaybackEnd: ({ context }) => {
-      context.onPlaybackEnd?.();
-    },
-
-    notifySeek: ({ context, event }) => {
-      if (event.type === "SEEK") {
-        context.onSeek?.(event.time);
-      }
-    },
-
     notifyError: ({ context }) => {
       if (context.error) {
         context.onError?.(new Error(context.error));
       }
     },
-
-    notifyFrame: assign(({ context }) => {
-      const frame = context.currentFrame;
-      if (!frame || context.lastCallbackFrameTimestamp === frame.timestamp) {
-        return {};
-      }
-
-      context.onFrame?.(frame);
-      context.onStateChange?.(frame.state);
-
-      return {
-        lastCallbackFrameTimestamp: frame.timestamp,
-      };
-    }),
-
-    notifyPlaybackUpdate: ({ context }) => {
-      context.onPlaybackUpdate?.(context.timeline.currentTime, context.currentFrame);
-    },
-
-    storeAudioBlob: assign(({ event }) => {
-      if (event.type !== "STOPPED") return {};
-      return {
-        audio: {
-          blob: event.blob,
-          element: null,
-          isRecording: false,
-          mediaRecorder: null,
-          chunks: [],
-          mimeType: event.blob.type,
-          source: "microphone" as const,
-          startOffsetMs: 0,
-          externalDurationMs: null,
-        },
-      };
-    }),
-
-    storeAudioStarted: assign(({ context, event }) => {
-      if (event.type !== "STARTED") return {};
-      return {
-        audio: {
-          ...context.audio,
-          mediaRecorder: event.mediaRecorder,
-          mimeType: event.mimeType,
-          startOffsetMs: 0,
-        },
-      };
-    }),
-
-    storeCameraBlob: assign(({ context, event }) => {
-      if (event.type !== "CAMERA_STOPPED") return {};
-      return {
-        camera: {
-          ...context.camera,
-          blob: event.blob,
-          isRecording: false,
-          mimeType: event.blob.type,
-          source: "camera" as const,
-        },
-      };
-    }),
-
-    // Append a live microphone timeslice fragment to the session's append-only audio stream so
-    // an optional live recording sink can forward it. The finalized blob (STOPPED) is unchanged.
-    captureAudioChunk: assign(({ context, event }) => {
-      if (event.type !== "CHUNK" || !context.session) return {};
-      const fragment: RecordingSessionMediaFragment = {
-        trackId: AUDIO_TRACK_ID,
-        startTimeMs: context.audio.startOffsetMs + event.startTimeMs,
-        endTimeMs: context.audio.startOffsetMs + event.endTimeMs,
-        blob: event.chunk,
-        mimeType: event.chunk.type || context.audio.mimeType || "audio/webm",
-      };
-      context.session.audioFragments.push(fragment);
-      return {
-        session: context.session,
-        sessionRevision: context.sessionRevision + 1,
-      };
-    }),
-
-    storeCameraStarted: assign(({ context, event }) => {
-      if (event.type !== "CAMERA_STARTED") return {};
-      // The camera MediaRecorder only starts after getUserMedia resolves, which lags the
-      // recording-session origin (session.startedAtPerf) by the camera warmup. Capture that
-      // offset so playback can shift the video back into sync; otherwise the face video runs
-      // ahead of audio. Both sides must be the same (monotonic) clock — see P7.
-      const startOffsetMs = context.session
-        ? Math.max(0, event.startedAtPerf - context.session.startedAtPerf)
-        : 0;
-      return {
-        camera: {
-          ...context.camera,
-          mimeType: event.mimeType,
-          startOffsetMs,
-        },
-      };
-    }),
-
-    handleCameraError: assign(({ context, event }) => {
-      if (event.type !== "CAMERA_ERROR") return {};
-      console.warn("Camera recording disabled:", event.error);
-      return {
-        camera: {
-          ...context.camera,
-          isRecording: false,
-          mimeType: "",
-          source: null,
-          startOffsetMs: 0,
-        },
-      };
-    }),
-
-    setEditorRef: assign(({ context, event }) => {
-      if (event.type !== "SET_EDITOR_REF") {
-        return {};
-      }
-
-      const editor = event.editor;
-      if (editor === context.editorRefs.editor) {
-        return {};
-      }
-
-      return {
-        editorRefs: {
-          ...context.editorRefs,
-          editor,
-        },
-      };
-    }),
-
-    applyPreviewEventsAtTime: assign(({ context, event }) => {
-      const { recording, applyPreviewState, lastAppliedPreviewEventIndex } = context;
-
-      if (!recording?.previewEvents?.length || !applyPreviewState) {
-        return {};
-      }
-
-      const replayResult = getPreviewReplayResult({
-        previewEvents: recording.previewEvents,
-        currentTime: resolveReplayTime(event, context.timeline.currentTime),
-        lastAppliedIndex: lastAppliedPreviewEventIndex,
-        lastAppliedState: context.lastAppliedPreviewState,
-        isSeeking: isSeekReplayEvent(event),
-      });
-
-      replayResult.appliedStates.forEach((previewState) => {
-        applyPreviewState(previewState);
-      });
-
-      if (
-        replayResult.nextIndex !== lastAppliedPreviewEventIndex ||
-        replayResult.retainedState !== context.lastAppliedPreviewState
-      ) {
-        return {
-          lastAppliedPreviewEventIndex: replayResult.nextIndex,
-          lastAppliedPreviewState: replayResult.retainedState,
-        };
-      }
-
-      return {};
-    }),
-    applyPreviewPatchBatchesAtTime: assign(({ context, event }) => {
-      const { recording, applyPreviewPatchReplay, lastAppliedPreviewPatchBatchIndex } = context;
-
-      if (
-        !recording?.previewPatchBatches?.length ||
-        !recording.previewInitialDocuments?.length ||
-        !applyPreviewPatchReplay
-      ) {
-        return {};
-      }
-
-      const nextIndex = applyPreviewPatchReplay({
-        recordingId: recording.id,
-        currentTime: resolveReplayTime(event, context.timeline.currentTime),
-        isSeeking: isSeekReplayEvent(event),
-        initialDocuments: recording.previewInitialDocuments,
-        patchBatches: recording.previewPatchBatches,
-        lastAppliedPatchBatchIndex: lastAppliedPreviewPatchBatchIndex,
-      });
-
-      if (nextIndex !== lastAppliedPreviewPatchBatchIndex) {
-        return {
-          lastAppliedPreviewPatchBatchIndex: nextIndex,
-        };
-      }
-
-      return {};
-    }),
-    applyWorkspaceEventsAtTime: assign(({ context, event }) => {
-      const {
-        hasManualWorkspaceOverride,
-        recording,
-        applyWorkspaceSnapshot,
-        lastAppliedWorkspaceEventIndex,
-      } = context;
-
-      if (hasManualWorkspaceOverride) {
-        return {};
-      }
-
-      if (!recording?.workspaceEvents?.length || !applyWorkspaceSnapshot) {
-        return {};
-      }
-
-      const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
-      const replayResult = getWorkspaceReplayResult({
-        workspaceEvents: recording.workspaceEvents,
-        currentTime: resolveReplayTime(event, context.timeline.currentTime),
-        currentSnapshot: currentWorkspaceSnapshot,
-        lastAppliedIndex: lastAppliedWorkspaceEventIndex,
-      });
-
-      if (replayResult.snapshotToApply) {
-        const activeFileChanged =
-          Boolean(currentWorkspaceSnapshot) &&
-          currentWorkspaceSnapshot?.activeFilePath !== replayResult.snapshotToApply.activeFilePath;
-
-        applyWorkspaceSnapshot(replayResult.snapshotToApply);
-        return {
-          lastAppliedWorkspaceEventIndex: replayResult.nextIndex,
-          // File switches change the Monaco model path on the React side.
-          // Wait for that model sync before applying editor frame content.
-          pendingPlaybackEditorSync: activeFileChanged || context.pendingPlaybackEditorSync,
-          currentFrame: null,
-          lastAppliedFrameIndex: -1,
-          lastAppliedSlideEventIndex: -1,
-        };
-      }
-
-      if (replayResult.nextIndex !== lastAppliedWorkspaceEventIndex) {
-        return { lastAppliedWorkspaceEventIndex: replayResult.nextIndex };
-      }
-
-      return {};
-    }),
-    applyRuntimeEventsAtTime: assign(({ context, event }) => {
-      const { recording, applyRuntimeSnapshot, lastAppliedRuntimeEventIndex } = context;
-
-      if (!recording?.runtimeEvents?.length || !applyRuntimeSnapshot) {
-        return {};
-      }
-
-      const replayResult = getRuntimeReplayResult({
-        runtimeEvents: recording.runtimeEvents,
-        currentTime: resolveReplayTime(event, context.timeline.currentTime),
-        lastAppliedIndex: lastAppliedRuntimeEventIndex,
-      });
-
-      if (replayResult.snapshotToApply) {
-        applyRuntimeSnapshot(replayResult.snapshotToApply);
-        return { lastAppliedRuntimeEventIndex: replayResult.nextIndex };
-      }
-
-      if (replayResult.nextIndex !== lastAppliedRuntimeEventIndex) {
-        return { lastAppliedRuntimeEventIndex: replayResult.nextIndex };
-      }
-
-      return {};
-    }),
-    applySlideEventsAtTime: assign(({ context, event }) => {
-      const { recording, applySlideState, lastAppliedSlideEventIndex } = context;
-
-      if (!recording?.slideEvents?.length || !applySlideState) {
-        return {};
-      }
-
-      const replayResult = getSlideReplayResult({
-        slideEvents: recording.slideEvents,
-        slides: recording.slides,
-        currentTime: resolveReplayTime(event, context.timeline.currentTime),
-        lastAppliedIndex: lastAppliedSlideEventIndex,
-        isSeeking: isSeekReplayEvent(event),
-      });
-
-      replayResult.applications.forEach((application) => {
-        applySlideState(application.slideState, application.slideIndex);
-      });
-
-      if (replayResult.nextIndex !== lastAppliedSlideEventIndex) {
-        return {
-          lastAppliedSlideEventIndex: replayResult.nextIndex,
-        };
-      }
-
-      return {};
-    }),
   },
 }).createMachine({
   id: "editor",
