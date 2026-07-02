@@ -297,8 +297,22 @@ export const applyFrameState = (
   return collection;
 };
 
+/** Content string plus the model version it was read at, for reuse across captures. */
+export interface CapturedContentRef {
+  value: string;
+  versionId: number;
+}
+
 /**
- * Create a frame from current editor state
+ * Create a frame from current editor state.
+ *
+ * `previousContent`, when its `versionId` matches the model's current
+ * `getVersionId()`, lets the frame reuse the prior content string by reference
+ * instead of calling `editor.getValue()` again. This matters for mouse/selection
+ * frames (no document edit since the last capture): the caller's content-delta
+ * diff already short-circuits on `prev === next` by reference, so avoiding a
+ * fresh `getValue()` copy turns that into an O(1) check instead of an O(doc)
+ * string equality scan preceded by an O(doc) copy.
  */
 export const createFrame = (
   editor: monaco.editor.IStandaloneCodeEditor,
@@ -306,8 +320,13 @@ export const createFrame = (
   mouseCursor: MouseCursorPosition,
   getSlideState?: EditorMachineInput["getSlideState"],
   getPreviewState?: EditorMachineInput["getPreviewState"],
-): EditorFrame => {
-  const content = editor.getValue();
+  previousContent?: CapturedContentRef,
+): { frame: EditorFrame; contentVersionId: number } => {
+  const versionId = editor.getModel()?.getVersionId() ?? -1;
+  const content =
+    previousContent && previousContent.versionId === versionId
+      ? previousContent.value
+      : editor.getValue();
   const position = normalizeEditorPosition(editor.getPosition());
   const selection = normalizeEditorSelection(editor.getSelection(), undefined, position);
   const viewState = normalizeEditorViewState(editor.saveViewState(), selection, position);
@@ -315,17 +334,20 @@ export const createFrame = (
   const previewState = getPreviewState?.();
 
   return {
-    timestamp,
-    state: {
-      content,
-      selection,
-      position,
-      viewState,
-      mouseCursor,
-      slideState: slideState?.previewState,
-      currentSlideIndex: slideState?.currentSlideIndex,
-      previewState: previewState || undefined,
+    frame: {
+      timestamp,
+      state: {
+        content,
+        selection,
+        position,
+        viewState,
+        mouseCursor,
+        slideState: slideState?.previewState,
+        currentSlideIndex: slideState?.currentSlideIndex,
+        previewState: previewState || undefined,
+      },
     },
+    contentVersionId: versionId,
   };
 };
 

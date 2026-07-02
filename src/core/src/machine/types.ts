@@ -113,6 +113,13 @@ export interface RecordingSession {
   audioFragments: RecordingSessionMediaFragment[];
   /** Last known mouse position */
   lastMousePosition: MouseCursorPosition;
+  /**
+   * Model `getVersionId()` at the last captured frame, paired with that frame's
+   * `state.content` (see `currentFrame` on the machine context). When a new
+   * capture's version id matches, the content string is reused by reference
+   * instead of re-reading `editor.getValue()`.
+   */
+  lastCapturedContentVersionId?: number;
 }
 
 /**

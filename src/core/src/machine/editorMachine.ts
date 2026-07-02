@@ -324,15 +324,16 @@ export const editorMachine = setup({
       // Use createFrame for the initial frame to ensure it has all metadata
       const editor = context.editorRefs.editor;
       let initialFrame: EditorFrame;
+      let contentVersionId: number | undefined;
 
       if (editor) {
-        initialFrame = createFrame(
+        ({ frame: initialFrame, contentVersionId } = createFrame(
           editor,
           0,
           lastMousePosition,
           context.getSlideState,
           context.getPreviewState,
-        );
+        ));
       } else {
         initialFrame = {
           timestamp: 0,
@@ -362,6 +363,7 @@ export const editorMachine = setup({
           ...session,
           frames: emitted ? [emitted] : [],
           encoder,
+          lastCapturedContentVersionId: contentVersionId,
         },
         currentFrame: initialFrame,
       };
@@ -402,12 +404,21 @@ export const editorMachine = setup({
         }
       }
 
-      const frame = createFrame(
+      const previousContent =
+        context.currentFrame && context.session.lastCapturedContentVersionId !== undefined
+          ? {
+              value: context.currentFrame.state.content,
+              versionId: context.session.lastCapturedContentVersionId,
+            }
+          : undefined;
+
+      const { frame, contentVersionId } = createFrame(
         editor,
         timestamp,
         mousePosition,
         context.getSlideState,
         context.getPreviewState,
+        previousContent,
       );
 
       const { state: encoder, emitted } = pushFrame(context.session.encoder, frame);
@@ -419,6 +430,7 @@ export const editorMachine = setup({
           encoder,
           cursorEvents,
           lastMousePosition: mousePosition,
+          lastCapturedContentVersionId: contentVersionId,
         },
         currentFrame: frame,
       };
@@ -435,12 +447,21 @@ export const editorMachine = setup({
       }
 
       const timestamp = Date.now() - context.session.startedAt;
-      const frame = createFrame(
+      const previousContent =
+        context.currentFrame && context.session.lastCapturedContentVersionId !== undefined
+          ? {
+              value: context.currentFrame.state.content,
+              versionId: context.session.lastCapturedContentVersionId,
+            }
+          : undefined;
+
+      const { frame, contentVersionId } = createFrame(
         editor,
         timestamp,
         context.session.lastMousePosition,
         context.getSlideState,
         context.getPreviewState,
+        previousContent,
       );
 
       if (frame.state.previewState) {
@@ -457,6 +478,7 @@ export const editorMachine = setup({
           ...context.session,
           frames: emitted ? [...context.session.frames, emitted] : context.session.frames,
           encoder,
+          lastCapturedContentVersionId: contentVersionId,
         },
         currentFrame: frame,
       };
