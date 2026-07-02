@@ -182,6 +182,69 @@ describe("recordingCodec", () => {
     expect(again.frames).not.toBe(late.frames);
   });
 
+  it("progressive snapshots do not share mutable event arrays", async () => {
+    // Event accumulator arrays must be copied per snapshot, not shared by reference.
+    // If a snapshot's event arrays are shared, later push() calls that mutate them
+    // will silently grow the previously-returned snapshot, breaking consumers that
+    // key memoization on array reference (like React Compiler).
+    const recording = createRecording({
+      duration: 800,
+      frames: [makeKeyframe(0, "a\n"), makeKeyframe(500, "ab\n")],
+      cursorEvents: [
+        { timestamp: 10, x: 1, y: 2, visible: true },
+        { timestamp: 250, x: 2, y: 3, visible: true },
+        { timestamp: 600, x: 3, y: 4, visible: true },
+      ],
+      slideEvents: [
+        { timestamp: 50, type: "slide_open", slideId: "slide-1" },
+        { timestamp: 550, type: "slide_change", slideId: "slide-2" },
+      ],
+    });
+
+    const bytes = await encodeRecordingToStream(recording);
+
+    const reader = createStreamingRecordingReader();
+    // Feed in small chunks like the neighboring test does, withholding the footer to force
+    // a mid-stream snapshot that doesn't yet have all events.
+    const CHUNK_SIZE = 40;
+    const footerHoldback = 16;
+    const partialLength = bytes.length - footerHoldback;
+
+    for (let offset = 0; offset < partialLength; offset += CHUNK_SIZE) {
+      reader.push(bytes.subarray(offset, Math.min(offset + CHUNK_SIZE, partialLength)));
+    }
+
+    const snapshot1 = reader.getRecording();
+    if (!snapshot1) throw new Error("Expected a snapshot before footer");
+
+    const snapshot1CursorLength = snapshot1.cursorEvents?.length ?? 0;
+    const snapshot1SlideLength = snapshot1.slideEvents?.length ?? 0;
+
+    // With the footer withheld, we should have partial events (not all 3 cursor or both slides).
+    expect(snapshot1CursorLength).toBeGreaterThan(0);
+    expect(snapshot1CursorLength).toBeLessThanOrEqual(3);
+    expect(snapshot1SlideLength).toBeGreaterThan(0);
+    expect(snapshot1SlideLength).toBeLessThanOrEqual(2);
+
+    // Push the footer to complete the stream.
+    reader.push(bytes.subarray(partialLength));
+
+    const snapshot2 = reader.getRecording();
+    if (!snapshot2) throw new Error("Expected a snapshot after footer");
+
+    // Snapshot 1's event arrays must not have grown (they must be independent copies).
+    expect(snapshot1.cursorEvents?.length).toBe(snapshot1CursorLength);
+    expect(snapshot1.slideEvents?.length).toBe(snapshot1SlideLength);
+
+    // Snapshot 2 should have all events (the stream completed).
+    expect(snapshot2.cursorEvents?.length).toBe(3);
+    expect(snapshot2.slideEvents?.length).toBe(2);
+
+    // The snapshots must have different array references (not shared).
+    expect(snapshot1.cursorEvents).not.toBe(snapshot2.cursorEvents);
+    expect(snapshot1.slideEvents).not.toBe(snapshot2.slideEvents);
+  });
+
   it("decodes a replayable prefix before the footer arrives, then finalizes", async () => {
     const recording = createRecording({
       duration: 800,

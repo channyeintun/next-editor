@@ -509,16 +509,16 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         prenormalized: true,
         hasSegments: segmentCount > 0,
         maxSegmentTimeMs: Math.max(meta.duration, maxSegmentTimeMs),
-        // Fresh array per snapshot so consumers keyed on reference see the growth;
+        // Fresh arrays per snapshot so consumers keyed on reference see the growth;
         // copying pointers is cheap, unlike the per-frame deep clone this replaces.
         frames: frames.slice(),
-        slideEvents,
-        previewEvents,
-        previewInitialDocuments,
-        previewPatchBatches,
-        workspaceEvents,
-        runtimeEvents,
-        cursorEvents,
+        slideEvents: slideEvents.slice(),
+        previewEvents: previewEvents.slice(),
+        previewInitialDocuments: previewInitialDocuments.slice(),
+        previewPatchBatches: previewPatchBatches.slice(),
+        workspaceEvents: workspaceEvents.slice(),
+        runtimeEvents: runtimeEvents.slice(),
+        cursorEvents: cursorEvents.slice(),
         clusterSummaries: Array.from(clusterMap.values()),
       });
     },
