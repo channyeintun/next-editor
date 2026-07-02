@@ -5,7 +5,6 @@ import type {
   RecordingAudioSource,
   RecordingCameraSource,
   RecordingClusterMeta,
-  RecordingMediaFragment,
   RecordingTrackMeta,
 } from "../../core/src/types";
 import type { Slide } from "../../core/src/slides";
@@ -76,10 +75,10 @@ export const SEGMENT_KIND = {
   workspace: 5,
   runtime: 6,
   cursor: 7,
-  audioChunk: 8,
-  // 9 was `cameraChunk`. Camera video is now always stored externally (never inline in the
-  // stream), so the kind is retired and reserved — do not reuse 9 for a new segment kind, since
-  // older streams may still contain camera chunks (now skipped as an unknown kind on decode).
+  // 8 was `audioChunk` and 9 was `cameraChunk`. Media is now always stored externally (never
+  // inline in the stream) — audio as a sibling file referenced by `audioFile`/`audioUrl`, camera
+  // as a sibling video. Both kinds are retired and reserved — do not reuse 8 or 9 for new segment
+  // kinds, since older streams may still contain those chunks (now skipped as unknown on decode).
 } as const;
 
 export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
@@ -130,11 +129,6 @@ export interface SegmentHeaderFields {
   clusterIndex: number;
   containsKeyframe: boolean;
   isInit: boolean;
-}
-
-/** A {@link RecordingMediaFragment} paired with the raw bytes it points at. */
-export interface MaterializedMediaSegment extends RecordingMediaFragment {
-  bytes: Uint8Array;
 }
 
 // ----------------------------------------------------------------------------
@@ -341,7 +335,7 @@ export function readSegmentHeader(
 }
 
 export function isKnownSegmentKind(kind: number): boolean {
-  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.audioChunk;
+  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.cursor;
 }
 
 // ----------------------------------------------------------------------------

@@ -1,11 +1,7 @@
 import { decode as msgpackDecode } from "@msgpack/msgpack";
 import { unzlibSync } from "fflate";
 import type { Recording } from "../../core/src";
-import type {
-  CursorRecordingEvent,
-  RecordingClusterMeta,
-  RecordingMediaFragment,
-} from "../../core/src/types";
+import type { CursorRecordingEvent, RecordingClusterMeta } from "../../core/src/types";
 import type {
   PreviewDomPatchBatch,
   PreviewEvent,
@@ -17,11 +13,7 @@ import { normalizeDeltaFrame, normalizeRecordingData } from "../../core/src/util
 import type { RuntimeRecordingEvent } from "../../types/runtime";
 import type { WorkspaceRecordingEvent } from "../../types/workspace";
 import {
-  concatChunks,
-  copyToArrayBuffer,
   decodeRecords,
-  DEFAULT_AUDIO_TRACK_ID,
-  DEFAULT_CAMERA_TRACK_ID,
   findFooterStart,
   hasMagicAt,
   HEADER_PREFIX_SIZE,
@@ -31,7 +23,6 @@ import {
   SEGMENT_KIND,
   segmentHeaderSize,
   STREAM_FORMAT_VERSION,
-  type MaterializedMediaSegment,
   type RecordingStreamMeta,
   type SegmentHeaderFields,
 } from "./format";
@@ -39,7 +30,6 @@ import {
   deriveRecordingClusters,
   deriveRecordingMediaFragments,
   deriveRecordingTracks,
-  getTrackId,
   mergeClusterSummary,
 } from "./clusters";
 
@@ -51,10 +41,6 @@ import {
 // only newly-completed segments per push. Both feed `assembleRecording`, so a
 // progressively-decoded prefix and a one-shot decode of the same bytes match.
 // ============================================================================
-
-interface SequencedMediaSegment extends MaterializedMediaSegment {
-  sequence: number;
-}
 
 interface DecodedSegment {
   kind: number;
@@ -114,18 +100,10 @@ function* walkSegments(
   }
 }
 
-function sortMediaSegments<T extends { startTimeMs: number; sequence: number }>(
-  segments: T[],
-): T[] {
-  return segments.sort(
-    (left, right) => left.startTimeMs - right.startTimeMs || left.sequence - right.sequence,
-  );
-}
-
 /**
  * Decoded-stream accumulators shared by the one-shot decoder and the incremental
- * reader. Record arrays are expected in stream (timeline) order; media blobs are
- * pre-assembled and {@link RecordingMediaFragment} metadata carries no bytes.
+ * reader. Record arrays are expected in stream (timeline) order. Media bytes never
+ * live in the stream — audio/camera are external files referenced from the header.
  */
 interface DecodedStreamState {
   meta: RecordingStreamMeta;
@@ -148,8 +126,6 @@ interface DecodedStreamState {
   workspaceEvents: WorkspaceRecordingEvent[];
   runtimeEvents: RuntimeRecordingEvent[];
   cursorEvents: CursorRecordingEvent[];
-  audioBlob?: Blob;
-  audioFragments: RecordingMediaFragment[];
   clusterSummaries: RecordingClusterMeta[];
 }
 
@@ -162,9 +138,8 @@ function assembleRecording(state: DecodedStreamState): Recording {
   const { meta, formatVersion, streamFinalized } = state;
 
   const decodedDuration = Math.max(meta.duration, state.maxSegmentTimeMs);
-  const audioStartOffsetMs =
-    meta.audioStartOffsetMs ?? state.audioFragments[0]?.startTimeMs ?? undefined;
-  // Camera bytes never live in the stream; its offset comes from meta alone.
+  // Media bytes never live in the stream; audio/camera offsets come from meta alone.
+  const audioStartOffsetMs = meta.audioStartOffsetMs ?? undefined;
   const cameraStartOffsetMs = meta.cameraStartOffsetMs ?? undefined;
 
   const provisionalRecording: Recording = {
@@ -187,7 +162,6 @@ function assembleRecording(state: DecodedStreamState): Recording {
     captions: meta.captions,
     captionFiles: meta.captionFiles,
     slides: meta.slides,
-    audioBlob: state.audioBlob,
     audioSource: meta.audioSource,
     audioStartOffsetMs,
     // Audio may live outside the stream — the header then carries only the reference.
@@ -217,13 +191,7 @@ function assembleRecording(state: DecodedStreamState): Recording {
       ? meta.tracks.map((track) => ({ ...track }))
       : deriveRecordingTracks(provisionalRecording);
 
-  const mediaFragments =
-    state.audioFragments.length > 0
-      ? [...state.audioFragments].sort(
-          (left, right) =>
-            left.startTimeMs - right.startTimeMs || left.clusterIndex - right.clusterIndex,
-        )
-      : deriveRecordingMediaFragments(provisionalRecording, tracks, clusters);
+  const mediaFragments = deriveRecordingMediaFragments(provisionalRecording, tracks, clusters);
 
   const assembled: Recording = {
     ...provisionalRecording,
@@ -233,26 +201,6 @@ function assembleRecording(state: DecodedStreamState): Recording {
   };
 
   return state.prenormalized ? assembled : normalizeRecordingData(assembled);
-}
-
-function mediaFragmentFromSegment(
-  meta: RecordingStreamMeta,
-  kind: "audio" | "camera",
-  header: Pick<SegmentHeaderFields, "clusterIndex" | "startTimeMs" | "endTimeMs" | "isInit">,
-  byteLength: number,
-): RecordingMediaFragment {
-  return {
-    trackId: getTrackId(
-      meta.tracks,
-      kind,
-      kind === "audio" ? DEFAULT_AUDIO_TRACK_ID : DEFAULT_CAMERA_TRACK_ID,
-    ),
-    clusterIndex: header.clusterIndex,
-    startTimeMs: header.startTimeMs,
-    endTimeMs: header.endTimeMs,
-    byteLength,
-    isInit: header.isInit,
-  };
 }
 
 function decodeSegments(bytes: Uint8Array): Recording {
@@ -269,7 +217,6 @@ function decodeSegments(bytes: Uint8Array): Recording {
   const workspaceEvents: WorkspaceRecordingEvent[] = [];
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const cursorEvents: CursorRecordingEvent[] = [];
-  const audioSegments: SequencedMediaSegment[] = [];
   const clusterMap = new Map<number, RecordingClusterMeta>();
   let hasSegments = false;
   let maxSegmentTimeMs = meta.duration;
@@ -309,18 +256,6 @@ function decodeSegments(bytes: Uint8Array): Recording {
       case SEGMENT_KIND.cursor:
         cursorEvents.push(...decodeRecords<CursorRecordingEvent>(segment.payload));
         break;
-      case SEGMENT_KIND.audioChunk:
-        audioSegments.push({
-          trackId: getTrackId(meta.tracks, "audio", DEFAULT_AUDIO_TRACK_ID),
-          clusterIndex: segment.clusterIndex,
-          startTimeMs: segment.startTimeMs,
-          endTimeMs: segment.endTimeMs,
-          byteLength: segment.payload.length,
-          bytes: segment.payload.slice(),
-          isInit: segment.isInit,
-          sequence: segment.sequence,
-        });
-        break;
     }
   }
 
@@ -332,16 +267,6 @@ function decodeSegments(bytes: Uint8Array): Recording {
   workspaceEvents.sort((left, right) => left.timestamp - right.timestamp);
   runtimeEvents.sort((left, right) => left.timestamp - right.timestamp);
   cursorEvents.sort((left, right) => left.timestamp - right.timestamp);
-
-  const sortedAudioSegments = sortMediaSegments(audioSegments);
-
-  const audioBlob =
-    sortedAudioSegments.length > 0
-      ? new Blob(
-          [copyToArrayBuffer(concatChunks(sortedAudioSegments.map((segment) => segment.bytes)))],
-          { type: meta.audioType || "audio/webm" },
-        )
-      : undefined;
 
   return assembleRecording({
     meta,
@@ -357,10 +282,6 @@ function decodeSegments(bytes: Uint8Array): Recording {
     workspaceEvents,
     runtimeEvents,
     cursorEvents,
-    audioBlob,
-    audioFragments: sortedAudioSegments.map(
-      ({ bytes: _bytes, sequence: _sequence, ...fragment }) => fragment,
-    ),
     clusterSummaries: Array.from(clusterMap.values()),
   });
 }
@@ -380,8 +301,8 @@ export function decodeRecordingPrefix(bytes: Uint8Array): Recording {
 // `getRecording()`. Only newly-completed segments are decoded on each push (the
 // header is parsed once, segment payloads are inflated once), so progressive
 // playback cost is O(total bytes) instead of the O(n²) of re-decoding the whole
-// prefix every interval. Media blobs grow by reference (`new Blob([prev, next])`)
-// rather than being re-concatenated from scratch each time.
+// prefix every interval. Frames are normalized once at ingest, and media bytes never
+// live in the stream (audio/camera are external files referenced from the header).
 //
 // Stream bytes are written in timeline (cluster/time) order, so accumulators stay
 // sorted by arrival and need no re-sort. Output matches a one-shot
@@ -420,12 +341,8 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   const workspaceEvents: WorkspaceRecordingEvent[] = [];
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const cursorEvents: CursorRecordingEvent[] = [];
-  const audioFragments: RecordingMediaFragment[] = [];
   const clusterMap = new Map<number, RecordingClusterMeta>();
 
-  const audioChunks: BlobPart[] = [];
-  let audioBlob: Blob | undefined;
-  let audioBlobStale = false;
   let segmentCount = 0;
   let maxSegmentTimeMs = 0;
 
@@ -516,20 +433,6 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         commit = () => cursorEvents.push(...records);
         break;
       }
-      case SEGMENT_KIND.audioChunk: {
-        // Copy out of the growable buffer (it may be reallocated on the next push).
-        const chunk = payload.slice();
-        const mediaMeta = meta;
-        commit = () => {
-          // Collect raw chunks; the Blob is (re)built flat in `getRecording()`. Nesting
-          // `new Blob([prev, chunk])` per segment builds a thousands-deep Blob chain over
-          // a long recording, making every later read progressively more expensive.
-          audioChunks.push(chunk);
-          audioBlobStale = true;
-          audioFragments.push(mediaFragmentFromSegment(mediaMeta, "audio", header, chunk.length));
-        };
-        break;
-      }
       default:
         commit = () => {};
     }
@@ -603,10 +506,6 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     },
     getRecording() {
       if (!headerParsed || !meta) return null;
-      if (audioBlobStale) {
-        audioBlob = new Blob(audioChunks, { type: meta.audioType || "audio/webm" });
-        audioBlobStale = false;
-      }
       return assembleRecording({
         meta,
         formatVersion,
@@ -625,8 +524,6 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         workspaceEvents,
         runtimeEvents,
         cursorEvents,
-        audioBlob,
-        audioFragments,
         clusterSummaries: Array.from(clusterMap.values()),
       });
     },

@@ -144,15 +144,18 @@ export class RecordingStorage {
 
   private async createStoredEntry(recording: Recording): Promise<StoredRecordingEntry> {
     const normalizedRecording = normalizeRecording(recording);
-    // The stream is camera-free; the camera video is persisted separately as its own blob.
+    // The stream is media-free; camera and audio are persisted separately as their own blobs.
     const binaryData = await encodeRecordingToStream(normalizedRecording);
     const cameraBlob =
       normalizedRecording.cameraBlob instanceof Blob ? normalizedRecording.cameraBlob : undefined;
+    const audioBlob =
+      normalizedRecording.audioBlob instanceof Blob ? normalizedRecording.audioBlob : undefined;
 
     return {
       metadata: this.createStoredMetadata(normalizedRecording, binaryData.byteLength),
       binaryData,
       cameraBlob,
+      audioBlob,
     };
   }
 
@@ -165,9 +168,16 @@ export class RecordingStorage {
       );
     }
 
-    const recording = normalizeRecording(recordings[0]);
+    let recording = normalizeRecording(recordings[0]);
     // Reattach the separately-stored camera video (CameraOverlay turns the blob into an object URL).
-    return entry.cameraBlob ? { ...recording, cameraBlob: entry.cameraBlob } : recording;
+    if (entry.cameraBlob) {
+      recording = { ...recording, cameraBlob: entry.cameraBlob };
+    }
+    // Reattach the separately-stored audio blob so playback finds it inline again.
+    if (entry.audioBlob) {
+      recording = { ...recording, audioBlob: entry.audioBlob };
+    }
+    return recording;
   }
 
   private async loadIndexedDBRecordings(): Promise<Recording[]> {

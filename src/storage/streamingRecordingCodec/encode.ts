@@ -1,5 +1,5 @@
 import type { Recording } from "../../core/src";
-import type { RecordingClusterMeta, RecordingTrackMeta } from "../../core/src/types";
+import type { RecordingClusterMeta } from "../../core/src/types";
 import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
 import { isKeyframe } from "../../core/src/utils/deltaTypes";
 import { normalizeRecordingData } from "../../core/src/utils/editorState";
@@ -11,15 +11,12 @@ import {
   cameraMimeFromFilename,
   clampU32,
   concatChunks,
-  DEFAULT_AUDIO_TRACK_ID,
-  DEFAULT_CAMERA_TRACK_ID,
   encodeRecords,
   FLAG_HAS_AUDIO,
   FLAG_HAS_CAMERA,
   readLastRecordTimestamp,
   readRecordTimestamp,
   SEGMENT_KIND,
-  type MaterializedMediaSegment,
   type RecordingStreamMeta,
   type SegmentIndexEntry,
   type SegmentKind,
@@ -27,9 +24,7 @@ import {
 import {
   batchFramesByKeyframe,
   deriveRecordingClusters,
-  deriveRecordingMediaFragments,
   deriveRecordingTracks,
-  getTrackId,
   groupRecordsByCluster,
   resolveClusterIndexForTime,
 } from "./clusters";
@@ -60,7 +55,6 @@ export interface StreamingRecordingWriter {
     records: ReadonlyArray<unknown>,
     options?: SegmentAppendOptions,
   ): void;
-  appendAudioChunk(chunk: Uint8Array, options?: SegmentAppendOptions): void;
   finalize(): Uint8Array;
   drainPending(): Uint8Array;
   isFinalized(): boolean;
@@ -168,18 +162,6 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
         isInit: options?.isInit,
       });
     },
-    appendAudioChunk(chunk, options) {
-      ensureWritable();
-      if (chunk.length === 0) return;
-      const startTimeMs = options?.startTimeMs ?? headerMeta?.audioStartOffsetMs ?? 0;
-      appendSegment(SEGMENT_KIND.audioChunk, chunk, {
-        startTimeMs,
-        endTimeMs: options?.endTimeMs ?? startTimeMs,
-        firstFrameIndex: options?.firstFrameIndex ?? -1,
-        clusterIndex: options?.clusterIndex,
-        isInit: options?.isInit,
-      });
-    },
     finalize() {
       ensureWritable();
       pushChunk(buildFooterChunk(index));
@@ -197,104 +179,19 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   };
 }
 
-function readBlobAsArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
-  if (typeof blob.arrayBuffer === "function") {
-    return blob.arrayBuffer();
-  }
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (reader.result instanceof ArrayBuffer) {
-        resolve(reader.result);
-        return;
-      }
-      reject(new Error("Failed to read media blob as ArrayBuffer"));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read media blob"));
-    reader.readAsArrayBuffer(blob);
-  });
-}
-
-async function materializeMediaSegments(
-  recording: Recording,
-  kind: "audio" | "camera",
-  tracks: ReadonlyArray<RecordingTrackMeta>,
-  clusters: ReadonlyArray<RecordingClusterMeta>,
-): Promise<MaterializedMediaSegment[]> {
-  const blob = kind === "audio" ? recording.audioBlob : recording.cameraBlob;
-  const defaultTrackId = kind === "audio" ? DEFAULT_AUDIO_TRACK_ID : DEFAULT_CAMERA_TRACK_ID;
-  const trackKind = kind === "audio" ? "audio" : "camera";
-  const startOffsetMs =
-    kind === "audio" ? (recording.audioStartOffsetMs ?? 0) : (recording.cameraStartOffsetMs ?? 0);
-  const trackId = getTrackId(tracks, trackKind, defaultTrackId);
-
-  const metadata = deriveRecordingMediaFragments(recording, tracks, clusters)
-    .filter((fragment) => fragment.trackId === trackId)
-    .sort(
-      (left, right) =>
-        left.startTimeMs - right.startTimeMs || left.clusterIndex - right.clusterIndex,
-    );
-
-  if (metadata.length > 0 && metadata.every((fragment) => fragment.bytes instanceof Uint8Array)) {
-    return metadata.map((fragment) => ({
-      ...fragment,
-      bytes: (fragment.bytes as Uint8Array).slice(),
-      byteLength: fragment.byteLength ?? (fragment.bytes as Uint8Array).length,
-    }));
-  }
-
-  if (!(blob instanceof Blob) || blob.size === 0) {
-    return [];
-  }
-
-  const bytes = new Uint8Array(await readBlobAsArrayBuffer(blob));
-  const fallbackMetadata =
-    metadata.length > 0
-      ? metadata
-      : [
-          {
-            trackId,
-            clusterIndex: resolveClusterIndexForTime(clusters, startOffsetMs),
-            startTimeMs: startOffsetMs,
-            endTimeMs: Math.max(startOffsetMs, recording.duration),
-            byteLength: bytes.length,
-            isInit: true,
-          },
-        ];
-
-  let offset = 0;
-  return fallbackMetadata
-    .map((fragment, index) => {
-      const remaining = Math.max(0, bytes.length - offset);
-      const expectedLength =
-        typeof fragment.byteLength === "number" && Number.isFinite(fragment.byteLength)
-          ? Math.max(0, Math.trunc(fragment.byteLength))
-          : remaining;
-      const takeLength =
-        index === fallbackMetadata.length - 1 ? remaining : Math.min(remaining, expectedLength);
-      const fragmentBytes = bytes.subarray(offset, offset + takeLength).slice();
-      offset += takeLength;
-      return {
-        ...fragment,
-        bytes: fragmentBytes,
-        byteLength: fragmentBytes.length,
-        isInit: fragment.isInit ?? index === 0,
-      };
-    })
-    .filter((fragment) => fragment.bytes.length > 0);
-}
-
 export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
   const normalized = normalizeRecordingData(recording);
   const tracks = deriveRecordingTracks(normalized);
   const clusters = deriveRecordingClusters(normalized);
-  // Externalized audio (a sibling file/URL) is never embedded — like camera, the stream
-  // carries only the reference and metadata in its header, keeping the `.ne` small.
-  const hasExternalAudio = Boolean(normalized.audioFile || normalized.audioUrl);
-  const audioFragments = hasExternalAudio
-    ? []
-    : await materializeMediaSegments(normalized, "audio", tracks, clusters);
-  const hasAudio = audioFragments.length > 0 || hasExternalAudio;
+  // Audio is never embedded in the stream — its bytes live in a sibling file/blob referenced
+  // by `audioFile`/`audioUrl` (or attached in memory as `audioBlob`). The stream carries only
+  // the reference and metadata in its header, keeping the `.ne` small.
+  const hasAudio = Boolean(
+    normalized.audioFile ||
+    normalized.audioUrl ||
+    normalized.audioSource ||
+    (normalized.audioBlob instanceof Blob && normalized.audioBlob.size > 0),
+  );
   // Camera video is never embedded in the stream — its bytes live in a separate file/blob. The
   // stream carries only the camera reference and metadata in its header.
   const hasCamera = Boolean(
@@ -407,21 +304,6 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
   queueClusteredEventSegments(SEGMENT_KIND.workspace, normalized.workspaceEvents, 1);
   queueClusteredEventSegments(SEGMENT_KIND.runtime, normalized.runtimeEvents, 1);
   queueClusteredEventSegments(SEGMENT_KIND.cursor, normalized.cursorEvents, 1);
-
-  audioFragments.forEach((fragment, index) => {
-    pendingSegments.push({
-      clusterIndex: fragment.clusterIndex,
-      startTimeMs: fragment.startTimeMs,
-      priority: 2,
-      write: () =>
-        writer.appendAudioChunk(fragment.bytes, {
-          startTimeMs: fragment.startTimeMs,
-          endTimeMs: fragment.endTimeMs,
-          clusterIndex: fragment.clusterIndex,
-          isInit: fragment.isInit ?? index === 0,
-        }),
-    });
-  });
 
   pendingSegments
     .sort(

@@ -6,39 +6,74 @@ import { audioPlaybackActor } from "./audioActor";
 import type { Recording } from "../types";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 
-// SoundTouch is loaded lazily by audioActor for pitch preservation. Replace it
-// with a lightweight mock so the playback graph can be exercised under jsdom and
-// the pitch-compensation wiring can be asserted without a real AudioWorklet.
-const soundTouchMock = vi.hoisted(() => ({
+// The Signalsmith Stretch worklet is loaded lazily by audioActor for off-speed pitch
+// preservation. Replace it with a lightweight mock so the playback graph can be
+// exercised under jsdom and the stretch scheduling can be asserted without a real
+// AudioWorklet (jsdom's `AudioWorkletNode` has no usable `port`).
+const stretchMock = vi.hoisted(() => ({
   instances: [] as Array<{
-    playbackRate: { value: number };
-    pitch: { value: number };
-    pitchSemitones: { value: number };
-    disconnected: boolean;
+    scheduleCalls: Array<{
+      active?: boolean;
+      input?: number;
+      output?: number;
+      rate?: number;
+      semitones?: number;
+    }>;
+    buffersAdded: number;
+    connected: boolean;
+    stopped: boolean;
   }>,
 }));
 
-vi.mock("@soundtouchjs/audio-worklet", () => {
-  class MockSoundTouchNode {
-    static async register() {}
-    playbackRate = { value: 1 };
-    pitch = { value: 1 };
-    pitchSemitones = { value: 0 };
-    disconnected = false;
+vi.mock("signalsmith-stretch", () => {
+  class MockStretchNode {
+    inputTime = 0;
+    scheduleCalls: Array<{
+      active?: boolean;
+      input?: number;
+      output?: number;
+      rate?: number;
+      semitones?: number;
+    }> = [];
+    buffersAdded = 0;
+    connected = false;
+    stopped = false;
     constructor() {
-      soundTouchMock.instances.push(this);
+      stretchMock.instances.push(this);
     }
-    connect() {}
+    connect() {
+      this.connected = true;
+    }
     disconnect() {
-      this.disconnected = true;
+      this.connected = false;
+    }
+    async addBuffers(channels: Float32Array[]) {
+      this.buffersAdded += 1;
+      return channels[0]?.length ?? 0;
+    }
+    async dropBuffers() {
+      return { start: 0, end: 0 };
+    }
+    async schedule(change: (typeof this.scheduleCalls)[number]) {
+      this.scheduleCalls.push(change);
+      return change;
+    }
+    async start() {
+      return this.schedule({ active: true });
+    }
+    async stop() {
+      this.stopped = true;
+      return this.schedule({ active: false });
+    }
+    async setUpdateInterval() {}
+    async latency() {
+      return 0;
     }
   }
-  return { SoundTouchNode: MockSoundTouchNode };
+  return {
+    default: async () => new MockStretchNode(),
+  };
 });
-
-vi.mock("@soundtouchjs/audio-worklet/processor?url", () => ({
-  default: "blob:soundtouch-processor",
-}));
 
 const selection = {
   startLineNumber: 1,
@@ -632,8 +667,8 @@ describe("editorMachine external audio recording", () => {
       value: MockExternalAudioContext,
     });
     // This test plays at 1x, which never needs pitch preservation. Keep
-    // AudioWorkletNode undefined so the actor's lazy SoundTouch import never
-    // fires — otherwise an in-flight dynamic import would leak past the test.
+    // AudioWorkletNode undefined so the actor's lazy stretch-node load never
+    // fires — otherwise an in-flight load would leak past the test.
     delete (globalThis as Record<string, unknown>).AudioWorkletNode;
     // jsdom's Blob lacks arrayBuffer(); the actor decodes through it, so stub it.
     if (typeof Blob.prototype.arrayBuffer !== "function") {
@@ -704,8 +739,14 @@ describe("audioPlaybackActor", () => {
     destination = {};
     audioWorklet = { addModule: async () => {} };
     bufferSources: MockBufferSource[] = [];
-    // A long mono buffer so any requested seek offset stays in range.
-    private decodeResult = { duration: 120, numberOfChannels: 1, length: 1_000 };
+    // A long mono buffer so any requested seek offset stays in range. Includes
+    // `getChannelData` since the stretch node copies channel samples out of it.
+    private decodeResult = {
+      duration: 120,
+      numberOfChannels: 1,
+      length: 1_000,
+      getChannelData: () => new Float32Array(1_000),
+    };
 
     constructor() {
       MockAudioContext.instances.push(this);
@@ -765,10 +806,10 @@ describe("audioPlaybackActor", () => {
     }
   };
 
-  // The decode + worklet-registration chains (including the dynamic SoundTouch
-  // import) settle over an unpredictable number of microtask/macrotask turns,
-  // especially under full-suite load. Poll until the graph reaches the expected
-  // shape instead of guessing a fixed number of flushes.
+  // The decode + worklet-load chains (including the async stretch-node creation)
+  // settle over an unpredictable number of microtask/macrotask turns, especially
+  // under full-suite load. Poll until the graph reaches the expected shape instead
+  // of guessing a fixed number of flushes.
   const waitUntil = async (predicate: () => boolean, timeoutMs = 2000) => {
     const start = Date.now();
     while (!predicate()) {
@@ -789,7 +830,7 @@ describe("audioPlaybackActor", () => {
 
   // Stop every spawned actor on teardown — even if a test threw before its own
   // actor.stop(). A surviving actor would otherwise resolve its pending decode /
-  // SoundTouch import during a later test and leak a buffer source or pitch node.
+  // stretch-node load during a later test and leak a buffer source or stretch node.
   let spawnedActors: Array<ReturnType<typeof createActor>> = [];
 
   afterEach(() => {
@@ -804,7 +845,7 @@ describe("audioPlaybackActor", () => {
       patchedBlobArrayBuffer = false;
     }
     MockAudioContext.instances = [];
-    soundTouchMock.instances = [];
+    stretchMock.instances = [];
   });
 
   const createPlayback = (playbackRate: number, startPositionMs = 0) => {
@@ -820,44 +861,42 @@ describe("audioPlaybackActor", () => {
     return actor;
   };
 
-  it("preserves pitch at 2x by routing through a tempo-matched SoundTouch node", async () => {
+  it("preserves pitch at 2x by routing through a tempo-matched Stretch node", async () => {
     installMockAudio();
     const actor = createPlayback(2);
 
     actor.send({ type: "PLAY" });
-    // Wait for the decode and the lazy SoundTouch import to settle: at 2x the
-    // graph stabilizes with exactly one pitch node routed after the source.
+    // Off-speed playback starts on the native (transient, resampled) fallback while the
+    // Stretch worklet loads, then upgrades in place once the node is ready.
     await waitUntil(
       () =>
-        soundTouchMock.instances.length === 1 &&
-        (MockAudioContext.instances[0]?.bufferSources.length ?? 0) > 0,
+        stretchMock.instances.length === 1 &&
+        (stretchMock.instances[0]?.scheduleCalls.length ?? 0) > 0,
     );
 
-    const ctx = MockAudioContext.instances[0];
-    const source = ctx.bufferSources.at(-1);
-    // The buffer source still carries the 2x tempo, so speed is preserved...
-    expect(source?.playbackRate.value).toBe(2);
-    // ...while a SoundTouch node set to the same tempo cancels the resulting
-    // octave shift, keeping the voice's pitch natural.
-    expect(soundTouchMock.instances).toHaveLength(1);
-    expect(soundTouchMock.instances[0].playbackRate.value).toBe(2);
-    expect(soundTouchMock.instances[0].pitch.value).toBe(1);
-    expect(soundTouchMock.instances[0].pitchSemitones.value).toBe(0);
+    const stretch = stretchMock.instances[0];
+    // The node was loaded with the decoded samples...
+    expect(stretch.buffersAdded).toBeGreaterThan(0);
+    // ...and scheduled at 2x tempo with zero pitch shift, so speed changes without
+    // touching pitch — no resample-then-correct double processing.
+    const activeSchedule = stretch.scheduleCalls.find((call) => call.active);
+    expect(activeSchedule?.rate).toBe(2);
+    expect(activeSchedule?.semitones).toBe(0);
 
     actor.stop();
   });
 
-  it("stays native at 1x with no pitch shifter inserted", async () => {
+  it("stays native at 1x with no stretch node created", async () => {
     installMockAudio();
     const actor = createPlayback(1);
 
     actor.send({ type: "PLAY" });
-    // At 1x the source plays directly; no pitch node is ever inserted.
+    // At 1x the source plays directly; the stretch worklet is never loaded.
     await waitUntil(() => (MockAudioContext.instances[0]?.bufferSources.length ?? 0) > 0);
 
     const ctx = MockAudioContext.instances[0];
     expect(ctx.bufferSources.at(-1)?.playbackRate.value).toBe(1);
-    expect(soundTouchMock.instances).toHaveLength(0);
+    expect(stretchMock.instances).toHaveLength(0);
 
     actor.stop();
   });
@@ -867,27 +906,27 @@ describe("audioPlaybackActor", () => {
     const actor = createPlayback(2);
 
     actor.send({ type: "PLAY" });
-    // Let the graph fully stabilize (decode + pitch node) so the seek/sync
-    // assertions below count only the sources they themselves trigger.
+    // Let the graph fully stabilize (decode + stretch node upgrade) so the seek/sync
+    // assertions below count only the schedule calls they themselves trigger.
     await waitUntil(
       () =>
-        soundTouchMock.instances.length === 1 &&
-        (MockAudioContext.instances[0]?.bufferSources.length ?? 0) > 0,
+        stretchMock.instances.length === 1 &&
+        (stretchMock.instances[0]?.scheduleCalls.some((call) => call.active) ?? false),
     );
-    const ctx = MockAudioContext.instances[0];
+    const stretch = stretchMock.instances[0];
 
     actor.send({ type: "SEEK", timeMs: 12_500 });
-    expect(ctx.bufferSources.at(-1)?.startedOffset).toBe(12.5);
+    expect(stretch.scheduleCalls.at(-1)?.input).toBe(12.5);
 
-    const sourceCount = ctx.bufferSources.length;
+    const scheduleCount = stretch.scheduleCalls.length;
     // 200ms drift is below AUDIO_SYNC_DRIFT_THRESHOLD_MS → no restart.
     actor.send({ type: "SYNC", timeMs: 12_700 });
-    expect(ctx.bufferSources.length).toBe(sourceCount);
+    expect(stretch.scheduleCalls.length).toBe(scheduleCount);
 
     // 500ms drift reaches the threshold → restart from the synced position.
     actor.send({ type: "SYNC", timeMs: 13_000 });
-    expect(ctx.bufferSources.length).toBe(sourceCount + 1);
-    expect(ctx.bufferSources.at(-1)?.startedOffset).toBe(13);
+    expect(stretch.scheduleCalls.length).toBeGreaterThan(scheduleCount);
+    expect(stretch.scheduleCalls.at(-1)?.input).toBe(13);
 
     actor.stop();
   });

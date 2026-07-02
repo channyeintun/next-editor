@@ -16,18 +16,6 @@ import {
  */
 const EVENT_FLUSH_THRESHOLD = 32;
 
-async function blobToBytes(blob: Blob): Promise<Uint8Array> {
-  if (typeof blob.arrayBuffer === "function") {
-    return new Uint8Array(await blob.arrayBuffer());
-  }
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read audio blob"));
-    reader.readAsArrayBuffer(blob);
-  });
-}
-
 interface StreamedCounts {
   frames: number;
   slide: number;
@@ -60,9 +48,10 @@ interface PendingStreamSegment {
  * newly-captured records to a live SCR3 writer and forwarding the drained bytes.
  *
  * Frame segments are flushed at keyframe boundaries (range-loadable) and event segments on a
- * small threshold, matching the SCR3 batching policy. Audio and camera fragments are read
- * asynchronously and appended in capture order. The emitted bytes are the same SCR3 stream the
- * exporter produces, so a remote consumer can replay them with `decodeRecordingPrefix`.
+ * small threshold, matching the SCR3 batching policy. Media bytes are never part of the stream —
+ * audio and camera live in their own files/blobs, delivered outside this sink. The emitted bytes
+ * are the same SCR3 stream the exporter produces, so a remote consumer can replay them with
+ * `decodeRecordingPrefix`.
  */
 export class RecordingStreamBridge {
   private readonly writer: StreamingRecordingWriter = createStreamingRecordingWriter();
@@ -76,8 +65,6 @@ export class RecordingStreamBridge {
     runtime: 0,
     cursor: 0,
   };
-  /** Number of audio fragments already scheduled for streaming. */
-  private audioCount = 0;
   /** Timeline starts for SCR3 cluster indices known to the live bridge. */
   private readonly clusterStarts: number[] = [];
   /** Serializes segment appends so async media reads cannot reorder the SCR3 stream. */
@@ -173,7 +160,6 @@ export class RecordingStreamBridge {
       ),
       ...this.collectEventSegments(SEGMENT_KIND.runtime, session.runtimeEvents, "runtime", final),
       ...this.collectEventSegments(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", final),
-      ...this.collectAudioSegments(session.audioFragments),
     ];
   }
 
@@ -298,33 +284,6 @@ export class RecordingStreamBridge {
       groupStart = groupEnd;
     }
     this.counts[key] = records.length;
-    return segments;
-  }
-
-  private collectAudioSegments(
-    fragments: RecordingSession["audioFragments"],
-  ): PendingStreamSegment[] {
-    const segments: PendingStreamSegment[] = [];
-    while (this.audioCount < fragments.length) {
-      const fragment = fragments[this.audioCount];
-      const fragmentIndex = this.audioCount;
-      this.audioCount += 1;
-      const clusterIndex = this.resolveClusterIndex(fragment.startTimeMs);
-      segments.push({
-        clusterIndex,
-        startTimeMs: fragment.startTimeMs,
-        priority: 2,
-        write: async () => {
-          const bytes = await blobToBytes(fragment.blob);
-          this.writer.appendAudioChunk(bytes, {
-            startTimeMs: fragment.startTimeMs,
-            endTimeMs: fragment.endTimeMs,
-            clusterIndex,
-            isInit: fragmentIndex === 0,
-          });
-        },
-      });
-    }
     return segments;
   }
 

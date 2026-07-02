@@ -6,6 +6,32 @@ the playback blob; true range-streaming playback remains a follow-up, as does A4
 worker-izing the streaming decode and A5 interval tuning — both now optional since the
 quadratics are gone and URL-loaded `.ne` files no longer carry audio bytes).
 
+**Follow-up (same day):** inline audio was removed from the SCR3 format entirely — no
+legacy `audioChunk` decoding path. Every recording's audio now lives outside the
+stream (sibling `.weba` file for `.ne` exports, a separate IndexedDB blob store for
+local saves), mirroring how camera video already worked. `SEGMENT_KIND.audioChunk` is
+retired the same way `cameraChunk` was — old `.ne` files with inline audio will not
+replay their audio track (this was an accepted breaking change, not an oversight).
+
+Off-speed playback was also switched from SoundTouch (WSOLA resample + pitch-correct,
+two-stage processing) to [Signalsmith Stretch](https://signalsmith-audio.co.uk/code/stretch/)
+(`signalsmith-stretch` npm package), a single-stage phase-vocoder-style time-stretch
+driven from a loaded sample buffer. This removes the double-processing artifacts that
+made 2x playback sound less natural than the reference bar (YouTube-style speed-up
+quality). Implementation notes:
+
+- `HTMLAudioElement` + `preservesPitch` was deliberately avoided — prior experience
+  showed it feels laggy and pitch-raise is hard to fully suppress across browsers.
+  Stretch keeps everything on the existing Web Audio graph (AudioWorklet + WASM).
+- The stretch node is a **single persistent node per AudioContext**, unlike the old
+  per-start `SoundTouchNode` — its own internal buffering makes creating a fresh node
+  per seek wasteful. Seeks/retempos on it are a duck-and-recover on one persistent
+  envelope rather than the native engine's two-envelope crossfade (see
+  `startStretchSource` in `audioActor.ts`).
+- 1x playback is untouched (still a plain `AudioBufferSourceNode`, byte-for-byte
+  native); the stretch worklet loads lazily only when playback actually goes
+  off-speed, so 1x users never pay for it.
+
 ## 1. Problem statement
 
 Loading a ~50‑minute recording via the `?url=` query parameter drives CPU to

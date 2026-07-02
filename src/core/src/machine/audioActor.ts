@@ -1,47 +1,5 @@
 import { fromCallback, type ActorRefFrom } from "xstate";
-
-/**
- * SoundTouch (WSOLA) is loaded lazily and only used to preserve pitch when audio
- * plays off-speed. An `AudioBufferSourceNode` resamples on `playbackRate`, which
- * couples tempo and pitch (2x speed = +1 octave); SoundTouch cancels that
- * tempo-induced pitch shift. Module load and per-`AudioContext` registration are
- * cached so repeated playback actors share the work.
- */
-type SoundTouchNodeCtor = typeof import("@soundtouchjs/audio-worklet").SoundTouchNode;
-
-let soundTouchLoader: Promise<{
-  SoundTouchNode: SoundTouchNodeCtor;
-  processorUrl: string;
-}> | null = null;
-const soundTouchRegistrations = new WeakMap<BaseAudioContext, Promise<SoundTouchNodeCtor>>();
-
-const loadSoundTouch = () => {
-  if (!soundTouchLoader) {
-    soundTouchLoader = Promise.all([
-      import("@soundtouchjs/audio-worklet"),
-      import("@soundtouchjs/audio-worklet/processor?url"),
-    ]).then(([module, processor]) => ({
-      SoundTouchNode: module.SoundTouchNode,
-      processorUrl: processor.default,
-    }));
-  }
-
-  return soundTouchLoader;
-};
-
-const registerSoundTouch = (context: BaseAudioContext): Promise<SoundTouchNodeCtor> => {
-  let registration = soundTouchRegistrations.get(context);
-
-  if (!registration) {
-    registration = loadSoundTouch().then(async ({ SoundTouchNode, processorUrl }) => {
-      await SoundTouchNode.register(context, processorUrl);
-      return SoundTouchNode;
-    });
-    soundTouchRegistrations.set(context, registration);
-  }
-
-  return registration;
-};
+import { canUseStretch, getStretchNode, type StretchNode } from "./stretchAudio";
 
 const AUDIO_SYNC_DRIFT_THRESHOLD_MS = 500;
 const STREAM_BUFFER_SWITCH_LOOKAHEAD_MS = 1000;
@@ -319,7 +277,11 @@ const safeDisconnect = (node?: AudioNode | null) => {
 // ============================================================================
 
 /**
- * Audio playback actor - manages HTMLAudioElement for robust synchronized playback
+ * Audio playback actor — plays recording audio through a Web Audio graph, synchronized to the
+ * editor timeline. At 1x it plays a plain `AudioBufferSourceNode` (byte-for-byte native). Off
+ * speed it drives a single-stage Signalsmith Stretch time-stretch (see {@link getStretchNode}),
+ * which changes tempo without touching pitch — replacing the previous resample-plus-correct
+ * SoundTouch chain whose double processing sounded unnatural at 2x.
  */
 export const audioPlaybackActor = fromCallback<
   AudioPlaybackEvent,
@@ -329,10 +291,22 @@ export const audioPlaybackActor = fromCallback<
   let activeBlob = input.blob;
   let audioContext: AudioContext | null = null;
   let gainNode: GainNode | null = null;
+
+  // Native (1x) engine.
   let sourceNode: AudioBufferSourceNode | null = null;
-  let pitchShiftNode: InstanceType<SoundTouchNodeCtor> | null = null;
   let envelopeNode: GainNode | null = null;
-  let soundTouchNodeCtor: SoundTouchNodeCtor | null = null;
+
+  // Stretch (off-speed) engine — a single reusable node per AudioContext.
+  let stretchNode: StretchNode | null = null;
+  let stretchReady = false;
+  let stretchLoading = false;
+  let stretchActive = false;
+  // Both created lazily on first stretch use and left connected for the actor's lifetime — the
+  // node is a single continuous player, not a per-start disposable (see `startStretchSource`).
+  let stretchEnvelope: GainNode | null = null;
+  let stretchConnected = false;
+  let stretchLoadedBuffer: AudioBuffer | null = null;
+
   let activeBuffer: AudioBuffer | null = null;
   let pendingBuffer: AudioBuffer | null = null;
   let pendingBufferLoadedUntilMs = input.loadedUntilMs ?? Number.POSITIVE_INFINITY;
@@ -352,15 +326,14 @@ export const audioPlaybackActor = fromCallback<
   let disposed = false;
 
   /**
-   * Ghost sources: AudioBufferSourceNodes that have been detached from `sourceNode`
-   * and are currently fading out. Tracking them here lets us immediately hard-stop
-   * all lingering ghosts when a new seek arrives, preventing echo/chorus buildup
-   * from rapid consecutive seeks where multiple fades overlap.
+   * Ghost graphs: native source/envelope pairs that have been detached and are fading out.
+   * Tracking them lets a new seek immediately hard-stop every lingering fade, preventing
+   * echo/chorus buildup when rapid consecutive seeks overlap their fade-outs. The stretch engine
+   * has no equivalent — it reuses one persistent node/envelope instead of spawning new ones.
    */
   type LingeringNode = {
     source: AudioBufferSourceNode;
     envelope: GainNode;
-    shifter: InstanceType<SoundTouchNodeCtor> | null;
   };
   const lingeringNodes = new Set<LingeringNode>();
 
@@ -368,16 +341,23 @@ export const audioPlaybackActor = fromCallback<
     for (const ghost of lingeringNodes) {
       safeStop(ghost.source);
       safeDisconnect(ghost.source);
-      safeDisconnect(ghost.shifter);
       safeDisconnect(ghost.envelope);
     }
     lingeringNodes.clear();
   };
 
+  const isPlaying = (): boolean => sourceNode !== null || stretchActive;
+
   const cleanup = () => {
     disposed = true;
     killLingeringNodes();
     stopSource();
+    if (stretchNode) {
+      safeDisconnect(stretchNode);
+    }
+    if (stretchEnvelope) {
+      safeDisconnect(stretchEnvelope);
+    }
     gainNode?.disconnect();
     gainNode = null;
     if (audioContext) {
@@ -404,45 +384,18 @@ export const audioPlaybackActor = fromCallback<
     gainNode = audioContext.createGain();
     gainNode.gain.value = volume;
     gainNode.connect(audioContext.destination);
-    ensurePitchShifter(audioContext);
+    // The stretch worklet is created lazily (from `startSource`, only when playbackRate !== 1)
+    // rather than here, so 1x playback never pays for a worklet it doesn't use.
     return audioContext;
   };
 
   /**
-   * Loads + registers the SoundTouch worklet used for pitch preservation. Runs in
-   * the background; until it resolves, off-speed audio plays without pitch
-   * correction (native resampled behavior) and is upgraded in place the moment the
-   * node becomes available. A no-op when Web Audio worklets are unavailable.
+   * Position reached, in editor-timeline ms. Both engines advance the timeline at
+   * `rate * wallclock` (native resamples the source; stretch stretches time), so the same
+   * clock math serves both.
    */
-  const ensurePitchShifter = (context: AudioContext) => {
-    if (soundTouchNodeCtor || typeof AudioWorkletNode === "undefined" || !context.audioWorklet) {
-      return;
-    }
-
-    void registerSoundTouch(context)
-      .then((Ctor) => {
-        if (disposed) {
-          return;
-        }
-        soundTouchNodeCtor = Ctor;
-        // Registration finished after playback already began off-speed: rebuild the
-        // source from its current position so the pitch is corrected from here on.
-        if (requestedPlay && sourceNode && playbackRate !== 1 && !pitchShiftNode) {
-          targetTimeMs = getSourceTimelineTime();
-          startSource();
-        }
-      })
-      .catch((error) => {
-        console.warn("[AudioActor] Pitch preservation unavailable:", error);
-      });
-  };
-
-  const getTargetOffsetSeconds = (): number => {
-    return Math.max(0, targetTimeMs - startOffsetMs) / 1000;
-  };
-
   const getSourceTimelineTime = (): number => {
-    if (!audioContext || !sourceNode) {
+    if (!audioContext || !isPlaying()) {
       return targetTimeMs;
     }
 
@@ -450,6 +403,10 @@ export const audioPlaybackActor = fromCallback<
       playStartedAtTimelineMs +
       (audioContext.currentTime - playStartedAtContextTime) * playbackRate * 1000
     );
+  };
+
+  const getTargetOffsetSeconds = (): number => {
+    return Math.max(0, targetTimeMs - startOffsetMs) / 1000;
   };
 
   const canPlayRequestedTime = (): boolean => {
@@ -468,39 +425,75 @@ export const audioPlaybackActor = fromCallback<
     return finalized || activeBufferLoadedUntilMs >= targetTimeMs;
   };
 
-  const stopSource = ({ fade = false }: { fade?: boolean } = {}) => {
+  /**
+   * Lazily creates the Stretch node for this context. Runs in the background; until it resolves,
+   * off-speed audio plays on the native fallback (resampled, so briefly pitched) and is upgraded
+   * in place the moment the node is ready. A no-op where AudioWorklet is unavailable — playback
+   * then stays on the native resample path.
+   */
+  const ensureStretchNode = (context: AudioContext) => {
+    if (stretchNode || stretchLoading || !canUseStretch() || !context.audioWorklet) {
+      return;
+    }
+    stretchLoading = true;
+    void getStretchNode(context)
+      .then((node) => {
+        if (disposed) {
+          safeDisconnect(node);
+          return;
+        }
+        stretchNode = node;
+        stretchReady = true;
+        void node.setUpdateInterval(0.1, onStretchTimeUpdate);
+        // Ready after off-speed playback already began on the native fallback: switch to the
+        // stretch engine from the current position so pitch is corrected from here on.
+        if (requestedPlay && playbackRate !== 1 && !stretchActive) {
+          targetTimeMs = getSourceTimelineTime();
+          startSource();
+        }
+      })
+      .catch((error) => {
+        console.warn("[AudioActor] Stretch time-stretch unavailable:", error);
+      })
+      .finally(() => {
+        stretchLoading = false;
+      });
+  };
+
+  /** Emitted stretch playhead updates: detect end-of-buffer (there is no `onended`). */
+  const onStretchTimeUpdate = (inputSeconds: number) => {
+    if (disposed || !stretchActive || !activeBuffer) {
+      return;
+    }
+    if (finalized && inputSeconds >= activeBuffer.duration - 0.06) {
+      stopStretchSource({});
+      if (streamMode && activatePendingBuffer(true)) {
+        startSource();
+        return;
+      }
+      sendBack({ type: "FINISHED" });
+    }
+  };
+
+  const stopNativeSource = ({ fade = false }: { fade?: boolean } = {}) => {
     if (!sourceNode) {
-      // No active source, but a detached pitch shifter could still linger. Discard
-      // it so its WSOLA buffer can't replay stale samples on the next start.
-      safeDisconnect(pitchShiftNode);
-      pitchShiftNode = null;
       return;
     }
 
-    // Detach the whole per-source graph at once so it can finish its fade
-    // independently while a fresh source takes over. A new node per start still
-    // means no stale WSOLA samples survive a seek (the cause of the previous echo).
     const source = sourceNode;
-    const shifter = pitchShiftNode;
     const envelope = envelopeNode;
     sourceNode = null;
-    pitchShiftNode = null;
     envelopeNode = null;
     source.onended = null;
 
     const disconnectGraph = () => {
       safeDisconnect(source);
-      safeDisconnect(shifter);
       safeDisconnect(envelope);
     };
 
-    // Declick: ramp this source to silence over a few milliseconds and stop it
-    // once the ramp completes, instead of cutting the waveform instantly (an
-    // audible click, and a burst of them while scrubbing).
-    //
-    // The ghost is registered in `lingeringNodes` so that rapid consecutive seeks
-    // can immediately kill all lingering fades — preventing echo buildup where
-    // multiple ghost sources overlap and play simultaneously.
+    // Declick: ramp to silence over a few ms and stop once the ramp completes, instead of
+    // cutting the waveform instantly. The ghost is tracked so rapid seeks can kill all
+    // lingering fades before they overlap.
     if (fade && audioContext && envelope) {
       const now = audioContext.currentTime;
       const stopAt = now + DECLICK_FADE_SECONDS;
@@ -509,7 +502,7 @@ export const audioPlaybackActor = fromCallback<
         envelope.gain.setValueAtTime(envelope.gain.value, now);
         envelope.gain.linearRampToValueAtTime(0, stopAt);
 
-        const ghost: LingeringNode = { source, envelope, shifter };
+        const ghost: LingeringNode = { source, envelope };
         lingeringNodes.add(ghost);
         source.onended = () => {
           lingeringNodes.delete(ghost);
@@ -524,6 +517,38 @@ export const audioPlaybackActor = fromCallback<
 
     safeStop(source);
     disconnectGraph();
+  };
+
+  const stopStretchSource = ({ fade = false }: { fade?: boolean } = {}) => {
+    if (!stretchActive || !stretchNode) {
+      return;
+    }
+    stretchActive = false;
+    const node = stretchNode;
+    const envelope = stretchEnvelope;
+
+    // Unlike the native engine, the stretch node is a single node reused across starts (see
+    // `startStretchSource`) — there is nothing to disconnect-and-swap here, just quiet it down.
+    if (fade && audioContext && envelope) {
+      const now = audioContext.currentTime;
+      const stopAt = now + DECLICK_FADE_SECONDS;
+      try {
+        envelope.gain.cancelScheduledValues(now);
+        envelope.gain.setValueAtTime(envelope.gain.value, now);
+        envelope.gain.linearRampToValueAtTime(0, stopAt);
+        void node.stop(stopAt);
+        return;
+      } catch {
+        // Fall through to a hard stop.
+      }
+    }
+
+    void node.stop();
+  };
+
+  const stopSource = (options: { fade?: boolean } = {}) => {
+    stopNativeSource(options);
+    stopStretchSource(options);
   };
 
   const shouldActivatePendingBuffer = (force = false): boolean => {
@@ -568,7 +593,21 @@ export const audioPlaybackActor = fromCallback<
     sendBack({ type: "READY", duration: durationMs });
   };
 
-  const startSource = () => {
+  /** Copies an AudioBuffer's channels into the stretch node, skipping a reload of the same buffer. */
+  const loadStretchBuffer = (node: StretchNode, buffer: AudioBuffer) => {
+    if (stretchLoadedBuffer === buffer) {
+      return;
+    }
+    void node.dropBuffers();
+    const channels: Float32Array[] = [];
+    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+      channels.push(buffer.getChannelData(channel).slice());
+    }
+    void node.addBuffers(channels);
+    stretchLoadedBuffer = buffer;
+  };
+
+  const startNativeSource = () => {
     const context = getAudioContext();
     if (!context || !gainNode || !activeBuffer || !canPlayRequestedTime()) {
       return;
@@ -579,53 +618,22 @@ export const audioPlaybackActor = fromCallback<
       return;
     }
 
-    // Kill any ghost sources from previous seeks before starting the new one.
-    // Without this, rapid seeks accumulate overlapping fade-out nodes that play
-    // concurrently and produce an audible echo/chorus effect.
-    killLingeringNodes();
     stopSource({ fade: true });
 
     const source = context.createBufferSource();
     source.buffer = activeBuffer;
+    // Off-speed native playback is only the transient fallback before the stretch node loads;
+    // it resamples (pitch rises with tempo) until the upgrade in `ensureStretchNode` swaps it out.
     source.playbackRate.value = playbackRate;
 
-    // Pitch preservation: `AudioBufferSourceNode.playbackRate` resamples, shifting
-    // pitch along with tempo (2x speed raises pitch an octave). When off-speed,
-    // route through a SoundTouch node whose `playbackRate` is set to the same value
-    // so it cancels exactly that tempo-induced pitch shift, leaving voices natural.
-    // A fresh node per source start means no stale samples survive a seek. At 1x we
-    // bypass it so the normal path stays byte-for-byte native.
-    let tail: AudioNode = source;
-    if (playbackRate !== 1 && soundTouchNodeCtor) {
-      try {
-        const PitchShifter = soundTouchNodeCtor;
-        const shifter = new PitchShifter({
-          context,
-          outputChannelCount: activeBuffer.numberOfChannels >= 2 ? 2 : 1,
-        });
-        shifter.playbackRate.value = playbackRate;
-        shifter.pitch.value = 1;
-        shifter.pitchSemitones.value = 0;
-        source.connect(shifter);
-        pitchShiftNode = shifter;
-        tail = shifter;
-      } catch (error) {
-        console.warn("[AudioActor] Pitch shifter init failed, using native playback:", error);
-        pitchShiftNode = null;
-        tail = source;
-      }
-    }
-
-    // Per-source envelope between the source graph and the master volume so this
-    // source can fade in while the previous one (if any) fades out — turning the
-    // otherwise-clicky seek/restart into a short crossfade. Master volume stays on
-    // `gainNode`, so the two multiply and the resulting level is unchanged.
+    // Per-source envelope so this source can fade in while a previous one fades out — turning an
+    // otherwise-clicky seek/restart into a short crossfade. Master volume stays on `gainNode`.
     const envelope = context.createGain();
     const fadeStartTime = context.currentTime;
     envelope.gain.setValueAtTime(0, fadeStartTime);
     envelope.gain.linearRampToValueAtTime(1, fadeStartTime + DECLICK_FADE_SECONDS);
 
-    tail.connect(envelope);
+    source.connect(envelope);
     envelope.connect(gainNode);
     source.onended = () => {
       if (sourceNode !== source) {
@@ -652,6 +660,98 @@ export const audioPlaybackActor = fromCallback<
     source.start(0, offsetSeconds);
   };
 
+  /**
+   * Starts (or repositions) playback on the stretch engine. Unlike the native engine — a fresh
+   * `AudioBufferSourceNode` per start, crossfaded against the previous one — Stretch is a single
+   * node reused for the actor's lifetime (its own internal buffering makes a fresh node per seek
+   * wasteful). So there is no second node to crossfade against: the declick here is a duck (ramp
+   * the one persistent envelope down, reposition, ramp back up) rather than a crossfade, and the
+   * node/envelope connection is made once and left in place.
+   */
+  const startStretchSource = (): boolean => {
+    const context = getAudioContext();
+    if (!context || !gainNode || !activeBuffer || !stretchNode || !canPlayRequestedTime()) {
+      return false;
+    }
+
+    const offsetSeconds = getTargetOffsetSeconds();
+    if (offsetSeconds >= activeBuffer.duration) {
+      return false;
+    }
+
+    // Only the native fallback needs stopping here — it's a different node/graph. Stretch's own
+    // previous position (if any) is repositioned in place below, not torn down.
+    stopNativeSource({ fade: true });
+
+    const node = stretchNode;
+    loadStretchBuffer(node, activeBuffer);
+
+    const wasActive = stretchActive;
+    if (!stretchEnvelope) {
+      stretchEnvelope = context.createGain();
+      stretchEnvelope.connect(gainNode);
+    }
+    if (!stretchConnected) {
+      node.connect(stretchEnvelope);
+      stretchConnected = true;
+    }
+
+    const envelope = stretchEnvelope;
+    const now = context.currentTime;
+    envelope.gain.cancelScheduledValues(now);
+    if (wasActive) {
+      // Already playing: duck-and-recover around the reposition/retempo point to mask the
+      // input discontinuity, since there's only one continuous output to mask it on.
+      envelope.gain.setValueAtTime(envelope.gain.value, now);
+      envelope.gain.linearRampToValueAtTime(0, now + DECLICK_FADE_SECONDS);
+      envelope.gain.linearRampToValueAtTime(1, now + DECLICK_FADE_SECONDS * 2);
+    } else {
+      // First activation (or resuming after a full stop): simple fade-in.
+      envelope.gain.setValueAtTime(0, now);
+      envelope.gain.linearRampToValueAtTime(1, now + DECLICK_FADE_SECONDS);
+    }
+
+    void node.schedule({
+      active: true,
+      input: offsetSeconds,
+      output: now,
+      rate: playbackRate,
+      semitones: 0,
+    });
+
+    playStartedAtTimelineMs = targetTimeMs;
+    playStartedAtContextTime = now;
+    stretchActive = true;
+    return true;
+  };
+
+  const startSource = () => {
+    const context = getAudioContext();
+    if (!context || !gainNode || !activeBuffer || !canPlayRequestedTime()) {
+      return;
+    }
+
+    const offsetSeconds = getTargetOffsetSeconds();
+    if (offsetSeconds >= activeBuffer.duration) {
+      return;
+    }
+
+    // Kill ghost fades from previous seeks before starting the new one, so overlapping
+    // fade-outs can't accumulate into an audible echo/chorus.
+    killLingeringNodes();
+
+    if (playbackRate !== 1 && canUseStretch()) {
+      if (stretchReady && stretchNode) {
+        startStretchSource();
+        return;
+      }
+      // Node still loading: play native (resampled) now and upgrade to stretch when ready.
+      ensureStretchNode(context);
+    }
+
+    startNativeSource();
+  };
+
   const maybePlay = () => {
     const context = getAudioContext();
     if (!context) return;
@@ -672,13 +772,13 @@ export const audioPlaybackActor = fromCallback<
       console.warn("[AudioActor] AudioContext resume failed:", err);
     });
 
-    if (!sourceNode) {
+    if (!isPlaying()) {
       startSource();
     }
   };
 
   const applyTargetTime = (force = false) => {
-    if (!sourceNode) {
+    if (!isPlaying()) {
       return;
     }
 
@@ -751,29 +851,38 @@ export const audioPlaybackActor = fromCallback<
       return;
     }
 
-    // Crossing the 1x boundary changes the graph topology (the pitch shifter only
-    // exists off-speed), so rebuild the source from its current position. Any other
-    // change just updates the live AudioParams for a smooth, gap-free speed change.
+    // Crossing the 1x boundary switches engines (native <-> stretch), so rebuild from the
+    // current position. Otherwise keep playing and just retempo in place.
     const crossesBypassBoundary = (prevRate === 1) !== (nextRate === 1);
 
-    if (sourceNode && crossesBypassBoundary) {
+    if (isPlaying() && crossesBypassBoundary) {
       targetTimeMs = getSourceTimelineTime();
       playbackRate = nextRate;
       startSource();
       return;
     }
 
-    if (sourceNode) {
-      playStartedAtTimelineMs = getSourceTimelineTime();
-      playStartedAtContextTime = audioContext?.currentTime ?? 0;
-    }
+    // Re-anchor the timeline clock to the current position before changing the rate.
+    const currentTimelineMs = isPlaying() ? getSourceTimelineTime() : targetTimeMs;
     playbackRate = nextRate;
+
     if (sourceNode) {
+      // Native fallback (off-speed before the stretch node loaded): keep resampling at the new rate.
+      playStartedAtTimelineMs = currentTimelineMs;
+      playStartedAtContextTime = audioContext?.currentTime ?? 0;
       sourceNode.playbackRate.value = nextRate;
-      // Keep the pitch compensation locked to the source's tempo.
-      if (pitchShiftNode) {
-        pitchShiftNode.playbackRate.value = nextRate;
-      }
+    } else if (stretchActive && stretchNode && audioContext) {
+      // Retempo the stretch node in place from the current input position — gap-free, pitch intact.
+      const inputSeconds = Math.max(0, currentTimelineMs - startOffsetMs) / 1000;
+      playStartedAtTimelineMs = currentTimelineMs;
+      playStartedAtContextTime = audioContext.currentTime;
+      void stretchNode.schedule({
+        active: true,
+        input: inputSeconds,
+        output: audioContext.currentTime,
+        rate: nextRate,
+        semitones: 0,
+      });
     }
   };
 

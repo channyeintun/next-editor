@@ -32,28 +32,6 @@ function makeKeyframe(timestamp: number, content: string) {
   };
 }
 
-function readBlobAsArray(blob: Blob): Promise<Uint8Array> {
-  if (typeof blob.arrayBuffer === "function") {
-    return blob.arrayBuffer().then((buffer) => new Uint8Array(buffer));
-  }
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (reader.result instanceof ArrayBuffer) {
-        resolve(new Uint8Array(reader.result));
-        return;
-      }
-
-      reject(new Error("Expected Blob to read as an ArrayBuffer"));
-    };
-    reader.onerror = () => {
-      reject(reader.error ?? new Error("Failed to read Blob"));
-    };
-    reader.readAsArrayBuffer(blob);
-  });
-}
-
 function createRecording(overrides: Partial<Recording> = {}): Recording {
   return {
     version: 3,
@@ -91,7 +69,7 @@ function createRecording(overrides: Partial<Recording> = {}): Recording {
 }
 
 describe("recordingCodec", () => {
-  it("round trips recording metadata, frames, and audio payloads", async () => {
+  it("round trips recording metadata and frames; audio bytes never embed in the stream", async () => {
     const audioBlob = new Blob([new Uint8Array([1, 2, 3, 4])], {
       type: "audio/webm",
     });
@@ -102,19 +80,10 @@ describe("recordingCodec", () => {
 
     expect(decoded.id).toBe(recording.id);
     expect(decoded.version).toBe(3);
+    // Audio metadata survives, but the bytes live outside the `.ne` (sibling file / IDB blob).
     expect(decoded.audioSource).toBe("external");
+    expect(decoded.audioBlob).toBeUndefined();
     expect(decoded.frames).toEqual(recording.frames);
-    const decodedAudioBlob = decoded.audioBlob;
-    expect(decodedAudioBlob).toBeInstanceOf(Blob);
-
-    if (!(decodedAudioBlob instanceof Blob)) {
-      throw new Error("Expected decoded audio payload to be a Blob");
-    }
-
-    expect(decodedAudioBlob.type).toBe("audio/webm");
-
-    const decodedAudio = await readBlobAsArray(decodedAudioBlob);
-    expect(Array.from(decodedAudio)).toEqual([1, 2, 3, 4]);
   });
 
   it("round trips a go-diff content delta through the zstd stream and reconstructs it", async () => {
@@ -173,15 +142,11 @@ describe("recordingCodec", () => {
     expect(streamed.cursorEvents).toEqual(oneShot.cursorEvents);
     expect(streamed.streamFinalized).toBe(true);
 
-    const [streamedAudio, oneShotAudio] = await Promise.all([
-      readBlobAsArray(streamed.audioBlob as Blob),
-      readBlobAsArray(oneShot.audioBlob as Blob),
-    ]);
-    expect(Array.from(streamedAudio)).toEqual(Array.from(oneShotAudio));
-    expect(Array.from(streamedAudio)).toEqual([10, 20, 30, 40, 50]);
-
-    // Camera video is never embedded in the stream, so even though the recording had a camera
-    // blob, neither decode path reconstructs one — only the camera metadata survives.
+    // Media bytes are never embedded in the stream, so even though the recording had audio and
+    // camera blobs, neither decode path reconstructs them — only the metadata survives.
+    expect(streamed.audioBlob).toBeUndefined();
+    expect(oneShot.audioBlob).toBeUndefined();
+    expect(streamed.audioSource).toBe("external");
     expect(streamed.cameraBlob).toBeUndefined();
     expect(oneShot.cameraBlob).toBeUndefined();
     expect(streamed.cameraSource).toBe("camera");
@@ -243,89 +208,6 @@ describe("recordingCodec", () => {
     expect(reader.getRecording()?.streamFinalized).toBe(true);
   });
 
-  it("exposes audio that grows fragment-by-fragment as the stream arrives", async () => {
-    // Three audio fragments across three clusters simulate MediaRecorder timeslices.
-    const audioChunks = [
-      new Uint8Array([1, 2, 3, 4]),
-      new Uint8Array([5, 6, 7, 8]),
-      new Uint8Array([9, 10, 11, 12]),
-    ];
-    const recording = createRecording({
-      duration: 1200,
-      keyframeInterval: 120,
-      frames: [makeKeyframe(0, "a\n"), makeKeyframe(400, "ab\n"), makeKeyframe(800, "abc\n")],
-      audioSource: "microphone",
-      audioBlob: new Blob(audioChunks, { type: "audio/webm" }),
-      tracks: [
-        { id: "editor", kind: "editor", durationMs: 1200 },
-        {
-          id: "audio",
-          kind: "audio",
-          mimeType: "audio/webm",
-          source: "microphone",
-          startOffsetMs: 0,
-          durationMs: 1200,
-        },
-      ],
-      clusters: [
-        { index: 0, startTimeMs: 0, endTimeMs: 400, containsKeyframe: true },
-        { index: 1, startTimeMs: 400, endTimeMs: 800, containsKeyframe: true },
-        { index: 2, startTimeMs: 800, endTimeMs: 1200, containsKeyframe: true },
-      ],
-      mediaFragments: [
-        {
-          trackId: "audio",
-          clusterIndex: 0,
-          startTimeMs: 0,
-          endTimeMs: 400,
-          bytes: audioChunks[0],
-          isInit: true,
-        },
-        {
-          trackId: "audio",
-          clusterIndex: 1,
-          startTimeMs: 400,
-          endTimeMs: 800,
-          bytes: audioChunks[1],
-        },
-        {
-          trackId: "audio",
-          clusterIndex: 2,
-          startTimeMs: 800,
-          endTimeMs: 1200,
-          bytes: audioChunks[2],
-        },
-      ],
-    });
-
-    const bytes = await encodeRecordingToStream(recording);
-
-    // Feed one byte at a time and record each new audio "loaded edge" — the value the
-    // player uses (`getPlaybackAudioState` → `loadedUntilMs`) to gate streamed playback.
-    const reader = createStreamingRecordingReader();
-    const loadedEdges: number[] = [];
-    let audioFragmentCount = 0;
-    for (let offset = 0; offset < bytes.length; offset += 1) {
-      reader.push(bytes.subarray(offset, offset + 1));
-      const audioFragments =
-        reader.getRecording()?.mediaFragments?.filter((fragment) => fragment.trackId === "audio") ??
-        [];
-      if (audioFragments.length !== audioFragmentCount) {
-        audioFragmentCount = audioFragments.length;
-        loadedEdges.push(audioFragments.reduce((edge, f) => Math.max(edge, f.endTimeMs), 0));
-      }
-    }
-
-    // The loaded edge advances monotonically, one step per fragment, well before the
-    // whole file (or its footer) has arrived — i.e. audio is progressively playable.
-    expect(loadedEdges).toEqual([400, 800, 1200]);
-    expect(reader.isFinalized()).toBe(true);
-
-    const audioBlob = reader.getRecording()?.audioBlob as Blob;
-    const audioBytes = await readBlobAsArray(audioBlob);
-    expect(Array.from(audioBytes)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-  });
-
   it("streams a base64-wrapped recording fed as aligned groups (the .ne text path)", async () => {
     // The shipped `.ne` files are base64-wrapped SCR3 streams, so the loader decodes whole
     // 4-char base64 groups into bytes and pushes them to the same incremental reader. This
@@ -367,9 +249,8 @@ describe("recordingCodec", () => {
     expect(streamed.frames).toEqual(oneShot.frames);
     expect(streamed.duration).toBe(oneShot.duration);
     expect(streamed.streamFinalized).toBe(true);
-
-    const audioBytes = await readBlobAsArray(streamed.audioBlob as Blob);
-    expect(Array.from(audioBytes)).toEqual([7, 8, 9]);
+    // Audio bytes are never part of the stream.
+    expect(streamed.audioBlob).toBeUndefined();
   });
 
   it("externalizes camera as a sibling reference instead of inline chunks", async () => {

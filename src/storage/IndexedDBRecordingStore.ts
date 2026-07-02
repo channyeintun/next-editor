@@ -2,11 +2,12 @@ import type { Recording } from "../core/src";
 import { requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
 
 const RECORDING_DATABASE_NAME = "next-editor-recordings-db";
-const RECORDING_DATABASE_VERSION = 3;
+const RECORDING_DATABASE_VERSION = 4;
 const RECORDING_METADATA_STORE = "recording-metadata";
 const RECORDING_SEGMENTS_STORE = "recording-segments";
-// Camera video is stored outside the SCR3 byte stream, as a standalone Blob keyed by recording id.
+// Media is stored outside the SCR3 byte stream, as standalone Blobs keyed by recording id.
 const RECORDING_CAMERA_STORE = "recording-camera";
+const RECORDING_AUDIO_STORE = "recording-audio";
 
 interface StoredRecordingSegment {
   recordingId: string;
@@ -15,6 +16,11 @@ interface StoredRecordingSegment {
 }
 
 interface StoredCameraVideo {
+  recordingId: string;
+  blob: Blob;
+}
+
+interface StoredAudio {
   recordingId: string;
   blob: Blob;
 }
@@ -34,8 +40,10 @@ export interface StoredRecordingMetadata {
 export interface StoredRecordingEntry {
   metadata: StoredRecordingMetadata;
   binaryData: Uint8Array;
-  /** Camera video stored alongside the (camera-free) stream; absent when there is no camera. */
+  /** Camera video stored alongside the (media-free) stream; absent when there is no camera. */
   cameraBlob?: Blob;
+  /** Audio stored alongside the (media-free) stream; absent when there is no audio. */
+  audioBlob?: Blob;
 }
 
 /** Most-recently-updated first, breaking ties by creation time (newest first). */
@@ -106,6 +114,13 @@ export class IndexedDBRecordingStore {
             keyPath: "recordingId",
           });
         }
+
+        // v4: audio moved out of the SCR3 stream into its own store.
+        if (!database.objectStoreNames.contains(RECORDING_AUDIO_STORE)) {
+          database.createObjectStore(RECORDING_AUDIO_STORE, {
+            keyPath: "recordingId",
+          });
+        }
       };
 
       request.onsuccess = () => {
@@ -173,16 +188,23 @@ export class IndexedDBRecordingStore {
   async getEntry(id: string): Promise<StoredRecordingEntry | null> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE, RECORDING_CAMERA_STORE],
+      [
+        RECORDING_METADATA_STORE,
+        RECORDING_SEGMENTS_STORE,
+        RECORDING_CAMERA_STORE,
+        RECORDING_AUDIO_STORE,
+      ],
       "readonly",
     );
     const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
     const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
     const cameraStore = transaction.objectStore(RECORDING_CAMERA_STORE);
+    const audioStore = transaction.objectStore(RECORDING_AUDIO_STORE);
 
     const metadata = await requestToPromise(metadataStore.get(id));
     const segments = await requestToPromise(segmentsStore.getAll(this.segmentRange(id)));
     const camera = await requestToPromise(cameraStore.get(id));
+    const audio = await requestToPromise(audioStore.get(id));
     await transactionToPromise(transaction);
 
     if (!metadata) {
@@ -194,22 +216,29 @@ export class IndexedDBRecordingStore {
       return null;
     }
 
-    return { metadata, binaryData, cameraBlob: camera?.blob };
+    return { metadata, binaryData, cameraBlob: camera?.blob, audioBlob: audio?.blob };
   }
 
   async getAllEntries(): Promise<StoredRecordingEntry[]> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE, RECORDING_CAMERA_STORE],
+      [
+        RECORDING_METADATA_STORE,
+        RECORDING_SEGMENTS_STORE,
+        RECORDING_CAMERA_STORE,
+        RECORDING_AUDIO_STORE,
+      ],
       "readonly",
     );
     const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
     const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
     const cameraStore = transaction.objectStore(RECORDING_CAMERA_STORE);
+    const audioStore = transaction.objectStore(RECORDING_AUDIO_STORE);
 
     const metadata = await requestToPromise(metadataStore.getAll());
     const segments = await requestToPromise(segmentsStore.getAll());
     const cameras = await requestToPromise(cameraStore.getAll());
+    const audios = await requestToPromise(audioStore.getAll());
     await transactionToPromise(transaction);
 
     const segmentsById = new Map<string, StoredRecordingSegment[]>();
@@ -225,6 +254,11 @@ export class IndexedDBRecordingStore {
     const cameraById = new Map<string, Blob>();
     for (const camera of cameras) {
       cameraById.set(camera.recordingId, camera.blob);
+    }
+
+    const audioById = new Map<string, Blob>();
+    for (const audio of audios) {
+      audioById.set(audio.recordingId, audio.blob);
     }
 
     const binaryById = new Map<string, Uint8Array>();
@@ -247,6 +281,7 @@ export class IndexedDBRecordingStore {
       metadata: entry,
       binaryData: binaryById.get(entry.id)!,
       cameraBlob: cameraById.get(entry.id),
+      audioBlob: audioById.get(entry.id),
     }));
   }
 
@@ -261,12 +296,18 @@ export class IndexedDBRecordingStore {
 
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE, RECORDING_CAMERA_STORE],
+      [
+        RECORDING_METADATA_STORE,
+        RECORDING_SEGMENTS_STORE,
+        RECORDING_CAMERA_STORE,
+        RECORDING_AUDIO_STORE,
+      ],
       "readwrite",
     );
     const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
     const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
     const cameraStore = transaction.objectStore(RECORDING_CAMERA_STORE);
+    const audioStore = transaction.objectStore(RECORDING_AUDIO_STORE);
 
     for (const entry of entries) {
       metadataStore.put(entry.metadata);
@@ -277,7 +318,7 @@ export class IndexedDBRecordingStore {
         seq: 0,
         bytes: toArrayBuffer(entry.binaryData),
       } satisfies StoredRecordingSegment);
-      // Camera video lives in its own store; replace or clear it to match the entry.
+      // Media lives in its own stores; replace or clear each to match the entry.
       if (entry.cameraBlob) {
         cameraStore.put({
           recordingId: entry.metadata.id,
@@ -285,6 +326,14 @@ export class IndexedDBRecordingStore {
         } satisfies StoredCameraVideo);
       } else {
         cameraStore.delete(entry.metadata.id);
+      }
+      if (entry.audioBlob) {
+        audioStore.put({
+          recordingId: entry.metadata.id,
+          blob: entry.audioBlob,
+        } satisfies StoredAudio);
+      } else {
+        audioStore.delete(entry.metadata.id);
       }
     }
 
@@ -316,24 +365,36 @@ export class IndexedDBRecordingStore {
   async delete(id: string): Promise<void> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE, RECORDING_CAMERA_STORE],
+      [
+        RECORDING_METADATA_STORE,
+        RECORDING_SEGMENTS_STORE,
+        RECORDING_CAMERA_STORE,
+        RECORDING_AUDIO_STORE,
+      ],
       "readwrite",
     );
     transaction.objectStore(RECORDING_METADATA_STORE).delete(id);
     transaction.objectStore(RECORDING_SEGMENTS_STORE).delete(this.segmentRange(id));
     transaction.objectStore(RECORDING_CAMERA_STORE).delete(id);
+    transaction.objectStore(RECORDING_AUDIO_STORE).delete(id);
     await transactionToPromise(transaction);
   }
 
   async clear(): Promise<void> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE, RECORDING_CAMERA_STORE],
+      [
+        RECORDING_METADATA_STORE,
+        RECORDING_SEGMENTS_STORE,
+        RECORDING_CAMERA_STORE,
+        RECORDING_AUDIO_STORE,
+      ],
       "readwrite",
     );
     transaction.objectStore(RECORDING_METADATA_STORE).clear();
     transaction.objectStore(RECORDING_SEGMENTS_STORE).clear();
     transaction.objectStore(RECORDING_CAMERA_STORE).clear();
+    transaction.objectStore(RECORDING_AUDIO_STORE).clear();
     await transactionToPromise(transaction);
   }
 }
