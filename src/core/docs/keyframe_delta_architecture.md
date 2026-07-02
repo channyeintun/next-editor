@@ -59,7 +59,7 @@ The top-level storage format.
 
 ```typescript
 interface DeltaRecording {
-  version: 2;
+  version: 4;
   frames: (Keyframe | FrameDelta)[];
   keyframeInterval: 120;
   // ... metadata (audio, slides, duration)

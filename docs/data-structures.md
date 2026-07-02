@@ -7,7 +7,7 @@ This document describes the current recording and playback data structures used 
 ```mermaid
 classDiagram
     class Recording {
-        +version: 2 | 3
+        +version: 4
         +id: string
         +name: string
         +frames: DeltaFrame[]
@@ -34,13 +34,13 @@ classDiagram
     }
 ```
 
-The shipped app creates version `3` recordings and stores them in SCR3. The type still accepts `2 | 3` because some normalization and compatibility code paths remain in the library surface, but current storage and export flows are SCR3-based.
+The shipped app creates version `4` recordings and stores them in SCR3. There is a single supported schema version — older versions are not decodable, with no legacy compatibility path.
 
 ## The `Recording` Shape
 
 ```ts
 interface Recording {
-  version: 2 | 3;
+  version: 4;
   id: string;
   name: string;
   frames: DeltaFrame[];

@@ -133,10 +133,10 @@ Current playback behavior:
 flowchart LR
     Recording --> Normalize[Normalize recording]
     Normalize --> Encode[Encode SCR3 stream]
-    Encode --> Base64[Base64 text for .ne file]
+    Encode --> NeFile[Raw SCR3 bytes for .ne file]
     Encode --> IndexedDB[Persist binary SCR3 in IndexedDB]
     Encode --> Live[Forward live bytes to sink]
-    Base64 --> Decode[Decode in worker]
+    NeFile --> Decode[Decode in worker]
     IndexedDB --> Decode
     Live --> PrefixDecode[Prefix decode for streaming]
     Decode --> Load[loadRecording]
@@ -147,7 +147,7 @@ Current storage rules:
 
 - The app stores and exports SCR3 recordings.
 - IndexedDB persists metadata plus append-only recording segments.
-- Exported `.ne` files contain base64-wrapped SCR3 bytes for portability, and the runtime loader also accepts raw SCR3 byte streams.
+- Exported `.ne` files are raw SCR3 bytes with no base64 wrapping; the runtime loader reads the same raw byte stream.
 - Worker-backed decode keeps msgpack and deflate work off the main thread.
 
 ## URL Loading Flow
@@ -156,7 +156,7 @@ The shipped URL loader supports both same-origin and cross-origin recording URLs
 
 - Same-origin files are fetched directly.
 - Cross-origin URLs try `/api/proxy?url=...` first and fall back to direct fetch if the proxy is missing.
-- When the response body is streamable, the loader sniffs raw SCR3 bytes vs base64 text, decodes progressively, and uses `extendRecording` for later prefixes.
+- When the response body is streamable, the loader feeds raw SCR3 bytes to an incremental `StreamingRecordingReader`, decodes progressively, and uses `extendRecording` for later prefixes.
 - After the recording loads, the loader resolves any `captionFiles` the recording declares relative to the `.ne` URL, fetches and parses each one, and adds it via `addCaptionTrack`. Captions are never inferred from sibling filenames — HTTP exposes no directory listing.
 
 ## API Client Transport

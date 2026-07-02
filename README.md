@@ -109,7 +109,7 @@ vp preview
 
 Next Editor records a timeline of delta-compressed editor frames plus timed side-channel events for slides, preview state, rrweb preview snapshots, API client requests/responses, workspace mutations, runtime events, cursor samples, audio, and optional camera video.
 
-Recordings use the SCR3 `.ne` container. The shipped exporter currently emits base64-wrapped SCR3 for portability, and the loader also accepts raw SCR3 byte streams. SCR3 is append-only and prefix-decodable, which enables progressive playback from an incomplete download and live forwarding through `recordingStreamSink`. Caption tracks ride along in the SCR3 metadata, either inlined as parsed cues or referenced by `captionFiles` so a hosted `.ne` can load sibling `.vtt`/`.srt` files.
+Recordings use the SCR3 `.ne` container as raw binary end-to-end — the exporter writes raw SCR3 bytes and the loader reads them directly, with no base64 wrapping. SCR3 is append-only and prefix-decodable, which enables progressive playback from an incomplete download and live forwarding through `recordingStreamSink`. Caption tracks ride along in the SCR3 metadata, either inlined as parsed cues or referenced by `captionFiles` so a hosted `.ne` can load sibling `.vtt`/`.srt` files.
 
 ## Streaming And Camera Notes
 

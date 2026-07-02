@@ -53,7 +53,6 @@ Key exports:
 - `useNextEditorPlayback`
 - `editorMachine`
 - `timelineMachine`
-- `initWasm`
 - `Recording`, `EditorFrame`, `EditorState`
 - `RecordingStreamSink`, `UseNextEditorConfig`, `UseNextEditorReturn`
 - Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`
@@ -80,7 +79,7 @@ flowchart LR
 Important current details:
 
 - Frames are delta-compressed during capture, not as a final batch-only step.
-- The current app emits version `3` recordings and stores them in the SCR3 stream container.
+- The current app emits version `4` recordings and stores them in the SCR3 stream container.
 - The public `Recording` facade now carries stream-oriented metadata through `tracks`, `clusters`, and `mediaFragments` in addition to the assembled playback blobs.
 - `previewInitialDocuments` and `previewPatchBatches` are first-class parts of the recording. They carry rrweb events verbatim (`PreviewRecordedEvent`): the seed document holds the rrweb Meta + FullSnapshot pair, and each patch batch holds the incremental events for a frame. Replay drives an rrweb `Replayer`, so the preview is restored without requiring a runtime rerun.
 - `cursorEvents` are stored separately from frame deltas for smoother fake-cursor playback.
@@ -209,21 +208,18 @@ stateDiagram-v2
 | `isValidFrameState(state)` | Validate frame structure  |
 | `isEditorReady(editor)`    | Check Monaco availability |
 
-### wasm.ts
+### dmpCodec.ts
 
-WebAssembly acceleration for string operations:
+WebAssembly-accelerated content diffing, backing `createContentDelta` / `applyContentDelta` in `frameDelta.ts` (see `src/core/dmp/README.md` for the Rust module and wire format):
 
 ```typescript
-// Initialize WASM module
-await initWasm();
+// Load the zero-import diff-match-patch WASM module
+await loadDmpCodec();
 
-// Accelerated string comparison
-const prefixLen = wasmModule.find_common_prefix(bytes1, bytes2);
-const suffixLen = wasmModule.find_common_suffix(bytes1, bytes2);
-
-// Accelerated base64 encoding
-const encoded = wasmModule.base64_encode(bytes);
-const decoded = wasmModule.base64_decode(encoded);
+// Compute/apply a delta via the loaded codec
+const codec = getDmpCodec();
+const delta = codec.diffDelta(bytesA, bytesB);
+const rebuilt = codec.applyDelta(bytesA, delta);
 ```
 
 ---

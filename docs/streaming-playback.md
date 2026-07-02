@@ -16,9 +16,9 @@ This is one-way _playback_ streaming (one producer → many viewers, watch-as-it
 
 Yes — you can start playing from a partial download. You do **not** need the whole file.
 
-The recording container (`SCR3`) is an append-only stream, and the decoder
-[`decodeRecordingPrefix`](../src/storage/streamingRecordingCodec.ts) turns **any in-order
-prefix** of those bytes into a playable `Recording`. Two player actions consume it:
+The recording container (`SCR3`) is an append-only stream, and the incremental reader
+[`createStreamingRecordingReader`](../src/storage/streamingRecordingCodec/decode.ts) turns **any
+in-order prefix** of those bytes into a playable `Recording`. Two player actions consume it:
 
 - `loadRecording(recording)` — load the **first** decodable prefix (sets up the timeline).
 - `extendRecording(recording)` — swap in each **larger** prefix **in place**, keeping the
@@ -34,10 +34,10 @@ Both are exposed from the actions hook (`useNextEditorActions`) and used by the 
 
 1. **Append-only, prefix-decodable container.** `SCR3` is `header → segments… → footer`. Each
    segment is time-clustered and track-aware: frame/event batches stay deflate-compressed while
-   audio and camera fragments are stored as raw media bytes.
-   [`decodeRecordingPrefix`](../src/storage/streamingRecordingCodec.ts) tolerates a **missing
-   footer** (still-writing stream) and a **truncated trailing segment** (mid-download), decoding
-   every complete segment seen so far (`walkSegments` / `findSegmentsEnd`).
+   audio and camera fragments are stored as raw media bytes. The stateful reader
+   [`createStreamingRecordingReader`](../src/storage/streamingRecordingCodec/decode.ts) tolerates a
+   **missing footer** (still-writing stream) and a **truncated trailing segment** (mid-download),
+   decoding only newly-arrived complete segments on each `push()` call.
 
 2. **Forward-only replay.** Playback reconstructs a frame from the nearest keyframe **at or
    before** the target, applying deltas forward
@@ -62,7 +62,7 @@ Both are exposed from the actions hook (`useNextEditorActions`) and used by the 
 Both finalized exports and live broadcasts now use the same stream-oriented layout idea:
 
 - **Finalized export / saved file**
-  ([`encodeRecordingToStream`](../src/storage/streamingRecordingCodec.ts)) writes `SCR3` in
+  ([`encodeRecordingToStream`](../src/storage/streamingRecordingCodec/encode.ts)) writes `SCR3` in
   **time-cluster order**: each cluster can contain frame batches, event batches, audio
   fragments, and camera fragments for that slice of the timeline.
 
@@ -70,33 +70,33 @@ Both finalized exports and live broadcasts now use the same stream-oriented layo
   the same segment types as capture progresses, so a prefix is still a clean "everything up to
   time _T_" slice.
 
-Both are valid `SCR3` and both decode with the same `decodeRecordingPrefix`.
+Both are valid `SCR3` and both decode with the same incremental reader.
 
 ---
 
 ### Scenario A — Play a finalized `.ne` while it downloads (what `introduction.ne` does)
 
-Stream the bytes with `fetch`, decode the accumulated prefix every so often, and feed the player
-`loadRecording` (first) then `extendRecording` (each larger prefix). The shipped
-[useUrlLoader.ts](../src/hooks/useUrlLoader.ts) now auto-detects **raw SCR3 bytes vs base64 text**
-before choosing the decode path.
+Stream the bytes with `fetch` and feed each chunk to a
+[`createStreamingRecordingReader`](../src/storage/streamingRecordingCodec/decode.ts), then feed the
+player `loadRecording` (first) then `extendRecording` (each larger prefix). A `.ne` is raw SCR3
+bytes end-to-end — the shipped [useUrlLoader.ts](../src/hooks/useUrlLoader.ts) does not sniff or
+decode base64 text.
 
 ```ts
-import {
-  decodeBase64ToRecordings,
-  decompressBinaryToRecordings,
-} from "../src/storage/recordingCodecClient";
+import { createStreamingRecordingReader } from "../src/storage/streamingRecordingCodec/decode";
 
-const SCR3_MAGIC = new Uint8Array([0x53, 0x43, 0x52, 0x33]);
+const reader = createStreamingRecordingReader();
 
-function isScr3(bytes: Uint8Array) {
-  return bytes.length >= 4 && SCR3_MAGIC.every((byte, index) => bytes[index] === byte);
-}
-
-async function decodePrefix(prefix: Uint8Array | string) {
-  return typeof prefix === "string"
-    ? decodeBase64ToRecordings(prefix)
-    : decompressBinaryToRecordings(prefix);
+async function streamPrefixes(response: Response) {
+  const body = response.body;
+  if (!body) return;
+  for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) {
+    reader.push(chunk);
+    const recording = reader.getRecording();
+    if (recording) {
+      // feed loadRecording (first) / extendRecording (subsequent) here
+    }
+  }
 }
 ```
 
@@ -126,9 +126,10 @@ function useStreamedIntro(url: string, autoplay = false) {
 `extendRecording` keeps the current time and applied state, so you can `play()` after the first
 prefix and let later prefixes fill in **without any re-seek or visible jump**.
 
-> Tip: `decodeBase64ToRecordings` runs deflate + msgpack **in the codec worker**
-> ([recordingCodecClient.ts](../src/storage/recordingCodecClient.ts)), keeping the main thread
-> responsive. Throttle decodes by bytes (above) or time — each decode is O(bytes so far).
+> Tip: whole-file decodes go through `decompressBinaryToRecordings`, which runs deflate + msgpack
+> **in the codec worker** ([recordingCodecClient.ts](../src/storage/recordingCodecClient.ts)),
+> keeping the main thread responsive. Throttle `push()` calls by bytes (above) or time — each
+> decode is bounded by newly-arrived segments, not the whole prefix.
 
 ---
 
@@ -163,14 +164,15 @@ replays them with exactly the decode path below.
 ### Viewer (tail + decode prefix)
 
 ```ts
-import { decodeRecordingPrefix } from "../src/storage/streamingRecordingCodec";
+import { createStreamingRecordingReader } from "../src/storage/streamingRecordingCodec/decode";
 
-const parts: Uint8Array[] = [];
+const reader = createStreamingRecordingReader();
 let loadedOnce = false;
 
 socket.onmessage = (ev: MessageEvent<ArrayBuffer>) => {
-  parts.push(new Uint8Array(ev.data));
-  const recording = decodeRecordingPrefix(concat(parts)); // header duration grows live
+  reader.push(new Uint8Array(ev.data));
+  const recording = reader.getRecording(); // header duration grows live
+  if (!recording) return;
   if (!loadedOnce) {
     loadRecording(recording);
     loadedOnce = true;
@@ -211,10 +213,10 @@ effective duration in your UI.
 
 ## Performance & correctness tips
 
-- **Throttle re-decodes.** Each decode is O(bytes so far). Decode on a byte or time threshold,
-  not on every chunk (the shipped loader uses ~512 KB).
-- **Decode in the worker.** Prefer
-  [`decodeBase64ToRecordings`](../src/storage/recordingCodecClient.ts) /
+- **Throttle re-decodes.** `push()` only decodes newly-arrived complete segments, but calling
+  `getRecording()` still has a cost. Poll on a byte or time threshold, not on every chunk (the
+  shipped loader uses ~512 KB).
+- **Decode in the worker.** For whole-file (non-progressive) decodes, prefer
   [`decompressBinaryToRecordings`](../src/storage/recordingCodecClient.ts) so deflate stays off
   the main thread.
 - **No re-seek needed.** `extendRecording` preserves position; you do **not** reload + `seekTo`.
@@ -249,17 +251,15 @@ operate on growing arrays.
 
 ## API reference
 
-| Function / type                           | Module                                                                  | Purpose                                                          |
-| ----------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `loadRecording(recording)`                | [useNextEditorContext.ts](../src/hooks/useNextEditorContext.ts)         | Load the first (possibly partial) recording into the player.     |
-| `extendRecording(recording)`              | [useNextEditorContext.ts](../src/hooks/useNextEditorContext.ts)         | Swap in a larger prefix in place, keeping position/timeline.     |
-| `decodeRecordingPrefix(bytes)`            | [streamingRecordingCodec.ts](../src/storage/streamingRecordingCodec.ts) | Decode any in-order prefix (missing footer / truncated tail OK). |
-| `decodeRecordingStream(bytes)`            | [streamingRecordingCodec.ts](../src/storage/streamingRecordingCodec.ts) | Decode a complete, finalized stream.                             |
-| `decodeBase64ToRecordings(b64)`           | [recordingCodecClient.ts](../src/storage/recordingCodecClient.ts)       | Worker-backed base64 `.ne` → `Recording[]` (prefix or full).     |
-| `decompressBinaryToRecordings(bytes)`     | [recordingCodecClient.ts](../src/storage/recordingCodecClient.ts)       | Worker-backed binary decode (prefix or full) → `Recording[]`.    |
-| `RecordingStreamSink`                     | [core types](../src/core/src/types.ts)                                  | `{ write(bytes), close() }` live sink interface.                 |
-| `UseNextEditorConfig.recordingStreamSink` | [core types](../src/core/src/types.ts)                                  | Opt-in: forward the live `SCR3` stream while recording.          |
+| Function / type                           | Module                                                                                | Purpose                                                                |
+| ----------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `loadRecording(recording)`                | [useNextEditorContext.ts](../src/hooks/useNextEditorContext.ts)                       | Load the first (possibly partial) recording into the player.           |
+| `extendRecording(recording)`              | [useNextEditorContext.ts](../src/hooks/useNextEditorContext.ts)                       | Swap in a larger prefix in place, keeping position/timeline.           |
+| `createStreamingRecordingReader()`        | [streamingRecordingCodec/decode.ts](../src/storage/streamingRecordingCodec/decode.ts) | Stateful reader: `push(bytes)` + `getRecording()` (missing footer OK). |
+| `decodeRecordingStream(bytes)`            | [streamingRecordingCodec/decode.ts](../src/storage/streamingRecordingCodec/decode.ts) | Decode a complete, finalized stream (or any prefix) in one call.       |
+| `decompressBinaryToRecordings(bytes)`     | [recordingCodecClient.ts](../src/storage/recordingCodecClient.ts)                     | Worker-backed binary decode (prefix or full) → `Recording[]`.          |
+| `RecordingStreamSink`                     | [core types](../src/core/src/types.ts)                                                | `{ write(bytes), close() }` live sink interface.                       |
+| `UseNextEditorConfig.recordingStreamSink` | [core types](../src/core/src/types.ts)                                                | Opt-in: forward the live `SCR3` stream while recording.                |
 
-`decodeBase64` ([base64.ts](../src/core/src/utils/base64.ts)) converts `.ne` text to bytes; raw
-SCR3 binaries skip it. `useNextEditorActions` (public barrel) exposes `loadRecording` /
-`extendRecording` to components.
+A `.ne` is raw SCR3 bytes end-to-end — there is no base64 wrapping to strip. `useNextEditorActions`
+(public barrel) exposes `loadRecording` / `extendRecording` to components.
