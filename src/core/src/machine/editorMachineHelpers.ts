@@ -30,6 +30,7 @@ import { isEditorReady } from "../utils/validation";
 import { areStructuredDataEqual } from "../../../utils/equality";
 import { areMouseCursorPositionsEqual } from "../utils/cursorCoordinates";
 import { isKeyframe } from "../utils/frameDelta";
+import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 
 // ============================================================================
 // Editor machine helpers
@@ -521,3 +522,108 @@ export const hasSpawnedPlaybackAudio = (context: EditorMachineContext): boolean 
 
 export const shouldRecordCamera = (context: EditorMachineContext): boolean =>
   context.enableCameraRecording && context.camera.isRecording;
+
+/**
+ * The subset of xstate's `enqueue` object used to drive the "audioPlayer" child actor.
+ * Kept structural (rather than importing xstate's generic `ActionEnqueuer`) so this
+ * helper doesn't need to thread the machine's full setup() type parameters.
+ */
+export interface PlaybackAudioEnqueue {
+  spawnChild: (
+    src: "audioPlayback",
+    options: { id: "audioPlayer"; input: AudioPlaybackInput },
+  ) => void;
+  sendTo: (actor: "audioPlayer", event: AudioPlaybackEvent) => void;
+  assign: (updater: Partial<EditorMachineContext>) => void;
+}
+
+export interface SyncPlaybackAudioOptions {
+  /** Spawn a fresh "audioPlayer" child if this recording has audio and none exists yet. */
+  spawnIfMissing: boolean;
+  /**
+   * When an "audioPlayer" child already exists, whether to re-send it the (possibly
+   * grown) audio blob: "never", "always", or only `"playing-or-finalized"` — i.e. only
+   * pay for the decode of the accumulated blob while playback is actually running or the
+   * stream is complete (see the quadratic-decode comment this guards against).
+   */
+  appendPolicy: "never" | "always" | "playing-or-finalized";
+  /** Send SEEK to the current timeline position. */
+  seek: boolean;
+  /** Send SET_PLAYBACK_RATE to match the timeline speed. */
+  syncRate: boolean;
+  /** Send SET_VOLUME to match the timeline volume. */
+  syncVolume: boolean;
+  /** Send PLAY. Also participates in the `"playing-or-finalized"` append gate. */
+  play: boolean;
+}
+
+/**
+ * The one true spawn/append/seek/rate/volume/play sequence for the playback "audioPlayer"
+ * child actor, encoding what used to be duplicated (with drifting variations) across
+ * playback entry, EXTEND_RECORDING, and the "playing" entry in editorMachine.ts.
+ *
+ * Returns whether the audio actor is spawned and being controlled by this call, so
+ * callers that need to interleave other actor messages (e.g. the timelineActor) around
+ * the audio sequence can reuse that without recomputing it.
+ */
+export const syncPlaybackAudio = (
+  context: EditorMachineContext,
+  enqueue: PlaybackAudioEnqueue,
+  options: SyncPlaybackAudioOptions,
+): boolean => {
+  const audioState = getPlaybackAudioState(context.recording);
+  if (!audioState) {
+    return false;
+  }
+
+  const spawning = options.spawnIfMissing && !context.playbackAudioSpawned;
+  const controlling = spawning || context.playbackAudioSpawned;
+  if (!controlling) {
+    return false;
+  }
+
+  if (spawning) {
+    enqueue.spawnChild("audioPlayback", {
+      id: "audioPlayer",
+      input: {
+        blob: audioState.blob,
+        mode: audioState.streamMode ? "stream" : "blob",
+        loadedUntilMs: audioState.loadedUntilMs,
+        startOffsetMs: audioState.startOffsetMs,
+        finalized: audioState.finalized,
+        volume: context.timeline.volume,
+        playbackRate: context.timeline.speed,
+        startPositionMs: context.timeline.currentTime,
+      },
+    });
+    enqueue.assign({ playbackAudioSpawned: true });
+  } else if (
+    options.appendPolicy === "always" ||
+    (options.appendPolicy === "playing-or-finalized" && (audioState.finalized || options.play))
+  ) {
+    enqueue.sendTo("audioPlayer", {
+      type: "APPEND_FRAGMENT",
+      blob: audioState.blob,
+      loadedUntilMs: audioState.loadedUntilMs,
+      finalized: audioState.finalized,
+    });
+    if (audioState.finalized) {
+      enqueue.sendTo("audioPlayer", { type: "FINALIZE_STREAM" });
+    }
+  }
+
+  if (options.seek) {
+    enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: context.timeline.currentTime });
+  }
+  if (options.syncRate) {
+    enqueue.sendTo("audioPlayer", { type: "SET_PLAYBACK_RATE", rate: context.timeline.speed });
+  }
+  if (options.syncVolume) {
+    enqueue.sendTo("audioPlayer", { type: "SET_VOLUME", volume: context.timeline.volume });
+  }
+  if (options.play) {
+    enqueue.sendTo("audioPlayer", { type: "PLAY" });
+  }
+
+  return true;
+};
