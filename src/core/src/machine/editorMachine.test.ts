@@ -293,6 +293,32 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  it("replaces the loaded recording when LOAD_RECORDING arrives during playback", async () => {
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+      },
+    }).start();
+
+    const firstRecording = createRecording();
+    actor.send({ type: "LOAD_RECORDING", recording: firstRecording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    expect(actor.getSnapshot().context.recording!.id).toBe("recording-1");
+
+    const secondRecording = createRecording();
+    secondRecording.id = "recording-2";
+    secondRecording.duration = 2000;
+
+    actor.send({ type: "LOAD_RECORDING", recording: secondRecording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    expect(actor.getSnapshot().context.recording!.id).toBe("recording-2");
+    expect(actor.getSnapshot().context.recording!.duration).toBe(2000);
+
+    actor.stop();
+  });
+
   it("stops mouse tracking on the no-audio recording path and emits callbacks", async () => {
     const events: string[] = [];
     // Held in an object so the assignment inside the callback doesn't make

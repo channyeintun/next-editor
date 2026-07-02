@@ -799,6 +799,12 @@ export const editorMachine = setup({
           target: "idle",
           actions: "clearRecording",
         },
+        // Replace the loaded recording with a newly provided one (file import while a
+        // recording is open, or the URL loader's whole-file fallback after a mid-stream
+        // reader failure). Exiting `playback` stops the timeline/audio children first.
+        LOAD_RECORDING: {
+          target: "loading",
+        },
       },
       states: {
         ready: {
