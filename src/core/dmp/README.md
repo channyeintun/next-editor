@@ -13,12 +13,14 @@ host:
 Compression is handled separately by **fflate** (zlib), not this module.
 
 This replaces the previous AssemblyScript implementation (see
-[`../docs/codec-history.md`](../docs/codec-history.md)). The port is faithful:
-the delta byte format is **identical**, so deltas stored by older
-(AssemblyScript-built) recordings still decode here unchanged. The move to Rust
-buys the LLVM backend's faster Myers inner loops (notably scattered edits, the
-case this codec exists for) at the same artifact size, while keeping the
-zero-import property below.
+[`../docs/codec-history.md`](../docs/codec-history.md)). The move to Rust buys
+the LLVM backend's faster Myers inner loops (notably scattered edits, the case
+this codec exists for) at the same artifact size, while keeping the zero-import
+property below. The delta wire format extends the original op stream with a
+**mandatory leading CHECK op** (a 4-byte FNV-1a hash of the base), so
+`applyDelta` fails loudly when run against the wrong base instead of silently
+producing corrupted content. Pre-CHECK deltas are not accepted (no legacy
+decoding).
 
 ## Why this can use Vite's `.wasm` import
 
@@ -86,9 +88,11 @@ size), see the Phase 4 benchmark table in
 ## ABI
 
 All data crosses through linear `memory` (wasm32 offsets). A `u64` result packs
-`(ptr << 32) | len`; `0` means empty, and an all-ones sentinel means failure
-(corrupt/mismatched delta). The host reads `len` bytes at `ptr`, then calls
-`freeBuf(ptr)`.
+`(ptr << 32) | len`; `0` means empty. Two failure sentinels: all-ones means a
+structurally corrupt/truncated delta, and all-ones-minus-one (`ERR_BASE`) means
+the delta is well-formed but the base failed its CHECK hash — a replay desync,
+surfaced by the host as `DmpBaseMismatchError`. The host reads `len` bytes at
+`ptr`, then calls `freeBuf(ptr)`.
 
 | export                                | signature    | notes                              |
 | ------------------------------------- | ------------ | ---------------------------------- |
@@ -99,5 +103,9 @@ All data crosses through linear `memory` (wasm32 offsets). A `u64` result packs
 
 The delta is opaque to JS: each op is a LEB128 varint `(len << 2) | type`
 (`0` EQUAL copy-from-source, `1` DELETE skip-source, `2` INSERT literal bytes
-that follow). `applyDelta` consumes exactly what `diffDelta` produces, so the
-format never needs a JS-side interpreter.
+that follow, `3` CHECK hash bytes that follow). Every delta begins with a CHECK
+op carrying `len = 4` and the little-endian FNV-1a (32-bit) of the whole base;
+`applyDelta` verifies it before touching the source and rejects a delta whose
+first op is anything else. CHECK is only valid as the first op. `applyDelta`
+consumes exactly what `diffDelta` produces, so the format never needs a JS-side
+interpreter.

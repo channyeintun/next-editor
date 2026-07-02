@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { instantiateDmpCodec } from "./dmpCodec";
+import { DmpBaseMismatchError, instantiateDmpCodec } from "./dmpCodec";
 
 // The dmp codec is a reproducible build artifact (`bun run build:wasm`) and is
 // gitignored, so skip rather than fail when it hasn't been built locally/in CI.
@@ -79,5 +79,71 @@ describe.skipIf(!hasArtifact)("dmp codec (diff-match-patch in Rust)", () => {
     expect(() => codec.applyDelta(enc.encode("abc"), new Uint8Array([0xff, 0xff, 0xff]))).toThrow(
       /applyDelta failed/,
     );
+  });
+
+  it("emits a mandatory CHECK op as the first op of every delta", async () => {
+    const codec = await load();
+    const delta = codec.diffDelta(enc.encode("same"), enc.encode("same"));
+    // tag = (hashLen << 2) | CHECK = (4 << 2) | 3 = 0x13, then 4 hash bytes.
+    expect(delta[0]).toBe(0x13);
+    expect(delta.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("rejects applying a delta to a same-length wrong base (the silent-corruption case)", async () => {
+    const codec = await load();
+    const base = enc.encode("The quick brown fox jumps over the lazy dog");
+    const wrongBase = enc.encode("The quick brown fox jumps over the lazy cat");
+    const delta = codec.diffDelta(base, enc.encode("The quick brown fox JUMPED over the lazy dog"));
+
+    expect(wrongBase.length).toBe(base.length);
+    expect(() => codec.applyDelta(wrongBase, delta)).toThrow(DmpBaseMismatchError);
+    expect(() => codec.applyDelta(wrongBase, delta)).toThrow(/base mismatch/);
+  });
+
+  it("rejects a delta missing its CHECK op (pre-check-op format)", async () => {
+    const codec = await load();
+    // A bare EQUAL op copying the whole 3-byte source: tag = (3 << 2) | 0.
+    const legacyDelta = new Uint8Array([3 << 2]);
+    expect(() => codec.applyDelta(enc.encode("abc"), legacyDelta)).toThrow(DmpBaseMismatchError);
+    // An empty delta is also no longer valid — every delta carries a CHECK head.
+    expect(() => codec.applyDelta(new Uint8Array(0), new Uint8Array(0))).toThrow(/applyDelta/);
+  });
+
+  it("property: random edits round-trip; equal-length wrong bases always fail", async () => {
+    const codec = await load();
+    // Deterministic LCG so failures are reproducible.
+    let seed = 0xdecafbad;
+    const rand = (max: number) => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed % max;
+    };
+    const alphabet = "abcdefghij\nãé☕";
+
+    for (let round = 0; round < 50; round++) {
+      const baseLen = 1 + rand(400);
+      let base = "";
+      for (let i = 0; i < baseLen; i++) base += alphabet[rand(alphabet.length)];
+
+      // Random scattered edits.
+      let target = base;
+      for (let edits = 0; edits <= rand(4); edits++) {
+        const at = rand(target.length + 1);
+        const del = rand(Math.min(8, target.length - at + 1));
+        let ins = "";
+        for (let i = 0; i < rand(8); i++) ins += alphabet[rand(alphabet.length)];
+        target = target.slice(0, at) + ins + target.slice(at + del);
+      }
+
+      const a = enc.encode(base);
+      const b = enc.encode(target);
+      const delta = codec.diffDelta(a, b);
+      expect(dec.decode(codec.applyDelta(a, delta))).toBe(target);
+
+      // Same-length corrupted base must be rejected, not silently applied.
+      // (`baseLen` is always ≥ 1, so there is always a byte to corrupt.)
+      const wrong = a.slice();
+      wrong[rand(wrong.length)] ^= 0x01;
+      expect(() => codec.applyDelta(wrong, delta)).toThrow(DmpBaseMismatchError);
+    }
   });
 });
