@@ -15,7 +15,7 @@ import { areRuntimeRecordingSnapshotsEqual } from "../../../utils/equality";
 import type { RecordingSession } from "./types";
 
 function getRecordingTimestamp(session: RecordingSession): number {
-  return Date.now() - session.startedAt;
+  return performance.now() - session.startedAtPerf;
 }
 
 /**

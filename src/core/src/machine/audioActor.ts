@@ -61,7 +61,13 @@ export type AudioPlaybackEvent =
   | { type: "FINALIZE_STREAM" };
 
 export type AudioRecordingEmit =
-  | { type: "STARTED"; mediaRecorder: MediaRecorder; mimeType: string; startedAtMs: number }
+  | {
+      type: "STARTED";
+      mediaRecorder: MediaRecorder;
+      mimeType: string;
+      startedAtMs: number;
+      startedAtPerf: number;
+    }
   | { type: "CHUNK"; chunk: Blob; startTimeMs: number; endTimeMs: number }
   | { type: "STOPPED"; blob: Blob }
   | { type: "ERROR"; error: string };
@@ -118,6 +124,7 @@ export const audioRecordingActor = fromCallback<
   let disposed = false;
   let starting = false;
   let startedAtMs = 0;
+  let startedAtPerfMs = 0;
   let nextChunkStartTimeMs = 0;
 
   const cleanupStream = () => {
@@ -169,8 +176,8 @@ export const audioRecordingActor = fromCallback<
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           const endTimeMs =
-            startedAtMs > 0
-              ? Math.max(nextChunkStartTimeMs, Date.now() - startedAtMs)
+            startedAtPerfMs > 0
+              ? Math.max(nextChunkStartTimeMs, performance.now() - startedAtPerfMs)
               : nextChunkStartTimeMs;
           chunks.push(event.data);
           sendBack({
@@ -195,8 +202,15 @@ export const audioRecordingActor = fromCallback<
       mediaRecorder.onstart = () => {
         if (!disposed && mediaRecorder) {
           startedAtMs = Date.now();
+          startedAtPerfMs = performance.now();
           nextChunkStartTimeMs = 0;
-          sendBack({ type: "STARTED", mediaRecorder, mimeType, startedAtMs });
+          sendBack({
+            type: "STARTED",
+            mediaRecorder,
+            mimeType,
+            startedAtMs,
+            startedAtPerf: startedAtPerfMs,
+          });
         }
       };
 

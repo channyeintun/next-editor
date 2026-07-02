@@ -9,7 +9,7 @@ export interface CameraRecordingInput {
 export type CameraRecordingEvent = { type: "START" } | { type: "STOP" };
 
 export type CameraRecordingEmit =
-  | { type: "CAMERA_STARTED"; mimeType: string; startedAtMs: number }
+  | { type: "CAMERA_STARTED"; mimeType: string; startedAtMs: number; startedAtPerf: number }
   | { type: "CAMERA_STOPPED"; blob: Blob }
   | { type: "CAMERA_ERROR"; error: string };
 
@@ -42,6 +42,7 @@ export const cameraRecordingActor = fromCallback<
   let starting = false;
   let stopRequested = false;
   let startedAtMs = 0;
+  let startedAtPerfMs = 0;
 
   const cleanupStream = () => {
     if (stream) {
@@ -109,7 +110,13 @@ export const cameraRecordingActor = fromCallback<
       mediaRecorder.onstart = () => {
         if (!disposed) {
           startedAtMs = Date.now();
-          sendBack({ type: "CAMERA_STARTED", mimeType, startedAtMs });
+          startedAtPerfMs = performance.now();
+          sendBack({
+            type: "CAMERA_STARTED",
+            mimeType,
+            startedAtMs,
+            startedAtPerf: startedAtPerfMs,
+          });
         }
       };
 

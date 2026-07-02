@@ -95,8 +95,14 @@ export interface RecordingSessionMediaFragment {
  * equality selectors can still detect a change.
  */
 export interface RecordingSession {
-  /** When recording started (performance.now()) */
+  /**
+   * Wall-clock time recording started (`Date.now()`). Metadata only (e.g. the live
+   * elapsed-time display) — never subtracted from another wall-clock read to derive an
+   * in-session timestamp, since `Date.now()` is not monotonic. Use `startedAtPerf` for that.
+   */
   startedAt: number;
+  /** When recording started (`performance.now()`), monotonic origin for all in-session timestamps */
+  startedAtPerf: number;
   /** Already-compressed frames built incrementally during capture (append-only) */
   frames: DeltaFrame[];
   /** Incremental encoder state (input count, last stored frame, last full frame) */
@@ -409,6 +415,7 @@ export type AudioActorStartedEvent = {
   mediaRecorder: MediaRecorder;
   mimeType: string;
   startedAtMs: number;
+  startedAtPerf: number;
 };
 
 /** Audio actor error event */
@@ -481,6 +488,7 @@ export type CameraActorStartedEvent = {
   type: "CAMERA_STARTED";
   mimeType: string;
   startedAtMs: number;
+  startedAtPerf: number;
 };
 
 /** Camera chunk received */

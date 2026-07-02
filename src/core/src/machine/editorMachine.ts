@@ -221,6 +221,10 @@ export const editorMachine = setup({
         event.type === "STARTED" && Number.isFinite(event.startedAtMs)
           ? event.startedAtMs
           : Date.now();
+      const startedAtPerf =
+        event.type === "STARTED" && Number.isFinite(event.startedAtPerf)
+          ? event.startedAtPerf
+          : performance.now();
       const slideEvents: SlideEvent[] = [];
       const previewEvents: PreviewEvent[] = [];
       const workspaceEvents: WorkspaceRecordingEvent[] = [];
@@ -290,6 +294,7 @@ export const editorMachine = setup({
       return {
         session: {
           startedAt,
+          startedAtPerf,
           frames: [],
           encoder: createFrameStreamEncoder(),
           slideEvents,
@@ -374,7 +379,7 @@ export const editorMachine = setup({
       const editor = context.editorRefs.editor;
       if (!editor || !context.session) return {};
 
-      const timestamp = Date.now() - context.session.startedAt;
+      const timestamp = performance.now() - context.session.startedAtPerf;
 
       const mousePosition =
         event.type === "CAPTURE_FRAME" && event.mousePosition
@@ -446,7 +451,7 @@ export const editorMachine = setup({
         return {};
       }
 
-      const timestamp = Date.now() - context.session.startedAt;
+      const timestamp = performance.now() - context.session.startedAtPerf;
       const previousContent =
         context.currentFrame && context.session.lastCapturedContentVersionId !== undefined
           ? {
@@ -496,7 +501,7 @@ export const editorMachine = setup({
         typeof context.audio.externalDurationMs === "number" &&
         Number.isFinite(context.audio.externalDurationMs)
           ? Math.max(context.audio.externalDurationMs, 1)
-          : Math.max(Date.now() - context.session.startedAt, 1);
+          : Math.max(performance.now() - context.session.startedAtPerf, 1);
       const slides = context.getSlides?.();
       const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() || undefined;
       const workspaceSnapshot = currentWorkspaceSnapshot
@@ -1140,10 +1145,11 @@ export const editorMachine = setup({
     storeCameraStarted: assign(({ context, event }) => {
       if (event.type !== "CAMERA_STARTED") return {};
       // The camera MediaRecorder only starts after getUserMedia resolves, which lags the
-      // recording-session origin (session.startedAt) by the camera warmup. Capture that offset so
-      // playback can shift the video back into sync; otherwise the face video runs ahead of audio.
+      // recording-session origin (session.startedAtPerf) by the camera warmup. Capture that
+      // offset so playback can shift the video back into sync; otherwise the face video runs
+      // ahead of audio. Both sides must be the same (monotonic) clock — see P7.
       const startOffsetMs = context.session
-        ? Math.max(0, event.startedAtMs - context.session.startedAt)
+        ? Math.max(0, event.startedAtPerf - context.session.startedAtPerf)
         : 0;
       return {
         camera: {
