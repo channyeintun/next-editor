@@ -23,6 +23,7 @@ import {
 interface UseWebContainerRuntimeSessionOptions {
   environmentVariables: EnvironmentVariables;
   onTerminalOutput?: () => void;
+  onServerReady?: () => void;
 }
 
 const RUNNER_OUTPUT_LIMIT = 6000;
@@ -61,6 +62,7 @@ function safelyKillProcess(process: WebContainerProcess | null): void {
 export function useWebContainerRuntimeSession({
   environmentVariables,
   onTerminalOutput,
+  onServerReady,
 }: UseWebContainerRuntimeSessionOptions) {
   const instanceRef = useRef<WebContainer | null>(null);
   const foregroundProcessesRef = useRef<Set<WebContainerProcess>>(new Set());
@@ -84,6 +86,7 @@ export function useWebContainerRuntimeSession({
   const activeTerminalSessionIdRef = useRef<string | null>(null);
   const activeCommandRef = useRef<string | null>(null);
   const onTerminalOutputRef = useRef(onTerminalOutput);
+  const onServerReadyRef = useRef(onServerReady);
   const statusRef = useRef<WebContainerRuntimeStatus>("idle");
   const [status, setStatusState] = useState<WebContainerRuntimeStatus>("idle");
   const [previewUrl, setPreviewUrlState] = useState<string | null>(null);
@@ -108,6 +111,7 @@ export function useWebContainerRuntimeSession({
   activeTerminalSessionIdRef.current = activeTerminalSessionId;
   activeCommandRef.current = activeCommand;
   onTerminalOutputRef.current = onTerminalOutput;
+  onServerReadyRef.current = onServerReady;
   statusRef.current = status;
 
   const isRuntimeGenerationActive = (generation: number) =>
@@ -326,6 +330,7 @@ export function useWebContainerRuntimeSession({
       setPreviewPort(port);
       setPreviewUrl(url);
       setStatus("ready");
+      onServerReadyRef.current?.();
     });
 
     portListenerCleanupRef.current?.();

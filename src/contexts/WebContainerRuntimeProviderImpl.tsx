@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import type { WebContainer } from "@webcontainer/api";
 import {
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
@@ -66,6 +67,53 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const [runnerConfig, setRunnerConfig] = useState<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
   const { hasMountedProjectRef, ensureProjectMounted, queueProjectSync, resetWorkspaceSync } =
     useWebContainerWorkspaceSync();
+
+  const requestReverseSync = (instance: WebContainer, generation?: number) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (reverseSyncTimeoutRef.current !== null) {
+      window.clearTimeout(reverseSyncTimeoutRef.current);
+    }
+
+    reverseSyncTimeoutRef.current = window.setTimeout(() => {
+      reverseSyncTimeoutRef.current = null;
+
+      void (async () => {
+        if (!lessonRunsInWebContainer(lessonTypeRef.current)) {
+          return;
+        }
+
+        if (generation !== undefined && !isRuntimeGenerationActive(generation)) {
+          return;
+        }
+
+        const currentProject = getProject();
+        const nextProject = await readWorkspaceProject(instance, currentProject);
+
+        if (
+          (generation !== undefined && !isRuntimeGenerationActive(generation)) ||
+          areWorkspaceProjectsEqual(currentProject, nextProject)
+        ) {
+          return;
+        }
+
+        loadProject(
+          nextProject,
+          getActiveFilePath(),
+          getCollapsedFolders(),
+          getSidebarScrollTop(),
+          getSidebarWidth(),
+        );
+      })().catch((error) => {
+        if (generation === undefined || isRuntimeGenerationActive(generation)) {
+          setErrorMessage(getRuntimeErrorMessage(error));
+        }
+      });
+    }, 150);
+  };
+
   const {
     activeCommand,
     activeTerminalSessionId,
@@ -100,46 +148,26 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   } = useWebContainerRuntimeSession({
     environmentVariables,
     onTerminalOutput: () => {
-      if (typeof window === "undefined") {
+      const instance = instanceRef.current;
+
+      if (!instance) {
         return;
       }
 
-      if (reverseSyncTimeoutRef.current !== null) {
-        window.clearTimeout(reverseSyncTimeoutRef.current);
+      requestReverseSync(instance);
+    },
+    onServerReady: () => {
+      if (!lessonRunsInWebContainer(lessonTypeRef.current)) {
+        return;
       }
 
-      reverseSyncTimeoutRef.current = window.setTimeout(() => {
-        reverseSyncTimeoutRef.current = null;
+      const instance = instanceRef.current;
 
-        void (async () => {
-          if (!lessonRunsInWebContainer(lessonTypeRef.current)) {
-            return;
-          }
+      if (!instance) {
+        return;
+      }
 
-          const instance = instanceRef.current;
-
-          if (!instance) {
-            return;
-          }
-
-          const currentProject = getProject();
-          const nextProject = await readWorkspaceProject(instance, currentProject);
-
-          if (areWorkspaceProjectsEqual(currentProject, nextProject)) {
-            return;
-          }
-
-          loadProject(
-            nextProject,
-            getActiveFilePath(),
-            getCollapsedFolders(),
-            getSidebarScrollTop(),
-            getSidebarWidth(),
-          );
-        })().catch((error) => {
-          setErrorMessage(getRuntimeErrorMessage(error));
-        });
-      }, 150);
+      requestReverseSync(instance);
     },
   });
 
@@ -211,6 +239,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     }
 
     hasRunInitCommandRef.current = true;
+    requestReverseSync(instance, generation);
     return instance;
   };
 
@@ -353,42 +382,8 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
       await writeTerminalInput(instance, input);
 
-      if (typeof window !== "undefined" && (input.includes("\n") || input.includes("\u0003"))) {
-        if (reverseSyncTimeoutRef.current !== null) {
-          window.clearTimeout(reverseSyncTimeoutRef.current);
-        }
-
-        reverseSyncTimeoutRef.current = window.setTimeout(() => {
-          reverseSyncTimeoutRef.current = null;
-
-          void (async () => {
-            if (!isRuntimeGenerationActive(generation)) {
-              return;
-            }
-
-            const currentProject = getProject();
-            const nextProject = await readWorkspaceProject(instance, currentProject);
-
-            if (
-              !isRuntimeGenerationActive(generation) ||
-              areWorkspaceProjectsEqual(currentProject, nextProject)
-            ) {
-              return;
-            }
-
-            loadProject(
-              nextProject,
-              getActiveFilePath(),
-              getCollapsedFolders(),
-              getSidebarScrollTop(),
-              getSidebarWidth(),
-            );
-          })().catch((error) => {
-            if (isRuntimeGenerationActive(generation)) {
-              setErrorMessage(getRuntimeErrorMessage(error));
-            }
-          });
-        }, 150);
+      if (input.includes("\n") || input.includes("\u0003")) {
+        requestReverseSync(instance, generation);
       }
     } catch (error) {
       if (isRuntimeGenerationActive(generation)) {
