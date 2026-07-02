@@ -343,7 +343,7 @@ describe("useUrlLoader", () => {
     // fallback (simulating a host, e.g. an S3 presigned URL, that only allows GetObject). Using
     // the basename candidate (rather than the happy-path `cameraFile` guess) also means the
     // resolved URL differs from the initial guess, so `extendRecording` actually fires.
-    const recording = createRecording({ cameraFile: "old-name.webm", cameraSource: "external" });
+    const recording = createRecording({ cameraFile: "old-name.webm", cameraSource: "camera" });
     const neBytes = await encodeRecordingToStream(recording);
 
     const requestLog: Array<{ url: string; method: string }> = [];
@@ -394,7 +394,7 @@ describe("useUrlLoader", () => {
     // The stored sibling filename resolves to a host that answers 200 with an HTML SPA
     // fallback page (not real video) — the probe must reject it and fall through to the
     // .ne-basename candidate, which serves the real file.
-    const recording = createRecording({ cameraFile: "lesson.webm", cameraSource: "external" });
+    const recording = createRecording({ cameraFile: "lesson.webm", cameraSource: "camera" });
     const neBytes = await encodeRecordingToStream(recording);
 
     const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
