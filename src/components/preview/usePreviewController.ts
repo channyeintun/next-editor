@@ -66,6 +66,7 @@ import {
   getRuntimePreviewState,
   normalizePreviewRoute,
   refreshRuntimePreview,
+  runtimePreviewSrcNeedsReset,
 } from "./runtimePreview";
 
 export interface PreviewController {
@@ -718,7 +719,10 @@ export function usePreviewController(): PreviewController {
 
     if (lessonRunsInWebContainer(lessonType) && runtimePreviewUrl) {
       captureRuntimePreviewSnapshot();
-      if (iframe.getAttribute("srcdoc") !== null || iframe.src !== runtimePreviewUrl) {
+      // Guarded via the src *attribute* (see runtimePreviewSrcNeedsReset): any
+      // `src` assignment navigates the frame, so re-assigning on every effect
+      // run would reload the live preview and lose its state.
+      if (runtimePreviewSrcNeedsReset(iframe, runtimePreviewUrl)) {
         iframe.removeAttribute("srcdoc");
         iframe.src = runtimePreviewUrl;
       }

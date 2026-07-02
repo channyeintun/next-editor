@@ -126,6 +126,25 @@ export function applyRouteToRuntimePreviewLocation(
   }
 }
 
+/**
+ * Whether the live runtime iframe must be (re)pointed at the runtime preview URL.
+ *
+ * Compares the `src` *attribute* — the exact string a previous run assigned — and
+ * NOT the reflected `iframe.src` property. The property getter returns the parsed,
+ * re-serialized URL (an origin-only URL gains a trailing "/"), which never equals
+ * the raw WebContainer server-ready URL, so a property comparison is permanently
+ * unequal. Since any assignment to `src` (even of the identical value) navigates
+ * the frame, comparing against the property made every run of the src-sync effect
+ * reload the preview — dropping its scroll/SPA state whenever something re-rendered
+ * the preview panel (e.g. switching files while recording).
+ */
+export function runtimePreviewSrcNeedsReset(
+  iframe: HTMLIFrameElement,
+  runtimePreviewUrl: string,
+): boolean {
+  return iframe.getAttribute("srcdoc") !== null || iframe.getAttribute("src") !== runtimePreviewUrl;
+}
+
 export async function refreshRuntimePreview(
   iframe: HTMLIFrameElement,
   fallbackUrl: string,
