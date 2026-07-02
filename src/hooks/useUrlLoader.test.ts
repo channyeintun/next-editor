@@ -338,7 +338,12 @@ describe("useUrlLoader", () => {
   });
 
   it("probes a camera URL with HEAD first, falling back to a ranged GET when HEAD is rejected", async () => {
-    const recording = createRecording({ cameraFile: "lesson.webm", cameraSource: "external" });
+    // The stored sibling filename (`old-name.webm`) 404s outright, so the winning candidate is
+    // the .ne-basename fallback (`intro-01.webm`) — reachable only via HEAD-reject + ranged-GET
+    // fallback (simulating a host, e.g. an S3 presigned URL, that only allows GetObject). Using
+    // the basename candidate (rather than the happy-path `cameraFile` guess) also means the
+    // resolved URL differs from the initial guess, so `extendRecording` actually fires.
+    const recording = createRecording({ cameraFile: "old-name.webm", cameraSource: "external" });
     const neBytes = await encodeRecordingToStream(recording);
 
     const requestLog: Array<{ url: string; method: string }> = [];
@@ -350,7 +355,7 @@ describe("useUrlLoader", () => {
         if (url.endsWith(".ne")) {
           return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
         }
-        if (url.endsWith("/lesson.webm")) {
+        if (url.endsWith("/intro-01.webm")) {
           // HEAD rejected (simulates a host that only allows GetObject/ranged GET) via a status
           // the proxy fallback doesn't special-case, so the ranged-GET retry happens on the same
           // (proxied) URL rather than falling through to a raw direct fetch.
@@ -378,9 +383,9 @@ describe("useUrlLoader", () => {
     });
 
     const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
-    expect(extended.cameraUrl).toBe("https://example.com/lesson.webm");
+    expect(extended.cameraUrl).toBe("https://example.com/intro-01.webm");
 
-    const cameraRequests = requestLog.filter((entry) => entry.url.endsWith("/lesson.webm"));
+    const cameraRequests = requestLog.filter((entry) => entry.url.endsWith("/intro-01.webm"));
     expect(cameraRequests[0]?.method).toBe("HEAD");
     expect(cameraRequests.some((entry) => entry.method !== "HEAD")).toBe(true);
   });
