@@ -182,9 +182,24 @@ export class RecordingStorage {
     return recording;
   }
 
-  private async loadIndexedDBRecordings(): Promise<Recording[]> {
-    const entries = await this.indexedDBStore.getAllEntries();
-    return Promise.all(entries.map((entry) => this.decodeStoredEntry(entry)));
+  /**
+   * List stored recordings by metadata only — no stream/media bytes are read or decoded.
+   * Use this for library UIs; decode individual recordings on demand via {@link loadById}.
+   */
+  async list(): Promise<StoredRecordingMetadata[]> {
+    return this.indexedDBStore.listMetadata();
+  }
+
+  /**
+   * Load and decode a single recording by id, reading only that recording's bytes.
+   * Returns null when the id has no stored entry (or its payload is missing).
+   */
+  async loadById(id: string): Promise<Recording | null> {
+    const entry = await this.indexedDBStore.getEntry(id);
+    if (!entry) {
+      return null;
+    }
+    return this.decodeStoredEntry(entry);
   }
 
   /**
@@ -211,19 +226,44 @@ export class RecordingStorage {
   }
 
   /**
-   * Load all recordings from IndexedDB.
+   * Load all recordings from IndexedDB, decoding one at a time by id. A corrupt or
+   * unreadable entry is skipped rather than failing the whole library; its id is
+   * reported in `failedIds` so the caller can surface it.
    */
-  async load(): Promise<Recording[]> {
+  async loadAll(): Promise<{ recordings: Recording[]; failedIds: string[] }> {
     try {
-      if (!(await this.indexedDBStore.hasEntries())) {
-        return [];
+      const metadata = await this.indexedDBStore.listMetadata();
+      const recordings: Recording[] = [];
+      const failedIds: string[] = [];
+
+      for (const entry of metadata) {
+        try {
+          const recording = await this.loadById(entry.id);
+          if (recording) {
+            recordings.push(recording);
+          } else {
+            failedIds.push(entry.id);
+          }
+        } catch (error) {
+          console.error(`RecordingStorage: Failed to decode recording ${entry.id}:`, error);
+          failedIds.push(entry.id);
+        }
       }
 
-      return await this.loadIndexedDBRecordings();
+      return { recordings, failedIds };
     } catch (error) {
       console.error("Failed to load recordings from IndexedDB:", error);
-      return [];
+      return { recordings: [], failedIds: [] };
     }
+  }
+
+  /**
+   * Load all recordings from IndexedDB. Prefer {@link list} + {@link loadById} (or
+   * {@link loadAll} for the failure-isolated form) for library UIs.
+   */
+  async load(): Promise<Recording[]> {
+    const { recordings } = await this.loadAll();
+    return recordings;
   }
 
   /**

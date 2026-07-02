@@ -2,6 +2,7 @@ import { createContext, type RefObject } from "react";
 import type { CaptionTrack, Recording } from "../core/src/types";
 import type { TimelineActorRef } from "../core/src/machine/timelineMachine";
 import type { EditorActorRef } from "../core/src/useNextEditor";
+import type { StoredRecordingMetadata } from "../storage/IndexedDBRecordingStore";
 import type {
   PreviewDomPatchBatch,
   PreviewEvent,
@@ -44,6 +45,8 @@ export interface NextEditorActions {
   clearStorage: () => Promise<void>;
   getStorageStats: () => Promise<{ count: number; totalSize: string }>;
   loadRecordingsFromStorage: () => Promise<Recording[]>;
+  listStoredRecordings: () => Promise<StoredRecordingMetadata[]>;
+  loadStoredRecordingById: (id: string) => Promise<Recording | null>;
   deleteFromStorage: (id: string) => Promise<void>;
 }
 

@@ -168,15 +168,6 @@ export class IndexedDBRecordingStore {
     return result;
   }
 
-  async hasEntries(): Promise<boolean> {
-    const database = await this.getDatabase();
-    const transaction = database.transaction(RECORDING_METADATA_STORE, "readonly");
-    const store = transaction.objectStore(RECORDING_METADATA_STORE);
-    const count = await requestToPromise(store.count());
-    await transactionToPromise(transaction);
-    return count > 0;
-  }
-
   async listMetadata(): Promise<StoredRecordingMetadata[]> {
     const database = await this.getDatabase();
     const transaction = database.transaction(RECORDING_METADATA_STORE, "readonly");
@@ -219,72 +210,6 @@ export class IndexedDBRecordingStore {
     }
 
     return { metadata, binaryData, cameraBlob: camera?.blob, audioBlob: audio?.blob };
-  }
-
-  async getAllEntries(): Promise<StoredRecordingEntry[]> {
-    const database = await this.getDatabase();
-    const transaction = database.transaction(
-      [
-        RECORDING_METADATA_STORE,
-        RECORDING_SEGMENTS_STORE,
-        RECORDING_CAMERA_STORE,
-        RECORDING_AUDIO_STORE,
-      ],
-      "readonly",
-    );
-    const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
-    const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
-    const cameraStore = transaction.objectStore(RECORDING_CAMERA_STORE);
-    const audioStore = transaction.objectStore(RECORDING_AUDIO_STORE);
-
-    const metadata = await requestToPromise(metadataStore.getAll());
-    const segments = await requestToPromise(segmentsStore.getAll());
-    const cameras = await requestToPromise(cameraStore.getAll());
-    const audios = await requestToPromise(audioStore.getAll());
-    await transactionToPromise(transaction);
-
-    const segmentsById = new Map<string, StoredRecordingSegment[]>();
-    for (const segment of segments) {
-      const existing = segmentsById.get(segment.recordingId);
-      if (existing) {
-        existing.push(segment);
-      } else {
-        segmentsById.set(segment.recordingId, [segment]);
-      }
-    }
-
-    const cameraById = new Map<string, Blob>();
-    for (const camera of cameras) {
-      cameraById.set(camera.recordingId, camera.blob);
-    }
-
-    const audioById = new Map<string, Blob>();
-    for (const audio of audios) {
-      audioById.set(audio.recordingId, audio.blob);
-    }
-
-    const binaryById = new Map<string, Uint8Array>();
-    for (const entry of metadata) {
-      const binaryData = this.concatSegments(segmentsById.get(entry.id) ?? []);
-      if (binaryData) {
-        binaryById.set(entry.id, binaryData);
-      }
-    }
-
-    const missingPayloadIds = metadata
-      .filter((entry) => !binaryById.has(entry.id))
-      .map((entry) => entry.id);
-
-    if (missingPayloadIds.length > 0) {
-      throw new Error(`Missing recording payloads for ids: ${missingPayloadIds.join(", ")}`);
-    }
-
-    return metadata.sort(compareMetadataByRecency).map((entry) => ({
-      metadata: entry,
-      binaryData: binaryById.get(entry.id)!,
-      cameraBlob: cameraById.get(entry.id),
-      audioBlob: audioById.get(entry.id),
-    }));
   }
 
   async put(entry: StoredRecordingEntry): Promise<void> {

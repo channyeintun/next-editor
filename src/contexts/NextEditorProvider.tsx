@@ -81,6 +81,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       return [];
     }
   };
+  const listStoredRecordings = () => recordingStorage.current.list();
+  const loadStoredRecordingById = (id: string) => recordingStorage.current.loadById(id);
 
   const handleWorkspaceEvent = (event?: {
     sidebarWidthDelta?: number;
@@ -121,6 +123,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     clearStorage,
     getStorageStats,
     loadRecordingsFromStorage,
+    listStoredRecordings,
+    loadStoredRecordingById,
     deleteFromStorage,
   };
 
