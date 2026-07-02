@@ -220,6 +220,7 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     audioStartOffsetMs: hasAudio ? normalized.audioStartOffsetMs : undefined,
     audioFile: normalized.audioFile,
     audioUrl: normalized.audioUrl,
+    audioUrlConfigured: normalized.audioUrlConfigured,
     cameraType: hasCamera
       ? cameraTrack?.mimeType || cameraMimeFromFilename(normalized.cameraFile) || "video/webm"
       : undefined,
@@ -227,6 +228,7 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     cameraStartOffsetMs: hasCamera ? normalized.cameraStartOffsetMs : undefined,
     cameraFile: normalized.cameraFile,
     cameraUrl: normalized.cameraUrl,
+    cameraUrlConfigured: normalized.cameraUrlConfigured,
     captions: normalized.captions,
     captionFiles: normalized.captionFiles,
     slides: normalized.slides,

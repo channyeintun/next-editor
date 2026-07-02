@@ -15,11 +15,70 @@ const MISSING_PROXY_STATUS_CODES = new Set([404, 405, 501]);
 // downloaded bytes, so playback can start before the whole `.ne` file has arrived.
 const STREAM_DECODE_INTERVAL_BYTES = 512 * 1024;
 
+/** Extension (no dot) of a filename, or undefined if it has none. */
+function fileExtension(filename: string | undefined): string | undefined {
+  if (!filename) return undefined;
+  return /\.([^./]+)$/.exec(filename)?.[1];
+}
+
+/** `<neBasename>.<ext>` resolved against the `.ne` URL, e.g. `intro-01.ne` -> `intro-01.weba`. */
+function neBasenameMediaUrl(neUrl: string, ext: string): string | null {
+  try {
+    const url = new URL(neUrl);
+    const slash = url.pathname.lastIndexOf("/");
+    const base = url.pathname.slice(slash + 1).replace(/\.ne$/i, "");
+    if (!base) return null;
+    url.pathname = `${url.pathname.slice(0, slash + 1)}${base}.${ext}`;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ordered, deduplicated candidate URLs for a media kind (audio/camera), so a renamed/re-hosted
+ * `.ne` can still find its media: (1) a configured URL persisted on the recording, (2) the
+ * stored sibling filename resolved against the `.ne` URL, (3) the `.ne` file's own basename
+ * with the stored (or default) extension — covers the user renaming `lesson.ne`+`lesson.weba`
+ * to `intro-01.ne`+`intro-01.weba` together. Returns `[]` when the recording declares no media
+ * of this kind at all (never invents media that wasn't referenced).
+ */
+function buildMediaCandidates(
+  storedUrl: string | undefined,
+  storedFile: string | undefined,
+  baseUrl: string | undefined,
+  defaultExt: string,
+): string[] {
+  if (!storedUrl && !storedFile) {
+    return [];
+  }
+  const candidates: string[] = [];
+  if (storedUrl) {
+    candidates.push(storedUrl);
+  }
+  if (storedFile && baseUrl) {
+    try {
+      candidates.push(new URL(storedFile, baseUrl).toString());
+    } catch {
+      // Unresolvable reference — skip this candidate.
+    }
+  }
+  if (baseUrl) {
+    const basenameUrl = neBasenameMediaUrl(baseUrl, fileExtension(storedFile) ?? defaultExt);
+    if (basenameUrl) {
+      candidates.push(basenameUrl);
+    }
+  }
+  return Array.from(new Set(candidates));
+}
+
 /**
  * Resolve external media references (`cameraFile` / `audioFile`) into absolute URLs relative to
  * the original `.ne` URL, so a sibling video plays via a native `<video src>` and sibling audio
  * can be fetched for playback. Resolves against the user-facing `.ne` URL (not any same-origin
- * proxy URL) so the media is fetched from its real host.
+ * proxy URL) so the media is fetched from its real host. This is the fast, unverified happy
+ * path — {@link resolveExternalMedia} falls back to the `.ne` basename out-of-band when this
+ * guess turns out to be wrong (renamed/re-hosted media).
  */
 function withResolvedMediaUrls(recording: Recording, baseUrl: string | undefined): Recording {
   if (!baseUrl) {
@@ -98,17 +157,17 @@ function buildSameOriginProxyUrl(targetUrl: string): string {
   return proxyUrl.toString();
 }
 
-async function fetchNextEditorUrl(url: string): Promise<Response> {
+async function fetchNextEditorUrl(url: string, init?: RequestInit): Promise<Response> {
   const urlObj = new URL(url);
 
   if (urlObj.origin === window.location.origin) {
-    return fetch(url);
+    return fetch(url, init);
   }
 
   const proxyUrl = buildSameOriginProxyUrl(url);
 
   try {
-    const proxyResponse = await fetch(proxyUrl);
+    const proxyResponse = await fetch(proxyUrl, init);
 
     // Hosts without a real `/api/proxy` endpoint (static/SPA deploys) rewrite the
     // unknown path to the app shell and answer 200 with `text/html`. That HTML is
@@ -126,7 +185,30 @@ async function fetchNextEditorUrl(url: string): Promise<Response> {
     console.warn("Same-origin proxy request failed, falling back to direct fetch:", error);
   }
 
-  return fetch(url);
+  return fetch(url, init);
+}
+
+/**
+ * Checks whether a media URL is reachable and not an HTML fallback page, without downloading
+ * the body — used to verify a camera `<video src>` candidate before assigning it (playback
+ * would otherwise fail silently inside the `<video>` element). Tries `HEAD` first since it's
+ * cheapest; some hosts (e.g. S3 presigned URLs scoped to `GetObject`) reject `HEAD`, so a
+ * ranged `GET` is the fallback.
+ */
+async function probeMediaUrl(url: string): Promise<boolean> {
+  try {
+    let response = await fetchNextEditorUrl(url, { method: "HEAD" });
+    if (!response.ok) {
+      response = await fetchNextEditorUrl(url, { headers: { Range: "bytes=0-0" } });
+    }
+    if (!response.ok) {
+      return false;
+    }
+    const contentType = response.headers.get("content-type") ?? "";
+    return !contentType.includes("text/html");
+  } catch {
+    return false;
+  }
 }
 
 export const useUrlLoader = () => {
@@ -274,36 +356,96 @@ export const useUrlLoader = () => {
   };
 
   /**
-   * Fetches a recording's external audio (a sibling file referenced by `audioFile` /
-   * `audioUrl`) and attaches it via `extendRecording`, which spawns/updates the playback
-   * audio actor. Runs after the `.ne` itself has fully loaded, so the audio bytes never
-   * flow through the progressive stream decoder — the whole point of externalizing them.
+   * Finds a working audio candidate (a sibling file referenced by `audioFile` / `audioUrl`, or
+   * the `.ne` basename fallback) and downloads it, without touching the recording — the caller
+   * applies the result via a single `extendRecording` alongside any camera fix, so the two
+   * out-of-band resolutions never race and clobber each other.
    */
-  const attachExternalAudio = async (recording: Recording) => {
-    const url = recording.audioUrl;
-    if (!url || recording.audioBlob instanceof Blob) {
-      return;
+  const findWorkingAudioBlob = async (
+    recording: Recording,
+    neUrl: string | undefined,
+  ): Promise<{ url: string; blob: Blob } | null> => {
+    if (recording.audioBlob instanceof Blob) {
+      return null;
     }
-    try {
-      const response = await fetchNextEditorUrl(url);
-      if (!response.ok) {
-        console.warn(`External audio fetch failed (${response.status}): ${url}`);
-        return;
+    const candidates = buildMediaCandidates(recording.audioUrl, recording.audioFile, neUrl, "weba");
+    for (const url of candidates) {
+      try {
+        const response = await fetchNextEditorUrl(url);
+        if (!response.ok) {
+          console.warn(`External audio fetch failed (${response.status}): ${url}`);
+          continue;
+        }
+        const raw = await response.blob();
+        if (raw.size === 0 || raw.type.includes("text/html")) {
+          continue;
+        }
+        // Some hosts serve sibling audio without a usable content type; fall back to the
+        // extension-derived MIME so `decodeAudioData` and track metadata behave.
+        const type =
+          (raw.type && !raw.type.includes("text/html") ? raw.type : undefined) ??
+          audioMimeFromFilename(recording.audioFile ?? url) ??
+          "audio/webm";
+        const blob = raw.type === type ? raw : new Blob([raw], { type });
+        return { url, blob };
+      } catch (err) {
+        console.warn(`Failed to fetch external audio from ${url}:`, err);
       }
-      const raw = await response.blob();
-      if (raw.size === 0) {
-        return;
+    }
+    return null;
+  };
+
+  /**
+   * Finds a working camera URL — playback consumes `cameraUrl` directly via a `<video src>`,
+   * which fails silently on a bad URL rather than throwing, so the happy-path guess from
+   * `withResolvedMediaUrls` is verified with a cheap probe before falling back through the
+   * `.ne` basename candidate. Returns `null` when the current URL already probes fine (the
+   * common case) or nothing works.
+   */
+  const findWorkingCameraUrl = async (
+    recording: Recording,
+    neUrl: string | undefined,
+  ): Promise<string | null> => {
+    const candidates = buildMediaCandidates(
+      recording.cameraUrl,
+      recording.cameraFile,
+      neUrl,
+      "webm",
+    );
+    for (const url of candidates) {
+      if (await probeMediaUrl(url)) {
+        return url !== recording.cameraUrl ? url : null;
       }
-      // Some hosts serve sibling audio without a usable content type; fall back to the
-      // extension-derived MIME so `decodeAudioData` and track metadata behave.
-      const type =
-        (raw.type && !raw.type.includes("text/html") ? raw.type : undefined) ??
-        audioMimeFromFilename(recording.audioFile ?? url) ??
-        "audio/webm";
-      const audioBlob = raw.type === type ? raw : new Blob([raw], { type });
-      extendRecording({ ...recording, audioBlob });
-    } catch (err) {
-      console.warn("Failed to fetch external audio:", err);
+    }
+    if (candidates.length > 0) {
+      console.warn("External camera video probe failed for all candidates:", candidates);
+    }
+    return null;
+  };
+
+  /**
+   * Resolves external audio/camera media out-of-band, after the (now tiny) `.ne` itself has
+   * loaded. Camera is probed first (cheap HEAD/ranged-GET) so a single `extendRecording` can
+   * carry both fixes — audio's full download happens after, folding in whatever the camera
+   * probe found instead of racing it.
+   */
+  const resolveExternalMedia = async (recording: Recording, neUrl: string | undefined) => {
+    let current = recording;
+
+    if (current.cameraFile || current.cameraUrl) {
+      const cameraUrl = await findWorkingCameraUrl(current, neUrl);
+      if (cameraUrl) {
+        current = { ...current, cameraUrl };
+      }
+    }
+
+    const audio = await findWorkingAudioBlob(current, neUrl);
+    if (audio) {
+      current = { ...current, audioUrl: audio.url, audioBlob: audio.blob };
+    }
+
+    if (current !== recording) {
+      extendRecording(current);
     }
   };
 
@@ -347,9 +489,9 @@ export const useUrlLoader = () => {
         })
         .catch(() => {});
 
-      // Externalized audio loads out-of-band, after the (now tiny) `.ne` finished.
+      // Externalized audio/camera resolve out-of-band, after the (now tiny) `.ne` finished.
       if (loaded) {
-        void attachExternalAudio(loaded);
+        void resolveExternalMedia(loaded, url);
       }
     } catch (err) {
       console.error("Failed to load tutorial from URL:", err);

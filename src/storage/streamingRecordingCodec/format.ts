@@ -95,6 +95,8 @@ export interface RecordingStreamMeta {
   audioFile?: string;
   /** Resolved/absolute URL for external audio, when known at encode time. */
   audioUrl?: string;
+  /** True when `audioUrl` was explicitly set by the user (survives export) rather than an auto-resolved guess. */
+  audioUrlConfigured?: boolean;
   cameraType?: string;
   cameraSource?: RecordingCameraSource;
   cameraStartOffsetMs?: number;
@@ -102,6 +104,8 @@ export interface RecordingStreamMeta {
   cameraFile?: string;
   /** Resolved/absolute URL for an external camera video, when known at encode time. */
   cameraUrl?: string;
+  /** True when `cameraUrl` was explicitly set by the user (survives export) rather than an auto-resolved guess. */
+  cameraUrlConfigured?: boolean;
   captions?: CaptionTrack[];
   captionFiles?: string[];
   slides?: Slide[];

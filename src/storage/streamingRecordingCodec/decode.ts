@@ -160,11 +160,13 @@ function assembleRecording(state: DecodedStreamState): Recording {
     // Audio may live outside the stream — the header then carries only the reference.
     audioFile: meta.audioFile,
     audioUrl: meta.audioUrl,
+    audioUrlConfigured: meta.audioUrlConfigured,
     // Camera is always external — the stream carries only the reference/metadata, never bytes.
     cameraSource: meta.cameraSource,
     cameraStartOffsetMs,
     cameraFile: meta.cameraFile,
     cameraUrl: meta.cameraUrl,
+    cameraUrlConfigured: meta.cameraUrlConfigured,
     streamFinalized,
     workspaceSnapshot: meta.workspaceSnapshot,
     runtimeSnapshot: meta.runtimeSnapshot,

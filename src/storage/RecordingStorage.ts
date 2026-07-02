@@ -27,6 +27,24 @@ function stripExtension(filename: string): string {
   return filename.replace(/\.[^.]+$/, "");
 }
 
+/**
+ * Drop an `audioUrl`/`cameraUrl` unless the user explicitly set it via "Configure Media Links"
+ * (`*UrlConfigured`). Everything else — a `blob:`/`data:` object URL from an import, or a
+ * `https://` URL auto-resolved by `useUrlLoader` while loading from a `?url=` host — can't
+ * survive a re-export as-is: baking it in would silently defeat sibling-file resolution on the
+ * next load, since a present `cameraUrl`/`audioUrl` is preferred over the sibling filename.
+ */
+function sanitizeMediaUrlsForExport(recording: Recording): Recording {
+  const sanitized = { ...recording };
+  if (!sanitized.audioUrlConfigured) {
+    delete sanitized.audioUrl;
+  }
+  if (!sanitized.cameraUrlConfigured) {
+    delete sanitized.cameraUrl;
+  }
+  return sanitized;
+}
+
 /** True for companion files that are audio (by MIME, or by extension for `.weba` etc.). */
 export function isAudioFile(file: File): boolean {
   return file.type.startsWith("audio/") || /\.(weba|ogg|m4a|mp3|wav)$/i.test(file.name);
@@ -291,7 +309,7 @@ export class RecordingStorage {
 
       // Externalize the camera blob into a sibling video file and reference it from the `.ne`.
       const cameraBlob = recording.cameraBlob instanceof Blob ? recording.cameraBlob : null;
-      let recordingToEncode = recording;
+      let recordingToEncode = sanitizeMediaUrlsForExport(recording);
       let videoName: string | null = null;
       if (cameraBlob) {
         videoName = `${baseFilename}.${cameraExtensionFromMime(cameraBlob.type)}`;
