@@ -425,21 +425,28 @@ const didCursorPositionChange = (
   return !areMouseCursorPositionsEqual(previous, next);
 };
 
+/**
+ * Pushes in place — `cursorEvents` keeps its identity for the whole session (see the
+ * mutable capture buffer invariant on {@link RecordingSession}). Returns `false` when
+ * the position deduplicates against the last event (no push happened) so callers know
+ * whether to bump `sessionRevision`.
+ */
 export const appendCursorEvent = (
   cursorEvents: CursorRecordingEvent[],
   timestamp: number,
   mousePosition: MouseCursorPosition | undefined,
-): CursorRecordingEvent[] => {
-  if (!mousePosition) return cursorEvents;
+): boolean => {
+  if (!mousePosition) return false;
 
   const lastCursorEvent = cursorEvents[cursorEvents.length - 1];
   const cursorChanged = didCursorPositionChange(lastCursorEvent, mousePosition);
 
   if (!cursorChanged) {
-    return cursorEvents;
+    return false;
   }
 
-  return [...cursorEvents, { timestamp, ...mousePosition }];
+  cursorEvents.push({ timestamp, ...mousePosition });
+  return true;
 };
 
 interface PlaybackAudioState {

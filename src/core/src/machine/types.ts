@@ -83,7 +83,16 @@ export interface RecordingSessionMediaFragment {
 }
 
 /**
- * Recording session state
+ * Recording session state.
+ *
+ * This is a mutable capture buffer: its object identity — and the identity of every
+ * array field below — stays stable for the whole recording. Appenders push in place
+ * rather than spreading into a new array/object, so capture cost is O(1) instead of
+ * O(session-so-far) per sample. Arrays are append-only during a session; only indices
+ * `<= length` observed at read time are stable, so incremental readers (e.g. the
+ * live stream sink) must track their own read cursor rather than diffing snapshots.
+ * `EditorMachineContext.sessionRevision` is bumped on every mutation so reference-
+ * equality selectors can still detect a change.
  */
 export interface RecordingSession {
   /** When recording started (performance.now()) */
@@ -184,6 +193,13 @@ export interface EditorMachineContext {
   timeline: TimelineState;
   /** Current recording session (during recording) */
   session: RecordingSession | null;
+  /**
+   * Bumped whenever `session`'s arrays are mutated in place (append-only capture
+   * buffer — see {@link RecordingSession}). `session` keeps a stable object identity
+   * for the whole recording, so this is the only signal a reference-equality selector
+   * can use to detect a capture-buffer change.
+   */
+  sessionRevision: number;
   /** Loaded recording data */
   recording: Recording | null;
   /** Stream-oriented track metadata for the finalized recording facade. */
@@ -602,6 +618,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     pausedAt: 0,
   },
   session: null,
+  sessionRevision: 0,
   recording: null,
   currentFrame: null,
   audio: {

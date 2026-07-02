@@ -185,23 +185,20 @@ export const editorMachine = setup({
 
       const externalDurationMs = Number.isFinite(event.duration) ? event.duration : null;
 
-      const session =
-        context.session && externalDurationMs !== null && context.session.audioFragments.length > 0
-          ? {
-              ...context.session,
-              audioFragments: context.session.audioFragments.map((fragment, index) =>
-                index === 0
-                  ? {
-                      ...fragment,
-                      endTimeMs: context.audio.startOffsetMs + externalDurationMs,
-                    }
-                  : fragment,
-              ),
-            }
-          : context.session;
+      if (
+        context.session &&
+        externalDurationMs !== null &&
+        context.session.audioFragments.length > 0
+      ) {
+        context.session.audioFragments[0] = {
+          ...context.session.audioFragments[0],
+          endTimeMs: context.audio.startOffsetMs + externalDurationMs,
+        };
+      }
 
       return {
-        session,
+        session: context.session,
+        sessionRevision: context.session ? context.sessionRevision + 1 : context.sessionRevision,
         audio: {
           ...context.audio,
           externalDurationMs,
@@ -308,6 +305,7 @@ export const editorMachine = setup({
           audioFragments: externalAudioFragment,
           lastMousePosition: initialMousePosition,
         },
+        sessionRevision: 0,
         lastCallbackFrameTimestamp: undefined,
       };
     }),
@@ -359,13 +357,15 @@ export const editorMachine = setup({
 
       const { state: encoder, emitted } = pushFrame(session.encoder, initialFrame);
 
+      if (emitted) {
+        session.frames.push(emitted);
+      }
+      session.encoder = encoder;
+      session.lastCapturedContentVersionId = contentVersionId;
+
       return {
-        session: {
-          ...session,
-          frames: emitted ? [emitted] : [],
-          encoder,
-          lastCapturedContentVersionId: contentVersionId,
-        },
+        session,
+        sessionRevision: context.sessionRevision + 1,
         currentFrame: initialFrame,
       };
     }),
@@ -380,10 +380,10 @@ export const editorMachine = setup({
         event.type === "CAPTURE_FRAME" && event.mousePosition
           ? event.mousePosition
           : context.session.lastMousePosition;
-      const cursorEvents =
+      const cursorAppended =
         event.type === "CAPTURE_FRAME" && event.isMouseMovement
-          ? appendCursorEvent(context.session.cursorEvents ?? [], timestamp, mousePosition)
-          : context.session.cursorEvents;
+          ? appendCursorEvent(context.session.cursorEvents, timestamp, mousePosition)
+          : false;
 
       if (event.type === "CAPTURE_FRAME" && event.isMouseMovement) {
         const lastFrame = context.session.encoder.lastFullFrame;
@@ -395,12 +395,10 @@ export const editorMachine = setup({
           timestamp - lastFrame.timestamp < MOUSE_FRAME_INTERVAL_MS &&
           !visibilityChanged
         ) {
+          context.session.lastMousePosition = mousePosition;
           return {
-            session: {
-              ...context.session,
-              cursorEvents,
-              lastMousePosition: mousePosition,
-            },
+            session: context.session,
+            sessionRevision: cursorAppended ? context.sessionRevision + 1 : context.sessionRevision,
           };
         }
       }
@@ -424,15 +422,16 @@ export const editorMachine = setup({
 
       const { state: encoder, emitted } = pushFrame(context.session.encoder, frame);
 
+      if (emitted) {
+        context.session.frames.push(emitted);
+      }
+      context.session.encoder = encoder;
+      context.session.lastMousePosition = mousePosition;
+      context.session.lastCapturedContentVersionId = contentVersionId;
+
       return {
-        session: {
-          ...context.session,
-          frames: emitted ? [...context.session.frames, emitted] : context.session.frames,
-          encoder,
-          cursorEvents,
-          lastMousePosition: mousePosition,
-          lastCapturedContentVersionId: contentVersionId,
-        },
+        session: context.session,
+        sessionRevision: context.sessionRevision + 1,
         currentFrame: frame,
       };
     }),
@@ -474,13 +473,15 @@ export const editorMachine = setup({
 
       const { state: encoder, emitted } = pushFrame(context.session.encoder, frame);
 
+      if (emitted) {
+        context.session.frames.push(emitted);
+      }
+      context.session.encoder = encoder;
+      context.session.lastCapturedContentVersionId = contentVersionId;
+
       return {
-        session: {
-          ...context.session,
-          frames: emitted ? [...context.session.frames, emitted] : context.session.frames,
-          encoder,
-          lastCapturedContentVersionId: contentVersionId,
-        },
+        session: context.session,
+        sessionRevision: context.sessionRevision + 1,
         currentFrame: frame,
       };
     }),
@@ -564,6 +565,7 @@ export const editorMachine = setup({
       return {
         recording,
         session: null,
+        sessionRevision: 0,
         audio: {
           ...context.audio,
           isRecording: false,
@@ -1128,11 +1130,10 @@ export const editorMachine = setup({
         blob: event.chunk,
         mimeType: event.chunk.type || context.audio.mimeType || "audio/webm",
       };
+      context.session.audioFragments.push(fragment);
       return {
-        session: {
-          ...context.session,
-          audioFragments: [...context.session.audioFragments, fragment],
-        },
+        session: context.session,
+        sessionRevision: context.sessionRevision + 1,
       };
     }),
 
@@ -1578,6 +1579,7 @@ export const editorMachine = setup({
                 externalDurationMs: null,
               }),
               session: null,
+              sessionRevision: 0,
             }),
             "notifyError",
           ],
@@ -1587,8 +1589,10 @@ export const editorMachine = setup({
             assign(({ context, event }) => {
               if (!context.session) return {};
 
+              appendSlideRecordingEvent(context.session, event.event);
               return {
-                session: appendSlideRecordingEvent(context.session, event.event),
+                session: context.session,
+                sessionRevision: context.sessionRevision + 1,
               };
             }),
             "captureFrame",
@@ -1600,8 +1604,10 @@ export const editorMachine = setup({
             assign(({ context, event }) => {
               if (!context.session) return {};
 
+              appendPreviewRecordingEvent(context.session, event.event);
               return {
-                session: appendPreviewRecordingEvent(context.session, event.event),
+                session: context.session,
+                sessionRevision: context.sessionRevision + 1,
               };
             }),
             "capturePreviewRefreshFrame",
@@ -1612,8 +1618,10 @@ export const editorMachine = setup({
           actions: assign(({ context, event }) => {
             if (!context.session) return {};
 
+            appendPreviewInitialDocument(context.session, event.document);
             return {
-              session: appendPreviewInitialDocument(context.session, event.document),
+              session: context.session,
+              sessionRevision: context.sessionRevision + 1,
             };
           }),
         },
@@ -1621,8 +1629,10 @@ export const editorMachine = setup({
           actions: assign(({ context, event }) => {
             if (!context.session) return {};
 
+            appendPreviewPatchBatch(context.session, event.batch);
             return {
-              session: appendPreviewPatchBatch(context.session, event.batch),
+              session: context.session,
+              sessionRevision: context.sessionRevision + 1,
             };
           }),
         },
@@ -1632,17 +1642,18 @@ export const editorMachine = setup({
               const snapshot = context.getWorkspaceSnapshot?.();
               if (!context.session || !snapshot) return {};
 
-              const nextSession = appendWorkspaceRecordingEvent(context.session, snapshot, {
+              const appended = appendWorkspaceRecordingEvent(context.session, snapshot, {
                 sidebarWidthDelta: event.sidebarWidthDelta,
                 previewDockWidthDelta: event.previewDockWidthDelta,
               });
 
-              if (nextSession === context.session) {
+              if (!appended) {
                 return {};
               }
 
               return {
-                session: nextSession,
+                session: context.session,
+                sessionRevision: context.sessionRevision + 1,
               };
             }),
           ],
@@ -1653,14 +1664,15 @@ export const editorMachine = setup({
               const snapshot = context.getRuntimeSnapshot?.();
               if (!context.session || !snapshot) return {};
 
-              const nextSession = appendRuntimeRecordingEvent(context.session, snapshot);
+              const appended = appendRuntimeRecordingEvent(context.session, snapshot);
 
-              if (nextSession === context.session) {
+              if (!appended) {
                 return {};
               }
 
               return {
-                session: nextSession,
+                session: context.session,
+                sessionRevision: context.sessionRevision + 1,
               };
             }),
           ],

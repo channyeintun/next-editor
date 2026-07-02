@@ -18,112 +18,98 @@ function getRecordingTimestamp(session: RecordingSession): number {
   return Date.now() - session.startedAt;
 }
 
+/**
+ * All appenders below mutate `session`'s arrays in place and return the same session
+ * reference — see the invariant documented on {@link RecordingSession}. Callers bump
+ * `sessionRevision` themselves so the mutation is still visible to reference-equality
+ * selectors.
+ */
+
 export function appendSlideRecordingEvent(
   session: RecordingSession,
   event: SlideEvent,
 ): RecordingSession {
-  return {
-    ...session,
-    slideEvents: [
-      ...session.slideEvents,
-      {
-        ...event,
-        timestamp: getRecordingTimestamp(session),
-      },
-    ],
-  };
+  session.slideEvents.push({
+    ...event,
+    timestamp: getRecordingTimestamp(session),
+  });
+  return session;
 }
 
 export function appendPreviewRecordingEvent(
   session: RecordingSession,
   event: PreviewEvent,
 ): RecordingSession {
-  return {
-    ...session,
-    previewEvents: [
-      ...session.previewEvents,
-      {
-        ...event,
-        timestamp: getRecordingTimestamp(session),
-      },
-    ],
-  };
+  session.previewEvents.push({
+    ...event,
+    timestamp: getRecordingTimestamp(session),
+  });
+  return session;
 }
 
 export function appendPreviewInitialDocument(
   session: RecordingSession,
   document: PreviewInitialDocument,
 ): RecordingSession {
-  return {
-    ...session,
-    previewInitialDocuments: [
-      ...session.previewInitialDocuments,
-      {
-        ...document,
-        time: getRecordingTimestamp(session),
-      },
-    ],
-  };
+  session.previewInitialDocuments.push({
+    ...document,
+    time: getRecordingTimestamp(session),
+  });
+  return session;
 }
 
 export function appendPreviewPatchBatch(
   session: RecordingSession,
   batch: PreviewDomPatchBatch,
 ): RecordingSession {
-  return {
-    ...session,
-    previewPatchBatches: [
-      ...session.previewPatchBatches,
-      {
-        ...batch,
-        time: getRecordingTimestamp(session),
-      },
-    ],
-  };
+  session.previewPatchBatches.push({
+    ...batch,
+    time: getRecordingTimestamp(session),
+  });
+  return session;
 }
 
+/**
+ * Returns `false` when the snapshot deduplicates against the last recorded event (no
+ * push happened) so callers know whether to bump `sessionRevision`. `session` itself
+ * is always the same reference — array identity never changes.
+ */
 export function appendWorkspaceRecordingEvent(
   session: RecordingSession,
   snapshot: WorkspaceRecordingSnapshot,
   deltas?: WorkspaceWidthDeltas,
-): RecordingSession {
+): boolean {
   const recordingSnapshot = deltas ? toWorkspaceDeltaSnapshot(snapshot, deltas) : snapshot;
   const previousEvent = session.workspaceEvents[session.workspaceEvents.length - 1];
 
   if (previousEvent && areWorkspaceSnapshotsEqual(previousEvent.snapshot, recordingSnapshot)) {
-    return session;
+    return false;
   }
 
-  return {
-    ...session,
-    workspaceEvents: [
-      ...session.workspaceEvents,
-      {
-        timestamp: getRecordingTimestamp(session),
-        snapshot: recordingSnapshot,
-      },
-    ],
-  };
+  session.workspaceEvents.push({
+    timestamp: getRecordingTimestamp(session),
+    snapshot: recordingSnapshot,
+  });
+  return true;
 }
 
+/**
+ * Returns `false` when the snapshot deduplicates against the last recorded event (no
+ * push happened) so callers know whether to bump `sessionRevision`.
+ */
 export function appendRuntimeRecordingEvent(
   session: RecordingSession,
   snapshot: RuntimeRecordingSnapshot,
-): RecordingSession {
+): boolean {
   const previousEvent = session.runtimeEvents[session.runtimeEvents.length - 1];
 
   if (previousEvent && areRuntimeRecordingSnapshotsEqual(previousEvent.snapshot, snapshot)) {
-    return session;
+    return false;
   }
 
-  return {
-    ...session,
-    runtimeEvents: [
-      ...session.runtimeEvents,
-      {
-        timestamp: getRecordingTimestamp(session),
-        snapshot,
-      },
-    ],
-  };
+  session.runtimeEvents.push({
+    timestamp: getRecordingTimestamp(session),
+    snapshot,
+  });
+  return true;
 }
