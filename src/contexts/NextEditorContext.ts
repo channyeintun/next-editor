@@ -44,8 +44,9 @@ export interface NextEditorActions {
   importFromFile: () => Promise<Recording[]>;
   clearStorage: () => Promise<void>;
   getStorageStats: () => Promise<{ count: number; totalSize: string }>;
-  loadRecordingsFromStorage: () => Promise<Recording[]>;
+  /** Metadata only (no stream/media decode) — the source for library list UIs. */
   listStoredRecordings: () => Promise<StoredRecordingMetadata[]>;
+  /** Decodes one recording's full payload; call only when the user opens/selects it. */
   loadStoredRecordingById: (id: string) => Promise<Recording | null>;
   deleteFromStorage: (id: string) => Promise<void>;
 }

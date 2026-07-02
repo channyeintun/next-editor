@@ -70,13 +70,24 @@ function makeActionsMock(): NextEditorActions {
     importFromFile: vi.fn(),
     clearStorage: vi.fn(),
     getStorageStats: vi.fn(),
-    loadRecordingsFromStorage: vi.fn(),
     listStoredRecordings: vi.fn(),
     loadStoredRecordingById: vi.fn(),
     deleteFromStorage: vi.fn(),
   };
 }
 /* eslint-enable vitest/require-mock-type-parameters */
+
+/**
+ * `fetchNextEditorUrl` routes cross-origin requests through the same-origin `/api/proxy`
+ * endpoint (`?url=<encoded target>`), since the test origin (`http://localhost`) differs from
+ * `https://example.com`. Mocks that only care about the real target URL should match against
+ * this, not the raw request URL.
+ */
+function targetUrl(requestUrl: string): string {
+  const parsed = new URL(requestUrl, "http://localhost");
+  const proxied = parsed.searchParams.get("url");
+  return proxied ?? requestUrl;
+}
 
 function fakeResponse(
   body: Uint8Array | null,
@@ -110,7 +121,7 @@ describe("useUrlLoader", () => {
     const audioBytes = new Uint8Array([1, 2, 3, 4]);
 
     const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
-      const url = typeof input === "string" ? input : input.toString();
+      const url = targetUrl(typeof input === "string" ? input : input.toString());
       if (url.endsWith(".ne")) {
         return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
       }
@@ -167,5 +178,251 @@ describe("useUrlLoader", () => {
     // Only the `.ne` itself was fetched — no speculative probe for audio/camera.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(actions.extendRecording).not.toHaveBeenCalled();
+  });
+
+  it("prefers a configured audio URL over the stored sibling filename and .ne-basename fallback", async () => {
+    // All three candidates are reachable — the configured URL (candidate 1) must win.
+    const recording = createRecording({
+      audioFile: "lesson.weba",
+      audioUrl: "https://cdn.example.com/hosted-audio.weba",
+      audioUrlConfigured: true,
+      audioSource: "external",
+    });
+    const neBytes = await encodeRecordingToStream(recording);
+    const audioBytes = new Uint8Array([9, 9, 9]);
+
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+      const url = targetUrl(typeof input === "string" ? input : input.toString());
+      if (url.endsWith(".ne")) {
+        return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+      }
+      // Every candidate resolves — the test asserts which one is actually picked.
+      return fakeResponse(audioBytes, { ok: true, contentType: "audio/webm" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const actions = makeActionsMock();
+    const extendRecordingMock = vi.mocked(actions.extendRecording);
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+
+    const { result } = renderHook(() => useUrlLoader(), { wrapper });
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+
+    await waitFor(() => {
+      expect(extendRecordingMock).toHaveBeenCalled();
+    });
+
+    const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
+    expect(extended.audioUrl).toBe("https://cdn.example.com/hosted-audio.weba");
+  });
+
+  it("falls back to the stored sibling filename when no configured URL is set", async () => {
+    const recording = createRecording({ audioFile: "lesson.weba", audioSource: "external" });
+    const neBytes = await encodeRecordingToStream(recording);
+    const audioBytes = new Uint8Array([1, 2, 3]);
+
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+      const url = targetUrl(typeof input === "string" ? input : input.toString());
+      if (url.endsWith(".ne")) {
+        return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+      }
+      // The stored sibling filename resolves fine — the .ne-basename fallback must not be used.
+      if (url.endsWith("/lesson.weba")) {
+        return fakeResponse(audioBytes, { ok: true, contentType: "audio/webm" });
+      }
+      return fakeResponse(null, { ok: false, status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const actions = makeActionsMock();
+    const extendRecordingMock = vi.mocked(actions.extendRecording);
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+
+    const { result } = renderHook(() => useUrlLoader(), { wrapper });
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+
+    await waitFor(() => {
+      expect(extendRecordingMock).toHaveBeenCalled();
+    });
+
+    const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
+    expect(extended.audioUrl).toBe("https://example.com/lesson.weba");
+  });
+
+  it("resolves a relative configured audio URL against the .ne URL instead of throwing", async () => {
+    // A relative configured URL is exactly what the "Configure Media Links" dialog supports
+    // (documented as "relative to the .ne file"). Before the fix, `new URL(storedUrl)` on this
+    // raw relative string threw inside the candidate loop, silently skipping straight to the
+    // next candidate; this test pins that the relative URL itself is resolved and used.
+    const recording = createRecording({
+      audioFile: "lesson.weba",
+      audioUrl: "media/hosted-audio.weba",
+      audioUrlConfigured: true,
+      audioSource: "external",
+    });
+    const neBytes = await encodeRecordingToStream(recording);
+    const audioBytes = new Uint8Array([4, 5, 6]);
+
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+      const url = targetUrl(typeof input === "string" ? input : input.toString());
+      if (url.endsWith(".ne")) {
+        return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+      }
+      if (url.endsWith("/media/hosted-audio.weba")) {
+        return fakeResponse(audioBytes, { ok: true, contentType: "audio/webm" });
+      }
+      return fakeResponse(null, { ok: false, status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const actions = makeActionsMock();
+    const extendRecordingMock = vi.mocked(actions.extendRecording);
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+
+    const { result } = renderHook(() => useUrlLoader(), { wrapper });
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+
+    await waitFor(() => {
+      expect(extendRecordingMock).toHaveBeenCalled();
+    });
+
+    const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
+    expect(extended.audioUrl).toBe("https://example.com/media/hosted-audio.weba");
+    expect(extended.audioBlob).toBeInstanceOf(Blob);
+  });
+
+  it("deduplicates candidates when the configured URL equals the stored-filename resolution", async () => {
+    // Configured URL and the stored-sibling resolution are the exact same absolute URL —
+    // the candidate list must not probe/fetch it twice.
+    const recording = createRecording({
+      audioFile: "lesson.weba",
+      audioUrl: "https://example.com/intro-01/lesson.weba",
+      audioUrlConfigured: true,
+      audioSource: "external",
+    });
+    const neBytes = await encodeRecordingToStream(recording);
+    const audioBytes = new Uint8Array([7, 8]);
+
+    let audioFetchCount = 0;
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+      const url = targetUrl(typeof input === "string" ? input : input.toString());
+      if (url.endsWith(".ne")) {
+        return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+      }
+      audioFetchCount += 1;
+      return fakeResponse(audioBytes, { ok: true, contentType: "audio/webm" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const actions = makeActionsMock();
+    const extendRecordingMock = vi.mocked(actions.extendRecording);
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+
+    const { result } = renderHook(() => useUrlLoader(), { wrapper });
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01/intro-01.ne");
+
+    await waitFor(() => {
+      expect(extendRecordingMock).toHaveBeenCalled();
+    });
+
+    // Only one fetch for the (deduplicated) audio candidate.
+    expect(audioFetchCount).toBe(1);
+  });
+
+  it("probes a camera URL with HEAD first, falling back to a ranged GET when HEAD is rejected", async () => {
+    const recording = createRecording({ cameraFile: "lesson.webm", cameraSource: "external" });
+    const neBytes = await encodeRecordingToStream(recording);
+
+    const requestLog: Array<{ url: string; method: string }> = [];
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async (input, init) => {
+        const url = targetUrl(typeof input === "string" ? input : input.toString());
+        const method = init?.method ?? "GET";
+        requestLog.push({ url, method });
+        if (url.endsWith(".ne")) {
+          return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+        }
+        if (url.endsWith("/lesson.webm")) {
+          // HEAD rejected (simulates a host that only allows GetObject/ranged GET) via a status
+          // the proxy fallback doesn't special-case, so the ranged-GET retry happens on the same
+          // (proxied) URL rather than falling through to a raw direct fetch.
+          if (init?.method === "HEAD") {
+            return fakeResponse(null, { ok: false, status: 403 });
+          }
+          return fakeResponse(new Uint8Array([1]), { ok: true, contentType: "video/webm" });
+        }
+        return fakeResponse(null, { ok: false, status: 404 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const actions = makeActionsMock();
+    const extendRecordingMock = vi.mocked(actions.extendRecording);
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+
+    const { result } = renderHook(() => useUrlLoader(), { wrapper });
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+
+    await waitFor(() => {
+      expect(extendRecordingMock).toHaveBeenCalled();
+    });
+
+    const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
+    expect(extended.cameraUrl).toBe("https://example.com/lesson.webm");
+
+    const cameraRequests = requestLog.filter((entry) => entry.url.endsWith("/lesson.webm"));
+    expect(cameraRequests[0]?.method).toBe("HEAD");
+    expect(cameraRequests.some((entry) => entry.method !== "HEAD")).toBe(true);
+  });
+
+  it("rejects an HTML response when probing a camera URL and falls through to the next candidate", async () => {
+    // The stored sibling filename resolves to a host that answers 200 with an HTML SPA
+    // fallback page (not real video) — the probe must reject it and fall through to the
+    // .ne-basename candidate, which serves the real file.
+    const recording = createRecording({ cameraFile: "lesson.webm", cameraSource: "external" });
+    const neBytes = await encodeRecordingToStream(recording);
+
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async (input) => {
+        const url = targetUrl(typeof input === "string" ? input : input.toString());
+        if (url.endsWith(".ne")) {
+          return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+        }
+        if (url.endsWith("/lesson.webm")) {
+          return fakeResponse(new Uint8Array([1]), { ok: true, contentType: "text/html" });
+        }
+        if (url.endsWith("/intro-01.webm")) {
+          return fakeResponse(new Uint8Array([2]), { ok: true, contentType: "video/webm" });
+        }
+        return fakeResponse(null, { ok: false, status: 404 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const actions = makeActionsMock();
+    const extendRecordingMock = vi.mocked(actions.extendRecording);
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+
+    const { result } = renderHook(() => useUrlLoader(), { wrapper });
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+
+    await waitFor(() => {
+      expect(extendRecordingMock).toHaveBeenCalled();
+    });
+
+    const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
+    expect(extended.cameraUrl).toBe("https://example.com/intro-01.webm");
   });
 });

@@ -190,6 +190,8 @@ export const editorMachine = setup({
         externalDurationMs !== null &&
         context.session.audioFragments.length > 0
       ) {
+        // In-place update of a constant-size element (index 0 always exists here), not a
+        // spread-append — consistent with the mutable-session invariant.
         context.session.audioFragments[0] = {
           ...context.session.audioFragments[0],
           endTimeMs: context.audio.startOffsetMs + externalDurationMs,

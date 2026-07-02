@@ -73,16 +73,16 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   const getStorageStats = () => recordingStorage.current.getStats();
   const deleteFromStorage = (id: string) => recordingStorage.current.delete(id);
 
-  const loadRecordingsFromStorage = async () => {
-    try {
-      return await recordingStorage.current.load();
-    } catch (error) {
-      console.warn("Failed to load recordings from storage:", error);
-      return [];
-    }
-  };
+  // Library UIs should render from this metadata list — cheap, no stream/media decode — and
+  // call `loadStoredRecordingById` only for the entry the user actually opens.
   const listStoredRecordings = () => recordingStorage.current.list();
-  const loadStoredRecordingById = (id: string) => recordingStorage.current.loadById(id);
+  const loadStoredRecordingById = async (id: string) => {
+    const recording = await recordingStorage.current.loadById(id);
+    if (!recording) {
+      console.warn(`Failed to load stored recording ${id}: entry missing or undecodable`);
+    }
+    return recording;
+  };
 
   const handleWorkspaceEvent = (event?: {
     sidebarWidthDelta?: number;
@@ -122,7 +122,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     importFromFile,
     clearStorage,
     getStorageStats,
-    loadRecordingsFromStorage,
     listStoredRecordings,
     loadStoredRecordingById,
     deleteFromStorage,
