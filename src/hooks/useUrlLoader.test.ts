@@ -107,7 +107,13 @@ function fakeResponse(
         ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength)
         : new ArrayBuffer(0),
     blob: async () => new Blob(body ? [body as BlobPart] : [], { type: init.contentType }),
+    text: async () => (body ? new TextDecoder().decode(body) : ""),
   } as unknown as Response;
+}
+
+/** A minimal valid single-cue VTT file body, used by caption-fallback tests. */
+function vttBody(): Uint8Array {
+  return new TextEncoder().encode("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n");
 }
 
 describe("useUrlLoader", () => {
@@ -429,5 +435,105 @@ describe("useUrlLoader", () => {
 
     const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
     expect(extended.cameraUrl).toBe("https://example.com/intro-01.webm");
+  });
+
+  it("falls back to the .ne basename VTT when the declared caption file 404s", async () => {
+    const recording = createRecording({ captionFiles: ["lesson.vtt"] });
+    const neBytes = await encodeRecordingToStream(recording);
+
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+      const url = targetUrl(typeof input === "string" ? input : input.toString());
+      if (url.endsWith(".ne")) {
+        return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+      }
+      // The declared caption file (renamed sibling) 404s...
+      if (url.endsWith("/lesson.vtt")) {
+        return fakeResponse(null, { ok: false, status: 404 });
+      }
+      // ...the .ne-basename candidate is where the renamed VTT actually lives.
+      if (url.endsWith("/intro-01.vtt")) {
+        return fakeResponse(vttBody(), { ok: true, contentType: "text/vtt" });
+      }
+      return fakeResponse(null, { ok: false, status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const actions = makeActionsMock();
+    const addCaptionTrackMock = vi.mocked(actions.addCaptionTrack);
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+
+    const { result } = renderHook(() => useUrlLoader(), { wrapper });
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+
+    await waitFor(() => {
+      expect(addCaptionTrackMock).toHaveBeenCalled();
+    });
+
+    expect(addCaptionTrackMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("never invents a basename caption candidate when a declared caption file resolves fine", async () => {
+    const recording = createRecording({ captionFiles: ["lesson.vtt"] });
+    const neBytes = await encodeRecordingToStream(recording);
+
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+      const url = targetUrl(typeof input === "string" ? input : input.toString());
+      if (url.endsWith(".ne")) {
+        return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+      }
+      if (url.endsWith("/lesson.vtt")) {
+        return fakeResponse(vttBody(), { ok: true, contentType: "text/vtt" });
+      }
+      // The .ne-basename candidate must never be probed once a declared caption succeeds.
+      if (url.endsWith("/intro-01.vtt")) {
+        throw new Error("basename caption candidate should not be fetched");
+      }
+      return fakeResponse(null, { ok: false, status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const actions = makeActionsMock();
+    const addCaptionTrackMock = vi.mocked(actions.addCaptionTrack);
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+
+    const { result } = renderHook(() => useUrlLoader(), { wrapper });
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+
+    await waitFor(() => {
+      expect(addCaptionTrackMock).toHaveBeenCalled();
+    });
+
+    expect(addCaptionTrackMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("never guesses a basename caption candidate when the recording declares no captionFiles at all", async () => {
+    // Unlike audio/camera (always resolvable to *some* default extension), a recording that
+    // never mentions captions must not trigger a speculative `.vtt` probe — only a declared
+    // caption file that fails is allowed to fall back to the `.ne` basename.
+    const recording = createRecording();
+    const neBytes = await encodeRecordingToStream(recording);
+
+    const fetchMock = vi.fn<() => Promise<Response>>(async () =>
+      fakeResponse(neBytes, { ok: true }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const actions = makeActionsMock();
+    const addCaptionTrackMock = vi.mocked(actions.addCaptionTrack);
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+
+    const { result } = renderHook(() => useUrlLoader(), { wrapper });
+
+    await result.current.fetchNextEditorFile("https://example.com/plain.ne");
+
+    expect(actions.loadRecording).toHaveBeenCalledTimes(1);
+    // Only the `.ne` itself was fetched — no speculative caption probe.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(addCaptionTrackMock).not.toHaveBeenCalled();
   });
 });

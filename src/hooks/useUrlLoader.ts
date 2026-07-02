@@ -136,8 +136,12 @@ async function fetchVttFile(url: string): Promise<CaptionTrack | null> {
 
 /**
  * Loads caption tracks the recording explicitly declares via `captionFiles`, resolved relative
- * to the `.ne` URL. Captions are never guessed from sibling filenames — HTTP has no directory
- * listing, so a recording must name its companion VTTs to have them auto-load.
+ * to the `.ne` URL. Captions are never guessed from sibling filenames when a recording declares
+ * none at all — HTTP has no directory listing, so a recording must name its companion VTTs to
+ * have them auto-load. But when captions *are* declared and every one 404s (the same rename case
+ * handled for audio/camera), `<neBasename>.vtt` is tried as a last-ditch fallback candidate
+ * (mirrors `buildMediaCandidates`, kept to a single candidate since captions are optional and
+ * multi-language guessing would be over-engineering for this low-priority case).
  */
 async function fetchSiblingCaptions(
   neUrl: string,
@@ -157,6 +161,18 @@ async function fetchSiblingCaptions(
       tracks.push(result.value);
     }
   }
+
+  if (tracks.length === 0) {
+    const basenameUrl = neBasenameMediaUrl(neUrl, "vtt");
+    if (
+      basenameUrl &&
+      !captionFiles.some((file) => new URL(file, neUrl).toString() === basenameUrl)
+    ) {
+      const track = await fetchVttFile(basenameUrl);
+      if (track) tracks.push(track);
+    }
+  }
+
   return tracks;
 }
 
