@@ -66,6 +66,7 @@ import {
   shouldRecordCamera,
   syncPlaybackAudio,
   SYNC_PAUSED_WORKSPACE_ACTIONS,
+  type CapturedViewStateRef,
 } from "./editorMachineHelpers";
 
 // ============================================================================
@@ -331,9 +332,16 @@ export const editorMachine = setup({
       const editor = context.editorRefs.editor;
       let initialFrame: EditorFrame;
       let contentVersionId: number | undefined;
+      let modelUri: string | undefined;
+      let viewStateRef: CapturedViewStateRef | undefined;
 
       if (editor) {
-        ({ frame: initialFrame, contentVersionId } = createFrame(
+        ({
+          frame: initialFrame,
+          contentVersionId,
+          modelUri,
+          viewStateRef,
+        } = createFrame(
           editor,
           0,
           lastMousePosition,
@@ -369,6 +377,8 @@ export const editorMachine = setup({
       }
       session.encoder = encoder;
       session.lastCapturedContentVersionId = contentVersionId;
+      session.lastCapturedContentModelUri = modelUri;
+      session.lastCapturedViewStateRef = viewStateRef;
 
       return {
         session,
@@ -411,20 +421,24 @@ export const editorMachine = setup({
       }
 
       const previousContent =
-        context.currentFrame && context.session.lastCapturedContentVersionId !== undefined
+        context.currentFrame &&
+        context.session.lastCapturedContentVersionId !== undefined &&
+        context.session.lastCapturedContentModelUri !== undefined
           ? {
               value: context.currentFrame.state.content,
               versionId: context.session.lastCapturedContentVersionId,
+              modelUri: context.session.lastCapturedContentModelUri,
             }
           : undefined;
 
-      const { frame, contentVersionId } = createFrame(
+      const { frame, contentVersionId, modelUri, viewStateRef } = createFrame(
         editor,
         timestamp,
         mousePosition,
         context.getSlideState,
         context.getPreviewState,
         previousContent,
+        context.session.lastCapturedViewStateRef,
       );
 
       const { state: encoder, emitted } = pushFrame(context.session.encoder, frame);
@@ -435,6 +449,8 @@ export const editorMachine = setup({
       context.session.encoder = encoder;
       context.session.lastMousePosition = mousePosition;
       context.session.lastCapturedContentVersionId = contentVersionId;
+      context.session.lastCapturedContentModelUri = modelUri;
+      context.session.lastCapturedViewStateRef = viewStateRef;
 
       return {
         session: context.session,
@@ -455,20 +471,24 @@ export const editorMachine = setup({
 
       const timestamp = performance.now() - context.session.startedAtPerf;
       const previousContent =
-        context.currentFrame && context.session.lastCapturedContentVersionId !== undefined
+        context.currentFrame &&
+        context.session.lastCapturedContentVersionId !== undefined &&
+        context.session.lastCapturedContentModelUri !== undefined
           ? {
               value: context.currentFrame.state.content,
               versionId: context.session.lastCapturedContentVersionId,
+              modelUri: context.session.lastCapturedContentModelUri,
             }
           : undefined;
 
-      const { frame, contentVersionId } = createFrame(
+      const { frame, contentVersionId, modelUri, viewStateRef } = createFrame(
         editor,
         timestamp,
         context.session.lastMousePosition,
         context.getSlideState,
         context.getPreviewState,
         previousContent,
+        context.session.lastCapturedViewStateRef,
       );
 
       if (frame.state.previewState) {
@@ -485,6 +505,8 @@ export const editorMachine = setup({
       }
       context.session.encoder = encoder;
       context.session.lastCapturedContentVersionId = contentVersionId;
+      context.session.lastCapturedContentModelUri = modelUri;
+      context.session.lastCapturedViewStateRef = viewStateRef;
 
       return {
         session: context.session,
@@ -725,7 +747,7 @@ export const editorMachine = setup({
         frame = targetFrame;
       } else if (frameIndex === lastAppliedFrameIndex + 1 && currentFrame) {
         // Consecutive delta: apply incrementally
-        frame = applyFrameDelta(currentFrame, targetFrame);
+        frame = applyFrameDelta(currentFrame, targetFrame, frameIndex);
       } else {
         // Jump into delta: full reconstruction required
         frame = reconstructFrameAtIndex(frames, frameIndex);

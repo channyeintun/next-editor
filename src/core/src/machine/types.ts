@@ -27,6 +27,7 @@ import type { DeltaFrame } from "../utils/deltaTypes";
 import type { FrameStreamEncoderState } from "../utils/frameStreamEncoder";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type { CapturedViewStateRef } from "./editorMachineHelpers";
 
 // ============================================================================
 // Machine Status Types
@@ -131,10 +132,23 @@ export interface RecordingSession {
   /**
    * Model `getVersionId()` at the last captured frame, paired with that frame's
    * `state.content` (see `currentFrame` on the machine context). When a new
-   * capture's version id matches, the content string is reused by reference
-   * instead of re-reading `editor.getValue()`.
+   * capture's version id AND model URI both match, the content string is reused
+   * by reference instead of re-reading `editor.getValue()`. Version ids are a
+   * per-model counter, so the URI must match too — otherwise a file switch
+   * between captures (same numeric version id, different model) would silently
+   * reuse the previous file's content.
    */
   lastCapturedContentVersionId?: number;
+  /** Model URI paired with `lastCapturedContentVersionId`, see above. */
+  lastCapturedContentModelUri?: string;
+  /**
+   * `saveViewState()` result from the last captured frame plus the scalars it was
+   * derived from (content version, model, scroll, selection, position). When a
+   * new capture's scalars all match, `createFrame` reuses the `viewState` object
+   * by reference instead of calling `editor.saveViewState()` again — see
+   * `CapturedViewStateRef` in `editorMachineHelpers.ts`.
+   */
+  lastCapturedViewStateRef?: CapturedViewStateRef;
 }
 
 /**

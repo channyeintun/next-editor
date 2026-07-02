@@ -2,6 +2,8 @@ import type * as monaco from "monaco-editor";
 import type {
   CursorRecordingEvent,
   EditorFrame,
+  EditorPosition,
+  EditorSelection,
   MouseCursorPosition,
   Recording,
   RecordingClusterMeta,
@@ -19,6 +21,7 @@ import {
   applyPositionDiff,
   applySelectionDiff,
   areSelectionsEqual,
+  arePositionsEqual,
 } from "../utils/editorDiff";
 import {
   normalizeEditorFrame,
@@ -298,22 +301,59 @@ export const applyFrameState = (
   return collection;
 };
 
-/** Content string plus the model version it was read at, for reuse across captures. */
+/** Content string plus the model identity it was read at, for reuse across captures. */
 export interface CapturedContentRef {
   value: string;
   versionId: number;
+  /** `model.uri.toString()` — version ids are per-model counters, so identity requires both. */
+  modelUri: string;
+}
+
+/**
+ * `saveViewState()` result plus the cheap scalars that fully determine whether
+ * it would come out identical if recomputed, for reuse across captures.
+ */
+export interface CapturedViewStateRef {
+  value: monaco.editor.ICodeEditorViewState | null;
+  versionId: number;
+  modelUri: string;
+  scrollTop: number;
+  scrollLeft: number;
+  selection: EditorSelection;
+  position: EditorPosition;
 }
 
 /**
  * Create a frame from current editor state.
  *
- * `previousContent`, when its `versionId` matches the model's current
- * `getVersionId()`, lets the frame reuse the prior content string by reference
- * instead of calling `editor.getValue()` again. This matters for mouse/selection
- * frames (no document edit since the last capture): the caller's content-delta
- * diff already short-circuits on `prev === next` by reference, so avoiding a
- * fresh `getValue()` copy turns that into an O(1) check instead of an O(doc)
- * string equality scan preceded by an O(doc) copy.
+ * `previousContent`, when both its `versionId` and `modelUri` match the current
+ * model, lets the frame reuse the prior content string by reference instead of
+ * calling `editor.getValue()` again. This matters for mouse/selection frames (no
+ * document edit since the last capture): the caller's content-delta diff already
+ * short-circuits on `prev === next` by reference, so avoiding a fresh `getValue()`
+ * copy turns that into an O(1) check instead of an O(doc) string equality scan
+ * preceded by an O(doc) copy.
+ *
+ * The `modelUri` check matters because this is a multi-file workspace — Monaco's
+ * `getVersionId()` is a per-model counter, so switching the active file between
+ * captures can coincidentally produce the same numeric version id on the new
+ * model. Without also checking the model URI, that coincidence would silently
+ * reuse the previous file's content string for the new file, desyncing the
+ * recorded stream.
+ *
+ * `previousViewState` similarly lets the frame reuse the prior `viewState`
+ * object by reference, skipping `editor.saveViewState()` and the normalize pass
+ * over it, whenever the values that `saveViewState()` would derive from —
+ * content version, model, scroll position, selection, and cursor position — are
+ * all unchanged since the last capture. This is the case for mouse-move-only
+ * frames (`onDidScrollChange`/pointer frames with no edit, no scroll, no
+ * selection change): `saveViewState()` would return a structurally identical
+ * (but freshly allocated) object, and the delta encoder's `areStructuredDataEqual`
+ * deep-compare on `viewState` (see `frameDelta.ts`) already short-circuits on
+ * reference equality, so reusing the reference turns that deep compare into an
+ * O(1) check. Selection/position changes still invalidate the reuse — they are
+ * part of the gate, not bypassed by it — so cursor/selection-only frames still
+ * get a freshly saved (and correctly differing) viewState.
  */
 export const createFrame = (
   editor: monaco.editor.IStandaloneCodeEditor,
@@ -322,15 +362,40 @@ export const createFrame = (
   getSlideState?: EditorMachineInput["getSlideState"],
   getPreviewState?: EditorMachineInput["getPreviewState"],
   previousContent?: CapturedContentRef,
-): { frame: EditorFrame; contentVersionId: number } => {
-  const versionId = editor.getModel()?.getVersionId() ?? -1;
+  previousViewState?: CapturedViewStateRef,
+): {
+  frame: EditorFrame;
+  contentVersionId: number;
+  modelUri: string;
+  viewStateRef: CapturedViewStateRef;
+} => {
+  const model = editor.getModel();
+  const versionId = model?.getVersionId() ?? -1;
+  const modelUri = model?.uri.toString() ?? "";
   const content =
-    previousContent && previousContent.versionId === versionId
+    previousContent &&
+    previousContent.versionId === versionId &&
+    previousContent.modelUri === modelUri
       ? previousContent.value
       : editor.getValue();
   const position = normalizeEditorPosition(editor.getPosition());
   const selection = normalizeEditorSelection(editor.getSelection(), undefined, position);
-  const viewState = normalizeEditorViewState(editor.saveViewState(), selection, position);
+  const scrollTop = editor.getScrollTop();
+  const scrollLeft = editor.getScrollLeft();
+
+  const canReuseViewState =
+    previousViewState !== undefined &&
+    previousViewState.versionId === versionId &&
+    previousViewState.modelUri === modelUri &&
+    previousViewState.scrollTop === scrollTop &&
+    previousViewState.scrollLeft === scrollLeft &&
+    arePositionsEqual(previousViewState.position, position) &&
+    areSelectionsEqual(previousViewState.selection, selection);
+
+  const viewState = canReuseViewState
+    ? previousViewState.value
+    : normalizeEditorViewState(editor.saveViewState(), selection, position);
+
   const slideState = getSlideState?.();
   const previewState = getPreviewState?.();
 
@@ -349,6 +414,16 @@ export const createFrame = (
       },
     },
     contentVersionId: versionId,
+    modelUri,
+    viewStateRef: {
+      value: viewState,
+      versionId,
+      modelUri,
+      scrollTop,
+      scrollLeft,
+      selection,
+      position,
+    },
   };
 };
 

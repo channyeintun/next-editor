@@ -71,6 +71,25 @@ export function applyContentDelta(base: string, delta: ContentDelta): string {
   return contentTextDecoder.decode(rebuilt);
 }
 
+/**
+ * Same as {@link applyContentDelta}, but on failure rethrows with `frameIndex`
+ * folded into the message so a replay desync (dmp base mismatch or a corrupt
+ * delta) is attributable to the frame that failed, instead of surfacing as a
+ * bare codec error with no reconstruction context. Mutates and rethrows the
+ * original error (rather than wrapping it in a new one) so `instanceof
+ * DmpBaseMismatchError` still holds for callers that distinguish it from a
+ * corrupt-delta error. No-op when `frameIndex` is omitted.
+ */
+function applyContentDeltaAt(base: string, delta: ContentDelta, frameIndex?: number): string {
+  try {
+    return applyContentDelta(base, delta);
+  } catch (error) {
+    if (frameIndex === undefined || !(error instanceof Error)) throw error;
+    error.message = `content delta failed at frame ${frameIndex}: ${error.message}`;
+    throw error;
+  }
+}
+
 // ============================================================================
 // Position/Selection Delta Functions
 // ============================================================================
@@ -285,11 +304,20 @@ export function hasChanges(delta: FrameDelta): boolean {
 
 /**
  * Reconstructs a full frame by applying a delta to a base frame.
+ *
+ * `frameIndex`, when provided, is attributed on failure: a dmp base-mismatch (or
+ * any other content-delta error) is rethrown with the frame index folded into
+ * the message, so a replay desync can be traced back to which frame diverged
+ * instead of surfacing as an opaque codec error.
  */
-export function applyFrameDelta(base: EditorFrame, delta: FrameDelta): EditorFrame {
+export function applyFrameDelta(
+  base: EditorFrame,
+  delta: FrameDelta,
+  frameIndex?: number,
+): EditorFrame {
   const normalizedBase = normalizeEditorFrame(base);
   const newContent = delta.contentDelta
-    ? applyContentDelta(normalizedBase.state.content, delta.contentDelta)
+    ? applyContentDeltaAt(normalizedBase.state.content, delta.contentDelta, frameIndex)
     : normalizedBase.state.content;
 
   const newPosition = delta.positionDelta
@@ -409,7 +437,7 @@ export function reconstructFrameAtIndex(
       // Another keyframe - use it as new base
       current = frame;
     } else {
-      current = applyFrameDelta(current, frame);
+      current = applyFrameDelta(current, frame, i);
     }
   }
 
