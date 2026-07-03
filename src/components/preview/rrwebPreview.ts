@@ -15,11 +15,15 @@ import type {
 // the message bridge wiring does not have to change, only the payload shape.
 export const RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_INITIAL_DOCUMENT";
 export const RUNTIME_PATCH_BATCH_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_PATCH_BATCH";
-// Host -> preview: request a fresh corrective FullSnapshot. Sent when a recording
-// starts: the initial document the host has cached dates from page load, so any
-// preview state reached before recording began (mutations, scroll positions) is
-// missing from it. The fresh snapshot lands in the patch stream near t=0 and
-// replay rebuilds from the true recording-start state.
+// Host -> preview: request a fresh FullSnapshot of the CURRENT document. Sent
+// when a recording starts. The recorder answers by re-serializing the live DOM
+// and posting the Meta+FullSnapshot pair back as an initial document flagged
+// `refresh: true` — that response (not the stale page-load snapshot the host
+// once cached) is what seeds the recording, so replay opens from the true
+// recording-start state without storing a superseded full snapshot. If nothing
+// answers (preview hidden, runtime rebooting, recorder absent), nothing is
+// recorded up front: the live iframe's own initial document seeds replay when
+// it (re)loads.
 export const RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_TAKE_SNAPSHOT";
 
 // Format version carried on every rrweb-format preview record. Bumped from the
@@ -128,6 +132,12 @@ export function createRrwebPreviewRecorderScript({
       var pendingMeta = null;
       var checkpointScheduled = false;
       var lastCheckpointAt = 0;
+      // Set while answering a host RUNTIME_TAKE_SNAPSHOT request: diverts the
+      // resulting Meta+FullSnapshot pair out of the patch stream and posts it as
+      // a refresh:true initial document instead. rrweb emits synchronously inside
+      // takeFullSnapshot(), so the flag never leaks onto unrelated events.
+      var hostSnapshotRequested = false;
+      var pendingRefreshMeta = null;
 
       // Inlined from collectStaleMirrorNodeIds() in rrwebPreview.ts (single source
       // of truth). Detects nodes rrweb's mirror still tracks but that have been
@@ -209,6 +219,31 @@ export function createRrwebPreviewRecorderScript({
       }
 
       function emit(event) {
+        // Host-requested snapshot (recording start): bundle the Meta+FullSnapshot
+        // pair into a refresh:true initial document instead of the patch stream,
+        // so the recording seeds replay from the live recording-start state
+        // without also storing the stale page-load snapshot.
+        if (hostSnapshotRequested) {
+          if (event.type === metaType) {
+            pendingRefreshMeta = event;
+            return;
+          }
+          if (event.type === fullSnapshotType) {
+            var refreshEvents = pendingRefreshMeta ? [pendingRefreshMeta, event] : [event];
+            pendingRefreshMeta = null;
+            hostSnapshotRequested = false;
+            post(initialDocumentMessageType, {
+              version: version,
+              time: getMessageTime(),
+              documentId: documentId,
+              route: getRoute(),
+              refresh: true,
+              events: refreshEvents,
+            });
+            return;
+          }
+        }
+
         // Hold the Meta event so it can be bundled with the first FullSnapshot as
         // the initial document.
         if (event.type === metaType && !sentInitial) {
@@ -242,23 +277,28 @@ export function createRrwebPreviewRecorderScript({
         }
       }
 
-      // Host-requested corrective snapshot (sent when a recording starts): the
-      // host's cached initial document is from page load, so re-serialize the
-      // CURRENT document — including element/document scroll offsets — into the
-      // patch stream so replay rebuilds from the true recording-start state.
+      // Host-requested snapshot (sent when a recording starts): re-serialize the
+      // CURRENT document — including element/document scroll offsets — and post
+      // it back as a refresh:true initial document (see emit above) so the
+      // recording opens from the true recording-start state. Emission is
+      // synchronous inside takeFullSnapshot, so the flag is scoped to this call;
+      // the trailing reset covers the throw path.
       window.addEventListener('message', function(event) {
         var data = event && event.data;
         if (!data || data.type !== ${JSON.stringify(RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE)}) return;
         if (!sentInitial) return;
         try {
           lastCheckpointAt = getMessageTime();
+          hostSnapshotRequested = true;
           window.rrweb.takeFullSnapshot();
         } catch (e) {}
+        hostSnapshotRequested = false;
+        pendingRefreshMeta = null;
       });
 
       function startRecording() {
         try {
-          window.rrweb.record({
+          var stop = window.rrweb.record({
             emit: emit,
             recordCanvas: false,
             collectFonts: false,
@@ -269,6 +309,10 @@ export function createRrwebPreviewRecorderScript({
             // bloat the snapshot; comments are noise. Drop both.
             slimDOMOptions: { script: true, comment: true },
           });
+          // Expose the stop handle on the setup marker (still truthy, so the
+          // re-entry guard holds) so tests and teardown paths can detach the
+          // recorder's observers.
+          if (stop) window[marker] = { stop: stop };
         } catch (e) {}
       }
 

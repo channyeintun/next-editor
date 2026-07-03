@@ -224,7 +224,6 @@ export function usePreviewController(): PreviewController {
     ((document: PreviewInitialDocument) => void) | null
   >(null);
   const handlePreviewPatchBatchRef = useRef<((batch: PreviewDomPatchBatch) => void) | null>(null);
-  const lastPreviewInitialDocumentRef = useRef<PreviewInitialDocument | null>(null);
   const recordedPreviewInitialDocumentIdRef = useRef<string | null>(null);
 
   const {
@@ -353,29 +352,22 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
-    const initialDocument = lastPreviewInitialDocumentRef.current;
-    if (
-      initialDocument &&
-      initialDocument.documentId !== recordedPreviewInitialDocumentIdRef.current
-    ) {
-      handlePreviewInitialDocument(initialDocument);
-      recordedPreviewInitialDocumentIdRef.current = initialDocument.documentId;
-    }
-
-    // The initial document recorded above is the snapshot the page posted at
-    // load time — preview state reached before recording began (mutations,
-    // scroll positions) is not in it. Ask the in-page recorder for a fresh
-    // corrective FullSnapshot so replay rebuilds from the true recording-start
-    // state; it arrives in the patch stream near t=0.
+    // Ask the in-page recorder for a fresh snapshot of the CURRENT document. The
+    // answer comes back as a `refresh` initial document (recorded by the message
+    // bridge), so replay opens from the true recording-start state. The stale
+    // page-load snapshot the preview posted long ago is deliberately not
+    // recorded: if nothing answers (preview hidden, runtime rebooting, recorder
+    // absent), that snapshot describes a document that is not live anyway, and
+    // the iframe's own initial document seeds replay when it (re)loads.
     try {
       iframeRef.current?.contentWindow?.postMessage(
         { type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE },
         "*",
       );
     } catch {
-      // Cross-origin/postMessage failures just leave the load-time snapshot.
+      // Cross-origin/postMessage failures behave like an unanswered request.
     }
-  }, [handlePreviewInitialDocument, isRecording]);
+  }, [isRecording]);
 
   const sizeRef = useRef<PreviewSize>(size);
   const isOpenRef = useRef(isOpen);
@@ -496,7 +488,6 @@ export function usePreviewController(): PreviewController {
     handlePreviewEventRef,
     handlePreviewInitialDocumentRef,
     handlePreviewPatchBatchRef,
-    lastPreviewInitialDocumentRef,
     recordedPreviewInitialDocumentIdRef,
     lastRuntimeSnapshotRef,
     scrollPositionRef,

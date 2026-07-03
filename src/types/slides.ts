@@ -118,6 +118,11 @@ export interface PreviewInitialDocument {
   route?: string;
   // rrweb Meta + FullSnapshot events that seed replay.
   events?: PreviewRecordedEvent[];
+  // True when this document is the recorder's answer to the host's
+  // recording-start snapshot request: a re-serialization of the LIVE document,
+  // not the page-load snapshot. Bridge-level routing only — stripped before the
+  // document is recorded, so stored recordings never carry it.
+  refresh?: boolean;
 }
 
 export interface PreviewDomPatchBatch {

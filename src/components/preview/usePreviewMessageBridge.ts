@@ -34,7 +34,6 @@ interface UsePreviewMessageBridgeOptions {
   handlePreviewEventRef: RefObject<((event: PreviewEvent) => void) | null>;
   handlePreviewInitialDocumentRef: RefObject<((document: PreviewInitialDocument) => void) | null>;
   handlePreviewPatchBatchRef: RefObject<((batch: PreviewDomPatchBatch) => void) | null>;
-  lastPreviewInitialDocumentRef: RefObject<PreviewInitialDocument | null>;
   recordedPreviewInitialDocumentIdRef: RefObject<string | null>;
   lastRuntimeSnapshotRef: RefObject<string>;
   scrollPositionRef: RefObject<PreviewScrollPosition>;
@@ -105,6 +104,7 @@ function createValidatedInitialDocument(
     !isFiniteNumber(payload.time) ||
     typeof payload.documentId !== "string" ||
     !isOptionalString(payload.route) ||
+    (payload.refresh !== undefined && payload.refresh !== true) ||
     !isPreviewRecordedEventArray(payload.events)
   ) {
     return null;
@@ -116,6 +116,7 @@ function createValidatedInitialDocument(
     documentId: payload.documentId,
     route: payload.route,
     events: payload.events,
+    refresh: payload.refresh,
   };
 }
 
@@ -152,7 +153,6 @@ export function usePreviewMessageBridge({
   handlePreviewEventRef,
   handlePreviewInitialDocumentRef,
   handlePreviewPatchBatchRef,
-  lastPreviewInitialDocumentRef,
   recordedPreviewInitialDocumentIdRef,
   lastRuntimeSnapshotRef,
   scrollPositionRef,
@@ -196,15 +196,23 @@ export function usePreviewMessageBridge({
           return;
         }
 
-        lastPreviewInitialDocumentRef.current = initialDocument;
+        if (!isRecordingRef.current || !handlePreviewInitialDocumentRef.current) {
+          return;
+        }
 
-        if (
-          isRecordingRef.current &&
-          handlePreviewInitialDocumentRef.current &&
-          initialDocument.documentId !== recordedPreviewInitialDocumentIdRef.current
-        ) {
-          handlePreviewInitialDocumentRef.current(initialDocument);
-          recordedPreviewInitialDocumentIdRef.current = initialDocument.documentId;
+        // A refresh document is the recorder's answer to the recording-start
+        // snapshot request. It seeds the recording only while nothing has been
+        // recorded yet, so a late answer can never displace a newer page's own
+        // initial document. Regular (page-load) documents are recorded whenever
+        // a new documentId appears — an iframe (re)load during the recording.
+        const { refresh, ...recordedDocument } = initialDocument;
+        const shouldRecord = refresh
+          ? recordedPreviewInitialDocumentIdRef.current === null
+          : recordedDocument.documentId !== recordedPreviewInitialDocumentIdRef.current;
+
+        if (shouldRecord) {
+          handlePreviewInitialDocumentRef.current(recordedDocument);
+          recordedPreviewInitialDocumentIdRef.current = recordedDocument.documentId;
         }
 
         return;
@@ -336,7 +344,6 @@ export function usePreviewMessageBridge({
     isRecordingRef,
     isUserScrollingRef,
     lastRuntimeSnapshotRef,
-    lastPreviewInitialDocumentRef,
     onApiClientResponse,
     onConsoleMessage,
     onRouteChange,

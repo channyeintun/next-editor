@@ -168,11 +168,11 @@ describe("rrweb preview scroll replay timing", () => {
     expect(replayedScroller()?.scrollTop).toBe(500);
   });
 
-  // The host records the page-load initial document when a recording starts, and
-  // drops every patch posted before that moment — so state reached pre-recording
-  // (mutations, scroll) is missing from the replay baseline. The recording-start
-  // corrective FullSnapshot (RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE) re-serializes the
-  // current document into the patch stream; replay must rebuild from it.
+  // State reached before recording starts (mutations, scroll) is missing from
+  // the page-load snapshot, so the recording-start snapshot
+  // (RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE) re-serializes the current document.
+  // Replay must rebuild from a later FullSnapshot wherever it appears in the
+  // stream — this also covers drift-checkpoint snapshots in the patch stream.
   it("recovers pre-recording mutations and scroll via the record-start snapshot", async () => {
     document.body.innerHTML = `
       <div id="scroller" style="height: 200px; overflow: auto;">
