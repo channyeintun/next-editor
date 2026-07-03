@@ -27,6 +27,12 @@ the older `introduction` lesson predates recent recorder changes and was exclude
   32 KB window). **done** — commit `024ee07`: per-segment `contentUnchanged` marker
   (`framePreviewContentDedup.ts`; carry never crosses a segment boundary, keeping keyframe-bounded
   frame segments range-loadable). Re-encoding that lesson: 3.98 MB → 624 KB (−84%), byte-identical.
+- Root-cause fix for the same issue — commit `348fdeb`: the delta FORMAT itself now stays
+  incremental for previewState. `createFrameDelta` emits a `contentUnchanged` form (everything but
+  the embedded preview HTML) when only other previewState fields moved, and `applyFrameDelta`
+  restores content from the base-frame chain — so new captures never embed duplicated content in the
+  first place. The codec-level marker was renamed `contentDeduped` so the two layers cannot consume
+  each other's markers; the codec pass remains for keyframes and pre-fix recordings.
 
 ## What the issue-repro recording shows
 
