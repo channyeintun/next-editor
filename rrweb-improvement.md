@@ -16,6 +16,10 @@ the older `introduction` lesson predates recent recorder changes and was exclude
   config is `sampling: { mousemove: 100, scroll: 150, media: 800 }`.
 - Finding 3 (`maskAllInputs` comment): **done** — commit `0561268` (same file/commit as finding 2).
 - Finding 4 (measure script binary SCR3): **done** — commit `035f453`.
+- Deferred item (previewPatch added-node dedup): **done** — commit `4583815`. Stream-only
+  `{ dedupTemplate, dedupIds }` marker for repeated rrweb added-node payloads
+  (`previewPatchDedup.ts`, wired like `workspaceEventDedup` into both encoders and both decoders).
+  Re-encoding the mutation-heavy feed lesson: 813 KB → 671 KB (−17.5%) with a byte-identical decode.
 
 ## What the issue-repro recording shows
 
@@ -173,11 +177,10 @@ use `public/lessons/issue-repro/recording-1783046610421.ne`). Verify it prints a
 
 ## Considered and rejected / deferred
 
-- **Dedup of re-added identical DOM subtrees in `previewPatch`** (stream-only marker à la
-  `workspaceEventDedup`): motivated by virtualized-feed churn in the _old_ introduction lesson (81%
-  duplicate add-node bytes there), but the current-format sample has only 19 mutations and 2.9 KB of
-  patches. Deferred — revisit with `measure-recording-size.mjs` if mutation-heavy lessons show
-  `previewPatch` dominating again.
+- **Dedup of re-added identical DOM subtrees in `previewPatch`**: initially deferred, since
+  **implemented** (see Status above; commit `4583815`). Motivated by virtualized-feed churn (81%
+  duplicate add-node bytes in the feed-style lesson); harmless on quiet recordings — no repeats
+  means no markers.
 - **Dropping legacy `preview_interaction` events when rrweb is active**: they are consumed by replay
   (`replayState/preview.ts` `currentInteraction` drives the panel overlay) and cost ~2% here. Not
   dead weight; leave alone.
