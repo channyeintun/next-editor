@@ -32,6 +32,7 @@ import {
   deriveRecordingTracks,
   mergeClusterSummary,
 } from "./clusters";
+import { hydrateFramePreviewContent } from "./framePreviewContentDedup";
 import { createPreviewAddNodeHydrator } from "./previewPatchDedup";
 import { createWorkspaceEventContentHydrator } from "./workspaceEventDedup";
 
@@ -236,7 +237,9 @@ function decodeSegments(bytes: Uint8Array): Recording {
     );
     switch (segment.kind) {
       case SEGMENT_KIND.frames:
-        frames.push(...decodeRecords<DeltaFrame>(segment.payload));
+        // Per-segment marker resolution — self-contained, no cross-segment carry
+        // (see framePreviewContentDedup.ts).
+        frames.push(...hydrateFramePreviewContent(decodeRecords<DeltaFrame>(segment.payload)));
         break;
       case SEGMENT_KIND.slide:
         slideEvents.push(...decodeRecords<SlideEvent>(segment.payload));
@@ -406,10 +409,14 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     let commit: () => void;
     switch (header.kind) {
       case SEGMENT_KIND.frames: {
-        // Normalize each frame once, as it arrives. `getRecording()` then skips the
+        // Resolve per-segment previewState-content markers first (self-contained,
+        // no reader state — see framePreviewContentDedup.ts), then normalize each
+        // frame once, as it arrives. `getRecording()` then skips the
         // whole-recording normalize pass (`prenormalized`), so progressive decoding
         // stays O(total bytes) instead of re-cloning every frame per interval.
-        const records = decodeRecords<DeltaFrame>(payload).map(normalizeDeltaFrame);
+        const records = hydrateFramePreviewContent(decodeRecords<DeltaFrame>(payload)).map(
+          normalizeDeltaFrame,
+        );
         commit = () => frames.push(...records);
         break;
       }

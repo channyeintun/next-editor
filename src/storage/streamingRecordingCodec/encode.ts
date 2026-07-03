@@ -28,6 +28,7 @@ import {
   groupRecordsByCluster,
   resolveClusterIndexForTime,
 } from "./clusters";
+import { stripFramePreviewContent } from "./framePreviewContentDedup";
 import { createPreviewAddNodeStripper } from "./previewPatchDedup";
 import { createWorkspaceEventContentStripper } from "./workspaceEventDedup";
 
@@ -150,7 +151,10 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     appendFrameSegment(frames, options) {
       ensureWritable();
       if (frames.length === 0) return;
-      appendSegment(SEGMENT_KIND.frames, encodeRecords(frames), {
+      // Repeated previewState contents are stripped per segment (frame segments
+      // are keyframe-bounded and range-loadable, so the carry must not cross a
+      // segment boundary) — see framePreviewContentDedup.ts.
+      appendSegment(SEGMENT_KIND.frames, encodeRecords(stripFramePreviewContent(frames)), {
         startTimeMs: options?.startTimeMs ?? frames[0].timestamp,
         endTimeMs: options?.endTimeMs ?? readLastRecordTimestamp(frames),
         firstFrameIndex: options?.firstFrameIndex ?? frameCount,
