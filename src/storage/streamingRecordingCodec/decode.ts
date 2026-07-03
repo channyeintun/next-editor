@@ -32,6 +32,7 @@ import {
   deriveRecordingTracks,
   mergeClusterSummary,
 } from "./clusters";
+import { createPreviewAddNodeHydrator } from "./previewPatchDedup";
 import { createWorkspaceEventContentHydrator } from "./workspaceEventDedup";
 
 // ============================================================================
@@ -219,6 +220,9 @@ function decodeSegments(bytes: Uint8Array): Recording {
   // Stream order matches encode order, so carrying deduped file contents forward
   // here mirrors the stripper's state exactly (see workspaceEventDedup.ts).
   const hydrateWorkspaceEvents = createWorkspaceEventContentHydrator();
+  // Same contract for repeated rrweb added-node payloads: hydration must run in
+  // stream order (before the time re-sort below) — see previewPatchDedup.ts.
+  const hydratePreviewPatchBatches = createPreviewAddNodeHydrator();
 
   for (const segment of walkSegments(bytes, headerEnd, segmentsEnd)) {
     hasSegments = true;
@@ -244,7 +248,9 @@ function decodeSegments(bytes: Uint8Array): Recording {
         previewInitialDocuments.push(...decodeRecords<PreviewInitialDocument>(segment.payload));
         break;
       case SEGMENT_KIND.previewPatch:
-        previewPatchBatches.push(...decodeRecords<PreviewDomPatchBatch>(segment.payload));
+        previewPatchBatches.push(
+          ...hydratePreviewPatchBatches(decodeRecords<PreviewDomPatchBatch>(segment.payload)),
+        );
         break;
       case SEGMENT_KIND.workspace:
         workspaceEvents.push(
@@ -345,6 +351,9 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   // Segments arrive in stream (= encode) order, so one carry map per reader mirrors
   // the writer's stripper state (see workspaceEventDedup.ts).
   const hydrateWorkspaceEvents = createWorkspaceEventContentHydrator();
+  // Same stream-order contract for repeated rrweb added-node payloads
+  // (see previewPatchDedup.ts).
+  const hydratePreviewPatchBatches = createPreviewAddNodeHydrator();
 
   let segmentCount = 0;
   let maxSegmentTimeMs = 0;
@@ -421,7 +430,9 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       }
       case SEGMENT_KIND.previewPatch: {
         const records = decodeRecords<PreviewDomPatchBatch>(payload);
-        commit = () => previewPatchBatches.push(...records);
+        // Hydration advances the template list, so it runs inside `commit` — a
+        // decode throw above must leave the dedup state untouched.
+        commit = () => previewPatchBatches.push(...hydratePreviewPatchBatches(records));
         break;
       }
       case SEGMENT_KIND.workspace: {

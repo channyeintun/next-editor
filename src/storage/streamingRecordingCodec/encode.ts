@@ -28,6 +28,7 @@ import {
   groupRecordsByCluster,
   resolveClusterIndexForTime,
 } from "./clusters";
+import { createPreviewAddNodeStripper } from "./previewPatchDedup";
 import { createWorkspaceEventContentStripper } from "./workspaceEventDedup";
 
 // ============================================================================
@@ -75,6 +76,10 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   // base64 assets); repeated contents are stripped to a marker here and carried
   // forward on decode — see workspaceEventDedup.ts for the symmetry contract.
   const stripWorkspaceEvents = createWorkspaceEventContentStripper();
+  // rrweb mutation adds re-serialize identical node payloads on content churn
+  // (virtualized lists remounting rows); repeats are stripped to a template
+  // marker here and rebuilt on decode — see previewPatchDedup.ts.
+  const stripPreviewPatchAdds = createPreviewAddNodeStripper();
 
   const pushChunk = (bytes: Uint8Array): void => {
     chunks.push(bytes);
@@ -159,7 +164,11 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
       ensureWritable();
       if (records.length === 0) return;
       const streamRecords =
-        kind === SEGMENT_KIND.workspace ? stripWorkspaceEvents(records) : records;
+        kind === SEGMENT_KIND.workspace
+          ? stripWorkspaceEvents(records)
+          : kind === SEGMENT_KIND.previewPatch
+            ? stripPreviewPatchAdds(records)
+            : records;
       appendSegment(kind, encodeRecords(streamRecords), {
         startTimeMs: options?.startTimeMs ?? readRecordTimestamp(records[0]),
         endTimeMs: options?.endTimeMs ?? readLastRecordTimestamp(records),
