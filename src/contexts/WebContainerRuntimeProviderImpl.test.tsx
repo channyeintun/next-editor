@@ -223,4 +223,59 @@ describe("WebContainerRuntimeProviderImpl reverse sync", () => {
     const project = workspace.getProject();
     expect(project.files["package-lock.json"]).toBeDefined();
   });
+
+  it("reverse syncs a file reported by fs.watch without any terminal output", async () => {
+    const fakeFs = createFakeFs({
+      "index.html": "<main>Hello</main>",
+    });
+    const { instance } = createFakeInstance(fakeFs);
+
+    // The default fake fs has no `watch`; add one so the provider runs in
+    // watcher mode (which also gates off the terminal-output heuristic).
+    type WatchListener = (event: "rename" | "change", filename: string | Uint8Array) => void;
+    const capturedWatch: { listener: WatchListener | null } = { listener: null };
+    Object.assign(instance.fs, {
+      watch: vi.fn<
+        (path: string, options: unknown, listener: WatchListener) => { close: () => void }
+      >((_path, _options, listener) => {
+        capturedWatch.listener = listener;
+        return { close: vi.fn<() => void>() };
+      }),
+      mkdir: vi.fn<() => Promise<void>>(async () => {}),
+      rm: vi.fn<() => Promise<void>>(async () => {}),
+      writeFile: vi.fn<() => Promise<void>>(async () => {}),
+    });
+
+    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+
+    const { runtime, workspace } = renderProviders();
+
+    await act(async () => {
+      await runtime.startRuntime();
+    });
+
+    // Drain the post-init reverse sync so the watcher event below is the only
+    // pending trigger.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    if (!capturedWatch.listener) {
+      throw new Error("Expected the provider to register an fs.watch listener");
+    }
+    const fireWatch = capturedWatch.listener;
+
+    // A container process (e.g. an Express route handler) writes a file. No
+    // terminal output accompanies it — only the watcher can see it.
+    fakeFs.addFile("server/data.json", '{"visits":1}');
+    fireWatch("rename", "server/data.json");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    const project = workspace.getProject();
+    expect(project.files["server/data.json"]).toBeDefined();
+  });
 });

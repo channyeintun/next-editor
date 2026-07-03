@@ -205,7 +205,7 @@ function stripRuntimeSnapshotScript(content: string): string {
     .replace(/\s*<script data-next-editor-api-client-proxy>[\s\S]*?<\/script>\s*/g, "\n");
 }
 
-function shouldIgnoreRuntimeImportPath(path: string): boolean {
+export function shouldIgnoreRuntimeImportPath(path: string): boolean {
   const normalizedPath = normalizeWorkspacePath(path);
   const rootSegment = normalizedPath.split("/")[0];
 
@@ -355,12 +355,17 @@ export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
   return tree;
 }
 
-async function ensureDirectory(instance: WebContainer, directoryPath: string): Promise<void> {
+async function ensureDirectory(
+  instance: WebContainer,
+  directoryPath: string,
+  onWrite?: (path: string) => void,
+): Promise<void> {
   const segments = directoryPath.split("/").filter(Boolean);
   let currentPath = "";
 
   for (const segment of segments) {
     currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+    onWrite?.(currentPath);
 
     try {
       await instance.fs.mkdir(currentPath);
@@ -379,6 +384,10 @@ export async function syncWorkspaceProject(
   instance: WebContainer,
   previousProject: WorkspaceProject | null,
   nextProject: WorkspaceProject,
+  // Reports every container path this sync mutates (created folders, removed
+  // paths, written files) so callers can tell their own writes apart from
+  // container-originated ones — e.g. to suppress fs.watch echoes.
+  onWrite?: (path: string) => void,
 ): Promise<void> {
   if (previousProject === nextProject) {
     return;
@@ -404,12 +413,14 @@ export async function syncWorkspaceProject(
       continue;
     }
 
-    await ensureDirectory(instance, normalizedFolderPath);
+    await ensureDirectory(instance, normalizedFolderPath, onWrite);
   }
 
   const deletedPaths = Array.from(previousFiles.keys()).filter((path) => !nextFiles.has(path));
 
   for (const path of deletedPaths.sort((left, right) => right.length - left.length)) {
+    onWrite?.(path);
+
     try {
       await instance.fs.rm(path);
     } catch {
@@ -422,6 +433,8 @@ export async function syncWorkspaceProject(
   );
 
   for (const folderPath of deletedFolders.sort((left, right) => right.length - left.length)) {
+    onWrite?.(folderPath);
+
     try {
       await instance.fs.rm(folderPath, { recursive: true, force: true });
     } catch {
@@ -436,7 +449,8 @@ export async function syncWorkspaceProject(
       continue;
     }
 
-    await ensureDirectory(instance, getFileDirectory(path));
+    await ensureDirectory(instance, getFileDirectory(path), onWrite);
+    onWrite?.(path);
     await instance.fs.writeFile(
       path,
       file.encoding === "base64" ? base64ToBytes(file.content) : file.content,

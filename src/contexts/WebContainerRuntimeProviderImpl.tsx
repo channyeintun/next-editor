@@ -65,8 +65,17 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     loadStoredEnvironmentVariables,
   );
   const [runnerConfig, setRunnerConfig] = useState<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
-  const { hasMountedProjectRef, ensureProjectMounted, queueProjectSync, resetWorkspaceSync } =
-    useWebContainerWorkspaceSync();
+  const {
+    hasMountedProjectRef,
+    ensureProjectMounted,
+    isFsWatchActive,
+    queueProjectSync,
+    resetWorkspaceSync,
+  } = useWebContainerWorkspaceSync({
+    // A container process changed a file our own sync didn't write — pull the
+    // container filesystem back into the workspace.
+    onExternalFileChange: (instance) => requestReverseSync(instance),
+  });
 
   const requestReverseSync = (instance: WebContainer, generation?: number) => {
     if (typeof window === "undefined") {
@@ -151,6 +160,13 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       const instance = instanceRef.current;
 
       if (!instance) {
+        return;
+      }
+
+      // With a recursive fs.watch running, terminal output is a redundant (and
+      // very noisy — every log chunk) proxy for "a file may have changed"; the
+      // heuristic only remains as a fallback when watch is unavailable.
+      if (isFsWatchActive()) {
         return;
       }
 
