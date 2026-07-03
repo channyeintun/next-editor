@@ -309,6 +309,16 @@ export function createRrwebPreviewRecorderScript({
             // right, not be sample-perfect.
             sampling: { mousemove: 100, scroll: 150, media: 800 },
             inlineStylesheet: true,
+            // Bake image pixels into the snapshot (rr_dataURL). The preview page
+            // is served from an ephemeral per-boot WebContainer origin, so any
+            // project-served image recorded as a URL is unreachable in replay
+            // (the host no longer resolves) — stable external URLs still work
+            // either way. Same-origin loaded images inline synchronously during
+            // serialization; an image still loading when serialized inlines via
+            // a load listener, which only reaches storage if it fires before the
+            // batch flushes (missed ones keep their URL — the pre-existing
+            // behavior, not a regression).
+            inlineImages: true,
             // Capture real input values: the preview replays the author's own demo
             // content, and typed text must stay visible in replay.
             maskAllInputs: false,

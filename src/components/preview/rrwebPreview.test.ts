@@ -113,6 +113,9 @@ describe("createRrwebPreviewRecorderScript", () => {
     expect(script).toContain("window.rrweb.record");
     expect(script).toContain("__TEST_MARKER__");
     expect(script).toContain(String(PREVIEW_RRWEB_FORMAT_VERSION));
+    // Images must be baked into snapshots as data URLs: project-served image
+    // URLs point at the ephemeral WebContainer origin and are dead in replay.
+    expect(script).toContain("inlineImages: true");
     expect(script.length).toBeGreaterThan(100_000);
   });
 });
