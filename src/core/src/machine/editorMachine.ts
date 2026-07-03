@@ -1,4 +1,4 @@
-import { setup, assign, spawnChild, stopChild, enqueueActions, fromPromise } from "xstate";
+import { setup, assign, stateIn, stopChild, enqueueActions, fromPromise } from "xstate";
 import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
 import { createInitialContext } from "./types";
 import type { MouseCursorPosition, Recording } from "../types";
@@ -12,8 +12,8 @@ import {
   APPLY_REPLAY_STATE_ACTIONS,
   APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS,
   getPlaybackAudioState,
-  hasPlaybackAudio,
   hasSpawnedPlaybackAudio,
+  PLAYBACK_END_EPSILON_MS,
   RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
   SET_EDITOR_REF_ACTIONS,
   shouldRecordCamera,
@@ -26,10 +26,17 @@ import {
   startExternalAudioPlayback,
   storeExternalAudioDuration,
   stopExternalAudioRecording,
+  resetAudioAfterRecorderStop,
   initRecordingSession,
   captureInitialFrame,
   captureFrame,
   capturePreviewRefreshFrame,
+  captureSlideEvent,
+  capturePreviewEvent,
+  capturePreviewInitialDocument,
+  capturePreviewPatchBatch,
+  captureWorkspaceEvent,
+  captureRuntimeEvent,
   finalizeRecording,
   notifyRecordingStart,
   notifyRecordingStop,
@@ -43,6 +50,8 @@ import {
 import {
   setRecording,
   extendRecording,
+  addCaptionTrack,
+  removeCaptionTrack,
   applyFrameAtTime,
   seekToTime,
   setPlaybackSpeed,
@@ -71,14 +80,6 @@ import {
   applyRuntimeEventsAtTime,
   applySlideEventsAtTime,
 } from "./replayActions";
-import {
-  appendPreviewInitialDocument,
-  appendPreviewPatchBatch,
-  appendPreviewRecordingEvent,
-  appendRuntimeRecordingEvent,
-  appendSlideRecordingEvent,
-  appendWorkspaceRecordingEvent,
-} from "./recordingSession";
 
 // ============================================================================
 // Editor State Machine
@@ -118,10 +119,8 @@ export const editorMachine = setup({
     }),
   },
   guards: {
-    hasRecording: ({ context }) => context.recording !== null,
     canPlay: ({ context }) =>
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
-    hasAudio: ({ context }) => hasPlaybackAudio(context),
     hasExternalAudioBlob: ({ event }) =>
       event.type === "START_RECORDING" && event.audioBlob instanceof Blob,
     isMicrophoneAudioRecording: ({ context }) =>
@@ -139,10 +138,6 @@ export const editorMachine = setup({
       (context.pendingPlaybackEditorSync ||
         context.currentFrame !== null ||
         context.lastAppliedFrameIndex >= 0),
-    isValidSeekTime: ({ context, event }) => {
-      if (event.type !== "SEEK") return false;
-      return event.time >= 0 && event.time <= context.timeline.duration;
-    },
   },
   actions: {
     // Recording (capture-side) actions — bodies live in captureActions.ts, wrapped
@@ -152,10 +147,17 @@ export const editorMachine = setup({
     startExternalAudioPlayback: enqueueActions(startExternalAudioPlayback),
     storeExternalAudioDuration: assign(storeExternalAudioDuration),
     stopExternalAudioRecording: assign(stopExternalAudioRecording),
+    resetAudioAfterRecorderStop: assign(resetAudioAfterRecorderStop),
     initRecordingSession: assign(initRecordingSession),
     captureInitialFrame: assign(captureInitialFrame),
     captureFrame: assign(captureFrame),
     capturePreviewRefreshFrame: assign(capturePreviewRefreshFrame),
+    captureSlideEvent: assign(captureSlideEvent),
+    capturePreviewEvent: assign(capturePreviewEvent),
+    capturePreviewInitialDocument: assign(capturePreviewInitialDocument),
+    capturePreviewPatchBatch: assign(capturePreviewPatchBatch),
+    captureWorkspaceEvent: assign(captureWorkspaceEvent),
+    captureRuntimeEvent: assign(captureRuntimeEvent),
     finalizeRecording: assign(finalizeRecording),
     notifyRecordingStart,
     notifyRecordingStop,
@@ -170,6 +172,8 @@ export const editorMachine = setup({
     // here so `setup()` can infer this machine's exact context/event/actor types.
     setRecording: assign(setRecording),
     extendRecording: assign(extendRecording),
+    addCaptionTrack: assign(addCaptionTrack),
+    removeCaptionTrack: assign(removeCaptionTrack),
     applyFrameAtTime: assign(applyFrameAtTime),
     seekToTime: assign(seekToTime),
     setPlaybackSpeed: assign(setPlaybackSpeed),
@@ -228,29 +232,10 @@ export const editorMachine = setup({
       },
     ],
     ADD_CAPTION_TRACK: {
-      actions: assign(({ context, event }) => {
-        if (event.type !== "ADD_CAPTION_TRACK" || !context.recording) return {};
-        const existing = context.recording.captions ?? [];
-        const filtered = existing.filter((t) => t.id !== event.track.id);
-        return {
-          recording: {
-            ...context.recording,
-            captions: [...filtered, event.track],
-          },
-        };
-      }),
+      actions: "addCaptionTrack",
     },
     REMOVE_CAPTION_TRACK: {
-      actions: assign(({ context, event }) => {
-        if (event.type !== "REMOVE_CAPTION_TRACK" || !context.recording?.captions) return {};
-        const filtered = context.recording.captions.filter((t) => t.id !== event.trackId);
-        return {
-          recording: {
-            ...context.recording,
-            captions: filtered.length > 0 ? filtered : undefined,
-          },
-        };
-      }),
+      actions: "removeCaptionTrack",
     },
   },
   states: {
@@ -293,6 +278,8 @@ export const editorMachine = setup({
     startingRecording: {
       entry: [
         enqueueActions(({ context, enqueue }) => {
+          // Spawn, not invoke: must survive into recording/stoppingRecording — its
+          // STOPPED event arrives after leaving this state.
           enqueue.spawnChild("audioRecording", {
             id: "audioRecorder",
             input: {
@@ -333,54 +320,40 @@ export const editorMachine = setup({
           target: "idle",
           actions: [
             stopChild("audioRecorder"),
+            "resetAudioAfterRecorderStop",
             assign({
               error: ({ event }) =>
                 event.type === "ERROR" ? event.error : "Failed to start audio",
-              audio: ({ context }) => ({
-                ...context.audio,
-                isRecording: false,
-                mediaRecorder: null,
-                source: null,
-                startOffsetMs: 0,
-              }),
             }),
             "notifyError",
           ],
         },
         STOP_RECORDING: {
           target: "idle",
-          actions: [
-            stopChild("audioRecorder"),
-            assign({
-              audio: ({ context }) => ({
-                ...context.audio,
-                isRecording: false,
-                source: null,
-                startOffsetMs: 0,
-              }),
-            }),
-          ],
+          actions: [stopChild("audioRecorder"), "resetAudioAfterRecorderStop"],
         },
       },
     },
 
     recording: {
-      entry: [
-        spawnChild("mouseTracking", {
-          id: "mouseTracker",
-          input: ({ self }) => ({
-            onMouseMove: (pos: MouseCursorPosition) => {
-              self.send({
-                type: "CAPTURE_FRAME",
-                isMouseMovement: true,
-                mousePosition: pos,
-              });
-            },
-          }),
+      invoke: {
+        src: "mouseTracking",
+        id: "mouseTracker",
+        input: ({ self }) => ({
+          onMouseMove: (pos: MouseCursorPosition) => {
+            self.send({
+              type: "CAPTURE_FRAME",
+              isMouseMovement: true,
+              mousePosition: pos,
+            });
+          },
         }),
+      },
+      entry: [
         enqueueActions(({ context, enqueue }) => {
           if (!context.enableCameraRecording) return;
 
+          // Spawn, not invoke: conditional on enableCameraRecording.
           enqueue.spawnChild("cameraRecording", {
             id: "cameraRecorder",
             input: {},
@@ -398,7 +371,7 @@ export const editorMachine = setup({
           });
         }),
       ],
-      exit: [stopChild("mouseTracker"), stopChild("recordingAudioPlayer")],
+      exit: [stopChild("recordingAudioPlayer")],
       on: {
         CAPTURE_FRAME: {
           actions: ["captureFrame", "notifyFrame"],
@@ -453,97 +426,22 @@ export const editorMachine = setup({
           ],
         },
         SLIDE_EVENT: {
-          actions: [
-            assign(({ context, event }) => {
-              if (!context.session) return {};
-
-              appendSlideRecordingEvent(context.session, event.event);
-              return {
-                session: context.session,
-                sessionRevision: context.sessionRevision + 1,
-              };
-            }),
-            "captureFrame",
-            "notifyFrame",
-          ],
+          actions: ["captureSlideEvent", "captureFrame", "notifyFrame"],
         },
         PREVIEW_EVENT: {
-          actions: [
-            assign(({ context, event }) => {
-              if (!context.session) return {};
-
-              appendPreviewRecordingEvent(context.session, event.event);
-              return {
-                session: context.session,
-                sessionRevision: context.sessionRevision + 1,
-              };
-            }),
-            "capturePreviewRefreshFrame",
-            "notifyFrame",
-          ],
+          actions: ["capturePreviewEvent", "capturePreviewRefreshFrame", "notifyFrame"],
         },
         PREVIEW_INITIAL_DOCUMENT: {
-          actions: assign(({ context, event }) => {
-            if (!context.session) return {};
-
-            appendPreviewInitialDocument(context.session, event.document);
-            return {
-              session: context.session,
-              sessionRevision: context.sessionRevision + 1,
-            };
-          }),
+          actions: "capturePreviewInitialDocument",
         },
         PREVIEW_PATCH_BATCH: {
-          actions: assign(({ context, event }) => {
-            if (!context.session) return {};
-
-            appendPreviewPatchBatch(context.session, event.batch);
-            return {
-              session: context.session,
-              sessionRevision: context.sessionRevision + 1,
-            };
-          }),
+          actions: "capturePreviewPatchBatch",
         },
         WORKSPACE_EVENT: {
-          actions: [
-            assign(({ context, event }) => {
-              const snapshot = context.getWorkspaceSnapshot?.();
-              if (!context.session || !snapshot) return {};
-
-              const appended = appendWorkspaceRecordingEvent(context.session, snapshot, {
-                sidebarWidthDelta: event.sidebarWidthDelta,
-                previewDockWidthDelta: event.previewDockWidthDelta,
-              });
-
-              if (!appended) {
-                return {};
-              }
-
-              return {
-                session: context.session,
-                sessionRevision: context.sessionRevision + 1,
-              };
-            }),
-          ],
+          actions: "captureWorkspaceEvent",
         },
         RUNTIME_EVENT: {
-          actions: [
-            assign(({ context }) => {
-              const snapshot = context.getRuntimeSnapshot?.();
-              if (!context.session || !snapshot) return {};
-
-              const appended = appendRuntimeRecordingEvent(context.session, snapshot);
-
-              if (!appended) {
-                return {};
-              }
-
-              return {
-                session: context.session,
-                sessionRevision: context.sessionRevision + 1,
-              };
-            }),
-          ],
+          actions: "captureRuntimeEvent",
         },
         STOP_RECORDING: [
           {
@@ -643,18 +541,18 @@ export const editorMachine = setup({
 
     playback: {
       initial: "ready",
+      invoke: {
+        src: "timeline",
+        id: "timelineActor",
+        input: ({ context }) => ({
+          speed: context.timeline.speed,
+          duration: context.timeline.duration,
+          startPosition: context.timeline.currentTime,
+        }),
+      },
       entry: [
         ...APPLY_REPLAY_STATE_ACTIONS,
         enqueueActions(({ context, enqueue }) => {
-          enqueue.spawnChild("timeline", {
-            id: "timelineActor",
-            input: {
-              speed: context.timeline.speed,
-              duration: context.timeline.duration,
-              startPosition: context.timeline.currentTime,
-            },
-          });
-
           syncPlaybackAudio(context, enqueue, {
             spawnIfMissing: true,
             appendPolicy: "never",
@@ -666,7 +564,6 @@ export const editorMachine = setup({
         }),
       ],
       exit: [
-        stopChild("timelineActor"),
         stopChild("audioPlayer"),
         "clearCursorDecorations",
         assign({ playbackAudioSpawned: false }),
@@ -679,7 +576,7 @@ export const editorMachine = setup({
           actions: [
             "extendRecording",
             ...APPLY_REPLAY_STATE_ACTIONS,
-            enqueueActions(({ context, event, enqueue, self }) => {
+            enqueueActions(({ context, event, enqueue, check }) => {
               if (event.type !== "EXTEND_RECORDING") {
                 return;
               }
@@ -701,7 +598,7 @@ export const editorMachine = setup({
                 seek: true,
                 syncRate: true,
                 syncVolume: true,
-                play: self.getSnapshot().matches({ playback: "playing" }),
+                play: check(stateIn({ playback: "playing" })),
               });
             }),
           ],
@@ -925,7 +822,8 @@ export const editorMachine = setup({
               {
                 target: "playing",
                 guard: ({ context }) =>
-                  context.timeline.currentTime >= context.timeline.duration - 100, // Fuzzy end check
+                  context.timeline.currentTime >=
+                  context.timeline.duration - PLAYBACK_END_EPSILON_MS, // Fuzzy end check
                 actions: [
                   "reattachPlaybackWorkspace",
                   "resetPlayback",

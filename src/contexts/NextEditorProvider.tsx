@@ -1,7 +1,10 @@
 import { useRef, useEffect } from "react";
 import type * as monaco from "monaco-editor";
 import type { Recording, UseNextEditorConfig } from "../core/src";
-import { useNextEditorActorBindings } from "../core/src/useNextEditor";
+import {
+  useNextEditorActorActions,
+  useNextEditorInteractionEffects,
+} from "../core/src/useNextEditor";
 import { NextEditorActionsContext } from "./NextEditorContext";
 import { NextEditorActorContext } from "./NextEditorActorContext";
 import { usePreviewAdapterHandle } from "./PreviewAdapterHandleContext";
@@ -36,11 +39,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   suppressWorkspaceEventsRef,
 }) => {
   const actorRef = NextEditorActorContext.useActorRef();
-  const originalHook = useNextEditorActorBindings(actorRef, config);
-
-  // Opt-in: forward the live SCR3 recording stream to a configured sink (inert if absent).
-  useRecordingStreamSink(actorRef, config.recordingStreamSink);
-
+  // Subscription-free senders + side effects only: the provider dispatches events but
+  // never reads machine state, so it must not re-render on state transitions.
   const {
     clearRecording,
     startRecording,
@@ -63,7 +63,11 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handlePreviewPatchBatch,
     handleWorkspaceEvent: handleWorkspaceEventBase,
     handleRuntimeEvent,
-  } = originalHook;
+  } = useNextEditorActorActions(actorRef);
+  useNextEditorInteractionEffects(actorRef, config);
+
+  // Opt-in: forward the live SCR3 recording stream to a configured sink (inert if absent).
+  useRecordingStreamSink(actorRef, config.recordingStreamSink);
 
   // Stabilize storage and registration methods
   const exportAsFile = (recording: Recording, filename?: string) =>

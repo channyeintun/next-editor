@@ -51,26 +51,28 @@ export const timelineMachine = setup({
     startedAt: 0,
     accumulatedTime: input.startPosition,
   }),
+  on: {
+    SEEK: {
+      actions: assign(({ event }) => ({
+        currentTime: event.time,
+        accumulatedTime: event.time,
+      })),
+    },
+    SET_DURATION: {
+      actions: assign(({ context, event }) => ({
+        duration: Math.max(context.currentTime, event.duration),
+      })),
+    },
+    SET_SPEED: {
+      actions: assign(({ event }) => ({
+        speed: event.speed,
+      })),
+    },
+  },
   states: {
     stopped: {
       on: {
         START: "running",
-        SEEK: {
-          actions: assign(({ event }) => ({
-            currentTime: event.time,
-            accumulatedTime: event.time,
-          })),
-        },
-        SET_DURATION: {
-          actions: assign(({ context, event }) => ({
-            duration: Math.max(context.currentTime, event.duration),
-          })),
-        },
-        SET_SPEED: {
-          actions: assign(({ event }) => ({
-            speed: event.speed,
-          })),
-        },
       },
     },
     running: {
@@ -93,7 +95,7 @@ export const timelineMachine = setup({
             enqueueActions(({ context, enqueue }) => {
               if (context.currentTime >= context.duration) {
                 enqueue.raise({ type: "STOP" });
-                enqueue.sendParent({ type: "FINISHED" });
+                enqueue({ type: "emitFinished" });
               }
             }),
           ],
@@ -105,11 +107,6 @@ export const timelineMachine = setup({
             currentTime: event.time,
             accumulatedTime: event.time,
             startedAt: performance.now(),
-          })),
-        },
-        SET_DURATION: {
-          actions: assign(({ context, event }) => ({
-            duration: Math.max(context.currentTime, event.duration),
           })),
         },
         SET_SPEED: {
@@ -128,22 +125,6 @@ export const timelineMachine = setup({
       on: {
         START: "running",
         STOP: "stopped",
-        SEEK: {
-          actions: assign(({ event }) => ({
-            currentTime: event.time,
-            accumulatedTime: event.time,
-          })),
-        },
-        SET_DURATION: {
-          actions: assign(({ context, event }) => ({
-            duration: Math.max(context.currentTime, event.duration),
-          })),
-        },
-        SET_SPEED: {
-          actions: assign(({ event }) => ({
-            speed: event.speed,
-          })),
-        },
       },
     },
   },

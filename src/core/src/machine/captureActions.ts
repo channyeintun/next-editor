@@ -2,6 +2,7 @@ import type { SlideEvent, PreviewEvent } from "../slides";
 import type {
   EditorMachineContext,
   EditorMachineEvent,
+  RecordingSession,
   RecordingSessionMediaFragment,
 } from "./types";
 import type { EditorFrame, MouseCursorPosition, Recording } from "../types";
@@ -11,6 +12,14 @@ import {
   type WorkspaceRecordingEvent,
 } from "../../../types/workspace";
 import { createFrameStreamEncoder, pushFrame } from "../utils/frameStreamEncoder";
+import {
+  appendPreviewInitialDocument,
+  appendPreviewPatchBatch,
+  appendPreviewRecordingEvent,
+  appendRuntimeRecordingEvent,
+  appendSlideRecordingEvent,
+  appendWorkspaceRecordingEvent,
+} from "./recordingSession";
 import {
   appendCursorEvent,
   AUDIO_TRACK_ID,
@@ -160,6 +169,20 @@ export const stopExternalAudioRecording = ({
     },
   };
 };
+
+export const resetAudioAfterRecorderStop = ({
+  context,
+}: {
+  context: EditorMachineContext;
+}): Partial<EditorMachineContext> => ({
+  audio: {
+    ...context.audio,
+    isRecording: false,
+    mediaRecorder: null,
+    source: null,
+    startOffsetMs: 0,
+  },
+});
 
 export const initRecordingSession = ({
   context,
@@ -469,6 +492,104 @@ export const capturePreviewRefreshFrame = ({
     sessionRevision: context.sessionRevision + 1,
     currentFrame: frame,
   };
+};
+
+/**
+ * Shared "append to session + bump revision" shape for the recording-state event
+ * handlers below. `append` mutates `session`'s arrays in place by design (see the
+ * invariant on {@link RecordingSession}) and returns `false` when nothing was
+ * appended (deduplicated event), in which case the revision must not bump.
+ */
+export const appendToSession = (
+  context: EditorMachineContext,
+  append: (session: RecordingSession) => boolean,
+): Partial<EditorMachineContext> =>
+  !context.session || !append(context.session)
+    ? {}
+    : { session: context.session, sessionRevision: context.sessionRevision + 1 };
+
+export const captureSlideEvent = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "SLIDE_EVENT") return {};
+  return appendToSession(context, (session) => {
+    appendSlideRecordingEvent(session, event.event);
+    return true;
+  });
+};
+
+export const capturePreviewEvent = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "PREVIEW_EVENT") return {};
+  return appendToSession(context, (session) => {
+    appendPreviewRecordingEvent(session, event.event);
+    return true;
+  });
+};
+
+export const capturePreviewInitialDocument = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "PREVIEW_INITIAL_DOCUMENT") return {};
+  return appendToSession(context, (session) => {
+    appendPreviewInitialDocument(session, event.document);
+    return true;
+  });
+};
+
+export const capturePreviewPatchBatch = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "PREVIEW_PATCH_BATCH") return {};
+  return appendToSession(context, (session) => {
+    appendPreviewPatchBatch(session, event.batch);
+    return true;
+  });
+};
+
+export const captureWorkspaceEvent = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "WORKSPACE_EVENT") return {};
+  const snapshot = context.getWorkspaceSnapshot?.();
+  if (!snapshot) return {};
+  return appendToSession(context, (session) =>
+    appendWorkspaceRecordingEvent(session, snapshot, {
+      sidebarWidthDelta: event.sidebarWidthDelta,
+      previewDockWidthDelta: event.previewDockWidthDelta,
+    }),
+  );
+};
+
+export const captureRuntimeEvent = ({
+  context,
+}: {
+  context: EditorMachineContext;
+}): Partial<EditorMachineContext> => {
+  const snapshot = context.getRuntimeSnapshot?.();
+  if (!snapshot) return {};
+  return appendToSession(context, (session) => appendRuntimeRecordingEvent(session, snapshot));
 };
 
 export const finalizeRecording = ({

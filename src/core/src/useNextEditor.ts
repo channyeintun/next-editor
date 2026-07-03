@@ -18,6 +18,7 @@ import type {
   SlideEvent,
 } from "./slides";
 import { findFrameIndexAtTime, reconstructFrameAtIndex } from "./utils/frameDelta";
+import { PLAYBACK_END_EPSILON_MS } from "./machine/editorMachineHelpers";
 import type { TimelineActorRef } from "./machine/timelineMachine";
 import type { SnapshotFrom } from "xstate";
 
@@ -60,23 +61,15 @@ const IGNORED_PLAYBACK_INPUT_KEYS = new Set([
 // Selectors - Memoized functions for extracting state slices
 // ============================================================================
 
-const getPlaybackState = (state: EditorMachineSnapshot): string | null => {
-  const stateValue = state.value;
-
-  if (
-    typeof stateValue === "object" &&
-    stateValue !== null &&
-    "playback" in stateValue &&
-    typeof stateValue.playback === "string"
-  ) {
-    return stateValue.playback;
-  }
-
+const getPlaybackState = (state: EditorMachineSnapshot): "playing" | "paused" | "ended" | null => {
+  if (state.matches({ playback: "playing" })) return "playing";
+  if (state.matches({ playback: "paused" })) return "paused";
+  if (state.matches({ playback: "ended" })) return "ended";
   return null;
 };
 
 // Recording state selectors
-export const selectIsRecording = (state: EditorMachineSnapshot) => state.value === "recording";
+export const selectIsRecording = (state: EditorMachineSnapshot) => state.matches("recording");
 export const selectIsRecordingAudio = (state: EditorMachineSnapshot) =>
   state.context.audio.isRecording;
 export const selectRecordingStartTime = (state: EditorMachineSnapshot) =>
@@ -84,22 +77,21 @@ export const selectRecordingStartTime = (state: EditorMachineSnapshot) =>
 
 // Playback state selectors
 export const selectIsPlaying = (state: EditorMachineSnapshot) =>
-  getPlaybackState(state) === "playing";
-export const selectIsPaused = (state: EditorMachineSnapshot) =>
-  getPlaybackState(state) === "paused" ||
-  (getPlaybackState(state) === "ended" &&
-    state.context.timeline.currentTime < state.context.timeline.duration - 100);
-export const selectHasEnded = (state: EditorMachineSnapshot) =>
-  getPlaybackState(state) === "ended" &&
-  state.context.timeline.currentTime >= state.context.timeline.duration - 100;
-export const selectUsesPlaybackModel = (state: EditorMachineSnapshot) => {
+  state.matches({ playback: "playing" });
+export const selectIsPaused = (state: EditorMachineSnapshot) => {
   const playbackState = getPlaybackState(state);
-
   return (
-    !state.context.hasManualWorkspaceOverride &&
-    (playbackState === "playing" || playbackState === "paused" || playbackState === "ended")
+    playbackState === "paused" ||
+    (playbackState === "ended" &&
+      state.context.timeline.currentTime <
+        state.context.timeline.duration - PLAYBACK_END_EPSILON_MS)
   );
 };
+export const selectHasEnded = (state: EditorMachineSnapshot) =>
+  state.matches({ playback: "ended" }) &&
+  state.context.timeline.currentTime >= state.context.timeline.duration - PLAYBACK_END_EPSILON_MS;
+export const selectUsesPlaybackModel = (state: EditorMachineSnapshot) =>
+  !state.context.hasManualWorkspaceOverride && getPlaybackState(state) !== null;
 
 // Timeline selectors (high-frequency updates)
 export const selectPlaybackSpeed = (state: EditorMachineSnapshot) => state.context.timeline.speed;
@@ -115,39 +107,12 @@ export const selectTimelineActor = (state: EditorMachineSnapshot) =>
 export const selectLiveCursor = (state: EditorMachineSnapshot) =>
   state.context.currentFrame?.state?.mouseCursor || null;
 
-export const useNextEditorActorBindings = (
-  actorRef: EditorActorRef,
-  config: UseNextEditorConfig,
-): UseNextEditorReturn => {
-  // Subscribe to specific state slices using selectors
-  // Recording state
-  const isRecording = useSelector(actorRef, selectIsRecording);
-  const isRecordingAudio = useSelector(actorRef, selectIsRecordingAudio);
-  const recordingStartTime = useSelector(actorRef, selectRecordingStartTime);
-
-  // Playback state
-  const isPlaying = useSelector(actorRef, selectIsPlaying);
-  const isPaused = useSelector(actorRef, selectIsPaused);
-  const hasEnded = useSelector(actorRef, selectHasEnded);
-
-  // Timeline state (high-frequency)
-  const playbackSpeed = useSelector(actorRef, selectPlaybackSpeed);
-  const volume = useSelector(actorRef, selectVolume);
-  const duration = useSelector(actorRef, selectDuration);
-
-  // Data - using shallowEqual for object selectors per XState docs
-  const currentRecording = useSelector(actorRef, selectRecording, shallowEqual);
-  const editor = useSelector(actorRef, selectEditor);
-  const timelineActor = useSelector(actorRef, selectTimelineActor);
-
-  // Handle editor ref synchronization - run on every render to catch ref changes
-  useEffect(() => {
-    const currentEditor = config.editorRef.current;
-    if (currentEditor && currentEditor !== editor) {
-      actorRef.send({ type: "SET_EDITOR_REF", editor: currentEditor });
-    }
-  }); // No dependencies - run on every render to catch ref changes
-
+/**
+ * Action senders that close over the stable actorRef — subscription-free by design.
+ * Consumers that only dispatch events (e.g. the provider's actions context) can use
+ * this without re-rendering on machine state transitions.
+ */
+export const useNextEditorActorActions = (actorRef: EditorActorRef) => {
   // Recording Controls
   const startRecording = (options?: { audioBlob?: Blob; enableCamera?: boolean }) => {
     actorRef.send({
@@ -215,6 +180,82 @@ export const useNextEditorActorBindings = (
     actorRef.send({ type: "CAPTURE_FRAME" });
   };
 
+  const handleSlideEvent = (event: SlideEvent) => {
+    actorRef.send({ type: "SLIDE_EVENT", event });
+  };
+
+  const handlePreviewEvent = (event: PreviewEvent) => {
+    actorRef.send({ type: "PREVIEW_EVENT", event });
+  };
+
+  const handlePreviewInitialDocument = (document: PreviewInitialDocument) => {
+    actorRef.send({ type: "PREVIEW_INITIAL_DOCUMENT", document });
+  };
+
+  const handlePreviewPatchBatch = (batch: PreviewDomPatchBatch) => {
+    actorRef.send({ type: "PREVIEW_PATCH_BATCH", batch });
+  };
+
+  const handleWorkspaceEvent = (event?: {
+    sidebarWidthDelta?: number;
+    previewDockWidthDelta?: number;
+  }) => {
+    actorRef.send({
+      type: "WORKSPACE_EVENT",
+      sidebarWidthDelta: event?.sidebarWidthDelta,
+      previewDockWidthDelta: event?.previewDockWidthDelta,
+    });
+  };
+
+  const handleRuntimeEvent = () => {
+    actorRef.send({ type: "RUNTIME_EVENT" });
+  };
+
+  return {
+    startRecording,
+    stopRecording,
+    play,
+    pause,
+    stop,
+    seekTo,
+    setPlaybackSpeed,
+    setVolume,
+    loadRecording,
+    extendRecording,
+    addCaptionTrack,
+    removeCaptionTrack,
+    clearRecording,
+    syncEditorRef,
+    handleEditorChange,
+    handleSlideEvent,
+    handlePreviewEvent,
+    handlePreviewInitialDocument,
+    handlePreviewPatchBatch,
+    handleWorkspaceEvent,
+    handleRuntimeEvent,
+  };
+};
+
+/**
+ * Side-effect-only companion to useNextEditorActorActions: keeps the machine's
+ * editor ref in sync and pauses playback on user interaction. Subscribes only to
+ * the slices those effects need (isPlaying, editor); returns nothing.
+ */
+export const useNextEditorInteractionEffects = (
+  actorRef: EditorActorRef,
+  config: UseNextEditorConfig,
+): void => {
+  const isPlaying = useSelector(actorRef, selectIsPlaying);
+  const editor = useSelector(actorRef, selectEditor);
+
+  // Handle editor ref synchronization - run on every render to catch ref changes
+  useEffect(() => {
+    const currentEditor = config.editorRef.current;
+    if (currentEditor && currentEditor !== editor) {
+      actorRef.send({ type: "SET_EDITOR_REF", editor: currentEditor });
+    }
+  }); // No dependencies - run on every render to catch ref changes
+
   // Handle playback interaction detection via direct input listeners
   // This is more stable than onChange for preventing machine/user feedback loops
   useEffect(() => {
@@ -261,37 +302,35 @@ export const useNextEditorActorBindings = (
       };
     }
   }, [isPlaying, actorRef]);
+};
 
-  const handleSlideEvent = (event: SlideEvent) => {
-    actorRef.send({ type: "SLIDE_EVENT", event });
-  };
+export const useNextEditorActorBindings = (
+  actorRef: EditorActorRef,
+  config: UseNextEditorConfig,
+): UseNextEditorReturn => {
+  const actions = useNextEditorActorActions(actorRef);
+  useNextEditorInteractionEffects(actorRef, config);
 
-  const handlePreviewEvent = (event: PreviewEvent) => {
-    actorRef.send({ type: "PREVIEW_EVENT", event });
-  };
+  // Subscribe to specific state slices using selectors
+  // Recording state
+  const isRecording = useSelector(actorRef, selectIsRecording);
+  const isRecordingAudio = useSelector(actorRef, selectIsRecordingAudio);
+  const recordingStartTime = useSelector(actorRef, selectRecordingStartTime);
 
-  const handlePreviewInitialDocument = (document: PreviewInitialDocument) => {
-    actorRef.send({ type: "PREVIEW_INITIAL_DOCUMENT", document });
-  };
+  // Playback state
+  const isPlaying = useSelector(actorRef, selectIsPlaying);
+  const isPaused = useSelector(actorRef, selectIsPaused);
+  const hasEnded = useSelector(actorRef, selectHasEnded);
 
-  const handlePreviewPatchBatch = (batch: PreviewDomPatchBatch) => {
-    actorRef.send({ type: "PREVIEW_PATCH_BATCH", batch });
-  };
+  // Timeline state (high-frequency)
+  const playbackSpeed = useSelector(actorRef, selectPlaybackSpeed);
+  const volume = useSelector(actorRef, selectVolume);
+  const duration = useSelector(actorRef, selectDuration);
 
-  const handleWorkspaceEvent = (event?: {
-    sidebarWidthDelta?: number;
-    previewDockWidthDelta?: number;
-  }) => {
-    actorRef.send({
-      type: "WORKSPACE_EVENT",
-      sidebarWidthDelta: event?.sidebarWidthDelta,
-      previewDockWidthDelta: event?.previewDockWidthDelta,
-    });
-  };
-
-  const handleRuntimeEvent = () => {
-    actorRef.send({ type: "RUNTIME_EVENT" });
-  };
+  // Data - using shallowEqual for object selectors per XState docs
+  const currentRecording = useSelector(actorRef, selectRecording, shallowEqual);
+  const editor = useSelector(actorRef, selectEditor);
+  const timelineActor = useSelector(actorRef, selectTimelineActor);
 
   // Helper functions
   const getEditorState = (): EditorState | null => {
@@ -337,30 +376,8 @@ export const useNextEditorActorBindings = (
     currentRecording,
     actualDuration: duration / 1000, // seconds for actualDuration
 
-    // Controls
-    startRecording,
-    stopRecording,
-    play,
-    pause,
-    stop,
-    seekTo,
-    setPlaybackSpeed,
-    setVolume,
-    loadRecording,
-    extendRecording,
-    addCaptionTrack,
-    removeCaptionTrack,
-    clearRecording,
-
-    // Integration
-    syncEditorRef,
-    handleEditorChange,
-    handleSlideEvent,
-    handlePreviewEvent,
-    handlePreviewInitialDocument,
-    handlePreviewPatchBatch,
-    handleWorkspaceEvent,
-    handleRuntimeEvent,
+    // Controls + Integration (subscription-free senders)
+    ...actions,
 
     // Helpers
     getEditorState,

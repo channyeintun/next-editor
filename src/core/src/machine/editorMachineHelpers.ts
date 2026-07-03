@@ -493,6 +493,13 @@ export const RESET_AND_REATTACH_REPLAY_STATE_ACTIONS = [
 
 export const MOUSE_FRAME_INTERVAL_MS = 50;
 
+/**
+ * Tolerance for treating the playhead as "at the end" — timeline ticks and audio
+ * durations can disagree by a few milliseconds, so end-of-playback checks compare
+ * against `duration - PLAYBACK_END_EPSILON_MS` rather than the exact duration.
+ */
+export const PLAYBACK_END_EPSILON_MS = 100;
+
 const didCursorPositionChange = (
   previous: MouseCursorPosition | undefined,
   next: MouseCursorPosition | undefined,
@@ -665,6 +672,7 @@ export const syncPlaybackAudio = (
   }
 
   if (spawning) {
+    // Spawn, not invoke: lazily/conditionally created (audio may only arrive mid-stream).
     enqueue.spawnChild("audioPlayback", {
       id: "audioPlayer",
       input: {
