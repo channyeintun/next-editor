@@ -3,7 +3,10 @@
 // per segment kind, so storage regressions are visible without a test suite.
 //
 // Usage: node scripts/measure-recording-size.mjs [path-to.ne ...]
-//        (defaults to public/introduction.ne)
+//        (defaults to public/lessons/issue-repro/recording-1783046610421.ne)
+//
+// Format: files may be raw binary SCR3 (first 4 bytes: 0x53 0x43 0x52 0x33 / "SCR3")
+// or legacy base64-encoded text. The script auto-detects and decodes accordingly.
 //
 // Format source of truth: src/storage/streamingRecordingCodec/format.ts
 
@@ -102,11 +105,18 @@ function measure(bytes) {
 
 async function main() {
   const paths = process.argv.slice(2);
-  if (paths.length === 0) paths.push("public/introduction.ne");
+  if (paths.length === 0) paths.push("public/lessons/issue-repro/recording-1783046610421.ne");
 
   for (const path of paths) {
-    const text = await readFile(path, "utf8");
-    const bytes = decodeBase64(text);
+    const buffer = await readFile(path);
+    let bytes = new Uint8Array(buffer);
+
+    // Check if it's raw binary SCR3 (first 4 bytes: 0x53 0x43 0x52 0x33)
+    if (!(bytes[0] === 0x53 && bytes[1] === 0x43 && bytes[2] === 0x52 && bytes[3] === 0x33)) {
+      // Fall back to legacy base64 decoding
+      bytes = decodeBase64(buffer.toString("utf8"));
+    }
+
     const { total, headerBytes, footerBytes, perKind } = measure(bytes);
     const audio = perKind.find((k) => k.name === "audioChunk")?.payload ?? 0;
     const segmentTotal = perKind.reduce((sum, k) => sum + k.payload, 0);
@@ -114,7 +124,7 @@ async function main() {
       perKind.reduce((sum, k) => sum + k.count, 0) * SEGMENT_HEADER_SIZE;
 
     console.log(`\n${path}`);
-    console.log(`  base64 file:        ${formatBytes(text.trim().length)}`);
+    console.log(`  file size:          ${formatBytes(buffer.length)}`);
     console.log(`  binary stream:      ${formatBytes(total)}`);
     console.log(`  header:             ${formatBytes(headerBytes)}`);
     console.log(`  footer index:       ${formatBytes(footerBytes)}`);
