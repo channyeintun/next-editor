@@ -20,6 +20,13 @@ the older `introduction` lesson predates recent recorder changes and was exclude
   `{ dedupTemplate, dedupIds }` marker for repeated rrweb added-node payloads
   (`previewPatchDedup.ts`, wired like `workspaceEventDedup` into both encoders and both decoders).
   Re-encoding the mutation-heavy feed lesson: 813 KB → 671 KB (−17.5%) with a byte-identical decode.
+- Follow-up found while validating a fresh recording (2026-07-03): **frame `previewState.content`
+  duplication** — the frame delta format re-emits the whole `previewState` (full static-preview
+  HTML included) whenever any part of it changes, so preview scrolling re-embedded an identical
+  ~60 KB content 337 times in a 30 s lesson (3.8 MB of a 3.98 MB file; each copy exceeds deflate's
+  32 KB window). **done** — commit `024ee07`: per-segment `contentUnchanged` marker
+  (`framePreviewContentDedup.ts`; carry never crosses a segment boundary, keeping keyframe-bounded
+  frame segments range-loadable). Re-encoding that lesson: 3.98 MB → 624 KB (−84%), byte-identical.
 
 ## What the issue-repro recording shows
 
