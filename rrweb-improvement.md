@@ -50,8 +50,9 @@ the current format, and it also has a fidelity edge: replay may briefly show tha
 t≈2255–2668.
 
 Also measured: of the 58 rrweb events in the patch stream, 12 are `mousemove` batches and 22
-`mouseInteraction` — pointer-position data that replay never displays (the fake cursor is hidden in
-`rrwebPreviewReplayer.makeResponsive()`; the app draws its own cursor overlay).
+`mouseInteraction`. The fake replay cursor itself is hidden (`rrwebPreviewReplayer.makeResponsive()`;
+the app draws its own cursor overlay), but the positions still drive rrweb's in-page hover/selection
+styling during replay — so they are throttled, not dropped (see finding 2).
 
 ## Findings, priority order
 
@@ -60,8 +61,8 @@ Also measured: of the 58 rrweb events in the patch stream, 12 are `mousemove` ba
    record nothing — the live iframe posts its own initial document when it loads (proven by the
    t=2668 path). Fixes both the 24% waste in this file and the duplicate-snapshot cost when the
    iframe _is_ responsive (today: cached doc + fresh snapshot are both stored).
-2. **[Medium] Add a `sampling` config to `rrweb.record()`** — drop mousemove (dead weight: pointer
-   hidden in replay), throttle scroll/media. Bounds pointer-heavy sessions cheaply.
+2. **[Medium] Add a `sampling` config to `rrweb.record()`** — throttle mousemove/scroll/media.
+   Bounds pointer-heavy sessions cheaply while keeping hover/selection replay styling.
 3. **[Hygiene] `maskAllInputs` comment contradicts the code** — comment says "do not capture input
    values that may be secret" but `maskAllInputs: false` captures them (deliberately, for demo
    fidelity). Fix the comment.
@@ -132,28 +133,21 @@ _Sized for the main agent (multi-file, recording-pipeline semantics), not a smal
 
 ## Finding 2 — `sampling` config for `rrweb.record()` (small-model task)
 
-In `startRecording()` in `rrwebPreview.ts`, `window.rrweb.record({...})` has no `sampling` option:
-mousemove position batches, every scroll at rrweb's default 100 ms throttle, media at 500 ms. Replay
-hides rrweb's fake pointer and the host draws its own cursor overlay, so positions are never shown.
+In `startRecording()` in `rrwebPreview.ts`, `window.rrweb.record({...})` had no `sampling` option:
+mousemove batched at rrweb's default 50 ms threshold, every scroll at the default 100 ms throttle,
+media at 500 ms.
 
-Add to the record options (ES5 style, matching surrounding comments):
+Final config (after user feedback):
 
 ```js
-sampling: {
-  // Pointer positions are dead weight: replay hides rrweb's fake cursor
-  // (rrwebPreviewReplayer.makeResponsive) and the host draws its own overlay.
-  mousemove: false,
-  // Scroll offsets only need to look right, not be sample-perfect.
-  scroll: 150,
-  media: 800,
-},
+sampling: { mousemove: 100, scroll: 150, media: 800 },
 ```
 
-Keep mouse _interaction_ recording (clicks/focus — 22 events here, tiny, and clicks matter). Do NOT
-touch `sampling.input` (typing fidelity is wanted). Update any `rrwebPreview.test.ts` assertions on
-the generated script; check `rrwebScrollReplay.test.ts` / `rrwebSeekDriving.test.ts` /
-`rrwebRoundTrip.test.ts` still pass (if a test asserts an intermediate scroll position faster than
-150 ms sampling, relax it to assert the final position).
+`mousemove: false` was tried first and **rejected**: although rrweb's fake replay cursor is hidden
+(the host draws its own cursor overlay), the replayer derives in-page **hover and similar styling**
+from pointer positions, and that fidelity matters for replay. A mild 100 ms throttle keeps the
+styling while trimming data. Mouse _interaction_ recording (clicks/focus) untouched;
+`sampling.input` untouched (typing fidelity is wanted).
 
 ---
 
