@@ -105,7 +105,7 @@ describe("frame previewState content dedup", () => {
 
     expect(decoded.frames).toEqual(expected);
     for (const frame of decoded.frames) {
-      expect(JSON.stringify(frame)).not.toContain("contentUnchanged");
+      expect(JSON.stringify(frame)).not.toContain("contentDeduped");
     }
   });
 

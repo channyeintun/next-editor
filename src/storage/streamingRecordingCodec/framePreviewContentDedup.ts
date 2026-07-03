@@ -13,9 +13,16 @@ import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
 //
 // On encode, a frame whose previewState.content is byte-identical to the last
 // content written EARLIER IN THE SAME SEGMENT is stored with `content: ""` and
-// a `contentUnchanged: true` marker; on decode the marker is resolved by
+// a `contentDeduped: true` marker; on decode the marker is resolved by
 // carrying the content forward (sharing the string reference, so rehydration
-// is memory-cheap). Unlike the workspace/previewPatch dedups, the carry NEVER
+// is memory-cheap). Distinct from the DELTA-level `contentUnchanged` marker
+// (deltaTypes.ts PreviewStateContentUnchanged): that one is part of the frame
+// format itself, lives in memory, and is resolved by applyFrameDelta against
+// the base-frame chain — this codec pass must never touch it, which falls out
+// of the rules below: delta-marker previewStates carry no content string, so
+// the stripper skips them, and only `contentDeduped` triggers the hydrator.
+// This pass still pays off for keyframes and for recordings captured before
+// the delta-level fix. Unlike the workspace/previewPatch dedups, the carry NEVER
 // crosses a segment boundary: frame segments are keyframe-bounded and
 // advertised as range-loadable, so every segment must stay self-contained —
 // the first content-bearing frame of each segment always carries its full
@@ -32,7 +39,7 @@ import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
 /** Stream-only shape: a `PreviewState` whose content was deduped away. */
 interface DedupedPreviewState extends Record<string, unknown> {
   content?: unknown;
-  contentUnchanged?: boolean;
+  contentDeduped?: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -88,7 +95,7 @@ export function stripFramePreviewContent(frames: ReadonlyArray<unknown>): unknow
       return previewState;
     }
     if (content === lastContent) {
-      return { ...previewState, content: "", contentUnchanged: true };
+      return { ...previewState, content: "", contentDeduped: true };
     }
     lastContent = content;
     return previewState;
@@ -96,7 +103,7 @@ export function stripFramePreviewContent(frames: ReadonlyArray<unknown>): unknow
 }
 
 /**
- * Resolves `contentUnchanged` markers within ONE decoded frame segment by
+ * Resolves `contentDeduped` markers within ONE decoded frame segment by
  * carrying contents forward, restoring exactly what was stripped. Runs before
  * frame normalization so the marker never reaches in-memory recordings.
  */
@@ -104,8 +111,8 @@ export function hydrateFramePreviewContent(frames: DeltaFrame[]): DeltaFrame[] {
   let lastContent: string | null = null;
 
   return mapFramePreviewStates(frames, (previewState) => {
-    if (previewState.contentUnchanged) {
-      const { contentUnchanged: _contentUnchanged, ...rest } = previewState;
+    if (previewState.contentDeduped) {
+      const { contentDeduped: _contentDeduped, ...rest } = previewState;
       return { ...rest, content: lastContent ?? "" };
     }
     const content = previewState.content;

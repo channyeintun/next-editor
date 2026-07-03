@@ -275,7 +275,18 @@ export function createFrameDelta(prev: EditorFrame, next: EditorFrame): FrameDel
   }
 
   if (previewStateChanged(prev.state.previewState, next.state.previewState)) {
-    delta.previewState = next.state.previewState;
+    const nextPreview = next.state.previewState;
+    // Keep the delta incremental: previewState.content is the full
+    // static-preview HTML and scroll ticks change previewState at
+    // animation-frame rate. When the content itself is unchanged, emit
+    // everything but the content; applyFrameDelta carries it forward from the
+    // base frame.
+    if (nextPreview && prev.state.previewState?.content === nextPreview.content) {
+      const { content: _content, ...rest } = nextPreview;
+      delta.previewState = { ...rest, contentUnchanged: true };
+    } else {
+      delta.previewState = nextPreview;
+    }
   }
 
   if (next.state.viewState && !areStructuredDataEqual(next.state.viewState, prev.state.viewState)) {
@@ -300,6 +311,25 @@ export function hasChanges(delta: FrameDelta): boolean {
     delta.currentSlideIndex !== undefined ||
     delta.previewState !== undefined
   );
+}
+
+/**
+ * Materializes a delta's previewState against the base frame's: the
+ * content-unchanged form (see {@link PreviewStateContentUnchanged}) gets the
+ * base content back; a full previewState (or an absent one) passes through.
+ */
+function resolvePreviewStateDelta(
+  deltaPreviewState: FrameDelta["previewState"],
+  basePreviewState: PreviewState | undefined,
+): PreviewState | undefined {
+  if (deltaPreviewState === undefined) {
+    return basePreviewState;
+  }
+  if ("contentUnchanged" in deltaPreviewState && deltaPreviewState.contentUnchanged) {
+    const { contentUnchanged: _contentUnchanged, ...rest } = deltaPreviewState;
+    return { ...rest, content: basePreviewState?.content };
+  }
+  return deltaPreviewState;
 }
 
 /**
@@ -354,8 +384,7 @@ export function applyFrameDelta(
         delta.currentSlideIndex !== undefined
           ? delta.currentSlideIndex
           : normalizedBase.state.currentSlideIndex,
-      previewState:
-        delta.previewState !== undefined ? delta.previewState : normalizedBase.state.previewState,
+      previewState: resolvePreviewStateDelta(delta.previewState, normalizedBase.state.previewState),
     },
   });
 }

@@ -48,6 +48,18 @@ export interface SelectionDelta {
 }
 
 /**
+ * Delta form of previewState, emitted when previewState changed but its
+ * `content` — the full static-preview HTML, tens of KB — did not. Scroll ticks
+ * mutate previewState at animation-frame rate, so copying it whole would embed
+ * the unchanged content per tick; this form carries everything else and
+ * `applyFrameDelta` restores content from the base frame, keeping delta frames
+ * genuinely incremental.
+ */
+export interface PreviewStateContentUnchanged extends Omit<PreviewState, "content"> {
+  contentUnchanged: true;
+}
+
+/**
  * A frame delta - stores only changes from previous frame
  * Used for frames between keyframes to reduce storage
  */
@@ -69,8 +81,11 @@ export interface FrameDelta {
   slideState?: SlidePreviewState;
   /** Current slide index (only included if changed) */
   currentSlideIndex?: number;
-  /** Preview state (only included if changed) */
-  previewState?: PreviewState;
+  /**
+   * Preview state (only included if changed; the content-unchanged form omits
+   * the embedded preview HTML and is resolved against the base frame on apply)
+   */
+  previewState?: PreviewState | PreviewStateContentUnchanged;
 }
 
 /**
