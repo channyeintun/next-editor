@@ -33,6 +33,12 @@ the older `introduction` lesson predates recent recorder changes and was exclude
   restores content from the base-frame chain — so new captures never embed duplicated content in the
   first place. The codec-level marker was renamed `contentDeduped` so the two layers cannot consume
   each other's markers; the codec pass remains for keyframes and pre-fix recordings.
+- Second half of the root cause — commit `6b8900a`: content CHANGES also stayed full copies (live
+  editing re-renders the preview per keystroke; undo/redo re-visits earlier versions — a verified
+  40 s session still stored 60 full ~58 KB contents, 27 distinct). previewState content edits now
+  ride the same dmp content-delta path as editor text (`contentDelta` form in the delta, rebuilt
+  along the base chain on apply, full-copy fallback if the codec is unavailable). Expected frames
+  cost for such a session drops to ~11 keyframe copies + keystroke-sized patches.
 
 ## What the issue-repro recording shows
 
