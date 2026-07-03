@@ -124,13 +124,15 @@ describe("previewState delta stays incremental", () => {
     expect(reconstructed.state.previewState).toEqual(preview(PREVIEW_HTML, 80));
   });
 
-  it("emits full previewState when the content actually changed", () => {
+  it("reconstructs a content change exactly (patched or full form)", () => {
     const prev = withPreview(0, preview(PREVIEW_HTML, 0));
     const next = withPreview(16, preview("<p>new</p>", 0));
 
+    // Depending on whether the dmp codec is installed this delta is a patch or
+    // a full-copy fallback; the applied result must be identical either way.
     const delta = createFrameDelta(prev, next);
 
-    expect(delta.previewState).toEqual(preview("<p>new</p>", 0));
+    expect(delta.previewState).toBeDefined();
     const applied = applyFrameDelta(prev, delta);
     expect(applied.state.previewState).toEqual(preview("<p>new</p>", 0));
   });
@@ -143,5 +145,43 @@ describe("previewState delta stays incremental", () => {
 
     expect(delta.previewState).toEqual(preview(PREVIEW_HTML, 0));
     expect(applyFrameDelta(prev, delta).state.previewState).toEqual(preview(PREVIEW_HTML, 0));
+  });
+
+  // With the dmp codec installed, preview-content EDITS are stored as patches
+  // against the base chain — like editor content — so live typing (and
+  // undo/redo walking back through earlier versions) never re-embeds the full
+  // preview HTML per change. A measured 40s editing session stored 60 full
+  // ~58KB copies (27 distinct versions) before this.
+  describe.skipIf(!hasArtifact)("content edits become dmp patches", () => {
+    const versions = [
+      PREVIEW_HTML,
+      PREVIEW_HTML.replace("static preview", "static preview edited"),
+      PREVIEW_HTML.replace("static preview", "static preview edited twice"),
+    ];
+
+    it("stores a typing + undo chain without re-embedding full contents", async () => {
+      if (!isDmpCodecLoaded()) {
+        installDmpCodec(await instantiateDmpCodec(readFileSync(wasmPath)));
+      }
+
+      // Type forward through the versions, then undo back down.
+      const contents = [...versions, versions[1], versions[0]];
+      const frames = contents.map((content, index) =>
+        withPreview(index * 16, preview(content, index)),
+      );
+
+      let reconstructed = frames[0];
+      for (let index = 1; index < frames.length; index += 1) {
+        const delta = createFrameDelta(frames[index - 1], frames[index]);
+
+        // The delta must carry a patch, never the full HTML.
+        const encoded = JSON.stringify(delta.previewState);
+        expect(encoded).toContain("contentDelta");
+        expect(encoded.length).toBeLessThan(versions[0].length / 2);
+
+        reconstructed = applyFrameDelta(reconstructed, delta, index);
+        expect(reconstructed.state.previewState).toEqual(preview(contents[index], index));
+      }
+    });
   });
 });

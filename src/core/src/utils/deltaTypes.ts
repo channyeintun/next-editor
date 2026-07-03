@@ -60,6 +60,17 @@ export interface PreviewStateContentUnchanged extends Omit<PreviewState, "conten
 }
 
 /**
+ * Delta form of previewState for frames where the preview content itself
+ * changed: successive static-preview HTML versions differ by keystrokes (live
+ * editing re-renders the preview per edit), so like editor content they are
+ * stored as a dmp patch against the base frame's content rather than another
+ * full copy. `applyFrameDelta` rebuilds the content along the base chain.
+ */
+export interface PreviewStateContentPatched extends Omit<PreviewState, "content"> {
+  contentDelta: ContentDelta;
+}
+
+/**
  * A frame delta - stores only changes from previous frame
  * Used for frames between keyframes to reduce storage
  */
@@ -83,9 +94,10 @@ export interface FrameDelta {
   currentSlideIndex?: number;
   /**
    * Preview state (only included if changed; the content-unchanged form omits
-   * the embedded preview HTML and is resolved against the base frame on apply)
+   * the embedded preview HTML and the content-patched form carries a dmp patch
+   * — both are resolved against the base frame on apply)
    */
-  previewState?: PreviewState | PreviewStateContentUnchanged;
+  previewState?: PreviewState | PreviewStateContentUnchanged | PreviewStateContentPatched;
 }
 
 /**

@@ -276,14 +276,34 @@ export function createFrameDelta(prev: EditorFrame, next: EditorFrame): FrameDel
 
   if (previewStateChanged(prev.state.previewState, next.state.previewState)) {
     const nextPreview = next.state.previewState;
+    const prevContent = prev.state.previewState?.content;
     // Keep the delta incremental: previewState.content is the full
-    // static-preview HTML and scroll ticks change previewState at
-    // animation-frame rate. When the content itself is unchanged, emit
-    // everything but the content; applyFrameDelta carries it forward from the
-    // base frame.
-    if (nextPreview && prev.state.previewState?.content === nextPreview.content) {
+    // static-preview HTML. Scroll ticks change previewState without touching
+    // the content, so emit everything but the content and let applyFrameDelta
+    // carry it forward; live edits change the content by keystrokes, so store
+    // a dmp patch against the base content (exactly like editor content)
+    // instead of another full copy.
+    if (nextPreview && prevContent === nextPreview.content) {
       const { content: _content, ...rest } = nextPreview;
       delta.previewState = { ...rest, contentUnchanged: true };
+    } else if (
+      nextPreview &&
+      typeof prevContent === "string" &&
+      prevContent !== "" &&
+      typeof nextPreview.content === "string" &&
+      nextPreview.content !== ""
+    ) {
+      try {
+        const previewContentDelta = createContentDelta(prevContent, nextPreview.content);
+        const { content: _content, ...rest } = nextPreview;
+        delta.previewState = previewContentDelta
+          ? { ...rest, contentDelta: previewContentDelta }
+          : { ...rest, contentUnchanged: true };
+      } catch {
+        // dmp codec unavailable: fall back to the full copy rather than fail
+        // the capture.
+        delta.previewState = nextPreview;
+      }
     } else {
       delta.previewState = nextPreview;
     }
@@ -316,11 +336,13 @@ export function hasChanges(delta: FrameDelta): boolean {
 /**
  * Materializes a delta's previewState against the base frame's: the
  * content-unchanged form (see {@link PreviewStateContentUnchanged}) gets the
- * base content back; a full previewState (or an absent one) passes through.
+ * base content back, the content-patched form applies its dmp patch to the
+ * base content, and a full previewState (or an absent one) passes through.
  */
 function resolvePreviewStateDelta(
   deltaPreviewState: FrameDelta["previewState"],
   basePreviewState: PreviewState | undefined,
+  frameIndex?: number,
 ): PreviewState | undefined {
   if (deltaPreviewState === undefined) {
     return basePreviewState;
@@ -328,6 +350,13 @@ function resolvePreviewStateDelta(
   if ("contentUnchanged" in deltaPreviewState && deltaPreviewState.contentUnchanged) {
     const { contentUnchanged: _contentUnchanged, ...rest } = deltaPreviewState;
     return { ...rest, content: basePreviewState?.content };
+  }
+  if ("contentDelta" in deltaPreviewState && deltaPreviewState.contentDelta) {
+    const { contentDelta, ...rest } = deltaPreviewState;
+    return {
+      ...rest,
+      content: applyContentDeltaAt(basePreviewState?.content ?? "", contentDelta, frameIndex),
+    };
   }
   return deltaPreviewState;
 }
@@ -384,7 +413,11 @@ export function applyFrameDelta(
         delta.currentSlideIndex !== undefined
           ? delta.currentSlideIndex
           : normalizedBase.state.currentSlideIndex,
-      previewState: resolvePreviewStateDelta(delta.previewState, normalizedBase.state.previewState),
+      previewState: resolvePreviewStateDelta(
+        delta.previewState,
+        normalizedBase.state.previewState,
+        frameIndex,
+      ),
     },
   });
 }
