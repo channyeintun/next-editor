@@ -28,6 +28,7 @@ import {
   groupRecordsByCluster,
   resolveClusterIndexForTime,
 } from "./clusters";
+import { createWorkspaceEventContentStripper } from "./workspaceEventDedup";
 
 // ============================================================================
 // Encoding: turn a `Recording` into SCR3 bytes.
@@ -70,6 +71,10 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   let frameCount = 0;
   let nextFrameClusterIndex = 0;
   let headerMeta: RecordingStreamMeta | null = null;
+  // Workspace events each embed the full project (every file's content, including
+  // base64 assets); repeated contents are stripped to a marker here and carried
+  // forward on decode — see workspaceEventDedup.ts for the symmetry contract.
+  const stripWorkspaceEvents = createWorkspaceEventContentStripper();
 
   const pushChunk = (bytes: Uint8Array): void => {
     chunks.push(bytes);
@@ -153,7 +158,9 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     appendEventSegment(kind, records, options) {
       ensureWritable();
       if (records.length === 0) return;
-      appendSegment(kind, encodeRecords(records), {
+      const streamRecords =
+        kind === SEGMENT_KIND.workspace ? stripWorkspaceEvents(records) : records;
+      appendSegment(kind, encodeRecords(streamRecords), {
         startTimeMs: options?.startTimeMs ?? readRecordTimestamp(records[0]),
         endTimeMs: options?.endTimeMs ?? readLastRecordTimestamp(records),
         firstFrameIndex: options?.firstFrameIndex ?? -1,

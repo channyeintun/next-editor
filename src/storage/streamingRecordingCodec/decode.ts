@@ -32,6 +32,7 @@ import {
   deriveRecordingTracks,
   mergeClusterSummary,
 } from "./clusters";
+import { createWorkspaceEventContentHydrator } from "./workspaceEventDedup";
 
 // ============================================================================
 // Decoding: turn SCR3 bytes into a `Recording`.
@@ -215,6 +216,9 @@ function decodeSegments(bytes: Uint8Array): Recording {
   const clusterMap = new Map<number, RecordingClusterMeta>();
   let hasSegments = false;
   let maxSegmentTimeMs = meta.duration;
+  // Stream order matches encode order, so carrying deduped file contents forward
+  // here mirrors the stripper's state exactly (see workspaceEventDedup.ts).
+  const hydrateWorkspaceEvents = createWorkspaceEventContentHydrator();
 
   for (const segment of walkSegments(bytes, headerEnd, segmentsEnd)) {
     hasSegments = true;
@@ -243,7 +247,9 @@ function decodeSegments(bytes: Uint8Array): Recording {
         previewPatchBatches.push(...decodeRecords<PreviewDomPatchBatch>(segment.payload));
         break;
       case SEGMENT_KIND.workspace:
-        workspaceEvents.push(...decodeRecords<WorkspaceRecordingEvent>(segment.payload));
+        workspaceEvents.push(
+          ...hydrateWorkspaceEvents(decodeRecords<WorkspaceRecordingEvent>(segment.payload)),
+        );
         break;
       case SEGMENT_KIND.runtime:
         runtimeEvents.push(...decodeRecords<RuntimeRecordingEvent>(segment.payload));
@@ -336,6 +342,9 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const cursorEvents: CursorRecordingEvent[] = [];
   const clusterMap = new Map<number, RecordingClusterMeta>();
+  // Segments arrive in stream (= encode) order, so one carry map per reader mirrors
+  // the writer's stripper state (see workspaceEventDedup.ts).
+  const hydrateWorkspaceEvents = createWorkspaceEventContentHydrator();
 
   let segmentCount = 0;
   let maxSegmentTimeMs = 0;
@@ -417,7 +426,9 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       }
       case SEGMENT_KIND.workspace: {
         const records = decodeRecords<WorkspaceRecordingEvent>(payload);
-        commit = () => workspaceEvents.push(...records);
+        // Hydration advances the carry map, so it runs inside `commit` — a decode
+        // throw above must leave the dedup state untouched along with the arrays.
+        commit = () => workspaceEvents.push(...hydrateWorkspaceEvents(records));
         break;
       }
       case SEGMENT_KIND.runtime: {
