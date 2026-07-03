@@ -302,8 +302,14 @@ export function createRrwebPreviewRecorderScript({
             emit: emit,
             recordCanvas: false,
             collectFonts: false,
+            // Pointer positions are dead weight in storage: replay hides rrweb's
+            // fake cursor (rrwebPreviewReplayer.makeResponsive) and the host draws
+            // its own cursor-replay overlay, so recorded coordinates are never
+            // shown. Scroll offsets only need to look right, not be sample-perfect.
+            sampling: { mousemove: false, scroll: 150, media: 800 },
             inlineStylesheet: true,
-            // Replay is visual-only; do not capture input values that may be secret.
+            // Capture real input values: the preview replays the author's own demo
+            // content, and typed text must stay visible in replay.
             maskAllInputs: false,
             // Scripts never execute in replay and our own injected scripts must not
             // bloat the snapshot; comments are noise. Drop both.
