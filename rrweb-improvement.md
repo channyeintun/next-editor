@@ -33,6 +33,19 @@ the older `introduction` lesson predates recent recorder changes and was exclude
   restores content from the base-frame chain — so new captures never embed duplicated content in the
   first place. The codec-level marker was renamed `contentDeduped` so the two layers cannot consume
   each other's markers; the codec pass remains for keyframes and pre-fix recordings.
+- Follow-up found in the issue-repro lesson (2026-07-03): **project-served images broken in
+  replay** — rrweb snapshots stored `<img>` as a URL absolutized against the preview page's
+  WebContainer origin (e.g. `https://…--3000--….webcontainer-api.io/assets/copilot.png`); that
+  origin is ephemeral and per-boot, so replay (pure DOM reconstruction, no container running)
+  fetches from a dead host and the image renders broken. **done** — `inlineImages: true` in the
+  recorder options: rrweb bakes the pixels into the snapshot as an `rr_dataURL` data URL (PNG
+  re-encode via canvas; same-origin loaded images inline synchronously during serialization, so
+  they survive the postMessage transport). Stable external URLs were never affected and still
+  replay from their real host. Caveats: an image still loading when a snapshot/mutation is
+  serialized inlines via a load listener and is lost if the batch flushes first (it keeps its URL —
+  the pre-fix behavior); full snapshots now carry the image payload, so image-heavy pages cost
+  more per checkpoint. Existing recordings (including the issue-repro `.ne`) predate the fix and
+  must be re-recorded to heal.
 - Second half of the root cause — commit `6b8900a`: content CHANGES also stayed full copies (live
   editing re-renders the preview per keystroke; undo/redo re-visits earlier versions — a verified
   40 s session still stored 60 full ~58 KB contents, 27 distinct). previewState content edits now
