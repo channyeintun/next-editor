@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   type RefObject,
   useRef,
   useState,
@@ -140,6 +141,36 @@ function navigateIframeHistory(
       { type: IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE, payload: { action } },
       "*",
     );
+  }
+}
+
+/**
+ * Writes preview HTML into the iframe (patching the live document when asked and
+ * possible, falling back to a srcdoc swap). Returns whether the content landed, so
+ * the caller only records it as applied on success. Module-level (not inside the
+ * hook) because its try/catch would otherwise force a React Compiler bailout of
+ * the whole controller hook.
+ */
+function writeIframeContent(
+  iframe: HTMLIFrameElement,
+  content: string,
+  preserveDocument: boolean,
+): boolean {
+  try {
+    if (
+      preserveDocument &&
+      iframe.getAttribute("src") === null &&
+      patchIframeContentFromHtml(iframe, content)
+    ) {
+      return true;
+    }
+
+    iframe.removeAttribute("src");
+    iframe.srcdoc = content;
+    return true;
+  } catch (error) {
+    console.error("Error updating iframe srcdoc:", error);
+    return false;
   }
 }
 
@@ -316,11 +347,6 @@ export function usePreviewController(): PreviewController {
     },
   });
 
-  isRecordingRef.current = isRecording;
-  handlePreviewEventRef.current = handlePreviewEvent;
-  handlePreviewInitialDocumentRef.current = handlePreviewInitialDocument;
-  handlePreviewPatchBatchRef.current = handlePreviewPatchBatch;
-
   useEffect(() => {
     if (!isRecording) {
       recordedPreviewInitialDocumentIdRef.current = null;
@@ -338,11 +364,26 @@ export function usePreviewController(): PreviewController {
   }, [handlePreviewInitialDocument, isRecording]);
 
   const sizeRef = useRef<PreviewSize>(size);
-  sizeRef.current = size;
   const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
   const panelModeRef = useRef<PreviewPanelMode>(panelMode);
-  panelModeRef.current = panelMode;
+
+  // Mirror the latest render values into refs for consumers that live outside the
+  // render cycle (the persistent message-bridge listeners and the machine's
+  // snapshot getter). Synced in a layout effect — not during render — so the hook
+  // stays memoizable by the React Compiler (render-time ref writes force a whole-
+  // hook bailout, which made every re-render re-fire every effect in here). The
+  // consumers all read `.current` asynchronously (postMessage handlers, machine
+  // events), so commit-time freshness is sufficient.
+  useLayoutEffect(() => {
+    isRecordingRef.current = isRecording;
+    handlePreviewEventRef.current = handlePreviewEvent;
+    handlePreviewInitialDocumentRef.current = handlePreviewInitialDocument;
+    handlePreviewPatchBatchRef.current = handlePreviewPatchBatch;
+    sizeRef.current = size;
+    isOpenRef.current = isOpen;
+    panelModeRef.current = panelMode;
+  });
+
   const previousSaveVersionRef = useRef<number | null>(null);
   const previousIsRecordingRef = useRef(isRecording);
   const lastRefreshKeyRef = useRef<number | undefined>(undefined);
@@ -467,23 +508,8 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
-    const iframe = iframeRef.current;
-
-    try {
-      if (
-        options?.preserveDocument &&
-        iframe.getAttribute("src") === null &&
-        patchIframeContentFromHtml(iframe, content)
-      ) {
-        lastContentRef.current = content;
-        return;
-      }
-
-      iframe.removeAttribute("src");
-      iframe.srcdoc = content;
+    if (writeIframeContent(iframeRef.current, content, options?.preserveDocument === true)) {
       lastContentRef.current = content;
-    } catch (error) {
-      console.error("Error updating iframe srcdoc:", error);
     }
   };
 

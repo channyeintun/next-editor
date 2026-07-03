@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import type { WebContainer } from "@webcontainer/api";
 import {
   WebContainerRuntimeActionsContext,
@@ -171,8 +171,15 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     },
   });
 
-  lessonTypeRef.current = lessonType;
-  runnerConfigRef.current = runnerConfig;
+  // Mirrored via a layout effect (not during render) so the provider stays
+  // memoizable by the React Compiler — render-time ref writes bail out the whole
+  // component, which made the runtime context values new objects on every render.
+  // All readers are async (timeouts, command callbacks), so commit-time freshness
+  // is sufficient.
+  useLayoutEffect(() => {
+    lessonTypeRef.current = lessonType;
+    runnerConfigRef.current = runnerConfig;
+  });
 
   const isSupported = isWebContainerRuntimeSupported();
   const workspaceRoot = getWorkspaceRoot(projectName);
@@ -323,7 +330,11 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     }
   };
   const rerunRunnerRef = useRef(rerunRunner);
-  rerunRunnerRef.current = rerunRunner;
+  // Layout-effect sync (not render-time) for the same compiler-bailout reason as
+  // the lessonType/runnerConfig refs above; only read from async save callbacks.
+  useLayoutEffect(() => {
+    rerunRunnerRef.current = rerunRunner;
+  });
 
   const startTerminalSession = async () => {
     if (!lessonRunsInWebContainer(lessonType)) {
