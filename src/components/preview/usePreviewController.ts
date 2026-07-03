@@ -49,7 +49,7 @@ import {
   type ApiClientHistoryEntry,
   type HttpMethod,
 } from "../../stores/apiClientStore";
-import { hasRrwebPreviewEvents } from "./rrwebPreview";
+import { hasRrwebPreviewEvents, RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
 import { useApiClient } from "./useApiClient";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
 import { usePreviewMessageBridge } from "./usePreviewMessageBridge";
@@ -360,6 +360,20 @@ export function usePreviewController(): PreviewController {
     ) {
       handlePreviewInitialDocument(initialDocument);
       recordedPreviewInitialDocumentIdRef.current = initialDocument.documentId;
+    }
+
+    // The initial document recorded above is the snapshot the page posted at
+    // load time — preview state reached before recording began (mutations,
+    // scroll positions) is not in it. Ask the in-page recorder for a fresh
+    // corrective FullSnapshot so replay rebuilds from the true recording-start
+    // state; it arrives in the patch stream near t=0.
+    try {
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE },
+        "*",
+      );
+    } catch {
+      // Cross-origin/postMessage failures just leave the load-time snapshot.
     }
   }, [handlePreviewInitialDocument, isRecording]);
 

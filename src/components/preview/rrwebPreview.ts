@@ -15,6 +15,12 @@ import type {
 // the message bridge wiring does not have to change, only the payload shape.
 export const RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_INITIAL_DOCUMENT";
 export const RUNTIME_PATCH_BATCH_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_PATCH_BATCH";
+// Host -> preview: request a fresh corrective FullSnapshot. Sent when a recording
+// starts: the initial document the host has cached dates from page load, so any
+// preview state reached before recording began (mutations, scroll positions) is
+// missing from it. The fresh snapshot lands in the patch stream near t=0 and
+// replay rebuilds from the true recording-start state.
+export const RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_TAKE_SNAPSHOT";
 
 // Format version carried on every rrweb-format preview record. Bumped from the
 // legacy custom-op format (1) so records are unambiguously rrweb (2).
@@ -235,6 +241,20 @@ export function createRrwebPreviewRecorderScript({
           scheduleCheckpoint();
         }
       }
+
+      // Host-requested corrective snapshot (sent when a recording starts): the
+      // host's cached initial document is from page load, so re-serialize the
+      // CURRENT document — including element/document scroll offsets — into the
+      // patch stream so replay rebuilds from the true recording-start state.
+      window.addEventListener('message', function(event) {
+        var data = event && event.data;
+        if (!data || data.type !== ${JSON.stringify(RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE)}) return;
+        if (!sentInitial) return;
+        try {
+          lastCheckpointAt = getMessageTime();
+          window.rrweb.takeFullSnapshot();
+        } catch (e) {}
+      });
 
       function startRecording() {
         try {
