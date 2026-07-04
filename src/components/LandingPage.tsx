@@ -75,7 +75,7 @@ const USE_CASES = [
   {
     icon: Presentation,
     title: "Conference Talks & Demos",
-    desc: "Present with synced reveal.js slides, live runtime preview, and narration — all from one .ne file.",
+    desc: "Present with synced slides, live runtime preview, and narration — all from one .ne file.",
     color: "#ffd255",
   },
   {
@@ -412,21 +412,7 @@ const LandingPage = () => {
               },
               {
                 title: "Interactive Slides",
-                desc: (
-                  <>
-                    Powered by{" "}
-                    <a
-                      href="https://revealjs.com/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-pinata-cyan hover:underline decoration-pinata-cyan/30"
-                    >
-                      reveal.js
-                    </a>
-                    . Record your coding journey and instantly play it back as a stunning
-                    presentation.
-                  </>
-                ),
+                desc: "Record your coding journey and instantly play it back as a stunning presentation.",
                 color: "#4DE5D6",
                 textColor: "#020617",
               },

@@ -138,7 +138,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const recordingStorage = useRef(createRecordingStorage());
   const previewHandle = usePreviewAdapterHandle();
-  const { store: slidesStore, navigator: slideNavigator } = useSlidesStore();
+  const { store: slidesStore } = useSlidesStore();
   const { store: runtimePanelStore } = useRuntimePanelStore();
   const {
     getProject,
@@ -188,10 +188,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       );
       return { previewState, currentSlideIndex };
     },
-    applySlideState: (slideState, currentSlideIndex) => {
-      // Capture the pre-update state up front: the navigate decision below
-      // compares the replay target against where the deck currently is.
-      const { slides, previewState: prev } = slidesStore.getSnapshot().context;
+    applySlideState: (slideState) => {
+      const { previewState: prev } = slidesStore.getSnapshot().context;
 
       const nextIsOpen = slideState.isOpen;
       const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
@@ -215,21 +213,6 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
             currentInteraction: nextInteraction,
           },
         });
-      }
-
-      if (slideState.isOpen) {
-        const prevIndexv = prev.indexv ?? 0;
-        const prevSlideIndex = Math.max(
-          0,
-          slides.findIndex((s) => s.id === prev.currentSlideId),
-        );
-
-        if (
-          currentSlideIndex !== prevSlideIndex ||
-          (slideState.indexv !== undefined && nextIndexv !== prevIndexv)
-        ) {
-          slideNavigator.current?.(currentSlideIndex, nextIndexv);
-        }
       }
     },
 

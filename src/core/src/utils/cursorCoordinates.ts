@@ -10,7 +10,7 @@ export const CURSOR_REPLAY_VIEWPORT_TARGET_ID = "viewport";
 export const CURSOR_REPLAY_ROOT_TARGET_ID = "app";
 
 // Targets whose *content* is scaled to fit the box (the preview iframe is
-// scaled-to-fit, reveal.js scales slides, and the raw viewport fallback). For
+// scaled-to-fit, the slide preview scales its content, and the raw viewport fallback). For
 // these, a recorded point must be re-scaled by the box's current size on replay.
 //
 // Every other target (the code editor, file explorer, terminal dock, layout

@@ -113,6 +113,83 @@ body {
   }
 }
 
+/* Presentation typography for markdown slides (marked's output is plain,
+   unclassed HTML — no Tailwind Typography plugin is installed here). */
+.slide-markdown {
+  color: #f1f5f9;
+  font-size: 1.5rem;
+  line-height: 1.5;
+  overflow: auto;
+  text-align: center;
+}
+
+.slide-markdown h1,
+.slide-markdown h2,
+.slide-markdown h3 {
+  font-weight: 700;
+  margin: 0 0 0.6em;
+  line-height: 1.2;
+}
+
+.slide-markdown h1 {
+  font-size: 2.75rem;
+}
+
+.slide-markdown h2 {
+  font-size: 2.1rem;
+}
+
+.slide-markdown h3 {
+  font-size: 1.65rem;
+}
+
+.slide-markdown p {
+  margin: 0 0 0.8em;
+}
+
+.slide-markdown ul,
+.slide-markdown ol {
+  margin: 0 0 0.8em;
+  padding-left: 1.4em;
+  text-align: left;
+}
+
+.slide-markdown li {
+  margin: 0.2em 0;
+}
+
+.slide-markdown a {
+  color: #67e8f9;
+  text-decoration: underline;
+}
+
+.slide-markdown code {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 0.25em;
+  padding: 0.1em 0.35em;
+  font-size: 0.85em;
+}
+
+.slide-markdown pre {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 0.5em;
+  padding: 1em;
+  overflow: auto;
+  text-align: left;
+}
+
+.slide-markdown pre code {
+  background: none;
+  padding: 0;
+}
+
+.slide-markdown blockquote {
+  border-left: 3px solid rgba(255, 255, 255, 0.3);
+  margin: 0 0 0.8em;
+  padding-left: 1em;
+  opacity: 0.85;
+}
+
 .terminal-caret {
   animation: terminal-blink 1s step-end infinite;
   display: inline-block;

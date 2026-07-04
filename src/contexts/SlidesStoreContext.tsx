@@ -2,14 +2,11 @@ import { createContext, useContext, useEffect, useState, type PropsWithChildren 
 import {
   createSlidesStore,
   saveSlidesToStorage,
-  type SlideNavigator,
   type SlidesStoreInstance,
 } from "../stores/slidesStore";
 
 interface SlidesStoreContextValue {
   store: SlidesStoreInstance;
-  /** Imperative reveal.js navigation handle, applied during replay (tier c). */
-  navigator: { current: SlideNavigator | null };
 }
 
 const SlidesStoreContext = createContext<SlidesStoreContextValue | null>(null);
@@ -17,7 +14,6 @@ const SlidesStoreContext = createContext<SlidesStoreContextValue | null>(null);
 export function SlidesStoreProvider({ children }: PropsWithChildren) {
   const [value] = useState<SlidesStoreContextValue>(() => ({
     store: createSlidesStore(),
-    navigator: { current: null },
   }));
 
   // Persist slides to localStorage whenever they change.

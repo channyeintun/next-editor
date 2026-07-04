@@ -1,4 +1,3 @@
-import { useSlidesStore } from "../contexts/SlidesStoreContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import SlidePreview from "./SlidePreview";
@@ -12,7 +11,6 @@ export default function SlidePanel() {
     closePresentation,
     handleSlideEvent: onSlideEvent,
   } = useSlidesContext();
-  const { navigator } = useSlidesStore();
 
   const { pause } = useNextEditorActions();
   const isPresentationVisible = previewState.isOpen && previewState.isMaximized === true;
@@ -30,10 +28,6 @@ export default function SlidePanel() {
         isOpen={isPresentationVisible}
         isMaximized={previewState.isMaximized}
         verticalIndex={previewState.indexv}
-        currentInteraction={previewState.currentInteraction}
-        setSlideNavigator={(nav) => {
-          navigator.current = nav;
-        }}
         positioning="fixed"
       />
     </>

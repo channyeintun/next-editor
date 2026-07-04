@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import { Keyboard } from "lucide-react";
+import { ChevronLeft, ChevronRight, Keyboard } from "lucide-react";
 import type { Slide, SlideEvent } from "../types/slides";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
-import RevealSlideRenderer from "./RevealSlideRenderer";
+import CustomSlideRenderer from "./CustomSlideRenderer";
 
 interface SlidePreviewProps {
   slides: Slide[];
@@ -14,8 +14,6 @@ interface SlidePreviewProps {
   isOpen: boolean;
   isMaximized?: boolean;
   verticalIndex?: number;
-  currentInteraction?: import("../types/slides").IframeInteractionEvent;
-  setSlideNavigator?: (navigator: (indexh: number, indexv: number) => void) => void;
   positioning?: "fixed" | "relative" | "absolute" | "sticky";
 }
 
@@ -28,8 +26,6 @@ function SlidePreview({
   onClose,
   isOpen,
   verticalIndex = 0,
-  currentInteraction,
-  setSlideNavigator,
   positioning = "fixed",
 }: SlidePreviewProps) {
   const { isPlaying } = useNextEditorMetadata();
@@ -61,15 +57,9 @@ function SlidePreview({
     onStopPlayback?.();
   };
 
-  const handleSlideChangeFromReveal = (indexh: number, indexv?: number) => {
-    if (isPlaying) return;
-    onSlideChange(indexh, indexv);
-    if (slides[indexh]) {
-      emitSlideEvent("slide_change", slides[indexh].id, true, indexv);
-    }
-  };
-
-  // Handle messages from the Reveal iframe
+  // Handle messages from html slides that embed an iframe with the shared
+  // interaction-capture script (see src/utils/iframeInteractionCapture.ts) —
+  // unrelated to the slide renderer itself.
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (isPlaying) return;
@@ -100,6 +90,10 @@ function SlidePreview({
   // Number of build steps on a slide (0 for html/markdown slides).
   const stepCountOf = (slide?: Slide): number =>
     slide?.contentType === "google-svg" ? (slide.steps?.length ?? 0) : 0;
+
+  const isFirst = currentSlideIndex === 0 && verticalIndex === 0;
+  const isLast =
+    currentSlideIndex === slides.length - 1 && verticalIndex >= stepCountOf(currentSlide);
 
   const goToNextSlide = () => {
     if (isPlaying) return;
@@ -169,10 +163,12 @@ function SlidePreview({
     return null;
   }
 
+  const isNavigationEnabled = !isPlaying;
+
   return (
     <>
       <div
-        className="fixed inset-0 z-90 bg-black/80 backdrop-blur-md opacity-0 animate-[fade-in_0.2s_ease-out_forwards] motion-reduce:animate-none motion-reduce:opacity-100"
+        className="fixed inset-0 z-90 backdrop-blur-md opacity-0 animate-[fade-in_0.2s_ease-out_forwards] motion-reduce:animate-none motion-reduce:opacity-100"
         onClick={handleClose}
       />
 
@@ -189,15 +185,39 @@ function SlidePreview({
           data-cursor-replay-target="slide-content"
           onClick={(e) => e.stopPropagation()}
         >
-          <RevealSlideRenderer
+          <CustomSlideRenderer
             slides={slides}
             currentSlideIndex={currentSlideIndex}
             currentVerticalIndex={verticalIndex}
-            currentInteraction={currentInteraction}
-            onSlideChange={handleSlideChangeFromReveal}
-            isNavigationEnabled={!isPlaying}
-            setSlideNavigator={setSlideNavigator}
           />
+
+          {isNavigationEnabled && (slides.length > 1 || stepCountOf(currentSlide) > 0) && (
+            <>
+              <button
+                type="button"
+                onClick={goToPrevSlide}
+                disabled={isFirst}
+                aria-label="Previous slide"
+                className="absolute left-4 top-1/2 -translate-y-1/2 flex size-10 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronLeft className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={goToNextSlide}
+                disabled={isLast}
+                aria-label="Next slide"
+                className="absolute right-4 top-1/2 -translate-y-1/2 flex size-10 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronRight className="size-5" />
+              </button>
+            </>
+          )}
+
+          {/* Slide counter */}
+          <div className="absolute bottom-4 right-4 rounded-full bg-black/40 px-3 py-1 text-xs font-medium text-white/80">
+            {currentSlideIndex + 1} / {slides.length}
+          </div>
 
           {/* Keyboard navigation hint */}
           {recordMode && (

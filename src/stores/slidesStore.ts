@@ -83,8 +83,6 @@ export const saveSlidesToStorage = (slides: Slide[]): void => {
   }
 };
 
-export type SlideNavigator = (indexh: number, indexv: number) => void;
-
 export interface SlidesContext {
   slides: Slide[];
   previewState: SlidePreviewState;

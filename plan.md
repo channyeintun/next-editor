@@ -7,11 +7,18 @@ extract one inline SVG per slide plus typed build-step animation data, and rende
 those slides **inside the existing Reveal.js shell** as a new slide content type.
 No Google auth, no server changes.
 
+> **Superseded 2026-07-04 (see Phase 6):** decision #1 below ("Reveal.js stays")
+> was corrected — the actual ask was to replace Reveal.js entirely, not just
+> add Google slides alongside it. Phases 1–5 (the parser, slide model, and
+> google-svg rendering/animator) are unaffected; Phase 6 replaces the Reveal.js
+> shell itself with a custom renderer for every slide type.
+
 ## Architecture decisions (binding for all phases)
 
-1. **Reveal.js stays.** A Google slide is a new `contentType: "google-svg"` slide
-   rendered as inline SVG inside a Reveal slide. Existing html/markdown slides are
-   untouched.
+1. ~~**Reveal.js stays.**~~ **Superseded — see Phase 6.** A Google slide is a
+   new `contentType: "google-svg"` slide, originally rendered as inline SVG
+   inside a Reveal slide; Existing html/markdown slides were originally left
+   untouched on Reveal.js too.
 2. **SVG lives in `Slide.content`** (like html slides). This keeps recordings
    (`meta.slides` in the recording codec) self-contained with zero codec changes.
    localStorage persistence gets fflate compression to handle the size (§Phase 2).
@@ -379,3 +386,78 @@ repo already has a `*.test.tsx` pattern; otherwise typecheck + manual QA.
 - Percent translations in step animations assume the element's own box as the
   reference — matches the reference implementation; verify visually with an
   animated deck.
+
+---
+
+## Phase 6 — Remove Reveal.js entirely
+
+**Why:** the original ask was to _replace_ Reveal.js, not run Google slides
+alongside it. `Reveal.js` was also found to never set an explicit `height` on
+a slide's `<section>` (only `width: 100%`); this is _why_ google-svg slides
+initially rendered nothing when wrapped in a `position: absolute; inset: 0`
+div (it took the SVG out of flow, so the section collapsed to zero height —
+fixed for the layered approach, but moot once Reveal.js is gone).
+
+**Scope:** every slide type (`html`, `markdown`, `google-svg`) moves to one
+custom renderer with no Reveal.js dependency. `reveal.js` and `@revealjs/react`
+are removed from package.json; `marked` (already present transitively via
+`@revealjs/react`, v14) is added as a direct dependency for markdown-to-HTML.
+
+**Files removed:** `src/components/RevealSlideRenderer.tsx`.
+
+**Files added:**
+
+- `src/components/CustomSlideRenderer.tsx` — renders exactly the current slide
+  (`slides[currentSlideIndex]`), filling its container, no transition/animation
+  on slide change (removed per user feedback — an earlier direction-aware
+  fade+translate mount transition made the rounded modal corners look jagged
+  during the animation, a known browser artifact from promoting an animated
+  descendant to its own compositing layer; simplest fix was to drop the
+  transition entirely rather than compensate for it). Per contentType:
+  `html` → `RawHtmlSlide` (moved in, unchanged: innerHTML + script re-exec),
+  `markdown` → new `MarkdownSlide` (via `marked`), `google-svg` → the existing
+  `GoogleSvgSlide` (`stepsRevealed = currentVerticalIndex`). No `key` on the
+  slide wrapper, so a build-step reveal on a google-svg slide updates in place
+  without remounting the animator.
+
+**Files changed:**
+
+- `src/components/SlidePreview.tsx` — now owns all navigation UI: on-screen
+  prev/next controls and a slide counter/progress indicator, wired to the
+  existing step-aware `goToNextSlide`/`goToPrevSlide` (unifying click and
+  keyboard behavior — previously Reveal's own on-screen controls bypassed
+  step-awareness entirely). Drops `setSlideNavigator` and the
+  `handleSlideChangeFromReveal` bridge (no longer meaningful once there's no
+  separate engine-internal index to reconcile). The `IFRAME_INTERACTION`
+  message listener and `currentInteraction` state are untouched — unrelated to
+  Reveal.js (generic iframe-interaction capture used elsewhere too).
+- `src/contexts/SlidesStoreContext.tsx`, `src/contexts/NextEditorProvider.tsx`,
+  `src/components/SlidePanel.tsx` — remove the imperative `navigator`
+  (tier c) escape hatch entirely. It existed only to force Reveal's own
+  internal slide index to stay in sync during replay; `applySlideState`
+  already writes through `slidesStore.trigger.setPreviewState(...)`
+  (verified), which alone is sufficient once the renderer is 100% prop-driven
+  with no separate internal state to desync.
+- `src/components/SlidesManager.tsx` — subtitle no longer says "Reveal.js
+  powered".
+- `index.css` — new slide-transition keyframes, following the existing
+  `fade-in`/`fade-up` pattern (no animation library added, consistent with
+  this repo already having removed `motion` from `LandingPage.tsx` in favor of
+  a hand-rolled `useInView` hook).
+
+**Verified before removal, not assumed:**
+
+- No test file imported `RevealSlideRenderer` directly (grepped).
+- `currentInteraction` forwarded to the old renderer only fed a documented
+  no-op effect ("no visual rings or highlights are shown on the slides
+  themselves") — dropping it from the new renderer's props is not a
+  regression; the state itself keeps flowing through the store/replay engine
+  exactly as before, just unconsumed by the renderer (as it always was).
+- `data-cursor-replay-target="slide-preview"` / `"slide-content"` attributes
+  (used by `src/core/src/utils/cursorCoordinates.ts` to scale replayed cursor
+  positions) are preserved on the same elements in the new `SlidePreview.tsx`.
+
+**Out of scope / deferred:** vertical slide _stacks_ for html/markdown content
+(Reveal's `<Stack>`) were never actually used in this codebase — `Slide` is a
+flat array, one slide per array entry, so nothing is lost by not replicating
+Reveal's stack concept.

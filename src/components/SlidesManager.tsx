@@ -395,7 +395,7 @@ export default function SlidesManager({
               Presentation Slides
             </h3>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Reveal.js powered
+              Slide presentations
             </p>
           </div>
         </div>
