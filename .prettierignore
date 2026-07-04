@@ -1,1 +1,6 @@
 public/next-editor.js
+
+# Synthetic fixture mimicking a real Google Slides published-deck page byte
+# for byte; the parser under test matches its exact (single-quoted) format,
+# so it must not be reformatted.
+src/googleSlides/__fixtures__/published-deck.html
