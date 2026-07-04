@@ -66,3 +66,23 @@ imagePath: string }`, entries for `texture-1` → `/texture-1.jpeg` and
   Claude's preview browser for this app — eyeball via tsc + tests, user
   verifies UI manually).
 - Commit once all phases pass typecheck/tests.
+
+## Follow-up — Custom texture upload
+
+Added after Phase 4: a per-slide "upload your own image" swatch alongside the
+two presets. `Slide.background` already stored a plain string, so a custom
+upload is just a raw image data URL stored in that same field (no new type on
+`Slide`) — `getSlideBackgroundImage()` now returns unknown ids as-is (treating
+them as a direct image source) instead of `undefined`.
+
+- `src/config/slideBackgrounds.ts`: `isCustomSlideBackground()`,
+  `readCustomBackgroundImage()` (downscales to ≤1920px, re-encodes as JPEG
+  ~0.8 quality client-side since the result lives inline in localStorage
+  alongside the rest of the deck; rejects non-images and results still over
+  ~1.5MB via `CustomBackgroundError`).
+- `SlidesManager.tsx`'s `BackgroundPicker`: added an upload swatch (hidden
+  file input, `accept="image/*"`) that shows the uploaded thumbnail once set,
+  a spinner while processing, and a transient inline error on failure.
+  Clicking "None" drops the custom image (not kept for restore, matching
+  preset removal). Re-clicking an already-set custom swatch reopens the
+  picker to replace it.

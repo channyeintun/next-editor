@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Plus,
   Trash2,
@@ -12,9 +12,17 @@ import {
   Save,
   RotateCcw,
   Monitor,
+  Upload,
+  Loader2,
 } from "lucide-react";
 import type { Slide, SlideContentType } from "../types/slides";
-import { SLIDE_BACKGROUND_PRESETS, getSlideBackgroundImage } from "../config/slideBackgrounds";
+import {
+  SLIDE_BACKGROUND_PRESETS,
+  getSlideBackgroundImage,
+  isCustomSlideBackground,
+  readCustomBackgroundImage,
+  CustomBackgroundError,
+} from "../config/slideBackgrounds";
 
 interface SlidesManagerProps {
   slides: Slide[];
@@ -39,6 +47,30 @@ function BackgroundPicker({
   onChange: (background: string | undefined) => void;
   noneBgClass: string;
 }) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const customImage = isCustomSlideBackground(value) ? getSlideBackgroundImage(value) : undefined;
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setIsUploading(true);
+    setError(null);
+    try {
+      const dataUrl = await readCustomBackgroundImage(file);
+      onChange(dataUrl);
+    } catch (err) {
+      setError(err instanceof CustomBackgroundError ? err.message : "Couldn't use that image.");
+      window.setTimeout(() => setError(null), 4000);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="space-y-1.5">
       <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -78,7 +110,41 @@ function BackgroundPicker({
             }`}
           />
         ))}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading}
+          title={customImage ? "Replace custom image" : "Upload image"}
+          aria-label={
+            customImage ? "Replace custom background image" : "Upload custom background image"
+          }
+          aria-pressed={!!customImage}
+          style={
+            customImage
+              ? { backgroundImage: `url(${customImage})`, backgroundSize: "cover" }
+              : undefined
+          }
+          className={`flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors disabled:opacity-60 ${
+            customImage
+              ? "border-cyan-400/70 ring-1 ring-cyan-400/40"
+              : `border-dashed ${noneBgClass} border-slate-700 hover:border-slate-600`
+          }`}
+        >
+          {isUploading ? (
+            <Loader2 className="size-3.5 animate-spin text-slate-400" />
+          ) : (
+            !customImage && <Upload className="size-3.5 text-slate-500" />
+          )}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
       </div>
+      {error && <p className="text-[10px] text-rose-400">{error}</p>}
     </div>
   );
 }
