@@ -1,12 +1,14 @@
-// Shared core for the transient image-fetch proxy used only at Google Slides
-// import time. Google's slide-image CDN (docs.google.com/slides-images-rt/…)
-// and its general image host (*.googleusercontent.com) send a
+// Shared core for the image-fetch proxy used to render Google Slides images.
+// Google's slide-image CDN (docs.google.com/slides-images-rt/…) and its
+// general image host (*.googleusercontent.com) send a
 // Cross-Origin-Resource-Policy header that blocks direct cross-origin
 // <img>/<image>/fetch() loads from the browser, even though the resources are
-// publicly viewable. There is no pure-client workaround, so this proxy
-// fetches the bytes server-side and hands them back same-origin; the client
-// then inlines the result as a data: URL (see inlineImages.ts) so persisted
-// slide content never depends on a live network fetch again.
+// publicly viewable. There is no pure-client workaround, so imported slides'
+// SVGs have these hrefs rewritten to route through this proxy (see
+// proxyImageHrefs.ts), which fetches the bytes server-side and hands them
+// back same-origin. This runs live, at render time, on every view — the
+// original image bytes are deliberately not stored, to keep persisted slide
+// content small.
 //
 // This module is imported by both the Vite dev-server middleware
 // (tube/vite/slideImageProxyPlugin.ts) and the Vercel Edge Function

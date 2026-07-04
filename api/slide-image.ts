@@ -1,13 +1,14 @@
 import { proxySlideImage } from "../src/googleSlides/imageProxy";
 
 // Vercel Edge Function: GET /api/slide-image?url=<encoded https URL>.
-// Transient proxy used only at Google Slides import time to work around
+// Proxy used to render Google Slides images at view time, working around
 // Google's Cross-Origin-Resource-Policy header blocking direct cross-origin
 // image loads (docs.google.com/slides-images-rt/…, *.googleusercontent.com).
-// Not a persistence layer: the client inlines the response as a data: URL
-// (see src/googleSlides/inlineImages.ts) so imported slides never depend on
-// this endpoint again. Shares validation/fetch logic with the Vite dev-server
-// middleware (tube/vite/slideImageProxyPlugin.ts) via imageProxy.ts.
+// Imported slides' SVGs have their image hrefs rewritten to point here (see
+// src/googleSlides/proxyImageHrefs.ts) rather than inlining the bytes, so
+// persisted slide content stays small. Shares validation/fetch logic with the
+// Vite dev-server middleware (tube/vite/slideImageProxyPlugin.ts) via
+// imageProxy.ts.
 export const config = { runtime: "edge" };
 
 export default async function handler(request: Request): Promise<Response> {
