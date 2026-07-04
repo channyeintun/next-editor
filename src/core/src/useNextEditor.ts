@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type * as monaco from "monaco-editor";
 import { useActorRef, useSelector, shallowEqual } from "@xstate/react";
 import type { ActorRefFrom } from "xstate";
@@ -107,12 +107,7 @@ export const selectTimelineActor = (state: EditorMachineSnapshot) =>
 export const selectLiveCursor = (state: EditorMachineSnapshot) =>
   state.context.currentFrame?.state?.mouseCursor || null;
 
-/**
- * Action senders that close over the stable actorRef — subscription-free by design.
- * Consumers that only dispatch events (e.g. the provider's actions context) can use
- * this without re-rendering on machine state transitions.
- */
-export const useNextEditorActorActions = (actorRef: EditorActorRef) => {
+const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   // Recording Controls
   const startRecording = (options?: { audioBlob?: Blob; enableCamera?: boolean }) => {
     actorRef.send({
@@ -234,6 +229,32 @@ export const useNextEditorActorActions = (actorRef: EditorActorRef) => {
     handleWorkspaceEvent,
     handleRuntimeEvent,
   };
+};
+
+/**
+ * Action senders that close over the stable actorRef — subscription-free by design.
+ * Consumers that only dispatch events (e.g. the provider's actions context) can use
+ * this without re-rendering on machine state transitions.
+ *
+ * Memoized via useState rather than relying on the React Compiler: this hook
+ * contains no React hook calls in its action bodies, so the compiler skips it
+ * entirely (no memo cache is emitted) and every render would otherwise produce
+ * 21 fresh sender identities. That churn is not cosmetic — CodeEditor keys its
+ * unmount-cleanup effect on `syncEditorRef`, and that cleanup nulls
+ * `editorRef.current` and detaches the editor from the machine, so unstable
+ * identities silently break frame/cursor capture and replay.
+ */
+export const useNextEditorActorActions = (actorRef: EditorActorRef) => {
+  const [cache, setCache] = useState(() => ({
+    actorRef,
+    actions: createNextEditorActorActions(actorRef),
+  }));
+  // Render-phase adjustment (not an effect) so a swapped actor — e.g. HMR
+  // replacing the machine — never leaves senders pointing at a stopped actor.
+  if (cache.actorRef !== actorRef) {
+    setCache({ actorRef, actions: createNextEditorActorActions(actorRef) });
+  }
+  return cache.actions;
 };
 
 /**
