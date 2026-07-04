@@ -62,7 +62,14 @@ implementation does not transform editor URLs.
    `{ name: pageId + ".svg", title, width, height, steps, body: svgString }`.
 5. **Steps filter**: for each raw step group, drop entries whose target id `P[1]`
    is one of the page ids (those are whole-slide transition entries); keep the
-   rest as `[entries]`.
+   rest as `[entries]`. **This is the only filter that decides whether a step
+   survives.** The `o[6] == 2` flag (§1.5) is a _separate_ exclusion applied
+   later, at animation time, and never affects whether the step itself is
+   kept — a step whose every surviving (non-page-id) entry has `o[6] == 2`
+   still exists as a real, empty-effect step. (Confirmed 2026-07-04: an
+   earlier restatement of this algorithm in `plan.md` conflated the two,
+   causing our port to drop such steps and silently shift step numbering —
+   fixed; see plan.md's Phase 1 correction note.)
 
 ### 1.3 Import / storage (`_import_from_google`, ide bundle @ ~688990)
 
@@ -99,10 +106,23 @@ Google's published page includes per-slide build/animation data
 (`docData[1][i][7][0]`), and the reference implementation replays it natively:
 
 - A **step** is an array of animation entries. Entry `o`:
-  - `o[1]` = SVG element id (`svg.querySelector('#' + o[1])`)
+  - `o[1]` = SVG element id, resolved lazily as `o.EL ||= svg.querySelector('#' + o[1])`
+    — a miss is **retried on every apply**, not cached permanently, so an
+    element that isn't in the DOM yet at construction time is picked up as
+    soon as it appears. (This is an animation-time detail, unrelated to the
+    parse-time page-id filter in §1.2.)
   - `o[2]` = duration ms (min 1), `o[3]` = delay ms
-  - `o[6] == 2` → skip entry
-  - `o[0]` = property tracks `x`:
+  - `o[6] == 2` → build no track for this entry at all (it never gets an
+    opacity/scale/translate handler, contributes 0 to the step's duration);
+    this is purely an animation-time no-op, **not** a parse-time exclusion —
+    see the §1.2 correction note.
+  - `o[0]` = property tracks `x`, applied by a plain `if / else if / else if`
+    chain that assigns `style.transform` directly per branch — **tracks are
+    never composed**, so if one entry somehow carries both a scale and a
+    translate track, whichever is processed later in `x`'s order simply
+    overwrites the earlier one on `style.transform` (confirmed 2026-07-04
+    directly from the bundle; our first port combined them into one
+    `"translate(...) scale(...)"` string, which was wrong — fixed):
     - `x[0] == 0` → opacity from `x[1]` to `x[2]` (linear progress)
     - `x[0] == 2` → `scale()` from `x[2]` to `x[3]` (easeInOutCubic)
     - `x[0] == 3` → `translate()` from `(x[1], x[2])` to `(x[3], x[4])` in
@@ -111,7 +131,10 @@ Google's published page includes per-slide build/animation data
   matched SVG elements. Steps map onto a global timeline (`T0`/`T1` per step);
   stepping forward animates, jumping (or backward) snaps via `update(t)` which
   replays/unwinds all tracks — fully **scrubbable**, and it divides duration by
-  `timeline.playbackRate`, so it respects playback speed.
+  `timeline.playbackRate`, so it respects playback speed. The very first
+  `currentStep` assignment after construction has no prior numeric state to
+  compare against, so it always takes the snap branch rather than animating —
+  our port replicates this with an explicit "first call always snaps" flag.
 - Navigation semantics (`stepForward/stepBackward`): advance within a slide's
   steps first, then move to next/prev slide; `currentStep` is a persisted int,
   i.e. **slide + step state is part of the recording timeline** and replays
@@ -174,17 +197,33 @@ as ordinary DOM.
 
 ---
 
-## 3. Where we are today (Reveal.js)
+## 3. Where we are today
 
-- [RevealSlideRenderer.tsx](src/components/RevealSlideRenderer.tsx) wraps
-  `@revealjs/react` (`Deck`/`Slide`/`Markdown`), embedded mode, h/v indices,
-  imperative `deck.slide(h, v)` navigator registered via
-  [SlidesStoreContext.tsx](src/contexts/SlidesStoreContext.tsx) for replay.
+> Historical note: this section originally described the Reveal.js-based
+> renderer that existed when this research began. Reveal.js was removed
+> entirely in `plan.md` Phase 6 (2026-07-04) in favor of a custom renderer;
+> the description below reflects the current state.
+
+- [CustomSlideRenderer.tsx](src/components/CustomSlideRenderer.tsx) renders
+  the current slide directly (no engine, no h/v indices): `html` →
+  `RawHtmlSlide` (innerHTML + script re-exec), `markdown` → `MarkdownSlide`
+  (via `marked`), `google-svg` → [GoogleSvgSlide.tsx](src/components/GoogleSvgSlide.tsx).
+  [SlidePreview.tsx](src/components/SlidePreview.tsx) owns all navigation
+  (on-screen controls + keyboard), step-aware for `google-svg` slides.
 - Slide model ([slides.ts](src/types/slides.ts), [slidesStore.ts](src/stores/slidesStore.ts)):
-  `{ id, content, contentType: "html" | "markdown", background?, order }`,
-  persisted to **localStorage**, preview state in an `@xstate/store`.
-- Backgrounds come from our texture feature (`getSlideBackgroundImage`).
-- Replay drives Reveal via the registered navigator (tier c in replay).
+  `{ id, content, contentType: "html" | "markdown" | "google-svg", background?,
+title?, steps?, sourceUrl?, order }`, persisted to **localStorage** with
+  fflate compression above 200 KB, preview state in an `@xstate/store`.
+- Backgrounds come from our texture feature (`getSlideBackgroundImage`);
+  not applicable to `google-svg` slides (the SVG is the artwork).
+- Replay writes straight through `slidesStore.trigger.setPreviewState(...)`;
+  there is no separate imperative navigator to keep in sync (the Reveal-era
+  "tier c" escape hatch was removed along with Reveal.js).
+- The parser/animator/import pieces described in §1 above are implemented in
+  [src/googleSlides/](src/googleSlides/); see `plan.md` Phases 1–4 for the
+  port design and Phase 1's correction note + this doc's 2026-07-04 updates
+  for two subtle fidelity bugs (step-count drift, transform overwrite
+  semantics) found by diffing our port against the bundle directly.
 
 ---
 
@@ -220,10 +259,12 @@ and animations). Option C is a non-starter for recording/replay.
    `title`, `sourceUrl` on the slide; deck-level `sourceUrl` for reimport.
    Keep `id = pageId` so reimport can diff like the reference implementation.
 3. **Storage**: SVGs are too big for raw localStorage — compress (fflate).
-4. **Renderer**: keep Reveal.js as the shell and render a `google-svg` slide as
-   an inline SVG inside a Reveal slide; steps handled by our own animator
-   (~100-line port: opacity/scale/translate + easeInOutCubic, scrubbable
-   `update(t)`), which the reference implementation proves is sufficient.
+4. **Renderer**: render a `google-svg` slide as an inline SVG (originally
+   inside a Reveal.js shell alongside `html`/`markdown` slides, later
+   replaced by a custom renderer for all slide types — see `plan.md` Phase 6);
+   steps handled by our own animator (~100-line port: opacity/scale/translate
+   - easeInOutCubic, scrubbable `update(t)`), which the reference
+     implementation proves is sufficient.
 5. **SVG normalization on import**: strip `tabindex`, unwrap
    `google.com/url?q=` hyperlinks, decide policy for external `<image>` hrefs
    (leave absolute — works because we inline the SVG — or proxy later if
