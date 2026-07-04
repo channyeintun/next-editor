@@ -340,19 +340,27 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     editorDisposablesRef.current = [];
   };
 
+  const detachEditorOnUnmount = useEffectEvent(() => {
+    disposeEditorListeners();
+    const monaco = monacoRef.current;
+
+    if (monaco) {
+      disposePlaybackModels(monaco);
+    }
+
+    editorRef.current = null;
+    syncEditorRef(null);
+  });
+
+  // True-unmount-only teardown, keyed on []. The body is destructive — it
+  // detaches the editor from the machine and nulls the shared ref — so it must
+  // never re-run on dependency identity churn: with function deps, one unstable
+  // sender identity silently kills frame/cursor capture and replay (f280e83).
   useEffect(() => {
     return () => {
-      disposeEditorListeners();
-      const monaco = monacoRef.current;
-
-      if (monaco) {
-        disposePlaybackModels(monaco);
-      }
-
-      editorRef.current = null;
-      syncEditorRef(null);
+      detachEditorOnUnmount();
     };
-  }, [editorRef, syncEditorRef]);
+  }, []);
 
   useEffect(() => {
     disposePlaybackModelsIfIdle(editorRef.current?.getModel()?.uri ?? null);
