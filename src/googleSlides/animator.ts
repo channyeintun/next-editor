@@ -115,6 +115,9 @@ export class DeckStepAnimator {
   private readonly elementCache = new Map<string, Element | null>();
   private revealed = 0;
   private rafId: number | null = null;
+  // The first setRevealed after construction is a fresh mount / seek and always
+  // snaps: landing at step 1 must not be mistaken for a user-driven forward step.
+  private hasRevealed = false;
 
   constructor(svg: SVGSVGElement, steps: DeckStep[]) {
     this.svg = svg;
@@ -155,9 +158,12 @@ export class DeckStepAnimator {
   setRevealed(stepsRevealed: number, opts?: { playbackRate?: number }): void {
     this.cancelRaf();
     const target = timeForRevealed(this.timeline, stepsRevealed);
-    const isSingleForward = stepsRevealed === this.revealed + 1;
+    // A fresh mount / seek (the first call) always snaps; only subsequent calls
+    // can animate a single forward increment.
+    const isSingleForward = this.hasRevealed && stepsRevealed === this.revealed + 1;
     const from = timeForRevealed(this.timeline, this.revealed);
     this.revealed = stepsRevealed;
+    this.hasRevealed = true;
 
     if (!isSingleForward || target <= from || typeof requestAnimationFrame !== "function") {
       this.apply(target);

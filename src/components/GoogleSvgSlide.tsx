@@ -37,15 +37,13 @@ export default function GoogleSvgSlide({ content, steps, stepsRevealed }: Google
       svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
       svg.style.display = "block";
       svg.style.width = "100%";
-      // Height is intentionally left unset. Reveal never sets an explicit
-      // height on a slide's <section> (only width: 100%), so its height
-      // comes from its in-flow content. An <svg> with a viewBox but no
-      // width/height attribute is a replaced element with an intrinsic
-      // aspect ratio, so leaving height auto makes the browser derive a
-      // real, non-zero height from the viewBox -- that's what gives the
-      // section something to size around. The previous absolute/inset-0
-      // wrapper took the SVG out of flow entirely, so the section collapsed
-      // to zero height and the slide rendered nothing.
+      // Height is intentionally left unset. An <svg> with a viewBox but no
+      // width/height attribute is a replaced element with an intrinsic aspect
+      // ratio, so leaving height auto makes the browser derive a real,
+      // non-zero height from the viewBox. Keeping the SVG in normal flow (not
+      // absolutely positioned) lets that intrinsic height flow up to the
+      // wrapper div below; an absolute/inset-0 wrapper would take the SVG out
+      // of flow and collapse the box to zero height, rendering nothing.
 
       if (steps && steps.length > 0) {
         animatorRef.current = new DeckStepAnimator(svg, steps);
@@ -65,7 +63,7 @@ export default function GoogleSvgSlide({ content, steps, stepsRevealed }: Google
   }, [stepsRevealed]);
 
   // In normal flow (not absolutely positioned): this div's height comes from
-  // its content (the injected SVG), which is what gives Reveal's <section> a
-  // real height to lay out and center around.
+  // its content (the injected SVG), which lets the surrounding slide container
+  // size and center around a real, non-zero height.
   return <div ref={containerRef} className="w-full bg-black" />;
 }

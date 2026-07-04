@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DeckStepAnimator, buildTimeline, sampleStyles, timeForRevealed } from "./animator";
 import type { DeckStep } from "./types";
 
@@ -142,5 +142,24 @@ describe("DeckStepAnimator (snap path)", () => {
     const a = new DeckStepAnimator(svg, steps);
     expect(() => a.setRevealed(2)).not.toThrow();
     a.dispose();
+  });
+
+  it("snaps on the very first setRevealed(1) (fresh mount / seek), then animates a later forward step", () => {
+    const raf = vi.spyOn(globalThis, "requestAnimationFrame");
+    const svg = makeSvg(["el1", "el2", "el3"]);
+    const a = new DeckStepAnimator(svg, steps);
+
+    // First call landing on step 1 is a fresh mount / seek -> snap, no rAF,
+    // no intermediate value: el1 is fully revealed immediately.
+    a.setRevealed(1);
+    expect(raf).not.toHaveBeenCalled();
+    expect((svg.querySelector("#el1") as SVGElement).style.opacity).toBe("1");
+
+    // A later genuine forward increment (1 -> 2) animates via rAF.
+    a.setRevealed(2);
+    expect(raf).toHaveBeenCalled();
+
+    a.dispose();
+    raf.mockRestore();
   });
 });
