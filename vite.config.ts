@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import wasm from "vite-plugin-wasm";
 import { fileURLToPath } from "node:url";
 import { lessonsApiPlugin } from "./tube/vite/lessonsApiPlugin";
+import { slideImageProxyPlugin } from "./tube/vite/slideImageProxyPlugin";
 
 const crossOriginHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -21,6 +22,10 @@ export default defineConfig({
     lessonsApiPlugin({
       source: fileURLToPath(new URL("./tube/data/lessons.json", import.meta.url)),
     }) as unknown as PluginOption,
+    // Dev-server equivalent of api/slide-image.ts (see that file's doc
+    // comment): lets `bun run dev` resolve the same /api/slide-image route
+    // that production serves as a Vercel Edge Function.
+    slideImageProxyPlugin() as unknown as PluginOption,
     wasm() as unknown as PluginOption,
     tailwindcss() as unknown as PluginOption,
     lazyPlugins(async () => {
