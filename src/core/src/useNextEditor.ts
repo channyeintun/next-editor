@@ -248,13 +248,27 @@ export const useNextEditorInteractionEffects = (
   const isPlaying = useSelector(actorRef, selectIsPlaying);
   const editor = useSelector(actorRef, selectEditor);
 
-  // Handle editor ref synchronization - run on every render to catch ref changes
+  // Keep the machine's editor ref attached. SET_EDITOR_REF sends are silently
+  // discarded while the actor is stopped (StrictMode/Suspense effect reconnects
+  // rehydrate the actor via stop+restart), so a single missed send must not be
+  // permanent. This used to self-heal by accident: the provider once subscribed
+  // to a dozen selectors, re-rendered on every machine transition, and a dep-less
+  // effect re-sent the ref. Re-assert deliberately instead: once on mount and
+  // after every machine transition, via an actor subscription (no re-renders).
+  // Events sent to a not-yet-(re)started actor are buffered and flush on start.
   useEffect(() => {
-    const currentEditor = config.editorRef.current;
-    if (currentEditor && currentEditor !== editor) {
-      actorRef.send({ type: "SET_EDITOR_REF", editor: currentEditor });
-    }
-  }); // No dependencies - run on every render to catch ref changes
+    const syncEditorRefIfStale = () => {
+      const currentEditor = config.editorRef.current;
+      if (currentEditor && actorRef.getSnapshot().context.editorRefs.editor !== currentEditor) {
+        actorRef.send({ type: "SET_EDITOR_REF", editor: currentEditor });
+      }
+    };
+    syncEditorRefIfStale();
+    const subscription = actorRef.subscribe(syncEditorRefIfStale);
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [actorRef, config.editorRef]);
 
   // Handle playback interaction detection via direct input listeners
   // This is more stable than onChange for preventing machine/user feedback loops

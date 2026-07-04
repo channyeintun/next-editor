@@ -302,7 +302,10 @@ export const captureInitialFrame = ({
   };
 
   // Use createFrame for the initial frame to ensure it has all metadata
-  const editor = context.editorRefs.editor;
+  // Capture reads the live editor: fall back to the input ref getter so a
+  // SET_EDITOR_REF event lost to a stopped-actor window (StrictMode/Suspense
+  // rehydration) cannot silently disable frame/cursor capture.
+  const editor = context.editorRefs.editor ?? context.getEditorInstance();
   let initialFrame: EditorFrame;
   let contentVersionId: number | undefined;
   let modelUri: string | undefined;
@@ -361,7 +364,10 @@ export const captureFrame = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
-  const editor = context.editorRefs.editor;
+  // Capture reads the live editor: fall back to the input ref getter so a
+  // SET_EDITOR_REF event lost to a stopped-actor window (StrictMode/Suspense
+  // rehydration) cannot silently disable frame/cursor capture.
+  const editor = context.editorRefs.editor ?? context.getEditorInstance();
   if (!editor || !context.session) return {};
 
   const timestamp = performance.now() - context.session.startedAtPerf;
@@ -443,7 +449,10 @@ export const capturePreviewRefreshFrame = ({
     return {};
   }
 
-  const editor = context.editorRefs.editor;
+  // Capture reads the live editor: fall back to the input ref getter so a
+  // SET_EDITOR_REF event lost to a stopped-actor window (StrictMode/Suspense
+  // rehydration) cannot silently disable frame/cursor capture.
+  const editor = context.editorRefs.editor ?? context.getEditorInstance();
   if (!editor || !context.session) {
     return {};
   }
