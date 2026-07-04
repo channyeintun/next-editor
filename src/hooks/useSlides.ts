@@ -1,51 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import type { Slide, SlidePreviewState, SlideEvent, SlideContentType } from "../types/slides";
-
-const SLIDES_STORAGE_KEY = "next-editor-slides";
-
-// Type guard for Slide
-const isSlide = (item: unknown): item is Slide => {
-  if (typeof item !== "object" || item === null) return false;
-  const obj = item as { [K in keyof Slide]?: unknown };
-  return (
-    typeof obj.id === "string" &&
-    typeof obj.content === "string" &&
-    typeof obj.order === "number" &&
-    (obj.contentType === "html" ||
-      obj.contentType === "markdown" ||
-      obj.contentType === undefined) &&
-    (obj.background === undefined || typeof obj.background === "string")
-  );
-};
-
-// Load slides from localStorage
-const loadSlidesFromStorage = (): Slide[] => {
-  try {
-    const saved = localStorage.getItem(SLIDES_STORAGE_KEY);
-    if (saved) {
-      const parsed: unknown = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
-        // Validate and migrate slides
-        return parsed.filter(isSlide).map((slide) => ({
-          ...slide,
-          contentType: slide.contentType ?? "html", // Migrate old slides missing contentType
-        }));
-      }
-    }
-  } catch (e) {
-    console.error("Failed to load slides from localStorage:", e);
-  }
-  return [];
-};
-
-// Save slides to localStorage
-const saveSlidesToStorage = (slides: Slide[]): void => {
-  try {
-    localStorage.setItem(SLIDES_STORAGE_KEY, JSON.stringify(slides));
-  } catch (e) {
-    console.error("Failed to save slides to localStorage:", e);
-  }
-};
+// Storage helpers are shared with slidesStore so both readers/writers of the
+// "next-editor-slides" key agree on the guard and the compressed payload format.
+import { loadSlidesFromStorage, saveSlidesToStorage } from "../stores/slidesStore";
 
 interface UseSlidesConfig {
   onSlideEvent?: (event: SlideEvent) => void;

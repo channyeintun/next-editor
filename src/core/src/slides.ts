@@ -1,11 +1,51 @@
-export type SlideContentType = "html" | "markdown";
+export type SlideContentType = "html" | "markdown" | "google-svg";
+
+/**
+ * Structural copies of the Google Slides build-step types. The canonical
+ * definitions live in src/googleSlides/types.ts; they are duplicated here so
+ * the core package's slide model does not depend on app-level modules.
+ */
+export interface DeckStepTrackOpacity {
+  kind: "opacity";
+  from: number;
+  to: number;
+}
+
+export interface DeckStepTrackScale {
+  kind: "scale";
+  from: number;
+  to: number;
+}
+
+export interface DeckStepTrackTranslate {
+  kind: "translate";
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+}
+
+export type DeckStepTrack = DeckStepTrackOpacity | DeckStepTrackScale | DeckStepTrackTranslate;
+
+export interface DeckStepEntry {
+  elementId: string;
+  durationMs: number;
+  delayMs: number;
+  tracks: DeckStepTrack[];
+}
+
+/** One step = entries animated together. */
+export type DeckStep = DeckStepEntry[];
 
 export interface Slide {
   id: string;
-  content: string;
+  content: string; // for google-svg: normalized SVG markup
   contentType: SlideContentType;
   name?: string;
   order: number;
+  title?: string; // google-svg: slide title from the deck
+  steps?: DeckStep[]; // google-svg: build steps
+  sourceUrl?: string; // google-svg: published deck URL (same on every deck slide)
 }
 
 export interface SlidePreviewState {

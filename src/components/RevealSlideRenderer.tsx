@@ -4,7 +4,9 @@ import "reveal.js/reveal.css";
 import "reveal.js/theme/black.css";
 import type { RevealApi } from "reveal.js";
 import type { SlideContentType } from "../types/slides";
+import type { DeckStep } from "../googleSlides/types";
 import { getSlideBackgroundImage } from "../config/slideBackgrounds";
+import GoogleSvgSlide from "./GoogleSvgSlide";
 
 interface RevealSlideRendererProps {
   slides: Array<{
@@ -12,6 +14,7 @@ interface RevealSlideRendererProps {
     content: string;
     contentType: SlideContentType;
     background?: string;
+    steps?: DeckStep[];
   }>;
   currentSlideIndex: number;
   currentVerticalIndex: number;
@@ -53,12 +56,16 @@ function RevealDeckContent({
   onReady,
   onSlideChange,
   slides,
+  currentSlideIndex,
+  currentVerticalIndex,
 }: {
   deckRef: React.MutableRefObject<RevealApi | null>;
   isNavigationEnabled: boolean;
   onReady: (deck: RevealApi) => void;
   onSlideChange: (indexh: number, indexv: number) => void;
   slides: RevealSlideRendererProps["slides"];
+  currentSlideIndex: number;
+  currentVerticalIndex: number;
 }) {
   const handleRevealSlideChange = (event: Event) => {
     const slideChangeEvent = event as Event & {
@@ -68,6 +75,13 @@ function RevealDeckContent({
 
     onSlideChange(slideChangeEvent.indexh, slideChangeEvent.indexv ?? 0);
   };
+
+  // When any slide has build steps, arrow keys must reveal steps rather than
+  // jump slides, so SlidePreview's keydown handler drives navigation and
+  // Reveal's own keyboard is disabled to avoid the two fighting.
+  const hasSteppedSlides = slides.some(
+    (slide) => slide.contentType === "google-svg" && (slide.steps?.length ?? 0) > 0,
+  );
 
   return (
     <Deck
@@ -79,14 +93,29 @@ function RevealDeckContent({
         center: true,
         hash: false,
         transition: "slide",
-        keyboard: isNavigationEnabled,
-        touch: isNavigationEnabled,
+        keyboard: isNavigationEnabled && !hasSteppedSlides,
+        touch: isNavigationEnabled && !hasSteppedSlides,
       }}
       onReady={onReady}
       onSlideChange={handleRevealSlideChange}
     >
-      {slides.map((slide) => {
+      {slides.map((slide, index) => {
         const backgroundImage = getSlideBackgroundImage(slide.background);
+
+        if (slide.contentType === "google-svg") {
+          // The SVG is the artwork, so no Reveal background image. Build steps
+          // are revealed via the vertical index of the active slide.
+          const stepsRevealed = index === currentSlideIndex ? currentVerticalIndex : 0;
+          return (
+            <RevealReactSlide key={slide.id}>
+              <GoogleSvgSlide
+                content={slide.content}
+                steps={slide.steps}
+                stepsRevealed={stepsRevealed}
+              />
+            </RevealReactSlide>
+          );
+        }
 
         if (slide.contentType === "markdown") {
           return (
@@ -209,6 +238,8 @@ function RevealSlideRenderer({
         onReady={handleDeckReady}
         onSlideChange={handleDeckSlideChange}
         slides={slides}
+        currentSlideIndex={currentSlideIndex}
+        currentVerticalIndex={currentVerticalIndex}
       />
     </div>
   );

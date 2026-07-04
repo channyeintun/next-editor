@@ -14,6 +14,9 @@ import {
   Monitor,
   Upload,
   Loader2,
+  Presentation,
+  Download,
+  ExternalLink,
 } from "lucide-react";
 import type { Slide, SlideContentType } from "../types/slides";
 import {
@@ -23,6 +26,8 @@ import {
   readCustomBackgroundImage,
   CustomBackgroundError,
 } from "../config/slideBackgrounds";
+import { fetchPublishedDeck, GoogleSlidesParseError } from "../googleSlides";
+import { applyDeckToSlides } from "../googleSlides/importDeck";
 
 interface SlidesManagerProps {
   slides: Slide[];
@@ -149,8 +154,12 @@ function BackgroundPicker({
   );
 }
 
-function getPreviewText(content: string): string {
-  const lines = content.split("\n").filter((line) => line.trim());
+function getPreviewText(slide: Slide, index: number): string {
+  if (slide.contentType === "google-svg") {
+    return slide.title?.trim() || `Slide ${index + 1}`;
+  }
+
+  const lines = slide.content.split("\n").filter((line) => line.trim());
   const firstLine = lines[0] || "Empty slide";
 
   return (
@@ -158,6 +167,131 @@ function getPreviewText(content: string): string {
       .replace(/<[^>]*>/g, "")
       .replace(/^#+\s*/, "")
       .substring(0, 40) + (firstLine.length > 40 ? "..." : "")
+  );
+}
+
+function GoogleSlidesImport({
+  slides,
+  onSlidesChange,
+}: {
+  slides: Slide[];
+  onSlidesChange: (slides: Slide[]) => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const googleSlides = slides.filter((slide) => slide.contentType === "google-svg");
+  const sourceUrl = googleSlides.find((slide) => slide.sourceUrl)?.sourceUrl;
+
+  const runImport = async (deckUrl: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const deck = await fetchPublishedDeck(deckUrl);
+      onSlidesChange(applyDeckToSlides(slides, deck));
+      setUrl("");
+    } catch (err) {
+      setError(
+        err instanceof GoogleSlidesParseError
+          ? err.message
+          : "Couldn't import that deck. Please try again.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const removeDeck = () => {
+    onSlidesChange(
+      slides
+        .filter((slide) => slide.contentType !== "google-svg")
+        .map((slide, index) => ({ ...slide, order: index })),
+    );
+    setError(null);
+  };
+
+  if (sourceUrl) {
+    return (
+      <div className="space-y-2 rounded-lg border border-slate-800 bg-[#11141c] p-3">
+        <div className="flex items-center gap-2">
+          <Presentation className="size-4 shrink-0 text-amber-300" />
+          <p className="min-w-0 flex-1 truncate text-xs font-medium text-slate-300">
+            {googleSlides.length} {googleSlides.length === 1 ? "slide" : "slides"} from{" "}
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-0.5 text-cyan-300 hover:underline"
+            >
+              Google Slides <ExternalLink className="size-3" />
+            </a>
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => runImport(sourceUrl)}
+            disabled={isLoading}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-slate-700 bg-[#1d1f29] py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-600 disabled:opacity-60"
+          >
+            {isLoading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Download className="size-3.5" />
+            )}
+            Update
+          </button>
+          <button
+            type="button"
+            onClick={removeDeck}
+            disabled={isLoading}
+            className="rounded-md border border-slate-700 bg-[#1d1f29] px-3 py-1.5 text-xs font-medium text-rose-300 transition-colors hover:border-rose-500/50 disabled:opacity-60"
+          >
+            Remove deck
+          </button>
+        </div>
+        {error && <p className="text-[10px] text-rose-400">{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-800 bg-[#11141c] p-3">
+      <div className="flex items-center gap-2">
+        <Presentation className="size-4 shrink-0 text-amber-300" />
+        <span className="text-xs font-semibold text-slate-200">Import from Google Slides</span>
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && url.trim() && !isLoading) runImport(url.trim());
+          }}
+          placeholder="https://docs.google.com/presentation/d/e/…/pub"
+          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#0f1219] px-3 py-1.5 text-xs text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-400/70"
+        />
+        <button
+          type="button"
+          onClick={() => runImport(url.trim())}
+          disabled={isLoading || !url.trim()}
+          className="flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-[#5da4ff]/40 bg-[#273449] px-3 py-1.5 text-xs font-semibold text-slate-100 transition-colors hover:border-[#5da4ff] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isLoading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Download className="size-3.5" />
+          )}
+          Import
+        </button>
+      </div>
+      <p className="text-[10px] leading-relaxed text-slate-500">
+        In Google Slides: File → Share → Publish to web, then paste the published link here.
+      </p>
+      {error && <p className="text-[10px] text-rose-400">{error}</p>}
+    </div>
   );
 }
 
@@ -221,6 +355,8 @@ export default function SlidesManager({
   };
 
   const startEditing = (slide: Slide) => {
+    // Imported Google slides are vector artwork, not hand-editable text.
+    if (slide.contentType === "google-svg") return;
     setEditingSlideId(slide.id);
     setEditContent(slide.content);
     setEditBackground(slide.background);
@@ -279,6 +415,9 @@ export default function SlidesManager({
       </div>
 
       <div className="editor-scrollbar flex-1 space-y-5 overflow-y-auto p-5">
+        {/* Import from Google Slides */}
+        <GoogleSlidesImport slides={slides} onSlidesChange={onSlidesChange} />
+
         {/* Add Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#11141c] p-1">
@@ -422,18 +561,22 @@ export default function SlidesManager({
                         >
                           {backgroundImage && <div className="absolute inset-0 bg-[#151821]/50" />}
                           <div className="absolute inset-0 flex items-center justify-center">
-                            {slide.contentType === "html" ? (
+                            {slide.contentType === "google-svg" ? (
+                              <Presentation className="text-amber-300/70 size-4" />
+                            ) : slide.contentType === "html" ? (
                               <Code className="text-sky-300/60 size-4" />
                             ) : (
                               <FileText className="text-cyan-300/60 size-4" />
                             )}
                           </div>
                           <div className="absolute right-0 top-0 border-b border-l border-slate-700 bg-slate-800 px-1 py-0.5 text-[6px] font-bold uppercase leading-none text-slate-400">
-                            {slide.contentType}
+                            {slide.contentType === "google-svg" ? "slides" : slide.contentType}
                           </div>
-                          <div className="absolute inset-0 flex items-center justify-center bg-cyan-400/10 py-1 opacity-0 transition-opacity group-hover/thumb:opacity-100">
-                            <Edit3 className="text-white size-3" />
-                          </div>
+                          {slide.contentType !== "google-svg" && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-cyan-400/10 py-1 opacity-0 transition-opacity group-hover/thumb:opacity-100">
+                              <Edit3 className="text-white size-3" />
+                            </div>
+                          )}
                         </div>
 
                         {/* Center: Info */}
@@ -445,7 +588,7 @@ export default function SlidesManager({
                             <span className="h-px flex-1 bg-slate-800"></span>
                           </div>
                           <p className="truncate text-xs font-semibold text-slate-200 transition-colors group-hover:text-cyan-200">
-                            {getPreviewText(slide.content)}
+                            {getPreviewText(slide, index)}
                           </p>
                         </div>
 

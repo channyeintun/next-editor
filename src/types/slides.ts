@@ -1,12 +1,17 @@
-export type SlideContentType = "html" | "markdown";
+import type { DeckStep } from "../googleSlides/types";
+
+export type SlideContentType = "html" | "markdown" | "google-svg";
 
 export interface Slide {
   id: string;
-  content: string;
+  content: string; // for google-svg: normalized SVG markup
   contentType: SlideContentType;
   name?: string;
   order: number;
   background?: string;
+  title?: string; // google-svg: slide title from the deck
+  steps?: DeckStep[]; // google-svg: build steps (from src/googleSlides)
+  sourceUrl?: string; // google-svg: published deck URL (same on every deck slide)
 }
 
 export interface SlidePreviewState {
