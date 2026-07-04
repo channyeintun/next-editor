@@ -4,12 +4,14 @@ import "reveal.js/reveal.css";
 import "reveal.js/theme/black.css";
 import type { RevealApi } from "reveal.js";
 import type { SlideContentType } from "../types/slides";
+import { getSlideBackgroundImage } from "../config/slideBackgrounds";
 
 interface RevealSlideRendererProps {
   slides: Array<{
     id: string;
     content: string;
     contentType: SlideContentType;
+    background?: string;
   }>;
   currentSlideIndex: number;
   currentVerticalIndex: number;
@@ -84,12 +86,16 @@ function RevealDeckContent({
       onSlideChange={handleRevealSlideChange}
     >
       {slides.map((slide) => {
+        const backgroundImage = getSlideBackgroundImage(slide.background);
+
         if (slide.contentType === "markdown") {
-          return <Markdown key={slide.id} markdown={slide.content} />;
+          return (
+            <Markdown key={slide.id} markdown={slide.content} backgroundImage={backgroundImage} />
+          );
         }
 
         return (
-          <RevealReactSlide key={slide.id}>
+          <RevealReactSlide key={slide.id} backgroundImage={backgroundImage}>
             <RawHtmlSlide content={slide.content} />
           </RevealReactSlide>
         );

@@ -11,7 +11,10 @@ const isSlide = (item: unknown): item is Slide => {
     typeof obj.id === "string" &&
     typeof obj.content === "string" &&
     typeof obj.order === "number" &&
-    (obj.contentType === "html" || obj.contentType === "markdown" || obj.contentType === undefined)
+    (obj.contentType === "html" ||
+      obj.contentType === "markdown" ||
+      obj.contentType === undefined) &&
+    (obj.background === undefined || typeof obj.background === "string")
   );
 };
 

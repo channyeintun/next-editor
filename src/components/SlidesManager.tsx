@@ -14,6 +14,7 @@ import {
   Monitor,
 } from "lucide-react";
 import type { Slide, SlideContentType } from "../types/slides";
+import { SLIDE_BACKGROUND_PRESETS, getSlideBackgroundImage } from "../config/slideBackgrounds";
 
 interface SlidesManagerProps {
   slides: Slide[];
@@ -28,6 +29,59 @@ const DEFAULT_HTML_CONTENT = `<h1>Welcome</h1>
 const DEFAULT_MARKDOWN_CONTENT = `# Welcome
 
 Your slide content here`;
+
+function BackgroundPicker({
+  value,
+  onChange,
+  noneBgClass,
+}: {
+  value: string | undefined;
+  onChange: (background: string | undefined) => void;
+  noneBgClass: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        Background
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onChange(undefined)}
+          title="None"
+          aria-label="No background"
+          aria-pressed={!value}
+          className={`flex size-7 shrink-0 items-center justify-center rounded-md border ${noneBgClass} text-[10px] font-semibold text-slate-500 transition-colors ${
+            !value
+              ? "border-cyan-400/70 ring-1 ring-cyan-400/40"
+              : "border-slate-700 hover:border-slate-600"
+          }`}
+        >
+          None
+        </button>
+        {SLIDE_BACKGROUND_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            onClick={() => onChange(preset.id)}
+            title={preset.label}
+            aria-label={preset.label}
+            aria-pressed={value === preset.id}
+            style={{
+              backgroundImage: `url(${preset.imagePath})`,
+              backgroundSize: "cover",
+            }}
+            className={`size-7 shrink-0 rounded-md border transition-colors ${
+              value === preset.id
+                ? "border-cyan-400/70 ring-1 ring-cyan-400/40"
+                : "border-slate-700 hover:border-slate-600"
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function getPreviewText(content: string): string {
   const lines = content.split("\n").filter((line) => line.trim());
@@ -49,8 +103,10 @@ export default function SlidesManager({
 }: SlidesManagerProps) {
   const [newSlideContent, setNewSlideContent] = useState("");
   const [contentType, setContentType] = useState<SlideContentType>("markdown");
+  const [background, setBackground] = useState<string | undefined>(undefined);
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [editBackground, setEditBackground] = useState<string | undefined>(undefined);
 
   const addSlide = () => {
     const content =
@@ -62,10 +118,12 @@ export default function SlidesManager({
       content,
       contentType,
       order: slides.length,
+      background,
     };
 
     onSlidesChange([...slides, newSlide]);
     setNewSlideContent("");
+    setBackground(undefined);
   };
 
   const removeSlide = (slideId: string) => {
@@ -99,22 +157,27 @@ export default function SlidesManager({
   const startEditing = (slide: Slide) => {
     setEditingSlideId(slide.id);
     setEditContent(slide.content);
+    setEditBackground(slide.background);
   };
 
   const saveEdit = () => {
     if (!editingSlideId) return;
 
     const updatedSlides = slides.map((slide) =>
-      slide.id === editingSlideId ? { ...slide, content: editContent } : slide,
+      slide.id === editingSlideId
+        ? { ...slide, content: editContent, background: editBackground }
+        : slide,
     );
     onSlidesChange(updatedSlides);
     setEditingSlideId(null);
     setEditContent("");
+    setEditBackground(undefined);
   };
 
   const cancelEdit = () => {
     setEditingSlideId(null);
     setEditContent("");
+    setEditBackground(undefined);
   };
 
   return (
@@ -196,6 +259,12 @@ export default function SlidesManager({
             />
           </div>
 
+          <BackgroundPicker
+            value={background}
+            onChange={setBackground}
+            noneBgClass="bg-[#11141c]"
+          />
+
           <button
             type="button"
             onClick={addSlide}
@@ -230,107 +299,125 @@ export default function SlidesManager({
             </div>
           ) : (
             <div className="space-y-3 pb-4">
-              {slides.map((slide, index) => (
-                <div
-                  key={slide.id}
-                  className="group relative overflow-hidden rounded-lg border border-slate-800 bg-[#11141c] p-3 transition-colors hover:border-slate-700 hover:bg-[#1b2029]"
-                >
-                  {editingSlideId === slide.id ? (
-                    <div className="space-y-3">
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        className="h-32 w-full resize-none rounded-lg border border-slate-700 bg-[#0f1219] px-3 py-2 font-mono text-xs text-slate-200 outline-none transition-colors focus:border-cyan-400/70"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={saveEdit}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-[#10c776] py-1.5 text-xs font-semibold text-slate-950 transition-colors hover:bg-[#39f39a]"
-                        >
-                          <Save className="size-3" />
-                          Update
-                        </button>
-                        <button
-                          type="button"
-                          onClick={cancelEdit}
-                          className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-600"
-                          aria-label="Cancel editing slide"
-                          title="Cancel"
-                        >
-                          <RotateCcw className="size-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-4">
-                      {/* Left: Thumbnail area */}
-                      <div
-                        className="group/thumb relative h-11 w-14 shrink-0 cursor-pointer overflow-hidden rounded-md border border-slate-700 bg-[#151821] transition-shadow hover:ring-2 hover:ring-cyan-400/40"
-                        onClick={() => startEditing(slide)}
-                      >
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          {slide.contentType === "html" ? (
-                            <Code className="text-sky-300/60 size-4" />
-                          ) : (
-                            <FileText className="text-cyan-300/60 size-4" />
-                          )}
-                        </div>
-                        <div className="absolute right-0 top-0 border-b border-l border-slate-700 bg-slate-800 px-1 py-0.5 text-[6px] font-bold uppercase leading-none text-slate-400">
-                          {slide.contentType}
-                        </div>
-                        <div className="absolute inset-0 flex items-center justify-center bg-cyan-400/10 py-1 opacity-0 transition-opacity group-hover/thumb:opacity-100">
-                          <Edit3 className="text-white size-3" />
-                        </div>
-                      </div>
+              {slides.map((slide, index) => {
+                const backgroundImage = getSlideBackgroundImage(slide.background);
 
-                      {/* Center: Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-semibold text-slate-500">
-                            #{index + 1}
-                          </span>
-                          <span className="h-px flex-1 bg-slate-800"></span>
+                return (
+                  <div
+                    key={slide.id}
+                    className="group relative overflow-hidden rounded-lg border border-slate-800 bg-[#11141c] p-3 transition-colors hover:border-slate-700 hover:bg-[#1b2029]"
+                  >
+                    {editingSlideId === slide.id ? (
+                      <div className="space-y-3">
+                        <textarea
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          className="h-32 w-full resize-none rounded-lg border border-slate-700 bg-[#0f1219] px-3 py-2 font-mono text-xs text-slate-200 outline-none transition-colors focus:border-cyan-400/70"
+                        />
+                        <BackgroundPicker
+                          value={editBackground}
+                          onChange={setEditBackground}
+                          noneBgClass="bg-[#0f1219]"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={saveEdit}
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-[#10c776] py-1.5 text-xs font-semibold text-slate-950 transition-colors hover:bg-[#39f39a]"
+                          >
+                            <Save className="size-3" />
+                            Update
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-600"
+                            aria-label="Cancel editing slide"
+                            title="Cancel"
+                          >
+                            <RotateCcw className="size-3" />
+                          </button>
                         </div>
-                        <p className="truncate text-xs font-semibold text-slate-200 transition-colors group-hover:text-cyan-200">
-                          {getPreviewText(slide.content)}
-                        </p>
                       </div>
+                    ) : (
+                      <div className="flex items-center gap-4">
+                        {/* Left: Thumbnail area */}
+                        <div
+                          className="group/thumb relative h-11 w-14 shrink-0 cursor-pointer overflow-hidden rounded-md border border-slate-700 bg-[#151821] transition-shadow hover:ring-2 hover:ring-cyan-400/40"
+                          style={
+                            backgroundImage
+                              ? {
+                                  backgroundImage: `url(${backgroundImage})`,
+                                  backgroundSize: "cover",
+                                }
+                              : undefined
+                          }
+                          onClick={() => startEditing(slide)}
+                        >
+                          {backgroundImage && <div className="absolute inset-0 bg-[#151821]/50" />}
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            {slide.contentType === "html" ? (
+                              <Code className="text-sky-300/60 size-4" />
+                            ) : (
+                              <FileText className="text-cyan-300/60 size-4" />
+                            )}
+                          </div>
+                          <div className="absolute right-0 top-0 border-b border-l border-slate-700 bg-slate-800 px-1 py-0.5 text-[6px] font-bold uppercase leading-none text-slate-400">
+                            {slide.contentType}
+                          </div>
+                          <div className="absolute inset-0 flex items-center justify-center bg-cyan-400/10 py-1 opacity-0 transition-opacity group-hover/thumb:opacity-100">
+                            <Edit3 className="text-white size-3" />
+                          </div>
+                        </div>
 
-                      {/* Right: Actions */}
-                      <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-                        <button
-                          type="button"
-                          onClick={() => moveSlide(slide.id, "up")}
-                          disabled={index === 0}
-                          className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                          title="Move Up"
-                        >
-                          <ChevronUp className="size-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveSlide(slide.id, "down")}
-                          disabled={index === slides.length - 1}
-                          className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                          title="Move Down"
-                        >
-                          <ChevronDown className="size-3.5" />
-                        </button>
-                        <div className="mx-1 h-4 w-px bg-slate-800"></div>
-                        <button
-                          type="button"
-                          onClick={() => removeSlide(slide.id)}
-                          className="rounded-md p-1.5 text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
-                          title="Delete"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
+                        {/* Center: Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-semibold text-slate-500">
+                              #{index + 1}
+                            </span>
+                            <span className="h-px flex-1 bg-slate-800"></span>
+                          </div>
+                          <p className="truncate text-xs font-semibold text-slate-200 transition-colors group-hover:text-cyan-200">
+                            {getPreviewText(slide.content)}
+                          </p>
+                        </div>
+
+                        {/* Right: Actions */}
+                        <div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                          <button
+                            type="button"
+                            onClick={() => moveSlide(slide.id, "up")}
+                            disabled={index === 0}
+                            className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                            title="Move Up"
+                          >
+                            <ChevronUp className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveSlide(slide.id, "down")}
+                            disabled={index === slides.length - 1}
+                            className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                            title="Move Down"
+                          >
+                            <ChevronDown className="size-3.5" />
+                          </button>
+                          <div className="mx-1 h-4 w-px bg-slate-800"></div>
+                          <button
+                            type="button"
+                            onClick={() => removeSlide(slide.id)}
+                            className="rounded-md p-1.5 text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
+                            title="Delete"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

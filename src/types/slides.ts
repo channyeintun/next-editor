@@ -6,6 +6,7 @@ export interface Slide {
   contentType: SlideContentType;
   name?: string;
   order: number;
+  background?: string;
 }
 
 export interface SlidePreviewState {
