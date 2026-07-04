@@ -58,8 +58,11 @@ export interface ElementStyle {
 /**
  * Computes the inline styles (opacity, transform) for every animated element at
  * time `t` on the timeline. Opacity interpolates linearly; scale/translate use
- * easeInOutCubic (matching the reference). When an element has both scale and
- * translate tracks the transforms are combined into one string.
+ * easeInOutCubic (matching the reference). Scale and translate are never
+ * combined into one transform string: each track sets `style.transform`
+ * directly, so when an entry has both, the one that appears later in
+ * `entry.tracks` simply overwrites the earlier one (matching the reference's
+ * plain overwrite-in-iteration-order behavior).
  */
 export function sampleStyles(timeline: DeckTimeline, t: number): Map<string, ElementStyle> {
   const styles = new Map<string, ElementStyle>();
@@ -70,29 +73,19 @@ export function sampleStyles(timeline: DeckTimeline, t: number): Map<string, Ele
     const eased = easeInOutCubic(linear);
 
     const style: ElementStyle = styles.get(entry.elementId) ?? {};
-    let scale: number | undefined;
-    const translate: { x: number; y: number } = { x: 0, y: 0 };
-    let hasTranslate = false;
 
-    // Seed from any transform already accumulated for this element is avoided;
-    // each entry re-derives its own transform. Elements typically appear in a
-    // single step, so this stays simple.
     for (const track of entry.tracks) {
       if (track.kind === "opacity") {
         style.opacity = track.from + (track.to - track.from) * linear;
       } else if (track.kind === "scale") {
-        scale = track.from + (track.to - track.from) * eased;
+        const scale = track.from + (track.to - track.from) * eased;
+        style.transform = `scale(${scale})`;
       } else if (track.kind === "translate") {
-        hasTranslate = true;
-        translate.x = track.fromX + (track.toX - track.fromX) * eased;
-        translate.y = track.fromY + (track.toY - track.fromY) * eased;
+        const x = track.fromX + (track.toX - track.fromX) * eased;
+        const y = track.fromY + (track.toY - track.fromY) * eased;
+        style.transform = `translate(${x * 100}%, ${y * 100}%)`;
       }
     }
-
-    const parts: string[] = [];
-    if (hasTranslate) parts.push(`translate(${translate.x * 100}%, ${translate.y * 100}%)`);
-    if (scale !== undefined) parts.push(`scale(${scale})`);
-    if (parts.length > 0) style.transform = parts.join(" ");
 
     styles.set(entry.elementId, style);
   }
@@ -127,10 +120,14 @@ export class DeckStepAnimator {
   }
 
   private resolve(id: string): Element | null {
-    if (!this.elementCache.has(id)) {
-      this.elementCache.set(id, this.svg.querySelector(`#${CSS.escape(id)}`));
-    }
-    return this.elementCache.get(id) ?? null;
+    // Only a found element is cached; a miss is retried on every call so an
+    // element added to the DOM later (e.g. lazily-mounted SVG content) is
+    // picked up instead of staying permanently unresolved.
+    const cached = this.elementCache.get(id);
+    if (cached != null) return cached;
+    const el = this.svg.querySelector(`#${CSS.escape(id)}`);
+    if (el) this.elementCache.set(id, el);
+    return el;
   }
 
   private apply(t: number): void {

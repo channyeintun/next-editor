@@ -123,15 +123,23 @@ export class GoogleSlidesParseError extends Error {}
      `slice(indexOf("<svg"))`. Map pageId → svg.
   4. Steps: for each slide's raw `[7][0]` (array of step groups, may be empty /
      missing — treat defensively), each group is `[entries]` where entry `o` is:
-     skip when `o[6] === 2` or when `o[1]` is one of the page ids (whole-slide
-     transition entries); else
+     skip when `o[1]` is one of the page ids (whole-slide transition entries);
+     else
      `{ elementId: o[1], durationMs: Math.max(o[2], 1), delayMs: o[3], tracks }`
      with tracks from `o[0]`:
      `x[0]===0 → opacity {from: x[1], to: x[2]}`;
      `x[0]===2 → scale {from: x[2], to: x[3]}`;
      `x[0]===3 → translate {fromX: x[1], fromY: x[2], toX: x[3], toY: x[4]}`
      (percent units). Unknown `x[0]` values: ignore the track.
-     Steps with zero surviving entries are dropped.
+     Steps with zero surviving (non-page-id) entries are dropped.
+     > **Correction 2026-07-04:** the above described `o[6] === 2` as an
+     > additional per-entry skip at this same stage, conflated with the
+     > page-id skip. In the reference, `o[6] === 2` is a separate, later
+     > exclusion applied only when building an entry's tracks (it never
+     > gets an opacity/scale/translate track), and it does **not** affect
+     > whether the step itself survives — that decision uses only the
+     > page-id filter above. A step where every surviving entry has
+     > `o[6] === 2` is still kept, as an empty-array step.
   5. Any structural failure (no `docData`, JSON parse failure, zero slides,
      page-id/SVG count mismatch) → throw `GoogleSlidesParseError` with a message
      that tells the user to check the deck is published to the web.

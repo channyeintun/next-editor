@@ -99,6 +99,41 @@ describe("parsePublishedDeck error paths", () => {
     expect(d.slides[0].svg).toBe("<svg><text>a\\b</text></svg>");
   });
 
+  it("keeps a step whose surviving entries are all flag===2 as an empty step, but drops a step whose entries are all page-id-targeted", () => {
+    // Slide "p" has three steps:
+    //  - step A: one entry targeting the page id itself -> zero surviving
+    //    entries after the page-id filter -> dropped entirely.
+    //  - step B: one page-id entry (excluded) plus one flag===2 entry on a
+    //    real element -> one surviving entry at the page-id stage, so the
+    //    step is kept, but the flag===2 entry produces no track -> kept as [].
+    //  - step C: a normal opacity entry -> kept with one entry, to prove
+    //    numbering continues correctly after the empty step.
+    const stepA = [[[[[0, 0, 1]], "p", 100, 0, 0, 0, 0]]];
+    const stepB = [
+      [
+        [[[0, 0, 1]], "p", 100, 0, 0, 0, 0],
+        [[[0, 0, 1]], "el1", 100, 0, 0, 0, 2],
+      ],
+    ];
+    const stepC = [[[[[0, 0, 1]], "el2", 200, 0, 0, 0, 0]]];
+    const rawSteps = [stepA, stepB, stepC];
+    const docData = [[10, 20], [["p", null, "T", null, null, null, null, [rawSteps]]]];
+    const html =
+      `<script>docData: ${JSON.stringify(docData)}</script>` +
+      "<script>setPageData('p');SK_svgData = '\\x3csvg\\x3e\\x3c/svg\\x3e';</script>";
+    const d = parsePublishedDeck(html, SOURCE_URL);
+    expect(d.slides[0].steps).toHaveLength(2);
+    expect(d.slides[0].steps[0]).toEqual([]); // step B: kept, empty
+    expect(d.slides[0].steps[1]).toEqual([
+      {
+        elementId: "el2",
+        durationMs: 200,
+        delayMs: 0,
+        tracks: [{ kind: "opacity", from: 0, to: 1 }],
+      },
+    ]); // step C
+  });
+
   it("bracket-matches docData even with nested arrays", () => {
     // Sanity: the fixture's docData is itself deeply nested, and it parsed
     // above; here we assert a minimal nested case too.

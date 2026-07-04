@@ -76,12 +76,49 @@ describe("sampleStyles", () => {
     expect(s.get("el1")?.opacity).toBe(1);
   });
 
-  it("combines scale and translate into a single transform, opacity separate", () => {
+  it("does not combine scale and translate: opacity stays separate, transform is scale alone", () => {
     const s = sampleStyles(tl, 700); // fully revealed
     expect(s.get("el2")?.opacity).toBe(1);
     expect(s.get("el2")?.transform).toBe("scale(1)");
     // el3 ends at translate(0%, 0%).
     expect(s.get("el3")?.transform).toBe("translate(0%, 0%)");
+  });
+
+  it("when an entry has both scale and translate tracks, the later track in entry.tracks wins (no combined string)", () => {
+    // scale listed after translate -> transform should be the scale string,
+    // never a combination of both.
+    const tlScaleLast = buildTimeline([
+      [
+        {
+          elementId: "x",
+          durationMs: 100,
+          delayMs: 0,
+          tracks: [
+            { kind: "translate", fromX: 0, fromY: 0, toX: 1, toY: 1 },
+            { kind: "scale", from: 0, to: 1 },
+          ],
+        },
+      ],
+    ]);
+    const sScaleLast = sampleStyles(tlScaleLast, 100);
+    expect(sScaleLast.get("x")?.transform).toBe("scale(1)");
+
+    // translate listed after scale -> transform should be the translate string.
+    const tlTranslateLast = buildTimeline([
+      [
+        {
+          elementId: "x",
+          durationMs: 100,
+          delayMs: 0,
+          tracks: [
+            { kind: "scale", from: 0, to: 1 },
+            { kind: "translate", fromX: 0, fromY: 0, toX: 1, toY: 1 },
+          ],
+        },
+      ],
+    ]);
+    const sTranslateLast = sampleStyles(tlTranslateLast, 100);
+    expect(sTranslateLast.get("x")?.transform).toBe("translate(100%, 100%)");
   });
 
   it("eases scale/translate (not linear) mid-step", () => {
@@ -141,6 +178,28 @@ describe("DeckStepAnimator (snap path)", () => {
     const svg = makeSvg(["el1"]); // el2/el3 absent
     const a = new DeckStepAnimator(svg, steps);
     expect(() => a.setRevealed(2)).not.toThrow();
+    a.dispose();
+  });
+
+  it("retries a missing element on later calls instead of caching the miss permanently", () => {
+    const svg = makeSvg(["el1"]); // el2/el3 absent at construction time
+    const a = new DeckStepAnimator(svg, steps);
+
+    // el2 is absent -> setRevealed should not throw, and nothing to assert on
+    // el2 yet since it doesn't exist in the DOM.
+    expect(() => a.setRevealed(2)).not.toThrow();
+    expect(svg.querySelector("#el2")).toBeNull();
+
+    // Now insert el2 into the SVG and change progress again: a permanently
+    // cached miss would mean el2 never gets styled; the fix re-queries on
+    // every miss, so it should now be found and styled.
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("id", "el2");
+    svg.appendChild(g);
+
+    a.setRevealed(0); // change progress so a new style is applied
+    a.setRevealed(2);
+    expect((svg.querySelector("#el2") as SVGElement).style.opacity).toBe("1");
     a.dispose();
   });
 

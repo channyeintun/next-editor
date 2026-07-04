@@ -131,10 +131,21 @@ function convertTracks(rawTracks: unknown): DeckStepTrack[] {
  * Converts a slide's raw build-step data (docData[1][i][7][0]) into typed
  * steps. The raw shape is `[ step, … ]`, where each `step` holds its animation
  * entries at index 0 (i.e. `step[0] = [entry, …]`); each entry is
- * `[tracks, elementId, durationMs, delayMs, _, _, flag]`. Entries are skipped
- * when the flag (index 6) === 2 or when the target id is a page id (whole-slide
- * transition entries); steps with zero surviving entries are dropped. The data
- * may be missing or partial — treated defensively.
+ * `[tracks, elementId, durationMs, delayMs, _, _, flag]`.
+ *
+ * Two independent rules apply, at two different stages (matching the
+ * reference implementation, which applies them in different places too):
+ *  1. Step survival (parse time): entries targeting a page id (whole-slide
+ *     transition entries) are excluded, and a step is dropped only if zero
+ *     entries survive that exclusion. The flag (index 6) plays no role here.
+ *  2. Track building (this function's output): entries with flag === 2 are
+ *     additionally excluded from the returned step's entries — they never
+ *     get an opacity/scale/translate track applied — but their presence
+ *     already counted toward step survival in (1). So a step where every
+ *     surviving (non-page-id) entry has flag === 2 is still kept, just as an
+ *     empty-array `DeckStep`; it still occupies a slot in the step sequence.
+ *
+ * The data may be missing or partial — treated defensively.
  */
 function convertSteps(rawSteps: unknown, pageIds: ReadonlySet<string>): DeckStep[] {
   const steps: DeckStep[] = [];
@@ -143,20 +154,27 @@ function convertSteps(rawSteps: unknown, pageIds: ReadonlySet<string>): DeckStep
     if (!Array.isArray(rawStep)) continue;
     const rawEntries = rawStep[0];
     if (!Array.isArray(rawEntries)) continue;
-    const entries: DeckStepEntry[] = [];
-    for (const entry of rawEntries) {
-      if (!Array.isArray(entry)) continue;
+
+    // Stage 1: survival — exclude only page-id-targeted entries.
+    const survivingEntries = rawEntries.filter((entry): entry is unknown[] => {
+      if (!Array.isArray(entry)) return false;
       const elementId = entry[1];
-      if (typeof elementId !== "string") continue;
-      if (entry[6] === 2 || pageIds.has(elementId)) continue;
+      return typeof elementId === "string" && !pageIds.has(elementId);
+    });
+    if (survivingEntries.length === 0) continue;
+
+    // Stage 2: track building — additionally exclude flag===2 entries.
+    const entries: DeckStepEntry[] = [];
+    for (const entry of survivingEntries) {
+      if (entry[6] === 2) continue;
       entries.push({
-        elementId,
+        elementId: entry[1] as string,
         durationMs: Math.max(asFiniteNumber(entry[2]) ?? 0, 1),
         delayMs: asFiniteNumber(entry[3]) ?? 0,
         tracks: convertTracks(entry[0]),
       });
     }
-    if (entries.length > 0) steps.push(entries);
+    steps.push(entries);
   }
   return steps;
 }
