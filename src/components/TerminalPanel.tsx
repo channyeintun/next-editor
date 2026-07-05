@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import { ChevronDown, ChevronUp, Diamond, Plus, Settings, SquareTerminal, X } from "lucide-react";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
@@ -10,7 +10,6 @@ import {
   selectPlaybackSnapshot,
   selectTerminalScrollLines,
 } from "../stores/runtimePanelStore";
-import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import XtermTerminal from "./XtermTerminal";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
@@ -18,7 +17,6 @@ import {
   useWebContainerRuntimeMetadata,
 } from "../hooks/useWebContainerRuntime";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
-import { useWorkspaceSidebarCollapsed, useWorkspaceSidebarWidth } from "../hooks/useWorkspace";
 import type {
   RuntimeDockTab,
   RuntimeRecordingSnapshot,
@@ -92,10 +90,6 @@ interface RuntimeEventState {
   terminalScrollLines: RuntimeTerminalScrollLines;
 }
 
-type RuntimeDockStyle = CSSProperties & {
-  "--runtime-dock-left": string;
-};
-
 const DOCK_TABS: RuntimeDockTabConfig[] = [
   {
     id: "runner",
@@ -152,15 +146,7 @@ function RunnerToggle({
   );
 }
 
-interface TerminalPanelProps {
-  /**
-   * When the media controls are enlarged (small embeds), the bottom control bar
-   * is much taller and would cover the collapsed dock, so lift the dock above it.
-   */
-  large?: boolean;
-}
-
-function TerminalPanel({ large = false }: TerminalPanelProps) {
+function TerminalPanel() {
   const { store: runtimePanelStore, consoleAppender, consoleOpener } = useRuntimePanelStore();
   const activeTab = useSelector(runtimePanelStore, (s) => selectActiveTab(s.context));
   const isCollapsed = useSelector(runtimePanelStore, (s) => selectIsCollapsed(s.context));
@@ -178,9 +164,6 @@ function TerminalPanel({ large = false }: TerminalPanelProps) {
   const setIsSettingsOpen = (open: boolean) =>
     runtimePanelStore.trigger.setIsSettingsOpen({ open });
   const [isCreatingTerminal, setIsCreatingTerminal] = useState(false);
-  const { dockWidth: previewDockWidth, isDocked: isPreviewDocked } = usePreviewPanel();
-  const sidebarWidth = useWorkspaceSidebarWidth();
-  const isSidebarCollapsed = useWorkspaceSidebarCollapsed();
   const { handleRuntimeEvent } = useNextEditorActions();
   const {
     closeTerminalSession,
@@ -423,19 +406,11 @@ function TerminalPanel({ large = false }: TerminalPanelProps) {
 
   const runnerCommand = runnerConfig.runCommand.trim() || "Runner disabled";
   const runnerOutput = content || "Waiting for runner output...";
-  // Hiding the file explorer frees its column, so the dock starts flush with the
-  // editor (just the gutter) instead of leaving a gap where the sidebar used to be.
-  const effectiveSidebarWidth = isSidebarCollapsed ? 0 : sidebarWidth;
-  const dockStyle: RuntimeDockStyle = {
-    "--runtime-dock-left": `${effectiveSidebarWidth + 16}px`,
-    right: isPreviewDocked ? previewDockWidth + 16 : 16,
-  };
 
   return (
     <>
       <div
-        className={`runtime-dock fixed ${large ? "bottom-40" : "bottom-12"} z-40 flex flex-col overflow-hidden rounded-lg border border-[#0f131a] bg-[#15191f] shadow-[0_18px_40px_rgba(2,6,23,0.42)]`}
-        style={dockStyle}
+        className="flex shrink-0 flex-col overflow-hidden rounded-t-md bg-[#15191f]"
         data-cursor-replay-target="runtime-dock"
       >
         <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">

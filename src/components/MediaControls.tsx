@@ -316,7 +316,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const hasMultipleCaptionTracks = captionTracks && captionTracks.length > 1;
 
   // Size tokens — scale the controls up for small embeds when `large` is set.
-  const containerPadding = large ? "px-10 py-8" : "px-4 py-3";
+  const containerPadding = large ? "px-10 py-8" : "px-4 py-1";
+  const containerHeight = large ? "" : "max-h-10";
   const rowSizing = large ? "gap-8 min-h-20" : "gap-3 min-h-8";
   const transportButtonWidth = large ? "w-[72px]" : "w-6";
   const transportIconSize = large ? 72 : 24;
@@ -330,7 +331,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   return (
     <div
-      className={`${positioning} bottom-0 left-0 z-45 w-full ${containerPadding} pointer-events-none`}
+      className={`${positioning} bottom-0 left-0 z-45 w-full border-t border-[#0f131a] bg-[#11141c] ${containerPadding} ${containerHeight} pointer-events-none`}
     >
       {/* Caption file picker — kept outside the record-only controls so "Import captions…"
           works once a recording is loaded (when the audio-source row is no longer rendered). */}
@@ -520,7 +521,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 {showCaptionMenu && hasMultipleCaptionTracks && (
                   <div
                     role="menu"
-                    className="absolute bottom-full right-0 z-46 mb-2 min-w-40 rounded-lg bg-white py-1 shadow-lg"
+                    className="absolute bottom-full right-0 z-46 mb-2 min-w-40 rounded-lg border border-slate-700 bg-[#2b2f38] py-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
                   >
                     <button
                       type="button"
@@ -530,10 +531,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                         captionTrigger.setEnabled({ enabled: false });
                         setShowCaptionMenu(false);
                       }}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-gray-100 ${
-                        !captionsEnabled
-                          ? "font-semibold text-gray-900"
-                          : "font-normal text-gray-700"
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-slate-700 ${
+                        !captionsEnabled ? "font-semibold text-white" : "font-normal text-slate-300"
                       }`}
                     >
                       <span className="w-4">
@@ -556,8 +555,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                             if (!captionsEnabled) captionTrigger.toggleEnabled();
                             setShowCaptionMenu(false);
                           }}
-                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-gray-100 ${
-                            isSelected ? "font-semibold text-gray-900" : "font-normal text-gray-700"
+                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-slate-700 ${
+                            isSelected ? "font-semibold text-white" : "font-normal text-slate-300"
                           }`}
                         >
                           <span className="w-4">
@@ -581,12 +580,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               </button>
 
               {showSettings && (
-                <div className="absolute bottom-full right-0 z-46 mb-2 min-w-50 rounded-lg bg-white p-4 shadow-lg">
-                  <div className="text-gray-800">
+                <div className="absolute bottom-full right-0 z-46 mb-2 min-w-50 rounded-lg border border-slate-700 bg-[#2b2f38] p-4 shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
+                  <div className="text-slate-100">
                     <div className="mb-3">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Speed</label>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Speed</label>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm text-gray-500 min-w-8">{playbackSpeed}x</span>
+                        <span className="text-sm text-slate-400 min-w-8">{playbackSpeed}x</span>
                         <input
                           type="range"
                           min="0.5"
@@ -594,14 +593,16 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                           step="0.25"
                           value={playbackSpeed}
                           onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
-                          className="flex-1 h-1 bg-gray-300 rounded appearance-none cursor-pointer"
+                          className="flex-1 h-1 bg-slate-600 rounded appearance-none cursor-pointer accent-[#10c776]"
                         />
                       </div>
                     </div>
                     <div className="mb-3">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Volume</label>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Volume
+                      </label>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm text-gray-500 min-w-8">
+                        <span className="text-sm text-slate-400 min-w-8">
                           {Math.round(volume * 100)}
                         </span>
                         <input
@@ -611,15 +612,15 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                           step="0.1"
                           value={volume}
                           onChange={handleVolumeChange}
-                          className="flex-1 h-1 bg-gray-300 rounded appearance-none cursor-pointer"
+                          className="flex-1 h-1 bg-slate-600 rounded appearance-none cursor-pointer accent-[#10c776]"
                         />
                       </div>
                     </div>
-                    <div className="border-t border-gray-200 pt-3">
+                    <div className="border-t border-slate-700 pt-3">
                       <button
                         type="button"
                         onClick={() => captionFileInputRef.current?.click()}
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700"
                       >
                         <Captions size={14} aria-hidden="true" />
                         Import captions…

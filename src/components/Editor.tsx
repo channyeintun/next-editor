@@ -17,8 +17,6 @@ import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProv
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
-import { useWorkspaceLessonType } from "../hooks/useWorkspace";
-import { lessonRunsInWebContainer } from "../types/workspace";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import CameraOverlay from "./CameraOverlay";
 import CaptionsOverlay from "./CaptionsOverlay";
@@ -30,7 +28,6 @@ import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
 import { startTour } from "./tour/productTour";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
-const TerminalPanel = lazy(() => import("./TerminalPanel"));
 
 export interface EditorProps {
   /** Force read-only playback (hides import/export, record mode, tour). Falls back
@@ -63,7 +60,6 @@ export function EditorLayout({
 }: EditorProps = {}) {
   const { isLoading: urlLoading, error: urlError, retry } = useUrlQuery(recordingUrl);
   const { isDragging, error: dropError, clearError: clearDropError } = useDragAndDropUrl();
-  const lessonType = useWorkspaceLessonType();
 
   const { isRecording, currentRecording } = useNextEditorMetadata();
   const { target: postRecordingTarget, clear: clearPostRecordingTarget } = usePostRecordingTarget(
@@ -110,7 +106,6 @@ export function EditorLayout({
         <CursorComponent />
         <CameraOverlay />
         <CaptionsOverlay />
-        {lessonRunsInWebContainer(lessonType) ? <TerminalPanel large={largeControls} /> : null}
         <SlidePanel />
 
         {/* Loading / error overlays live inside the (relative) editor surface so they
@@ -128,7 +123,7 @@ export function EditorLayout({
         ) : null}
       </div>
 
-      <MediaControls recordMode={!readOnly} large={largeControls} />
+      <MediaControls recordMode={!readOnly} large={largeControls} positioning="relative" />
 
       <DragDropOverlay isDragging={isDragging} />
 

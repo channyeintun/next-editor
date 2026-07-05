@@ -15,13 +15,16 @@ import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEdi
 import {
   useWorkspaceActions,
   useWorkspaceEditorState,
+  useWorkspaceLessonType,
   useWorkspaceProjectVersion,
   useWorkspaceSidebarState,
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
+import { lessonRunsInWebContainer } from "../types/workspace";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import BinaryFilePreview from "./BinaryFilePreview";
+import TerminalPanel from "./TerminalPanel";
 import {
   disposePlaybackModels,
   syncPlaybackModel,
@@ -136,6 +139,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const { saveProject, updateFileContent } = useWorkspaceActions();
   const saveWorkspace = useWebContainerRuntimeSaveWorkspace();
   const { activeFile } = useWorkspaceEditorState();
+  const lessonType = useWorkspaceLessonType();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
 
@@ -408,26 +412,32 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           className="flex min-w-0 flex-1 gap-2 overflow-hidden bg-[#11141c]"
           data-cursor-replay-target="editor-and-preview"
         >
-          <div
-            className={"editor-paint-layer min-w-0 flex-1" + (isPlaying ? " playback-mode" : "")}
-            data-cursor-replay-target="code-editor"
-          >
-            {isBinaryActiveFile ? (
-              <BinaryFilePreview file={activeFile} />
-            ) : (
-              <Editor
-                height="100%"
-                path={editorModelPath}
-                language={selectedLanguage}
-                theme={theme}
-                defaultValue={usesPlaybackModel ? activeFile.content : undefined}
-                value={usesPlaybackModel ? undefined : activeFile.content}
-                saveViewState={!usesPlaybackModel}
-                onMount={handleEditorDidMount}
-                beforeMount={handleEditorBeforeMount}
-                options={getEditorOptions(isPlaying)}
-              />
-            )}
+          <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+            <div
+              className={
+                "editor-paint-layer min-h-0 flex-1 overflow-hidden rounded-t-md" +
+                (isPlaying ? " playback-mode" : "")
+              }
+              data-cursor-replay-target="code-editor"
+            >
+              {isBinaryActiveFile ? (
+                <BinaryFilePreview file={activeFile} />
+              ) : (
+                <Editor
+                  height="100%"
+                  path={editorModelPath}
+                  language={selectedLanguage}
+                  theme={theme}
+                  defaultValue={usesPlaybackModel ? activeFile.content : undefined}
+                  value={usesPlaybackModel ? undefined : activeFile.content}
+                  saveViewState={!usesPlaybackModel}
+                  onMount={handleEditorDidMount}
+                  beforeMount={handleEditorBeforeMount}
+                  options={getEditorOptions(isPlaying)}
+                />
+              )}
+            </div>
+            {lessonRunsInWebContainer(lessonType) ? <TerminalPanel /> : null}
           </div>
           <Suspense fallback={null}>
             <Preview />

@@ -214,7 +214,7 @@ function PreviewToolbar({
   const hasPanelBar = showModeToggle && Boolean(onModeChange);
 
   return (
-    <div className="shrink-0 border-b border-slate-800 bg-[#242938]">
+    <div className="shrink-0 rounded-t-md border-b border-slate-800 bg-[#242938]">
       {/* Panel bar — the frame selector and window controls. Frame-agnostic: it
           sits above (never inside) either frame's own chrome. */}
       {hasPanelBar ? (
@@ -422,12 +422,12 @@ export function PreviewChrome({
   const isDocked = mode === "docked";
   const rootStyle = isDocked ? { width: dockExpanded ? dockWidth : 0 } : getFloatingStyle(size);
   const rootClassName = isDocked
-    ? `relative z-30 flex h-full shrink-0 flex-col overflow-hidden border-l border-slate-900 bg-[#1d1f29]${
+    ? `relative z-30 flex h-full shrink-0 flex-col overflow-hidden rounded-md bg-clip-padding bg-[#1d1f29]${
         dockAnimating
           ? " transition-[width] duration-200 ease-out motion-reduce:transition-none"
           : ""
       }`
-    : "fixed z-60 flex flex-col overflow-hidden rounded-xl border border-slate-700 bg-[#1d1f29] shadow-[0_24px_54px_rgba(2,6,23,0.52)] transition-[top,right,width,height,transform,opacity] duration-150 ease-out";
+    : "fixed z-60 flex flex-col overflow-hidden rounded-md border border-slate-700 bg-[#1d1f29] shadow-[0_24px_54px_rgba(2,6,23,0.52)] transition-[top,right,width,height,transform,opacity] duration-150 ease-out";
 
   return (
     <div
