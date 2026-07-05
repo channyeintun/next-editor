@@ -2,18 +2,26 @@ import { Hono } from "hono";
 import type { Env } from "../env";
 import { proxySlideImage } from "../../../src/googleSlides/imageProxy";
 
-// Mounted at /api/image-proxy in worker/index.ts. Reuses the same
-// host-allowlisted (docs.google.com, *.googleusercontent.com) proxy core the
-// Google Slides import feature already uses (src/googleSlides/imageProxy.ts)
-// — Google's avatar images are also served from *.googleusercontent.com and
-// send a Cross-Origin-Resource-Policy header that COEP:require-corp blocks
-// from a direct <img src>. Deliberately a separate route from
-// /api/slide-image (which stays on its current Vercel Edge Function + Vite
-// dev-plugin path until Phase 4 moves it here) so plain `bun run dev` without
-// `dev:worker` running keeps working for Slides unaffected.
-export const imageProxyRoute = new Hono<{ Bindings: Env }>();
+// Mounted at /api/slide-image in worker/index.ts — the same canonical route
+// name the Vercel Edge Function (api/slide-image.ts) and the Vite dev plugin
+// (tube/vite/slideImageProxyPlugin.ts) already use, reusing the identical
+// shared proxy core (src/googleSlides/imageProxy.ts). Also serves Google
+// avatar images: they're hosted on *.googleusercontent.com (already covered
+// by the same host allowlist) and send a Cross-Origin-Resource-Policy header
+// that the app's COEP:require-corp blocks from a direct <img src> — the
+// exact same problem Slides images have.
+//
+// Deliberately NOT added to the vite dev proxy: the existing
+// slideImageProxyPlugin already intercepts this path directly in the vite
+// dev server, independent of whether the Worker is running, so plain
+// `bun run dev` (no `dev:worker`) keeps working unchanged. This
+// implementation only actually gets exercised once deployed to Cloudflare
+// for real (completing part of Phase 4's "move /api/slide-image into the
+// Worker" ahead of schedule) — the Vercel Edge Function and Vite plugin stay
+// in place untouched until that cutover.
+export const slideImageRoute = new Hono<{ Bindings: Env }>();
 
-imageProxyRoute.get("/", async (c) => {
+slideImageRoute.get("/", async (c) => {
   const result = await proxySlideImage(c.req.query("url") ?? null);
 
   if (result.status !== 200 || !result.body) {
