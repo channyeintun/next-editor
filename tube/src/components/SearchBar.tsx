@@ -11,8 +11,8 @@ export default function SearchBar({ value, onChange }: SearchBarProps) {
       <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
       <input
         type="text"
-        aria-label="Search lessons"
-        placeholder="Search lessons..."
+        aria-label="Search authors and lessons"
+        placeholder="Search authors and lessons..."
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => e.key === "Escape" && value && onChange("")}

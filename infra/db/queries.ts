@@ -348,3 +348,35 @@ export async function listPublishedLessonsByOwner(
     .all<LessonRow>();
   return result.results ?? [];
 }
+
+// Backs GET /api/search — authors matched by username or display name.
+export async function searchUsers(db: D1Database, q: string, limit: number): Promise<UserRow[]> {
+  const like = `%${q}%`;
+  const result = await db
+    .prepare("SELECT * FROM users WHERE username LIKE ? OR name LIKE ? ORDER BY name LIMIT ?")
+    .bind(like, like, limit)
+    .all<UserRow>();
+  return result.results ?? [];
+}
+
+// Backs GET /api/search — published lessons matched by title, description, or
+// tags. `tags` is stored as a JSON array string, so the LIKE match here is a
+// substring match against that raw JSON text (same fields the old client-side
+// filter checked, just across every published lesson instead of only loaded pages).
+export async function searchPublishedLessons(
+  db: D1Database,
+  q: string,
+  limit: number,
+): Promise<LessonRow[]> {
+  const like = `%${q}%`;
+  const result = await db
+    .prepare(
+      `SELECT * FROM lessons
+       WHERE status = 'published' AND (title LIKE ? OR description LIKE ? OR tags LIKE ?)
+       ORDER BY published_at DESC
+       LIMIT ?`,
+    )
+    .bind(like, like, like, limit)
+    .all<LessonRow>();
+  return result.results ?? [];
+}

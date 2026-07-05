@@ -4,6 +4,11 @@ import type { Lesson } from "../types";
 import { useLessonsInfinite } from "../hooks/useLessons";
 import LessonCard from "./LessonCard";
 import SearchBar from "./SearchBar";
+import SearchResults from "./SearchResults";
+
+// How long to wait after the last keystroke before firing the backend search
+// request — avoids a request per keystroke while still feeling responsive.
+const SEARCH_DEBOUNCE_MS = 300;
 
 // Card columns per breakpoint — mirrors the Tailwind grid the cards used to live
 // in (grid-cols-1 sm:2 lg:3 xl:4) so the virtualized layout looks identical.
@@ -49,20 +54,15 @@ export default function LessonGrid() {
     refetch,
   } = useLessonsInfinite();
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [query]);
   const columns = useColumns();
 
   const lessons = data?.pages.flatMap((p) => p.lessons) ?? [];
-
-  const q = query.trim().toLowerCase();
-  const filtered = q
-    ? lessons.filter(
-        (l) =>
-          l.title.toLowerCase().includes(q) ||
-          l.description.toLowerCase().includes(q) ||
-          l.tags?.some((t) => t.toLowerCase().includes(q)),
-      )
-    : lessons;
-  const rows = chunk(filtered, columns);
+  const rows = chunk(lessons, columns);
 
   // Virtualize rows against the page scroll, so the navbar and footer stay in
   // normal flow (no nested scrollbar) and only on-screen cards are mounted.
@@ -84,8 +84,9 @@ export default function LessonGrid() {
   });
 
   // Auto-load the next page when the sentinel nears the viewport. Suppressed
-  // while searching: filter what's loaded instead of paging in the background.
-  const canPage = hasNextPage && !q;
+  // while searching: the query bar switches to backend search results
+  // instead (see the render below), so there's no infinite list to page.
+  const canPage = hasNextPage && !debouncedQuery;
   const sentinelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const el = sentinelRef.current;
@@ -121,14 +122,21 @@ export default function LessonGrid() {
     );
   }
 
+  if (debouncedQuery) {
+    return (
+      <div>
+        {lessons.length > 0 && <SearchBar value={query} onChange={setQuery} />}
+        <SearchResults query={debouncedQuery} />
+      </div>
+    );
+  }
+
   return (
     <div>
       {lessons.length > 0 && <SearchBar value={query} onChange={setQuery} />}
 
-      {filtered.length === 0 ? (
-        <div className="flex justify-center py-20 text-slate-400">
-          {lessons.length === 0 ? "No lessons yet." : "No lessons match your search."}
-        </div>
+      {lessons.length === 0 ? (
+        <div className="flex justify-center py-20 text-slate-400">No lessons yet.</div>
       ) : (
         <>
           <div ref={listRef}>
