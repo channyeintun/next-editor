@@ -12,7 +12,7 @@ export default function MyLibraryPage() {
   if (isLoading) {
     return (
       <div className="flex min-h-dvh flex-col bg-[#11141c] font-telegraf text-white">
-        <Navbar actions={<AuthMenu />} />
+        <Navbar minimal actions={<AuthMenu />} />
       </div>
     );
   }
