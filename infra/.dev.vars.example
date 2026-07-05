@@ -1,0 +1,8 @@
+# Copy to infra/.dev.vars (git-ignored) for local `wrangler dev`. Real values
+# come from Chan — see docs/cloudflare-plan.md "Config & secrets to provide".
+# Phase 2 (auth) is when these actually get read; earlier phases run without them.
+
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# Random 32+ byte secret, e.g. `openssl rand -hex 32`.
+SESSION_SECRET=

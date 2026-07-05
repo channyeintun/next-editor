@@ -1,0 +1,47 @@
+name = "next-editor-tube"
+main = "./worker/index.ts"
+compatibility_date = "2026-07-05"
+
+# Without this, esbuild's Yarn PnP detection walks up past the repo root,
+# finds an unrelated ~/.pnp.cjs on this machine, and refuses normal
+# node_modules resolution for "hono" (Wrangler's own suggested fix for this
+# false-positive: https://developers.cloudflare.com/workers/wrangler/configuration/#bundling-issues).
+[alias]
+hono = "hono"
+
+# The SPA build output (bun run build, from the repo root). Static Assets are
+# matched first and served directly (no Worker invocation, no CPU billed);
+# anything that doesn't match a file in here falls through to the Worker
+# (worker/index.ts), which handles /api/*, /media/*, and the SPA fallback.
+[assets]
+directory = "../dist"
+binding = "ASSETS"
+# Serves index.html (200) for any request that doesn't match a static file
+# (used by the Worker's catch-all below). Plain redirect-to-"/" (the default)
+# doesn't work here since our SPA routes (/learn, /code, /learn/:slug) aren't
+# "/" itself.
+not_found_handling = "single-page-application"
+# Without this, an exact static-file match (JS chunks, seed /lessons/*.json,
+# images) is served directly by the edge and never reaches the Worker below —
+# which means it would ship without the COEP/COOP headers the app requires on
+# every response for WebContainers/SharedArrayBuffer (see worker/index.ts).
+# Routing every request through the Worker first costs a bit of Worker CPU on
+# static files, but correctness here isn't optional.
+run_worker_first = true
+
+# TODO(Phase 4): replace database_id with the real one from
+# `wrangler d1 create next-editor-tube` — needs Cloudflare account auth from
+# Chan (see docs/progress.md). Local `wrangler dev` only uses this id to key
+# the Miniflare-simulated local SQLite file, so the placeholder works for now.
+[[d1_databases]]
+binding = "DB"
+database_name = "next-editor-tube"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "./db/migrations"
+
+# TODO(Phase 4): create the real bucket (`wrangler r2 bucket create
+# next-editor-tube-media`) — needs Cloudflare account auth from Chan. Local
+# `wrangler dev` simulates R2 locally regardless of whether the bucket exists.
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "next-editor-tube-media"
