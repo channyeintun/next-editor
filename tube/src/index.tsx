@@ -1,4 +1,3 @@
 export { default } from "./LearnPage";
 export { default as LearnPage } from "./LearnPage";
-export { default as LessonDetailRoute } from "./components/LessonDetailRoute";
-export { default as AuthorProfilePage } from "./AuthorProfilePage";
+export { default as LearnSlugRoute } from "./components/LearnSlugRoute";

@@ -169,18 +169,12 @@ export const router = createBrowserRouter([
     ErrorBoundary: RouteErrorBoundary,
   },
   {
-    path: "/learn/@:username",
-    lazy: lazyRoute(
-      () => import("@next-editor/tube").then((m) => ({ default: m.AuthorProfilePage })),
-      "/learn/@:username",
-    ),
-    HydrateFallback: RouteHydrateFallback,
-    ErrorBoundary: RouteErrorBoundary,
-  },
-  {
+    // Handles both lesson detail (/learn/some-title-abc12345) and author
+    // profiles (/learn/@username) — see LearnSlugRoute for why these can't
+    // be split into two router-level routes.
     path: "/learn/:slug",
     lazy: lazyRoute(
-      () => import("@next-editor/tube").then((m) => ({ default: m.LessonDetailRoute })),
+      () => import("@next-editor/tube").then((m) => ({ default: m.LearnSlugRoute })),
       "/learn/:slug",
     ),
     HydrateFallback: RouteHydrateFallback,

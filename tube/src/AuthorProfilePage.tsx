@@ -1,17 +1,17 @@
 import type { ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { Link } from "react-router";
 import Navbar from "@app/components/Navbar";
 import { AuthMenu, avatarProxyUrl, useAuth, useAuthorProfile } from "@next-editor/infra";
 import Breadcrumb from "./components/Breadcrumb";
 import MyLibraryGrid from "./components/MyLibraryGrid";
 import LessonCard from "./components/LessonCard";
 
-// /learn/@username: the signed-in owner's own management view (draft +
-// published, same as the old /learn/mine) when the username is their own,
-// or a read-only public profile (published lessons only) for anyone else's
-// username — including a signed-out visitor.
-export default function AuthorProfilePage() {
-  const { username } = useParams();
+// /learn/@username (routed through LearnSlugRoute, which strips the "@"):
+// the signed-in owner's own management view (draft + published, same as the
+// old /learn/mine) when the username is their own, or a read-only public
+// profile (published lessons only) for anyone else's username — including a
+// signed-out visitor.
+export default function AuthorProfilePage({ username }: { username: string }) {
   const { user, isLoading: authLoading } = useAuth();
 
   if (authLoading) {
@@ -33,7 +33,7 @@ export default function AuthorProfilePage() {
     );
   }
 
-  return <PublicAuthorProfile username={username!} />;
+  return <PublicAuthorProfile username={username} />;
 }
 
 function PublicAuthorProfile({ username }: { username: string }) {
