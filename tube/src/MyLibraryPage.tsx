@@ -1,6 +1,7 @@
 import { Navigate } from "react-router";
 import Navbar from "@app/components/Navbar";
 import { AuthMenu, useAuth } from "@next-editor/infra";
+import Breadcrumb from "./components/Breadcrumb";
 import MyLibraryGrid from "./components/MyLibraryGrid";
 
 // Owner-only view of every lesson the signed-in user has uploaded (draft +
@@ -27,7 +28,9 @@ export default function MyLibraryPage() {
       <Navbar actions={<AuthMenu />} />
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-6 pb-20 pt-2 sm:px-8">
-        <h1 className="py-4 text-lg font-bold tracking-wide">My Library</h1>
+        <div className="py-4">
+          <Breadcrumb title="My Library" />
+        </div>
         <MyLibraryGrid />
       </main>
     </div>
