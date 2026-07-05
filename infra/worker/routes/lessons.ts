@@ -30,6 +30,18 @@ function asStringArray(value: unknown): string[] | null {
   return value.filter((item): item is string => typeof item === "string");
 }
 
+// The client sends the raw R2 key it just uploaded to (e.g.
+// "lessons/<id>/<id>.ne", from POST /api/uploads/:id/media/:filename's
+// response) — but that key is only actually servable at /media/<key> (see
+// routes/media.ts), not at the bare key path. tube's resolveThumb()/
+// LessonDetail always do `/${lesson.ne}` (matching the static seed
+// manifest's convention, where seed files really do live at the site root),
+// so the value stored here must already include the "media/" prefix or the
+// resulting URL 404s straight to the SPA shell instead of the real bytes.
+function toMediaPath(rawUploadPath: string): string {
+  return `media/${rawUploadPath}`;
+}
+
 // Mounted at /api/lessons in worker/index.ts. GET routes are public and
 // published-only — draft rows never reach the public gallery (see
 // docs/cloudflare-architecture.md). Everything else requires the signed-in
@@ -84,8 +96,8 @@ lessonsRoute.post("/", async (c) => {
       ownerId: user.id,
       title,
       description: typeof body.description === "string" ? body.description : null,
-      thumbnail: typeof body.thumbnail === "string" ? body.thumbnail : null,
-      ne: body.ne,
+      thumbnail: typeof body.thumbnail === "string" ? toMediaPath(body.thumbnail) : null,
+      ne: toMediaPath(body.ne),
       duration: typeof body.duration === "string" ? body.duration : null,
       tags: asStringArray(body.tags),
       author: user.name,
@@ -128,7 +140,7 @@ lessonsRoute.patch("/:id", async (c) => {
     updateParams.tags = tags;
   }
   if (typeof body.thumbnail === "string") {
-    updateParams.thumbnail = body.thumbnail;
+    updateParams.thumbnail = toMediaPath(body.thumbnail);
   }
 
   const row = await updateLesson(c.env.DB, c.req.param("id"), user.id, updateParams);
