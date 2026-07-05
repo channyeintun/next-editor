@@ -61,14 +61,15 @@ Real Google OAuth Client ID/Secret received from Chan and saved to `infra/.dev.v
 
 ## Phase 3 — Write path (upload + publish)
 
-- [ ] ⬜ P3.1 `src/`: extract `buildRecordingFiles` from `RecordingStorage.exportAsFile` (pure); expose via `NextEditorContext`
+UX spec for the upload modal done via the `frontend-ux-design` skill and approved by Chan — see [upload-modal-ux-spec.md](./upload-modal-ux-spec.md) — before any code. Key decisions: modal auto-opens once per stopped recording (dismissible, never a gate — the recording is already safe in IndexedDB); signed-out state is metadata-free (just a Sign-in button) so nothing typed is ever at risk of being lost across the OAuth redirect _except_ the one case where the session expires mid-form, where the resume intent also carries the typed values; draft→publish is two explicit steps.
+
+- [x] ✅ P3.1 `src/`: extracted `buildRecordingFiles` from `RecordingStorage.exportAsFile` (pure, tested directly — no `NextEditorContext` needed, since it's pure/stateless; infra imports it straight from `@app/storage/RecordingStorage`, same pattern as `@app/components/Editor`)
 - [ ] ⬜ P3.2 `src/components/Editor.tsx`: add `renderPostRecordingModal` render-prop (opt-in, no behavior change when absent)
-- [ ] ⬜ P3.3 `frontend-ux-design` pass for `<UploadLessonModal>` states (signed-out, OAuth-return resume, form, uploading, success, error)
-- [ ] ⬜ P3.4 `POST /api/uploads/sign` — presigned R2 PUT URLs, scoped to `lessons/<id>/…`
-- [ ] ⬜ P3.5 `POST /api/lessons` (draft), `PATCH /api/lessons/:id`, `POST /api/lessons/:id/publish`, `DELETE /api/lessons/:id` — ownership-enforced
-- [ ] ⬜ P3.6 `infra/client/upload/` — `UploadLessonModal`, `useUploadLesson`, `resumeIntent` (OAuth-redirect resume via IndexedDB-persisted recording)
-- [ ] ⬜ P3.7 Wire `/code` route: `renderPostRecordingModal={(ctx) => <UploadLessonModal {...ctx} />}`
-- [ ] ⬜ P3.8 Manual verification: record → sign in → upload → draft → publish → shows in gallery → plays back
+- [ ] ⬜ P3.3 `POST /api/uploads/sign` — presigned R2 PUT URLs, scoped to `lessons/<id>/…`
+- [ ] ⬜ P3.4 `POST /api/lessons` (draft), `PATCH /api/lessons/:id`, `POST /api/lessons/:id/publish`, `DELETE /api/lessons/:id` — ownership-enforced via `getCurrentUser`
+- [ ] ⬜ P3.5 `infra/client/upload/` — `UploadLessonModal`, `useUploadLesson`, `resumeIntent` (IndexedDB-persisted, survives the OAuth redirect)
+- [ ] ⬜ P3.6 Wire `/code` route: `renderPostRecordingModal={(ctx) => <UploadLessonModal {...ctx} />}`
+- [ ] ⬜ P3.7 Manual verification: record → sign in → upload → draft → publish → shows in gallery → plays back
 
 ## Phase 4 — Cutover & hardening — ⛔ needs real Cloudflare account auth (login or API token) + domain before this phase
 
