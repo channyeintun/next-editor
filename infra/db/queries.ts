@@ -9,35 +9,94 @@ export interface UpsertUserParams {
   avatarUrl: string | null;
 }
 
+function slugifyUsername(base: string): string {
+  const slug = base
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "user";
+}
+
+// Generates a username unique against the DB by appending -2, -3, ... on
+// collision. Only called once per user, at creation — usernames never
+// change afterward, since they're baked into lesson author_url links.
+async function generateUniqueUsername(db: D1Database, base: string): Promise<string> {
+  const slug = slugifyUsername(base);
+  for (let suffix = 0; ; suffix++) {
+    const candidate = suffix === 0 ? slug : `${slug}-${suffix}`;
+    const existing = await db
+      .prepare("SELECT 1 FROM users WHERE username = ?")
+      .bind(candidate)
+      .first();
+    if (!existing) return candidate;
+  }
+}
+
 // Keyed on google_sub (stable across logins); email/name/avatar refresh on
 // every sign-in so profile changes on the Google side propagate here.
+// username is generated once, on first sign-in, and never touched again by
+// this function (unlike a single INSERT ... ON CONFLICT, this needs a
+// read-then-write split so a new user's username can be looked up for
+// uniqueness before the row exists).
 export async function upsertUserByGoogleSub(
   db: D1Database,
   params: UpsertUserParams,
 ): Promise<UserRow> {
-  const row = await db
-    .prepare(
-      `INSERT INTO users (id, google_sub, email, name, avatar_url, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(google_sub) DO UPDATE SET
-         email = excluded.email,
-         name = excluded.name,
-         avatar_url = excluded.avatar_url
-       RETURNING *`,
-    )
-    .bind(
-      crypto.randomUUID(),
-      params.googleSub,
-      params.email,
-      params.name,
-      params.avatarUrl,
-      Date.now(),
-    )
+  const existing = await db
+    .prepare("SELECT * FROM users WHERE google_sub = ?")
+    .bind(params.googleSub)
     .first<UserRow>();
-  if (!row) {
-    throw new Error("upsertUserByGoogleSub: INSERT ... RETURNING produced no row");
+
+  if (existing) {
+    const row = await db
+      .prepare(
+        `UPDATE users SET email = ?, name = ?, avatar_url = ?
+         WHERE google_sub = ?
+         RETURNING *`,
+      )
+      .bind(params.email, params.name, params.avatarUrl, params.googleSub)
+      .first<UserRow>();
+    if (!row) {
+      throw new Error("upsertUserByGoogleSub: UPDATE ... RETURNING produced no row");
+    }
+    return row;
   }
-  return row;
+
+  const username = await generateUniqueUsername(db, params.name ?? params.email.split("@")[0]);
+  try {
+    const row = await db
+      .prepare(
+        `INSERT INTO users (id, google_sub, email, name, avatar_url, username, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         RETURNING *`,
+      )
+      .bind(
+        crypto.randomUUID(),
+        params.googleSub,
+        params.email,
+        params.name,
+        params.avatarUrl,
+        username,
+        Date.now(),
+      )
+      .first<UserRow>();
+    if (!row) {
+      throw new Error("upsertUserByGoogleSub: INSERT ... RETURNING produced no row");
+    }
+    return row;
+  } catch (error) {
+    // Two concurrent first-sign-ins for the same brand-new google_sub (e.g.
+    // the OAuth callback opened in two tabs) both pass the SELECT above and
+    // race to INSERT; the loser hits the UNIQUE(google_sub) constraint. The
+    // winner's row is what should be returned either way.
+    const row = await db
+      .prepare("SELECT * FROM users WHERE google_sub = ?")
+      .bind(params.googleSub)
+      .first<UserRow>();
+    if (!row) throw error;
+    return row;
+  }
 }
 
 export async function createSession(db: D1Database, userId: string): Promise<SessionRow> {
@@ -265,4 +324,27 @@ export async function deleteLesson(db: D1Database, id: string, ownerId: string):
     .bind(id, ownerId)
     .run();
   return (result.meta.changes ?? 0) > 0;
+}
+
+export async function getUserByUsername(db: D1Database, username: string): Promise<UserRow | null> {
+  const row = await db
+    .prepare("SELECT * FROM users WHERE username = ?")
+    .bind(username)
+    .first<UserRow>();
+  return row ?? null;
+}
+
+// Backs the public author-profile view (/learn/@username for anyone but the
+// owner) — published only, unlike listOwnedLessons.
+export async function listPublishedLessonsByOwner(
+  db: D1Database,
+  ownerId: string,
+): Promise<LessonRow[]> {
+  const result = await db
+    .prepare(
+      "SELECT * FROM lessons WHERE owner_id = ? AND status = 'published' ORDER BY published_at DESC",
+    )
+    .bind(ownerId)
+    .all<LessonRow>();
+  return result.results ?? [];
 }

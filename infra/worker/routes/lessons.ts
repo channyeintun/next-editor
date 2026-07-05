@@ -113,7 +113,7 @@ lessonsRoute.post("/", async (c) => {
       duration: typeof body.duration === "string" ? body.duration : null,
       tags: asStringArray(body.tags),
       author: user.name,
-      authorUrl: null,
+      authorUrl: `/learn/@${user.username}`,
     });
     return c.json(lessonRowToOwnedLesson(row), 201);
   } catch (error) {

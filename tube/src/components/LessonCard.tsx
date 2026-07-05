@@ -64,14 +64,12 @@ export default function LessonCard({ lesson }: { lesson: Lesson }) {
           <p className="mt-1 text-xs text-slate-400">
             {lesson.author &&
               (lesson.authorUrl ? (
-                <a
-                  href={lesson.authorUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  to={lesson.authorUrl}
                   className="rounded outline-none hover:text-white hover:underline focus-visible:text-white focus-visible:underline"
                 >
                   {lesson.author}
-                </a>
+                </Link>
               ) : (
                 <span>{lesson.author}</span>
               ))}

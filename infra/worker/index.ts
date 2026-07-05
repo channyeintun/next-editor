@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "./env";
 import { lessonsRoute } from "./routes/lessons";
+import { authorsRoute } from "./routes/authors";
 import { mediaRoute } from "./routes/media";
 import { authRoute } from "./auth/session";
 import { googleAuthRoute } from "./auth/google";
@@ -29,6 +30,7 @@ app.use("*", async (c, next) => {
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
 app.route("/api/lessons", lessonsRoute);
+app.route("/api/authors", authorsRoute);
 app.route("/media", mediaRoute);
 app.route("/api/auth", authRoute);
 app.route("/api/auth/google", googleAuthRoute);

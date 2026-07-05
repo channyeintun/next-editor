@@ -6,6 +6,7 @@ export interface UserRow {
   email: string;
   name: string | null;
   avatar_url: string | null;
+  username: string;
   created_at: number;
 }
 
@@ -15,12 +16,29 @@ export interface AuthUser {
   email: string;
   name: string | null;
   avatarUrl: string | null;
+  username: string;
 }
 
 export function userRowToAuthUser(row: UserRow): AuthUser {
   return {
     id: row.id,
     email: row.email,
+    name: row.name,
+    avatarUrl: row.avatar_url,
+    username: row.username,
+  };
+}
+
+/** Public author info — used by the author-profile and search endpoints. */
+export interface AuthorSummary {
+  username: string;
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+export function userRowToAuthorSummary(row: UserRow): AuthorSummary {
+  return {
+    username: row.username,
     name: row.name,
     avatarUrl: row.avatar_url,
   };

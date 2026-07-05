@@ -74,7 +74,7 @@ export default function AuthMenu() {
               Start creating
             </Link>
             <Link
-              to="/learn/mine"
+              to={`/learn/@${user.username}`}
               role="menuitem"
               onClick={() => setMenuOpen(false)}
               className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10"
