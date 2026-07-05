@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAuth, useSignOut, signInUrl } from "./useAuth";
+import { useAuth, useSignOut, signInUrl, avatarProxyUrl } from "./useAuth";
 
 // Sign-in link / avatar menu for the Navbar's `actions` slot. Matches the
 // existing pill-button style ("Start creating" in Navbar.tsx) so it reads as
@@ -35,7 +35,7 @@ export default function AuthMenu() {
       >
         {user.avatarUrl ? (
           <img
-            src={user.avatarUrl}
+            src={avatarProxyUrl(user.avatarUrl)}
             alt=""
             className="size-7 rounded-full"
             referrerPolicy="no-referrer"

@@ -57,3 +57,14 @@ export function signInUrl(returnTo?: string): string {
   }
   return url.toString();
 }
+
+// Google's avatar images (*.googleusercontent.com) send a
+// Cross-Origin-Resource-Policy header that the app's COEP:require-corp
+// blocks from a direct <img src>, same issue the Google Slides import
+// feature already solved — reuses that same proxy core, mounted in the
+// Worker at /api/image-proxy (see infra/worker/routes/imageProxy.ts).
+export function avatarProxyUrl(avatarUrl: string): string {
+  const url = new URL("/api/image-proxy", window.location.origin);
+  url.searchParams.set("url", avatarUrl);
+  return url.toString();
+}

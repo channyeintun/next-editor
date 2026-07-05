@@ -1,8 +1,9 @@
-import { lazy, useEffect, useRef, useState } from "react";
+import { lazy, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import type { Recording } from "../core/src";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
+import { usePostRecordingTarget } from "../hooks/usePostRecordingTarget";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
@@ -61,18 +62,10 @@ export function EditorLayout({
   const lessonType = useWorkspaceLessonType();
 
   const { isRecording, currentRecording } = useNextEditorMetadata();
-  const wasRecordingRef = useRef(false);
-  const [postRecordingTarget, setPostRecordingTarget] = useState<Recording | null>(null);
-
-  useEffect(() => {
-    // Only the live isRecording(true) -> (false) edge counts as "just finished
-    // recording" — a recording loaded from a URL or an import never sets
-    // isRecording true in the first place, so it can't false-trigger this.
-    if (wasRecordingRef.current && !isRecording && currentRecording) {
-      setPostRecordingTarget(currentRecording);
-    }
-    wasRecordingRef.current = isRecording;
-  }, [isRecording, currentRecording]);
+  const { target: postRecordingTarget, clear: clearPostRecordingTarget } = usePostRecordingTarget(
+    isRecording,
+    currentRecording,
+  );
 
   // Props win; otherwise fall back to URL params so the /code route keeps working.
   // Read params through the router (not `window.location.search`) so we share one
@@ -140,7 +133,7 @@ export function EditorLayout({
       {postRecordingTarget && renderPostRecordingModal
         ? renderPostRecordingModal({
             recording: postRecordingTarget,
-            onClose: () => setPostRecordingTarget(null),
+            onClose: clearPostRecordingTarget,
           })
         : null}
     </div>

@@ -164,6 +164,10 @@ export default defineConfig({
       "/api/lessons": "http://localhost:8787",
       "/api/auth": "http://localhost:8787",
       "/api/uploads": "http://localhost:8787",
+      // Distinct from /api/slide-image (left alone above, on purpose — see
+      // that route's own comment): a separate path so plain `bun run dev`
+      // without `dev:worker` running is unaffected for Google Slides.
+      "/api/image-proxy": "http://localhost:8787",
       "/media": "http://localhost:8787",
     },
   },
