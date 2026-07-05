@@ -1,5 +1,8 @@
-import { lazy, useEffect, useRef } from "react";
+import { lazy, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
+import type { Recording } from "../core/src";
+import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
@@ -39,6 +42,11 @@ export interface EditorProps {
   /** Fill the parent (`h-full`) instead of the viewport (`h-dvh`), so the editor can
    *  sit below other chrome (e.g. the /learn detail header). Defaults to viewport. */
   fill?: boolean;
+  /** Render an app-supplied UI once a recording finishes (e.g. an upload modal).
+   *  Fires exactly once per stop — not for a recording loaded via URL/import, which
+   *  never transitions isRecording true->false. Kept generic so this component has
+   *  no knowledge of what it renders (infra owns the actual modal). */
+  renderPostRecordingModal?: (ctx: { recording: Recording; onClose: () => void }) => ReactNode;
 }
 
 export function EditorLayout({
@@ -46,10 +54,25 @@ export function EditorLayout({
   recordingUrl,
   largeControls: largeControlsProp,
   fill = false,
+  renderPostRecordingModal,
 }: EditorProps = {}) {
   const { isLoading: urlLoading, error: urlError, retry } = useUrlQuery(recordingUrl);
   const { isDragging, error: dropError, clearError: clearDropError } = useDragAndDropUrl();
   const lessonType = useWorkspaceLessonType();
+
+  const { isRecording, currentRecording } = useNextEditorMetadata();
+  const wasRecordingRef = useRef(false);
+  const [postRecordingTarget, setPostRecordingTarget] = useState<Recording | null>(null);
+
+  useEffect(() => {
+    // Only the live isRecording(true) -> (false) edge counts as "just finished
+    // recording" — a recording loaded from a URL or an import never sets
+    // isRecording true in the first place, so it can't false-trigger this.
+    if (wasRecordingRef.current && !isRecording && currentRecording) {
+      setPostRecordingTarget(currentRecording);
+    }
+    wasRecordingRef.current = isRecording;
+  }, [isRecording, currentRecording]);
 
   // Props win; otherwise fall back to URL params so the /code route keeps working.
   // Read params through the router (not `window.location.search`) so we share one
@@ -113,6 +136,13 @@ export function EditorLayout({
       <DragDropOverlay isDragging={isDragging} />
 
       {!urlLoading && !urlError && !dropError ? <FloatingPlayButton /> : null}
+
+      {postRecordingTarget && renderPostRecordingModal
+        ? renderPostRecordingModal({
+            recording: postRecordingTarget,
+            onClose: () => setPostRecordingTarget(null),
+          })
+        : null}
     </div>
   );
 }
