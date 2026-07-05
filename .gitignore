@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.dev.vars
+.wrangler
 
 # Editor directories and files
 .idea
