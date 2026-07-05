@@ -2,7 +2,8 @@
 
 Tracks implementation of [cloudflare-plan.md](./cloudflare-plan.md) /
 [cloudflare-architecture.md](./cloudflare-architecture.md). Update after every
-completed task. Checkbox = merged to `main`.
+completed task. Checkbox = merged to `main`. For actually shipping a change or
+setting this up from scratch, see [cloudflare-deploy-guide.md](./cloudflare-deploy-guide.md).
 
 Legend: ✅ done · 🚧 in progress · ⛔ blocked (needs input from Chan) · ⬜ not started
 
