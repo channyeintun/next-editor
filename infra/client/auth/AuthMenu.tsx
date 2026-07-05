@@ -44,10 +44,10 @@ export default function AuthMenu() {
           />
         ) : (
           <span className="flex size-7 items-center justify-center rounded-full bg-pinata-purple text-xs font-semibold uppercase">
-            {(user.name ?? user.email)[0]}
+            {(user.name || user.email)[0]}
           </span>
         )}
-        <span className="hidden max-w-32 truncate sm:inline">{user.name ?? user.email}</span>
+        <span className="hidden max-w-32 truncate sm:inline">{user.name || user.email}</span>
       </button>
 
       {menuOpen && (

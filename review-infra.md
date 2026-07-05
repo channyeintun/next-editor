@@ -13,7 +13,13 @@ suffix check against SSRF. The findings below are the exceptions.
 
 ## High
 
-### H1 — Stored XSS: user SVGs are served as active content from the app's own origin
+### H1 — Stored XSS: user SVGs are served as active content from the app's own origin — **FIXED**
+
+> Removed `svg` from the upload extension allow-list (`worker/routes/uploads.ts`),
+> the client `accept`/validation lists (`thumbnailConstraints.ts`,
+> `uploadLesson.ts`, `UploadLessonModal.tsx`, `tube/MyLessonCard.tsx`), and added
+> `X-Content-Type-Options: nosniff` on `/media/*` as defense in depth
+> (`worker/routes/media.ts`).
 
 **Files:** `worker/routes/media.ts:21-47`, `worker/routes/uploads.ts:16` &
 `:41-43`, `client/upload/resizeThumbnail.ts:10`,
@@ -56,7 +62,12 @@ adding regardless, so a mislabeled non-SVG upload can't be sniffed into HTML.
 
 ## Medium
 
-### M1 — Uploads have no server-side size limit
+### M1 — Uploads have no server-side size limit — **FIXED**
+
+> Added a server-side `Content-Length` check in `worker/routes/uploads.ts`:
+> thumbnail extensions are capped at `MAX_THUMBNAIL_BYTES` (5MB, shared with the
+> client), everything else at a 200MB backstop; a missing/non-numeric
+> `Content-Length` is rejected (411) rather than trusted.
 
 **File:** `worker/routes/uploads.ts:36-43`
 
@@ -75,7 +86,13 @@ check (reject over N MB) before the `BUCKET.put`, and/or a per-user object
 budget. (The `.ne`/media allow-list on the extension helps, but not on size or
 count.)
 
-### M2 — `/media/*` serves any R2 key publicly with `immutable` caching and no published check
+### M2 — `/media/*` serves any R2 key publicly with `immutable` caching and no published check — **DOCUMENTED, NOT GATED**
+
+> Left as acceptable-by-design (gating this route on session + lesson status is
+> a larger architecture change, and would need to reconcile with CDN
+> cacheability) — added a one-line comment on `mediaRoute` in
+> `worker/routes/media.ts` making the trade-off explicit so it isn't mistaken
+> for an oversight later. Revisit if draft privacy becomes a real requirement.
 
 **File:** `worker/routes/media.ts:15-47`
 
@@ -93,7 +110,15 @@ future regression from assuming drafts are private.
 
 ## Low
 
-### L1 — Concurrent first-sign-in can 500 on a username collision; taken-username detection is string-fragile
+### L1 — Concurrent first-sign-in can 500 on a username collision; taken-username detection is string-fragile — **FIXED**
+
+> `upsertUserByGoogleSub` now retries the INSERT (bounded, 5 attempts) with a
+> freshly generated username when the failure is a username collision rather
+> than a `google_sub` race. Both `updateUsername` and the new retry logic use a
+> shared `isUniqueConstraintViolation(error, column)` helper matching SQLite's
+> specific `UNIQUE constraint failed: users.<column>` message instead of a bare
+> `"UNIQUE"` substring check. The `email UNIQUE` edge case noted below is
+> unchanged (accepted as unlikely with real Google accounts).
 
 **File:** `db/queries.ts:25-35`, `:90-101`, `:345-370`
 
@@ -116,7 +141,12 @@ future regression from assuming drafts are private.
   identities ever present the same email, that update violates the constraint
   and throws. Unlikely with real Google accounts, worth being aware of.
 
-### L2 — `LIKE` search: query not length-capped and wildcards unescaped
+### L2 — `LIKE` search: query not length-capped and wildcards unescaped — **FIXED**
+
+> Added `escapeLikePattern()` in `db/queries.ts` (escapes `%`, `_`, `\`) with a
+> matching `ESCAPE '\\'` clause on every `LIKE` in `searchUsers` and
+> `searchPublishedLessons`, and capped `q` at 100 characters in
+> `worker/routes/search.ts` before it reaches either query.
 
 **File:** `db/queries.ts:388-395` (`searchUsers`), `:401-417` (`searchPublishedLessons`)
 
@@ -129,7 +159,14 @@ future regression from assuming drafts are private.
   precludes index use). Add a length cap and escape LIKE metacharacters with an
   `ESCAPE` clause.
 
-### L3 — CSRF relies solely on `SameSite=Lax`; expired sessions are never reaped
+### L3 — CSRF relies solely on `SameSite=Lax`; expired sessions are never reaped — **PARTIALLY FIXED**
+
+> `createSession` now opportunistically deletes that same user's already-expired
+> sessions before inserting the new one, bounding growth for active users
+> without needing new cron infrastructure. A full sweep of expired sessions
+> from inactive users is still left for a future reconcile job, as noted. The
+> CSRF/`SameSite=Lax` posture is unchanged — it's a conscious, documented
+> choice, not a gap to fix.
 
 **File:** `worker/auth/session.ts:27-35`, `db/queries.ts:121-131`
 

@@ -85,8 +85,8 @@ export default function UploadLessonModal({
 
     if (!file) return;
 
-    if (!/^image\/(png|jpeg|svg\+xml)$/.test(file.type)) {
-      setThumbnailError("Choose a PNG, JPG, or SVG image.");
+    if (!/^image\/(png|jpeg)$/.test(file.type)) {
+      setThumbnailError("Choose a PNG or JPG image.");
       return;
     }
     if (file.size > MAX_THUMBNAIL_BYTES) {

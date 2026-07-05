@@ -14,7 +14,13 @@ and is where the notable finding is. No High-severity issues.
 
 ## Medium
 
-### T1 — D1 fetch paths lack the SPA-HTML-fallback guard the seed paths have (asymmetry → crash on HTML)
+### T1 — D1 fetch paths lack the SPA-HTML-fallback guard the seed paths have (asymmetry → crash on HTML) — **FIXED**
+
+> Both `fetchD1Page` and the D1 branch of `findLessonBySlug` (`src/lib/lessons.ts`)
+> now call `isHtmlFallback` the same way the seed paths already did — an HTML
+> response is treated as "no results" / "not found" instead of trusted as JSON.
+> Added matching regression tests in `lessons.test.ts` mirroring the existing
+> seed-path coverage.
 
 **File:** `src/lib/lessons.ts:58-61` (`fetchD1Page`), `:100-106` (`findLessonBySlug` D1 branch)
 
@@ -48,7 +54,11 @@ symmetry and dev robustness.
 
 ## Low
 
-### T2 — `/learn/@` (empty handle) spins forever
+### T2 — `/learn/@` (empty handle) spins forever — **FIXED**
+
+> `LearnSlugRoute` now redirects to `/learn` (via `<Navigate replace>`) when the
+> `@`-prefixed slug has no username after it, instead of rendering
+> `AuthorProfilePage` with an empty string.
 
 **Files:** `src/components/LearnSlugRoute.tsx:15-18`, `src/AuthorProfilePage.tsx:41-49`,
 `infra/client/authors/useAuthorProfile.ts`
@@ -60,7 +70,11 @@ runs and `isPending` stays `true` forever, leaving the user on a permanent
 "Loading profile…" state rather than an "Author not found" / redirect. Guard
 the empty-username case (treat it as not-found, or redirect to `/learn`).
 
-### T3 — Avatar/name initial assumes a non-empty `name`
+### T3 — Avatar/name initial assumes a non-empty `name` — **FIXED**
+
+> Swapped `??` for `||` at all three call sites (`AuthorProfilePage.tsx`,
+> `SearchResults.tsx`, and `infra/client/auth/AuthMenu.tsx`), so an empty-string
+> `name` falls back to the username/email the same way `null`/`undefined` does.
 
 **Files:** `src/AuthorProfilePage.tsx:86` & `:103-104`, `src/components/SearchResults.tsx:64-68`,
 `infra/client/auth/AuthMenu.tsx:48`

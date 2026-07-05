@@ -93,6 +93,17 @@ describe("fetchLessonsPage", () => {
     const page = await fetchLessonsPage("d1:3");
     expect(page.nextPage).toBeNull();
   });
+
+  it("treats a d1 SPA fallback (200 + text/html) as an empty terminal page instead of crashing", async () => {
+    // Same hazard as the seed shard case above, but for plain `bun run dev`
+    // (no dev:worker): /api/lessons has no handler at all there, so it falls
+    // through to the SPA index.html the same way an out-of-range seed shard
+    // does in production.
+    mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
+    const page = await fetchLessonsPage("d1:0");
+    expect(page.lessons).toEqual([]);
+    expect(page.nextPage).toBeNull();
+  });
 });
 
 describe("findLessonBySlug", () => {
@@ -140,6 +151,13 @@ describe("findLessonBySlug", () => {
   it("returns null when the seed shard 200s as HTML and D1 genuinely 404s too", async () => {
     mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
     mockedGet.mockRejectedValueOnce(axiosError(404));
+    const lesson = await findLessonBySlug("nope");
+    expect(lesson).toBeNull();
+  });
+
+  it("returns null when both the seed shard and the D1 lookup 200 as HTML (dev without dev:worker)", async () => {
+    mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
+    mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
     const lesson = await findLessonBySlug("nope");
     expect(lesson).toBeNull();
   });

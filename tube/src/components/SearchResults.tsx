@@ -62,10 +62,10 @@ export default function SearchResults({ query }: { query: string }) {
                   />
                 ) : (
                   <span className="flex size-7 items-center justify-center rounded-full bg-pinata-purple text-xs font-semibold uppercase">
-                    {(author.name ?? author.username)[0]}
+                    {(author.name || author.username)[0]}
                   </span>
                 )}
-                {author.name ?? author.username}
+                {author.name || author.username}
               </Link>
             ))}
           </div>

@@ -83,7 +83,7 @@ function PublicAuthorProfile({ username }: { username: string }) {
     );
   }
 
-  const displayName = data.user.name ?? data.user.username;
+  const displayName = data.user.name || data.user.username;
 
   return (
     <Shell>

@@ -55,8 +55,14 @@ async function fetchSeedPage(index: number): Promise<RawLessonsPage | null> {
   }
 }
 
+// In production the Worker always matches /api/lessons* and returns real
+// JSON, but plain `bun run dev` (no dev:worker) has no handler for it at
+// all, so it falls through to the same SPA index.html fallback the seed
+// path guards against above — same isHtmlFallback check, for symmetry and
+// dev robustness.
 async function fetchD1Page(index: number): Promise<RawLessonsPage> {
   const res = await axios.get<RawLessonsPage>(`/api/lessons?page=${index}`);
+  if (isHtmlFallback(res)) return { lessons: [], nextPage: null };
   return res.data;
 }
 
@@ -99,6 +105,8 @@ export async function findLessonBySlug(slug: string): Promise<Lesson | null> {
 
   try {
     const res = await axios.get<Lesson>(`/api/lessons/${encodeURIComponent(slug)}`);
+    // Same dev-without-worker fallback as fetchD1Page above: no real match.
+    if (isHtmlFallback(res)) return null;
     return res.data;
   } catch (err) {
     if (is404(err)) return null;

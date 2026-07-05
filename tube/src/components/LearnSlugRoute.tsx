@@ -1,4 +1,4 @@
-import { useParams } from "react-router";
+import { Navigate, useParams } from "react-router";
 import AuthorProfilePage from "../AuthorProfilePage";
 import LessonDetailRoute from "./LessonDetailRoute";
 
@@ -14,7 +14,14 @@ import LessonDetailRoute from "./LessonDetailRoute";
 export default function LearnSlugRoute() {
   const { slug } = useParams();
   if (slug?.startsWith("@")) {
-    return <AuthorProfilePage username={slug.slice(1)} />;
+    const username = slug.slice(1);
+    // "/learn/@" (empty handle) — bounce to the gallery rather than handing
+    // AuthorProfilePage an empty username, which would leave it stuck on a
+    // permanent loading state (its query hook has `enabled: !!username`).
+    if (!username) {
+      return <Navigate to="/learn" replace />;
+    }
+    return <AuthorProfilePage username={username} />;
   }
   return <LessonDetailRoute />;
 }

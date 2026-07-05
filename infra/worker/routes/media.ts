@@ -7,6 +7,11 @@ import type { Env } from "../env";
 // docs/cloudflare-architecture.md and the paths stored in the lessons table
 // (D1 stores "lessons/l1/l1.ne" without a leading slash; the client always
 // prepends "/media/" itself — see infra/db/types.ts's lessonRowToLesson).
+//
+// No ownership/published check here — a draft's media is only as private as
+// its unguessable UUID-based key, same as a published lesson's (which is
+// intentionally public). If draft media ever needs real access control, gate
+// this route on session + lesson status instead of relying on the key alone.
 export const mediaRoute = new Hono<{ Bindings: Env }>();
 
 // Hono's bare "/*" wildcard doesn't populate a "*" param (verified empirically
@@ -27,6 +32,11 @@ mediaRoute.get("/:key{.+}", async (c) => {
   object.writeHttpMetadata(headers);
   headers.set("etag", object.httpEtag);
   headers.set("accept-ranges", "bytes");
+  // Defense in depth: stops the browser from re-sniffing a mislabeled upload
+  // into an executable content-type (e.g. text/html) regardless of what
+  // content-type was stored — the upload route's extension allow-list is the
+  // primary defense (see routes/uploads.ts).
+  headers.set("x-content-type-options", "nosniff");
   // Lesson media files are never mutated in place (an edit uploads a new
   // lesson id), so it's safe to cache forever. Content-Length is left to the
   // runtime, which infers it correctly from the streamed body in both branches

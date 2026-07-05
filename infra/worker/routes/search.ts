@@ -13,7 +13,9 @@ const LESSON_LIMIT = 24;
 export const searchRoute = new Hono<{ Bindings: Env }>();
 
 searchRoute.get("/", async (c) => {
-  const q = (c.req.query("q") ?? "").trim();
+  // Bound query length: a long %…% pattern with a leading wildcard forces a
+  // full-table scan, so we cap it defensively at 100 characters.
+  const q = (c.req.query("q") ?? "").trim().slice(0, 100);
   if (!q) {
     return c.json({ authors: [], lessons: [] });
   }

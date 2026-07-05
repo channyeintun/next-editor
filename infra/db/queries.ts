@@ -2,6 +2,12 @@ import type { LessonRow, SessionRow, UserRow } from "./types";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+// Escapes LIKE metacharacters in user-supplied search text so `%`, `_`, and
+// `\` are matched literally instead of acting as wildcards.
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
 export interface UpsertUserParams {
   googleSub: string;
   email: string;
@@ -34,6 +40,18 @@ async function generateUniqueUsername(db: D1Database, base: string): Promise<str
   }
 }
 
+// SQLite's own message format ("UNIQUE constraint failed: <table>.<column>"),
+// stable across D1/wrangler versions since it comes from sqlite3 itself — more
+// specific than matching bare "UNIQUE", which would also match an unrelated
+// column's collision (e.g. google_sub or email) on the same table.
+function isUniqueConstraintViolation(error: unknown, column: string): boolean {
+  return String(error).includes(`UNIQUE constraint failed: users.${column}`);
+}
+
+// Bounds the retry loop below: a persistent, unrelated failure should surface
+// as an error rather than spin forever.
+const MAX_USERNAME_INSERT_ATTEMPTS = 5;
+
 // Keyed on google_sub (stable across logins); email/name/avatar refresh on
 // every sign-in so profile changes on the Google side propagate here.
 // username is only assigned here on first sign-in, never touched again by
@@ -65,44 +83,65 @@ export async function upsertUserByGoogleSub(
     return row;
   }
 
-  const username = await generateUniqueUsername(db, params.name ?? params.email.split("@")[0]);
-  try {
-    const row = await db
-      .prepare(
-        `INSERT INTO users (id, google_sub, email, name, avatar_url, username, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         RETURNING *`,
-      )
-      .bind(
-        crypto.randomUUID(),
-        params.googleSub,
-        params.email,
-        params.name,
-        params.avatarUrl,
-        username,
-        Date.now(),
-      )
-      .first<UserRow>();
-    if (!row) {
-      throw new Error("upsertUserByGoogleSub: INSERT ... RETURNING produced no row");
+  const base = params.name ?? params.email.split("@")[0];
+  for (let attempt = 1; ; attempt++) {
+    const username = await generateUniqueUsername(db, base);
+    try {
+      const row = await db
+        .prepare(
+          `INSERT INTO users (id, google_sub, email, name, avatar_url, username, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           RETURNING *`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          params.googleSub,
+          params.email,
+          params.name,
+          params.avatarUrl,
+          username,
+          Date.now(),
+        )
+        .first<UserRow>();
+      if (!row) {
+        throw new Error("upsertUserByGoogleSub: INSERT ... RETURNING produced no row");
+      }
+      return row;
+    } catch (error) {
+      // Two concurrent first-sign-ins for the same brand-new google_sub (e.g.
+      // the OAuth callback opened in two tabs) both pass the SELECT above and
+      // race to INSERT; the loser hits the UNIQUE(google_sub) constraint. The
+      // winner's row is what should be returned either way.
+      const row = await db
+        .prepare("SELECT * FROM users WHERE google_sub = ?")
+        .bind(params.googleSub)
+        .first<UserRow>();
+      if (row) return row;
+
+      // Not a google_sub race: two concurrent brand-new sign-ins independently
+      // generated the same username between generateUniqueUsername's read and
+      // this INSERT. D1 serializes writes, so a retry's SELECT will see the
+      // winner's row and pick the next suffix instead of colliding again.
+      if (
+        !isUniqueConstraintViolation(error, "username") ||
+        attempt >= MAX_USERNAME_INSERT_ATTEMPTS
+      ) {
+        throw error;
+      }
     }
-    return row;
-  } catch (error) {
-    // Two concurrent first-sign-ins for the same brand-new google_sub (e.g.
-    // the OAuth callback opened in two tabs) both pass the SELECT above and
-    // race to INSERT; the loser hits the UNIQUE(google_sub) constraint. The
-    // winner's row is what should be returned either way.
-    const row = await db
-      .prepare("SELECT * FROM users WHERE google_sub = ?")
-      .bind(params.googleSub)
-      .first<UserRow>();
-    if (!row) throw error;
-    return row;
   }
 }
 
 export async function createSession(db: D1Database, userId: string): Promise<SessionRow> {
   const now = Date.now();
+  // Opportunistic cleanup: sweep this user's own expired sessions on every new
+  // sign-in so the table doesn't grow unbounded (there's no separate cron for
+  // this yet). Bounded to this user's rows only, so it stays cheap.
+  await db
+    .prepare("DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?")
+    .bind(userId, now)
+    .run();
+
   const session: SessionRow = {
     id: crypto.randomUUID(),
     user_id: userId,
@@ -362,7 +401,7 @@ export async function updateUsername(
     }
     return { status: "ok", user: row };
   } catch (error) {
-    if (String(error).includes("UNIQUE")) {
+    if (isUniqueConstraintViolation(error, "username")) {
       return { status: "taken" };
     }
     throw error;
@@ -386,9 +425,13 @@ export async function listPublishedLessonsByOwner(
 
 // Backs GET /api/search — authors matched by username or display name.
 export async function searchUsers(db: D1Database, q: string, limit: number): Promise<UserRow[]> {
-  const like = `%${q}%`;
+  const like = `%${escapeLikePattern(q)}%`;
   const result = await db
-    .prepare("SELECT * FROM users WHERE username LIKE ? OR name LIKE ? ORDER BY name LIMIT ?")
+    .prepare(
+      `SELECT * FROM users
+       WHERE username LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\'
+       ORDER BY name LIMIT ?`,
+    )
     .bind(like, like, limit)
     .all<UserRow>();
   return result.results ?? [];
@@ -403,11 +446,11 @@ export async function searchPublishedLessons(
   q: string,
   limit: number,
 ): Promise<LessonRow[]> {
-  const like = `%${q}%`;
+  const like = `%${escapeLikePattern(q)}%`;
   const result = await db
     .prepare(
       `SELECT * FROM lessons
-       WHERE status = 'published' AND (title LIKE ? OR description LIKE ? OR tags LIKE ?)
+       WHERE status = 'published' AND (title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR tags LIKE ? ESCAPE '\\')
        ORDER BY published_at DESC
        LIMIT ?`,
     )
