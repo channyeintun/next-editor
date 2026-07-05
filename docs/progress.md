@@ -8,9 +8,9 @@ Legend: ✅ done · 🚧 in progress · ⛔ blocked (needs input from Chan) · �
 
 ## Phase 0 — Scaffolding (no cloud auth needed; local Miniflare only)
 
-- [ ] ⬜ P0.1 `infra/` package skeleton (package.json, tsconfig for worker, dir layout)
-- [ ] ⬜ P0.2 Root deps: `hono`, `wrangler`, `@cloudflare/workers-types` (bun add)
-- [ ] ⬜ P0.3 D1 schema: `infra/db/migrations/0001_init.sql` (users, sessions, lessons)
+- [x] ✅ P0.1 `infra/` package skeleton (package.json, tsconfig for worker, dir layout)
+- [x] ✅ P0.2 Root deps: `hono`, `wrangler`, `@cloudflare/workers-types` (bun add)
+- [x] ✅ P0.3 D1 schema: `infra/db/migrations/0001_init.sql` (users, sessions, lessons)
 - [ ] ⬜ P0.4 `infra/wrangler.toml` + `infra/worker/env.d.ts` + `.dev.vars.example`
 - [ ] ⬜ P0.5 Hono worker skeleton (`infra/worker/index.ts`): `/api/health`, static-assets passthrough
 - [ ] ⬜ P0.6 Dev wiring: vite `server.proxy` for `/api`,`/media` → `wrangler dev` port; root `dev:worker`/`dev:all` scripts
