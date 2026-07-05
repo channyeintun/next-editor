@@ -8,7 +8,15 @@ compatibility_date = "2026-07-05"
 # different port than the browser's address bar shows). TODO(Phase 4):
 # override with the real production origin once one exists.
 [vars]
-PUBLIC_URL = "http://localhost:5173"
+PUBLIC_URL = "https://nexteditor.dev"
+
+# Custom Domain: routes all paths of nexteditor.dev to this Worker. Requires
+# the zone to already be on Cloudflare (nameservers pointed here) — done by
+# Chan. Bare hostname, no path glob — Custom Domains cover every path by
+# design (unlike a plain Route, which uses "example.com/*" patterns).
+[[routes]]
+pattern = "nexteditor.dev"
+custom_domain = true
 
 # Without this, esbuild's Yarn PnP detection walks up past the repo root,
 # finds an unrelated ~/.pnp.cjs on this machine, and refuses normal
