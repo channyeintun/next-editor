@@ -23,12 +23,13 @@ Legend: ✅ done · 🚧 in progress · ⛔ blocked (needs input from Chan) · �
 - `env.ASSETS.fetch()` for `/index.html` explicitly returns a 307 redirect to `/`, not the page content. Fixed via `not_found_handling = "single-page-application"` in `[assets]` + fetching the original request path as-is.
 - **Important:** exact-match static assets bypass the Worker entirely by default, which means they'd ship without the app's required COEP/COOP headers (breaks WebContainers). Fixed with `run_worker_first = true` so every request — including static files — routes through the Worker's header middleware first; the catch-all still forwards to `ASSETS.fetch` for the actual file bytes. Small Worker-CPU cost on static files, but non-negotiable for correctness here.
 - The vite proxy deliberately whitelists `/api/health` (not a blanket `/api/*`) — the existing `slideImageProxyPlugin` dev route (`/api/slide-image`) would otherwise be shadowed before it moves into the Worker in Phase 4. Extend the proxy list route-by-route as `infra/worker/routes/*` gains real handlers (`/api/lessons` in Phase 1, `/api/auth`+`/api/uploads` in Phases 2-3).
+- **P1.3 (`/media/*`) had two real bugs caught only by testing against a live Miniflare R2 object, not by typecheck:** (1) Hono's bare `"/*"` wildcard does not populate a `"*"` param (came back `undefined`) — use `"/:key{.+}"` to actually capture the tail. (2) `R2Range`'s TS type is a discriminated union, but Miniflare's real resolved `object.range` carries all three keys (`offset`/`length`/`suffix`) with unused ones set to `undefined` rather than omitted, so `"suffix" in range` is true even when unset — check `!== undefined` on values, not key presence. Also: `object.range` resolves to the whole object even with no Range header sent (when `range` is passed as a raw `Headers`), so gate the 206 branch on `c.req.header("range")` actually being present, not just `object.range` truthiness. `object.size` is always the full object size (not the slice length) in both branches. `Content-Length` doesn't need to be set manually — the runtime infers it correctly from the streamed body.
 
 ## Phase 1 — Read path (D1 gallery, no auth yet)
 
 - [x] ✅ P1.1 `infra/db/queries.ts` + `infra/db/types.ts` (typed D1 helpers for lessons)
 - [x] ✅ P1.2 `GET /api/lessons` (published, paginated) + `GET /api/lessons/:slug`
-- [ ] ⬜ P1.3 `GET /media/*` — R2 stream with Range support + immutable cache headers
+- [x] ✅ P1.3 `GET /media/*` — R2 stream with Range support + immutable cache headers
 - [ ] ⬜ P1.4 Swap `tube/src/lib/lessons.ts`: seed shards first, then D1 pages; encode source in `nextPage` cursor
 - [ ] ⬜ P1.5 Local verification: seed `introduction` still loads w/ zero D1 hits; a hand-inserted local D1 row + local R2 object renders in gallery + plays back same-origin
 
