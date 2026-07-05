@@ -36,12 +36,15 @@ Legend: ✅ done · 🚧 in progress · ⛔ blocked (needs input from Chan) · �
 
 ## Phase 2 — Auth (Google OAuth) — ⛔ needs Google OAuth Client ID/Secret from Chan before live-testing
 
-- [ ] ⬜ P2.1 `infra/worker/auth/session.ts` — cookie sign/parse, session middleware
-- [ ] ⬜ P2.2 `infra/worker/auth/google.ts` — PKCE login/callback, user upsert
-- [ ] ⬜ P2.3 `GET /api/auth/me`, `POST /api/auth/logout`
-- [ ] ⬜ P2.4 `infra/client/auth/` — `AuthProvider`, `useAuth`, `AuthMenu`
-- [ ] ⬜ P2.5 Mount `AuthProvider` at router root; `Navbar actions` slot wired to `AuthMenu`
-- [ ] ⬜ P2.6 End-to-end sign-in test — **blocked until real Google OAuth credentials + redirect URIs are provided**
+Real Google OAuth Client ID/Secret received from Chan and saved to `infra/.dev.vars` (git-ignored); redirect URI `http://localhost:5173/api/auth/google/callback` registered on the client.
+
+- [x] ✅ P2.1 D1 user/session queries (`upsertUserByGoogleSub`, `createSession`, `getSessionUser`, `deleteSession`) + `UserRow`/`SessionRow`/`AuthUser` types — verified upsert/conflict path against real local D1
+- [ ] ⬜ P2.2 `infra/worker/auth/session.ts` — opaque `ne_session` cookie (DB-validated) + `GET /api/auth/me`/`POST /api/auth/logout`
+- [ ] ⬜ P2.3 `infra/worker/auth/google.ts` — PKCE login/callback using Hono's signed-cookie helpers for the handshake state
+- [ ] ⬜ P2.4 Mount both auth route groups in `worker/index.ts`; add `/api/auth` to the vite dev proxy
+- [ ] ⬜ P2.5 `infra/client/auth/` — `AuthProvider`, `useAuth`, `AuthMenu`
+- [ ] ⬜ P2.6 Mount `AuthProvider` at router root; `Navbar actions` slot wired to `AuthMenu`
+- [ ] ⬜ P2.7 End-to-end sign-in test — needs a real browser click-through against accounts.google.com (Chan to verify; not automatable here)
 
 ## Phase 3 — Write path (upload + publish)
 

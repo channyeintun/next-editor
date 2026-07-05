@@ -1,5 +1,38 @@
 import type { Lesson } from "../../tube/src/types";
 
+export interface UserRow {
+  id: string;
+  google_sub: string;
+  email: string;
+  name: string | null;
+  avatar_url: string | null;
+  created_at: number;
+}
+
+/** Shape returned to the client (GET /api/auth/me) — no google_sub. */
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+export function userRowToAuthUser(row: UserRow): AuthUser {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    avatarUrl: row.avatar_url,
+  };
+}
+
+export interface SessionRow {
+  id: string;
+  user_id: string;
+  created_at: number;
+  expires_at: number;
+}
+
 export type LessonStatus = "draft" | "published";
 
 export interface LessonRow {
