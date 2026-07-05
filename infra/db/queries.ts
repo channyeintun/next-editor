@@ -232,6 +232,33 @@ export async function publishLesson(
   return row ?? null;
 }
 
+export async function unpublishLesson(
+  db: D1Database,
+  id: string,
+  ownerId: string,
+): Promise<LessonRow | null> {
+  const row = await db
+    .prepare(
+      `UPDATE lessons SET status = 'draft', published_at = NULL, updated_at = ?
+       WHERE id = ? AND owner_id = ?
+       RETURNING *`,
+    )
+    .bind(Date.now(), id, ownerId)
+    .first<LessonRow>();
+  return row ?? null;
+}
+
+// All of an owner's lessons regardless of status, newest-updated first — backs
+// the "My Library" view (unlike listPublishedLessons, drafts are included and
+// there's no pagination since a single author's lesson count is small).
+export async function listOwnedLessons(db: D1Database, ownerId: string): Promise<LessonRow[]> {
+  const result = await db
+    .prepare("SELECT * FROM lessons WHERE owner_id = ? ORDER BY updated_at DESC")
+    .bind(ownerId)
+    .all<LessonRow>();
+  return result.results ?? [];
+}
+
 export async function deleteLesson(db: D1Database, id: string, ownerId: string): Promise<boolean> {
   const result = await db
     .prepare("DELETE FROM lessons WHERE id = ? AND owner_id = ?")

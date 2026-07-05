@@ -169,6 +169,15 @@ export const router = createBrowserRouter([
     ErrorBoundary: RouteErrorBoundary,
   },
   {
+    path: "/learn/mine",
+    lazy: lazyRoute(
+      () => import("@next-editor/tube").then((m) => ({ default: m.MyLibraryPage })),
+      "/learn/mine",
+    ),
+    HydrateFallback: RouteHydrateFallback,
+    ErrorBoundary: RouteErrorBoundary,
+  },
+  {
     path: "/learn/:slug",
     lazy: lazyRoute(
       () => import("@next-editor/tube").then((m) => ({ default: m.LessonDetailRoute })),

@@ -5,8 +5,10 @@ import {
   getLessonById,
   getPublishedLessonBySlug,
   insertDraftLesson,
+  listOwnedLessons,
   listPublishedLessons,
   publishLesson,
+  unpublishLesson,
   updateLesson,
   type UpdateLessonParams,
 } from "../../db/queries";
@@ -175,6 +177,19 @@ lessonsRoute.post("/:id/publish", async (c) => {
   return c.json(lessonRowToOwnedLesson(row));
 });
 
+lessonsRoute.post("/:id/unpublish", async (c) => {
+  const user = await getCurrentUser(c);
+  if (!user) {
+    return c.json({ error: "not signed in" }, 401);
+  }
+
+  const row = await unpublishLesson(c.env.DB, c.req.param("id"), user.id);
+  if (!row) {
+    return c.json({ error: "not found" }, 404);
+  }
+  return c.json(lessonRowToOwnedLesson(row));
+});
+
 lessonsRoute.delete("/:id", async (c) => {
   const user = await getCurrentUser(c);
   if (!user) {
@@ -201,6 +216,19 @@ lessonsRoute.delete("/:id", async (c) => {
 
   await deleteLesson(c.env.DB, id, user.id);
   return c.json({ success: true });
+});
+
+// All of the signed-in owner's lessons (draft + published) — backs "My
+// Library". Must be registered before the catch-all "/:slug" GET below, for
+// the same literal-vs-param ordering reason described on that route.
+lessonsRoute.get("/mine", async (c) => {
+  const user = await getCurrentUser(c);
+  if (!user) {
+    return c.json({ error: "not signed in" }, 401);
+  }
+
+  const rows = await listOwnedLessons(c.env.DB, user.id);
+  return c.json({ lessons: rows.map(lessonRowToOwnedLesson) });
 });
 
 // Registered last: a bare "/:slug" GET would otherwise shadow more specific

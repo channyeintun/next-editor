@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { useAuth, useSignOut, signInUrl, avatarProxyUrl } from "./useAuth";
 
 // Sign-in link / avatar menu for the Navbar's `actions` slot. Matches the
@@ -62,6 +63,14 @@ export default function AuthMenu() {
             role="menu"
             className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#11141c] shadow-xl"
           >
+            <Link
+              to="/learn/mine"
+              role="menuitem"
+              onClick={() => setMenuOpen(false)}
+              className="block w-full px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10"
+            >
+              My Library
+            </Link>
             <button
               type="button"
               role="menuitem"
