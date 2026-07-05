@@ -21,9 +21,7 @@ function Breadcrumb({ title }: { title: string }) {
         Lessons
       </Link>
       <ChevronRight className="size-3.5 shrink-0 text-slate-600" />
-      <span className="truncate font-machina capitalize tracking-tight text-slate-200">
-        {title}
-      </span>
+      <span className="truncate font-bold capitalize tracking-wider text-slate-200">{title}</span>
     </nav>
   );
 }
