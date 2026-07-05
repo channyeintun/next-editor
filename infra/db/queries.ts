@@ -19,8 +19,9 @@ function slugifyUsername(base: string): string {
 }
 
 // Generates a username unique against the DB by appending -2, -3, ... on
-// collision. Only called once per user, at creation — usernames never
-// change afterward, since they're baked into lesson author_url links.
+// collision. Only called once per user, at creation — see updateUsername
+// below for renames (which also has to keep the lesson author_url cascade
+// in sync, unlike this initial assignment).
 async function generateUniqueUsername(db: D1Database, base: string): Promise<string> {
   const slug = slugifyUsername(base);
   for (let suffix = 0; ; suffix++) {
@@ -35,10 +36,11 @@ async function generateUniqueUsername(db: D1Database, base: string): Promise<str
 
 // Keyed on google_sub (stable across logins); email/name/avatar refresh on
 // every sign-in so profile changes on the Google side propagate here.
-// username is generated once, on first sign-in, and never touched again by
-// this function (unlike a single INSERT ... ON CONFLICT, this needs a
-// read-then-write split so a new user's username can be looked up for
-// uniqueness before the row exists).
+// username is only assigned here on first sign-in, never touched again by
+// this function afterward — see updateUsername for user-initiated renames
+// (unlike a single INSERT ... ON CONFLICT, this needs a read-then-write
+// split so a new user's username can be looked up for uniqueness before the
+// row exists).
 export async function upsertUserByGoogleSub(
   db: D1Database,
   params: UpsertUserParams,
