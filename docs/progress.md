@@ -42,9 +42,13 @@ Real Google OAuth Client ID/Secret received from Chan and saved to `infra/.dev.v
 - [x] ✅ P2.2 `infra/worker/auth/session.ts` — opaque `ne_session` cookie (DB-validated) + `GET /api/auth/me`/`POST /api/auth/logout`
 - [x] ✅ P2.3 `infra/worker/auth/google.ts` — PKCE login/callback using Hono's signed-cookie helpers for the handshake state
 - [x] ✅ P2.4 Mounted both auth route groups in `worker/index.ts`; added `/api/auth` to the vite dev proxy
-- [ ] ⬜ P2.5 `infra/client/auth/` — `AuthProvider`, `useAuth`, `AuthMenu`
-- [ ] ⬜ P2.6 Mount `AuthProvider` at router root; `Navbar actions` slot wired to `AuthMenu`
+- [x] ✅ P2.5 `infra/client/auth/` — `useAuth`, `useSignOut`, `signInUrl`, `AuthMenu` (no `AuthProvider`/Context — see note below)
+- [x] ✅ P2.6 `Navbar` gained an optional `actions` slot; `AuthMenu` wired in at `tube/src/LearnPage.tsx` (the `/learn` route) — scoped there rather than also the landing page, since that's where auth-gated functionality actually lives right now
 - [ ] ⬜ P2.7 End-to-end sign-in test — needs a real browser click-through against accounts.google.com (Chan to verify; not automatable here)
+
+**P2.5 deviation from the original plan:** dropped the planned `AuthProvider.tsx` Context wrapper. TanStack Query's shared cache already gives every `useAuth()` caller the same session state (identical to how `tube`'s `useLessonsInfinite`/`useLesson` work with no Provider) — a Context would only duplicate that. Deleted the placeholder file rather than leaving unused scaffolding.
+
+**Real bug caught by an actual build, not typecheck:** the P0.1 scaffolding subagent added `@next-editor/infra` to `tsconfig.json`'s `paths` (type-checking only) but never added the matching entry to `vite.config.ts`'s `resolve.alias` (actual bundler resolution) — so the import would have type-checked fine while failing to resolve at runtime. Never surfaced until this task because nothing had imported `@next-editor/infra` until now. Caught by running `bun run build` (which eagerly resolves the whole module graph) after wiring `AuthMenu` into `LearnPage.tsx` — fixed by adding the alias. Full suite still 49/355 green after the fix.
 
 **P2.2-P2.4 verification notes:** everything up to the real Google login screen is built and verified locally (`wrangler dev` + real `.dev.vars` credentials, both directly on :8787 and through the vite proxy on :5173):
 

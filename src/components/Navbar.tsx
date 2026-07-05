@@ -1,6 +1,13 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 
-const Navbar = () => {
+export interface NavbarProps {
+  /** Extra controls rendered after "Start creating" (e.g. infra's <AuthMenu />).
+   *  Kept as a generic slot so this component has no knowledge of infra. */
+  actions?: ReactNode;
+}
+
+const Navbar = ({ actions }: NavbarProps = {}) => {
   return (
     <nav className="relative z-50 flex items-center justify-between p-4 bg-transparent sm:px-8 sm:py-6">
       <div className="flex items-center gap-2">
@@ -38,6 +45,7 @@ const Navbar = () => {
         >
           Start creating
         </Link>
+        {actions}
       </div>
     </nav>
   );

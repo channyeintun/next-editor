@@ -1,2 +1,5 @@
-// Thin fetch wrapper for /api routes (credentials: "include"). Implemented in a later task.
-export {};
+import axios from "axios";
+
+// Same-origin by design (see docs/cloudflare-architecture.md) — the browser
+// already sends cookies on same-origin requests, so no withCredentials needed.
+export const apiClient = axios.create({ baseURL: "/api" });
