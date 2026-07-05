@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import Editor, { type OnMount, type BeforeMount, type Monaco } from "@monaco-editor/react";
 // Self-host a trimmed Monaco (only the languages this editor uses) and point
 // @monaco-editor/react at it instead of the default CDN. Side-effect import.
@@ -41,6 +42,7 @@ interface CodeEditorProps {
   language?: string;
   theme?: string;
   showImportExport?: boolean;
+  breadcrumb?: ReactNode;
 }
 
 interface WorkspaceEventRecorderProps {
@@ -120,6 +122,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   language,
   theme = "next-editor-dark",
   showImportExport = false,
+  breadcrumb,
 }) => {
   // Opt out of the React Compiler. Monaco is a heavily imperative integration:
   // the theme is registered in `beforeMount`, and the model/language/tokenizer
@@ -394,7 +397,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         handleWorkspaceEvent={handleWorkspaceEvent}
         shouldTrackWorkspaceChanges={isRecording || Boolean(currentRecording)}
       />
-      <EditorHeader showImportExport={showImportExport} />
+      <EditorHeader showImportExport={showImportExport} breadcrumb={breadcrumb} />
       <div
         className="flex min-h-0 flex-1 overflow-hidden"
         data-cursor-replay-target="workspace-body"

@@ -12,6 +12,7 @@ import {
 } from "../../db/queries";
 import { lessonRowToLesson, lessonRowToOwnedLesson } from "../../db/types";
 import { getCurrentUser } from "../auth/session";
+import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 
 const DEFAULT_PAGE_SIZE = 12;
 
@@ -40,6 +41,15 @@ function asStringArray(value: unknown): string[] | null {
 // resulting URL 404s straight to the SPA shell instead of the real bytes.
 function toMediaPath(rawUploadPath: string): string {
   return `media/${rawUploadPath}`;
+}
+
+// The default thumbnail is a static asset at the site root (public/default-thumbnail.webp),
+// not something the client uploaded to R2 — so unlike every other `thumbnail` value, it must
+// NOT get the "media/" prefix above, or it'd 404 looking for R2 bytes that don't exist.
+function toStoredThumbnailPath(rawThumbnail: string): string {
+  return rawThumbnail === DEFAULT_THUMBNAIL_PATH
+    ? DEFAULT_THUMBNAIL_PATH
+    : toMediaPath(rawThumbnail);
 }
 
 // Mounted at /api/lessons in worker/index.ts. GET routes are public and
@@ -96,7 +106,7 @@ lessonsRoute.post("/", async (c) => {
       ownerId: user.id,
       title,
       description: typeof body.description === "string" ? body.description : null,
-      thumbnail: typeof body.thumbnail === "string" ? toMediaPath(body.thumbnail) : null,
+      thumbnail: typeof body.thumbnail === "string" ? toStoredThumbnailPath(body.thumbnail) : null,
       ne: toMediaPath(body.ne),
       duration: typeof body.duration === "string" ? body.duration : null,
       tags: asStringArray(body.tags),
@@ -140,7 +150,7 @@ lessonsRoute.patch("/:id", async (c) => {
     updateParams.tags = tags;
   }
   if (typeof body.thumbnail === "string") {
-    updateParams.thumbnail = toMediaPath(body.thumbnail);
+    updateParams.thumbnail = toStoredThumbnailPath(body.thumbnail);
   }
 
   const row = await updateLesson(c.env.DB, c.req.param("id"), user.id, updateParams);

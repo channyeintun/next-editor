@@ -1,6 +1,7 @@
 import type { Recording } from "@app/core/src";
 import { buildRecordingFiles } from "@app/storage/RecordingStorage";
 import { apiClient } from "../apiClient";
+import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 
 export function formatDuration(durationMs: number): string {
   const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
@@ -14,6 +15,9 @@ export interface UploadLessonInput {
   title: string;
   description: string;
   tags: string[];
+  thumbnail?: File;
+  /** Use the built-in placeholder image instead of uploading one. Ignored if `thumbnail` is set. */
+  useDefaultThumbnail?: boolean;
 }
 
 export interface UploadedLesson {
@@ -24,6 +28,25 @@ export interface UploadedLesson {
 interface UploadTarget {
   filename: string;
   blob: Blob;
+}
+
+const THUMBNAIL_EXTENSIONS = ["png", "jpg", "jpeg", "svg"] as const;
+
+// The upload route's filename allow-list only recognizes these extensions, so a name-derived
+// guess (e.g. a phone photo like "IMG_1234.JPG") must be normalized against it — falling back
+// to a mime-type guess, then "png", rather than ever forwarding an extension the route rejects.
+function thumbnailExtension(file: File): string {
+  const fromName = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase();
+  if (fromName && (THUMBNAIL_EXTENSIONS as readonly string[]).includes(fromName)) {
+    return fromName;
+  }
+
+  const fromMime: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/svg+xml": "svg",
+  };
+  return fromMime[file.type] ?? "png";
 }
 
 async function uploadFile(
@@ -59,6 +82,12 @@ export async function uploadLesson(
   const targets: UploadTarget[] = [{ filename: `${lessonId}.ne`, blob: files.ne }];
   if (files.audio) targets.push({ filename: files.audio.name, blob: files.audio.blob });
   if (files.camera) targets.push({ filename: files.camera.name, blob: files.camera.blob });
+  const thumbnailFilename = input.thumbnail
+    ? `${lessonId}-thumbnail.${thumbnailExtension(input.thumbnail)}`
+    : null;
+  if (input.thumbnail && thumbnailFilename) {
+    targets.push({ filename: thumbnailFilename, blob: input.thumbnail });
+  }
 
   const totalBytes = targets.reduce((sum, target) => sum + target.blob.size, 0) || 1;
   const loadedByIndex = Array.from<number>({ length: targets.length }).fill(0);
@@ -72,6 +101,12 @@ export async function uploadLesson(
     });
   }
 
+  const thumbnail = thumbnailFilename
+    ? pathsByFilename[thumbnailFilename]
+    : input.useDefaultThumbnail
+      ? DEFAULT_THUMBNAIL_PATH
+      : undefined;
+
   const res = await apiClient.post<{ id: string; slug: string }>("/lessons", {
     id: lessonId,
     title: input.title,
@@ -79,6 +114,7 @@ export async function uploadLesson(
     tags: input.tags.length > 0 ? input.tags : undefined,
     duration: formatDuration(input.recording.duration),
     ne: pathsByFilename[`${lessonId}.ne`],
+    thumbnail,
   });
 
   return { id: res.data.id, slug: res.data.slug };

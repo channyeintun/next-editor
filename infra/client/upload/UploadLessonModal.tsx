@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { ImagePlus, X } from "lucide-react";
 import type { Recording } from "@app/core/src";
 import { copyTextToClipboard } from "@app/components/fileSidebarHelpers";
 import { useAuth, signInUrl } from "../auth/useAuth";
 import { useUploadLesson, usePublishLesson, formatDuration } from "./useUploadLesson";
 import { saveResumeIntent } from "./resumeIntent";
+
+const THUMBNAIL_ACCEPT = "image/png,image/jpeg,image/svg+xml";
+// Keeps the upload PUT snappy and R2 tidy — generous for a thumbnail image.
+const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
 
 export interface UploadLessonModalProps {
   recording: Recording;
@@ -34,9 +39,8 @@ function parseTags(input: string): string[] {
 // a thumbnail from a recording frame" isn't straightforward here — a
 // recording is code-diff/cursor state, not a video, so there's no simple
 // frame to grab without a camera track (which is optional and often absent).
-// v1 ships without a generated thumbnail; the field is just left blank
-// (server default) until a manual upload affordance exists. Flagged in
-// docs/progress.md.
+// v1 ships with a manual "select thumbnail" upload instead of a generated one.
+// Flagged in docs/progress.md.
 export default function UploadLessonModal({
   recording,
   onClose,
@@ -53,13 +57,72 @@ export default function UploadLessonModal({
   const [uploadResult, setUploadResult] = useState<{ id: string; slug: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState<string | null>(null);
+  const [useDefaultThumbnail, setUseDefaultThumbnail] = useState(false);
+  const [thumbnailError, setThumbnailError] = useState<string | null>(null);
+  const thumbnailInputRef = useRef<HTMLInputElement | null>(null);
 
   const { upload, progress, isUploading, error, reset } = useUploadLesson();
   const publish = usePublishLesson();
 
+  // Revoke the preview's object URL whenever it's replaced/cleared or the modal unmounts,
+  // so a large image doesn't linger in memory past the form that offered it.
+  useEffect(() => {
+    return () => {
+      if (thumbnailPreviewUrl) URL.revokeObjectURL(thumbnailPreviewUrl);
+    };
+  }, [thumbnailPreviewUrl]);
+
   const handleSignIn = async () => {
     await saveResumeIntent({ recordingId: recording.id, returnTo: window.location.pathname });
     window.location.href = signInUrl(window.location.pathname);
+  };
+
+  const handleSelectThumbnail = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    // Clear the value so re-selecting the same file fires another change event.
+    input.value = "";
+
+    if (!file) return;
+
+    if (!/^image\/(png|jpeg|svg\+xml)$/.test(file.type)) {
+      setThumbnailError("Choose a PNG, JPG, or SVG image.");
+      return;
+    }
+    if (file.size > MAX_THUMBNAIL_BYTES) {
+      setThumbnailError("Image is too large — 5MB max.");
+      return;
+    }
+
+    setThumbnailError(null);
+    setThumbnailFile(file);
+    setUseDefaultThumbnail(false);
+    setThumbnailPreviewUrl((previous) => {
+      if (previous) URL.revokeObjectURL(previous);
+      return URL.createObjectURL(file);
+    });
+  };
+
+  const handleUseDefaultThumbnail = () => {
+    setThumbnailError(null);
+    setThumbnailFile(null);
+    setThumbnailPreviewUrl((previous) => {
+      if (previous) URL.revokeObjectURL(previous);
+      return null;
+    });
+    setUseDefaultThumbnail(true);
+  };
+
+  const handleRemoveThumbnail = () => {
+    setThumbnailFile(null);
+    setThumbnailPreviewUrl((previous) => {
+      if (previous) URL.revokeObjectURL(previous);
+      return null;
+    });
+    setUseDefaultThumbnail(false);
+    setThumbnailError(null);
   };
 
   const handleUpload = async () => {
@@ -73,7 +136,14 @@ export default function UploadLessonModal({
     try {
       const result = await upload({
         lessonId,
-        input: { recording, title: trimmedTitle, description, tags: parseTags(tagsInput) },
+        input: {
+          recording,
+          title: trimmedTitle,
+          description,
+          tags: parseTags(tagsInput),
+          thumbnail: thumbnailFile ?? undefined,
+          useDefaultThumbnail,
+        },
       });
       setUploadResult(result);
     } catch (err) {
@@ -253,6 +323,63 @@ export default function UploadLessonModal({
                 className="w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:opacity-60"
               />
             </label>
+
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">Thumbnail (optional)</span>
+              <div className="flex items-center gap-3">
+                {thumbnailPreviewUrl || useDefaultThumbnail ? (
+                  <div className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-lg border border-slate-700 bg-[#11141c]">
+                    <img
+                      src={thumbnailPreviewUrl ?? "/default-thumbnail.webp"}
+                      alt="Thumbnail preview"
+                      className="size-full object-cover"
+                    />
+                    {useDefaultThumbnail ? (
+                      <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-200">
+                        Default
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={handleRemoveThumbnail}
+                      disabled={isUploading}
+                      aria-label="Remove thumbnail"
+                      className="absolute right-1 top-1 inline-flex size-5 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-start gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => thumbnailInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex aspect-video w-32 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-700 text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <ImagePlus size={18} />
+                      <span className="text-[11px] font-medium">Select image</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleUseDefaultThumbnail}
+                      disabled={isUploading}
+                      className="text-[11px] font-medium text-slate-400 underline-offset-2 transition-colors hover:text-slate-200 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Use default thumbnail
+                    </button>
+                  </div>
+                )}
+              </div>
+              {thumbnailError ? <p className="text-xs text-rose-300">{thumbnailError}</p> : null}
+              <input
+                ref={thumbnailInputRef}
+                type="file"
+                accept={THUMBNAIL_ACCEPT}
+                className="hidden"
+                onChange={handleSelectThumbnail}
+              />
+            </div>
 
             {error ? (
               <p className="text-sm text-rose-300">

@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Link } from "react-router";
-import { ArrowLeft } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { Lesson } from "../types";
 
 // The real editor from the host app. Lazy-loaded so the gallery chunk stays small;
@@ -8,34 +8,38 @@ import type { Lesson } from "../types";
 // query params) — read-only playback of the lesson's recording.
 const Editor = lazy(() => import("@app/components/Editor"));
 
+// Rendered inside the editor's own header (via the `breadcrumb` prop) rather than
+// a second header stacked above it — the editor chrome already has a slot for it,
+// so /learn/:slug doesn't need to spend extra vertical space on its own bar.
+function Breadcrumb({ title }: { title: string }) {
+  return (
+    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-xs">
+      <Link
+        to="/learn"
+        className="shrink-0 font-bold uppercase tracking-wider text-slate-400 transition-colors hover:text-white"
+      >
+        Lessons
+      </Link>
+      <ChevronRight className="size-3.5 shrink-0 text-slate-600" />
+      <span className="truncate font-machina uppercase tracking-tight text-slate-200">{title}</span>
+    </nav>
+  );
+}
+
 export default function LessonDetail({ lesson }: { lesson: Lesson }) {
   return (
-    <div className="flex h-dvh flex-col bg-[#11141c] font-telegraf text-white">
-      <header className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
-        <Link
-          to="/learn"
-          aria-label="Back to lessons"
-          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/10 px-4 py-1.5 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
-        >
-          <ArrowLeft className="size-4" />
-          Lessons
-        </Link>
-        <h1 className="truncate font-machina text-sm uppercase tracking-tight text-slate-200">
-          {lesson.title}
-        </h1>
-      </header>
-
-      <div className="relative min-h-0 flex-1">
-        <Suspense
-          fallback={
-            <div className="flex size-full items-center justify-center text-sm text-slate-400">
-              Loading lesson…
-            </div>
-          }
-        >
-          <Editor readOnly fill recordingUrl={`/${lesson.ne}`} />
-        </Suspense>
-      </div>
-    </div>
+    <Suspense
+      fallback={
+        <div className="flex h-dvh items-center justify-center bg-[#11141c] text-sm text-slate-400">
+          Loading lesson…
+        </div>
+      }
+    >
+      <Editor
+        readOnly
+        recordingUrl={`/${lesson.ne}`}
+        breadcrumb={<Breadcrumb title={lesson.title} />}
+      />
+    </Suspense>
   );
 }

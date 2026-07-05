@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   ChevronRight,
   Compass,
@@ -834,14 +835,18 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
 interface EditorHeaderProps {
   showImportExport: boolean;
+  /** Replaces the static "Editor" label — e.g. a /learn/:slug breadcrumb trail. */
+  breadcrumb?: ReactNode;
 }
 
-function EditorHeader({ showImportExport }: EditorHeaderProps) {
+function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
   return (
     <div className="bg-[#11141c] px-4 py-1.5 flex items-center justify-between">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 min-w-0">
         <FileSidebarToggleButton />
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
+        {breadcrumb ?? (
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <WorkspaceSettingsButton showImportExport={showImportExport} />

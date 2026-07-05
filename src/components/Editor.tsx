@@ -41,13 +41,16 @@ export interface EditorProps {
   /** Enlarge playback controls for small embeds. Falls back to `?largeControls=true`. */
   largeControls?: boolean;
   /** Fill the parent (`h-full`) instead of the viewport (`h-dvh`), so the editor can
-   *  sit below other chrome (e.g. the /learn detail header). Defaults to viewport. */
+   *  sit below other app chrome. Defaults to viewport. */
   fill?: boolean;
   /** Render an app-supplied UI once a recording finishes (e.g. an upload modal).
    *  Fires exactly once per stop — not for a recording loaded via URL/import, which
    *  never transitions isRecording true->false. Kept generic so this component has
    *  no knowledge of what it renders (infra owns the actual modal). */
   renderPostRecordingModal?: (ctx: { recording: Recording; onClose: () => void }) => ReactNode;
+  /** Replaces the editor header's "Editor" label — e.g. the /learn/:slug detail
+   *  page's "Lessons > {title}" breadcrumb, so that page doesn't need its own header. */
+  breadcrumb?: ReactNode;
 }
 
 export function EditorLayout({
@@ -56,6 +59,7 @@ export function EditorLayout({
   largeControls: largeControlsProp,
   fill = false,
   renderPostRecordingModal,
+  breadcrumb,
 }: EditorProps = {}) {
   const { isLoading: urlLoading, error: urlError, retry } = useUrlQuery(recordingUrl);
   const { isDragging, error: dropError, clearError: clearDropError } = useDragAndDropUrl();
@@ -102,7 +106,7 @@ export function EditorLayout({
       data-cursor-replay-target="app"
     >
       <div className="flex-1 relative overflow-hidden" data-cursor-replay-target="editor-surface">
-        <CodeEditor showImportExport={!readOnly} />
+        <CodeEditor showImportExport={!readOnly} breadcrumb={breadcrumb} />
         <CursorComponent />
         <CameraOverlay />
         <CaptionsOverlay />
