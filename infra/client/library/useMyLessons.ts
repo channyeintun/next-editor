@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { publishLesson } from "../upload/uploadLesson";
+import { publishLesson, updateLessonThumbnail } from "../upload/uploadLesson";
 import { deleteLesson, fetchMyLessons, unpublishLesson } from "./myLessonsApi";
 
 const MY_LESSONS_QUERY_KEY = ["lessons", "mine"] as const;
@@ -32,4 +32,13 @@ export function useUnpublishLesson() {
 
 export function useDeleteLesson() {
   return useMyLessonMutation(deleteLesson);
+}
+
+export function useUpdateThumbnail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ lessonId, thumbnail }: { lessonId: string; thumbnail: File | "default" }) =>
+      updateLessonThumbnail(lessonId, thumbnail),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: MY_LESSONS_QUERY_KEY }),
+  });
 }

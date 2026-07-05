@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
+import { LibraryBig, LogOut } from "lucide-react";
 import { useAuth, useSignOut, signInUrl, avatarProxyUrl } from "./useAuth";
 
 // Sign-in link / avatar menu for the Navbar's `actions` slot. Matches the
@@ -67,8 +68,9 @@ export default function AuthMenu() {
               to="/learn/mine"
               role="menuitem"
               onClick={() => setMenuOpen(false)}
-              className="block w-full px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10"
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10"
             >
+              <LibraryBig className="size-4 text-slate-400" />
               My Library
             </Link>
             <button
@@ -79,8 +81,9 @@ export default function AuthMenu() {
                 signOut.mutate();
               }}
               disabled={signOut.isPending}
-              className="w-full px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10 disabled:opacity-60"
             >
+              <LogOut className="size-4 text-slate-400" />
               {signOut.isPending ? "Signing out…" : "Sign out"}
             </button>
           </div>

@@ -6,10 +6,7 @@ import { copyTextToClipboard } from "@app/components/fileSidebarHelpers";
 import { useAuth, signInUrl } from "../auth/useAuth";
 import { useUploadLesson, usePublishLesson, formatDuration } from "./useUploadLesson";
 import { saveResumeIntent } from "./resumeIntent";
-
-const THUMBNAIL_ACCEPT = "image/png,image/jpeg,image/svg+xml";
-// Keeps the upload PUT snappy and R2 tidy — generous for a thumbnail image.
-const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
+import { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./thumbnailConstraints";
 
 export interface UploadLessonModalProps {
   recording: Recording;

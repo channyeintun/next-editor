@@ -35,7 +35,7 @@ const THUMBNAIL_EXTENSIONS = ["png", "jpg", "jpeg", "svg"] as const;
 // The upload route's filename allow-list only recognizes these extensions, so a name-derived
 // guess (e.g. a phone photo like "IMG_1234.JPG") must be normalized against it — falling back
 // to a mime-type guess, then "png", rather than ever forwarding an extension the route rejects.
-function thumbnailExtension(file: File): string {
+export function thumbnailExtension(file: File): string {
   const fromName = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase();
   if (fromName && (THUMBNAIL_EXTENSIONS as readonly string[]).includes(fromName)) {
     return fromName;
@@ -122,4 +122,27 @@ export async function uploadLesson(
 
 export async function publishLesson(lessonId: string): Promise<void> {
   await apiClient.post(`/lessons/${lessonId}/publish`);
+}
+
+// A timestamp in the filename (rather than the fixed "<id>-thumbnail.<ext>"
+// the initial upload uses) so a thumbnail change on an already-published
+// lesson gets a fresh URL — reusing the old key would mean the CDN/browser
+// keeps serving cached bytes from the previous image at that same path.
+export async function updateLessonThumbnail(
+  lessonId: string,
+  thumbnail: File | "default",
+): Promise<void> {
+  let thumbnailPath: string;
+  if (thumbnail === "default") {
+    thumbnailPath = DEFAULT_THUMBNAIL_PATH;
+  } else {
+    const filename = `${lessonId}-thumbnail-${Date.now()}.${thumbnailExtension(thumbnail)}`;
+    const res = await apiClient.put<{ path: string }>(
+      `/uploads/${lessonId}/media/${filename}`,
+      thumbnail,
+      { headers: { "Content-Type": thumbnail.type || "application/octet-stream" } },
+    );
+    thumbnailPath = res.data.path;
+  }
+  await apiClient.patch(`/lessons/${lessonId}`, { thumbnail: thumbnailPath });
 }
