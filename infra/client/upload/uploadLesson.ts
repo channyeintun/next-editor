@@ -146,3 +146,7 @@ export async function updateLessonThumbnail(
   }
   await apiClient.patch(`/lessons/${lessonId}`, { thumbnail: thumbnailPath });
 }
+
+export async function updateLessonName(lessonId: string, title: string): Promise<void> {
+  await apiClient.patch(`/lessons/${lessonId}`, { title });
+}

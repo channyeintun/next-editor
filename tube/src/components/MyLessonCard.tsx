@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router";
-import { Eye, EyeOff, ImagePlus, MoreVertical, Play, Trash2 } from "lucide-react";
+import { Check, Eye, EyeOff, ImagePlus, MoreVertical, Pencil, Play, Trash2, X } from "lucide-react";
 import {
   MAX_THUMBNAIL_BYTES,
   resizeThumbnail,
@@ -8,6 +8,7 @@ import {
   useDeleteLesson,
   usePublishFromLibrary,
   useUnpublishLesson,
+  useUpdateLessonName,
   useUpdateThumbnail,
   type OwnedLesson,
 } from "@next-editor/infra";
@@ -24,16 +25,24 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [thumbnailError, setThumbnailError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [titleValue, setTitleValue] = useState(lesson.title);
+  const [titleError, setTitleError] = useState<string | null>(null);
   const thumbnailInputRef = useRef<HTMLInputElement | null>(null);
 
   const publish = usePublishFromLibrary();
   const unpublish = useUnpublishLesson();
   const del = useDeleteLesson();
   const updateThumbnail = useUpdateThumbnail();
+  const updateName = useUpdateLessonName();
 
   const isPublished = lesson.status === "published";
   const isBusy =
-    publish.isPending || unpublish.isPending || del.isPending || updateThumbnail.isPending;
+    publish.isPending ||
+    unpublish.isPending ||
+    del.isPending ||
+    updateThumbnail.isPending ||
+    updateName.isPending;
   const hasMutationError =
     publish.isError || unpublish.isError || del.isError || updateThumbnail.isError;
 
@@ -56,6 +65,26 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
     setThumbnailError(null);
     const optimized = await resizeThumbnail(file);
     updateThumbnail.mutate({ lessonId: lesson.id, thumbnail: optimized });
+  };
+
+  const submitRename = () => {
+    const trimmed = titleValue.trim();
+    if (!trimmed) {
+      setTitleError("Lesson name can't be empty.");
+      return;
+    }
+    if (trimmed === lesson.title) {
+      setRenaming(false);
+      return;
+    }
+    setTitleError(null);
+    updateName.mutate(
+      { lessonId: lesson.id, title: trimmed },
+      {
+        onSuccess: () => setRenaming(false),
+        onError: () => setTitleError("Couldn't update the lesson name — try again."),
+      },
+    );
   };
 
   return (
@@ -149,6 +178,20 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
+                    setTitleValue(lesson.title);
+                    setTitleError(null);
+                    setRenaming(true);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
+                >
+                  <Pencil className="size-4 text-slate-400" />
+                  Update lesson name
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
                     setConfirming("delete");
                   }}
                   className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-rose-300 transition-colors hover:bg-white/10"
@@ -171,25 +214,63 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
       </div>
 
       <div className="mt-3 space-y-2">
-        <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-white">
-          {isPublished ? (
-            <Link
-              to={`/learn/${lesson.slug}`}
-              className="rounded outline-none focus-visible:ring-2 focus-visible:ring-pinata-purple hover:underline"
+        {renaming ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              autoFocus
+              value={titleValue}
+              onChange={(e) => setTitleValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitRename();
+                if (e.key === "Escape") setRenaming(false);
+              }}
+              disabled={updateName.isPending}
+              className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white outline-none focus:border-pinata-purple/60 disabled:opacity-60"
+            />
+            <button
+              type="button"
+              aria-label="Save lesson name"
+              onClick={submitRename}
+              disabled={updateName.isPending}
+              className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
             >
-              {lesson.title}
-            </Link>
-          ) : (
-            lesson.title
-          )}
-        </h3>
+              <Check className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Cancel rename"
+              onClick={() => setRenaming(false)}
+              disabled={updateName.isPending}
+              className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-white disabled:opacity-50"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        ) : (
+          <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-white">
+            {isPublished ? (
+              <Link
+                to={`/learn/${lesson.slug}`}
+                className="rounded outline-none focus-visible:ring-2 focus-visible:ring-pinata-purple hover:underline"
+              >
+                {lesson.title}
+              </Link>
+            ) : (
+              lesson.title
+            )}
+          </h3>
+        )}
 
         {thumbnailError ? <p className="text-xs text-rose-300">{thumbnailError}</p> : null}
-        {!thumbnailError && hasMutationError && confirming === null ? (
+        {titleError ? <p className="text-xs text-rose-300">{titleError}</p> : null}
+        {!thumbnailError && !titleError && hasMutationError && confirming === null ? (
           <p className="text-xs text-rose-300">Something went wrong — try again.</p>
         ) : null}
         {updateThumbnail.isPending ? (
           <p className="text-xs text-slate-400">Updating thumbnail…</p>
+        ) : null}
+        {updateName.isPending ? (
+          <p className="text-xs text-slate-400">Updating lesson name…</p>
         ) : null}
 
         {confirming === "unpublish" ? (

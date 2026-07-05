@@ -11,6 +11,7 @@ export {
   useUnpublishLesson,
   useDeleteLesson,
   useUpdateThumbnail,
+  useUpdateLessonName,
 } from "./library/useMyLessons";
 export type { OwnedLesson } from "../db/types";
 export { useAuthorProfile } from "./authors/useAuthorProfile";
