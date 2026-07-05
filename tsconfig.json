@@ -21,6 +21,9 @@
       // Resolve the tube workspace package to its source so it's compiled as
       // first-class app code (JSX transform, Tailwind scan, type-checked).
       "@next-editor/tube": ["./tube/src/index.tsx"],
+      // Resolve the infra client package to its source so it's compiled as
+      // first-class app code (JSX transform, type-checked).
+      "@next-editor/infra": ["./infra/client/index.ts"],
       // Lets the tube package import the app's Editor for the /learn detail view.
       "@app/*": ["./src/*"]
     },
@@ -41,5 +44,5 @@
   },
   // The diff-match-patch codec lives in src/core/dmp as a Rust crate (no .ts),
   // so tsc ignores it; no exclude needed.
-  "include": ["src", "vite.config.ts", "tube/src", "api"]
+  "include": ["src", "vite.config.ts", "tube/src", "infra/client", "api"]
 }

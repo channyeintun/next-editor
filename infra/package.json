@@ -1,0 +1,16 @@
+{
+  "name": "@next-editor/infra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./client/index.ts"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "*",
+    "axios": "*",
+    "lucide-react": "*",
+    "react": "*",
+    "react-dom": "*"
+  }
+}
