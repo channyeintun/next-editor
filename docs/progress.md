@@ -90,14 +90,19 @@ UX spec for the upload modal done via the `frontend-ux-design` skill and approve
 - **Deviation from the original plan:** no presigned R2 PUT URLs — we don't have R2 signing keys configured (that needs the real Cloudflare account, Phase 4). Instead the client PUTs bytes straight through a Worker route (`PUT /api/uploads/:id/media/:filename`), which streams them into R2 via the binding directly — works identically in local dev and real deployment, no external R2 API token needed. Filename is constrained by the route pattern itself to a safe charset + a known extension allow-list (verified: an `.exe` and a `../` traversal attempt both 405 — no matching route).
 - **Ownership model, fully verified with two real local-D1 users (Alice/Bob) exercising every case:** before a lesson's D1 row exists, any signed-in user can upload media under a given id (fine — real ids are unguessable `crypto.randomUUID()` values, not the predictable test id used here); once `POST /api/lessons` claims that id, further uploads under it are checked against `owner_id` and a non-owner gets 403. `PATCH`/`POST .../publish`/`DELETE` all return the _same_ 404 for "doesn't exist" and "exists but not yours" (doesn't leak existence to a non-owner). `DELETE` confirmed to actually remove both the D1 row and every R2 object under `lessons/<id>/` (checked via a follow-up `r2 object get` returning "key does not exist"). Duplicate `id` on create correctly 409s rather than silently overwriting.
 
-## Phase 4 — Cutover & hardening — ⛔ needs real Cloudflare account auth (login or API token) + domain before this phase
+## Phase 4 — Cutover & hardening
+
+Chan chose **full cutover** (point the main domain straight at the Worker, replacing the current Vercel site) rather than a subdomain-first rollout. Chan ran `wrangler login` themselves (account: `Chanyeintun@gmail.com's Account`, id `b9cae7e40e0a9182d9c1be5560d4dd71`).
 
 - [x] ✅ P4.1a `/api/slide-image` — Worker-side done ahead of schedule in Phase 3 (see P3.6 notes); Vercel Edge Function + Vite dev plugin deliberately untouched until cutover
 - [ ] ⬜ P4.1b `/api/proxy` (cross-origin `.ne` loading) — still to move into the Worker
-- [ ] ⬜ P4.2 Real Cloudflare resources: `wrangler d1 create`, R2 bucket create, custom domain/route — **needs Chan: Cloudflare login or API token, account id, domain choice**
-- [ ] ⬜ P4.3 Secrets: `wrangler secret put` for `GOOGLE_CLIENT_ID/SECRET`, `SESSION_SECRET`, (R2 signing keys if used) — **needs Chan**
-- [ ] ⬜ P4.4 `bun run build` → `wrangler deploy`; smoke test production
-- [ ] ⬜ P4.5 Reconcile cron (sweep abandoned draft uploads) — optional hardening
+- [x] ✅ P4.2 Real Cloudflare resources created: D1 `next-editor-tube` (id `c9dc42e5-2602-4740-86a1-71b5646b7bbf`), R2 bucket `next-editor-tube-media`, migration `0001_init.sql` applied to remote (verified: `users`/`sessions`/`lessons` tables exist)
+- [x] ✅ P4.3 Production secrets set via `wrangler secret put` (piped from a scratchpad temp file, never as a CLI arg — deleted immediately after): `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (same real credentials as dev), `SESSION_SECRET` (freshly generated, distinct from the local one)
+- [x] ✅ P4.4 Deployed — live at `https://next-editor-tube.chanyeintun.workers.dev`. Smoke tested for real: `/api/health` 200, COEP/COOP headers present, `/learn` SPA 200, seed catalog + seed audio (621626 bytes, byte-identical to local) served correctly, `/api/lessons` hits the real remote D1 (empty, as expected — no lessons published yet), `/api/auth/me` correctly 401s signed-out
+- [ ] ⬜ P4.6 Custom domain cutover — **blocked on the domain name from Chan** (asked; not yet given). Once known: update `PUBLIC_URL` in `wrangler.toml` to the real domain, add a Workers Route/Custom Domain for it, register the production redirect URI (`https://<domain>/api/auth/google/callback`) in Google Cloud Console, point the domain's DNS/nameservers at Cloudflare, re-deploy, re-verify OAuth end-to-end on the real domain
+- [ ] ⬜ P4.7 Reconcile cron (sweep abandoned draft uploads) — optional hardening
+
+**Note on the OAuth redirect URI once the domain changes:** the _current_ Google OAuth client only has `http://localhost:5173/api/auth/google/callback` registered. Signing in on the production domain will fail with `redirect_uri_mismatch` until Chan adds the production callback URL in Google Cloud Console — same step as the original dev setup.
 
 ## Open items / decisions deferred (see plan doc "Open questions")
 
