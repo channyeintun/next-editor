@@ -14,3 +14,4 @@ export {
 } from "./library/useMyLessons";
 export type { OwnedLesson } from "../db/types";
 export { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./upload/thumbnailConstraints";
+export { resizeThumbnail } from "./upload/resizeThumbnail";

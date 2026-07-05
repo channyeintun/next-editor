@@ -7,6 +7,7 @@ import { useAuth, signInUrl } from "../auth/useAuth";
 import { useUploadLesson, usePublishLesson, formatDuration } from "./useUploadLesson";
 import { saveResumeIntent } from "./resumeIntent";
 import { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./thumbnailConstraints";
+import { resizeThumbnail } from "./resizeThumbnail";
 
 export interface UploadLessonModalProps {
   recording: Recording;
@@ -76,7 +77,7 @@ export default function UploadLessonModal({
     window.location.href = signInUrl(window.location.pathname);
   };
 
-  const handleSelectThumbnail = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSelectThumbnail = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.target;
     const file = input.files?.[0];
     // Clear the value so re-selecting the same file fires another change event.
@@ -94,11 +95,14 @@ export default function UploadLessonModal({
     }
 
     setThumbnailError(null);
-    setThumbnailFile(file);
+    // Downscaled/re-encoded here, before it ever touches state or an upload —
+    // the raw camera-resolution file is never what gets previewed or stored.
+    const optimized = await resizeThumbnail(file);
+    setThumbnailFile(optimized);
     setUseDefaultThumbnail(false);
     setThumbnailPreviewUrl((previous) => {
       if (previous) URL.revokeObjectURL(previous);
-      return URL.createObjectURL(file);
+      return URL.createObjectURL(optimized);
     });
   };
 

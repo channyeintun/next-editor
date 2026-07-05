@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { Eye, EyeOff, ImagePlus, MoreVertical, Play, Trash2 } from "lucide-react";
 import {
   MAX_THUMBNAIL_BYTES,
+  resizeThumbnail,
   THUMBNAIL_ACCEPT,
   useDeleteLesson,
   usePublishFromLibrary,
@@ -36,7 +37,7 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
   const hasMutationError =
     publish.isError || unpublish.isError || del.isError || updateThumbnail.isError;
 
-  const handleSelectThumbnail = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSelectThumbnail = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.target;
     const file = input.files?.[0];
     // Clear the value so re-selecting the same file fires another change event.
@@ -53,7 +54,8 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
     }
 
     setThumbnailError(null);
-    updateThumbnail.mutate({ lessonId: lesson.id, thumbnail: file });
+    const optimized = await resizeThumbnail(file);
+    updateThumbnail.mutate({ lessonId: lesson.id, thumbnail: optimized });
   };
 
   return (
