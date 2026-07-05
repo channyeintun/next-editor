@@ -23,6 +23,19 @@ function is404(err: unknown): boolean {
   return axios.isAxiosError(err) && err.response?.status === 404;
 }
 
+// The Worker's SPA fallback (not_found_handling = "single-page-application",
+// see infra/wrangler.toml) means an unmatched path is NEVER a real 404 — it's
+// always a 200 carrying index.html. A seed shard that doesn't exist (any slug
+// beyond what's in the static manifest) hits exactly this: is404() never
+// fires because there's no error at all, so the raw HTML would otherwise be
+// trusted as real JSON. Same fix useUrlLoader.ts already uses for the
+// equivalent problem on the recording-proxy path — check Content-Type instead
+// of trusting the status code alone.
+function isHtmlFallback(res: { headers: Record<string, unknown> }): boolean {
+  const contentType = res.headers["content-type"];
+  return typeof contentType === "string" && contentType.includes("text/html");
+}
+
 function parseCursor(cursor: string): { source: "seed" | "d1"; index: number } {
   const [source, indexStr] = cursor.split(":");
   return { source: source === "d1" ? "d1" : "seed", index: Number(indexStr) || 0 };
@@ -34,6 +47,7 @@ function parseCursor(cursor: string): { source: "seed" | "d1"; index: number } {
 async function fetchSeedPage(index: number): Promise<RawLessonsPage | null> {
   try {
     const res = await axios.get<RawLessonsPage>(`/lessons/page-${index}.json`);
+    if (isHtmlFallback(res)) return null;
     return res.data;
   } catch (err) {
     if (is404(err)) return null;
@@ -77,7 +91,8 @@ export async function fetchLessonsPage(cursor: string): Promise<LessonsPage> {
 export async function findLessonBySlug(slug: string): Promise<Lesson | null> {
   try {
     const res = await axios.get<Lesson>(`/lessons/by-slug/${encodeURIComponent(slug)}.json`);
-    return res.data;
+    if (!isHtmlFallback(res)) return res.data;
+    // Else: not a real shard for this slug — fall through to D1 below.
   } catch (err) {
     if (!is404(err)) throw err;
   }
