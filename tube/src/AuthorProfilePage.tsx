@@ -126,7 +126,7 @@ function PublicAuthorProfile({ username }: { username: string }) {
 function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col bg-[#11141c] font-telegraf text-white selection:bg-pinata-purple selection:text-white">
-      <Navbar actions={<AuthMenu />} />
+      <Navbar minimal actions={<AuthMenu />} />
       <main className="mx-auto w-full max-w-7xl flex-1 px-6 pb-20 pt-2 sm:px-8">{children}</main>
     </div>
   );
