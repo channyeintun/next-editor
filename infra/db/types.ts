@@ -69,3 +69,38 @@ export function lessonRowToLesson(row: LessonRow): Lesson {
       : undefined,
   };
 }
+
+/**
+ * Shape returned to the owner from the write routes (create/update/publish) —
+ * unlike the public `Lesson`, this includes `id` (needed for further
+ * PATCH/publish/DELETE calls) and `status` (draft vs. published), and keeps
+ * `publishedAt` as a raw epoch-ms timestamp rather than the display-formatted
+ * date string the public gallery uses.
+ */
+export interface OwnedLesson {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  thumbnail: string;
+  ne: string;
+  duration: string | null;
+  tags: string[];
+  status: LessonStatus;
+  publishedAt: number | null;
+}
+
+export function lessonRowToOwnedLesson(row: LessonRow): OwnedLesson {
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    description: row.description ?? "",
+    thumbnail: row.thumbnail ?? "",
+    ne: row.ne,
+    duration: row.duration,
+    tags: row.tags ? (JSON.parse(row.tags) as string[]) : [],
+    status: row.status,
+    publishedAt: row.published_at,
+  };
+}

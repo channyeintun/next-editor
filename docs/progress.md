@@ -65,11 +65,14 @@ UX spec for the upload modal done via the `frontend-ux-design` skill and approve
 
 - [x] ✅ P3.1 `src/`: extracted `buildRecordingFiles` from `RecordingStorage.exportAsFile` (pure, tested directly — no `NextEditorContext` needed, since it's pure/stateless; infra imports it straight from `@app/storage/RecordingStorage`, same pattern as `@app/components/Editor`)
 - [x] ✅ P3.2 `src/components/Editor.tsx`: added `renderPostRecordingModal` render-prop, firing on the isRecording(true)->(false) edge only (not on a URL-loaded/imported recording, which never sets isRecording true)
-- [ ] ⬜ P3.3 `POST /api/uploads/sign` — presigned R2 PUT URLs, scoped to `lessons/<id>/…`
-- [ ] ⬜ P3.4 `POST /api/lessons` (draft), `PATCH /api/lessons/:id`, `POST /api/lessons/:id/publish`, `DELETE /api/lessons/:id` — ownership-enforced via `getCurrentUser`
-- [ ] ⬜ P3.5 `infra/client/upload/` — `UploadLessonModal`, `useUploadLesson`, `resumeIntent` (IndexedDB-persisted, survives the OAuth redirect)
-- [ ] ⬜ P3.6 Wire `/code` route: `renderPostRecordingModal={(ctx) => <UploadLessonModal {...ctx} />}`
-- [ ] ⬜ P3.7 Manual verification: record → sign in → upload → draft → publish → shows in gallery → plays back
+- [x] ✅ P3.3 Upload/publish backend routes — see notes below on the presigned-URL deviation and full ownership-model verification
+- [ ] ⬜ P3.4 `infra/client/upload/` — `UploadLessonModal`, `useUploadLesson`, `resumeIntent` (IndexedDB-persisted, survives the OAuth redirect); wire into `/code` route
+- [ ] ⬜ P3.5 Manual verification: record → sign in → upload → draft → publish → shows in gallery → plays back
+
+**P3.3 notes:**
+
+- **Deviation from the original plan:** no presigned R2 PUT URLs — we don't have R2 signing keys configured (that needs the real Cloudflare account, Phase 4). Instead the client PUTs bytes straight through a Worker route (`PUT /api/uploads/:id/media/:filename`), which streams them into R2 via the binding directly — works identically in local dev and real deployment, no external R2 API token needed. Filename is constrained by the route pattern itself to a safe charset + a known extension allow-list (verified: an `.exe` and a `../` traversal attempt both 405 — no matching route).
+- **Ownership model, fully verified with two real local-D1 users (Alice/Bob) exercising every case:** before a lesson's D1 row exists, any signed-in user can upload media under a given id (fine — real ids are unguessable `crypto.randomUUID()` values, not the predictable test id used here); once `POST /api/lessons` claims that id, further uploads under it are checked against `owner_id` and a non-owner gets 403. `PATCH`/`POST .../publish`/`DELETE` all return the _same_ 404 for "doesn't exist" and "exists but not yours" (doesn't leak existence to a non-owner). `DELETE` confirmed to actually remove both the D1 row and every R2 object under `lessons/<id>/` (checked via a follow-up `r2 object get` returning "key does not exist"). Duplicate `id` on create correctly 409s rather than silently overwriting.
 
 ## Phase 4 — Cutover & hardening — ⛔ needs real Cloudflare account auth (login or API token) + domain before this phase
 

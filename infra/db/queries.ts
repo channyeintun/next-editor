@@ -111,3 +111,131 @@ export async function getPublishedLessonBySlug(
 
   return result ?? null;
 }
+
+export async function getLessonById(db: D1Database, id: string): Promise<LessonRow | null> {
+  const row = await db.prepare("SELECT * FROM lessons WHERE id = ?").bind(id).first<LessonRow>();
+  return row ?? null;
+}
+
+export interface InsertDraftLessonParams {
+  id: string;
+  slug: string;
+  ownerId: string;
+  title: string;
+  description: string | null;
+  thumbnail: string | null;
+  ne: string;
+  duration: string | null;
+  tags: string[] | null;
+  author: string | null;
+  authorUrl: string | null;
+}
+
+export async function insertDraftLesson(
+  db: D1Database,
+  params: InsertDraftLessonParams,
+): Promise<LessonRow> {
+  const now = Date.now();
+  const row = await db
+    .prepare(
+      `INSERT INTO lessons
+         (id, slug, owner_id, title, description, thumbnail, ne, duration, tags,
+          author, author_url, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
+       RETURNING *`,
+    )
+    .bind(
+      params.id,
+      params.slug,
+      params.ownerId,
+      params.title,
+      params.description,
+      params.thumbnail,
+      params.ne,
+      params.duration,
+      params.tags ? JSON.stringify(params.tags) : null,
+      params.author,
+      params.authorUrl,
+      now,
+      now,
+    )
+    .first<LessonRow>();
+  if (!row) {
+    throw new Error("insertDraftLesson: INSERT ... RETURNING produced no row");
+  }
+  return row;
+}
+
+export interface UpdateLessonParams {
+  title?: string;
+  description?: string;
+  tags?: string[] | null;
+  thumbnail?: string;
+}
+
+// Only touches columns actually present in `params` — column names in the SET
+// clause are always fixed literals from this function's own whitelist, never
+// derived from caller input; only values are parameter-bound. owner_id is
+// part of the WHERE, not just a post-hoc check, so a non-owner's update
+// silently matches zero rows (null) rather than needing a separate read.
+export async function updateLesson(
+  db: D1Database,
+  id: string,
+  ownerId: string,
+  params: UpdateLessonParams,
+): Promise<LessonRow | null> {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  if (params.title !== undefined) {
+    sets.push("title = ?");
+    values.push(params.title);
+  }
+  if (params.description !== undefined) {
+    sets.push("description = ?");
+    values.push(params.description);
+  }
+  if (params.tags !== undefined) {
+    sets.push("tags = ?");
+    values.push(params.tags ? JSON.stringify(params.tags) : null);
+  }
+  if (params.thumbnail !== undefined) {
+    sets.push("thumbnail = ?");
+    values.push(params.thumbnail);
+  }
+  if (sets.length === 0) {
+    return getLessonById(db, id);
+  }
+  sets.push("updated_at = ?");
+  values.push(Date.now(), id, ownerId);
+
+  const row = await db
+    .prepare(`UPDATE lessons SET ${sets.join(", ")} WHERE id = ? AND owner_id = ? RETURNING *`)
+    .bind(...values)
+    .first<LessonRow>();
+  return row ?? null;
+}
+
+export async function publishLesson(
+  db: D1Database,
+  id: string,
+  ownerId: string,
+): Promise<LessonRow | null> {
+  const now = Date.now();
+  const row = await db
+    .prepare(
+      `UPDATE lessons SET status = 'published', published_at = ?, updated_at = ?
+       WHERE id = ? AND owner_id = ?
+       RETURNING *`,
+    )
+    .bind(now, now, id, ownerId)
+    .first<LessonRow>();
+  return row ?? null;
+}
+
+export async function deleteLesson(db: D1Database, id: string, ownerId: string): Promise<boolean> {
+  const result = await db
+    .prepare("DELETE FROM lessons WHERE id = ? AND owner_id = ?")
+    .bind(id, ownerId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}

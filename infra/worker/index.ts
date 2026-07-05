@@ -4,6 +4,7 @@ import { lessonsRoute } from "./routes/lessons";
 import { mediaRoute } from "./routes/media";
 import { authRoute } from "./auth/session";
 import { googleAuthRoute } from "./auth/google";
+import { uploadsRoute } from "./routes/uploads";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -30,6 +31,7 @@ app.route("/api/lessons", lessonsRoute);
 app.route("/media", mediaRoute);
 app.route("/api/auth", authRoute);
 app.route("/api/auth/google", googleAuthRoute);
+app.route("/api/uploads", uploadsRoute);
 
 // Workers Static Assets already tried to match the request against dist/ and
 // missed before this Worker ran (exact-match static files — JS chunks, the

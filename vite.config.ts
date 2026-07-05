@@ -156,6 +156,7 @@ export default defineConfig({
       "/api/health": "http://localhost:8787",
       "/api/lessons": "http://localhost:8787",
       "/api/auth": "http://localhost:8787",
+      "/api/uploads": "http://localhost:8787",
       "/media": "http://localhost:8787",
     },
   },
