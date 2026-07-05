@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Recording } from "../core/src";
 import type { StoredRecordingEntry, StoredRecordingMetadata } from "./IndexedDBRecordingStore";
 import { decompressBinaryToRecordings, encodeRecordingToStream } from "./recordingCodecClient";
-import { attachCompanionAudio, RecordingStorage } from "./RecordingStorage";
+import { attachCompanionAudio, buildRecordingFiles, RecordingStorage } from "./RecordingStorage";
 
 function createRecording(overrides: Partial<Recording> = {}): Recording {
   return {
@@ -55,6 +55,42 @@ async function exportAndDecode(recording: Recording, filename?: string): Promise
   const [decoded] = await decompressBinaryToRecordings(bytes);
   return decoded;
 }
+
+describe("buildRecordingFiles", () => {
+  it("returns only a .ne blob for a recording with no media", async () => {
+    const recording = createRecording();
+    const files = await buildRecordingFiles(recording, "my-lesson");
+
+    expect(files.audio).toBeUndefined();
+    expect(files.camera).toBeUndefined();
+    const bytes = new Uint8Array(await files.ne.arrayBuffer());
+    const [decoded] = await decompressBinaryToRecordings(bytes);
+    expect(decoded.id).toBe(recording.id);
+  });
+
+  it("externalizes audio/camera blobs under the given baseFilename", async () => {
+    const audioBlob = new Blob(["audio"], { type: "audio/ogg" });
+    const cameraBlob = new Blob(["camera"], { type: "video/webm" });
+    const recording = createRecording({ audioBlob, cameraBlob });
+
+    const files = await buildRecordingFiles(recording, "my-lesson");
+
+    expect(files.audio).toEqual({ name: "my-lesson.ogg", blob: audioBlob });
+    expect(files.camera).toEqual({ name: "my-lesson.webm", blob: cameraBlob });
+  });
+
+  it("produces byte-identical .ne output to exportAsFile for the same recording", async () => {
+    const recording = createRecording();
+    const viaBuild = await buildRecordingFiles(recording, "recording-1");
+    const viaExport = await exportAndDecode(recording);
+    const decodedFromBuild = (
+      await decompressBinaryToRecordings(new Uint8Array(await viaBuild.ne.arrayBuffer()))
+    )[0];
+
+    expect(decodedFromBuild.id).toBe(viaExport.id);
+    expect(decodedFromBuild.frames).toEqual(viaExport.frames);
+  });
+});
 
 describe("RecordingStorage.exportAsFile", () => {
   afterEach(() => {

@@ -130,6 +130,52 @@ export function attachCompanionAudio(
   return { ...recording, audioBlob: audio };
 }
 
+export interface RecordingFileSet {
+  /** The SCR3 byte stream — no base64 wrapping. */
+  ne: Blob;
+  audio?: { name: string; blob: Blob };
+  camera?: { name: string; blob: Blob };
+}
+
+/**
+ * Serializes a recording into its `.ne` stream plus externalized sibling media
+ * blobs (audio/camera) — the same encoding `RecordingStorage.exportAsFile` uses,
+ * extracted as a pure function (no DOM, no download side effect) so callers that
+ * need the bytes without triggering a browser download (e.g. an upload flow)
+ * get byte-identical output rather than a second, divergent encoding path.
+ */
+export async function buildRecordingFiles(
+  recording: Recording,
+  baseFilename: string,
+): Promise<RecordingFileSet> {
+  // Externalize the camera blob into a sibling video file and reference it from the `.ne`.
+  const cameraBlob = recording.cameraBlob instanceof Blob ? recording.cameraBlob : null;
+  let recordingToEncode = sanitizeMediaUrlsForExport(recording);
+  let videoName: string | null = null;
+  if (cameraBlob) {
+    videoName = `${baseFilename}.${cameraExtensionFromMime(cameraBlob.type)}`;
+    recordingToEncode = { ...recordingToEncode, cameraBlob: undefined, cameraFile: videoName };
+  }
+
+  // Externalize the audio blob the same way (`.weba` etc., so it never collides with the
+  // camera's `.webm`). The encoder then writes no inline `audioChunk` segments.
+  const audioBlob = recording.audioBlob instanceof Blob ? recording.audioBlob : null;
+  let audioName: string | null = null;
+  if (audioBlob && audioBlob.size > 0) {
+    audioName = `${baseFilename}.${audioExtensionFromMime(audioBlob.type)}`;
+    recordingToEncode = { ...recordingToEncode, audioBlob: undefined, audioFile: audioName };
+  }
+
+  const streamBytes = await encodeRecordingToStream(recordingToEncode);
+  const ne = new Blob([streamBytes as BlobPart], { type: "application/octet-stream" });
+
+  return {
+    ne,
+    audio: audioBlob && audioName ? { name: audioName, blob: audioBlob } : undefined,
+    camera: cameraBlob && videoName ? { name: videoName, blob: cameraBlob } : undefined,
+  };
+}
+
 /**
  * Recording storage for use-next-editor.
  * Provides IndexedDB persistence plus export/import support for recordings.
@@ -308,41 +354,19 @@ export class RecordingStorage {
   async exportAsFile(recording: Recording, filename?: string): Promise<void> {
     try {
       const baseFilename = filename?.replace(/\.(json|ne)$/, "") || `recording-${recording.id}`;
+      const files = await buildRecordingFiles(recording, baseFilename);
 
-      // Externalize the camera blob into a sibling video file and reference it from the `.ne`.
-      const cameraBlob = recording.cameraBlob instanceof Blob ? recording.cameraBlob : null;
-      let recordingToEncode = sanitizeMediaUrlsForExport(recording);
-      let videoName: string | null = null;
-      if (cameraBlob) {
-        videoName = `${baseFilename}.${cameraExtensionFromMime(cameraBlob.type)}`;
-        recordingToEncode = { ...recordingToEncode, cameraBlob: undefined, cameraFile: videoName };
-      }
+      this.downloadBlob(files.ne, `${baseFilename}.ne`);
 
-      // Externalize the audio blob the same way (`.weba` etc., so it never collides with the
-      // camera's `.webm`). The encoder then writes no inline `audioChunk` segments.
-      const audioBlob = recording.audioBlob instanceof Blob ? recording.audioBlob : null;
-      let audioName: string | null = null;
-      if (audioBlob && audioBlob.size > 0) {
-        audioName = `${baseFilename}.${audioExtensionFromMime(audioBlob.type)}`;
-        recordingToEncode = { ...recordingToEncode, audioBlob: undefined, audioFile: audioName };
-      }
-
-      // The `.ne` is the raw SCR3 byte stream — no base64 wrapping.
-      const streamBytes = await encodeRecordingToStream(recordingToEncode);
-      this.downloadBlob(
-        new Blob([streamBytes as BlobPart], { type: "application/octet-stream" }),
-        `${baseFilename}.ne`,
-      );
-
-      if (cameraBlob && videoName) {
+      if (files.camera) {
         // Small gap so the browser doesn't collapse consecutive programmatic downloads into one.
         await new Promise((resolve) => setTimeout(resolve, 150));
-        this.downloadBlob(cameraBlob, videoName);
+        this.downloadBlob(files.camera.blob, files.camera.name);
       }
 
-      if (audioBlob && audioName) {
+      if (files.audio) {
         await new Promise((resolve) => setTimeout(resolve, 150));
-        this.downloadBlob(audioBlob, audioName);
+        this.downloadBlob(files.audio.blob, files.audio.name);
       }
     } catch (error) {
       throw new Error(
