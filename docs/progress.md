@@ -39,12 +39,21 @@ Legend: ✅ done · 🚧 in progress · ⛔ blocked (needs input from Chan) · �
 Real Google OAuth Client ID/Secret received from Chan and saved to `infra/.dev.vars` (git-ignored); redirect URI `http://localhost:5173/api/auth/google/callback` registered on the client.
 
 - [x] ✅ P2.1 D1 user/session queries (`upsertUserByGoogleSub`, `createSession`, `getSessionUser`, `deleteSession`) + `UserRow`/`SessionRow`/`AuthUser` types — verified upsert/conflict path against real local D1
-- [ ] ⬜ P2.2 `infra/worker/auth/session.ts` — opaque `ne_session` cookie (DB-validated) + `GET /api/auth/me`/`POST /api/auth/logout`
-- [ ] ⬜ P2.3 `infra/worker/auth/google.ts` — PKCE login/callback using Hono's signed-cookie helpers for the handshake state
-- [ ] ⬜ P2.4 Mount both auth route groups in `worker/index.ts`; add `/api/auth` to the vite dev proxy
+- [x] ✅ P2.2 `infra/worker/auth/session.ts` — opaque `ne_session` cookie (DB-validated) + `GET /api/auth/me`/`POST /api/auth/logout`
+- [x] ✅ P2.3 `infra/worker/auth/google.ts` — PKCE login/callback using Hono's signed-cookie helpers for the handshake state
+- [x] ✅ P2.4 Mounted both auth route groups in `worker/index.ts`; added `/api/auth` to the vite dev proxy
 - [ ] ⬜ P2.5 `infra/client/auth/` — `AuthProvider`, `useAuth`, `AuthMenu`
 - [ ] ⬜ P2.6 Mount `AuthProvider` at router root; `Navbar actions` slot wired to `AuthMenu`
 - [ ] ⬜ P2.7 End-to-end sign-in test — needs a real browser click-through against accounts.google.com (Chan to verify; not automatable here)
+
+**P2.2-P2.4 verification notes:** everything up to the real Google login screen is built and verified locally (`wrangler dev` + real `.dev.vars` credentials, both directly on :8787 and through the vite proxy on :5173):
+
+- `/api/auth/me` correctly 401s when signed out, and returns the right `AuthUser` shape (no `google_sub` leaked) once a session exists.
+- `/api/auth/google/login` redirects to Google with a byte-exact `redirect_uri` match, correct PKCE `code_challenge`/`S256`, and sets a signed, path-scoped (`/api/auth/google`), 10-minute handshake cookie.
+- `/api/auth/google/callback` correctly 400s on missing code/state/handshake and on a `state` mismatch (tested independently); the handshake cookie is single-use (cleared unconditionally on read).
+- `/api/auth/logout` clears the cookie, deletes the D1 session row, and a subsequent `/me` correctly 401s.
+- Hit the same Yarn-PnP bundling false-positive as `hono` itself (see Phase 0 notes) for the `hono/cookie` subpath specifically — needed its own `[alias]` entry in `wrangler.toml` (aliasing "hono" alone wasn't enough).
+- **Not (and can't be) automated here:** the actual Google login screen requires real browser interaction with accounts.google.com. Chan: open `http://localhost:5173/api/auth/google/login?returnTo=/code` with `bun run dev` + `bun run dev:worker` running, sign in, and confirm it lands back on `/code` signed in (`/api/auth/me` should then reflect your real Google profile).
 
 ## Phase 3 — Write path (upload + publish)
 
