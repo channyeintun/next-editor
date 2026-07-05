@@ -1,7 +1,6 @@
 import Navbar from "@app/components/Navbar";
 import { AuthMenu } from "@next-editor/infra";
 import LessonGrid from "./components/LessonGrid";
-import Footer from "./components/Footer";
 
 export default function LearnPage() {
   return (
@@ -12,8 +11,6 @@ export default function LearnPage() {
       <main className="mx-auto w-full max-w-7xl flex-1 px-6 pb-20 pt-2 sm:px-8">
         <LessonGrid />
       </main>
-
-      <Footer />
     </div>
   );
 }
