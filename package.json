@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vp dev",
     "start": "vp dev",
+    "dev:worker": "wrangler dev --config infra/wrangler.toml --port 8787",
+    "dev:all": "bun run dev & bun run dev:worker & wait",
+    "d1:migrate:local": "wrangler d1 migrations apply next-editor-tube --local --config infra/wrangler.toml",
     "build": "tsc -b tsconfig.json && vp build",
     "build:wasm": "node scripts/build-dmp-wasm.mjs",
     "check": "vp check",

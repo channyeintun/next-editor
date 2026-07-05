@@ -13,7 +13,7 @@ Legend: ✅ done · 🚧 in progress · ⛔ blocked (needs input from Chan) · �
 - [x] ✅ P0.3 D1 schema: `infra/db/migrations/0001_init.sql` (users, sessions, lessons)
 - [x] ✅ P0.4 `infra/wrangler.toml` + `infra/worker/env.d.ts` + `.dev.vars.example`
 - [x] ✅ P0.5 Hono worker skeleton (`infra/worker/index.ts`): `/api/health`, static-assets passthrough, COEP/COOP middleware
-- [ ] ⬜ P0.6 Dev wiring: vite `server.proxy` for `/api`,`/media` → `wrangler dev` port; root `dev:worker`/`dev:all` scripts
+- [x] ✅ P0.6 Dev wiring: vite `server.proxy` for `/api/health`,`/media` → `wrangler dev` port; root `dev:worker`/`dev:all`/`d1:migrate:local` scripts
 - [x] ✅ P0.7 Verify: `wrangler dev` boots locally, D1 migration applies `--local`, `/api/health` responds, SPA fallback + seed static assets serve correctly, COEP/COOP present on every response, `bun run dev` unaffected, typecheck/lint/build green
 
 **Findings from P0.4/P0.5/P0.7 (kept here since they'll matter again at deploy time):**
@@ -22,6 +22,7 @@ Legend: ✅ done · 🚧 in progress · ⛔ blocked (needs input from Chan) · �
 - Workers Static Assets caps individual files at 25 MiB — irrelevant to the seed (~1 MB total) but confirms large lesson media must go through R2/`/media/*`, never the assets directory. (Also found and cleared a 71 MiB stale/untracked file in a leftover local `dist/` — not part of the tracked seed, just cleaned it.)
 - `env.ASSETS.fetch()` for `/index.html` explicitly returns a 307 redirect to `/`, not the page content. Fixed via `not_found_handling = "single-page-application"` in `[assets]` + fetching the original request path as-is.
 - **Important:** exact-match static assets bypass the Worker entirely by default, which means they'd ship without the app's required COEP/COOP headers (breaks WebContainers). Fixed with `run_worker_first = true` so every request — including static files — routes through the Worker's header middleware first; the catch-all still forwards to `ASSETS.fetch` for the actual file bytes. Small Worker-CPU cost on static files, but non-negotiable for correctness here.
+- The vite proxy deliberately whitelists `/api/health` (not a blanket `/api/*`) — the existing `slideImageProxyPlugin` dev route (`/api/slide-image`) would otherwise be shadowed before it moves into the Worker in Phase 4. Extend the proxy list route-by-route as `infra/worker/routes/*` gains real handlers (`/api/lessons` in Phase 1, `/api/auth`+`/api/uploads` in Phases 2-3).
 
 ## Phase 1 — Read path (D1 gallery, no auth yet)
 

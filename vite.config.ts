@@ -145,6 +145,15 @@ export default defineConfig({
     hmr: {
       overlay: true, // Show errors in overlay
     },
+    // Routes implemented so far by the Tube Worker (`bun run dev:worker`,
+    // see infra/wrangler.toml). Deliberately NOT a blanket "/api" proxy: that
+    // would shadow slideImageProxyPlugin's existing /api/slide-image dev
+    // route above before it moves into the Worker (Phase 4). Extend this
+    // list route-by-route as infra/worker/routes/* gains real handlers.
+    proxy: {
+      "/api/health": "http://localhost:8787",
+      "/media": "http://localhost:8787",
+    },
   },
   preview: {
     headers: crossOriginHeaders,
