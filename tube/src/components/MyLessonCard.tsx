@@ -89,20 +89,22 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
 
   return (
     <div className="group">
-      <div className="relative aspect-video overflow-hidden rounded-xl bg-slate-900">
-        {thumbFailed ? (
-          <div className="flex size-full items-center justify-center bg-slate-800 text-slate-600">
-            <Play className="size-8" />
-          </div>
-        ) : (
-          <img
-            src={`/${lesson.thumbnail}`}
-            alt={lesson.title}
-            loading="lazy"
-            onError={() => setThumbFailed(true)}
-            className="size-full object-cover"
-          />
-        )}
+      <div className="relative aspect-video rounded-xl bg-slate-900">
+        <div className="absolute inset-0 overflow-hidden rounded-xl">
+          {thumbFailed ? (
+            <div className="flex size-full items-center justify-center bg-slate-800 text-slate-600">
+              <Play className="size-8" />
+            </div>
+          ) : (
+            <img
+              src={`/${lesson.thumbnail}`}
+              alt={lesson.title}
+              loading="lazy"
+              onError={() => setThumbFailed(true)}
+              className="size-full object-cover"
+            />
+          )}
+        </div>
         <span
           className={`absolute left-2 top-2 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
             isPublished ? "bg-emerald-500/90 text-slate-950" : "bg-black/80 text-slate-300"
