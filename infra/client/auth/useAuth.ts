@@ -46,6 +46,23 @@ export function useSignOut() {
   });
 }
 
+// Updates ME_QUERY_KEY directly from the response rather than invalidating,
+// so every useAuth() caller (AuthMenu, AuthorProfilePage's own-profile
+// check) sees the new username on the same render as the mutation succeeds,
+// with no extra round-trip.
+export function useUpdateUsername() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (username: string) => {
+      const res = await apiClient.patch<{ user: AuthUser }>("/auth/username", { username });
+      return res.data.user;
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData(ME_QUERY_KEY, user);
+    },
+  });
+}
+
 // A real browser navigation, not a fetch — /api/auth/google/login is a
 // server-driven 302 redirect to Google, which only works as a top-level
 // document navigation (an XHR would just follow it invisibly and get stuck

@@ -334,6 +334,39 @@ export async function getUserByUsername(db: D1Database, username: string): Promi
   return row ?? null;
 }
 
+export type UpdateUsernameResult = { status: "ok"; user: UserRow } | { status: "taken" };
+
+// Renames a user and cascades the change into every lesson's denormalized
+// author_url (see insertDraftLesson) in one D1 batch, so the rename and the
+// link update commit atomically — a partial failure would otherwise leave
+// published lessons pointing at a username that no longer exists.
+export async function updateUsername(
+  db: D1Database,
+  userId: string,
+  newUsername: string,
+): Promise<UpdateUsernameResult> {
+  try {
+    const [userResult] = await db.batch<UserRow>([
+      db
+        .prepare("UPDATE users SET username = ? WHERE id = ? RETURNING *")
+        .bind(newUsername, userId),
+      db
+        .prepare("UPDATE lessons SET author_url = ? WHERE owner_id = ?")
+        .bind(`/learn/@${newUsername}`, userId),
+    ]);
+    const row = userResult.results?.[0];
+    if (!row) {
+      throw new Error("updateUsername: UPDATE ... RETURNING produced no row");
+    }
+    return { status: "ok", user: row };
+  } catch (error) {
+    if (String(error).includes("UNIQUE")) {
+      return { status: "taken" };
+    }
+    throw error;
+  }
+}
+
 // Backs the public author-profile view (/learn/@username for anyone but the
 // owner) — published only, unlike listOwnedLessons.
 export async function listPublishedLessonsByOwner(

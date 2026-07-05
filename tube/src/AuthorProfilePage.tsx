@@ -5,6 +5,7 @@ import { AuthMenu, avatarProxyUrl, useAuth, useAuthorProfile } from "@next-edito
 import Breadcrumb from "./components/Breadcrumb";
 import MyLibraryGrid from "./components/MyLibraryGrid";
 import LessonCard from "./components/LessonCard";
+import UsernameEditor from "./components/UsernameEditor";
 
 // /learn/@username (routed through LearnSlugRoute, which strips the "@"):
 // the signed-in owner's own management view (draft + published, same as the
@@ -28,6 +29,7 @@ export default function AuthorProfilePage({ username }: { username: string }) {
         <div className="py-4">
           <Breadcrumb title="My Library" />
         </div>
+        <UsernameEditor username={username} />
         <MyLibraryGrid />
       </Shell>
     );

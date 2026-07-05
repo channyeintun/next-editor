@@ -1,6 +1,6 @@
 // Public exports for the host app.
 export { default as AuthMenu } from "./auth/AuthMenu";
-export { useAuth, useSignOut, signInUrl, avatarProxyUrl } from "./auth/useAuth";
+export { useAuth, useSignOut, useUpdateUsername, signInUrl, avatarProxyUrl } from "./auth/useAuth";
 export { default as UploadLessonModal } from "./upload/UploadLessonModal";
 export type { UploadLessonModalProps } from "./upload/UploadLessonModal";
 export { loadResumeIntent, clearResumeIntent } from "./upload/resumeIntent";
