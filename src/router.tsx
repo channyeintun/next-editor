@@ -158,7 +158,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/code",
-    lazy: lazyRoute(() => import("./components/Editor"), "/code"),
+    lazy: lazyRoute(() => import("./components/CodeRoute"), "/code"),
     HydrateFallback: RouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },

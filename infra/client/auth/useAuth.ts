@@ -20,11 +20,12 @@ async function fetchMe(): Promise<AuthUser | null> {
 // No dedicated Provider/Context — TanStack Query's shared cache (see
 // queryClient.ts) already gives every caller of useAuth() the same session
 // state, the same way tube's useLessonsInfinite/useLesson work.
-export function useAuth() {
+export function useAuth(options: { enabled?: boolean } = {}) {
   const query = useQuery({
     queryKey: ME_QUERY_KEY,
     queryFn: fetchMe,
     staleTime: 60_000,
+    enabled: options.enabled ?? true,
   });
   return {
     user: query.data ?? null,
