@@ -60,7 +60,7 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "tube/src/**/*.{test,spec}.{ts,tsx}"],
     alias: {
       "monaco-editor": fileURLToPath(new URL("./src/test/monaco-editor.mock.ts", import.meta.url)),
     },

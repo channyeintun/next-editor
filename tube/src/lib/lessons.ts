@@ -3,28 +3,90 @@ import type { Lesson } from "../types";
 
 export interface LessonsPage {
   lessons: Lesson[];
-  /** Next page index, or null once the last page has been served. */
+  /**
+   * Opaque cursor for the next page, or null once exhausted. Namespaces which
+   * backend serves it next — "seed:<n>" for a static build-time shard,
+   * "d1:<n>" for a D1-backed page of user-published lessons — so the static
+   * seed (introduction, etc.) is served first and pagination continues into
+   * D1 once it's exhausted. See docs/cloudflare-architecture.md "Catalog
+   * resolution".
+   */
+  nextPage: string | null;
+}
+
+interface RawLessonsPage {
+  lessons: Lesson[];
   nextPage: number | null;
 }
 
-// True pagination over static page shards emitted by the lessonsPagination Vite
-// plugin (see vite.config.ts): the client downloads only the page it's showing,
-// never the whole catalog. Swap point for a real backend: point this at
-// `/api/lessons?page=${page}` and return the server's cursor as nextPage.
-export async function fetchLessonsPage(page: number): Promise<LessonsPage> {
-  const res = await axios.get<LessonsPage>(`/lessons/page-${page}.json`);
+function is404(err: unknown): boolean {
+  return axios.isAxiosError(err) && err.response?.status === 404;
+}
+
+function parseCursor(cursor: string): { source: "seed" | "d1"; index: number } {
+  const [source, indexStr] = cursor.split(":");
+  return { source: source === "d1" ? "d1" : "seed", index: Number(indexStr) || 0 };
+}
+
+// Static shard emitted by the lessonsApiPlugin Vite plugin (see vite.config.ts).
+// Always has at least a page-0 (possibly empty), so this only 404s for an
+// out-of-range index — treated as "no more seed pages" by the caller.
+async function fetchSeedPage(index: number): Promise<RawLessonsPage | null> {
+  try {
+    const res = await axios.get<RawLessonsPage>(`/lessons/page-${index}.json`);
+    return res.data;
+  } catch (err) {
+    if (is404(err)) return null;
+    throw err;
+  }
+}
+
+async function fetchD1Page(index: number): Promise<RawLessonsPage> {
+  const res = await axios.get<RawLessonsPage>(`/api/lessons?page=${index}`);
   return res.data;
 }
 
+// Serves the static seed catalog first, then continues pagination into
+// user-published D1 lessons once the seed is exhausted — the client only ever
+// downloads the page it's showing, from whichever backend holds it.
+export async function fetchLessonsPage(cursor: string): Promise<LessonsPage> {
+  const { source, index } = parseCursor(cursor);
+
+  if (source === "seed") {
+    const page = await fetchSeedPage(index);
+    if (page) {
+      return {
+        lessons: page.lessons,
+        nextPage: page.nextPage !== null ? `seed:${page.nextPage}` : "d1:0",
+      };
+    }
+    // No seed shard at this index at all — fall through to D1 from the start.
+  }
+
+  const page = await fetchD1Page(source === "d1" ? index : 0);
+  return {
+    lessons: page.lessons,
+    nextPage: page.nextPage !== null ? `d1:${page.nextPage}` : null,
+  };
+}
+
 // One request per lesson for the deep-linkable detail route — no catalog scan.
-// Returns null (not undefined — Query rejects undefined) when the slug has no
-// shard, so the route can tell "not found" from a real fetch failure.
+// Tries the static seed shard first, then the D1-backed API. Returns null (not
+// undefined — Query rejects undefined) when the slug matches neither, so the
+// route can tell "not found" from a real fetch failure.
 export async function findLessonBySlug(slug: string): Promise<Lesson | null> {
   try {
     const res = await axios.get<Lesson>(`/lessons/by-slug/${encodeURIComponent(slug)}.json`);
     return res.data;
   } catch (err) {
-    if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+    if (!is404(err)) throw err;
+  }
+
+  try {
+    const res = await axios.get<Lesson>(`/api/lessons/${encodeURIComponent(slug)}`);
+    return res.data;
+  } catch (err) {
+    if (is404(err)) return null;
     throw err;
   }
 }
