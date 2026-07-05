@@ -27,7 +27,7 @@ Legend: ✅ done · 🚧 in progress · ⛔ blocked (needs input from Chan) · �
 ## Phase 1 — Read path (D1 gallery, no auth yet)
 
 - [x] ✅ P1.1 `infra/db/queries.ts` + `infra/db/types.ts` (typed D1 helpers for lessons)
-- [ ] ⬜ P1.2 `GET /api/lessons` (published, paginated) + `GET /api/lessons/:slug`
+- [x] ✅ P1.2 `GET /api/lessons` (published, paginated) + `GET /api/lessons/:slug`
 - [ ] ⬜ P1.3 `GET /media/*` — R2 stream with Range support + immutable cache headers
 - [ ] ⬜ P1.4 Swap `tube/src/lib/lessons.ts`: seed shards first, then D1 pages; encode source in `nextPage` cursor
 - [ ] ⬜ P1.5 Local verification: seed `introduction` still loads w/ zero D1 hits; a hand-inserted local D1 row + local R2 object renders in gallery + plays back same-origin

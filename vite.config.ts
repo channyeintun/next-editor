@@ -152,6 +152,7 @@ export default defineConfig({
     // list route-by-route as infra/worker/routes/* gains real handlers.
     proxy: {
       "/api/health": "http://localhost:8787",
+      "/api/lessons": "http://localhost:8787",
       "/media": "http://localhost:8787",
     },
   },
