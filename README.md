@@ -133,8 +133,6 @@ Recordings use the SCR3 `.ne` container as raw binary end-to-end — the exporte
 
 ## Learn More
 
-- [SLIDES_USAGE.md](SLIDES_USAGE.md) for slide authoring and synchronization.
-- [SELF_HOSTING.md](SELF_HOSTING.md) for Docker deployment and hosting requirements.
 - [docs/core.md](docs/core.md) for the core module boundaries and public API.
 - [docs/data-flow.md](docs/data-flow.md) for capture, playback, and storage flow.
 - [docs/data-structures.md](docs/data-structures.md) for the recording model and core types.
