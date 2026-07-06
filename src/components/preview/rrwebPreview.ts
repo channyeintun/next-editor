@@ -63,6 +63,16 @@ const RRWEB_INCREMENTAL_SOURCE_MUTATION = 0;
 // the SAME animation-frame batch as the swap that drifted (no visible stale frame).
 const RRWEB_CHECKPOINT_THROTTLE_MS = 200;
 
+// Scroll events are throttled at the rrweb source (one sample per this many ms,
+// applied as a discrete jump on replay — no interpolation). The cursor-overlay
+// pipeline (mouseTrackingActor.ts) samples/tweens roughly every animation frame,
+// so a coarser scroll cadence leaves a window where the overlay cursor has moved
+// on to a new screen position while the replayed DOM is still scrolled to the
+// previous sample, making the cursor appear to point at the wrong content. Kept
+// close to one frame so the residual gap is imperceptible; scroll events are a
+// tiny {id,x,y} payload, so this is cheap relative to mutation/snapshot data.
+const RRWEB_SCROLL_SAMPLING_MS = 33;
+
 // A minimal structural view of rrweb's recording mirror. `record.mirror` (a
 // public rrweb API) implements this; we only need to walk its id↔node map.
 export interface RrwebRecordingMirror {
@@ -305,9 +315,10 @@ export function createRrwebPreviewRecorderScript({
             // Keep pointer positions: rrweb's replayer derives in-page hover (and
             // similar) styling from them, so replay fidelity needs the stream even
             // though the fake cursor itself is hidden (the host draws its own
-            // cursor overlay). Throttle mildly; scroll/media only need to look
-            // right, not be sample-perfect.
-            sampling: { mousemove: 100, scroll: 150, media: 800 },
+            // cursor overlay). Scroll stays close to one frame (see
+            // RRWEB_SCROLL_SAMPLING_MS) so it doesn't lag the cursor overlay's
+            // own cadence; media only needs to look right, not be sample-perfect.
+            sampling: { mousemove: 100, scroll: ${JSON.stringify(RRWEB_SCROLL_SAMPLING_MS)}, media: 800 },
             inlineStylesheet: true,
             // Bake image pixels into the snapshot (rr_dataURL). The preview page
             // is served from an ephemeral per-boot WebContainer origin, so any
