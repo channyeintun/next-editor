@@ -57,10 +57,9 @@ function buildMediaCandidates(
   }
   const candidates: string[] = [];
   if (storedUrl) {
-    // The configured URL may be relative to the `.ne` (the Configure Media Links dialog
-    // explicitly supports this) — resolve it against `baseUrl` like the other candidates so
-    // downstream `new URL(...)` calls don't throw on a bare relative string. Absolute URLs are
-    // unaffected by resolving against a base.
+    // The stored URL may be relative to the `.ne` — resolve it against `baseUrl` like the
+    // other candidates so downstream `new URL(...)` calls don't throw on a bare relative
+    // string. Absolute URLs are unaffected by resolving against a base.
     try {
       const resolved = baseUrl ? new URL(storedUrl, baseUrl) : new URL(storedUrl);
       candidates.push(resolved.toString());

@@ -220,14 +220,6 @@ export interface Recording {
    * imported file. Playback fetches the audio from here when no `audioBlob` is attached.
    */
   audioUrl?: string;
-  /**
-   * True when `audioUrl` was explicitly set by the user via "Configure Media Links" (as opposed
-   * to auto-resolved from `audioFile`/the `.ne` basename on load). `exportAsFile` uses this to
-   * tell a real configured host URL from a transient load-time guess and strip only the latter —
-   * see {@link RecordingStorage.exportAsFile}. Persisted in the SCR3 stream so it survives a
-   * load → re-export round trip.
-   */
-  audioUrlConfigured?: boolean;
   cameraBlob?: Blob | CameraPlaceholder;
   cameraSource?: RecordingCameraSource;
   /** Camera warmup offset (ms) between the recording origin and the first camera frame. */
@@ -243,8 +235,6 @@ export interface Recording {
    * from an imported file. Preferred by playback so the browser range-streams the video directly.
    */
   cameraUrl?: string;
-  /** Same provenance marker as {@link audioUrlConfigured}, for `cameraUrl`. */
-  cameraUrlConfigured?: boolean;
   /** True when a decoded SCR3 stream included its footer; false for a still-growing prefix. */
   streamFinalized?: boolean;
   workspaceSnapshot?: WorkspaceRecordingSnapshot;

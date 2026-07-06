@@ -28,20 +28,15 @@ function stripExtension(filename: string): string {
 }
 
 /**
- * Drop an `audioUrl`/`cameraUrl` unless the user explicitly set it via "Configure Media Links"
- * (`*UrlConfigured`). Everything else — a `blob:`/`data:` object URL from an import, or a
- * `https://` URL auto-resolved by `useUrlLoader` while loading from a `?url=` host — can't
+ * Drop `audioUrl`/`cameraUrl` on export — a `blob:`/`data:` object URL from an import, or a
+ * `https://` URL auto-resolved by `useUrlLoader` while loading from a `?url=` host, can't
  * survive a re-export as-is: baking it in would silently defeat sibling-file resolution on the
  * next load, since a present `cameraUrl`/`audioUrl` is preferred over the sibling filename.
  */
 function sanitizeMediaUrlsForExport(recording: Recording): Recording {
   const sanitized = { ...recording };
-  if (!sanitized.audioUrlConfigured) {
-    delete sanitized.audioUrl;
-  }
-  if (!sanitized.cameraUrlConfigured) {
-    delete sanitized.cameraUrl;
-  }
+  delete sanitized.audioUrl;
+  delete sanitized.cameraUrl;
   return sanitized;
 }
 

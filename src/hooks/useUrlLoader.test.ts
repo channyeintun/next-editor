@@ -230,7 +230,6 @@ describe("useUrlLoader", () => {
     const recording = createRecording({
       audioFile: "lesson.weba",
       audioUrl: "https://cdn.example.com/hosted-audio.weba",
-      audioUrlConfigured: true,
       audioSource: "external",
     });
     const neBytes = await encodeRecordingToStream(recording);
@@ -299,14 +298,12 @@ describe("useUrlLoader", () => {
   });
 
   it("resolves a relative configured audio URL against the .ne URL instead of throwing", async () => {
-    // A relative configured URL is exactly what the "Configure Media Links" dialog supports
-    // (documented as "relative to the .ne file"). Before the fix, `new URL(storedUrl)` on this
-    // raw relative string threw inside the candidate loop, silently skipping straight to the
-    // next candidate; this test pins that the relative URL itself is resolved and used.
+    // `audioUrl` can be a URL relative to the `.ne` file. Before the fix, `new URL(storedUrl)`
+    // on this raw relative string threw inside the candidate loop, silently skipping straight
+    // to the next candidate; this test pins that the relative URL itself is resolved and used.
     const recording = createRecording({
       audioFile: "lesson.weba",
       audioUrl: "media/hosted-audio.weba",
-      audioUrlConfigured: true,
       audioSource: "external",
     });
     const neBytes = await encodeRecordingToStream(recording);
@@ -348,7 +345,6 @@ describe("useUrlLoader", () => {
     const recording = createRecording({
       audioFile: "lesson.weba",
       audioUrl: "https://example.com/intro-01/lesson.weba",
-      audioUrlConfigured: true,
       audioSource: "external",
     });
     const neBytes = await encodeRecordingToStream(recording);

@@ -125,27 +125,10 @@ describe("RecordingStorage.exportAsFile", () => {
     expect(decoded.audioUrl).toBeUndefined();
   });
 
-  it("keeps a configured https:// media URL through export", async () => {
-    const recording = createRecording({
-      audioFile: "lesson.weba",
-      audioUrl: "https://cdn.example.com/lesson-audio.weba",
-      audioUrlConfigured: true,
-      cameraFile: "lesson.webm",
-      cameraUrl: "https://cdn.example.com/lesson-camera.webm",
-      cameraUrlConfigured: true,
-    });
-
-    const decoded = await exportAndDecode(recording, "lesson");
-
-    expect(decoded.audioUrl).toBe("https://cdn.example.com/lesson-audio.weba");
-    expect(decoded.audioUrlConfigured).toBe(true);
-    expect(decoded.cameraUrl).toBe("https://cdn.example.com/lesson-camera.webm");
-    expect(decoded.cameraUrlConfigured).toBe(true);
-  });
-
-  it("strips an unconfigured https:// URL auto-resolved from a prior ?url= load (stale-host bug)", async () => {
-    // No `*UrlConfigured` flag — this is what `useUrlLoader`'s `withResolvedMediaUrls` produces,
-    // not something the user set via "Configure Media Links".
+  it("strips an https:// URL auto-resolved from a prior ?url= load (stale-host bug)", async () => {
+    // This is what `useUrlLoader`'s `withResolvedMediaUrls` produces — it can't survive a
+    // re-export as-is, since a present `cameraUrl`/`audioUrl` is preferred over the sibling
+    // filename on the next load.
     const recording = createRecording({
       audioFile: "lesson.weba",
       audioUrl: "https://old-host.example.com/lesson.weba",

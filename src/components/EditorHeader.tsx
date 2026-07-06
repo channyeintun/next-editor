@@ -9,7 +9,6 @@ import {
   FileUp,
   FilePlus2,
   LayoutTemplate,
-  Link2,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -17,7 +16,6 @@ import {
   Settings,
   Variable,
 } from "lucide-react";
-import type { Recording } from "../core/src";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import {
@@ -107,54 +105,6 @@ function parseEnvironmentInput(value: string): {
   };
 }
 
-/**
- * True once a recording has any audio/camera media — either external already, or a blob that
- * export will externalize. `audioSource === "external"` counts even without an `audioFile`/
- * `audioUrl` reference: older exports declared external audio without persisting the sibling
- * filename, and configuring a URL is exactly how such a recording gets its audio back.
- */
-function recordingHasExternalMedia(recording: Recording | null): boolean {
-  if (!recording) return false;
-  const hasAudioBlob = recording.audioBlob instanceof Blob && recording.audioBlob.size > 0;
-  const hasCameraBlob = recording.cameraBlob instanceof Blob;
-  return Boolean(
-    recording.audioFile ||
-    recording.audioUrl ||
-    recording.audioSource === "external" ||
-    recording.cameraFile ||
-    recording.cameraUrl ||
-    hasAudioBlob ||
-    hasCameraBlob,
-  );
-}
-
-/** Empty string for a transient (`blob:`/`data:`) or absent URL — those can't be edited/reused. */
-function mediaUrlDraftValue(url: string | undefined): string {
-  if (!url || url.startsWith("blob:") || url.startsWith("data:")) return "";
-  return url;
-}
-
-/**
- * Validates a "Configure media links" field. Empty is valid (clears the configured URL, falling
- * back to same-basename resolution). Rejects `blob:`/`data:` (tab-local, won't survive a page
- * reload) and anything that isn't a parseable absolute or `.ne`-relative URL.
- */
-function validateMediaUrlInput(value: string): { errorMessage: string | null } {
-  const trimmed = value.trim();
-  if (!trimmed) return { errorMessage: null };
-  if (trimmed.startsWith("blob:") || trimmed.startsWith("data:")) {
-    return {
-      errorMessage: "Use a real hosted URL, not a blob:/data: URL — it won't survive a reload.",
-    };
-  }
-  try {
-    new URL(trimmed, "https://example.com/");
-    return { errorMessage: null };
-  } catch {
-    return { errorMessage: "Enter a valid URL (absolute, or relative to the .ne file)." };
-  }
-}
-
 function FileSidebarToggleButton() {
   const isCollapsed = useWorkspaceSidebarCollapsed();
   const { setSidebarCollapsed } = useWorkspaceActions();
@@ -205,17 +155,12 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
   const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isStarterSubmenuOpen, setIsStarterSubmenuOpen] = useState(false);
-  const [isMediaLinksModalOpen, setIsMediaLinksModalOpen] = useState(false);
-  const [audioUrlDraft, setAudioUrlDraft] = useState("");
-  const [cameraUrlDraft, setCameraUrlDraft] = useState("");
-  const [mediaLinksError, setMediaLinksError] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const { rerunRunner, resetRuntime, updateEnvironmentVariables, updateRunnerConfig } =
     useWebContainerRuntimeActions();
   const { environmentVariables, runnerConfig, status } = useWebContainerRuntimeMetadata();
-  const { exportAsFile, extendRecording, importFromFile, loadRecording } = useNextEditorActions();
+  const { exportAsFile, importFromFile, loadRecording } = useNextEditorActions();
   const { currentRecording } = useNextEditorMetadata();
-  const hasExternalMedia = recordingHasExternalMedia(currentRecording);
   const { getProject, loadProject, saveProject } = useWorkspaceActions();
   const fileCount = useWorkspaceFileCount();
   const lessonType = useWorkspaceLessonType();
@@ -255,55 +200,6 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
   const handleEditEnvironment = () => {
     setIsMenuOpen(false);
     setIsEnvironmentModalOpen(true);
-  };
-
-  const closeMediaLinksModal = () => {
-    setIsMediaLinksModalOpen(false);
-    setMediaLinksError(null);
-  };
-
-  const handleOpenMediaLinks = () => {
-    setIsMenuOpen(false);
-    // Only prefill from a URL the user configured earlier — an auto-resolved load-time guess
-    // isn't something they set, so the field starts empty (same-basename behavior) for it.
-    setAudioUrlDraft(
-      currentRecording?.audioUrlConfigured ? mediaUrlDraftValue(currentRecording.audioUrl) : "",
-    );
-    setCameraUrlDraft(
-      currentRecording?.cameraUrlConfigured ? mediaUrlDraftValue(currentRecording.cameraUrl) : "",
-    );
-    setMediaLinksError(null);
-    setIsMediaLinksModalOpen(true);
-  };
-
-  const handleSaveMediaLinks = () => {
-    if (!currentRecording) {
-      closeMediaLinksModal();
-      return;
-    }
-
-    const audioCheck = validateMediaUrlInput(audioUrlDraft);
-    if (audioCheck.errorMessage) {
-      setMediaLinksError(audioCheck.errorMessage);
-      return;
-    }
-    const cameraCheck = validateMediaUrlInput(cameraUrlDraft);
-    if (cameraCheck.errorMessage) {
-      setMediaLinksError(cameraCheck.errorMessage);
-      return;
-    }
-
-    const trimmedAudioUrl = audioUrlDraft.trim();
-    const trimmedCameraUrl = cameraUrlDraft.trim();
-
-    extendRecording({
-      ...currentRecording,
-      audioUrl: trimmedAudioUrl || undefined,
-      audioUrlConfigured: Boolean(trimmedAudioUrl),
-      cameraUrl: trimmedCameraUrl || undefined,
-      cameraUrlConfigured: Boolean(trimmedCameraUrl),
-    });
-    closeMediaLinksModal();
   };
 
   const handleImportRecording = async () => {
@@ -611,23 +507,6 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
                       Export Recording (.ne)
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleOpenMediaLinks}
-                    disabled={!hasExternalMedia}
-                    className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
-                      hasExternalMedia
-                        ? "text-slate-200 hover:bg-slate-700 hover:text-white"
-                        : "cursor-not-allowed text-slate-500"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Link2 size={14} aria-hidden="true" />
-                      Configure Media Links
-                    </span>
-                  </button>
-
                   <div className="my-1 h-px bg-slate-700" />
 
                   <button
@@ -747,78 +626,6 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
                 <button
                   type="button"
                   onClick={handleSave}
-                  className="rounded bg-emerald-500 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-950 transition-colors hover:bg-emerald-400"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isMediaLinksModalOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-[#0b0d12]/62 px-4 py-8 backdrop-blur-[2px]"
-          onClick={closeMediaLinksModal}
-        >
-          <div
-            className="mx-auto flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#151821] shadow-[0_24px_48px_rgba(2,6,23,0.55)]"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="space-y-5 overflow-y-auto p-5">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-slate-100">Configure Media Links</p>
-                <p className="text-xs text-slate-400">
-                  Point audio/video at a hosted URL (S3, CDN) instead of a sibling file next to the
-                  .ne. Leave empty to load media by the .ne file's own name (lesson.ne → lesson.weba
-                  / lesson.webm).
-                </p>
-              </div>
-
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-slate-300">Audio URL</span>
-                <input
-                  type="text"
-                  value={audioUrlDraft}
-                  onChange={(event) => {
-                    setAudioUrlDraft(event.target.value);
-                    if (mediaLinksError) setMediaLinksError(null);
-                  }}
-                  spellCheck={false}
-                  placeholder="https://cdn.example.com/lesson-audio.weba"
-                  className="w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 py-2 font-mono text-xs text-slate-100 outline-none transition-colors focus:border-slate-500"
-                />
-              </label>
-
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-slate-300">Video URL</span>
-                <input
-                  type="text"
-                  value={cameraUrlDraft}
-                  onChange={(event) => {
-                    setCameraUrlDraft(event.target.value);
-                    if (mediaLinksError) setMediaLinksError(null);
-                  }}
-                  spellCheck={false}
-                  placeholder="https://cdn.example.com/lesson-camera.webm"
-                  className="w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 py-2 font-mono text-xs text-slate-100 outline-none transition-colors focus:border-slate-500"
-                />
-              </label>
-
-              {mediaLinksError ? <p className="text-sm text-rose-300">{mediaLinksError}</p> : null}
-
-              <div className="flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={closeMediaLinksModal}
-                  className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400 transition-colors hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveMediaLinks}
                   className="rounded bg-emerald-500 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-950 transition-colors hover:bg-emerald-400"
                 >
                   Save
