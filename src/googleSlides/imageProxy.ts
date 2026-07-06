@@ -11,9 +11,10 @@
 // content small.
 //
 // This module is imported by both the Vite dev-server middleware
-// (tube/vite/slideImageProxyPlugin.ts) and the Vercel Edge Function
-// (api/slide-image.ts) so the validation/fetch logic is written once. It only
-// uses the Web-standard fetch/Request/Response APIs, available in both.
+// (tube/vite/slideImageProxyPlugin.ts) and the Cloudflare Worker route
+// (infra/worker/routes/slideImage.ts) so the validation/fetch logic is
+// written once. It only uses the Web-standard fetch/Request/Response APIs,
+// available in both.
 
 const ALLOWED_EXACT_HOSTS = new Set(["docs.google.com"]);
 const ALLOWED_SUFFIX = ".googleusercontent.com";

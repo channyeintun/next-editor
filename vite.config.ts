@@ -22,9 +22,9 @@ export default defineConfig({
     lessonsApiPlugin({
       source: fileURLToPath(new URL("./tube/data/lessons.json", import.meta.url)),
     }) as unknown as PluginOption,
-    // Dev-server equivalent of api/slide-image.ts (see that file's doc
-    // comment): lets `bun run dev` resolve the same /api/slide-image route
-    // that production serves as a Vercel Edge Function.
+    // Dev-server equivalent of infra/worker/routes/slideImage.ts: lets
+    // `bun run dev` resolve the same /api/slide-image route the Worker
+    // serves in production.
     slideImageProxyPlugin() as unknown as PluginOption,
     wasm() as unknown as PluginOption,
     tailwindcss() as unknown as PluginOption,

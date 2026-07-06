@@ -9,12 +9,12 @@ it, and publish it — without dragging Cloudflare/D1/R2/OAuth logic into `src/`
 
 ## Decisions locked in
 
-| Question              | Decision                                                                                                                                                                                |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment topology   | **Full Cloudflare, same-origin.** SPA served by Workers Static Assets; API, OAuth, and R2 all live behind the same origin via one Hono Worker. Vercel remains a fallback deploy target. |
-| Lesson lifecycle      | **Draft → Publish.** Uploaded lessons start as private drafts; only `published` rows appear in the public gallery.                                                                      |
-| Who can create        | **Any Google account.** Sign in with Google → you can record, upload, and publish.                                                                                                      |
-| Existing JSON catalog | **Kept as-is.** The curated seed (e.g. `introduction`) stays static and D1-free — frequent-access, edge-cached. D1 only holds user-generated lessons.                                   |
+| Question              | Decision                                                                                                                                              |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment topology   | **Full Cloudflare, same-origin.** SPA served by Workers Static Assets; API, OAuth, and R2 all live behind the same origin via one Hono Worker.        |
+| Lesson lifecycle      | **Draft → Publish.** Uploaded lessons start as private drafts; only `published` rows appear in the public gallery.                                    |
+| Who can create        | **Any Google account.** Sign in with Google → you can record, upload, and publish.                                                                    |
+| Existing JSON catalog | **Kept as-is.** The curated seed (e.g. `introduction`) stays static and D1-free — frequent-access, edge-cached. D1 only holds user-generated lessons. |
 
 ## Why same-origin is not negotiable here
 
@@ -25,15 +25,15 @@ Cross-Origin-Embedder-Policy: require-corp
 Cross-Origin-Opener-Policy:   same-origin
 ```
 
-(see `vercel.json`, `vite.config.ts` `crossOriginHeaders`). This is required for
-`SharedArrayBuffer` / the WebContainer runtime. Under `require-corp`, **any
-subresource** — the `.ne` stream, the `.ogg`/`.weba` audio, the camera `.webm`,
-the thumbnail — must either be same-origin, or carry
-`Cross-Origin-Resource-Policy: cross-origin` **and** be requested with the CORS
-`crossorigin` attribute. Serving lesson media from a separate origin (a Vercel
-SPA + a `api.*` Worker, or a public R2 bucket domain) means retrofitting CORP +
-CORS onto every asset and every `<audio>`/`<video>` tag, plus cross-site cookie
-handling for the OAuth session.
+(see `infra/worker/index.ts`, `vite.config.ts` `crossOriginHeaders`). This is
+required for `SharedArrayBuffer` / the WebContainer runtime. Under
+`require-corp`, **any subresource** — the `.ne` stream, the `.ogg`/`.weba`
+audio, the camera `.webm`, the thumbnail — must either be same-origin, or
+carry `Cross-Origin-Resource-Policy: cross-origin` **and** be requested with
+the CORS `crossorigin` attribute. Serving lesson media from a separate origin
+(a static SPA + a `api.*` Worker, or a public R2 bucket domain) means
+retrofitting CORP + CORS onto every asset and every `<audio>`/`<video>` tag,
+plus cross-site cookie handling for the OAuth session.
 
 Serving the SPA, the API, and R2 bytes from **one Cloudflare origin** makes all
 of that disappear: subresources are same-origin, so COEP is satisfied for free,
@@ -277,7 +277,7 @@ sequencing.
 | `POST /api/lessons/:id/publish` | owner  | `status='published'`, set `published_at`                                             |
 | `DELETE /api/lessons/:id`       | owner  | Delete row + R2 objects                                                              |
 | `GET /media/*`                  | —      | Stream R2 object (Range, immutable cache)                                            |
-| `GET /api/slide-image?url=`     | —      | Google Slides image proxy (moved off Vercel Edge)                                    |
+| `GET /api/slide-image?url=`     | —      | Google Slides image proxy                                                            |
 | `GET /api/proxy?url=`           | —      | Same-origin proxy for cross-origin `.ne` loads (path already used by `useUrlLoader`) |
 
 ## Upload & publish sequence
@@ -326,4 +326,3 @@ all. R2's no-egress pricing is the key reason media streaming is cheap here.
 - The `.ne` / SCR3 format, the codec, the recorder machine, playback, sibling media resolution.
 - The static seed catalog and `public/lessons/introduction/*` assets.
 - The editor's behavior when `renderPostRecordingModal` is not supplied (i.e. the `/code` route stays byte-for-byte as today).
-- The Vercel deploy path — it keeps working as a fallback; Cloudflare is additive.

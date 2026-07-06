@@ -2,10 +2,10 @@ import type { Plugin } from "vite";
 import { proxySlideImage } from "../../src/googleSlides/imageProxy";
 
 /**
- * Dev-server equivalent of api/slide-image.ts: serves the same transient
- * Google Slides image proxy at /api/slide-image?url=<encoded https URL> so
- * `bun run dev` matches the Vercel Edge Function used in production. Shares
- * all validation/fetch logic with the Edge Function via imageProxy.ts — this
+ * Dev-server equivalent of infra/worker/routes/slideImage.ts: serves the same
+ * transient Google Slides image proxy at /api/slide-image?url=<encoded https
+ * URL> so `bun run dev` matches the Worker route used in production. Shares
+ * all validation/fetch logic with the Worker route via imageProxy.ts — this
  * file only adapts the result to Node's (req, res) middleware signature.
  */
 export function slideImageProxyPlugin(): Plugin {
