@@ -1,6 +1,11 @@
 name = "next-editor-tube"
 main = "./worker/index.ts"
 compatibility_date = "2026-07-05"
+# Required by @upstash/redis/cloudflare's "uncrypto" dependency, which falls
+# back to requiring the real "node:crypto" module at runtime on Workers
+# (workerd only polyfills it under this flag) — without it, any request that
+# touches the cache throws "Dynamic require of node:crypto is not supported".
+compatibility_flags = ["nodejs_compat"]
 
 # The browser-facing origin, used to build the exact Google OAuth redirect_uri
 # (must byte-for-byte match what's registered in Google Cloud Console — it
@@ -9,10 +14,11 @@ compatibility_date = "2026-07-05"
 # override with the real production origin once one exists.
 [vars]
 PUBLIC_URL = "https://nexteditor.dev"
-# Optional Upstash Redis cache layer (infra/worker/cache.ts). Once a real
-# Upstash database exists, add:
-#   UPSTASH_REDIS_REST_URL = "https://<...>.upstash.io"
-# and set the token as a secret (never a plaintext var):
+# Optional Upstash Redis cache layer (infra/worker/cache.ts). Both values are
+# Worker secrets, never plaintext vars — the URL is project-identifying and
+# the token is a bearer credential for it, so neither belongs in a file
+# that's committed to the repo:
+#   wrangler secret put UPSTASH_REDIS_REST_URL   --config infra/wrangler.toml
 #   wrangler secret put UPSTASH_REDIS_REST_TOKEN --config infra/wrangler.toml
 # The app must work identically when these are unset.
 
@@ -31,6 +37,8 @@ custom_domain = true
 [alias]
 hono = "hono"
 "hono/cookie" = "hono/cookie"
+"@upstash/redis/cloudflare" = "@upstash/redis/cloudflare"
+uncrypto = "uncrypto"
 
 # The SPA build output (bun run build, from the repo root). Static Assets are
 # matched first and served directly (no Worker invocation, no CPU billed);
