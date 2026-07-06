@@ -51,13 +51,13 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
 
   useEffect(() => {
     return () => {
-      if (mediaRecorderRef.current && isRecordingAudio) {
-        mediaRecorderRef.current.stop();
-        const stream = mediaRecorderRef.current.stream as MediaStream;
-        stream.getTracks().forEach((track) => track.stop());
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
+        recorder.stream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [isRecordingAudio]);
+  }, []);
 
   const startRecording = async () => {
     try {

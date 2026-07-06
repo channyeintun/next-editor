@@ -561,10 +561,10 @@ export const useUrlLoader = () => {
       console.error("Failed to load tutorial from URL:", err);
       setError(`Failed to load tutorial: ${err instanceof Error ? err.message : "Unknown error"}`);
       throw err;
-    }
-
-    if (!isStale()) {
-      setIsLoading(false);
+    } finally {
+      if (!isStale()) {
+        setIsLoading(false);
+      }
     }
   };
 
