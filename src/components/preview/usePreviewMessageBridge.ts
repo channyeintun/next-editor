@@ -1,6 +1,8 @@
 import { useEffect, type RefObject } from "react";
 import {
   type IframeInteractionEvent,
+  type IframeInteractionTarget,
+  type IframeInteractionData,
   type PreviewDomPatchBatch,
   type PreviewEvent,
   type PreviewInitialDocument,
@@ -249,12 +251,19 @@ export function usePreviewMessageBridge({
         return;
       }
 
-      if (payload.type === "mousemove") {
+      if (!isRecord(payload)) {
         return;
       }
 
-      if (payload.type === "route_change") {
-        const route = payload.data?.route;
+      const p = payload as Record<string, unknown>;
+
+      if (p.type === "mousemove") {
+        return;
+      }
+
+      if (p.type === "route_change") {
+        const data = p.data as Record<string, unknown> | undefined;
+        const route = data?.route;
 
         if (!effectiveRuntimePreviewUrl || typeof route !== "string") {
           return;
@@ -274,15 +283,16 @@ export function usePreviewMessageBridge({
         return;
       }
 
+      const data = p.data as Record<string, unknown> | undefined;
       const isMainDocumentScroll =
-        payload.type === "scroll" &&
-        payload.data &&
-        (payload.data.isDocument || payload.targetTag === "BODY" || payload.targetTag === "HTML");
+        p.type === "scroll" &&
+        data &&
+        (data.isDocument || p.targetTag === "BODY" || p.targetTag === "HTML");
 
       if (isMainDocumentScroll) {
         scrollPositionRef.current = {
-          scrollTop: payload.data.scrollTop,
-          scrollLeft: payload.data.scrollLeft,
+          scrollTop: data.scrollTop as number,
+          scrollLeft: data.scrollLeft as number,
         };
 
         if (isRecordingRef.current && handlePreviewEventRef.current) {
@@ -295,16 +305,16 @@ export function usePreviewMessageBridge({
           }, 100);
 
           targetScrollRef.current = {
-            scrollTop: payload.data.scrollTop,
-            scrollLeft: payload.data.scrollLeft,
+            scrollTop: data.scrollTop as number,
+            scrollLeft: data.scrollLeft as number,
           };
 
           handlePreviewEventRef.current({
             type: "preview_scroll",
             timestamp: Date.now(),
             size: sizeRef.current,
-            scrollTop: payload.data.scrollTop,
-            scrollLeft: payload.data.scrollLeft,
+            scrollTop: data.scrollTop as number,
+            scrollLeft: data.scrollLeft as number,
           });
         }
 
@@ -316,10 +326,10 @@ export function usePreviewMessageBridge({
       }
 
       const interaction: IframeInteractionEvent = {
-        type: payload.type,
+        type: p.type as unknown as IframeInteractionEvent["type"],
         timestamp: performance.now(),
-        target: payload.target,
-        data: payload.data,
+        target: p.target as unknown as IframeInteractionTarget,
+        data: p.data as unknown as IframeInteractionData | undefined,
       };
 
       pendingInteractionRef.current = interaction;

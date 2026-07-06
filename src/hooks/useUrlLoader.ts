@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNextEditorActions } from "./useNextEditorContext";
 import { decompressBinaryToRecordings } from "../storage/recordingCodecClient";
 import {
@@ -244,6 +244,14 @@ export const useUrlLoader = () => {
   // so callers can render an inline, themeable error panel (with retry) in context.
   const [error, setError] = useState<string | null>(null);
   const { loadRecording, extendRecording, addCaptionTrack } = useNextEditorActions();
+  const generationRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   const isNextEditorUrl = (url: string): boolean => {
     try {
@@ -488,14 +496,24 @@ export const useUrlLoader = () => {
       throw new Error("URL does not point to a supported file (.ne)");
     }
 
+    const generation = ++generationRef.current;
+    abortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    const isStale = () => generationRef.current !== generation;
+
+    setIsLoading(true);
+    setError(null);
+
     try {
-      setIsLoading(true);
-      setError(null);
-      const response = await fetchNextEditorUrl(url);
+      const response = await fetchNextEditorUrl(url, { signal: abortController.signal });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch file: ${response.statusText}`);
       }
+
+      if (isStale()) return;
 
       // Stream + progressively decode straight from the response body. Cloning the
       // response here would tee the stream and buffer the *entire* file in the unread
@@ -511,27 +529,41 @@ export const useUrlLoader = () => {
         bodyConsumed = true;
       }
 
+      if (isStale()) return;
+
       if (!loaded) {
-        const source = bodyConsumed ? await fetchNextEditorUrl(url) : response;
+        const source = bodyConsumed
+          ? await fetchNextEditorUrl(url, { signal: abortController.signal })
+          : response;
         const bytes = new Uint8Array(await source.arrayBuffer());
         loaded = await loadRecordingFromBinaryBytes(bytes, url);
       }
 
+      if (isStale()) return;
+
       fetchSiblingCaptions(url, loaded?.captionFiles)
         .then((tracks) => {
-          for (const track of tracks) addCaptionTrack(track);
+          if (!isStale()) {
+            for (const track of tracks) addCaptionTrack(track);
+          }
         })
         .catch(() => {});
 
       // Externalized audio/camera resolve out-of-band, after the (now tiny) `.ne` finished.
-      if (loaded) {
+      if (loaded && !isStale()) {
         void resolveExternalMedia(loaded, url);
       }
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
+      if (isStale()) return;
       console.error("Failed to load tutorial from URL:", err);
       setError(`Failed to load tutorial: ${err instanceof Error ? err.message : "Unknown error"}`);
       throw err;
-    } finally {
+    }
+
+    if (!isStale()) {
       setIsLoading(false);
     }
   };

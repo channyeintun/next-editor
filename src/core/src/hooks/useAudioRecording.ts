@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { calculateDurationFromFileReader } from "../utils/audioDuration";
 
 const getSupportedAudioMimeType = (): string => {
@@ -48,6 +48,16 @@ export const useAudioRecording = (): UseAudioRecordingReturn => {
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingStartTimeRef = useRef<number | null>(null);
   const mimeTypeRef = useRef<string>("");
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && isRecordingAudio) {
+        mediaRecorderRef.current.stop();
+        const stream = mediaRecorderRef.current.stream as MediaStream;
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [isRecordingAudio]);
 
   const startRecording = async () => {
     try {

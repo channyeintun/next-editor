@@ -87,7 +87,13 @@ let persistQueue: Promise<void> = Promise.resolve();
  * before hydration completes never wipes their bytes.
  */
 export function persistWorkspaceAssets(project: WorkspaceProject): Promise<void> {
-  const run = () => persistWorkspaceAssetsInternal(project);
+  const run = async () => {
+    try {
+      await persistWorkspaceAssetsInternal(project);
+    } catch (err) {
+      console.error("Failed to persist workspace assets:", err);
+    }
+  };
   persistQueue = persistQueue.then(run, run);
   return persistQueue;
 }
