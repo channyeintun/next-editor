@@ -23,14 +23,14 @@ flowchart TB
     end
 
     subgraph Core["Core Recording Layer"]
-        Hook[useNextEditorActorBindings]
+        Hook[useNextEditor / useNextEditorContext]
         Machine[editorMachine]
         Timeline[timelineMachine]
     end
 
     subgraph Persistence["Storage + Transport"]
         IndexedDB[IndexedDB recording store]
-        Codec[SCR3 codec worker]
+        Codec[recordingCodec.worker.ts]
         Stream[recordingStreamSink]
         Export[.ne file export/import]
     end
@@ -69,7 +69,7 @@ sequenceDiagram
     loop While recording
         UI->>Provider: handleEditorChange()
         Provider->>Machine: CAPTURE_FRAME
-        Preview-->>Machine: PREVIEW_EVENT / initial document / patch batch
+        Preview-->>Machine: PREVIEW_EVENT / PREVIEW_INITIAL_DOCUMENT / PREVIEW_PATCH_BATCH
         Runtime-->>Machine: WORKSPACE_EVENT / RUNTIME_EVENT
         Machine-->>Sink: append SCR3 bytes (optional)
     end
@@ -83,7 +83,7 @@ sequenceDiagram
 
 Key points:
 
-- Frames are compressed incrementally during capture.
+- Frames are compressed incrementally during capture via an in-session `FrameStreamEncoderState`, not as a final batch pass.
 - Preview replay data is captured with rrweb: a seed document (Meta + FullSnapshot) plus later patch batches of incremental rrweb events.
 - API client interactions on a runtime lesson are captured as preview events: switching to API mode, each request, its response (or timeout), request-tab switches, and history inspections all land on the timeline.
 - Workspace and runtime snapshots are captured alongside timed events so playback can restore the full lesson context.
@@ -123,8 +123,8 @@ sequenceDiagram
 
 Current playback behavior:
 
-- The machine keeps replay cursors for each append-only event stream so `extendRecording` can continue from the current point efficiently.
-- Audio playback is lazy when a progressive load first gains usable audio, then stays in sync by updating the same `HTMLAudioElement` with larger contiguous blob snapshots as more fragments arrive.
+- The machine keeps a replay cursor for each append-only event stream (frames, preview events, preview patch batches, slides, workspace, runtime) so `extendRecording` can continue from the current point efficiently.
+- Audio playback is lazy when a progressive load first gains usable audio, then stays in sync by updating the same `HTMLAudioElement` with larger contiguous blob snapshots as more fragments arrive; the machine throttles resyncs to roughly every 250ms during a `TICK`.
 - Camera playback is rendered by `CameraOverlay`, which derives the correct video time from timeline time minus `cameraStartOffsetMs`.
 
 ## Storage Flow
@@ -132,13 +132,13 @@ Current playback behavior:
 ```mermaid
 flowchart LR
     Recording --> Normalize[Normalize recording]
-    Normalize --> Encode[Encode SCR3 stream]
+    Normalize --> Encode[encodeRecordingToStream]
     Encode --> NeFile[Raw SCR3 bytes for .ne file]
     Encode --> IndexedDB[Persist binary SCR3 in IndexedDB]
     Encode --> Live[Forward live bytes to sink]
-    NeFile --> Decode[Decode in worker]
+    NeFile --> Decode[decompressBinaryToRecordings in worker]
     IndexedDB --> Decode
-    Live --> PrefixDecode[Prefix decode for streaming]
+    Live --> PrefixDecode[createStreamingRecordingReader prefix decode]
     Decode --> Load[loadRecording]
     PrefixDecode --> Extend[extendRecording]
 ```
@@ -148,7 +148,7 @@ Current storage rules:
 - The app stores and exports SCR3 recordings.
 - IndexedDB persists metadata plus append-only recording segments.
 - Exported `.ne` files are raw SCR3 bytes with no base64 wrapping; the runtime loader reads the same raw byte stream.
-- Worker-backed decode keeps msgpack and deflate work off the main thread.
+- `src/storage/recordingCodec.worker.ts` (backing `recordingCodecClient.ts`) keeps msgpack and deflate work off the main thread for whole-file decodes; `src/storage/streamingRecordingCodec/decode.ts` does incremental prefix decoding for progressive/live loads.
 
 ## URL Loading Flow
 
@@ -168,31 +168,6 @@ into the preview `fetch`es the path inside the iframe and posts the response bac
 parent. Because the request runs in the iframe's origin there is no CORS, and the host only
 ever sees a serialized request/response pair — which is exactly what gets recorded and
 replayed.
-
-## Where To Look Next
-
-- `docs/data-structures.md` for concrete type shapes.
-- `docs/state-machines.md` for the event/state topology.
-- `docs/streaming-playback.md` for the partial-download behavior in detail.
-  ┌─────────────────────────────────────────┐
-  │ Magic Number: "SCR3" (4 bytes) │
-  ├─────────────────────────────────────────┤
-  │ Format version + flags │
-  ├─────────────────────────────────────────┤
-  │ Deflated msgpack metadata │
-  ├─────────────────────────────────────────┤
-  │ Frame and event segments │
-  ├─────────────────────────────────────────┤
-  │ Audio chunk segment (optional) │
-  ├─────────────────────────────────────────┤
-  │ Camera chunk segment (optional, last) │
-  ├─────────────────────────────────────────┤
-  │ Footer segment index │
-  └─────────────────────────────────────────┘
-
-````
-
----
 
 ## Context Data Flow
 
@@ -227,39 +202,36 @@ flowchart LR
     Metadata --> MC
     Playback --> MC
     Playback --> CP
-````
+```
 
 This context splitting pattern prevents unnecessary re-renders:
 
-- **Actions Context**: Stable function references, rarely changes
-- **Metadata Context**: Recording state flags, changes on state transitions
-- **Playback Context**: Current time and cursor, updates every animation frame
-
----
+- **Actions Context** (`useNextEditorActions`): Stable function references, rarely changes.
+- **Metadata Context** (`useNextEditorMetadata`): Recording state flags, changes on state transitions.
+- **Playback Context** (`useNextEditorPlayback`): Timeline actor, speed, volume, duration — high-frequency, tick-driven consumers should prefer the narrower `useLiveTime` / `useLiveCursor` selectors.
 
 ## Frame Application Flow
 
 ```mermaid
 flowchart TB
-    Start([TICK Event]) --> FindIndex[Find frame at currentTime]
-    FindIndex --> CheckIndex{Same as<br/>lastAppliedIndex?}
-
-    CheckIndex -->|Yes| Skip[Skip - no changes]
-    CheckIndex -->|No| CheckDelta{Is next frame<br/>a delta?}
-
-    CheckDelta -->|Yes| ApplyDelta[Apply delta to current frame]
-    CheckDelta -->|No| Reconstruct[Full reconstruction from keyframe]
-
-    ApplyDelta --> Validate{Valid frame state?}
-    Reconstruct --> Validate
-
-    Validate -->|No| UpdateIndex[Update lastAppliedIndex only]
-    Validate -->|Yes| ApplyContent[Apply content to editor]
-
-    ApplyContent --> ApplySelection[Apply selection/position]
-    ApplySelection --> ApplyView[Apply view state]
-    ApplyView --> ApplyDecorations[Apply cursor decorations]
-    ApplyDecorations --> ApplySlides[Apply slide state]
-    ApplySlides --> ApplyPreview[Apply preview state]
-    ApplyPreview --> Done([Frame Applied])
+    Start([TICK Event]) --> UpdateTimeline[Update timeline.currentTime]
+    UpdateTimeline --> ApplyFrame[applyFrameAtTime]
+    ApplyFrame --> ApplyPreviewEvents[applyPreviewEventsAtTime]
+    ApplyPreviewEvents --> ApplyPreviewPatches[applyPreviewPatchBatchesAtTime]
+    ApplyPreviewPatches --> ApplySlides[applySlideEventsAtTime]
+    ApplySlides --> ApplyWorkspace[applyWorkspaceEventsAtTime]
+    ApplyWorkspace --> ApplyRuntime[applyRuntimeEventsAtTime]
+    ApplyRuntime --> SyncAudio{Audio spawned &<br/>250ms since last sync?}
+    SyncAudio -->|Yes| SyncAudioActor[Send SYNC to audioPlayer]
+    SyncAudio -->|No| NotifyUpdate
+    SyncAudioActor --> NotifyUpdate[notifyPlaybackUpdate]
+    NotifyUpdate --> Done([Frame Applied])
 ```
+
+Each `applyXAtTime` action reads its own `lastApplied*Index` cursor from context, applies only newly-reached events since that cursor, and advances the cursor — so a `TICK` (or an `EXTEND_RECORDING`) only does incremental work regardless of total recording length.
+
+## Where To Look Next
+
+- `docs/data-structures.md` for concrete type shapes.
+- `docs/state-machines.md` for the event/state topology.
+- `docs/streaming-playback.md` for the partial-download behavior in detail.

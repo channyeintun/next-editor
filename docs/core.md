@@ -48,17 +48,17 @@ Key exports:
 
 - `useNextEditor`
 - `NextEditorProvider`
-- `useNextEditorActions`
-- `useNextEditorMetadata`
-- `useNextEditorPlayback`
-- `editorMachine`
-- `timelineMachine`
+- `useNextEditorActions`, `useNextEditorMetadata`, `useNextEditorPlayback`
+- `editorMachine`, `timelineMachine`, `EditorActorRef`, `TimelineActorRef`
+- `EditorMachineStatus`, `EditorMachineContext`, `EditorMachineEvent`
 - `Recording`, `EditorFrame`, `EditorState`
 - `RecordingStreamSink`, `UseNextEditorConfig`, `UseNextEditorReturn`
-- Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`
+- Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewState`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`
 - Caption types such as `CaptionTrack`, `CaptionCue`, and `CaptionWord`
+- Track/cluster metadata types: `RecordingTrackKind`, `RecordingTrackMeta`, `RecordingClusterMeta`, `RecordingMediaFragment`
+- `useAudioRecording` / `UseAudioRecordingReturn` for advanced callers that want the raw recording actor without the full hook
 
-The core module also re-exports app-level components such as `CodeEditor`, `MediaControls`, `Preview`, and `SlidePanel`, but the recording and playback logic lives underneath those components in the machine and hook layer.
+The core module also re-exports app-level components such as `CodeEditor`, `MediaControls`, `Preview`, `CursorComponent`, and `SlidePanel`, but the recording and playback logic lives underneath those components in the machine and hook layer.
 
 ## Recording Model
 
@@ -78,13 +78,13 @@ flowchart LR
 
 Important current details:
 
-- Frames are delta-compressed during capture, not as a final batch-only step.
+- Frames are delta-compressed during capture, not as a final batch-only step — the recording session keeps an incremental `FrameStreamEncoderState` (`src/core/src/utils/frameStreamEncoder.ts`) rather than compressing after the fact.
 - The current app emits version `4` recordings and stores them in the SCR3 stream container.
-- The public `Recording` facade now carries stream-oriented metadata through `tracks`, `clusters`, and `mediaFragments` in addition to the assembled playback blobs.
+- The public `Recording` facade carries stream-oriented metadata through `tracks`, `clusters`, and `mediaFragments` in addition to the assembled playback blobs.
 - `previewInitialDocuments` and `previewPatchBatches` are first-class parts of the recording. They carry rrweb events verbatim (`PreviewRecordedEvent`): the seed document holds the rrweb Meta + FullSnapshot pair, and each patch batch holds the incremental events for a frame. Replay drives an rrweb `Replayer`, so the preview is restored without requiring a runtime rerun.
 - `cursorEvents` are stored separately from frame deltas for smoother fake-cursor playback.
 - `audioStartOffsetMs` and `cameraStartOffsetMs` align media tracks to the editor timeline.
-- `cameraStartOffsetMs` aligns instructor camera playback with the recording timeline.
+- Camera bytes never live inside the SCR3 stream itself — only a reference (`cameraFile`/`cameraUrl`) plus `cameraStartOffsetMs`; see `docs/data-structures.md` for the full storage story.
 
 ## Delta Encoding
 
@@ -100,7 +100,7 @@ flowchart LR
 
 - Keyframes are emitted at most every 120 frames.
 - Intermediate frames store only changed content and state.
-- Playback reconstructs a target frame by starting from the nearest prior keyframe and replaying forward.
+- Playback reconstructs a target frame by starting from the nearest prior keyframe and replaying forward (`reconstructFrameAtIndex` in `src/core/src/utils/frameDelta.ts`).
 
 This keeps exports compact while allowing deterministic restore of editor state at any point on the timeline.
 
@@ -110,11 +110,11 @@ The playback side is intentionally append-friendly.
 
 - `loadRecording(recording)` sets up an initial timeline.
 - `extendRecording(recording)` swaps in a longer append-only prefix of the same SCR3 recording without resetting playback position.
-- The machine keeps replay cursors such as `lastAppliedFrameIndex` and `lastAppliedPreviewPatchBatchIndex` so it can continue forward efficiently.
+- The machine keeps per-stream replay cursors — `lastAppliedFrameIndex`, `lastAppliedPreviewEventIndex`, `lastAppliedPreviewPatchBatchIndex`, `lastAppliedSlideEventIndex`, `lastAppliedWorkspaceEventIndex`, `lastAppliedRuntimeEventIndex` — so it can continue forward efficiently.
 - Progressive audio uses the same `HTMLAudioElement` surface in blob or stream mode; when later prefixes extend the audio track, the actor reattaches the growing blob snapshot and stays synchronized to the editor timeline.
 - Progressive camera playback stays in the React `CameraOverlay` boundary: `extendRecording` replaces `cameraBlob` with a larger reassembled snapshot, and the overlay reattaches that blob while continuing to derive video time from the timeline.
 
-That design is what makes partial-download playback and live stream replay possible.
+That design is what makes partial-download playback and live stream replay possible; see `docs/streaming-playback.md` for the full mechanics.
 
 ## Extension Points
 
@@ -124,93 +124,26 @@ The main extension hooks in `UseNextEditorConfig` are:
 - Snapshot getters and appliers for slides, preview, workspace, and runtime state.
 - `applyPreviewPatchReplay` to feed recorded rrweb preview events into the current preview surface's `Replayer`.
 - Lifecycle callbacks such as `onRecordingStop`, `onPlaybackStart`, and `onError`.
+- Granular callbacks such as `onFrame`, `onStateChange`, and `onPlaybackUpdate`.
 
-## Related Docs
+## Utility Modules (`src/core/src/utils`)
 
-- `docs/data-flow.md` explains how the app moves data through capture, storage, and playback.
-- `docs/data-structures.md` documents the concrete recording types.
-- `docs/state-machines.md` covers the XState topology.
-  if (frames[mid].timestamp <= time) low = mid;
-  else high = mid - 1;
-  }
-  return low;
-  }
+| File                                   | Purpose                                                                                                        |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `frameDelta.ts`                        | `compressFrames`, `reconstructFrameAtIndex`, `createContentDelta`, `applyContentDelta`, `findFrameIndexAtTime` |
+| `editorDiff.ts`                        | `applyContentDiff`, `applyPositionDiff`, `applySelectionDiff` — apply a diff to a live Monaco editor           |
+| `validation.ts`                        | `isValidFrameState`, `isValidEditorState`, `isEditorReady`                                                     |
+| `deltaTypes.ts`                        | `DeltaFrame` and related delta wire types                                                                      |
+| `frameStreamEncoder.ts`                | Incremental keyframe/delta encoder state used during live capture                                              |
+| `editorState.ts`                       | Reads/builds `EditorState` snapshots from a Monaco editor instance                                             |
+| `cursorCoordinates.ts`                 | Maps recorded cursor samples onto the current UI layout (viewport/root coordinate spaces)                      |
+| `cursorReplay.ts`                      | Fake-cursor tween/replay logic driven by `cursorEvents`                                                        |
+| `audioContext.ts` / `audioDuration.ts` | Shared `AudioContext` helpers and exact-duration calculation for audio blobs                                   |
+| `stringAffix.ts`                       | Small string prefix/suffix helpers used by content diffing                                                     |
 
-````
+### dmpCodec (WASM diffing)
 
----
-
-## State Machine Architecture
-
-### Machine States
-
-```mermaid
-stateDiagram-v2
-    [*] --> idle
-    idle --> startingRecording : START_RECORDING [audio]
-    idle --> recording : START_RECORDING [!audio]
-    idle --> loading : LOAD_RECORDING
-
-    startingRecording --> recording : STARTED
-    recording --> stoppingRecording : STOP_RECORDING [audio || camera]
-    stoppingRecording --> loading : STOPPED
-
-    loading --> playback : success
-
-    state playback {
-        [*] --> ready
-        ready --> playing : PLAY
-        playing --> paused : PAUSE
-        playing --> ended : FINISHED
-        paused --> playing : PLAY
-        ended --> playing : PLAY
-    }
-
-    playback --> idle : UNLOAD
-````
-
-### Child Actors
-
-| Actor                  | Purpose                        | Events                         |
-| ---------------------- | ------------------------------ | ------------------------------ |
-| `timelineActor`        | Playback timing via RAF        | TICK, FINISHED                 |
-| `audioRecordingActor`  | MediaRecorder management       | STARTED, STOPPED               |
-| `cameraRecordingActor` | Video MediaRecorder management | CAMERA_STARTED, CAMERA_STOPPED |
-| `audioPlaybackActor`   | HTMLAudioElement sync          | PLAY, PAUSE, SEEK              |
-| `mouseTrackingActor`   | Cursor position capture        | CAPTURE_FRAME                  |
-
----
-
-## Utility Functions
-
-### frameDelta.ts
-
-| Function                                 | Purpose                             |
-| ---------------------------------------- | ----------------------------------- |
-| `compressFrames(frames)`                 | Convert full frames to delta frames |
-| `reconstructFrameAtIndex(frames, index)` | Rebuild full frame from deltas      |
-| `createContentDelta(prev, next)`         | Compute text diff                   |
-| `applyContentDelta(base, delta)`         | Apply text diff                     |
-| `findFrameIndexAtTime(frames, time)`     | Binary search with hint             |
-
-### editorDiff.ts
-
-| Function                                | Purpose               |
-| --------------------------------------- | --------------------- |
-| `applyContentDiff(editor, content)`     | Update Monaco content |
-| `applyPositionDiff(editor, position)`   | Set cursor position   |
-| `applySelectionDiff(editor, selection)` | Set text selection    |
-
-### validation.ts
-
-| Function                   | Purpose                   |
-| -------------------------- | ------------------------- |
-| `isValidFrameState(state)` | Validate frame structure  |
-| `isEditorReady(editor)`    | Check Monaco availability |
-
-### dmpCodec.ts
-
-WebAssembly-accelerated content diffing, backing `createContentDelta` / `applyContentDelta` in `frameDelta.ts` (see `src/core/dmp/README.md` for the Rust module and wire format):
+WebAssembly-accelerated content diffing backs `createContentDelta` / `applyContentDelta` in `frameDelta.ts` (see `src/core/dmp/README.md` for the Rust module and wire format):
 
 ```typescript
 // Load the zero-import diff-match-patch WASM module
@@ -221,8 +154,6 @@ const codec = getDmpCodec();
 const delta = codec.diffDelta(bytesA, bytesB);
 const rebuilt = codec.applyDelta(bytesA, delta);
 ```
-
----
 
 ## Integration Example
 
@@ -249,3 +180,10 @@ const {
   },
 });
 ```
+
+## Related Docs
+
+- `docs/data-flow.md` explains how the app moves data through capture, storage, and playback.
+- `docs/data-structures.md` documents the concrete recording types.
+- `docs/state-machines.md` covers the XState topology.
+- `docs/streaming-playback.md` covers progressive/streamed playback in detail.
