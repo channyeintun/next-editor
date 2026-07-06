@@ -1,8 +1,0 @@
-services:
-  next-editor:
-    build:
-      context: .
-    image: next-editor
-    ports:
-      - "8080:8080"
-    restart: unless-stopped
