@@ -202,6 +202,32 @@ The introduction lesson therefore **never touches D1** and keeps being served as
 plain edge-cached JSON + static assets — exactly the "frequent access" carve-out
 requested.
 
+## Caching — optional Upstash Redis layer
+
+The "Short TTL" cache in the table above is `infra/worker/cache.ts`: an
+optional cache-aside layer in front of the two highest-traffic D1 reads,
+`GET /api/lessons` (list, 60s TTL) and `GET /api/lessons/:slug` (300s TTL).
+Search (`/api/search`) is deliberately **not** cached — unbounded query
+cardinality would burn through Upstash's free-tier command budget for little
+benefit.
+
+- **Optional by design.** `getCache(env)` returns `null` when
+  `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` aren't set, and every
+  Redis call in `cached()`/`invalidateCache()` is wrapped so a cache outage or
+  missing config falls back to hitting D1 directly — Upstash can never take
+  the app down.
+- **Invalidation.** `PATCH /api/lessons/:id`, `/publish`, `/unpublish`, and
+  `DELETE /api/lessons/:id` all `DEL` the affected lesson's slug-cache entry
+  immediately (critical for unpublish — otherwise a cached response could
+  keep serving an unpublished lesson for up to the 300s TTL). The paginated
+  list relies on its 60s TTL rather than per-page invalidation.
+- **Free tier fit** (256 MB storage / 10 GB bandwidth / 500K commands per
+  month): every key carries a TTL, a cache hit costs 1 command and a miss 2
+  (GET + SET), and search is excluded — comfortably inside the free tier for
+  hobby-scale traffic.
+
+See [upstash-cache-plan.md](../upstash-cache-plan.md) for the integration plan.
+
 ## Auth — Google OAuth, first-party session
 
 Authorization Code flow with PKCE, terminated server-side in the Worker so the

@@ -108,6 +108,25 @@ Without a `[[routes]]` entry in `wrangler.toml`, this deploys to the free
 `https://<worker-name>.<your-subdomain>.workers.dev` URL. Smoke test there
 first (see above) before touching any domain/DNS.
 
+### Optional: Upstash Redis cache
+
+The lessons list/detail endpoints read through an optional cache (see
+[cloudflare-architecture.md](./cloudflare-architecture.md#caching--optional-upstash-redis-layer)).
+The app runs fine without it — skip this if you don't want the dependency yet.
+
+1. Create a free Redis database at https://console.upstash.com (Regional or
+   Global — Global is closer to Workers' edge locations).
+2. Add the REST URL as a plaintext var in `infra/wrangler.toml`'s `[vars]`:
+   ```toml
+   UPSTASH_REDIS_REST_URL = "https://<...>.upstash.io"
+   ```
+3. Set the token as a secret, same "pipe from a file" caution as step 4 above:
+   ```sh
+   npx wrangler secret put UPSTASH_REDIS_REST_TOKEN < /path/to/tmpfile
+   ```
+4. Redeploy (`npx wrangler deploy`). No D1/R2/schema changes needed — the
+   cache layer is purely additive.
+
 ## Custom domain cutover
 
 This is the part with real gotchas — read this section before running
