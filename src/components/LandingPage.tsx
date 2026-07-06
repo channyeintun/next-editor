@@ -426,9 +426,9 @@ const LandingPage = () => {
                     </p>
                     <div className="relative pt-2">
                       <div className="bg-white rounded-lg p-2 text-slate-900 font-mono text-xs flex items-center shadow-lg border border-slate-200">
-                        <span className="text-slate-400">nexteditor.dev/code?</span>
+                        <span className="text-slate-400">nexteditor.dev/</span>
                         <span className="relative inline-block text-slate-950 font-bold whitespace-nowrap">
-                          url=intro.ne
+                          learn/introduction
                           <svg
                             className="absolute -bottom-2.5 left-0 w-full h-4 text-pinata-cyan overflow-visible px-0.5"
                             viewBox="0 0 100 20"
