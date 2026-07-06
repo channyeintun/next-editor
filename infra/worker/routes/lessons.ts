@@ -15,8 +15,16 @@ import {
 import { lessonRowToLesson, lessonRowToOwnedLesson } from "../../db/types";
 import { getCurrentUser } from "../auth/session";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
+import { cached, getCache, invalidateCache, lessonListKey, lessonSlugKey } from "../cache";
 
 const DEFAULT_PAGE_SIZE = 12;
+// Short TTLs: a newly published/edited lesson should show up in the public
+// gallery/detail views within roughly this long. The list isn't invalidated
+// key-by-key on writes (see invalidateCache calls below) — every paginated
+// page would need tracking for a marginal staleness win, so it just relies
+// on this TTL instead.
+const LIST_CACHE_TTL_SECONDS = 60;
+const SLUG_CACHE_TTL_SECONDS = 300;
 
 function slugify(title: string): string {
   const base = title
@@ -67,8 +75,16 @@ lessonsRoute.get("/", async (c) => {
     return c.json({ error: "invalid page" }, 400);
   }
 
-  const { rows, nextPage } = await listPublishedLessons(c.env.DB, page, DEFAULT_PAGE_SIZE);
-  return c.json({ lessons: rows.map(lessonRowToLesson), nextPage });
+  const body = await cached(
+    getCache(c.env),
+    lessonListKey(page, DEFAULT_PAGE_SIZE),
+    LIST_CACHE_TTL_SECONDS,
+    async () => {
+      const { rows, nextPage } = await listPublishedLessons(c.env.DB, page, DEFAULT_PAGE_SIZE);
+      return { lessons: rows.map(lessonRowToLesson), nextPage };
+    },
+  );
+  return c.json(body);
 });
 
 interface CreateLessonBody {
@@ -187,6 +203,7 @@ lessonsRoute.patch("/:id", async (c) => {
     }
   }
 
+  await invalidateCache(getCache(c.env), lessonSlugKey(row.slug));
   return c.json(lessonRowToOwnedLesson(row));
 });
 
@@ -200,6 +217,10 @@ lessonsRoute.post("/:id/publish", async (c) => {
   if (!row) {
     return c.json({ error: "not found" }, 404);
   }
+  // Not just a staleness optimization: without this, an unpublished lesson
+  // (or one whose slug-cache entry predates this publish) could keep serving
+  // a stale cached response — published or not — for up to SLUG_CACHE_TTL_SECONDS.
+  await invalidateCache(getCache(c.env), lessonSlugKey(row.slug));
   return c.json(lessonRowToOwnedLesson(row));
 });
 
@@ -213,6 +234,9 @@ lessonsRoute.post("/:id/unpublish", async (c) => {
   if (!row) {
     return c.json({ error: "not found" }, 404);
   }
+  // See the publish route above — must bust the cache immediately so the
+  // now-unpublished lesson stops being served from a stale cache entry.
+  await invalidateCache(getCache(c.env), lessonSlugKey(row.slug));
   return c.json(lessonRowToOwnedLesson(row));
 });
 
@@ -241,6 +265,7 @@ lessonsRoute.delete("/:id", async (c) => {
   }
 
   await deleteLesson(c.env.DB, id, user.id);
+  await invalidateCache(getCache(c.env), lessonSlugKey(existing.slug));
   return c.json({ success: true });
 });
 
@@ -262,9 +287,21 @@ lessonsRoute.get("/mine", async (c) => {
 // specificity for a literal-vs-param conflict (it currently doesn't, but this
 // ordering keeps the file correct even if that assumption changes).
 lessonsRoute.get("/:slug", async (c) => {
-  const row = await getPublishedLessonBySlug(c.env.DB, c.req.param("slug"));
-  if (!row) {
+  const slug = c.req.param("slug");
+  // A cache miss on a not-found slug is never populated: cached() treats a
+  // stored `null` the same as "no entry" and re-queries D1 every time. Fine
+  // here — 404s are cheap and rare enough not to need their own cache path.
+  const lesson = await cached(
+    getCache(c.env),
+    lessonSlugKey(slug),
+    SLUG_CACHE_TTL_SECONDS,
+    async () => {
+      const row = await getPublishedLessonBySlug(c.env.DB, slug);
+      return row ? lessonRowToLesson(row) : null;
+    },
+  );
+  if (!lesson) {
     return c.json({ error: "not found" }, 404);
   }
-  return c.json(lessonRowToLesson(row));
+  return c.json(lesson);
 });
