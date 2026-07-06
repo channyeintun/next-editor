@@ -521,7 +521,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 {showCaptionMenu && hasMultipleCaptionTracks && (
                   <div
                     role="menu"
-                    className="absolute bottom-full right-0 z-46 mb-2 min-w-40 rounded-lg border border-slate-700 bg-[#2b2f38] py-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
+                    className="absolute bottom-full right-0 z-46 mb-2 min-w-40 rounded-lg border border-slate-700 bg-[#151821] py-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
                   >
                     <button
                       type="button"
@@ -580,7 +580,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               </button>
 
               {showSettings && (
-                <div className="absolute bottom-full right-0 z-46 mb-2 min-w-50 rounded-lg border border-slate-700 bg-[#2b2f38] p-4 shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
+                <div className="absolute bottom-full right-0 z-46 mb-2 min-w-50 rounded-lg border border-slate-700 bg-[#151821] p-4 shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
                   <div className="text-slate-100">
                     <div className="mb-3">
                       <label className="block text-sm font-medium text-slate-300 mb-2">Speed</label>

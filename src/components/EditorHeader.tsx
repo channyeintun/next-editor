@@ -56,9 +56,8 @@ const LESSON_TYPE_OPTIONS: Array<{
 ];
 
 const HEADER_ICON_BUTTON_CLASS =
-  "inline-flex size-8 items-center justify-center rounded-lg border transition-colors";
-const HEADER_ICON_BUTTON_NEUTRAL_CLASS =
-  "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600 hover:text-white";
+  "inline-flex size-8 items-center justify-center rounded-lg transition-colors";
+const HEADER_ICON_BUTTON_NEUTRAL_CLASS = "text-slate-400 hover:bg-white/5 hover:text-white";
 
 function stringifyEnvironmentVariables(variables: Record<string, string>): string {
   return Object.entries(variables)
