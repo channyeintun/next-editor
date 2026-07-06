@@ -155,12 +155,38 @@ lessonsRoute.patch("/:id", async (c) => {
     updateParams.thumbnail = toStoredThumbnailPath(body.thumbnail);
   }
 
-  const row = await updateLesson(c.env.DB, c.req.param("id"), user.id, updateParams);
+  const id = c.req.param("id");
+  // Grabbed before the write because updateLesson's RETURNING reflects the
+  // post-update row — the old value would otherwise already be gone by the
+  // time we know whether the thumbnail actually changed.
+  const previousThumbnail =
+    updateParams.thumbnail !== undefined ? (await getLessonById(c.env.DB, id))?.thumbnail : null;
+
+  const row = await updateLesson(c.env.DB, id, user.id, updateParams);
   // Deliberately the same 404 whether the lesson doesn't exist or exists but
   // belongs to someone else — doesn't leak existence to a non-owner.
   if (!row) {
     return c.json({ error: "not found" }, 404);
   }
+
+  if (
+    previousThumbnail &&
+    previousThumbnail !== row.thumbnail &&
+    previousThumbnail !== DEFAULT_THUMBNAIL_PATH
+  ) {
+    // updateLessonThumbnail() (infra/client/upload/uploadLesson.ts) always
+    // uploads the replacement to a fresh R2 key (timestamped, to dodge CDN
+    // caching of the old bytes) rather than overwriting the old one in
+    // place, so the superseded object is now orphaned — clean it up here.
+    // Best-effort, same reasoning as the delete-lesson cleanup below: an
+    // orphaned R2 object is a minor storage cost, not a correctness problem.
+    try {
+      await c.env.BUCKET.delete(previousThumbnail.replace(/^media\//, ""));
+    } catch (error) {
+      console.error("Failed to delete superseded thumbnail for lesson", id, error);
+    }
+  }
+
   return c.json(lessonRowToOwnedLesson(row));
 });
 
