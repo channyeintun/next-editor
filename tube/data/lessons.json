@@ -4,7 +4,7 @@
       "slug": "introduction",
       "title": "Introduction to NextEditor",
       "description": "A short tour of recording and playback — see how to capture code sessions with synced audio and captions.",
-      "thumbnail": "lessons/introduction/thumbnail.svg",
+      "thumbnail": "lessons/introduction/thumbnail.webp",
       "ne": "lessons/introduction/introduction.ne",
       "duration": "4:12",
       "tags": ["intro", "basics"],
