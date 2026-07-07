@@ -106,10 +106,12 @@ export const editorMachine = setup({
       const playbackAudioState = getPlaybackAudioState(input.recording);
       if (playbackAudioState?.finalized && input.recording.audioSource !== "external") {
         try {
-          const exactDuration = await calculateDurationFromFileReader(playbackAudioState.blob);
-          // Use audio duration as the source of truth if it exists
-          // This prevents trailing silence from wall-clock overhead
-          duration = exactDuration * 1000;
+          if (input.recording.audioBlob instanceof Blob) {
+            const exactDuration = await calculateDurationFromFileReader(input.recording.audioBlob);
+            // Use audio duration as the source of truth if it exists
+            // This prevents trailing silence from wall-clock overhead
+            duration = exactDuration * 1000;
+          }
         } catch (err) {
           console.error("Failed to calculate exact audio duration:", err);
         }
@@ -122,7 +124,7 @@ export const editorMachine = setup({
     canPlay: ({ context }) =>
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
     hasExternalAudioBlob: ({ event }) =>
-      event.type === "START_RECORDING" && event.audioBlob instanceof Blob,
+      event.type === "START_RECORDING" && typeof event.audioUrl === "string",
     isMicrophoneAudioRecording: ({ context }) =>
       context.enableAudioRecording &&
       context.audio.isRecording &&
@@ -555,7 +557,6 @@ export const editorMachine = setup({
         enqueueActions(({ context, enqueue }) => {
           syncPlaybackAudio(context, enqueue, {
             spawnIfMissing: true,
-            appendPolicy: "never",
             seek: false,
             syncRate: false,
             syncVolume: false,
@@ -586,15 +587,8 @@ export const editorMachine = setup({
                 duration: Math.max(context.timeline.currentTime, event.recording.duration),
               });
 
-              // Each APPEND_FRAGMENT makes the audio actor decode the *entire*
-              // accumulated blob again (`decodeAudioData` over a growing buffer).
-              // During a progressive URL load that fired every download interval —
-              // quadratic decode work that pinned several cores on long recordings.
-              // Only pay for it when playback is actually running (audio must keep
-              // extending under the playhead) or on the final, complete blob.
               syncPlaybackAudio(context, enqueue, {
                 spawnIfMissing: true,
-                appendPolicy: "playing-or-finalized",
                 seek: true,
                 syncRate: true,
                 syncVolume: true,
@@ -728,7 +722,6 @@ export const editorMachine = setup({
               // saw no audio. Spawn the player lazily now that audio is available.
               const controllingPlaybackAudio = syncPlaybackAudio(context, enqueue, {
                 spawnIfMissing: true,
-                appendPolicy: "always",
                 seek: true,
                 syncRate: true,
                 syncVolume: false,

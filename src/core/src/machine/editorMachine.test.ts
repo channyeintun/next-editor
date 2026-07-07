@@ -605,7 +605,7 @@ describe("audioPlaybackActor", () => {
   const createPlayback = (playbackRate: number, startPositionMs = 0) => {
     const actor = createActor(audioPlaybackActor, {
       input: {
-        blob: new Blob(["audio"], { type: "audio/webm" }),
+        audioUrl: "https://cdn.example.com/audio.weba",
         volume: 0.5,
         playbackRate,
         startPositionMs,
@@ -620,7 +620,7 @@ describe("audioPlaybackActor", () => {
     const audio = MockAudio.instances[0];
     expect(audio).toBeDefined();
     expect(audio?.preservesPitch).toBe(false);
-    expect(audio?.src).toBe("blob:mock");
+    expect(audio?.src).toBe("https://cdn.example.com/audio.weba");
     expect(audio?.volume).toBe(0.5);
     expect(audio?.playbackRate).toBe(1);
   });
@@ -677,7 +677,6 @@ describe("audioPlaybackActor", () => {
   it("uses audioUrl directly when provided instead of a blob URL", () => {
     const actor = createActor(audioPlaybackActor, {
       input: {
-        blob: new Blob(["audio"], { type: "audio/webm" }),
         audioUrl: "https://cdn.example.com/lesson.weba",
         volume: 1,
         playbackRate: 1,

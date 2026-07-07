@@ -155,6 +155,8 @@ export interface RecordingSession {
  * Audio state for recording and playback
  */
 export interface AudioState {
+  /** External audio url if provided */
+  url: string | null;
   /** Audio blob from recording */
   blob: Blob | null;
   /** Audio element for playback */
@@ -328,7 +330,7 @@ export interface EditorMachineContext {
 /** Start recording event */
 export type StartRecordingEvent = {
   type: "START_RECORDING";
-  audioBlob?: Blob;
+  audioUrl?: string;
   enableCamera?: boolean;
 };
 
@@ -644,6 +646,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   recording: null,
   currentFrame: null,
   audio: {
+    url: null,
     blob: null,
     element: null,
     isRecording: false,

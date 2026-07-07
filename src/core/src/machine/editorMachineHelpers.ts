@@ -532,12 +532,10 @@ export const appendCursorEvent = (
 };
 
 interface PlaybackAudioState {
-  blob: Blob;
-  audioUrl?: string;
+  audioUrl: string;
   loadedUntilMs: number;
   startOffsetMs: number;
   finalized: boolean;
-  streamMode: boolean;
 }
 
 export const getPlaybackAudioState = (recording: Recording | null): PlaybackAudioState | null => {
@@ -550,60 +548,18 @@ export const getPlaybackAudioState = (recording: Recording | null): PlaybackAudi
     return null;
   }
 
-  const audioTrackId =
-    recording.tracks?.find((track) => track.kind === "audio")?.id ??
-    (recording.mediaFragments?.some((fragment) => fragment.trackId === "audio") ? "audio" : null);
+  const audioUrl = recording.audioUrl;
+  if (!audioUrl) {
+    return null;
+  }
+
   const startOffsetMs = recording.audioStartOffsetMs ?? 0;
-  const streamFinalized = recording.streamFinalized ?? true;
-  const audioTrack = recording.tracks?.find((track) => track.id === audioTrackId);
-  const audioTrackEndTimeMs =
-    audioTrack && typeof audioTrack.durationMs === "number"
-      ? (audioTrack.startOffsetMs ?? startOffsetMs) + audioTrack.durationMs
-      : recording.duration;
-
-  if (streamFinalized || !audioTrackId || !recording.mediaFragments?.length) {
-    return {
-      blob: audioBlob,
-      audioUrl: recording.audioUrl,
-      loadedUntilMs: recording.duration,
-      startOffsetMs,
-      finalized: streamFinalized,
-      streamMode: false,
-    };
-  }
-
-  const latestAudioEndTime = recording.mediaFragments.reduce((latest, fragment) => {
-    if (fragment.trackId !== audioTrackId) {
-      return latest;
-    }
-    const endTimeMs =
-      fragment.endTimeMs > fragment.startTimeMs
-        ? fragment.endTimeMs
-        : recording.audioSource === "external" && (fragment.byteLength ?? 0) > 0
-          ? Math.max(fragment.startTimeMs, audioTrackEndTimeMs, recording.duration)
-          : fragment.endTimeMs;
-
-    return Math.max(latest, endTimeMs);
-  }, -1);
-
-  if (latestAudioEndTime < 0) {
-    return {
-      blob: audioBlob,
-      audioUrl: recording.audioUrl,
-      loadedUntilMs: recording.duration,
-      startOffsetMs,
-      finalized: true,
-      streamMode: false,
-    };
-  }
 
   return {
-    blob: audioBlob,
-    audioUrl: recording.audioUrl,
-    loadedUntilMs: latestAudioEndTime,
+    audioUrl,
+    loadedUntilMs: recording.duration,
     startOffsetMs,
-    finalized: streamFinalized,
-    streamMode: true,
+    finalized: recording.streamFinalized ?? true,
   };
 };
 
@@ -633,20 +589,13 @@ export interface PlaybackAudioEnqueue {
 export interface SyncPlaybackAudioOptions {
   /** Spawn a fresh "audioPlayer" child if this recording has audio and none exists yet. */
   spawnIfMissing: boolean;
-  /**
-   * When an "audioPlayer" child already exists, whether to re-send it the (possibly
-   * grown) audio blob: "never", "always", or only `"playing-or-finalized"` — i.e. only
-   * pay for the decode of the accumulated blob while playback is actually running or the
-   * stream is complete (see the quadratic-decode comment this guards against).
-   */
-  appendPolicy: "never" | "always" | "playing-or-finalized";
   /** Send SEEK to the current timeline position. */
   seek: boolean;
   /** Send SET_PLAYBACK_RATE to match the timeline speed. */
   syncRate: boolean;
   /** Send SET_VOLUME to match the timeline volume. */
   syncVolume: boolean;
-  /** Send PLAY. Also participates in the `"playing-or-finalized"` append gate. */
+  /** Send PLAY. */
   play: boolean;
 }
 
@@ -676,14 +625,10 @@ export const syncPlaybackAudio = (
   }
 
   if (spawning) {
-    // Spawn, not invoke: lazily/conditionally created (audio may only arrive mid-stream).
     enqueue.spawnChild("audioPlayback", {
       id: "audioPlayer",
       input: {
-        blob: audioState.blob,
         audioUrl: audioState.audioUrl,
-        mode: audioState.streamMode ? "stream" : "blob",
-        loadedUntilMs: audioState.loadedUntilMs,
         startOffsetMs: audioState.startOffsetMs,
         volume: context.timeline.volume,
         playbackRate: context.timeline.speed,
@@ -691,19 +636,6 @@ export const syncPlaybackAudio = (
       },
     });
     enqueue.assign({ playbackAudioSpawned: true });
-  } else if (
-    options.appendPolicy === "always" ||
-    (options.appendPolicy === "playing-or-finalized" && (audioState.finalized || options.play))
-  ) {
-    enqueue.sendTo("audioPlayer", {
-      type: "APPEND_FRAGMENT",
-      blob: audioState.blob,
-      loadedUntilMs: audioState.loadedUntilMs,
-      finalized: audioState.finalized,
-    });
-    if (audioState.finalized) {
-      enqueue.sendTo("audioPlayer", { type: "FINALIZE_STREAM" });
-    }
   }
 
   if (options.seek) {

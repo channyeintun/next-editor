@@ -109,10 +109,10 @@ export const selectLiveCursor = (state: EditorMachineSnapshot) =>
 
 const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   // Recording Controls
-  const startRecording = (options?: { audioBlob?: Blob; enableCamera?: boolean }) => {
+  const startRecording = (options?: { audioUrl?: string; enableCamera?: boolean }) => {
     actorRef.send({
       type: "START_RECORDING",
-      audioBlob: options?.audioBlob,
+      audioUrl: options?.audioUrl,
       enableCamera: options?.enableCamera,
     });
   };

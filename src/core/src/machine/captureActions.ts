@@ -64,19 +64,20 @@ export const prepareExternalAudioRecording = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
-  if (event.type !== "START_RECORDING" || !(event.audioBlob instanceof Blob)) {
+  if (event.type !== "START_RECORDING" || typeof event.audioUrl !== "string") {
     return {};
   }
 
   return {
     audio: {
       ...context.audio,
-      blob: event.audioBlob,
+      url: event.audioUrl,
+      blob: null,
       element: null,
       isRecording: true,
       mediaRecorder: null,
       chunks: [],
-      mimeType: event.audioBlob.type,
+      mimeType: "audio/webm", // Default or extract from URL if needed
       source: "external" as const,
       externalDurationMs: null,
     },
@@ -89,7 +90,7 @@ export interface RecordingAudioPlayerEnqueue {
     options: {
       id: "recordingAudioPlayer";
       input: {
-        blob: Blob;
+        audioUrl: string;
         volume: number;
         playbackRate: number;
         startPositionMs: number;
@@ -108,14 +109,14 @@ export const startExternalAudioPlayback = ({
   event: EditorMachineEvent;
   enqueue: RecordingAudioPlayerEnqueue;
 }): void => {
-  if (event.type !== "START_RECORDING" || !(event.audioBlob instanceof Blob)) {
+  if (event.type !== "START_RECORDING" || typeof event.audioUrl !== "string") {
     return;
   }
 
   enqueue.spawnChild("audioPlayback", {
     id: "recordingAudioPlayer",
     input: {
-      blob: event.audioBlob,
+      audioUrl: event.audioUrl,
       volume: context.timeline.volume,
       playbackRate: 1,
       startPositionMs: 0,
@@ -734,6 +735,7 @@ export const storeAudioBlob = ({
   if (event.type !== "STOPPED") return {};
   return {
     audio: {
+      url: null,
       blob: event.blob,
       element: null,
       isRecording: false,

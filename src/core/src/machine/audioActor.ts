@@ -19,24 +19,16 @@ export interface AudioRecordingInput {
 }
 
 export interface AudioPlaybackInput {
-  /** Audio blob to play or the current contiguous stream snapshot */
-  blob: Blob;
-  /** Audio URL if external/imported */
-  audioUrl?: string;
+  /** External audio URL */
+  audioUrl: string;
   /** Initial volume (0-1) */
   volume: number;
   /** Initial playback rate */
   playbackRate: number;
   /** Starting position in milliseconds */
   startPositionMs: number;
-  /** Playback mode. Blob mode is the legacy/full-file path; stream mode updates the blob over time. */
-  mode?: "blob" | "stream";
-  /** Stream mode: end of the currently appended audio region on the editor timeline. */
-  loadedUntilMs?: number;
-  /** Stream mode: offset between the editor timeline origin and audio time 0. */
+  /** Offset between the editor timeline origin and audio time 0. */
   startOffsetMs?: number;
-  /** Stream mode: whether no more audio bytes will arrive. */
-  finalized?: boolean;
 }
 
 export type AudioRecordingEvent = { type: "START" } | { type: "STOP" };
@@ -47,9 +39,7 @@ export type AudioPlaybackEvent =
   | { type: "SEEK"; timeMs: number }
   | { type: "SET_VOLUME"; volume: number }
   | { type: "SET_PLAYBACK_RATE"; rate: number }
-  | { type: "SYNC"; timeMs: number }
-  | { type: "APPEND_FRAGMENT"; blob: Blob; loadedUntilMs: number; finalized?: boolean }
-  | { type: "FINALIZE_STREAM" };
+  | { type: "SYNC"; timeMs: number };
 
 export type AudioRecordingEmit =
   | {
@@ -271,14 +261,7 @@ export const audioPlaybackActor = fromCallback<
   audio.crossOrigin = "anonymous";
   audio.preservesPitch = true; // User requested pitch shift instead of native time-stretching
 
-  let currentObjectUrl: string | null = null;
-  if (input.audioUrl) {
-    audio.src = input.audioUrl;
-  } else {
-    currentObjectUrl = URL.createObjectURL(input.blob);
-    audio.src = currentObjectUrl;
-  }
-
+  audio.src = input.audioUrl;
   audio.volume = input.volume;
   audio.playbackRate = input.playbackRate;
 
@@ -294,11 +277,8 @@ export const audioPlaybackActor = fromCallback<
 
   audio.oncanplay = () => {
     if (disposed) return;
-    // Duration might be Infinity for streaming blobs initially, so we just use the loadedUntilMs or fallback to 0
     const durationMs =
-      Number.isFinite(audio.duration) && !isNaN(audio.duration)
-        ? audio.duration * 1000
-        : (input.loadedUntilMs ?? 0);
+      Number.isFinite(audio.duration) && !isNaN(audio.duration) ? audio.duration * 1000 : 0;
     sendBack({ type: "READY", duration: durationMs });
   };
 
@@ -342,28 +322,6 @@ export const audioPlaybackActor = fromCallback<
       case "SET_PLAYBACK_RATE":
         audio.playbackRate = event.rate;
         break;
-      case "APPEND_FRAGMENT":
-        // In stream mode, if we don't have an external URL, the blob grows.
-        // We re-create the object URL.
-        if (!input.audioUrl && event.blob) {
-          const wasPlaying = !audio.paused;
-          const currentTime = audio.currentTime;
-
-          if (currentObjectUrl) {
-            URL.revokeObjectURL(currentObjectUrl);
-          }
-          currentObjectUrl = URL.createObjectURL(event.blob);
-          audio.src = currentObjectUrl;
-          audio.currentTime = currentTime;
-
-          if (wasPlaying) {
-            audio.play().catch(() => {});
-          }
-        }
-        break;
-      case "FINALIZE_STREAM":
-        // No action needed for HTMLAudioElement
-        break;
     }
   });
 
@@ -372,9 +330,5 @@ export const audioPlaybackActor = fromCallback<
     audio.pause();
     audio.removeAttribute("src");
     audio.load();
-    if (currentObjectUrl) {
-      URL.revokeObjectURL(currentObjectUrl);
-      currentObjectUrl = null;
-    }
   };
 });
