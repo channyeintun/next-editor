@@ -533,6 +533,7 @@ export const appendCursorEvent = (
 
 interface PlaybackAudioState {
   blob: Blob;
+  audioUrl?: string;
   loadedUntilMs: number;
   startOffsetMs: number;
   finalized: boolean;
@@ -563,6 +564,7 @@ export const getPlaybackAudioState = (recording: Recording | null): PlaybackAudi
   if (streamFinalized || !audioTrackId || !recording.mediaFragments?.length) {
     return {
       blob: audioBlob,
+      audioUrl: recording.audioUrl,
       loadedUntilMs: recording.duration,
       startOffsetMs,
       finalized: streamFinalized,
@@ -587,6 +589,7 @@ export const getPlaybackAudioState = (recording: Recording | null): PlaybackAudi
   if (latestAudioEndTime < 0) {
     return {
       blob: audioBlob,
+      audioUrl: recording.audioUrl,
       loadedUntilMs: recording.duration,
       startOffsetMs,
       finalized: true,
@@ -596,6 +599,7 @@ export const getPlaybackAudioState = (recording: Recording | null): PlaybackAudi
 
   return {
     blob: audioBlob,
+    audioUrl: recording.audioUrl,
     loadedUntilMs: latestAudioEndTime,
     startOffsetMs,
     finalized: streamFinalized,
@@ -677,10 +681,10 @@ export const syncPlaybackAudio = (
       id: "audioPlayer",
       input: {
         blob: audioState.blob,
+        audioUrl: audioState.audioUrl,
         mode: audioState.streamMode ? "stream" : "blob",
         loadedUntilMs: audioState.loadedUntilMs,
         startOffsetMs: audioState.startOffsetMs,
-        finalized: audioState.finalized,
         volume: context.timeline.volume,
         playbackRate: context.timeline.speed,
         startPositionMs: context.timeline.currentTime,

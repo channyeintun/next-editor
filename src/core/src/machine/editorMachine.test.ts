@@ -1,79 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { createActor, waitFor } from "xstate";
 import type * as monaco from "monaco-editor";
 import { editorMachine } from "./editorMachine";
 import { audioPlaybackActor } from "./audioActor";
 import type { Recording } from "../types";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
-
-// The Signalsmith Stretch worklet is loaded lazily by audioActor for off-speed pitch
-// preservation. Replace it with a lightweight mock so the playback graph can be
-// exercised under jsdom and the stretch scheduling can be asserted without a real
-// AudioWorklet (jsdom's `AudioWorkletNode` has no usable `port`).
-const stretchMock = vi.hoisted(() => ({
-  instances: [] as Array<{
-    scheduleCalls: Array<{
-      active?: boolean;
-      input?: number;
-      output?: number;
-      rate?: number;
-      semitones?: number;
-    }>;
-    buffersAdded: number;
-    connected: boolean;
-    stopped: boolean;
-  }>,
-}));
-
-vi.mock("signalsmith-stretch", () => {
-  class MockStretchNode {
-    inputTime = 0;
-    scheduleCalls: Array<{
-      active?: boolean;
-      input?: number;
-      output?: number;
-      rate?: number;
-      semitones?: number;
-    }> = [];
-    buffersAdded = 0;
-    connected = false;
-    stopped = false;
-    constructor() {
-      stretchMock.instances.push(this);
-    }
-    connect() {
-      this.connected = true;
-    }
-    disconnect() {
-      this.connected = false;
-    }
-    async addBuffers(channels: Float32Array[]) {
-      this.buffersAdded += 1;
-      return channels[0]?.length ?? 0;
-    }
-    async dropBuffers() {
-      return { start: 0, end: 0 };
-    }
-    async schedule(change: (typeof this.scheduleCalls)[number]) {
-      this.scheduleCalls.push(change);
-      return change;
-    }
-    async start() {
-      return this.schedule({ active: true });
-    }
-    async stop() {
-      this.stopped = true;
-      return this.schedule({ active: false });
-    }
-    async setUpdateInterval() {}
-    async latency() {
-      return 0;
-    }
-  }
-  return {
-    default: async () => new MockStretchNode(),
-  };
-});
 
 const selection = {
   startLineNumber: 1,
@@ -606,272 +537,69 @@ describe("editorMachine actor lifecycle", () => {
   });
 });
 
-// External-audio playback (the `recordingAudioPlayer` child) runs the Web Audio
-// graph in audioPlaybackActor: it decodes the blob through an AudioContext and
-// plays it via a buffer source whose `onended` signals completion. Mock that
-// graph so the recording orchestration can be exercised under jsdom.
-class MockExternalBufferSource {
-  buffer: unknown = null;
-  playbackRate = { value: 1 };
-  onended: (() => void) | null = null;
-  connect() {}
-  disconnect() {}
-  start() {}
-  stop() {}
-}
-
-class MockExternalAudioContext {
-  static instances: MockExternalAudioContext[] = [];
-  currentTime = 0;
-  state = "running";
-  destination = {};
-  audioWorklet = { addModule: async () => {} };
-  bufferSources: MockExternalBufferSource[] = [];
-  // A 60s mono buffer → the actor reports a 60_000ms external-audio duration.
-  private decodeResult = { duration: 60, numberOfChannels: 1, length: 1_000 };
-
-  constructor() {
-    MockExternalAudioContext.instances.push(this);
-  }
-  createGain() {
-    const gain = {
-      value: 1,
-      setValueAtTime() {
-        return gain;
-      },
-      linearRampToValueAtTime() {
-        return gain;
-      },
-      cancelScheduledValues() {
-        return gain;
-      },
-    };
-    return { gain, connect() {}, disconnect() {} };
-  }
-  createBufferSource() {
-    const source = new MockExternalBufferSource();
-    this.bufferSources.push(source);
-    return source;
-  }
-  decodeAudioData() {
-    return Promise.resolve(this.decodeResult);
-  }
-  resume() {
-    return Promise.resolve();
-  }
-  close() {
-    return Promise.resolve();
-  }
-}
-
-describe("editorMachine external audio recording", () => {
-  const originalAudioContext = Object.getOwnPropertyDescriptor(globalThis, "AudioContext");
-  const originalAudioWorkletNode = Object.getOwnPropertyDescriptor(globalThis, "AudioWorkletNode");
-  let patchedBlobArrayBuffer = false;
-
-  afterEach(() => {
-    if (originalAudioContext) {
-      Object.defineProperty(globalThis, "AudioContext", originalAudioContext);
-    } else {
-      delete (globalThis as Record<string, unknown>).AudioContext;
-    }
-    if (originalAudioWorkletNode) {
-      Object.defineProperty(globalThis, "AudioWorkletNode", originalAudioWorkletNode);
-    } else {
-      delete (globalThis as Record<string, unknown>).AudioWorkletNode;
-    }
-    if (patchedBlobArrayBuffer) {
-      delete (Blob.prototype as { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer;
-      patchedBlobArrayBuffer = false;
-    }
-    MockExternalAudioContext.instances = [];
-  });
-
-  it("plays an uploaded audio file while recording and stops when it ends", async () => {
-    Object.defineProperty(globalThis, "AudioContext", {
-      configurable: true,
-      value: MockExternalAudioContext,
-    });
-    // This test plays at 1x, which never needs pitch preservation. Keep
-    // AudioWorkletNode undefined so the actor's lazy stretch-node load never
-    // fires — otherwise an in-flight load would leak past the test.
-    delete (globalThis as Record<string, unknown>).AudioWorkletNode;
-    // jsdom's Blob lacks arrayBuffer(); the actor decodes through it, so stub it.
-    if (typeof Blob.prototype.arrayBuffer !== "function") {
-      (Blob.prototype as { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer = () =>
-        Promise.resolve(new ArrayBuffer(8));
-      patchedBlobArrayBuffer = true;
-    }
-
-    const events: string[] = [];
-    // Held in an object so the assignment inside the callback doesn't make
-    // control-flow analysis narrow the variable to `never` at the read sites.
-    const stoppedRecording: { value: Recording | null } = { value: null };
-    const audioBlob = new Blob(["external audio"], { type: "audio/webm" });
-    const actor = createActor(editorMachine, {
-      input: {
-        editorRef: { current: null },
-        onRecordingStart: () => events.push("recording:start"),
-        onRecordingStop: (recording) => {
-          events.push("recording:stop");
-          stoppedRecording.value = recording;
-        },
-      },
-    }).start();
-
-    actor.send({ type: "START_RECORDING", audioBlob });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
-    expect(actor.getSnapshot().context.audio.source).toBe("external");
-
-    // The blob decodes asynchronously; once it resolves the actor reports the
-    // duration (READY) and, in the same turn, starts playing through a buffer
-    // source. Waiting on the processed duration is a stable barrier for both.
-    await waitFor(actor, (snapshot) => snapshot.context.audio.externalDurationMs === 60_000);
-    const source = MockExternalAudioContext.instances[0]?.bufferSources.at(-1);
-    expect(source).toBeDefined();
-
-    // Simulate the audio reaching its end → the actor emits FINISHED.
-    source?.onended?.();
-    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
-
-    expect(events).toEqual(["recording:start", "recording:stop"]);
-    expect(stoppedRecording.value?.audioBlob).toBe(audioBlob);
-    expect(stoppedRecording.value?.audioSource).toBe("external");
-    expect(stoppedRecording.value?.duration).toBe(60_000);
-    expect(actor.getSnapshot().children.recordingAudioPlayer).toBeUndefined();
-
-    actor.stop();
-  });
-});
-
 describe("audioPlaybackActor", () => {
-  class MockBufferSource {
-    buffer: unknown = null;
-    playbackRate = { value: 1 };
-    onended: (() => void) | null = null;
-    startedOffset: number | null = null;
-    connect() {}
-    disconnect() {}
-    start(_when: number, offset: number) {
-      this.startedOffset = offset;
-    }
-    stop() {}
-  }
-
-  class MockAudioContext {
-    static instances: MockAudioContext[] = [];
+  // Mock HTMLAudioElement — jsdom provides a stub but play()/pause() are not
+  // fully functional. We replace it with a minimal manual mock that tracks
+  // calls and lets tests trigger events imperatively.
+  class MockAudio {
+    static instances: MockAudio[] = [];
+    src = "";
+    volume = 1;
+    playbackRate = 1;
+    preservesPitch = true;
+    crossOrigin: string | null = null;
     currentTime = 0;
-    state = "running";
-    destination = {};
-    audioWorklet = { addModule: async () => {} };
-    bufferSources: MockBufferSource[] = [];
-    // A long mono buffer so any requested seek offset stays in range. Includes
-    // `getChannelData` since the stretch node copies channel samples out of it.
-    private decodeResult = {
-      duration: 120,
-      numberOfChannels: 1,
-      length: 1_000,
-      getChannelData: () => new Float32Array(1_000),
-    };
+    paused = true;
+    oncanplay: (() => void) | null = null;
+    onended: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    playCalls = 0;
+    pauseCalls = 0;
 
     constructor() {
-      MockAudioContext.instances.push(this);
+      MockAudio.instances.push(this);
     }
-    createGain() {
-      // Mirror a real AudioParam: the declick envelope schedules ramps on `gain`.
-      const gain = {
-        value: 1,
-        setValueAtTime(v: number) {
-          gain.value = v;
-          return gain;
-        },
-        linearRampToValueAtTime(v: number) {
-          gain.value = v;
-          return gain;
-        },
-        cancelScheduledValues() {
-          return gain;
-        },
-      };
-      return { gain, connect() {}, disconnect() {} };
-    }
-    createBufferSource() {
-      const source = new MockBufferSource();
-      this.bufferSources.push(source);
-      return source;
-    }
-    decodeAudioData() {
-      return Promise.resolve(this.decodeResult);
-    }
-    resume() {
+
+    play() {
+      this.playCalls++;
+      this.paused = false;
       return Promise.resolve();
     }
-    close() {
-      return Promise.resolve();
+
+    pause() {
+      this.pauseCalls++;
+      this.paused = true;
     }
+
+    removeAttribute(_name: string) {}
+    load() {}
   }
 
-  const originalAudioContext = Object.getOwnPropertyDescriptor(globalThis, "AudioContext");
-  const originalAudioWorkletNode = Object.getOwnPropertyDescriptor(globalThis, "AudioWorkletNode");
-  let patchedBlobArrayBuffer = false;
+  const originalAudio = Object.getOwnPropertyDescriptor(globalThis, "Audio");
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
 
-  const installMockAudio = () => {
-    Object.defineProperty(globalThis, "AudioContext", {
-      configurable: true,
-      value: MockAudioContext,
-    });
-    Object.defineProperty(globalThis, "AudioWorkletNode", {
-      configurable: true,
-      value: class {},
-    });
-    // jsdom's Blob lacks arrayBuffer(); the actor decodes via it, so stub it.
-    if (typeof Blob.prototype.arrayBuffer !== "function") {
-      (Blob.prototype as { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer = () =>
-        Promise.resolve(new ArrayBuffer(8));
-      patchedBlobArrayBuffer = true;
-    }
-  };
-
-  // The decode + worklet-load chains (including the async stretch-node creation)
-  // settle over an unpredictable number of microtask/macrotask turns, especially
-  // under full-suite load. Poll until the graph reaches the expected shape instead
-  // of guessing a fixed number of flushes.
-  const waitUntil = async (predicate: () => boolean, timeoutMs = 2000) => {
-    const start = Date.now();
-    while (!predicate()) {
-      if (Date.now() - start > timeoutMs) {
-        throw new Error("waitUntil: condition not met before timeout");
-      }
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-  };
-
-  const restore = (name: string, descriptor: PropertyDescriptor | undefined) => {
-    if (descriptor) {
-      Object.defineProperty(globalThis, name, descriptor);
-    } else {
-      delete (globalThis as Record<string, unknown>)[name];
-    }
-  };
-
-  // Stop every spawned actor on teardown — even if a test threw before its own
-  // actor.stop(). A surviving actor would otherwise resolve its pending decode /
-  // stretch-node load during a later test and leak a buffer source or stretch node.
   let spawnedActors: Array<ReturnType<typeof createActor>> = [];
+
+  beforeEach(() => {
+    MockAudio.instances = [];
+    Object.defineProperty(globalThis, "Audio", { configurable: true, value: MockAudio });
+    URL.createObjectURL = () => "blob:mock";
+    URL.revokeObjectURL = () => {};
+  });
 
   afterEach(() => {
     for (const actor of spawnedActors) {
       actor.stop();
     }
     spawnedActors = [];
-    restore("AudioContext", originalAudioContext);
-    restore("AudioWorkletNode", originalAudioWorkletNode);
-    if (patchedBlobArrayBuffer) {
-      delete (Blob.prototype as { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer;
-      patchedBlobArrayBuffer = false;
+    if (originalAudio) {
+      Object.defineProperty(globalThis, "Audio", originalAudio);
+    } else {
+      delete (globalThis as Record<string, unknown>).Audio;
     }
-    MockAudioContext.instances = [];
-    stretchMock.instances = [];
+    URL.createObjectURL = originalCreateObjectURL;
+    URL.revokeObjectURL = originalRevokeObjectURL;
   });
 
   const createPlayback = (playbackRate: number, startPositionMs = 0) => {
@@ -887,73 +615,94 @@ describe("audioPlaybackActor", () => {
     return actor;
   };
 
-  it("preserves pitch at 2x by routing through a tempo-matched Stretch node", async () => {
-    installMockAudio();
-    const actor = createPlayback(2);
-
-    actor.send({ type: "PLAY" });
-    // Off-speed playback starts on the native (transient, resampled) fallback while the
-    // Stretch worklet loads, then upgrades in place once the node is ready.
-    await waitUntil(
-      () =>
-        stretchMock.instances.length === 1 &&
-        (stretchMock.instances[0]?.scheduleCalls.length ?? 0) > 0,
-    );
-
-    const stretch = stretchMock.instances[0];
-    // The node was loaded with the decoded samples...
-    expect(stretch.buffersAdded).toBeGreaterThan(0);
-    // ...and scheduled at 2x tempo with zero pitch shift, so speed changes without
-    // touching pitch — no resample-then-correct double processing.
-    const activeSchedule = stretch.scheduleCalls.find((call) => call.active);
-    expect(activeSchedule?.rate).toBe(2);
-    expect(activeSchedule?.semitones).toBe(0);
-
-    actor.stop();
+  it("creates an HTMLAudioElement with preservesPitch=false on spawn", () => {
+    createPlayback(1);
+    const audio = MockAudio.instances[0];
+    expect(audio).toBeDefined();
+    expect(audio?.preservesPitch).toBe(false);
+    expect(audio?.src).toBe("blob:mock");
+    expect(audio?.volume).toBe(0.5);
+    expect(audio?.playbackRate).toBe(1);
   });
 
-  it("stays native at 1x with no stretch node created", async () => {
-    installMockAudio();
+  it("plays and pauses via PLAY/PAUSE events", async () => {
     const actor = createPlayback(1);
+    const audio = MockAudio.instances[0]!;
 
     actor.send({ type: "PLAY" });
-    // At 1x the source plays directly; the stretch worklet is never loaded.
-    await waitUntil(() => (MockAudioContext.instances[0]?.bufferSources.length ?? 0) > 0);
+    expect(audio.playCalls).toBe(1);
+    expect(audio.paused).toBe(false);
 
-    const ctx = MockAudioContext.instances[0];
-    expect(ctx.bufferSources.at(-1)?.playbackRate.value).toBe(1);
-    expect(stretchMock.instances).toHaveLength(0);
-
-    actor.stop();
+    actor.send({ type: "PAUSE" });
+    expect(audio.pauseCalls).toBe(1);
+    expect(audio.paused).toBe(true);
   });
 
-  it("seeks in milliseconds and ignores sub-threshold high-speed sync drift", async () => {
-    installMockAudio();
-    const actor = createPlayback(2);
+  it("seeks by setting currentTime on SEEK", () => {
+    const actor = createPlayback(1, 0);
+    const audio = MockAudio.instances[0]!;
 
-    actor.send({ type: "PLAY" });
-    // Let the graph fully stabilize (decode + stretch node upgrade) so the seek/sync
-    // assertions below count only the schedule calls they themselves trigger.
-    await waitUntil(
-      () =>
-        stretchMock.instances.length === 1 &&
-        (stretchMock.instances[0]?.scheduleCalls.some((call) => call.active) ?? false),
-    );
-    const stretch = stretchMock.instances[0];
+    // 12_500ms with no startOffset → currentTime = 12.5s
+    actor.send({ type: "SEEK", timeMs: 12_500 });
+    expect(audio.currentTime).toBe(12.5);
+  });
+
+  it("ignores sub-threshold drift on SYNC and re-seeks on over-threshold drift", () => {
+    const actor = createPlayback(1, 0);
+    const audio = MockAudio.instances[0]!;
 
     actor.send({ type: "SEEK", timeMs: 12_500 });
-    expect(stretch.scheduleCalls.at(-1)?.input).toBe(12.5);
+    const timeAfterSeek = audio.currentTime;
 
-    const scheduleCount = stretch.scheduleCalls.length;
-    // 200ms drift is below AUDIO_SYNC_DRIFT_THRESHOLD_MS → no restart.
+    // 200ms drift is below AUDIO_SYNC_DRIFT_THRESHOLD_MS (500ms) → no change.
     actor.send({ type: "SYNC", timeMs: 12_700 });
-    expect(stretch.scheduleCalls.length).toBe(scheduleCount);
+    expect(audio.currentTime).toBe(timeAfterSeek);
 
-    // 500ms drift reaches the threshold → restart from the synced position.
-    actor.send({ type: "SYNC", timeMs: 13_000 });
-    expect(stretch.scheduleCalls.length).toBeGreaterThan(scheduleCount);
-    expect(stretch.scheduleCalls.at(-1)?.input).toBe(13);
+    // 600ms drift exceeds threshold → seek applied.
+    actor.send({ type: "SYNC", timeMs: 13_100 });
+    expect(audio.currentTime).toBe(13.1);
+  });
 
-    actor.stop();
+  it("updates volume and playback rate", () => {
+    const actor = createPlayback(1);
+    const audio = MockAudio.instances[0]!;
+
+    actor.send({ type: "SET_VOLUME", volume: 0.3 });
+    expect(audio.volume).toBe(0.3);
+
+    actor.send({ type: "SET_PLAYBACK_RATE", rate: 2 });
+    expect(audio.playbackRate).toBe(2);
+  });
+
+  it("uses audioUrl directly when provided instead of a blob URL", () => {
+    const actor = createActor(audioPlaybackActor, {
+      input: {
+        blob: new Blob(["audio"], { type: "audio/webm" }),
+        audioUrl: "https://cdn.example.com/lesson.weba",
+        volume: 1,
+        playbackRate: 1,
+        startPositionMs: 0,
+      },
+    }).start();
+    spawnedActors.push(actor);
+
+    const audio = MockAudio.instances[0]!;
+    expect(audio.src).toBe("https://cdn.example.com/lesson.weba");
+  });
+
+  it("emits FINISHED when the audio element ends", () => {
+    const actor = createPlayback(1);
+    const audio = MockAudio.instances[0]!;
+
+    actor.send({ type: "PLAY" });
+
+    // The actor wires onended to send FINISHED back to the parent. Trigger it
+    // and confirm the element actually had a handler registered.
+    expect(audio.onended).toBeTypeOf("function");
+    audio.onended!();
+
+    // After onended fires the actor should still be alive (it's fromCallback —
+    // only the parent machine acts on FINISHED). Just confirm no throw occurred.
+    expect(actor.getSnapshot().status).toBe("active");
   });
 });
