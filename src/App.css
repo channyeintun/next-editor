@@ -57,6 +57,10 @@
   backface-visibility: hidden;
 }
 
+.editor-paint-layer .monaco-editor .monaco-hover {
+  pointer-events: none;
+}
+
 @keyframes nb-cursor-blink {
   0% {
     opacity: 1;
