@@ -615,11 +615,11 @@ describe("audioPlaybackActor", () => {
     return actor;
   };
 
-  it("creates an HTMLAudioElement with preservesPitch=false on spawn", () => {
+  it("creates an HTMLAudioElement with preservesPitch=true on spawn", () => {
     createPlayback(1);
     const audio = MockAudio.instances[0];
     expect(audio).toBeDefined();
-    expect(audio?.preservesPitch).toBe(false);
+    expect(audio?.preservesPitch).toBe(true);
     expect(audio?.src).toBe("https://cdn.example.com/audio.weba");
     expect(audio?.volume).toBe(0.5);
     expect(audio?.playbackRate).toBe(1);
