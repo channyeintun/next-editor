@@ -40,6 +40,7 @@ export class RrwebPreviewReplayer {
       speed: 1,
       // Real DOM replay into the mounted iframe (no virtual DOM diffing layer).
       useVirtualDom: false,
+      insertStyleRules: ["::selection { background-color: #b4d5fe; }"],
     });
     this.makeResponsive();
     // Render the initial snapshot immediately so the panel is never blank before
