@@ -1,7 +1,7 @@
 // Self-hosted, trimmed Monaco. Importing this module configures the workers,
 // theme, and TypeScript defaults before any raw editor instance is created.
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
-import { defineNextEditorTheme } from "./theme";
+import { NEXT_EDITOR_MONACO_THEME, defineNextEditorTheme } from "./theme";
 import { configureMonacoTypeScript } from "./typescriptDefaults";
 
 // Every standalone editor feature (find, multi-cursor, bracket matching, …) but
@@ -73,6 +73,7 @@ function ensureMonacoRuntimeInitialized() {
   globalScope.__nextEditorMonacoRuntimeInitialized = true;
   self.MonacoEnvironment = monacoEnvironment;
   defineNextEditorTheme(monaco);
+  monaco.editor.setTheme(NEXT_EDITOR_MONACO_THEME);
   configureMonacoTypeScript();
 }
 

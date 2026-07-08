@@ -344,7 +344,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     usesPlaybackModel,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setActiveTheme(theme);
   }, [theme]);
 
