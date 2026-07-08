@@ -175,12 +175,7 @@ export default function LessonGrid() {
             </div>
           </div>
 
-          {canPage && (
-            // Outside the virtualizer so the keyboard escape hatch survives:
-            // the observer drives the mouse path; on a load-more failure it
-            // becomes Retry.
-            <div ref={sentinelRef} className="pb-10 pt-5" />
-          )}
+          {canPage && <div ref={sentinelRef} className="pb-10 pt-5" />}
         </>
       )}
     </div>
