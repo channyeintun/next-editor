@@ -179,19 +179,7 @@ export default function LessonGrid() {
             // Outside the virtualizer so the keyboard escape hatch survives:
             // the observer drives the mouse path; on a load-more failure it
             // becomes Retry.
-            <div ref={sentinelRef} className="pb-10 pt-5">
-              {!isFetchingNextPage && isFetchNextPageError && (
-                <div className="flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => fetchNextPage()}
-                    className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-            </div>
+            <div ref={sentinelRef} className="pb-10 pt-5" />
           )}
         </>
       )}
