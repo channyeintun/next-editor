@@ -88,7 +88,7 @@ export default function LessonGrid() {
   // while searching: the query bar switches to backend search results
   // instead (see the render below), so there's no infinite list to page.
   const canPage = hasNextPage && !debouncedQuery;
-  const sentinelRef = useRef<HTMLButtonElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el || !canPage || isFetchNextPageError) return;
