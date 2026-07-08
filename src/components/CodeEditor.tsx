@@ -354,7 +354,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     disposeEditorListeners();
     editorRef.current = editor;
     syncEditorRef(editor);
-    syncEditorContentToWorkspace(editor);
 
     focusEditorIfNeeded(editor);
 
@@ -365,7 +364,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         }
 
         disposePlaybackModelsIfIdle(editor.getModel()?.uri ?? null);
-        syncEditorContentToWorkspace(editor);
         syncEditorRef(editor);
       }),
       editor.onDidChangeModelContent(() => {
