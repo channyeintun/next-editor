@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { useLesson } from "../hooks/useLessons";
 import LessonDetail from "./LessonDetail";
+import LoadingSpinner from "@app/components/LoadingSpinner";
 
 // Route component for /learn/:slug. Resolves the slug to a lesson (so the detail
 // view is deep-linkable with a clean URL and no query params), then renders the
@@ -12,11 +13,7 @@ export default function LessonDetailRoute() {
   const { data: lesson, isPending, isError } = useLesson(slug);
 
   if (isPending) {
-    return (
-      <Centered>
-        <p className="text-sm">Loading lesson…</p>
-      </Centered>
-    );
+    return <LoadingSpinner />;
   }
 
   if (lesson) {
