@@ -18,17 +18,10 @@ function axiosError(status: number) {
   return { isAxiosError: true, response: { status } };
 }
 
-// A real JSON success response always carries this header in production —
-// mocks need it too, since isHtmlFallback() reads it to distinguish a real
-// shard from the SPA catch-all (see the "html fallback" tests below, which
-// are what actually caught this bug in the first place).
 function jsonResponse(data: unknown) {
   return { data, headers: { "content-type": "application/json" } };
 }
 
-// The Worker's SPA fallback returns 200 + this content-type for ANY
-// unmatched static-asset path — never a real 404. Confirmed against the
-// live deployment, not assumed.
 function htmlFallbackResponse() {
   return { data: "<!doctype html>...", headers: { "content-type": "text/html" } };
 }
@@ -40,43 +33,12 @@ beforeEach(() => {
 });
 
 describe("fetchLessonsPage", () => {
-  it("returns a seed:n cursor while the static seed has more pages", async () => {
-    mockedGet.mockResolvedValueOnce(
-      jsonResponse({ lessons: [{ slug: "introduction" }], nextPage: 1 }),
-    );
+  it("returns local json data for seed:0 directly without fetching", async () => {
     const page = await fetchLessonsPage("seed:0");
-    expect(mockedGet).toHaveBeenCalledWith("/lessons/page-0.json");
-    expect(page.nextPage).toBe("seed:1");
-    expect(page.lessons).toHaveLength(1);
-  });
-
-  it("switches to d1:0 once the seed reports nextPage null", async () => {
-    mockedGet.mockResolvedValueOnce(
-      jsonResponse({ lessons: [{ slug: "introduction" }], nextPage: null }),
-    );
-    const page = await fetchLessonsPage("seed:0");
+    expect(mockedGet).not.toHaveBeenCalled();
     expect(page.nextPage).toBe("d1:0");
-  });
-
-  it("falls through to d1:0 when the seed shard itself 404s", async () => {
-    mockedGet.mockRejectedValueOnce(axiosError(404));
-    mockedGet.mockResolvedValueOnce(jsonResponse({ lessons: [], nextPage: null }));
-    const page = await fetchLessonsPage("seed:5");
-    expect(mockedGet).toHaveBeenNthCalledWith(1, "/lessons/page-5.json");
-    expect(mockedGet).toHaveBeenNthCalledWith(2, "/api/lessons?page=0");
-    expect(page.nextPage).toBeNull();
-  });
-
-  it("falls through to d1:0 when the missing seed shard returns the SPA fallback (200 + text/html) instead of a 404", async () => {
-    // This is what actually happens in production: not_found_handling =
-    // "single-page-application" means an out-of-range shard index never
-    // 404s, it 200s with index.html.
-    mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
-    mockedGet.mockResolvedValueOnce(jsonResponse({ lessons: [], nextPage: null }));
-    const page = await fetchLessonsPage("seed:5");
-    expect(mockedGet).toHaveBeenNthCalledWith(1, "/lessons/page-5.json");
-    expect(mockedGet).toHaveBeenNthCalledWith(2, "/api/lessons?page=0");
-    expect(page.nextPage).toBeNull();
+    expect(page.lessons).toHaveLength(1);
+    expect(page.lessons[0].slug).toBe("introduction");
   });
 
   it("paginates within d1 using d1:n cursors", async () => {
@@ -95,10 +57,6 @@ describe("fetchLessonsPage", () => {
   });
 
   it("treats a d1 SPA fallback (200 + text/html) as an empty terminal page instead of crashing", async () => {
-    // Same hazard as the seed shard case above, but for plain `bun run dev`
-    // (no dev:worker): /api/lessons has no handler at all there, so it falls
-    // through to the SPA index.html the same way an out-of-range seed shard
-    // does in production.
     mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
     const page = await fetchLessonsPage("d1:0");
     expect(page.lessons).toEqual([]);
@@ -107,63 +65,28 @@ describe("fetchLessonsPage", () => {
 });
 
 describe("findLessonBySlug", () => {
-  it("returns the seed lesson when the seed shard matches", async () => {
-    mockedGet.mockResolvedValueOnce(jsonResponse({ slug: "introduction" }));
+  it("returns the seed lesson when the local JSON matches without fetching", async () => {
     const lesson = await findLessonBySlug("introduction");
-    expect(mockedGet).toHaveBeenCalledWith("/lessons/by-slug/introduction.json");
+    expect(mockedGet).not.toHaveBeenCalled();
     expect(lesson?.slug).toBe("introduction");
   });
 
-  it("falls through to D1 when the seed shard 404s", async () => {
-    mockedGet.mockRejectedValueOnce(axiosError(404));
+  it("falls through to D1 when the local JSON does not match", async () => {
     mockedGet.mockResolvedValueOnce(jsonResponse({ slug: "user-lesson" }));
     const lesson = await findLessonBySlug("user-lesson");
-    expect(mockedGet).toHaveBeenNthCalledWith(1, "/lessons/by-slug/user-lesson.json");
-    expect(mockedGet).toHaveBeenNthCalledWith(2, "/api/lessons/user-lesson");
+    expect(mockedGet).toHaveBeenCalledWith("/api/lessons/user-lesson");
     expect(lesson?.slug).toBe("user-lesson");
   });
 
-  it("falls through to D1 when the seed shard returns the SPA fallback (200 + text/html) instead of a 404 -- the real production bug this was written for", async () => {
-    // Root cause of a real production incident: every D1-only lesson's
-    // by-slug shard doesn't exist as a static asset, so the Worker's SPA
-    // catch-all answered 200 with index.html instead of a 404. The old code
-    // trusted any 200 as a real Lesson, silently "succeeding" with garbage
-    // HTML -- lesson.ne ended up undefined, so the recording URL never even
-    // passed the .ne extension check and no fetch was ever attempted at all.
-    mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
-    mockedGet.mockResolvedValueOnce(
-      jsonResponse({ slug: "user-lesson", ne: "media/lessons/x/x.ne" }),
-    );
-    const lesson = await findLessonBySlug("user-lesson");
-    expect(mockedGet).toHaveBeenNthCalledWith(1, "/lessons/by-slug/user-lesson.json");
-    expect(mockedGet).toHaveBeenNthCalledWith(2, "/api/lessons/user-lesson");
-    expect(lesson?.slug).toBe("user-lesson");
-    expect(lesson?.ne).toBe("media/lessons/x/x.ne");
-  });
-
-  it("returns null when neither seed nor D1 has the slug", async () => {
-    mockedGet.mockRejectedValueOnce(axiosError(404));
+  it("returns null when neither local JSON nor D1 has the slug", async () => {
     mockedGet.mockRejectedValueOnce(axiosError(404));
     const lesson = await findLessonBySlug("nope");
     expect(lesson).toBeNull();
   });
 
-  it("returns null when the seed shard 200s as HTML and D1 genuinely 404s too", async () => {
-    mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
-    mockedGet.mockRejectedValueOnce(axiosError(404));
-    const lesson = await findLessonBySlug("nope");
-    expect(lesson).toBeNull();
-  });
-
-  it("returns null when both the seed shard and the D1 lookup 200 as HTML (dev without dev:worker)", async () => {
-    mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
+  it("returns null when both the local JSON does not match and the D1 lookup 200 as HTML (dev without dev:worker)", async () => {
     mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
     const lesson = await findLessonBySlug("nope");
     expect(lesson).toBeNull();
-  });
-
-  it("rethrows a non-404 error from the seed lookup", async () => {
-    mockedGet.mockRejectedValueOnce(axiosError(500));
-    await expect(findLessonBySlug("introduction")).rejects.toBeTruthy();
   });
 });

@@ -3,7 +3,7 @@ import type { PluginOption } from "@voidzero-dev/vite-plus-core";
 import tailwindcss from "@tailwindcss/vite";
 import wasm from "vite-plugin-wasm";
 import { fileURLToPath } from "node:url";
-import { lessonsApiPlugin } from "./tube/vite/lessonsApiPlugin";
+
 import { slideImageProxyPlugin } from "./tube/vite/slideImageProxyPlugin";
 
 const crossOriginHeaders = {
@@ -17,11 +17,6 @@ export default defineConfig({
     "*": "vp check --fix",
   },
   plugins: [
-    // Paginated /learn gallery data, served from one authored manifest that's
-    // kept out of public/ so the catalog never ships as a single JSON blob.
-    lessonsApiPlugin({
-      source: fileURLToPath(new URL("./tube/data/lessons.json", import.meta.url)),
-    }) as unknown as PluginOption,
     // Dev-server equivalent of infra/worker/routes/slideImage.ts: lets
     // `bun run dev` resolve the same /api/slide-image route the Worker
     // serves in production.

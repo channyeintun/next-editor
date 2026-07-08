@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { Lesson } from "../types";
+import lessonsData from "../../data/lessons.json";
 
 export interface LessonsPage {
   lessons: Lesson[];
@@ -41,20 +42,6 @@ function parseCursor(cursor: string): { source: "seed" | "d1"; index: number } {
   return { source: source === "d1" ? "d1" : "seed", index: Number(indexStr) || 0 };
 }
 
-// Static shard emitted by the lessonsApiPlugin Vite plugin (see vite.config.ts).
-// Always has at least a page-0 (possibly empty), so this only 404s for an
-// out-of-range index — treated as "no more seed pages" by the caller.
-async function fetchSeedPage(index: number): Promise<RawLessonsPage | null> {
-  try {
-    const res = await axios.get<RawLessonsPage>(`/lessons/page-${index}.json`);
-    if (isHtmlFallback(res)) return null;
-    return res.data;
-  } catch (err) {
-    if (is404(err)) return null;
-    throw err;
-  }
-}
-
 // In production the Worker always matches /api/lessons* and returns real
 // JSON, but plain `bun run dev` (no dev:worker) has no handler for it at
 // all, so it falls through to the same SPA index.html fallback the seed
@@ -73,11 +60,10 @@ export async function fetchLessonsPage(cursor: string): Promise<LessonsPage> {
   const { source, index } = parseCursor(cursor);
 
   if (source === "seed") {
-    const page = await fetchSeedPage(index);
-    if (page) {
+    if (index === 0) {
       return {
-        lessons: page.lessons,
-        nextPage: page.nextPage !== null ? `seed:${page.nextPage}` : "d1:0",
+        lessons: lessonsData.lessons as Lesson[],
+        nextPage: "d1:0",
       };
     }
     // No seed shard at this index at all — fall through to D1 from the start.
@@ -95,12 +81,9 @@ export async function fetchLessonsPage(cursor: string): Promise<LessonsPage> {
 // undefined — Query rejects undefined) when the slug matches neither, so the
 // route can tell "not found" from a real fetch failure.
 export async function findLessonBySlug(slug: string): Promise<Lesson | null> {
-  try {
-    const res = await axios.get<Lesson>(`/lessons/by-slug/${encodeURIComponent(slug)}.json`);
-    if (!isHtmlFallback(res)) return res.data;
-    // Else: not a real shard for this slug — fall through to D1 below.
-  } catch (err) {
-    if (!is404(err)) throw err;
+  const seedLesson = lessonsData.lessons.find((l) => l.slug === slug);
+  if (seedLesson) {
+    return seedLesson as Lesson;
   }
 
   try {
