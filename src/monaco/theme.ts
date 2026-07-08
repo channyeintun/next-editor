@@ -1,92 +1,9 @@
-import type { Monaco } from "@monaco-editor/react";
-import * as monacoTypeScriptModule from "monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
+import { monaco, type Monaco } from "./runtime";
 
-const monacoTypeScript =
-  monacoTypeScriptModule as unknown as typeof import("monaco-editor").typescript;
-
-export const MONACO_BUNDLER_MODULE_RESOLUTION = 100;
-
-export const MONACO_REACT_EXTRA_LIBS = [
-  {
-    filePath: "file:///node_modules/@types/react/index.d.ts",
-    content: `declare module "react" {
-  export type ReactNode = unknown;
-
-  export interface FunctionComponent<P = {}> {
-    (props: P): ReactNode;
-  }
-
-  export type FC<P = {}> = FunctionComponent<P>;
-
-  export interface StrictModeProps {
-    children?: ReactNode;
-  }
-
-  export const StrictMode: FC<StrictModeProps>;
-
-  export function useState<S>(
-    initialState: S | (() => S),
-  ): [S, (value: S | ((currentState: S) => S)) => void];
-}`,
-  },
-  {
-    filePath: "file:///node_modules/@types/react-dom/client.d.ts",
-    content: `declare module "react-dom/client" {
-  export interface Root {
-    render(children: unknown): void;
-    unmount(): void;
-  }
-
-  export function createRoot(container: Element | DocumentFragment): Root;
-}`,
-  },
-  {
-    filePath: "file:///node_modules/@types/react/jsx-runtime.d.ts",
-    content: `declare module "react/jsx-runtime" {
-  export namespace JSX {
-    type Element = unknown;
-
-    interface IntrinsicElements {
-      [elementName: string]: any;
-    }
-  }
-
-  export const Fragment: unknown;
-
-  export function jsx(type: unknown, props: unknown, key?: unknown): unknown;
-  export function jsxs(type: unknown, props: unknown, key?: unknown): unknown;
-}`,
-  },
-  {
-    filePath: "file:///src/vite-env.d.ts",
-    content: `declare module "*.css";
-declare module "*.svg" {
-  const source: string;
-  export default source;
-}`,
-  },
-] as const;
-
-export function getMonacoCompilerOptions() {
-  return {
-    allowImportingTsExtensions: true,
-    allowJs: true,
-    allowNonTsExtensions: true,
-    allowSyntheticDefaultImports: true,
-    esModuleInterop: true,
-    jsx: monacoTypeScript.JsxEmit.ReactJSX,
-    module: monacoTypeScript.ModuleKind.ESNext,
-    moduleResolution: MONACO_BUNDLER_MODULE_RESOLUTION,
-    noEmit: true,
-    resolvePackageJsonExports: true,
-    resolvePackageJsonImports: true,
-    target: monacoTypeScript.ScriptTarget.ESNext,
-    verbatimModuleSyntax: true,
-  };
-}
+export const NEXT_EDITOR_MONACO_THEME = "next-editor-dark";
 
 export function defineNextEditorTheme(monaco: Monaco) {
-  monaco.editor.defineTheme("next-editor-dark", {
+  monaco.editor.defineTheme(NEXT_EDITOR_MONACO_THEME, {
     base: "vs-dark",
     inherit: false,
     rules: [
@@ -219,6 +136,10 @@ export function defineNextEditorTheme(monaco: Monaco) {
       "input.border": "#2a323f",
     },
   });
+}
+
+export function setActiveTheme(theme: string) {
+  monaco.editor.setTheme(theme);
 }
 
 export const EDITOR_OPTIONS = {

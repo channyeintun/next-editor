@@ -1,16 +1,5 @@
-import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
-import Editor, { type OnMount, type BeforeMount, type Monaco } from "@monaco-editor/react";
-// Self-host a trimmed Monaco (only the languages this editor uses) and point
-// @monaco-editor/react at it instead of the default CDN. Side-effect import.
-import "./monacoSetup";
-// monaco-editor 0.55 moved the TypeScript language API out of
-// `monaco.languages.typescript` and into named exports of this contribution
-// module (the `languages.typescript = …` wiring now lives in editor.main.js,
-// which our trimmed ./monacoSetup intentionally never imports). The module
-// ships an empty `.d.ts`, so we re-type it below through the main entry's
-// top-level `typescript` namespace, where the real declarations live.
-import * as monacoTypeScriptModule from "monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
   useWorkspaceActions,
@@ -27,17 +16,17 @@ import BinaryFilePreview from "./BinaryFilePreview";
 import TerminalPanel from "./TerminalPanel";
 import {
   disposePlaybackModels,
+  getEditorOptions,
+  MonacoEditor,
+  monaco,
+  setActiveTheme,
   syncPlaybackModel,
+  syncWorkspaceModel,
   toMonacoModelPath,
   toPlaybackModelPath,
+  type Monaco,
   workspacePathFromMonacoModelUri,
-} from "./editorModels";
-import {
-  MONACO_REACT_EXTRA_LIBS,
-  defineNextEditorTheme,
-  getEditorOptions,
-  getMonacoCompilerOptions,
-} from "./editorConstants";
+} from "../monaco";
 
 const Preview = lazy(() => import("./Preview"));
 
@@ -93,29 +82,7 @@ function WorkspaceEventRecorder({
   return null;
 }
 
-let hasConfiguredMonacoTypeScript = false;
-const monacoTypeScript =
-  monacoTypeScriptModule as unknown as typeof import("monaco-editor").typescript;
-
-function configureMonacoTypeScript() {
-  if (hasConfiguredMonacoTypeScript) {
-    return;
-  }
-
-  const compilerOptions = getMonacoCompilerOptions();
-  const defaults = [monacoTypeScript.typescriptDefaults, monacoTypeScript.javascriptDefaults];
-
-  defaults.forEach((currentDefaults) => {
-    currentDefaults.setEagerModelSync(true);
-    currentDefaults.setCompilerOptions(compilerOptions);
-
-    MONACO_REACT_EXTRA_LIBS.forEach(({ content, filePath }) => {
-      currentDefaults.addExtraLib(content, filePath);
-    });
-  });
-
-  hasConfiguredMonacoTypeScript = true;
-}
+type StandaloneEditor = monaco.editor.IStandaloneCodeEditor;
 
 /**
  * CodeEditor Component - Monaco Editor wrapper with recording and replay capabilities
@@ -142,6 +109,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const lessonType = useWorkspaceLessonType();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
+  const viewStatesRef = useRef(new Map<string, monaco.editor.ICodeEditorViewState | null>());
+  const isApplyingExternalModelValueRef = useRef(false);
 
   // Only subscribe to the flags we actually need for rendering decisions
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
@@ -152,6 +121,30 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const editorModelPath = usesPlaybackModel
     ? toPlaybackModelPath(activeFile.path)
     : toMonacoModelPath(activeFile.path);
+  const activeModel = useMemo(() => {
+    if (isBinaryActiveFile) {
+      return null;
+    }
+
+    if (usesPlaybackModel) {
+      return syncPlaybackModel(monaco, activeFile.path, activeFile.content, selectedLanguage, {
+        preserveExistingContent: true,
+      });
+    }
+
+    isApplyingExternalModelValueRef.current = true;
+    try {
+      return syncWorkspaceModel(monaco, activeFile.path, activeFile.content, selectedLanguage);
+    } finally {
+      isApplyingExternalModelValueRef.current = false;
+    }
+  }, [
+    activeFile.content,
+    activeFile.path,
+    isBinaryActiveFile,
+    selectedLanguage,
+    usesPlaybackModel,
+  ]);
 
   const syncActivePlaybackModel = useEffectEvent((monaco: Monaco) => {
     if (!usesPlaybackModel || isBinaryActiveFile) {
@@ -163,7 +156,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     });
   });
 
-  const syncPlaybackEditorModel = useEffectEvent((editor: Parameters<OnMount>[0] | null) => {
+  const syncPlaybackEditorModel = useEffectEvent((editor: StandaloneEditor | null) => {
     const monaco = monacoRef.current;
 
     if (!usesPlaybackModel || !monaco || !editor) {
@@ -195,12 +188,17 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   // useEffectEvent provides a stable function reference that always reads
   // the latest playback attachment value without causing dependency issues
   const onEditorChange = useEffectEvent(() => {
-    if (usesPlaybackModel) return; // Skip while playback owns the editor model
+    if (usesPlaybackModel || isApplyingExternalModelValueRef.current) return;
     handleEditorChange();
   });
 
-  const syncEditorContentToWorkspace = useEffectEvent((editor: Parameters<OnMount>[0] | null) => {
-    if (usesPlaybackModel || !editor || isBinaryActiveFile) {
+  const syncEditorContentToWorkspace = useEffectEvent((editor: StandaloneEditor | null) => {
+    if (
+      usesPlaybackModel ||
+      !editor ||
+      isBinaryActiveFile ||
+      isApplyingExternalModelValueRef.current
+    ) {
       return;
     }
 
@@ -243,7 +241,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     void runSaveAction();
   });
 
-  const focusEditorIfNeeded = useEffectEvent((editor: Parameters<OnMount>[0] | null) => {
+  const focusEditorIfNeeded = useEffectEvent((editor: StandaloneEditor | null) => {
     if (!editor) {
       return;
     }
@@ -276,7 +274,32 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     editorDisposablesRef.current = [];
   };
 
+  const saveNormalViewState = useEffectEvent((editor: StandaloneEditor | null) => {
+    const model = editor?.getModel();
+
+    if (!editor || !model || model.uri.toString().startsWith("file:///__next-editor__/playback/")) {
+      return;
+    }
+
+    viewStatesRef.current.set(model.uri.toString(), editor.saveViewState());
+  });
+
+  const restoreNormalViewState = useEffectEvent(
+    (editor: StandaloneEditor, model: monaco.editor.ITextModel | null) => {
+      if (!model || model.uri.toString().startsWith("file:///__next-editor__/playback/")) {
+        return;
+      }
+
+      const viewState = viewStatesRef.current.get(model.uri.toString());
+
+      if (viewState) {
+        editor.restoreViewState(viewState);
+      }
+    },
+  );
+
   const detachEditorOnUnmount = useEffectEvent(() => {
+    saveNormalViewState(editorRef.current);
     disposeEditorListeners();
     const monaco = monacoRef.current;
 
@@ -322,6 +345,15 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   ]);
 
   useEffect(() => {
+    setActiveTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    monacoRef.current = monaco;
+    syncActivePlaybackModel(monaco);
+  }, [syncActivePlaybackModel]);
+
+  useEffect(() => {
     const editor = editorRef.current;
 
     if (!editor) {
@@ -341,19 +373,22 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   // editor reference so recording/save paths don't touch a disposed instance.
   useEffect(() => {
     if (isBinaryActiveFile) {
+      saveNormalViewState(editorRef.current);
+      disposeEditorListeners();
       editorRef.current = null;
       syncEditorRef(null);
     }
-  }, [editorRef, isBinaryActiveFile, syncEditorRef]);
+  }, [editorRef, isBinaryActiveFile, saveNormalViewState, syncEditorRef]);
 
   /**
    * Handle Monaco Editor mount event
    * Sets up the editor reference for use in recording and replay
    */
-  const handleEditorDidMount: OnMount = (editor) => {
+  const handleEditorDidMount = (editor: StandaloneEditor) => {
     disposeEditorListeners();
     editorRef.current = editor;
     syncEditorRef(editor);
+    restoreNormalViewState(editor, editor.getModel());
 
     focusEditorIfNeeded(editor);
 
@@ -382,17 +417,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     ];
   };
 
-  /**
-   * Handle Monaco Editor before mount event
-   * Defines the custom theme so it's available when the editor initializes
-   */
-  const handleEditorBeforeMount: BeforeMount = (monaco: Monaco) => {
-    monacoRef.current = monaco;
-    configureMonacoTypeScript();
-    syncActivePlaybackModel(monaco);
-    defineNextEditorTheme(monaco);
-  };
-
   return (
     <div className="h-full flex flex-col" data-cursor-replay-target="workspace">
       <WorkspaceEventRecorder
@@ -418,21 +442,16 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               }
               data-cursor-replay-target="code-editor"
             >
-              {isBinaryActiveFile ? (
+              {isBinaryActiveFile || !activeModel ? (
                 <BinaryFilePreview file={activeFile} />
               ) : (
-                <Editor
-                  height="100%"
-                  path={editorModelPath}
-                  language={selectedLanguage}
-                  theme={theme}
-                  defaultValue={usesPlaybackModel ? activeFile.content : undefined}
-                  value={usesPlaybackModel ? undefined : activeFile.content}
-                  saveViewState={!usesPlaybackModel}
+                <MonacoEditor
+                  className="size-full"
+                  model={activeModel}
                   onMount={handleEditorDidMount}
-                  beforeMount={handleEditorBeforeMount}
+                  onBeforeModelChange={saveNormalViewState}
+                  onAfterModelChange={restoreNormalViewState}
                   options={getEditorOptions(isPlaying)}
-                  loading={null}
                 />
               )}
             </div>

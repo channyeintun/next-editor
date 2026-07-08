@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { Monaco } from "@monaco-editor/react";
+import type { Monaco } from "../monaco/runtime";
 import {
   disposePlaybackModels,
   syncPlaybackModel,
+  syncWorkspaceModel,
   toMonacoModelPath,
   toPlaybackModelPath,
   workspacePathFromMonacoModelUri,
-} from "./editorModels";
+} from "../monaco/models";
 
 interface FakeUri {
   toString(): string;
@@ -19,6 +20,7 @@ interface FakeModel {
   uri: FakeUri;
   dispose(): void;
   getValue(): string;
+  getLanguageId(): string;
   setValue(content: string): void;
 }
 
@@ -49,6 +51,9 @@ function createFakeMonaco() {
           },
           getValue() {
             return this.content;
+          },
+          getLanguageId() {
+            return this.language;
           },
           setValue(nextContent: string) {
             this.content = nextContent;
@@ -93,6 +98,28 @@ describe("editor model helpers", () => {
 
     expect(model.getValue()).toBe("export default function App() {}");
     expect(model.language).toBe("typescript");
+    expect(models.size).toBe(1);
+  });
+
+  it("creates and reconciles normal workspace models", () => {
+    const { models, monaco } = createFakeMonaco();
+
+    const firstModel = syncWorkspaceModel(
+      monaco,
+      "src/App.tsx",
+      "workspace content",
+      "typescript",
+    ) as unknown as FakeModel;
+    const secondModel = syncWorkspaceModel(
+      monaco,
+      "src/App.tsx",
+      "updated content",
+      "javascript",
+    ) as unknown as FakeModel;
+
+    expect(secondModel).toBe(firstModel);
+    expect(secondModel.getValue()).toBe("updated content");
+    expect(secondModel.language).toBe("javascript");
     expect(models.size).toBe(1);
   });
 

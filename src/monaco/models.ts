@@ -1,4 +1,4 @@
-import type { Monaco } from "@monaco-editor/react";
+import type { Monaco } from "./runtime";
 import { normalizeWorkspacePath } from "../types/workspace";
 
 const PLAYBACK_MODEL_ROOT = "file:///__next-editor__/playback";
@@ -50,6 +50,26 @@ export function syncPlaybackModel(
   }
 
   monaco.editor.setModelLanguage(model, language);
+  return model;
+}
+
+export function syncWorkspaceModel(
+  monaco: Monaco,
+  workspacePath: string,
+  content: string,
+  language: string,
+) {
+  const uri = monaco.Uri.parse(toMonacoModelPath(workspacePath));
+  const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(content, language, uri);
+
+  if (model.getLanguageId() !== language) {
+    monaco.editor.setModelLanguage(model, language);
+  }
+
+  if (model.getValue() !== content) {
+    model.setValue(content);
+  }
+
   return model;
 }
 

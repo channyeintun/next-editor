@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import { Clock, Loader2, Minus, Plus, Send, Trash2 } from "lucide-react";
-import Editor from "@monaco-editor/react";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
+import { MonacoEditor, useOwnedModel } from "../../monaco";
 import {
   selectBody,
   selectHeaders,
@@ -84,6 +84,11 @@ export default function ApiClientPanel({
   const result = useSelector(store, (s) => selectResult(s.context));
   const history = useSelector(store, (s) => selectHistory(s.context));
   const activeTab = useSelector(store, (s) => selectRequestTab(s.context));
+  const requestModel = useOwnedModel({
+    uri: "file:///__next-editor__/api-client/request-body.json",
+    value: body,
+    language: "json",
+  });
 
   const selectTab = (tab: ApiClientRequestTab) => {
     store.trigger.setRequestTab({ tab });
@@ -169,12 +174,10 @@ export default function ApiClientPanel({
         ) : null}
         {activeTab === "body" && method !== "GET" ? (
           <div className="h-36">
-            <Editor
-              height="100%"
-              language="json"
-              value={body}
-              onChange={(v) => store.trigger.setBody({ body: v ?? "" })}
-              theme="vs-dark"
+            <MonacoEditor
+              className="size-full"
+              model={requestModel}
+              onChange={(value) => store.trigger.setBody({ body: value })}
               options={{
                 minimap: { enabled: false },
                 lineNumbers: "off",
@@ -341,8 +344,6 @@ function HeadersEditor({
 }
 
 function ResponseView({ result }: { result: NonNullable<ReturnType<typeof selectResult>> }) {
-  const [showHeaders, setShowHeaders] = useState(false);
-
   if (!result.ok) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
@@ -359,8 +360,23 @@ function ResponseView({ result }: { result: NonNullable<ReturnType<typeof select
   }
 
   const { response } = result;
+
+  return <SuccessfulResponseView response={response} />;
+}
+
+function SuccessfulResponseView({
+  response,
+}: {
+  response: Extract<NonNullable<ReturnType<typeof selectResult>>, { ok: true }>["response"];
+}) {
+  const [showHeaders, setShowHeaders] = useState(false);
   const prettyBody = tryPrettyJson(response.body);
   const lang = detectLanguage(response.headers, response.body);
+  const responseModel = useOwnedModel({
+    uri: `file:///__next-editor__/api-client/response-${response.status}-${response.durationMs}.${lang}`,
+    value: prettyBody,
+    language: lang,
+  });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -399,11 +415,9 @@ function ResponseView({ result }: { result: NonNullable<ReturnType<typeof select
 
       {/* Response body */}
       <div className="min-h-0 flex-1">
-        <Editor
-          height="100%"
-          language={lang}
-          value={prettyBody}
-          theme="vs-dark"
+        <MonacoEditor
+          className="size-full"
+          model={responseModel}
           options={{
             readOnly: true,
             minimap: { enabled: false },

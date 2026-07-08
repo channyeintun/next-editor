@@ -1,16 +1,8 @@
-// Self-hosted, trimmed Monaco.
-//
-// By default @monaco-editor/react loads the full monaco-editor runtime from a
-// CDN, which (a) bundles all ~85 languages and (b) is a cross-origin script that
-// the app's `Cross-Origin-Embedder-Policy: require-corp` header would otherwise
-// have to special-case. Instead we bundle Monaco ourselves and ship only the
-// languages this editor actually produces (see `inferLanguageFromPath` in
-// ../types/workspace.ts): typescript, javascript, json, css, html, markdown.
-//
-// Importing this module for its side effects is enough; CodeEditor.tsx does so
-// before it renders <Editor>, which is the only @monaco-editor/react render site.
-import { loader } from "@monaco-editor/react";
+// Self-hosted, trimmed Monaco. Importing this module configures the workers,
+// theme, and TypeScript defaults before any raw editor instance is created.
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
+import { defineNextEditorTheme } from "./theme";
+import { configureMonacoTypeScript } from "./typescriptDefaults";
 
 // Every standalone editor feature (find, multi-cursor, bracket matching, …) but
 // no bundled languages. Importing editor.main instead would pull in all of them.
@@ -32,12 +24,8 @@ import "monaco-editor/esm/vs/basic-languages/html/html.contribution.js";
 // Markdown has no worker-backed service — this grammar is all it needs.
 import "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution.js";
 
-// Worker-backed rich services. As of monaco 0.55 the typescript contribution
-// exposes its compiler API (JsxEmit, typescriptDefaults, …) as named exports
-// rather than assigning `monaco.languages.typescript`; CodeEditor.tsx imports
-// those directly to set compiler options and extra libs. JSON is self-contained:
-// language/json registers its own id and tokenizes via its worker, so it needs
-// no basic-languages grammar.
+// Worker-backed rich services. JSON is self-contained: language/json registers
+// its own id and tokenizes via its worker, so it needs no basic grammar.
 import "monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
 import "monaco-editor/esm/vs/language/css/monaco.contribution.js";
 import "monaco-editor/esm/vs/language/html/monaco.contribution.js";
@@ -73,9 +61,22 @@ const monacoEnvironment: monaco.Environment = {
   },
 };
 
-self.MonacoEnvironment = monacoEnvironment;
+const globalScope = self as typeof self & {
+  __nextEditorMonacoRuntimeInitialized?: boolean;
+};
 
-// Point @monaco-editor/react at our bundled instance instead of the CDN. Must
-// run before <Editor> mounts (and thus calls loader.init()), which it does
-// because this is a module-load side effect of importing CodeEditor.tsx.
-loader.config({ monaco });
+function ensureMonacoRuntimeInitialized() {
+  if (globalScope.__nextEditorMonacoRuntimeInitialized) {
+    return;
+  }
+
+  globalScope.__nextEditorMonacoRuntimeInitialized = true;
+  self.MonacoEnvironment = monacoEnvironment;
+  defineNextEditorTheme(monaco);
+  configureMonacoTypeScript();
+}
+
+ensureMonacoRuntimeInitialized();
+
+export { monaco };
+export type Monaco = typeof monaco;
