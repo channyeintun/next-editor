@@ -364,29 +364,39 @@ export function createRrwebPreviewRecorderScript({
 // the playback timeline runs on the recording clock (`Date.now() - startedAt`,
 // where `startedAt` is the audio-anchored origin — typically ~seconds after the
 // preview snapshot, due to mic warmup). Replaying on the raw clock makes preview
-// content lag the audio/editor by that fixed offset. So we rebase every event
-// onto the recording clock using its segment's recording-relative `time` as the
-// anchor, keeping only the sub-frame offset within a segment. The replay offset
-// (`currentTime - initialDocuments[0].time`) is then on the same clock, so preview
-// content lands at the recording time it actually occurred.
+// content lag the audio/editor by that fixed offset.
+//
+// Rebase all events from one global rrweb timestamp origin instead of anchoring
+// each batch independently. Batch `time` is when the host flushed the frame, which
+// can be a little after the DOM event itself; preserving the raw rrweb deltas keeps
+// replay aligned to when the preview actually changed.
 export function buildRrwebReplayEvents(
   initialDocuments: PreviewInitialDocument[],
   patchBatches: PreviewDomPatchBatch[],
 ): eventWithTime[] {
+  const segments = [...initialDocuments, ...patchBatches];
+  const originSegment = segments.find((segment) => segment.events?.length);
+  const originEvent = originSegment?.events?.[0];
+
+  if (!originSegment || !originEvent) {
+    return [];
+  }
+
+  const originRecordingTime = originSegment.time;
+  const originRrwebTime = originEvent.timestamp;
   const events: PreviewRecordedEvent[] = [];
 
-  const collect = (segments: { time: number; events?: PreviewRecordedEvent[] }[]) => {
+  const collect = (segments: { events?: PreviewRecordedEvent[] }[]) => {
     for (const segment of segments) {
       const segmentEvents = segment.events;
-      if (!segmentEvents || segmentEvents.length === 0) {
+      if (!segmentEvents?.length) {
         continue;
       }
-
-      // Anchor the segment's first event at its recorded time; events within a
-      // segment span one animation frame, so their relative order is preserved.
-      const origin = segmentEvents[0].timestamp;
       for (const event of segmentEvents) {
-        events.push({ ...event, timestamp: segment.time + (event.timestamp - origin) });
+        events.push({
+          ...event,
+          timestamp: originRecordingTime + (event.timestamp - originRrwebTime),
+        });
       }
     }
   };

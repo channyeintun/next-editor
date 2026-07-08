@@ -58,10 +58,10 @@ describe("buildRrwebReplayEvents", () => {
     expect(buildRrwebReplayEvents([bare], [])).toEqual([]);
   });
 
-  it("rebases events onto each segment's recording time, dropping the preview-clock offset", () => {
+  it("rebases events onto the recording clock, dropping the preview-clock offset", () => {
     // The preview iframe records on a raw Date.now() clock that sits far ahead of
     // the recording clock (audio warmup delays `startedAt`). Replay must follow the
-    // recording clock, so events anchor to their segment `time`, not their raw ts.
+    // recording clock while preserving the preview event deltas.
     const PREVIEW_BASE = 1_700_000_000_000;
     const seed: PreviewInitialDocument = {
       version: 2,
@@ -79,9 +79,9 @@ describe("buildRrwebReplayEvents", () => {
 
     const events = buildRrwebReplayEvents([seed], [batch]);
 
-    // Seed anchored at 0 (offsets 0,1); batch anchored at 500 (offsets 0,10) —
-    // the ~2.2s preview-clock lead is gone.
-    expect(events.map((entry) => entry.timestamp)).toEqual([0, 1, 500, 510]);
+    // Seed anchored at 0; later events keep their raw rrweb deltas, with the
+    // epoch-sized preview-clock lead removed.
+    expect(events.map((entry) => entry.timestamp)).toEqual([0, 1, 2200, 2210]);
   });
 });
 

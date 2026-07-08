@@ -79,6 +79,33 @@ function replayDirect(events: ReturnType<typeof buildRrwebReplayEvents>, root: H
 }
 
 describe("rrweb preview record -> replay round trip", () => {
+  it("preserves rrweb event deltas instead of delaying events to batch flush time", () => {
+    const initialDocuments: PreviewInitialDocument[] = [
+      {
+        version: 2,
+        time: 0,
+        documentId: "doc-1",
+        events: [
+          { type: RRWEB_EVENT_TYPE_META, timestamp: 10_000 } as PreviewRecordedEvent,
+          { type: RRWEB_EVENT_TYPE_FULL_SNAPSHOT, timestamp: 10_003 } as PreviewRecordedEvent,
+        ],
+      },
+    ];
+    const patchBatches: PreviewDomPatchBatch[] = [
+      {
+        version: 2,
+        time: 1_050,
+        source: "runtime-preview",
+        documentId: "doc-1",
+        events: [{ type: 3, timestamp: 11_000 } as PreviewRecordedEvent],
+      },
+    ];
+
+    const replayEvents = buildRrwebReplayEvents(initialDocuments, patchBatches);
+
+    expect(replayEvents.map((event) => event.timestamp)).toEqual([0, 3, 1_000]);
+  });
+
   it("replays a virtualized-list scroll churn to the exact final DOM (no drift, not empty)", async () => {
     // A window-virtualizer-like list: a spacer with absolutely-placed rows.
     document.body.innerHTML = `

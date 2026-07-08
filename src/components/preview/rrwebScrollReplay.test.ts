@@ -88,25 +88,33 @@ describe("rrweb preview scroll replay timing", () => {
     const scrollEvents = recorded.filter(isScrollEvent);
     expect(scrollEvents.length).toBeGreaterThanOrEqual(2);
 
-    // Machine-shaped storage: the initial document at recording-time 1000, each
-    // scroll in its own per-frame batch at recording-times 2000 and 3000.
+    // Machine-shaped storage. In production, batch `time` is the host's frame
+    // flush time, a little after the rrweb event itself; the replay builder should
+    // preserve the raw rrweb event deltas instead of delaying each event to that
+    // flush time.
+    const baseTime = 1_000;
+    const firstRawTimestamp = seedEvents[0]?.timestamp ?? recorded[0]?.timestamp ?? 0;
+    const recordingTimeFor = (event: PreviewRecordedEvent) =>
+      baseTime + (event.timestamp - firstRawTimestamp);
     const initialDocuments: PreviewInitialDocument[] = [
       {
         version: 2,
-        time: 1_000,
+        time: baseTime,
         documentId: "doc-1",
         route: "/",
         events: seedEvents,
       },
     ];
-    const patchBatches: PreviewDomPatchBatch[] = scrollEvents.map((event, index) => ({
+    const patchBatches: PreviewDomPatchBatch[] = scrollEvents.map((event) => ({
       version: 2,
-      time: 2_000 + index * 1_000,
+      time: recordingTimeFor(event) + 50,
       source: "runtime-preview",
       documentId: "doc-1",
       route: "/",
       events: [event],
     }));
+    const firstScrollTime = recordingTimeFor(scrollEvents[0]);
+    const secondScrollTime = recordingTimeFor(scrollEvents[1]);
 
     const events = buildRrwebReplayEvents(initialDocuments, patchBatches);
     const container = document.createElement("div");
@@ -116,7 +124,6 @@ describe("rrweb preview scroll replay timing", () => {
     // Raw Replayer with the jsdom rebuild-guard bypass (same pattern as the other
     // rrweb tests); driven with the exact production offset math
     // (`RrwebPreviewReplayer.seekToRecordingTime` = `pause(computeRrwebOffsetMs)`).
-    const baseTime = 1_000;
     activeReplayer = new Replayer(events as unknown as eventWithTime[], {
       root: container,
       liveMode: false,
@@ -143,27 +150,27 @@ describe("rrweb preview scroll replay timing", () => {
       container.querySelector("iframe")?.contentDocument?.getElementById("scroller");
 
     // Before the first recorded scroll: still at the top.
-    seekToRecordingTime(1_500);
+    seekToRecordingTime(firstScrollTime - 10);
     await sleep(0);
     expect(replayedScroller()?.scrollTop ?? 0).toBe(0);
 
     // At/after the first scroll's recording time: first position, not the second.
-    seekToRecordingTime(2_050);
+    seekToRecordingTime(firstScrollTime + 10);
     await sleep(0);
     expect(replayedScroller()?.scrollTop).toBe(500);
 
     // Between the two: still the first position.
-    seekToRecordingTime(2_900);
+    seekToRecordingTime(secondScrollTime - 10);
     await sleep(0);
     expect(replayedScroller()?.scrollTop).toBe(500);
 
     // After the second: second position.
-    seekToRecordingTime(3_050);
+    seekToRecordingTime(secondScrollTime + 10);
     await sleep(0);
     expect(replayedScroller()?.scrollTop).toBe(900);
 
     // Seek backward: the earlier position is restored.
-    seekToRecordingTime(2_050);
+    seekToRecordingTime(firstScrollTime + 10);
     await sleep(0);
     expect(replayedScroller()?.scrollTop).toBe(500);
   });
