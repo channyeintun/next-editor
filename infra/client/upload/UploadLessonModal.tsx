@@ -8,6 +8,7 @@ import { useUploadLesson, usePublishLesson, formatDuration } from "./useUploadLe
 import { saveResumeIntent } from "./resumeIntent";
 import { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./thumbnailConstraints";
 import { resizeThumbnail } from "./resizeThumbnail";
+import GoogleIcon from "@app/components/icon/Google";
 
 export interface UploadLessonModalProps {
   recording: Recording;
@@ -241,9 +242,9 @@ export default function UploadLessonModal({
               <button
                 type="button"
                 onClick={() => void handleSignIn()}
-                className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
+                className="flex gap-3 items-center rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
               >
-                Sign in with Google
+                <GoogleIcon /> Sign in with Google
               </button>
             </div>
           </div>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { LibraryBig, LogOut, Plus } from "lucide-react";
 import { useAuth, useSignOut, signInUrl, avatarProxyUrl } from "./useAuth";
+import GoogleIcon from "@app/components/icon/Google";
 
 // Sign-in link / avatar menu for the Navbar's `actions` slot. Matches the
 // existing pill-button style ("Start creating" in Navbar.tsx) so it reads as
@@ -19,9 +20,9 @@ export default function AuthMenu() {
     return (
       <a
         href={signInUrl(window.location.pathname)}
-        className="px-3 py-2 sm:px-6 rounded-full border border-white/10 bg-white/10 text-white text-xs sm:text-sm leading-none font-semibold whitespace-nowrap hover:bg-white hover:text-slate-950 transition-all font-telegraf"
+        className="flex gap-3 items-center px-3 py-2 sm:px-6 rounded-full border border-white/10 bg-white/10 text-white text-xs sm:text-sm leading-none font-semibold whitespace-nowrap hover:bg-white hover:text-slate-950 transition-all font-telegraf"
       >
-        Sign in with Google
+        <GoogleIcon /> Sign in with Google
       </a>
     );
   }
