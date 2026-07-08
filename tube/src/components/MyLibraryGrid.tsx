@@ -1,12 +1,18 @@
 import { Link } from "react-router";
 import { useMyLessons } from "@next-editor/infra";
 import MyLessonCard from "./MyLessonCard";
+import LessonCardSkeleton from "./LessonCardSkeleton";
 
 export default function MyLibraryGrid() {
   const { data, isPending, isError, refetch } = useMyLessons();
 
   if (isPending) {
-    return <div className="flex justify-center py-20 text-slate-400">Loading your lessons…</div>;
+    return (
+      <div className="grid grid-cols-1 gap-5 pb-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <LessonCardSkeleton />
+        <LessonCardSkeleton />
+      </div>
+    );
   }
 
   if (isError) {
