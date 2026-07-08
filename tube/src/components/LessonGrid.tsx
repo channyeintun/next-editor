@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
-import type { Lesson } from "../types";
 import { useLessonsInfinite } from "../hooks/useLessons";
 import LessonCard from "./LessonCard";
 import LessonCardSkeleton from "./LessonCardSkeleton";
@@ -35,9 +34,9 @@ function useColumns(): number {
   return columns;
 }
 
-function chunk(items: Lesson[], size: number): Lesson[][] {
+function chunk<T>(items: T[], size: number): T[][] {
   const cols = Math.max(1, size);
-  const rows: Lesson[][] = [];
+  const rows: T[][] = [];
   for (let i = 0; i < items.length; i += cols) rows.push(items.slice(i, i + cols));
   return rows;
 }
@@ -63,7 +62,11 @@ export default function LessonGrid() {
   const columns = useColumns();
 
   const lessons = data?.pages.flatMap((p) => p.lessons) ?? [];
-  const rows = chunk(lessons, columns);
+  const skeletonsToAppend = isFetchingNextPage
+    ? (columns - (lessons.length % columns)) % columns || columns
+    : 0;
+  const items = [...lessons, ...Array(skeletonsToAppend).fill(null)];
+  const rows = chunk(items, columns);
 
   // Virtualize rows against the page scroll, so the navbar and footer stay in
   // normal flow (no nested scrollbar) and only on-screen cards are mounted.
@@ -159,9 +162,13 @@ export default function LessonGrid() {
                     className="grid gap-5 pb-5"
                     style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
                   >
-                    {rows[vi.index].map((lesson) => (
-                      <LessonCard key={lesson.slug} lesson={lesson} />
-                    ))}
+                    {rows[vi.index].map((lesson, idx) =>
+                      lesson ? (
+                        <LessonCard key={lesson.slug} lesson={lesson} />
+                      ) : (
+                        <LessonCardSkeleton key={`skel-${idx}`} />
+                      ),
+                    )}
                   </div>
                 </div>
               ))}
@@ -173,16 +180,7 @@ export default function LessonGrid() {
             // the observer drives the mouse path; on a load-more failure it
             // becomes Retry.
             <div ref={sentinelRef} className="pb-10 pt-5">
-              {isFetchingNextPage ? (
-                <div
-                  className="grid gap-5"
-                  style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-                >
-                  {Array.from({ length: columns }).map((_, i) => (
-                    <LessonCardSkeleton key={i} />
-                  ))}
-                </div>
-              ) : (
+              {!isFetchingNextPage && (
                 <div className="flex justify-center">
                   <button
                     type="button"
