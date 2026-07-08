@@ -59,6 +59,27 @@ Package responsibilities:
 
 This package should replace direct app imports from `src/components/monacoSetup.ts`, `src/components/editorConstants.ts`, and `src/components/editorModels.ts`. Keep temporary re-exports only if needed to land the migration in smaller commits.
 
+Suggested public exports:
+
+```ts
+export { monaco, type Monaco } from "./runtime";
+export { MonacoEditor, type MonacoEditorProps } from "./MonacoEditor";
+export { NEXT_EDITOR_MONACO_THEME, defineNextEditorTheme, getEditorOptions } from "./theme";
+export {
+  configureMonacoTypeScript,
+  getMonacoCompilerOptions,
+  MONACO_EXTRA_LIBS,
+} from "./typescriptDefaults";
+export {
+  disposePlaybackModels,
+  syncPlaybackModel,
+  syncWorkspaceModel,
+  toMonacoModelPath,
+  toPlaybackModelPath,
+  workspacePathFromMonacoModelUri,
+} from "./models";
+```
+
 ### 2. Move `monacoSetup.ts` into the package runtime
 
 Move `src/components/monacoSetup.ts` to `src/monaco/runtime.ts`. Keep the existing language and worker imports. Remove the wrapper loader import and `loader.config({ monaco })`.
@@ -88,6 +109,10 @@ Update comments so they describe direct Monaco initialization, not pointing `@mo
 ```ts
 import { monaco, type Monaco } from "../monaco";
 ```
+
+The worker setup must be synchronous and available before the first `monaco.editor.create` call. Make `runtime.ts` the first thing loaded by the package import path, and make `MonacoEditor.tsx` import `monaco` from `./runtime` rather than importing `monaco-editor` directly.
+
+Define the app theme before any editor can mount. Prefer having `runtime.ts` call an internal theme initializer immediately after setting `self.MonacoEnvironment`, or have `index.ts` perform the runtime/theme initialization as a module-load side effect. This avoids a one-frame flash of Monaco's default theme before `next-editor-dark` is registered and selected.
 
 ### 3. Replace wrapper types
 
@@ -146,6 +171,17 @@ Ownership rules:
 - Call `onBeforeModelChange` before `editor.setModel(nextModel)` and `onAfterModelChange` afterward.
 - Dispose callback disposables, the `ResizeObserver`, the editor instance, and owned models on unmount.
 - Apply `theme` deliberately. Monaco themes are global, so prefer package-level theme constants and avoid letting a small embedded editor permanently switch the main editor theme.
+
+Lifecycle algorithm:
+
+1. Create the editor once after the container ref is available.
+2. Resolve the active model from either parent-owned `model` or owned `modelUri`/`value`/`language`.
+3. Create with `{ ...options, model, theme, automaticLayout: false }`.
+4. Register `onDidChangeModelContent` for `onChange`.
+5. Register a `ResizeObserver`, call `editor.layout()` on resize, and call `editor.layout()` once after creation.
+6. On prop updates, reconcile model, value, language, options, and theme without recreating the editor.
+7. Before model switches, call `onBeforeModelChange`; after `editor.setModel`, call `onAfterModelChange`.
+8. On cleanup, make disposal idempotent so React StrictMode remounts and rapid panel toggles do not double-dispose editor/model resources.
 
 ### 5. Use the package primitive in `CodeEditor.tsx`
 
@@ -287,7 +323,7 @@ The package component should dispose generic Monaco resources, while `CodeEditor
 `MonacoEditor` cleanup should:
 
 - Dispose its internal listener disposables.
-- Dispose the `ResizeObserver`.
+- Call `resizeObserver.disconnect()` and clear the observer ref.
 - Call its owned editor's `dispose()`.
 - Dispose only models that the component created itself.
 - Clear its local editor and observer refs after disposal.
@@ -403,4 +439,6 @@ Targeted automated tests to add or update:
 - Binary-file transitions: React will remove the editor container, but direct Monaco must still be explicitly disposed and detached from the shared machine refs.
 - Layout: direct Monaco needs explicit layout handling in this flex-heavy UI, with `automaticLayout` kept consistently disabled if using a custom `ResizeObserver`.
 - Theme scope: `monaco.editor.setTheme` is global, so API-panel editors can unintentionally change the main editor's theme.
+- Initialization order: the package runtime must set `self.MonacoEnvironment.getWorker` and register the app theme synchronously before any `MonacoEditor` creates an editor.
+- StrictMode/remount behavior: cleanup must be idempotent, including `ResizeObserver.disconnect()`, editor disposal, callback disposal, and owned-model disposal.
 - Hidden remaining dependency: `ApiClientPanel.tsx` must be migrated before `@monaco-editor/react` can be removed from `package.json`.
