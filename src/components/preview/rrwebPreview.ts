@@ -382,27 +382,35 @@ export function buildRrwebReplayEvents(
     return [];
   }
 
-  const originRecordingTime = originSegment.time;
-  const originRrwebTime = originEvent.timestamp;
+  let maxOffset = -Infinity;
+  for (const segment of segments) {
+    if (!segment.events?.length) {
+      continue;
+    }
+    const offset = segment.events[0].timestamp - segment.time;
+    if (offset > maxOffset) {
+      maxOffset = offset;
+    }
+  }
+
+  // Fallback if no valid events found
+  if (maxOffset === -Infinity) {
+    return [];
+  }
+
   const events: PreviewRecordedEvent[] = [];
 
-  const collect = (segments: { events?: PreviewRecordedEvent[] }[]) => {
-    for (const segment of segments) {
-      const segmentEvents = segment.events;
-      if (!segmentEvents?.length) {
-        continue;
-      }
-      for (const event of segmentEvents) {
-        events.push({
-          ...event,
-          timestamp: originRecordingTime + (event.timestamp - originRrwebTime),
-        });
-      }
+  for (const segment of segments) {
+    if (!segment.events?.length) {
+      continue;
     }
-  };
-
-  collect(initialDocuments);
-  collect(patchBatches);
+    for (const event of segment.events) {
+      events.push({
+        ...event,
+        timestamp: Math.max(0, event.timestamp - maxOffset),
+      });
+    }
+  }
 
   events.sort((left, right) => left.timestamp - right.timestamp);
 
