@@ -432,6 +432,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
                   onMount={handleEditorDidMount}
                   beforeMount={handleEditorBeforeMount}
                   options={getEditorOptions(isPlaying)}
+                  loading={null}
                 />
               )}
             </div>
