@@ -3,6 +3,7 @@ import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import type { Lesson } from "../types";
 import { useLessonsInfinite } from "../hooks/useLessons";
 import LessonCard from "./LessonCard";
+import LessonCardSkeleton from "./LessonCardSkeleton";
 import SearchBar from "./SearchBar";
 import SearchResults from "./SearchResults";
 
@@ -101,10 +102,6 @@ export default function LessonGrid() {
     return () => io.disconnect();
   }, [canPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
 
-  if (isPending) {
-    return <div className="flex justify-center py-20 text-slate-400">Loading lessons...</div>;
-  }
-
   if (isError) {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-center">
@@ -133,9 +130,17 @@ export default function LessonGrid() {
 
   return (
     <div>
-      {lessons.length > 0 && <SearchBar value={query} onChange={setQuery} />}
+      {(lessons.length > 0 || isPending) && <SearchBar value={query} onChange={setQuery} />}
 
-      {lessons.length === 0 ? (
+      {isPending ? (
+        <div
+          className="grid gap-5 pb-5"
+          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+        >
+          <LessonCardSkeleton />
+          <LessonCardSkeleton />
+        </div>
+      ) : lessons.length === 0 ? (
         <div className="flex justify-center py-20 text-slate-400">No lessons yet.</div>
       ) : (
         <>
