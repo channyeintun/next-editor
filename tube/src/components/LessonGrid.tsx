@@ -134,11 +134,12 @@ export default function LessonGrid() {
 
       {isPending ? (
         <div
-          className="grid gap-5 pb-5"
+          className="grid gap-5 py-5"
           style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
         >
-          <LessonCardSkeleton />
-          <LessonCardSkeleton />
+          {Array.from({ length: columns }).map((_, i) => (
+            <LessonCardSkeleton key={i} />
+          ))}
         </div>
       ) : lessons.length === 0 ? (
         <div className="flex justify-center py-20 text-slate-400">No lessons yet.</div>
@@ -171,16 +172,27 @@ export default function LessonGrid() {
             // Outside the virtualizer so the keyboard escape hatch survives:
             // the observer drives the mouse path; on a load-more failure it
             // becomes Retry.
-            <div className="flex justify-center py-10">
-              <button
-                ref={sentinelRef}
-                type="button"
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-                className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950 disabled:cursor-default disabled:opacity-60"
-              >
-                {isFetchingNextPage ? "Loading…" : isFetchNextPageError ? "Retry" : "Load more"}
-              </button>
+            <div ref={sentinelRef} className="pb-10 pt-5">
+              {isFetchingNextPage ? (
+                <div
+                  className="grid gap-5"
+                  style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+                >
+                  {Array.from({ length: columns }).map((_, i) => (
+                    <LessonCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => fetchNextPage()}
+                    className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
+                  >
+                    {isFetchNextPageError ? "Retry" : "Load more"}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </>
