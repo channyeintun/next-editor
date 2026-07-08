@@ -13,7 +13,11 @@ export default function LessonDetailRoute() {
   const { data: lesson, isPending, isError } = useLesson(slug);
 
   if (isPending) {
-    return <LoadingSpinner />;
+    return (
+      <Centered>
+        <LoadingSpinner />
+      </Centered>
+    );
   }
 
   if (lesson) {
