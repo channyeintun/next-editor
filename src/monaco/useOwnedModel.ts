@@ -13,7 +13,8 @@ export function useOwnedModel({ uri, value, language }: UseOwnedModelOptions) {
 
   if (!modelRef.current || modelRef.current.uri.toString() !== uri) {
     modelRef.current?.dispose();
-    modelRef.current = monaco.editor.createModel(value, language, parsedUri);
+    modelRef.current =
+      monaco.editor.getModel(parsedUri) ?? monaco.editor.createModel(value, language, parsedUri);
   }
 
   useEffect(() => {

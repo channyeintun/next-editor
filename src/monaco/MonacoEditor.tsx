@@ -39,7 +39,7 @@ export function MonacoEditor({
   const onBeforeModelChangeRef = useRef(onBeforeModelChange);
   const onAfterModelChangeRef = useRef(onAfterModelChange);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onChangeRef.current = onChange;
     onBeforeModelChangeRef.current = onBeforeModelChange;
     onAfterModelChangeRef.current = onAfterModelChange;
