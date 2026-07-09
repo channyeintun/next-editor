@@ -90,6 +90,7 @@ export interface RecordingAudioPlayerEnqueue {
     options: {
       id: "recordingAudioPlayer";
       input: {
+        blob: Blob;
         audioUrl: string;
         volume: number;
         playbackRate: number;
@@ -116,6 +117,10 @@ export const startExternalAudioPlayback = ({
   enqueue.spawnChild("audioPlayback", {
     id: "recordingAudioPlayer",
     input: {
+      // This actor always plays an external audio track (audioUrl) during
+      // recording — no local blob exists. An empty blob satisfies the required
+      // field; audioUrl takes precedence and is what actually loads.
+      blob: new Blob([], { type: "audio/webm" }),
       audioUrl: event.audioUrl,
       volume: context.timeline.volume,
       playbackRate: 1,
