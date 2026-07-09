@@ -532,7 +532,15 @@ export const appendCursorEvent = (
 };
 
 interface PlaybackAudioState {
+  /**
+   * Raw audio blob from MediaRecorder. Used for immediate playback after
+   * recording while the lesson is unpublished and has no audioUrl yet.
+   */
   blob: Blob;
+  /**
+   * Permanent CDN/storage URL, present only after the lesson is published.
+   * Takes precedence over blob when available.
+   */
   audioUrl?: string;
   loadedUntilMs: number;
   startOffsetMs: number;

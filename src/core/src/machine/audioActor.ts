@@ -20,9 +20,17 @@ export interface AudioRecordingInput {
 }
 
 export interface AudioPlaybackInput {
-  /** Audio blob to play or the current contiguous stream snapshot */
+  /**
+   * Audio blob used for immediate playback after recording, before the lesson
+   * is published and an audioUrl is available. Always present; used as the
+   * source when audioUrl is absent.
+   */
   blob: Blob;
-  /** External audio URL */
+  /**
+   * Permanent URL for the audio track, set after the lesson is published and
+   * the audio is uploaded to storage. Takes precedence over the blob when
+   * present. Absent for in-progress or unpublished recordings.
+   */
   audioUrl?: string;
   /** Initial volume (0-1) */
   volume: number;
