@@ -65,10 +65,6 @@ _Verified OK:_ `cursor.ts`/`frameDelta.ts` scans are off-by-one-safe; `preview.t
 
 ## 3. Hooks & stores (`src/hooks`, `src/stores`)
 
-### [High] `useAudioRecording` leaks the mic if unmounted mid-recording
-
-`core/src/hooks/useAudioRecording.ts` — `stopRecording` (~96-119) _does_ stop the `MediaStream` tracks (`stream.getTracks().forEach(t => t.stop())`, ~104), so the normal stop path is clean. The gap is the **unmount-while-recording** case: there is no `useEffect` cleanup to stop tracks if a consumer unmounts before `stopRecording` is called (navigation, error boundary). In that window the mic stream runs indefinitely (browser mic indicator stays on, resource leak). Fix: add an unmount effect that stops the recorder/tracks.
-
 ### [High] `fetchNextEditorFile` has no staleness/cancellation guard
 
 `useUrlLoader.ts` (~486-537) — no generation token or `AbortController`. Overlapping calls run `loadRecording`/`extendRecording`/`resolveExternalMedia` concurrently against the same actor, and a slow first request's late writes can land after a faster second request's `loadRecording`, overwriting newer state with stale media/caption data. Reachable two ways: (a) `retry()` (`useUrlQuery.ts` ~48-54) fired while a prior load is still in flight; (b) a genuine `?url=` change re-firing the loader effect (`useUrlQuery.ts` ~40-46) before the previous load finishes. Worse, the out-of-band tails — `fetchSiblingCaptions(...).then(addCaptionTrack)` (~520-524) and `void resolveExternalMedia(...)` (~527-529) — are deliberately **not awaited**, so they outlive the `fetchNextEditorFile` promise and can resolve well after a newer recording has loaded.
@@ -114,9 +110,8 @@ _Verified OK:_ rrweb replay ordering (`buildRrwebReplayEvents`/`RrwebPreviewRepl
 
 ## Suggested priority order
 
-1. **`useAudioRecording` mic cleanup** (§3) — clear user-facing impact (unmount-mid-recording only), simple fix.
-2. **`fetchNextEditorFile` staleness guard** (§3) — stale-overwrite race on real navigation/retry, widened by the un-awaited caption/media tails.
-3. **`IFRAME_INTERACTION` payload guard** (§4) — cheap defensive fix aligning with sibling branches.
-4. **`persistWorkspaceAssets` error surfacing** (§2) — silent data loss is worth at least logging.
+1. **`fetchNextEditorFile` staleness guard** (§3) — stale-overwrite race on real navigation/retry, widened by the un-awaited caption/media tails.
+2. **`IFRAME_INTERACTION` payload guard** (§4) — cheap defensive fix aligning with sibling branches.
+3. **`persistWorkspaceAssets` error surfacing** (§2) — silent data loss is worth at least logging.
 
 The remaining Medium/Low items are edge-case hardening and consistency cleanups; safe to defer.

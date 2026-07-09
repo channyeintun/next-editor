@@ -56,7 +56,6 @@ Key exports:
 - Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewState`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`
 - Caption types such as `CaptionTrack`, `CaptionCue`, and `CaptionWord`
 - Track/cluster metadata types: `RecordingTrackKind`, `RecordingTrackMeta`, `RecordingClusterMeta`, `RecordingMediaFragment`
-- `useAudioRecording` / `UseAudioRecordingReturn` for advanced callers that want the raw recording actor without the full hook
 
 The core module also re-exports app-level components such as `CodeEditor`, `MediaControls`, `Preview`, `CursorComponent`, and `SlidePanel`, but the recording and playback logic lives underneath those components in the machine and hook layer.
 

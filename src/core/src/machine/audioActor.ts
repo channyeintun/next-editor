@@ -1,4 +1,5 @@
 import { fromCallback } from "xstate";
+import { getSupportedAudioMimeType } from "../utils/audioMimeType";
 
 const AUDIO_SYNC_DRIFT_THRESHOLD_MS = 500;
 
@@ -63,34 +64,6 @@ export type AudioPlaybackEmit =
 // ============================================================================
 
 /**
- * Get the best supported audio MIME type
- */
-const getSupportedAudioMimeType = (): string => {
-  const mimeTypes = [
-    "audio/webm; codecs=opus",
-    "audio/webm",
-    "audio/mp4; codecs=mp4a.40.2",
-    "audio/mp4",
-    "audio/ogg; codecs=opus",
-    "audio/ogg",
-    "audio/wav",
-    "audio/mpeg",
-  ];
-
-  if (typeof MediaRecorder === "undefined") {
-    return "";
-  }
-
-  for (const mimeType of mimeTypes) {
-    if (MediaRecorder.isTypeSupported(mimeType)) {
-      return mimeType;
-    }
-  }
-
-  return "";
-};
-
-/**
  * Audio recording actor - manages MediaRecorder lifecycle
  */
 export const audioRecordingActor = fromCallback<
@@ -128,8 +101,11 @@ export const audioRecordingActor = fromCallback<
           autoGainControl: true,
           echoCancellation: true,
           noiseSuppression: true,
-          channelCount: 1,
-          sampleRate: 16000,
+          // Use `ideal` (not exact) values so Brave's fingerprint shield and
+          // other strict browsers can relax the constraint instead of rejecting
+          // the request with OverconstrainedError / NotSupportedError.
+          channelCount: { ideal: 1 },
+          sampleRate: { ideal: 16000 },
         },
       });
 
