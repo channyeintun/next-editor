@@ -5,6 +5,19 @@ import type {
   PlaylistRowWithMembership,
 } from "./types";
 
+// Shared subquery for PlaylistRowWithCount's first_lesson_thumbnail — the
+// lowest-position currently-published member's thumbnail, used as the
+// playlist's own cover image in the My Library card grid. Kept as one
+// constant (not copy-pasted) since all three call sites below must produce
+// the exact same PlaylistRowWithCount shape.
+const FIRST_LESSON_THUMBNAIL_SUBQUERY = `(
+  SELECT lessons.thumbnail FROM playlist_lessons
+  JOIN lessons ON lessons.id = playlist_lessons.lesson_id
+  WHERE playlist_lessons.playlist_id = playlists.id AND lessons.status = 'published'
+  ORDER BY playlist_lessons.position ASC
+  LIMIT 1
+) AS first_lesson_thumbnail`;
+
 export interface InsertPlaylistParams {
   id: string;
   slug: string;
@@ -83,7 +96,8 @@ export async function getOwnedPlaylistById(
     .prepare(
       `SELECT playlists.*, (
          SELECT COUNT(*) FROM playlist_lessons WHERE playlist_lessons.playlist_id = playlists.id
-       ) AS lesson_count
+       ) AS lesson_count,
+       ${FIRST_LESSON_THUMBNAIL_SUBQUERY}
        FROM playlists
        WHERE id = ? AND owner_id = ?`,
     )
@@ -104,7 +118,8 @@ export async function listOwnedPlaylists(
     .prepare(
       `SELECT playlists.*, (
          SELECT COUNT(*) FROM playlist_lessons WHERE playlist_lessons.playlist_id = playlists.id
-       ) AS lesson_count
+       ) AS lesson_count,
+       ${FIRST_LESSON_THUMBNAIL_SUBQUERY}
        FROM playlists
        WHERE owner_id = ?
        ORDER BY updated_at DESC`,
@@ -131,7 +146,8 @@ export async function listOwnedPlaylistsForLesson(
        EXISTS(
          SELECT 1 FROM playlist_lessons
          WHERE playlist_lessons.playlist_id = playlists.id AND playlist_lessons.lesson_id = ?
-       ) AS contains_lesson
+       ) AS contains_lesson,
+       ${FIRST_LESSON_THUMBNAIL_SUBQUERY}
        FROM playlists
        WHERE owner_id = ?
        ORDER BY updated_at DESC`,

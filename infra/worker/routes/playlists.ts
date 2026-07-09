@@ -70,7 +70,10 @@ playlistsRoute.post("/", async (c) => {
     title,
     description: typeof body?.description === "string" ? body.description : null,
   });
-  return c.json(playlistRowToOwnedPlaylist({ ...row, lesson_count: 0 }), 201);
+  return c.json(
+    playlistRowToOwnedPlaylist({ ...row, lesson_count: 0, first_lesson_thumbnail: null }),
+    201,
+  );
 });
 
 // Must be registered before the catch-all "/:slug" GET below, same ordering
@@ -124,7 +127,11 @@ playlistsRoute.patch("/:id", async (c) => {
 
   await invalidateCache(getCache(c.env), playlistSlugKey(row.slug));
   const withCount = await getOwnedPlaylistById(c.env.DB, row.id, user.id);
-  return c.json(playlistRowToOwnedPlaylist(withCount ?? { ...row, lesson_count: 0 }));
+  return c.json(
+    playlistRowToOwnedPlaylist(
+      withCount ?? { ...row, lesson_count: 0, first_lesson_thumbnail: null },
+    ),
+  );
 });
 
 playlistsRoute.delete("/:id", async (c) => {

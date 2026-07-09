@@ -133,9 +133,15 @@ export interface PlaylistRow {
   updated_at: number;
 }
 
-/** listOwnedPlaylists's row shape — PlaylistRow plus a COUNT(*) subquery alias. */
+/**
+ * listOwnedPlaylists's row shape — PlaylistRow plus a COUNT(*) subquery alias
+ * and the current first (lowest-position) published member's thumbnail, used
+ * as the playlist's own cover image in the My Library card grid. Null for an
+ * empty playlist, or one whose only members are all currently unpublished.
+ */
 export interface PlaylistRowWithCount extends PlaylistRow {
   lesson_count: number;
+  first_lesson_thumbnail: string | null;
 }
 
 export function playlistRowToPlaylist(row: PlaylistRow, lessons: LessonRow[]): Playlist {
@@ -161,6 +167,8 @@ export interface OwnedPlaylist {
   description: string;
   lessonCount: number;
   updatedAt: number;
+  /** Cover image — the first published member's thumbnail, or null (empty playlist). */
+  thumbnail: string | null;
 }
 
 export function playlistRowToOwnedPlaylist(row: PlaylistRowWithCount): OwnedPlaylist {
@@ -171,6 +179,7 @@ export function playlistRowToOwnedPlaylist(row: PlaylistRowWithCount): OwnedPlay
     description: row.description ?? "",
     lessonCount: row.lesson_count,
     updatedAt: row.updated_at,
+    thumbnail: row.first_lesson_thumbnail,
   };
 }
 
