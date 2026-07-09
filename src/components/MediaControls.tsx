@@ -590,6 +590,30 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               {showSettings && (
                 <div className="absolute bottom-full right-0 z-46 mb-2 min-w-50 rounded-lg border border-slate-700 bg-[#151821] p-4 shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
                   <div className="text-slate-100">
+                    {(!recordMode || playlistMode) && (
+                      <div className="mb-3 border-b border-slate-700 pb-3">
+                        {playlistMode && (
+                          <Switch
+                            checked={continueToNext}
+                            onChange={(checked) =>
+                              playbackSettingsTrigger.setContinueToNext({
+                                continueToNext: checked,
+                              })
+                            }
+                            label="Continue to Next"
+                          />
+                        )}
+                        {!recordMode && (
+                          <Switch
+                            checked={autoplay}
+                            onChange={(checked) =>
+                              playbackSettingsTrigger.setAutoplay({ autoplay: checked })
+                            }
+                            label="Autoplay"
+                          />
+                        )}
+                      </div>
+                    )}
                     <div className="mb-3">
                       <label className="block text-sm font-medium text-slate-300 mb-2">Speed</label>
                       <div className="flex items-center gap-3">
@@ -624,30 +648,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                         />
                       </div>
                     </div>
-                    {(!recordMode || playlistMode) && (
-                      <div className="border-t border-slate-700 pt-3">
-                        {!recordMode && (
-                          <Switch
-                            checked={autoplay}
-                            onChange={(checked) =>
-                              playbackSettingsTrigger.setAutoplay({ autoplay: checked })
-                            }
-                            label="Autoplay"
-                          />
-                        )}
-                        {playlistMode && (
-                          <Switch
-                            checked={continueToNext}
-                            onChange={(checked) =>
-                              playbackSettingsTrigger.setContinueToNext({
-                                continueToNext: checked,
-                              })
-                            }
-                            label="Continue to Next"
-                          />
-                        )}
-                      </div>
-                    )}
                     <div className="border-t border-slate-700 pt-3">
                       <button
                         type="button"
