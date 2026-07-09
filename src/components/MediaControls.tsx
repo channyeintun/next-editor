@@ -24,6 +24,7 @@ import PlayIcon from "./icon/Play";
 import PauseIcon from "./icon/Pause";
 import SettingIcon from "./icon/Setting";
 import ProgressBar from "./ProgressBar";
+import Switch from "./Switch";
 import type { Recording } from "../core/src";
 import {
   CAMERA_OVERLAY_PREVIEW_EVENT,
@@ -31,6 +32,7 @@ import {
   CAMERA_OVERLAY_VISIBILITY_KEY,
 } from "./CameraOverlay";
 import { useCaptionStore, useCaptionStoreTrigger } from "../hooks/useCaptionStore";
+import { usePlaybackSettings, usePlaybackSettingsTrigger } from "../hooks/usePlaybackSettings";
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -43,6 +45,9 @@ interface MediaControlsProps {
    * iframe) where the default compact controls become hard to read and tap.
    */
   large?: boolean;
+  /** Whether this recording is being played as part of a playlist — controls
+   *  whether the "Continue to Next" setting is shown. */
+  playlistMode?: boolean;
 }
 
 type RecordingAudioSourceOption = "microphone" | "external";
@@ -125,6 +130,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   recordMode = true,
   positioning = "fixed",
   large = false,
+  playlistMode = false,
 }) => {
   const {
     startRecording,
@@ -145,6 +151,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   const { enabled: captionsEnabled, language: captionLanguage } = useCaptionStore();
   const captionTrigger = useCaptionStoreTrigger();
+  const { autoplay, continueToNext } = usePlaybackSettings();
+  const playbackSettingsTrigger = usePlaybackSettingsTrigger();
   const [showSettings, setShowSettings] = useState(false);
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -616,6 +624,30 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                         />
                       </div>
                     </div>
+                    {(!recordMode || playlistMode) && (
+                      <div className="border-t border-slate-700 pt-3">
+                        {!recordMode && (
+                          <Switch
+                            checked={autoplay}
+                            onChange={(checked) =>
+                              playbackSettingsTrigger.setAutoplay({ autoplay: checked })
+                            }
+                            label="Autoplay"
+                          />
+                        )}
+                        {playlistMode && (
+                          <Switch
+                            checked={continueToNext}
+                            onChange={(checked) =>
+                              playbackSettingsTrigger.setContinueToNext({
+                                continueToNext: checked,
+                              })
+                            }
+                            label="Continue to Next"
+                          />
+                        )}
+                      </div>
+                    )}
                     <div className="border-t border-slate-700 pt-3">
                       <button
                         type="button"

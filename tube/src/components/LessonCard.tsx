@@ -14,9 +14,17 @@ function formatPublished(value?: string): string | undefined {
   return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
 }
 
-export default function LessonCard({ lesson }: { lesson: Lesson }) {
+export default function LessonCard({
+  lesson,
+  listSlug,
+}: {
+  lesson: Lesson;
+  /** Slug of the playlist this card is rendered within — appended as `?list=` so the
+   *  lesson page can offer "Continue to Next" through the same playlist. */
+  listSlug?: string;
+}) {
   const [thumbFailed, setThumbFailed] = useState(false);
-  const href = `/learn/${lesson.slug}`;
+  const href = listSlug ? `/learn/${lesson.slug}?list=${listSlug}` : `/learn/${lesson.slug}`;
   const published = formatPublished(lesson.publishedAt);
 
   return (

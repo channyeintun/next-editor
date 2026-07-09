@@ -2,8 +2,15 @@ import { lazy, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import type { Recording } from "../core/src";
-import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
+import {
+  useNextEditorActions,
+  useNextEditorMetadata,
+  useNextEditorPlayback,
+} from "../hooks/useNextEditorContext";
+import { selectLiveTime } from "../core/src/useNextEditor";
 import { usePostRecordingTarget } from "../hooks/usePostRecordingTarget";
+import { usePlaybackSettings } from "../hooks/usePlaybackSettings";
+import { getAudioContext, unlockAudioContext } from "../core/src/utils/audioContext";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
@@ -48,6 +55,16 @@ export interface EditorProps {
   /** Replaces the editor header's "Editor" label — e.g. the /learn/:slug detail
    *  page's "Lessons > {title}" breadcrumb, so that page doesn't need its own header. */
   breadcrumb?: ReactNode;
+  /** Fires once when playback reaches the end of the recording. Used by the /learn
+   *  playlist flow to auto-advance to the next lesson; the editor itself has no
+   *  notion of a playlist. */
+  onEnded?: () => void;
+  /** Whether this recording is being played as part of a playlist — passed through
+   *  to MediaControls to control the "Continue to Next" setting's visibility. */
+  playlistMode?: boolean;
+  /** One-shot force-autoplay, independent of the persisted Autoplay setting — set by
+   *  the playlist auto-advance flow so the next lesson always starts playing. */
+  autoplayOverride?: boolean;
 }
 
 export function EditorLayout({
@@ -57,11 +74,17 @@ export function EditorLayout({
   fill = false,
   renderPostRecordingModal,
   breadcrumb,
+  onEnded,
+  playlistMode = false,
+  autoplayOverride = false,
 }: EditorProps = {}) {
   const { isLoading: urlLoading, error: urlError, retry } = useUrlQuery(recordingUrl);
   const { isDragging, error: dropError, clearError: clearDropError } = useDragAndDropUrl();
 
-  const { isRecording, currentRecording } = useNextEditorMetadata();
+  const { isRecording, isPlaying, currentRecording, hasEnded } = useNextEditorMetadata();
+  const { play } = useNextEditorActions();
+  const { editorActor } = useNextEditorPlayback();
+  const { autoplay } = usePlaybackSettings();
   const { target: postRecordingTarget, clear: clearPostRecordingTarget } = usePostRecordingTarget(
     isRecording,
     currentRecording,
@@ -76,6 +99,54 @@ export function EditorLayout({
   const largeControls = largeControlsProp ?? searchParams.get("largeControls") === "true";
 
   const tourStartedRef = useRef(false);
+
+  // Fire onEnded once per ended-transition (not on every render while ended stays
+  // true), so a seek/replay that leaves and re-enters the ended state re-arms it.
+  const wasEndedRef = useRef(false);
+  useEffect(() => {
+    if (hasEnded && !wasEndedRef.current) {
+      onEnded?.();
+    }
+    wasEndedRef.current = hasEnded;
+  }, [hasEnded, onEnded]);
+
+  // Autoplay: start playback once a read-only recording has finished loading, when
+  // either the persisted Autoplay setting or a one-shot playlist override requests
+  // it. Guarded to fire once per recording load — if the browser blocks the
+  // unprompted play() (no user gesture on a cold load), playback stays at time 0
+  // and FloatingPlayButton remains the visible fallback.
+  const autoplayedForRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!readOnly || urlLoading || urlError || !currentRecording || !editorActor) {
+      return;
+    }
+    if (!(autoplay || autoplayOverride) || isPlaying) {
+      return;
+    }
+    if (autoplayedForRef.current === recordingUrl) {
+      return;
+    }
+    if (selectLiveTime(editorActor.getSnapshot()) !== 0) {
+      return;
+    }
+    autoplayedForRef.current = recordingUrl;
+
+    const ctx = getAudioContext();
+    unlockAudioContext(ctx);
+    ctx.resume().catch(() => {});
+    play();
+  }, [
+    readOnly,
+    urlLoading,
+    urlError,
+    currentRecording,
+    autoplay,
+    autoplayOverride,
+    isPlaying,
+    recordingUrl,
+    editorActor,
+    play,
+  ]);
 
   useEffect(() => {
     // Don't tour inside read-only embeds (the landing-page demo iframe), and wait
@@ -123,7 +194,12 @@ export function EditorLayout({
         ) : null}
       </div>
 
-      <MediaControls recordMode={!readOnly} large={largeControls} positioning="relative" />
+      <MediaControls
+        recordMode={!readOnly}
+        large={largeControls}
+        positioning="relative"
+        playlistMode={playlistMode}
+      />
 
       <DragDropOverlay isDragging={isDragging} />
 

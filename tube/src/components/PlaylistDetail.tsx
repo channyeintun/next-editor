@@ -26,7 +26,7 @@ export default function PlaylistDetail({ playlist }: { playlist: Playlist }) {
       ) : (
         <div className="grid grid-cols-1 gap-5 pb-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {playlist.lessons.map((lesson) => (
-            <LessonCard key={lesson.slug} lesson={lesson} />
+            <LessonCard key={lesson.slug} lesson={lesson} listSlug={playlist.slug} />
           ))}
         </div>
       )}
