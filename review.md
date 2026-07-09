@@ -1,117 +1,207 @@
-# `src` Review — 2026-07-06
+# Review: `src/monaco` vs `migration-plan.md` — 2026-07-10
 
-A focused review of the main logic layers: core state machine (`src/core/src/machine`), storage/codec (`src/storage`, `src/core/src/utils`), hooks/stores (`src/hooks`, `src/stores`), and preview/runtime rendering (`src/components/preview`).
+Reviewed against the revised migration plan. Scope: all 7 files in
+`src/monaco/`, plus the two consumers (`src/components/CodeEditor.tsx`,
+`src/components/preview/ApiClientPanel.tsx`) and the removal checklist.
+(The previous 2026-07-06 `src` review this file held is preserved in git history.)
 
-The project is mature and has been reviewed repeatedly, so this pass targets **reachable correctness bugs, races, and leaks** — not style. Most findings are narrow edge cases; each lists a concrete trigger so you can judge whether it's worth fixing. Nothing here was implemented (review-only, as requested).
-
-Legend: **[High]** likely user-visible under realistic use · **[Medium]** reachable but narrow · **[Low]** fragility / inconsistency, not a live bug.
-
----
-
-## 1. Core state machine (`src/core/src/machine`)
-
-### [Medium] Out-of-order `EXTEND_RECORDING` can replace state with a shorter recording
-
-`replayActions.ts` — `extendRecording` (~110-130) has no monotonicity guard (e.g. `event.recording.frames.length >= context.recording.frames.length`). If two in-flight streaming decodes resolve out of order, a stale shorter recording replaces the current one while `lastAppliedFrameIndex` stays put, so `applyFrameDelta(currentFrame, targetFrame, frameIndex)` (~177) diffs frames from unrelated recordings.
-
-- This is the same _class_ as the previously-fixed batch remove_node desync, but via a **new** path (out-of-order streaming extension).
-- **Caveat:** the append-only-superset invariant is documented at the call site (comment ~106-109); this handler deliberately trusts the upstream codec/streaming sink to emit only strictly-growing recordings. So this is an _assumption-dependent_ risk (guard the invariant here defensively, or ensure the streaming layer serializes decodes), not a standalone bug in `extendRecording`.
-
-### [Medium] `syncPlaybackAudio` can silently drop an append while paused
-
-`editorMachineHelpers.ts` (~690-703) — with `appendPolicy: "playing-or-finalized"`, a non-finalized append while paused sends no `APPEND_FRAGMENT` but still returns `true` ("controlling"). The `EXTEND_RECORDING` handler (`editorMachine.ts` ~594-602) proceeds as if audio is in sync.
-
-- **Repro:** `EXTEND_RECORDING` arrives while paused, then seek forward past the previously-loaded audio boundary. `audioActor.ts` `seekTo` (~910-916) can't play the scrubbed region (buffer never advanced) until another `EXTEND_RECORDING` happens to coincide with the `playing` state.
-
-### [Medium] `resolveWorkspaceSnapshotForReplay` delta math assumes synchronous apply
-
-`replayState/workspace.ts` — the per-event delta sum (`getWorkspaceWidthDelta` ~28-68, consumed by `resolveWorkspaceSnapshotForReplay` ~70-114) trusts that `lastAppliedWorkspaceEventIndex` reflects what's baked into the live `sidebarWidthDelta`. Since that index is deliberately not reset on SEEK, a rapid double-seek within one macrotask (before `applyWorkspaceSnapshot` commits) can compute the second delta against an unapplied baseline. Only a real bug if `applyWorkspaceSnapshot` is async/debounced on the UI side — worth confirming it's synchronous.
-
-### [Low] `RUNTIME_EVENT` handler ignores its event payload
-
-`captureActions.ts` (~594-602) — re-derives the snapshot via `getRuntimeSnapshot?.()` and ignores `event`. Harmless today; a footgun if a caller ever sends event-specific runtime data expecting it to be captured.
-
-### [Low] End-of-buffer detection may restart stretch source at wrong offset
-
-`audioActor.ts` (~478-490) — on `finalized && inputSeconds >= duration - 0.06`, it stops then (stream mode) restarts via `startSource()` without first setting `targetTimeMs = getSourceTimelineTime()` as other call sites do. If `pendingBuffer` was consumed by a concurrent SEEK/APPEND in the same tick, the restart can begin at a wrong offset.
-
-_Verified OK:_ `cursor.ts`/`frameDelta.ts` scans are off-by-one-safe; `preview.ts`/`slide.ts` seek-vs-forward branches diverge correctly; mouse-tracking iframe listener cleanup is symmetric. **Ruled out** (earlier draft flagged this as High): _backward seek across a file switch does not suppress frames._ `APPLY_REPLAY_STATE_ACTIONS` (`editorMachineHelpers.ts` ~455-462) runs `applyWorkspaceEventsAtTime` **before** `applyFrameAtTime` in the same transition, and it always writes `lastAppliedWorkspaceEventIndex = replayResult.nextIndex` — which `findTimedEventIndexAtOrBefore` (`cursor.ts` ~77-78) rewinds via binary search on a backward seek. So by the time `applyFrameAtTime` reads `latestWorkspaceEvent` the index already points at file A's event, and the `timestamp <` guard is correctly false. A cross-file seek also sets `pendingPlaybackEditorSync`, which suppresses frames until the Monaco model resyncs — identical, intentional behavior to a forward file switch.
+**Verdict: the migration is structurally faithful to the plan** — single
+HMR-safe runtime init, `MonacoEditor` owns no models and no theme,
+`automaticLayout: false` is enforced internally at both `create` and every
+`updateOptions`, `setActiveTheme` is the only app-facing theme call, the
+wrapper is fully removed (`rg "@monaco-editor/react"` over `src`,
+`package.json`, `bun.lock` returns nothing, and `monacoSetup.ts` /
+`editorConstants.ts` / `editorModels.ts` are gone). Typecheck passes.
+One high-severity bug and a handful of smaller gaps remain, listed below.
 
 ---
 
-## 2. Storage & codec (`src/storage`, `src/core/src/utils`)
+## F1 — HIGH: `useOwnedModel` is not StrictMode-safe; API-client editors mount with a disposed model in dev
 
-### [High] "Missing segments" is indistinguishable from "recording not found"
+`src/monaco/useOwnedModel.ts:14-18, 36-45` · violates plan §4/§10 checklist
+("idempotent … including under a StrictMode double-invoke") and §11.
 
-`IndexedDBRecordingStore.ts` (~203-213) — `getEntry()` returns `null` when `concatSegments` yields `null` (zero segments) even if `metadata` was found. Callers can't tell "doesn't exist" from "metadata exists but its segment write was lost." The latter (dangling metadata, e.g. from an aborted `putMany`) gets reported as a generic decode failure, masking a distinct corruption mode.
+The app renders under `<StrictMode>` (`src/main.tsx:12`). Model **creation**
+happens in the render phase, but **disposal** happens in an effect cleanup.
+StrictMode's dev-only effect double-invoke runs _all_ cleanups, then _all_
+setups, with **no re-render in between**:
 
-### [Medium] `persistWorkspaceAssets` swallows IndexedDB failures
+1. Mount: render creates model `M`; `MonacoEditor` creates an editor attached to `M`.
+2. StrictMode cleanup pass: `MonacoEditor` disposes the editor; then the
+   `[uri]` cleanup disposes `M` and nulls `modelRef`.
+3. StrictMode setup pass: `MonacoEditor`'s layout effect re-runs
+   `monaco.editor.create(container, { ...options, model })` — with the same,
+   now-disposed `M` prop. Nothing re-created it, because creation lives in
+   render and no render occurred.
 
-`workspaceAssetStore.ts` (~91, 117-133) — `persistQueue = persistQueue.then(run, run)` feeds a rejected prior run into `run` as the rejection handler and continues the chain. A real IDB failure (quota exceeded, blocked) is never surfaced: a later call's returned promise resolves fine even though an earlier save silently failed, and `loadWorkspaceAssetContents` later falls back to `{}` with no user-visible signal of data loss.
+Monaco asserts on attach: `TextModel._assertNotDisposed()` throws
+`BugIndicatingError('Model is disposed!')`
+(`node_modules/monaco-editor/esm/vs/editor/common/model/textModel.js:259-261`;
+the attach path in `codeEditorWidget.js:1243-1252` reads model state
+immediately). So in dev, mounting either `ApiClientPanel` editor should crash
+the panel. Production builds are unaffected (StrictMode double-invoke is
+dev-only), which is probably why this hasn't surfaced.
 
-### [Medium] `buildSegmentChunk` writes `payload.length` unclamped
+`CodeEditor` survives the same cycle only because workspace models are
+deliberately never disposed on unmount. But it has one narrow variant of the
+same bug: `detachEditorOnUnmount` (`CodeEditor.tsx:301-322`) runs
+`disposePlaybackModels(monaco)` with no preserved URI during the StrictMode
+cleanup pass, so mounting `CodeEditor` _while already in playback mode_ would
+re-create the editor against a disposed playback model.
 
-`streamingRecordingCodec/format.ts` (~207) — `view.setUint32(1, payload.length, true)` with no `clampU32`, unlike every sibling field. `setUint32` throws `RangeError` outside `[0, 0xFFFFFFFF]`. Low likelihood (needs a ~4GB payload) but inconsistent with the footer path's deliberate descriptive guard (`buildFooterChunk` ~229-233).
+**Suggested fix direction:** two complementary changes —
 
-### [Low] `RecordingStorage.clear()` doesn't wrap errors
+- Make `MonacoEditor` defensive: if `model.isDisposed()` at creation (or in
+  the `[model]` effect), create the editor without a model / skip `setModel`.
+  Child layout effects always fire before parent effects, so the child can
+  never be fully protected by the parent alone.
+- Move owned-model creation/disposal into a `useLayoutEffect` keyed by the
+  parsed URI, holding the model in state (render `MonacoEditor` only when
+  non-null). The StrictMode setup pass then re-creates the model and the
+  state update re-attaches it.
 
-`RecordingStorage.ts` (~456-458) + `IndexedDBRecordingStore.clear()` (~310-326) — unlike `save`/`delete`/`exportAsFile`, `clear()` has no try/catch, so a quota/abort surfaces as a raw `DOMException` instead of the wrapped `Error` used elsewhere.
+A StrictMode-remount test for `useOwnedModel` (plan Verification Checklist)
+would have caught this — see F7.
 
-### [Low] `resolveClusterIndexForTime` assumes sorted clusters
+## F2 — MEDIUM: view state is lost on text → binary transitions
 
-`streamingRecordingCodec/clusters.ts` (~35-41) — the backward linear scan assumes clusters are sorted by `startTimeMs` ascending. Encode-side callers pass sorted data today (unreachable), but there's no defensive sort/assert for a tampered/hand-built stream.
+`src/components/CodeEditor.tsx:374-381` · violates plan §7 ("Also save the
+current normal model view state … before the editor is disposed for a
+binary-file transition") and the smoke-test item "text → binary → text …
+previous view state is restored".
+
+When `isBinaryActiveFile` flips true, `MonacoEditor` unmounts. Its layout
+cleanup disposes the editor **during the commit phase**, before `CodeEditor`'s
+passive `[isBinaryActiveFile]` effect runs `saveNormalViewState(editorRef.current)`.
+On a disposed editor `getModel()` returns `null`, so `saveNormalViewState`
+early-returns at `CodeEditor.tsx:280` and nothing is saved. Cursor/scroll are
+silently lost every time the user views a binary asset and comes back.
+
+Note the save isn't reachable by any earlier hook either: text→binary doesn't
+go through `setModel`, so `onBeforeModelChange` never fires.
+
+**Suggested fix:** have `MonacoEditor` invoke a callback from its cleanup
+_before_ `editor.dispose()` (e.g. call `onBeforeModelChange(editor, currentModel)`
+on unmount, or add a dedicated `onWillDispose` prop), and hook
+`saveNormalViewState` there. The same hook also makes the true-unmount save in
+`detachEditorOnUnmount` actually see a live editor (harmless today only
+because `viewStatesRef` dies with the component anyway).
+
+## F3 — LOW/MEDIUM: model mutation during the render phase
+
+`src/monaco/useOwnedModel.ts:14-18` and `src/components/CodeEditor.tsx:124-147`.
+
+`useOwnedModel` creates/disposes models in render; `CodeEditor`'s `activeModel`
+`useMemo` calls `syncWorkspaceModel`/`syncPlaybackModel`, which can `setValue`
+a _shared, globally-registered_ model — a side effect in render. React is free
+to discard or replay renders (and with `"use no memo"` the memo is the only
+cache), so a thrown-away render still mutates the model service. Today the
+next committed render re-syncs and hides it, but it's the same hazard class as
+F1 and worth consolidating when F1 is fixed (do the sync in an effect, or at
+minimum keep it idempotent-only: create-if-missing in render, `setValue` in an
+effect).
+
+## F4 — LOW: second `monaco.editor.setTheme` call site in `runtime.ts`
+
+`src/monaco/runtime.ts:76` calls `monaco.editor.setTheme(NEXT_EDITOR_MONACO_THEME)`
+directly. The plan's theme invariant (§"theme.ts" and Verification Checklist)
+is "`setActiveTheme` is the only function in the codebase that calls
+`monaco.editor.setTheme`". The init-time call itself is right (it's the fix
+for the default-theme white flash, commit 9a82726) — just route it through
+`setActiveTheme(NEXT_EDITOR_MONACO_THEME)` so the invariant is grep-true and
+the checklist assertion can be automated.
+
+## F5 — LOW: `updateOptions` runs on every parent render
+
+`src/monaco/MonacoEditor.tsx:100-102` keys the options effect on object
+identity. `CodeEditor` passes `getEditorOptions(isPlaying)` (fresh object per
+render, and it re-renders on every keystroke via `activeFile.content`);
+`ApiClientPanel` passes inline literals. So `editor.updateOptions` runs on
+every keystroke/store update. Monaco diffs internally, so this is waste rather
+than breakage — but the plan's contract is "on `options` prop change". Either
+memoize at the call sites (`useMemo(() => getEditorOptions(isPlaying), [isPlaying])`
+is fine in the uncompiled `CodeEditor`; hoist the API-panel literals to module
+constants) or shallow-compare inside `MonacoEditor`.
+
+## F6 — LOW: playback-URI knowledge duplicated outside `models.ts`
+
+`src/components/CodeEditor.tsx:280,289` hardcode
+`"file:///__next-editor__/playback/"` twice, while `models.ts` keeps
+`PLAYBACK_MODEL_ROOT` and `isPlaybackModelUri` private (`models.ts:4,15-17`).
+The plan assigned "view-state helpers" to `models.ts` (§1, §"models.ts").
+Export `isPlaybackModelUri` (or the save/restore helpers themselves) so the
+prefix has one owner.
+
+Related latent trap: `workspacePathFromMonacoModelUri` (`models.ts:76-84`)
+only excludes the playback root, so the API-client URIs
+(`file:///__next-editor__/api-client/…`) _would_ resolve to writable workspace
+paths if ever passed through it. Nothing does today (it only sees the main
+editor's models), but excluding the whole `file:///__next-editor__/` reserved
+root would make that structural instead of coincidental.
+
+## F7 — MEDIUM (coverage): planned package tests are missing
+
+Plan implementation-order steps 3 and 6 + Verification Checklist. Present:
+`models.ts` is well covered by `src/components/editorModels.test.ts` (which
+deliberately deep-imports `../monaco/models` to avoid booting the runtime in
+node — good; consider relocating it to `src/monaco/models.test.ts` to live
+with what it tests). Missing entirely:
+
+- `MonacoEditor` lifecycle tests (idempotent disposal incl. StrictMode,
+  `setModel` callback ordering, `automaticLayout` enforcement, never disposing
+  a model).
+- `useOwnedModel` tests (create/dispose on URI change + unmount, conditional
+  `setValue`, `setModelLanguage`) — these would have caught F1.
+- The plan's step-3 decision (browser-mode vs Playwright CT for Monaco-backed
+  tests) appears unresolved; there's no test environment in the repo that can
+  run `editor.create`.
+
+## F8 — LOW (docs): stale wrapper-era comments
+
+Plan §2: "Update comments so they describe direct Monaco initialization."
+`CodeEditor.tsx:97-102` still justifies `"use no memo"` with "the theme is
+registered in `beforeMount`" and "render-to-render flow of the `<Editor>`
+props" — both describe the deleted wrapper (theme registration now happens
+once in `runtime.ts`). `CodeEditor.tsx:372` says "The Monaco `<Editor>`
+unmounts". Reword so the compiler opt-out rationale reflects the current
+direct-Monaco integration (or re-evaluate whether the opt-out is still needed
+now that `beforeMount` is gone — that's a behavior question, so verify in the
+running app before touching it).
 
 ---
 
-## 3. Hooks & stores (`src/hooks`, `src/stores`)
+## Plan conformance snapshot
 
-### [High] `fetchNextEditorFile` has no staleness/cancellation guard
+| Plan requirement                                                                                                                                                                                  | Status                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| §1 package layout + `index.ts` export surface                                                                                                                                                     | ✅ matches plan exactly                                                                                                                        |
+| §2 single global-flagged init (theme, TS defaults, workers, HMR-safe)                                                                                                                             | ✅ (`runtime.ts:64-80`)                                                                                                                        |
+| §3 wrapper types replaced                                                                                                                                                                         | ✅ no `@monaco-editor/react` types anywhere; remaining `import type * as monaco from "monaco-editor"` in `src/core` are type-only and harmless |
+| §4 `MonacoEditor`: no model create/dispose, no theme prop, `automaticLayout` forced, single `onDidChangeModelContent`, ResizeObserver + initial `layout()`, callback ordering, idempotent cleanup | ✅                                                                                                                                             |
+| §5 `CodeEditor` uses package; `setActiveTheme` only there; no re-init on mount                                                                                                                    | ✅ (`CodeEditor.tsx:347-349`; init not re-run)                                                                                                 |
+| §6 `syncWorkspaceModel` parity, `isApplyingExternalModelValueRef` carried over and wired                                                                                                          | ✅ (`CodeEditor.tsx:113,135-140,191,200`)                                                                                                      |
+| §7 view-state save/restore excl. playback                                                                                                                                                         | ⚠️ file-switch path ✅; binary transition ❌ (F2)                                                                                              |
+| §8 event wiring + guards preserved                                                                                                                                                                | ✅ all five listeners + playback/binary guards present                                                                                         |
+| §9 layout via internal ResizeObserver                                                                                                                                                             | ✅                                                                                                                                             |
+| §10 disposal ownership split                                                                                                                                                                      | ⚠️ ✅ for `MonacoEditor`/`CodeEditor`; ❌ `useOwnedModel` under StrictMode (F1)                                                                |
+| §11 `ApiClientPanel` on package primitive, no `setActiveTheme`                                                                                                                                    | ✅ (theme race resolved by construction) — but F1 applies                                                                                      |
+| §12 wrapper removed from deps/lock                                                                                                                                                                | ✅                                                                                                                                             |
+| Tests from Verification Checklist                                                                                                                                                                 | ⚠️ `models.ts` ✅; `MonacoEditor`/`useOwnedModel` ❌ (F7)                                                                                      |
 
-`useUrlLoader.ts` (~486-537) — no generation token or `AbortController`. Overlapping calls run `loadRecording`/`extendRecording`/`resolveExternalMedia` concurrently against the same actor, and a slow first request's late writes can land after a faster second request's `loadRecording`, overwriting newer state with stale media/caption data. Reachable two ways: (a) `retry()` (`useUrlQuery.ts` ~48-54) fired while a prior load is still in flight; (b) a genuine `?url=` change re-firing the loader effect (`useUrlQuery.ts` ~40-46) before the previous load finishes. Worse, the out-of-band tails — `fetchSiblingCaptions(...).then(addCaptionTrack)` (~520-524) and `void resolveExternalMedia(...)` (~527-529) — are deliberately **not awaited**, so they outlive the `fetchNextEditorFile` promise and can resolve well after a newer recording has loaded.
+## Verification runs
 
-### [Medium] `useDragAndDropUrl` fetch has no unmount guard
+- `bun run typecheck` — ✅ clean.
+- `npx vp test run` — 389/390 pass. The one failure
+  (`src/components/preview/rrwebPreview.test.ts` — replay-clock rebase) is in
+  the rrweb replay timeline, **unrelated to this migration**, and fails on a
+  clean working tree, i.e. pre-existing on `main`.
+- Not verified here: browser behavior (per project convention, tsc + tests
+  only; UI is eyeballed by the user). F1 predicts a visible dev-mode failure
+  when opening the API-client body/response editors — worth checking first.
 
-`useDragAndDropUrl.ts` (~64-67) — `fetchNextEditorFile(text)` fires from the `drop` handler with no guard; an in-flight fetch after unmount still calls `loadRecording`. Part of the same unguarded-async pattern as the loader above.
+## Suggested fix order
 
-### [Low] `useCollapseTransition` mutate-then-return ref pattern
-
-`useCollapseTransition.ts` (~37-77) — `previousCollapsedRef` is mutated in the effect body; correctness under Strict Mode double-invocation relies on synchronous mount-order effects. Works today; fragile vs. deriving the ref during render.
-
-### [Low] `useGitHubStars` isn't truly fire-once
-
-`useGitHubStars.ts` — no `enabled` gate; despite the comment implying fire-once, the query still runs on mount and a rate-limited request retries (per the client's `retry: 1` in `queryClient.ts`, so 1 retry — not 3×) before falling back to `undefined`. `staleTime`/`gcTime: Infinity` do prevent auto-refetch, so the "cached for the session" intent mostly holds; the caveat is only the mount-time run + single retry.
-
-_Verified OK:_ `workspaceStore`, `apiClientStore`, `captionStore`, `runtimePanelStore`, `slidesStore`, `previewAdapterHandle`, `useCaptionStore`, `useNextEditorContext`, `useWorkspace`, `useWebContainerRuntime`, `useRecordingStreamSink`, `useNextEditor` (deliberate ref re-assertion). **Ruled out** (earlier draft flagged `useUrlQuery`'s `searchParams` as an unstable-identity Medium): react-router v8's `useSearchParams` memoizes on `[location.search]` (`react-router/dist/.../lib/dom/lib.js` ~757), so the loader effect only re-fires on a real query-string change, not on every render — it is _not_ a fresh object each render.
-
----
-
-## 4. Preview & runtime rendering (`src/components/preview`)
-
-### [High] `IFRAME_INTERACTION` branch dereferences `payload` without validating it
-
-`usePreviewMessageBridge.ts` (~174, 252) — every other message branch guards `payload` first (via `isRecord()` in the initial-document/patch-batch validators, or optional chaining / truthy checks elsewhere); the `IFRAME_INTERACTION` path reads `payload.type === "mousemove"` directly. Any `postMessage({type:"IFRAME_INTERACTION"})` (no `payload`) whose `event.source` matches the tracked iframe's `contentWindow` throws inside the global message handler. Unreachable only because the paired injected script always includes `payload`; a future/same-origin sender omitting it will throw.
-
-### [Medium] Scroll-sync RAF is never cancelled
-
-`usePreviewPlaybackRegistration.ts` (~348-417) — `rafRef.current = requestAnimationFrame(...)` scheduled inside `snapshotApplier.current` is never `cancelAnimationFrame`'d on unmount or container/patch-replay change (contrast the sibling `rrwebReplayerRef` teardown at ~128-136). Dangling RAF; low impact today (callback guards `iframeRef.current`), but escalates if `iframeRef.current` is reused for a new iframe before the stale RAF fires — it would apply a stale scroll target to the new iframe.
-
-### [Medium] `patchChildNodes` is positional-only diffing
-
-`previewIframeUtils.ts` (~96-117) — no key/identity matching. A non-trailing insertion/removal misaligns all subsequent siblings, so `patchNode` mutates the wrong element's attributes/text. This is the static/runtime snapshot-fallback patcher (not rrweb replay), reachable whenever `patchIframeContentFromHtml` reconciles two snapshots differing by a mid-list change. Confirm it's intentionally scoped to append/trim-only diffs.
-
-### [Low] Message-bridge origin trust & fragile effect deps
-
-- `usePreviewMessageBridge.ts` guards only on `event.source` (no `event.origin`) — consistent with the codebase's WebContainer trust model; noted, not flagged.
-- `usePreviewController.ts` (~756-761) — `runtimePreviewSrcNeedsReset` effect keys on `panelMode`/`previewVersion`, unrelated to the src comparison; harmless given the attribute guard, but a fragile dep list that would reintroduce the historical reload-on-switch bug if the guard were removed.
-
-_Verified OK:_ rrweb replay ordering (`buildRrwebReplayEvents`/`RrwebPreviewReplayer`), resize/size math (NaN-safe clamping), `useApiClient`/`usePreviewInteractionCapture` cleanup. Ruled out: `PreviewEvent.timestamp` mixing `Date.now()`/`performance.now()` — `recordingSession.ts` overwrites `.timestamp` with its relative clock before persisting.
-
----
-
-## Suggested priority order
-
-1. **`fetchNextEditorFile` staleness guard** (§3) — stale-overwrite race on real navigation/retry, widened by the un-awaited caption/media tails.
-2. **`IFRAME_INTERACTION` payload guard** (§4) — cheap defensive fix aligning with sibling branches.
-3. **`persistWorkspaceAssets` error surfacing** (§2) — silent data loss is worth at least logging.
-
-The remaining Medium/Low items are edge-case hardening and consistency cleanups; safe to defer.
+1. F1 (dev crash) together with F3 (same root cause: model lifecycle in render).
+2. F2 (silent UX regression, small `MonacoEditor` API addition).
+3. F7 tests alongside 1–2 to lock them in.
+4. F4, F5, F6, F8 as a single small cleanup pass.
