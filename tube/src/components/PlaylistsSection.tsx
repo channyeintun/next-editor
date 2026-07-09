@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import {
   ArrowDown,
@@ -126,7 +126,9 @@ export default function PlaylistsSection({
       )}
 
       {playlists.length === 0 && !creating ? (
-        <p className="text-sm text-slate-500">No playlists yet.</p>
+        <p className="text-sm text-slate-500">
+          Group related lessons into a playlist so viewers can watch them in order.
+        </p>
       ) : (
         <div className="space-y-2">
           {playlists.map((playlist) => (
@@ -157,12 +159,27 @@ function PlaylistManageRow({
   const [titleValue, setTitleValue] = useState(playlist.title);
   const [titleError, setTitleError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  // Scopes the add/remove busy state to the one lesson actually being
+  // toggled — the mutation hooks below are shared across every lesson row in
+  // this panel, so their own isPending would otherwise disable every row's
+  // button while any one of them is in flight.
+  const [togglingLessonId, setTogglingLessonId] = useState<string | null>(null);
 
   const update = useUpdatePlaylist();
   const del = useDeletePlaylist();
   const addLesson = useAddLessonToPlaylist();
   const removeLesson = useRemoveLessonFromPlaylist();
   const reorder = useReorderPlaylistLessons();
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
 
   // Only fetched once expanded — avoids firing one detail request per
   // playlist row on every My Library load.
@@ -203,7 +220,24 @@ function PlaylistManageRow({
     if (target < 0 || target >= orderedMemberIds.length) return;
     const next = [...orderedMemberIds];
     [next[index], next[target]] = [next[target], next[index]];
-    reorder.mutate({ playlistId: playlist.id, lessonIds: next });
+    setActionError(null);
+    reorder.mutate(
+      { playlistId: playlist.id, lessonIds: next },
+      { onError: () => setActionError("Couldn't reorder — try again.") },
+    );
+  };
+
+  const toggleMember = (lessonId: string, isMember: boolean) => {
+    setActionError(null);
+    setTogglingLessonId(lessonId);
+    const mutation = isMember ? removeLesson : addLesson;
+    mutation.mutate(
+      { playlistId: playlist.id, lessonId },
+      {
+        onSettled: () => setTogglingLessonId(null),
+        onError: () => setActionError("Couldn't update the playlist — try again."),
+      },
+    );
   };
 
   return (
@@ -322,9 +356,13 @@ function PlaylistManageRow({
         </div>
       </div>
 
+      {actionError && <p className="px-3 pb-2 text-xs text-rose-300">{actionError}</p>}
+
       {confirming === "delete" && (
         <div className="mx-3 mb-3 space-y-2 rounded-lg border border-rose-500/30 bg-rose-500/5 p-2.5">
-          <p className="text-xs text-slate-300">Delete this playlist permanently?</p>
+          <p className="text-xs text-slate-300">
+            Delete this playlist permanently? This can't be undone.
+          </p>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setConfirming(null)} className={ghostButton}>
               Cancel
@@ -333,7 +371,10 @@ function PlaylistManageRow({
               type="button"
               onClick={() => {
                 setConfirming(null);
-                del.mutate(playlist.id);
+                setActionError(null);
+                del.mutate(playlist.id, {
+                  onError: () => setActionError("Couldn't delete the playlist — try again."),
+                });
               }}
               className="rounded bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rose-400"
             >
@@ -381,12 +422,8 @@ function PlaylistManageRow({
                     <span className="min-w-0 flex-1 truncate text-slate-300">{lesson.title}</span>
                     <button
                       type="button"
-                      disabled={addLesson.isPending || removeLesson.isPending}
-                      onClick={() =>
-                        isMember
-                          ? removeLesson.mutate({ playlistId: playlist.id, lessonId: lesson.id })
-                          : addLesson.mutate({ playlistId: playlist.id, lessonId: lesson.id })
-                      }
+                      disabled={togglingLessonId === lesson.id}
+                      onClick={() => toggleMember(lesson.id, isMember)}
                       className={
                         isMember
                           ? "shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-60"

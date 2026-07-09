@@ -1,4 +1,9 @@
-import type { LessonRow, PlaylistRow, PlaylistRowWithCount } from "./types";
+import type {
+  LessonRow,
+  PlaylistRow,
+  PlaylistRowWithCount,
+  PlaylistRowWithMembership,
+} from "./types";
 
 export interface InsertPlaylistParams {
   id: string;
@@ -106,6 +111,33 @@ export async function listOwnedPlaylists(
     )
     .bind(ownerId)
     .all<PlaylistRowWithCount>();
+  return result.results ?? [];
+}
+
+// Backs the "Add to playlist" popover: every one of the owner's playlists,
+// each flagged with whether `lessonId` is already a member — one request
+// instead of the popover fetching each playlist's full membership to figure
+// that out itself.
+export async function listOwnedPlaylistsForLesson(
+  db: D1Database,
+  ownerId: string,
+  lessonId: string,
+): Promise<PlaylistRowWithMembership[]> {
+  const result = await db
+    .prepare(
+      `SELECT playlists.*, (
+         SELECT COUNT(*) FROM playlist_lessons WHERE playlist_lessons.playlist_id = playlists.id
+       ) AS lesson_count,
+       EXISTS(
+         SELECT 1 FROM playlist_lessons
+         WHERE playlist_lessons.playlist_id = playlists.id AND playlist_lessons.lesson_id = ?
+       ) AS contains_lesson
+       FROM playlists
+       WHERE owner_id = ?
+       ORDER BY updated_at DESC`,
+    )
+    .bind(lessonId, ownerId)
+    .all<PlaylistRowWithMembership>();
   return result.results ?? [];
 }
 

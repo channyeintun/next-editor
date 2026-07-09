@@ -1,8 +1,19 @@
 import { apiClient } from "../apiClient";
-import type { OwnedPlaylist } from "../../db/types";
+import type { OwnedPlaylist, OwnedPlaylistWithMembership } from "../../db/types";
 
 export async function fetchMyPlaylists(): Promise<OwnedPlaylist[]> {
   const res = await apiClient.get<{ playlists: OwnedPlaylist[] }>("/playlists/mine");
+  return res.data.playlists;
+}
+
+// Backs the "Add to playlist" popover: every owned playlist, each flagged
+// with whether `lessonId` is already a member.
+export async function fetchMyPlaylistsForLesson(
+  lessonId: string,
+): Promise<OwnedPlaylistWithMembership[]> {
+  const res = await apiClient.get<{ playlists: OwnedPlaylistWithMembership[] }>("/playlists/mine", {
+    params: { lessonId },
+  });
   return res.data.playlists;
 }
 

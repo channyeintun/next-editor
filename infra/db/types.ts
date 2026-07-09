@@ -173,3 +173,27 @@ export function playlistRowToOwnedPlaylist(row: PlaylistRowWithCount): OwnedPlay
     updatedAt: row.updated_at,
   };
 }
+
+/** listOwnedPlaylistsForLesson's row shape — adds an EXISTS(...) membership flag. */
+export interface PlaylistRowWithMembership extends PlaylistRowWithCount {
+  contains_lesson: number;
+}
+
+/**
+ * Backs the "Add to playlist" popover on a lesson card: every one of the
+ * owner's playlists, each flagged with whether the given lesson is already a
+ * member — lets the popover render pre-checked toggles in one request
+ * instead of one request per playlist.
+ */
+export interface OwnedPlaylistWithMembership extends OwnedPlaylist {
+  containsLesson: boolean;
+}
+
+export function playlistRowToOwnedPlaylistWithMembership(
+  row: PlaylistRowWithMembership,
+): OwnedPlaylistWithMembership {
+  return {
+    ...playlistRowToOwnedPlaylist(row),
+    containsLesson: row.contains_lesson === 1,
+  };
+}

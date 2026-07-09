@@ -1,6 +1,17 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { Check, Eye, EyeOff, ImagePlus, MoreVertical, Pencil, Play, Trash2, X } from "lucide-react";
+import {
+  Check,
+  Eye,
+  EyeOff,
+  ImagePlus,
+  ListMusic,
+  MoreVertical,
+  Pencil,
+  Play,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   MAX_THUMBNAIL_BYTES,
   resizeThumbnail,
@@ -12,6 +23,7 @@ import {
   useUpdateThumbnail,
   type OwnedLesson,
 } from "@next-editor/infra";
+import AddToPlaylistPopover from "./AddToPlaylistPopover";
 
 type Confirming = "unpublish" | "delete" | null;
 
@@ -23,6 +35,7 @@ const confirmButton =
 export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [addingToPlaylist, setAddingToPlaylist] = useState(false);
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [thumbnailError, setThumbnailError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
@@ -86,6 +99,15 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
       },
     );
   };
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
 
   return (
     <div className="group">
@@ -163,6 +185,20 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
                   )}
                   {isPublished ? "Unpublish" : "Publish"}
                 </button>
+                {isPublished && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setAddingToPlaylist(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-white transition-colors hover:bg-white/10"
+                  >
+                    <ListMusic className="size-4 text-slate-400" />
+                    Add to playlist
+                  </button>
+                )}
                 <button
                   type="button"
                   role="menuitem"
@@ -203,6 +239,10 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
                 </button>
               </div>
             </>
+          )}
+
+          {addingToPlaylist && (
+            <AddToPlaylistPopover lesson={lesson} onClose={() => setAddingToPlaylist(false)} />
           )}
         </div>
 

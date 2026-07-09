@@ -4,6 +4,7 @@ import {
   createPlaylist,
   deletePlaylist,
   fetchMyPlaylists,
+  fetchMyPlaylistsForLesson,
   removeLessonFromPlaylist,
   reorderPlaylistLessons,
   updatePlaylist,
@@ -18,15 +19,28 @@ export function useMyPlaylists() {
   });
 }
 
+// Backs the "Add to playlist" popover on a lesson card. Same "playlists"
+// prefix as MY_PLAYLISTS_QUERY_KEY, so any mutation below invalidates it too.
+export function usePlaylistsForLesson(lessonId: string | undefined) {
+  return useQuery({
+    queryKey: ["playlists", "mine", "for-lesson", lessonId],
+    queryFn: () => fetchMyPlaylistsForLesson(lessonId!),
+    enabled: !!lessonId,
+  });
+}
+
 // Invalidates every query keyed under "playlists" (React Query matches by
 // key prefix), not just MY_PLAYLISTS_QUERY_KEY — the My Library management
 // panel also reads a specific playlist's current membership via tube's
-// usePlaylist(slug) (key ["playlists", "detail", slug]), sharing the same
-// QueryClient. A slug-scoped invalidation would need threading the slug
+// usePlaylist(slug) (key ["playlists", "detail", slug]), and the
+// add-to-playlist popover reads usePlaylistsForLesson (key ["playlists",
+// "mine", "for-lesson", lessonId]), all sharing the same QueryClient. A
+// narrowly-scoped invalidation would need threading the slug/lessonId
 // through every mutation; invalidating the whole "playlists" prefix is
-// simpler and cheap at this scale.
-function useMyPlaylistsMutation<TVariables>(
-  mutationFn: (variables: TVariables) => Promise<unknown>,
+// simpler and cheap at this scale. TData is preserved (not widened to
+// unknown) so callers like useCreatePlaylist can chain off the created row.
+function useMyPlaylistsMutation<TVariables, TData>(
+  mutationFn: (variables: TVariables) => Promise<TData>,
 ) {
   const queryClient = useQueryClient();
   return useMutation({

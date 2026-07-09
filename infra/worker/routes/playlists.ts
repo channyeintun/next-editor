@@ -8,12 +8,17 @@ import {
   getPlaylistBySlug,
   insertPlaylist,
   listOwnedPlaylists,
+  listOwnedPlaylistsForLesson,
   removeLessonFromPlaylist,
   reorderPlaylistLessons,
   updatePlaylist,
   type UpdatePlaylistParams,
 } from "../../db/playlistQueries";
-import { playlistRowToOwnedPlaylist, playlistRowToPlaylist } from "../../db/types";
+import {
+  playlistRowToOwnedPlaylist,
+  playlistRowToOwnedPlaylistWithMembership,
+  playlistRowToPlaylist,
+} from "../../db/types";
 import { getCurrentUser } from "../auth/session";
 import { cached, getCache, invalidateCache, playlistSlugKey } from "../cache";
 
@@ -69,11 +74,19 @@ playlistsRoute.post("/", async (c) => {
 });
 
 // Must be registered before the catch-all "/:slug" GET below, same ordering
-// reason as GET /mine in lessons.ts.
+// reason as GET /mine in lessons.ts. The optional ?lessonId= backs the "Add
+// to playlist" popover (MyLessonCard) — every owned playlist, each flagged
+// with whether that lesson is already a member, in one request.
 playlistsRoute.get("/mine", async (c) => {
   const user = await getCurrentUser(c);
   if (!user) {
     return c.json({ error: "not signed in" }, 401);
+  }
+
+  const lessonId = c.req.query("lessonId");
+  if (lessonId) {
+    const rows = await listOwnedPlaylistsForLesson(c.env.DB, user.id, lessonId);
+    return c.json({ playlists: rows.map(playlistRowToOwnedPlaylistWithMembership) });
   }
 
   const rows = await listOwnedPlaylists(c.env.DB, user.id);
