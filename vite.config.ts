@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import wasm from "vite-plugin-wasm";
 import { fileURLToPath } from "node:url";
 
-import { slideImageProxyPlugin } from "./tube/vite/slideImageProxyPlugin";
+import { proxyPlugin } from "./tube/vite/proxyPlugin";
 
 const crossOriginHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -17,10 +17,10 @@ export default defineConfig({
     "*": "vp check --fix",
   },
   plugins: [
-    // Dev-server equivalent of infra/worker/routes/slideImage.ts: lets
-    // `bun run dev` resolve the same /api/slide-image route the Worker
+    // Dev-server equivalent of infra/worker/routes/proxy.ts: lets
+    // `bun run dev` resolve the same /api/proxy route the Worker
     // serves in production.
-    slideImageProxyPlugin() as unknown as PluginOption,
+    proxyPlugin() as unknown as PluginOption,
     wasm() as unknown as PluginOption,
     tailwindcss() as unknown as PluginOption,
     lazyPlugins(async () => {
@@ -151,20 +151,20 @@ export default defineConfig({
     },
     // Routes implemented so far by the Tube Worker (`bun run dev:worker`,
     // see infra/wrangler.toml). Deliberately NOT a blanket "/api" proxy: that
-    // would shadow slideImageProxyPlugin's existing /api/slide-image dev
-    // route above before it moves into the Worker (Phase 4). Extend this
-    // list route-by-route as infra/worker/routes/* gains real handlers.
+    // would shadow proxyPlugin's existing /api/proxy dev route above before
+    // it moves into the Worker (Phase 4). Extend this list route-by-route as
+    // infra/worker/routes/* gains real handlers.
     proxy: {
       "/api/health": "http://localhost:8787",
       "/api/lessons": "http://localhost:8787",
       "/api/auth": "http://localhost:8787",
       "/api/uploads": "http://localhost:8787",
       "/media": "http://localhost:8787",
-      // /api/slide-image is deliberately NOT proxied here — the Worker now
-      // implements it too (infra/worker/routes/slideImage.ts, also used for
-      // avatar images), but slideImageProxyPlugin below already intercepts
-      // this path directly in the vite dev server, so plain `bun run dev`
-      // (no `dev:worker`) keeps working unchanged for both.
+      // /api/proxy is deliberately NOT proxied here — the Worker now
+      // implements it too (infra/worker/routes/proxy.ts, used for Slides
+      // images and avatars), but proxyPlugin below already intercepts this
+      // path directly in the vite dev server, so plain `bun run dev` (no
+      // `dev:worker`) keeps working unchanged for both.
     },
   },
   preview: {

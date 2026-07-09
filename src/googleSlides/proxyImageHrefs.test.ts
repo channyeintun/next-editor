@@ -9,7 +9,7 @@ describe("proxyImageHrefs", () => {
     const result = proxyImageHrefs(svg);
 
     expect(result).toBe(
-      '<svg><image xlink:href="/api/slide-image?url=' +
+      '<svg><image xlink:href="/api/proxy?url=' +
         encodeURIComponent("https://docs.google.com/slides-images-rt/AOd6-abc=s2048") +
         '" /></svg>',
     );
@@ -20,7 +20,7 @@ describe("proxyImageHrefs", () => {
 
     const result = proxyImageHrefs(svg);
 
-    expect(result).toContain('href="/api/slide-image?url=');
+    expect(result).toContain('href="/api/proxy?url=');
     expect(result).toContain(encodeURIComponent("https://lh3.googleusercontent.com/photo.jpg"));
   });
 

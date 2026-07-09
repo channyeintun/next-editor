@@ -13,4 +13,3 @@ export { isPublishedDeckUrl, parsePublishedDeck } from "./parse";
 export { normalizeSvg } from "./normalizeSvg";
 export { fetchPublishedDeck } from "./fetchPublishedDeck";
 export { proxyImageHrefs } from "./proxyImageHrefs";
-export { isAllowedImageHost, proxySlideImage } from "./imageProxy";

@@ -1,26 +1,26 @@
 import type { Plugin } from "vite";
-import { proxySlideImage } from "../../src/googleSlides/imageProxy";
+import { proxyUrl } from "../../src/shared/proxy";
 
 /**
- * Dev-server equivalent of infra/worker/routes/slideImage.ts: serves the same
- * transient Google Slides image proxy at /api/slide-image?url=<encoded https
- * URL> so `bun run dev` matches the Worker route used in production. Shares
- * all validation/fetch logic with the Worker route via imageProxy.ts — this
- * file only adapts the result to Node's (req, res) middleware signature.
+ * Dev-server equivalent of infra/worker/routes/proxy.ts: serves the same
+ * generic fetch proxy at /api/proxy?url=<encoded https URL> so `bun run dev`
+ * matches the Worker route used in production. Shares all validation/fetch
+ * logic with the Worker route via src/shared/proxy.ts — this file only
+ * adapts the result to Node's (req, res) middleware signature.
  */
-export function slideImageProxyPlugin(): Plugin {
+export function proxyPlugin(): Plugin {
   return {
-    name: "google-slides:slide-image-proxy",
+    name: "shared:proxy",
     configureServer(server) {
-      server.middlewares.use("/api/slide-image", (req, res) => {
+      server.middlewares.use("/api/proxy", (req, res) => {
         const fullUrl = new URL(req.url ?? "", "http://internal");
         const target = fullUrl.searchParams.get("url");
-        proxySlideImage(target)
+        proxyUrl(target)
           .then((result) => {
             if (result.status !== 200 || !result.body) {
               res.statusCode = result.status;
               res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ error: result.error ?? "Failed to proxy image." }));
+              res.end(JSON.stringify({ error: result.error ?? "Failed to proxy request." }));
               return;
             }
             res.statusCode = 200;

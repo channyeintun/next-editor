@@ -78,11 +78,11 @@ export function signInUrl(returnTo?: string): string {
 // Google's avatar images (*.googleusercontent.com) send a
 // Cross-Origin-Resource-Policy header that the app's COEP:require-corp
 // blocks from a direct <img src> — the same problem the Google Slides
-// import feature already solved. Reuses that exact same route: in dev,
-// tube/vite/slideImageProxyPlugin.ts already serves it directly; in
-// production it's infra/worker/routes/slideImage.ts.
+// import feature already solved. Reuses that same generic proxy route: in
+// dev, tube/vite/proxyPlugin.ts already serves it directly; in production
+// it's infra/worker/routes/proxy.ts.
 export function avatarProxyUrl(avatarUrl: string): string {
-  const url = new URL("/api/slide-image", window.location.origin);
+  const url = new URL("/api/proxy", window.location.origin);
   url.searchParams.set("url", avatarUrl);
   return url.toString();
 }

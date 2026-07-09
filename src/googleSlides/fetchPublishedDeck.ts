@@ -15,7 +15,7 @@ function stripUrlTail(url: string): string {
  * data, with each SVG normalized for inline injection and any Google-hosted
  * image hrefs (blocked from direct cross-origin loading by Google's
  * Cross-Origin-Resource-Policy header) rewritten to the transient
- * /api/slide-image proxy (see proxyImageHrefs.ts) so the browser can load
+ * /api/proxy route (see proxyImageHrefs.ts) so the browser can load
  * them same-origin at render time. Deliberately not inlined as data: URLs —
  * that would bloat every persisted slide by the image's full base64 size.
  *
