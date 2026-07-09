@@ -46,7 +46,7 @@ export function createStarterWorkspaceProject(): WorkspaceProject {
             // release line. Pinned exactly because caret ranges don't reliably
             // match a floating prerelease tag.
             nitro: "3.0.260610-beta",
-            typescript: "^7.0.1-rc",
+            typescript: "^7.0.2",
             vite: "^8.1.3",
             "vite-tsconfig-paths": "^6.1.1",
           },
