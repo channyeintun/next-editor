@@ -3,6 +3,7 @@ import { createActor, waitFor } from "xstate";
 import type * as monaco from "monaco-editor";
 import { editorMachine } from "./editorMachine";
 import { audioPlaybackActor } from "./audioActor";
+import { getPlaybackAudioState } from "./editorMachineHelpers";
 import type { Recording } from "../types";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 
@@ -605,6 +606,7 @@ describe("audioPlaybackActor", () => {
   const createPlayback = (playbackRate: number, startPositionMs = 0) => {
     const actor = createActor(audioPlaybackActor, {
       input: {
+        blob: new Blob(["audio"], { type: "audio/webm" }),
         audioUrl: "https://cdn.example.com/audio.weba",
         volume: 0.5,
         playbackRate,
@@ -674,9 +676,10 @@ describe("audioPlaybackActor", () => {
     expect(audio.playbackRate).toBe(2);
   });
 
-  it("uses audioUrl directly when provided instead of a blob URL", () => {
+  it("uses audioUrl directly when provided, ignoring blob", () => {
     const actor = createActor(audioPlaybackActor, {
       input: {
+        blob: new Blob(["audio"], { type: "audio/webm" }),
         audioUrl: "https://cdn.example.com/lesson.weba",
         volume: 1,
         playbackRate: 1,
@@ -687,6 +690,22 @@ describe("audioPlaybackActor", () => {
 
     const audio = MockAudio.instances[0]!;
     expect(audio.src).toBe("https://cdn.example.com/lesson.weba");
+  });
+
+  it("falls back to a blob URL when no audioUrl is provided", () => {
+    const actor = createActor(audioPlaybackActor, {
+      input: {
+        blob: new Blob(["audio"], { type: "audio/webm" }),
+        volume: 1,
+        playbackRate: 1,
+        startPositionMs: 0,
+      },
+    }).start();
+    spawnedActors.push(actor);
+
+    const audio = MockAudio.instances[0]!;
+    // URL.createObjectURL is mocked to return "blob:mock" in beforeEach
+    expect(audio.src).toBe("blob:mock");
   });
 
   it("emits FINISHED when the audio element ends", () => {
@@ -703,5 +722,57 @@ describe("audioPlaybackActor", () => {
     // After onended fires the actor should still be alive (it's fromCallback —
     // only the parent machine acts on FINISHED). Just confirm no throw occurred.
     expect(actor.getSnapshot().status).toBe("active");
+  });
+});
+
+describe("getPlaybackAudioState", () => {
+  const audioBlob = new Blob(["audio"], { type: "audio/webm" });
+
+  function makeRecording(overrides: Partial<Recording> = {}): Recording {
+    return {
+      version: 4,
+      id: "rec-1",
+      name: "Test",
+      createdAt: 0,
+      duration: 5000,
+      keyframeInterval: 120,
+      frames: [],
+      audioBlob,
+      ...overrides,
+    };
+  }
+
+  it("returns null when recording is null", () => {
+    expect(getPlaybackAudioState(null)).toBeNull();
+  });
+
+  it("returns null when audioBlob is missing", () => {
+    expect(getPlaybackAudioState(makeRecording({ audioBlob: undefined }))).toBeNull();
+  });
+
+  it("returns null when audioBlob is empty", () => {
+    expect(getPlaybackAudioState(makeRecording({ audioBlob: new Blob([]) }))).toBeNull();
+  });
+
+  it("returns state with blob when only audioBlob is present (no audioUrl)", () => {
+    const state = getPlaybackAudioState(makeRecording({ audioUrl: undefined }));
+    // Must not return null — newly recorded audio has a blob but no URL yet
+    expect(state).not.toBeNull();
+    expect(state!.blob).toBe(audioBlob);
+    expect(state!.audioUrl).toBeUndefined();
+  });
+
+  it("returns state with both blob and audioUrl when recording is fully uploaded", () => {
+    const state = getPlaybackAudioState(
+      makeRecording({ audioUrl: "https://cdn.example.com/audio.weba" }),
+    );
+    expect(state).not.toBeNull();
+    expect(state!.blob).toBe(audioBlob);
+    expect(state!.audioUrl).toBe("https://cdn.example.com/audio.weba");
+  });
+
+  it("includes startOffsetMs from recording", () => {
+    const state = getPlaybackAudioState(makeRecording({ audioStartOffsetMs: 500 }));
+    expect(state!.startOffsetMs).toBe(500);
   });
 });

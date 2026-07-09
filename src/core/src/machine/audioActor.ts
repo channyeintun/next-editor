@@ -20,8 +20,10 @@ export interface AudioRecordingInput {
 }
 
 export interface AudioPlaybackInput {
+  /** Audio blob to play or the current contiguous stream snapshot */
+  blob: Blob;
   /** External audio URL */
-  audioUrl: string;
+  audioUrl?: string;
   /** Initial volume (0-1) */
   volume: number;
   /** Initial playback rate */
@@ -237,7 +239,14 @@ export const audioPlaybackActor = fromCallback<
   audio.crossOrigin = "anonymous";
   audio.preservesPitch = true; // User requested pitch shift instead of native time-stretching
 
-  audio.src = input.audioUrl;
+  let currentObjectUrl: string | null = null;
+  if (input.audioUrl) {
+    audio.src = input.audioUrl;
+  } else {
+    currentObjectUrl = URL.createObjectURL(input.blob);
+    audio.src = currentObjectUrl;
+  }
+
   audio.volume = input.volume;
   audio.playbackRate = input.playbackRate;
 
@@ -305,5 +314,10 @@ export const audioPlaybackActor = fromCallback<
     disposed = true;
     audio.pause();
     audio.removeAttribute("src");
+    audio.load();
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = null;
+    }
   };
 });

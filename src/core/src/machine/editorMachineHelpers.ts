@@ -532,7 +532,8 @@ export const appendCursorEvent = (
 };
 
 interface PlaybackAudioState {
-  audioUrl: string;
+  blob: Blob;
+  audioUrl?: string;
   loadedUntilMs: number;
   startOffsetMs: number;
   finalized: boolean;
@@ -549,13 +550,11 @@ export const getPlaybackAudioState = (recording: Recording | null): PlaybackAudi
   }
 
   const audioUrl = recording.audioUrl;
-  if (!audioUrl) {
-    return null;
-  }
 
   const startOffsetMs = recording.audioStartOffsetMs ?? 0;
 
   return {
+    blob: audioBlob,
     audioUrl,
     loadedUntilMs: recording.duration,
     startOffsetMs,
@@ -628,6 +627,7 @@ export const syncPlaybackAudio = (
     enqueue.spawnChild("audioPlayback", {
       id: "audioPlayer",
       input: {
+        blob: audioState.blob,
         audioUrl: audioState.audioUrl,
         startOffsetMs: audioState.startOffsetMs,
         volume: context.timeline.volume,
