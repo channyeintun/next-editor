@@ -78,10 +78,13 @@ function Preview() {
     >
       {/* The iframe stays mounted and its `display` never changes — toggling that
           would reload the cross-origin runtime frame and lose its state. In API
-          mode the panel sits on top as an opaque overlay instead. */}
+          mode the panel sits on top as an opaque overlay instead.
+          ApiClientPanel is likewise always kept mounted (once the lazy chunk
+          loads) so that switching modes is instant — no blank-flash while the
+          chunk or Suspense boundary resolves. */}
       {previewRenderer}
-      {isApiMode ? (
-        <div className="absolute inset-0 z-10">
+      {controller.showModeToggle && (
+        <div className={`absolute inset-0 z-10${isApiMode ? "" : " invisible"}`}>
           <ApiClientPanel
             onSend={controller.sendApiClientRequest}
             runtimeReady={controller.isRuntimeReady}
@@ -89,7 +92,7 @@ function Preview() {
             onInspectHistory={controller.recordApiClientInspect}
           />
         </div>
-      ) : null}
+      )}
     </PreviewChrome>
   );
 }
