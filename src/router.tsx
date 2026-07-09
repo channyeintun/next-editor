@@ -169,6 +169,19 @@ export const router = createBrowserRouter([
     ErrorBoundary: RouteErrorBoundary,
   },
   {
+    // A different path depth than /learn/:slug below, so it's just an
+    // ordinary distinct route — no @-prefix-style disambiguation needed
+    // (that trick in LearnSlugRoute only exists because /learn/@username and
+    // /learn/some-slug collide on the same single path segment).
+    path: "/learn/playlist/:slug",
+    lazy: lazyRoute(
+      () => import("@next-editor/tube").then((m) => ({ default: m.PlaylistDetailRoute })),
+      "/learn/playlist/:slug",
+    ),
+    HydrateFallback: RouteHydrateFallback,
+    ErrorBoundary: RouteErrorBoundary,
+  },
+  {
     // Handles both lesson detail (/learn/some-title-abc12345) and author
     // profiles (/learn/@username) — see LearnSlugRoute for why these can't
     // be split into two router-level routes.

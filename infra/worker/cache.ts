@@ -13,6 +13,10 @@ export function lessonListKey(page: number, pageSize: number): string {
   return `l:${KEY_VERSION}:list:${page}:${pageSize}`;
 }
 
+export function playlistSlugKey(slug: string): string {
+  return `p:${KEY_VERSION}:slug:${slug}`;
+}
+
 // Upstash is optional — self-hosted/local setups may not have credentials
 // configured (see infra/.dev.vars, infra/wrangler.toml), and the app must
 // behave identically without them.

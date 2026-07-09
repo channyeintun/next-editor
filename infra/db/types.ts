@@ -1,4 +1,4 @@
-import type { Lesson } from "../../tube/src/types";
+import type { Lesson, Playlist } from "../../tube/src/types";
 
 export interface UserRow {
   id: string;
@@ -120,5 +120,56 @@ export function lessonRowToOwnedLesson(row: LessonRow): OwnedLesson {
     tags: row.tags ? (JSON.parse(row.tags) as string[]) : [],
     status: row.status,
     publishedAt: row.published_at,
+  };
+}
+
+export interface PlaylistRow {
+  id: string;
+  slug: string;
+  owner_id: string;
+  title: string;
+  description: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+/** listOwnedPlaylists's row shape — PlaylistRow plus a COUNT(*) subquery alias. */
+export interface PlaylistRowWithCount extends PlaylistRow {
+  lesson_count: number;
+}
+
+export function playlistRowToPlaylist(row: PlaylistRow, lessons: LessonRow[]): Playlist {
+  return {
+    slug: row.slug,
+    title: row.title,
+    description: row.description ?? "",
+    lessons: lessons.map(lessonRowToLesson),
+  };
+}
+
+/**
+ * Shape returned to the owner for "My Library" management — unlike the
+ * public `Playlist`, this includes `id` (needed for further PATCH/add/
+ * remove/reorder/DELETE calls) and a `lessonCount` instead of the full
+ * lesson list (the management UI fetches membership separately when a
+ * playlist is expanded).
+ */
+export interface OwnedPlaylist {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  lessonCount: number;
+  updatedAt: number;
+}
+
+export function playlistRowToOwnedPlaylist(row: PlaylistRowWithCount): OwnedPlaylist {
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    description: row.description ?? "",
+    lessonCount: row.lesson_count,
+    updatedAt: row.updated_at,
   };
 }

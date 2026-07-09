@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "./env";
 import { lessonsRoute } from "./routes/lessons";
+import { playlistsRoute } from "./routes/playlists";
 import { authorsRoute } from "./routes/authors";
 import { searchRoute } from "./routes/search";
 import { mediaRoute } from "./routes/media";
@@ -31,6 +32,7 @@ app.use("*", async (c, next) => {
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
 app.route("/api/lessons", lessonsRoute);
+app.route("/api/playlists", playlistsRoute);
 app.route("/api/authors", authorsRoute);
 app.route("/api/search", searchRoute);
 app.route("/media", mediaRoute);
