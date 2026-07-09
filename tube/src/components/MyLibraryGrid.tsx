@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { ListMusic } from "lucide-react";
 import { useMyLessons, useMyPlaylists } from "@next-editor/infra";
 import MyLessonCard from "./MyLessonCard";
 import LessonCardSkeleton from "./LessonCardSkeleton";
@@ -9,7 +10,12 @@ export default function MyLibraryGrid() {
   // Independent of the lessons query's pending/error state below: playlists
   // render as soon as they're ready regardless of whether the lessons grid
   // is still loading, same as any other independent section on this page.
-  const { data: playlists, isError: playlistsError, refetch: refetchPlaylists } = useMyPlaylists();
+  const {
+    data: playlists,
+    isPending: playlistsPending,
+    isError: playlistsError,
+    refetch: refetchPlaylists,
+  } = useMyPlaylists();
 
   if (isPending) {
     return (
@@ -47,6 +53,17 @@ export default function MyLibraryGrid() {
           >
             Try again
           </button>
+        </div>
+      ) : playlistsPending ? (
+        <div className="mb-8 space-y-3 border-b border-white/10 pb-8">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.06em] text-slate-300">
+            <ListMusic className="size-4" />
+            Playlists
+          </h2>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <LessonCardSkeleton />
+            <LessonCardSkeleton />
+          </div>
         </div>
       ) : (
         playlists && <PlaylistsSection playlists={playlists} lessons={data} />
