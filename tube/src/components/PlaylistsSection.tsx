@@ -36,11 +36,9 @@ export default function PlaylistsSection({
           <ListMusic className="size-4" />
           Playlists
         </h2>
-        {!creating && (
-          <button type="button" onClick={() => setCreating(true)} className={ghostButton}>
-            New playlist
-          </button>
-        )}
+        <button type="button" onClick={() => setCreating(true)} className={ghostButton}>
+          New playlist
+        </button>
       </div>
 
       {creating && <CreatePlaylistModal onClose={() => setCreating(false)} />}
