@@ -47,6 +47,13 @@ const TOUR_STEPS: Array<DriveStep & { element: string }> = [
     },
   },
   {
+    element: '[data-tour="whiteboard"]',
+    popover: {
+      title: "Whiteboard",
+      description: "Open the whiteboard to sketch and annotate alongside your code.",
+    },
+  },
+  {
     element: '[data-tour="preview"]',
     popover: {
       title: "Preview",

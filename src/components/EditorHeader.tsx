@@ -156,6 +156,7 @@ function WhiteboardHeaderButton() {
 
   return (
     <button
+      data-tour="whiteboard"
       type="button"
       aria-label={isOpen ? "Close whiteboard" : "Open whiteboard"}
       aria-pressed={isOpen}
