@@ -40,6 +40,10 @@ app.route("/api/auth", authRoute);
 app.route("/api/auth/google", googleAuthRoute);
 app.route("/api/uploads", uploadsRoute);
 app.route("/api/proxy", proxyRoute);
+// Legacy alias: decks imported before the /api/proxy rename (408ab6a) were
+// persisted with /api/slide-image?url=… hrefs baked into their slide SVGs,
+// so this path must keep resolving for as long as those documents exist.
+app.route("/api/slide-image", proxyRoute);
 
 // Workers Static Assets already tried to match the request against dist/ and
 // missed before this Worker ran (exact-match static files — JS chunks, the

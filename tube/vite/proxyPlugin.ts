@@ -1,4 +1,5 @@
-import type { Plugin } from "vite";
+import type { Connect, Plugin } from "vite";
+import type { ServerResponse } from "node:http";
 import { proxyUrl } from "../../src/shared/proxy";
 
 /**
@@ -12,7 +13,7 @@ export function proxyPlugin(): Plugin {
   return {
     name: "shared:proxy",
     configureServer(server) {
-      server.middlewares.use("/api/proxy", (req, res) => {
+      const handler = (req: Connect.IncomingMessage, res: ServerResponse) => {
         const fullUrl = new URL(req.url ?? "", "http://internal");
         const target = fullUrl.searchParams.get("url");
         proxyUrl(target)
@@ -38,7 +39,13 @@ export function proxyPlugin(): Plugin {
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ error: `Unexpected error: ${String(error)}` }));
           });
-      });
+      };
+      server.middlewares.use("/api/proxy", handler);
+      // Legacy alias: decks imported before the /api/proxy rename (408ab6a)
+      // have /api/slide-image?url=… hrefs persisted inside their slide SVGs
+      // (and inside recordings built from them), so the old path must keep
+      // resolving. Mirrors the same alias in infra/worker/index.ts.
+      server.middlewares.use("/api/slide-image", handler);
     },
   };
 }
