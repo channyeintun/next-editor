@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ListMusic } from "lucide-react";
-import type { OwnedLesson, OwnedPlaylist } from "@next-editor/infra";
+import type { OwnedPlaylist } from "@next-editor/infra";
 import CreatePlaylistModal from "./CreatePlaylistModal";
 import PlaylistCard from "./PlaylistCard";
 import PlaylistManagePanel from "./PlaylistManagePanel";
@@ -15,18 +15,13 @@ const ghostButton =
 // a single PlaylistManagePanel below the grid, since a compact card has no
 // room for that inline. Only the owner's own PUBLISHED lessons are ever
 // addable — playlists are always public (no draft state), so a draft lesson
-// must never become reachable through one.
-export default function PlaylistsSection({
-  playlists,
-  lessons,
-}: {
-  playlists: OwnedPlaylist[];
-  lessons: OwnedLesson[];
-}) {
+// must never become reachable through one. (A member unpublished *after*
+// being added still shows in the manage panel, tagged as a draft, so it can
+// be removed — the public playlist page filters it out.)
+export default function PlaylistsSection({ playlists }: { playlists: OwnedPlaylist[] }) {
   const [creating, setCreating] = useState(false);
   const [managingPlaylistId, setManagingPlaylistId] = useState<string | null>(null);
 
-  const publishedLessons = lessons.filter((l) => l.status === "published");
   const managingPlaylist = playlists.find((p) => p.id === managingPlaylistId) ?? null;
 
   return (
@@ -66,7 +61,6 @@ export default function PlaylistsSection({
       {managingPlaylist && (
         <PlaylistManagePanel
           playlist={managingPlaylist}
-          publishedLessons={publishedLessons}
           onClose={() => setManagingPlaylistId(null)}
         />
       )}

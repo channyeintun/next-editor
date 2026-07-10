@@ -1,5 +1,5 @@
 import { apiClient } from "../apiClient";
-import type { OwnedPlaylist, OwnedPlaylistWithMembership } from "../../db/types";
+import type { OwnedLesson, OwnedPlaylist, OwnedPlaylistWithMembership } from "../../db/types";
 
 export async function fetchMyPlaylists(): Promise<OwnedPlaylist[]> {
   const res = await apiClient.get<{ playlists: OwnedPlaylist[] }>("/playlists/mine");
@@ -15,6 +15,14 @@ export async function fetchMyPlaylistsForLesson(
     params: { lessonId },
   });
   return res.data.playlists;
+}
+
+// Owner-scoped membership for the manage panel: every member in playlist
+// order, including currently-unpublished ones (the public by-slug read
+// filters those out, which would make them unremovable).
+export async function fetchPlaylistLessons(playlistId: string): Promise<OwnedLesson[]> {
+  const res = await apiClient.get<{ lessons: OwnedLesson[] }>(`/playlists/${playlistId}/lessons`);
+  return res.data.lessons;
 }
 
 export async function createPlaylist(params: {

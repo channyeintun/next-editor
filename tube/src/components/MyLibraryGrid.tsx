@@ -66,7 +66,7 @@ export default function MyLibraryGrid() {
           </div>
         </div>
       ) : (
-        playlists && <PlaylistsSection playlists={playlists} lessons={data} />
+        playlists && <PlaylistsSection playlists={playlists} />
       )}
 
       {data.length === 0 ? (

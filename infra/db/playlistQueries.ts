@@ -87,6 +87,36 @@ export async function getPlaylistBySlug(
   return { playlist, lessons: result.results ?? [] };
 }
 
+// Owner-scoped membership read: every member row regardless of published
+// status, in position order. Backs the manage panel — unlike the public
+// getPlaylistBySlug above, an owner must be able to see (and remove) a member
+// that was unpublished after being added, otherwise the membership row is
+// stuck with no UI able to reach it. Returns null when the playlist doesn't
+// exist or isn't owned by `ownerId`, so the route can 404 rather than leak
+// membership of someone else's playlist.
+export async function getOwnedPlaylistLessons(
+  db: D1Database,
+  playlistId: string,
+  ownerId: string,
+): Promise<LessonRow[] | null> {
+  const playlist = await db
+    .prepare("SELECT id FROM playlists WHERE id = ? AND owner_id = ?")
+    .bind(playlistId, ownerId)
+    .first();
+  if (!playlist) return null;
+
+  const result = await db
+    .prepare(
+      `SELECT lessons.* FROM playlist_lessons
+       JOIN lessons ON lessons.id = playlist_lessons.lesson_id
+       WHERE playlist_lessons.playlist_id = ?
+       ORDER BY playlist_lessons.position ASC`,
+    )
+    .bind(playlistId)
+    .all<LessonRow>();
+  return result.results ?? [];
+}
+
 export async function getOwnedPlaylistById(
   db: D1Database,
   id: string,
@@ -281,10 +311,14 @@ export async function removeLessonFromPlaylist(
   return (results[1].meta.changes ?? 0) > 0;
 }
 
-// Rewrites every membership row's position to match orderedLessonIds' index,
-// atomically (db.batch(), same pattern updateUsername in queries.ts uses for
-// its rename+author_url cascade) — a partial reorder would otherwise leave
-// positions inconsistent.
+// Rewrites every membership row's position atomically (db.batch(), same
+// pattern updateUsername in queries.ts uses for its rename+author_url
+// cascade). The client's list is a preference, not the source of truth: ids
+// that aren't members (or repeat) are dropped, and members the client didn't
+// mention — e.g. rows a stale client never saw — are appended in their
+// current relative order. Positions therefore always come out dense over the
+// full membership; trusting the submitted list verbatim could leave the
+// untouched rows colliding with the rewritten 0..n-1 range.
 export async function reorderPlaylistLessons(
   db: D1Database,
   playlistId: string,
@@ -297,9 +331,28 @@ export async function reorderPlaylistLessons(
     .first();
   if (!playlist) return false;
 
+  const membersResult = await db
+    .prepare("SELECT lesson_id FROM playlist_lessons WHERE playlist_id = ? ORDER BY position ASC")
+    .bind(playlistId)
+    .all<{ lesson_id: string }>();
+  const memberIds = (membersResult.results ?? []).map((row) => row.lesson_id);
+  const memberIdSet = new Set(memberIds);
+
+  const finalOrder: string[] = [];
+  const placed = new Set<string>();
+  for (const lessonId of orderedLessonIds) {
+    if (memberIdSet.has(lessonId) && !placed.has(lessonId)) {
+      placed.add(lessonId);
+      finalOrder.push(lessonId);
+    }
+  }
+  for (const lessonId of memberIds) {
+    if (!placed.has(lessonId)) finalOrder.push(lessonId);
+  }
+
   const now = Date.now();
   await db.batch([
-    ...orderedLessonIds.map((lessonId, index) =>
+    ...finalOrder.map((lessonId, index) =>
       db
         .prepare("UPDATE playlist_lessons SET position = ? WHERE playlist_id = ? AND lesson_id = ?")
         .bind(index, playlistId, lessonId),

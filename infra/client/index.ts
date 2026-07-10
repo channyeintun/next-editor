@@ -22,6 +22,7 @@ export type { SearchResults } from "./search/searchApi";
 export {
   useMyPlaylists,
   usePlaylistsForLesson,
+  usePlaylistLessons,
   useCreatePlaylist,
   useUpdatePlaylist,
   useDeletePlaylist,

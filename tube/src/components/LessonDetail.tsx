@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import Editor from "@app/components/Editor";
 import { playbackSettingsStore } from "@app/stores/playbackSettingsStore";
@@ -33,9 +34,24 @@ export default function LessonDetail({ lesson }: { lesson: Lesson }) {
     });
   };
 
-  // Router state isn't part of the URL, so a refresh or a direct deep link never
-  // force-plays — only an in-app auto-advance navigation sets it.
+  // Only an in-app auto-advance navigation sets this. Router state isn't part of
+  // the URL (direct deep links never force-play), but React Router persists it in
+  // history.state.usr, which browsers restore across reloads and back/forward —
+  // the effect below scrubs that persisted copy so the override is truly one-shot.
   const autoplayOverride = (location.state as LessonDetailLocationState | null)?.autoplay ?? false;
+
+  // Scrub the flag from the history entry (bypassing the router: a router-level
+  // replace-navigation would swap in a state-less location and flip
+  // autoplayOverride back to false before the recording finishes loading, killing
+  // the autoplay it exists to trigger). React Router's in-memory location keeps
+  // the flag until the next navigation, so the Editor still sees it; only the
+  // persisted copy that would survive refresh/back-forward is cleared. `key` and
+  // `idx` in history.state are the router's own bookkeeping — preserved by the
+  // spread.
+  useEffect(() => {
+    if (!autoplayOverride) return;
+    window.history.replaceState({ ...window.history.state, usr: null }, "");
+  }, [autoplayOverride, location.key]);
 
   return (
     <Editor

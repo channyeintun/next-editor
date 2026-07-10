@@ -1,6 +1,6 @@
 # Review: Playlist, Autoplay, Continue-to-Next
 
-Date: 2026-07-10. Review only — nothing implemented.
+Date: 2026-07-10. **Update (same day): findings 1–6 are fixed** — see the "Fix status" section at the end. Nits remain open by choice.
 
 Scope traced end to end:
 
@@ -86,3 +86,12 @@ Suggested direction: derive the authoritative membership server-side, reorder th
 - Server-side: every mutation checks ownership; only the owner's own **published** lessons are addable; the public read re-filters `status='published'` on every request, so unpublishing genuinely removes a lesson from the public playlist page; add/remove/reorder use atomic `db.batch`; `MAX(position)+1` is computed inside the INSERT statement (no read-modify-write race under D1's serialized writes); duplicate add maps the UNIQUE violation to 409; Upstash cache is invalidated on every mutation and its failures degrade to D1.
 - Client cache: the `["playlists"]` prefix invalidation covers `/mine`, per-lesson membership, and the detail query; TanStack v5 awaits the returned `invalidateQueries` promise, so `isPending` covers the refetch window in the manage panel.
 - Route ordering (`/mine` before `/:slug`; `/learn/playlist/:slug` vs `/learn/:slug`) is correct, and the SPA-fallback/HTML-content-type guard in `findPlaylistBySlug` handles dev-without-worker.
+
+## Fix status (2026-07-10)
+
+1. **FIXED** — new owner-scoped `GET /api/playlists/:id/lessons` (`getOwnedPlaylistLessons`, all members incl. unpublished, position order) + infra `usePlaylistLessons` (staleTime 0; lessons mutations don't invalidate playlist keys). `PlaylistManagePanel` now reads it directly — no more slug reconciliation against `publishedLessons` — and renders unpublished members greyed with a "Draft" tag, Remove enabled; reorder submits the full membership. The `lessons` prop threading through `MyLibraryGrid` → `PlaylistsSection` → panel was removed.
+2. **FIXED** — `Editor`'s autoplay effect now skips the persisted-setting path when the recording has audio and the shared AudioContext isn't `running` (cold load, no gesture) — FloatingPlayButton stays the entry point instead of a silent visual replay. Audio-less recordings still autoplay. `autoplayOverride` is exempt: post-fix-4 it only exists in-session, after a play gesture unlocked the context. The once-per-load ref is only consumed when play() actually fires.
+3. **FIXED** — `autoplayedForRef` initializes to an `AUTOPLAY_NOT_FIRED` sentinel symbol instead of `undefined`, so `?url=`/drag-drop surfaces (where `recordingUrl` is undefined) autoplay once per mount instead of never.
+4. **FIXED** — `LessonDetail` scrubs the flag from the persisted history entry (`history.replaceState` with `usr: null`, preserving the router's `key`/`idx`) after latching it. Deliberately bypasses a router-level replace-navigation, which would flip `autoplayOverride` back to false before the next recording finishes loading and kill the autoplay it exists to trigger. Refresh and back/forward no longer force-play.
+5. **FIXED** — `reorderPlaylistLessons` now treats the submitted list as a preference: filters to actual members, dedupes, and appends unmentioned members in their current relative order, so positions always come out dense over the full membership.
+6. **FIXED** — `setRecording` carries `timeline.speed` and `timeline.volume` across loads (the audio child spawns from these context values, so they reach it). Covers the common auto-advance path where the machine instance survives; a full remount still starts at defaults — promoting speed into `playbackSettingsStore` remains possible follow-up.

@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
 import {
+  usePlaylistLessons,
   useRemoveLessonFromPlaylist,
   useReorderPlaylistLessons,
-  type OwnedLesson,
   type OwnedPlaylist,
 } from "@next-editor/infra";
-import { usePlaylist } from "../hooks/usePlaylists";
 
 // Reorder/remove for exactly one playlist at a time, opened via a card's
 // "Manage lessons" menu item. A real modal (matching
@@ -21,11 +20,9 @@ import { usePlaylist } from "../hooks/usePlaylists";
 // surface here that only gets more unwieldy as a library grows.
 export default function PlaylistManagePanel({
   playlist,
-  publishedLessons,
   onClose,
 }: {
   playlist: OwnedPlaylist;
-  publishedLessons: OwnedLesson[];
   onClose: () => void;
 }) {
   const [actionError, setActionError] = useState<string | null>(null);
@@ -38,7 +35,12 @@ export default function PlaylistManagePanel({
   const removeLesson = useRemoveLessonFromPlaylist();
   const reorder = useReorderPlaylistLessons();
 
-  const { data: detail, isPending: detailPending } = usePlaylist(playlist.slug);
+  // Owner-scoped membership (id/title/status per member), NOT the public
+  // by-slug read: that one filters to published lessons, which would leave a
+  // member that was unpublished after being added invisible here — stuck in
+  // the playlist with no way to remove it, while the card badge still counts
+  // it. Unpublished members render below with a "draft" tag instead.
+  const { data: members, isPending: membersPending } = usePlaylistLessons(playlist.id);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -48,12 +50,7 @@ export default function PlaylistManagePanel({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  // The public Lesson shape has no `id` (only owner-facing OwnedLesson does),
-  // so membership is reconciled by slug: a member's slug matched against the
-  // owner's own published lessons gives back the id the mutation APIs need.
-  const orderedMembers = (detail?.lessons ?? [])
-    .map((member) => publishedLessons.find((l) => l.slug === member.slug))
-    .filter((l): l is OwnedLesson => !!l);
+  const orderedMembers = members ?? [];
   const orderedMemberIds = orderedMembers.map((l) => l.id);
 
   const moveMember = (index: number, direction: -1 | 1) => {
@@ -106,7 +103,7 @@ export default function PlaylistManagePanel({
         <div className="max-h-[60vh] overflow-y-auto p-5">
           {actionError && <p className="mb-2 text-xs text-rose-300">{actionError}</p>}
 
-          {detailPending ? (
+          {membersPending ? (
             <p className="text-xs text-slate-500">Loading…</p>
           ) : orderedMembers.length === 0 ? (
             <p className="text-xs text-slate-500">No lessons yet.</p>
@@ -134,7 +131,21 @@ export default function PlaylistManagePanel({
                       <ArrowDown className="size-3.5" />
                     </button>
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-slate-300">{lesson.title}</span>
+                  <span
+                    className={`min-w-0 flex-1 truncate ${
+                      lesson.status === "published" ? "text-slate-300" : "text-slate-500"
+                    }`}
+                  >
+                    {lesson.title}
+                    {lesson.status !== "published" && (
+                      <span
+                        className="ml-2 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+                        title="Unpublished — hidden from the public playlist page until published again"
+                      >
+                        Draft
+                      </span>
+                    )}
+                  </span>
                   <button
                     type="button"
                     disabled={removingLessonId === lesson.id}

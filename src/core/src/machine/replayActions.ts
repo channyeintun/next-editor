@@ -85,8 +85,13 @@ export const setRecording = ({
     timeline: {
       currentTime: 0,
       duration,
-      speed: 1,
-      volume: 1,
+      // Speed and volume are player-level settings, not per-recording state:
+      // carry them across loads so a playlist auto-advance (or re-record)
+      // doesn't yank a viewer back to 1x/full volume mid-session. The audio
+      // child is spawned per-load from these context values (syncPlaybackAudio),
+      // so the carried values reach it.
+      speed: context.timeline.speed,
+      volume: context.timeline.volume,
       startedAt: 0,
       pausedDuration: 0,
       pausedAt: 0,

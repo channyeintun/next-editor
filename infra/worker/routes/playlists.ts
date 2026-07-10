@@ -4,6 +4,7 @@ import {
   addLessonToPlaylist,
   deletePlaylist,
   getOwnedPlaylistById,
+  getOwnedPlaylistLessons,
   getPlaylistById,
   getPlaylistBySlug,
   insertPlaylist,
@@ -15,6 +16,7 @@ import {
   type UpdatePlaylistParams,
 } from "../../db/playlistQueries";
 import {
+  lessonRowToOwnedLesson,
   playlistRowToOwnedPlaylist,
   playlistRowToOwnedPlaylistWithMembership,
   playlistRowToPlaylist,
@@ -94,6 +96,23 @@ playlistsRoute.get("/mine", async (c) => {
 
   const rows = await listOwnedPlaylists(c.env.DB, user.id);
   return c.json({ playlists: rows.map(playlistRowToOwnedPlaylist) });
+});
+
+// Owner-scoped membership read for the manage panel: every member including
+// currently-unpublished ones (the public GET /:slug below filters those out,
+// which would leave an unpublished member invisible and unremovable). Two
+// path segments, so the single-segment "/:slug" catch-all can't shadow it.
+playlistsRoute.get("/:id/lessons", async (c) => {
+  const user = await getCurrentUser(c);
+  if (!user) {
+    return c.json({ error: "not signed in" }, 401);
+  }
+
+  const rows = await getOwnedPlaylistLessons(c.env.DB, c.req.param("id"), user.id);
+  if (!rows) {
+    return c.json({ error: "not found" }, 404);
+  }
+  return c.json({ lessons: rows.map(lessonRowToOwnedLesson) });
 });
 
 playlistsRoute.patch("/:id", async (c) => {

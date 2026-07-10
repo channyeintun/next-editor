@@ -36,6 +36,12 @@ import { startTour } from "./tour/productTour";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
 
+// Initial value for the autoplay once-per-load guard below. A sentinel (not
+// undefined) because `recordingUrl` is legitimately undefined on ?url= and
+// drag-drop surfaces — an undefined-initialized ref would compare equal to it
+// and block autoplay before it ever fired once.
+const AUTOPLAY_NOT_FIRED = Symbol("autoplay-not-fired");
+
 export interface EditorProps {
   /** Force read-only playback (hides import/export, record mode, tour). Falls back
    *  to the `?readOnly=true` query param when omitted. */
@@ -112,10 +118,11 @@ export function EditorLayout({
 
   // Autoplay: start playback once a read-only recording has finished loading, when
   // either the persisted Autoplay setting or a one-shot playlist override requests
-  // it. Guarded to fire once per recording load — if the browser blocks the
-  // unprompted play() (no user gesture on a cold load), playback stays at time 0
-  // and FloatingPlayButton remains the visible fallback.
-  const autoplayedForRef = useRef<string | undefined>(undefined);
+  // it. Guarded to fire once per recording load (once per mount on surfaces where
+  // recordingUrl is undefined — ?url= and drag-drop).
+  const autoplayedForRef = useRef<string | undefined | typeof AUTOPLAY_NOT_FIRED>(
+    AUTOPLAY_NOT_FIRED,
+  );
   useEffect(() => {
     if (!readOnly || urlLoading || urlError || !currentRecording || !editorActor) {
       return;
@@ -129,11 +136,23 @@ export function EditorLayout({
     if (selectLiveTime(editorActor.getSnapshot()) !== 0) {
       return;
     }
-    autoplayedForRef.current = recordingUrl;
 
     const ctx = getAudioContext();
     unlockAudioContext(ctx);
     ctx.resume().catch(() => {});
+
+    // play() drives the replay machine, not a media element, so the browser's
+    // autoplay policy can't block it — starting an audio-bearing recording with a
+    // still-suspended AudioContext (cold load, no user gesture yet) would replay
+    // the visuals silently. Skip instead and leave FloatingPlayButton as the entry
+    // point. The playlist auto-advance override is exempt: it's only ever set by an
+    // in-session navigation, after a play gesture already unlocked the context.
+    const hasAudio = Boolean(currentRecording.audioBlob || currentRecording.audioUrl);
+    if (!autoplayOverride && hasAudio && ctx.state !== "running") {
+      return;
+    }
+
+    autoplayedForRef.current = recordingUrl;
     play();
   }, [
     readOnly,
