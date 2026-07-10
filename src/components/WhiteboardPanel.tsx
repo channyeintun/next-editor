@@ -9,6 +9,11 @@ import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import type { WhiteboardElementJSON } from "../core/src/whiteboard";
 
+// Image embeds are out of scope for v1 (binary files aren't recorded into the
+// .ne, see whiteboard-plan.md §4) — this also gates paste/drag-drop of images,
+// not just the toolbar button (Excalidraw checks it in insertImageElement).
+const UI_OPTIONS = { tools: { image: false } };
+
 // Excalidraw mutates the element objects it is handed in place (fractional-index
 // sync inside updateScene, and every live edit after playback hands control back).
 // The store's elements are the same objects held by `recording.whiteboardEvents`
@@ -64,19 +69,25 @@ export default function WhiteboardPanel() {
             <X size={16} />
           </button>
         </div>
-        <div className="relative flex-1">
+        {/* The arbitrary variant hides the library sidebar toggle — the library
+            has no recording semantics and Excalidraw exposes no UIOptions flag
+            for it. Zen mode is a default (via initialData, so the presenter can
+            still toggle it), not the controlled `zenModeEnabled` prop. */}
+        <div className="relative flex-1 [&_.default-sidebar-trigger]:hidden">
           <Excalidraw
             excalidrawAPI={(api) => {
               apiRef.current = api;
             }}
             theme="dark"
             viewModeEnabled={usesPlaybackModel}
+            UIOptions={UI_OPTIONS}
             initialData={{
               elements: toExcalidrawElements(scene.elements),
               appState: {
                 scrollX: scene.view.scrollX,
                 scrollY: scene.view.scrollY,
                 zoom: { value: scene.view.zoom as NormalizedZoomValue },
+                zenModeEnabled: true,
               },
             }}
             onChange={(
