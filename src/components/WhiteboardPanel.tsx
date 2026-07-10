@@ -78,11 +78,7 @@ export default function WhiteboardPanel() {
             excalidrawAPI={(api) => {
               apiRef.current = api;
             }}
-            // Light on purpose, despite the dark app chrome: Excalidraw's dark
-            // theme renders the whole canvas through an invert filter
-            // (invert(93%) hue-rotate(180deg)), so typed colors display flipped
-            // (#ffffff ink appears black). A white board keeps colors literal.
-            theme="light"
+            theme="dark"
             viewModeEnabled={usesPlaybackModel}
             UIOptions={UI_OPTIONS}
             initialData={{
