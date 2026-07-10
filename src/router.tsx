@@ -163,6 +163,12 @@ export const router = createBrowserRouter([
     ErrorBoundary: RouteErrorBoundary,
   },
   {
+    path: "/architecture",
+    lazy: lazyRoute(() => import("./components/ArchitecturePage"), "/architecture"),
+    HydrateFallback: RouteHydrateFallback,
+    ErrorBoundary: RouteErrorBoundary,
+  },
+  {
     path: "/learn",
     lazy: lazyRoute(() => import("@next-editor/tube"), "/learn"),
     HydrateFallback: RouteHydrateFallback,
