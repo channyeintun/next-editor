@@ -811,7 +811,6 @@ export const applyWhiteboardEventsAtTime = ({
 
   if (replayResult.stateToApply) {
     applyWhiteboardState(replayResult.stateToApply);
-    return { lastAppliedWhiteboardEventIndex: replayResult.nextIndex };
   }
 
   if (replayResult.nextIndex !== lastAppliedWhiteboardEventIndex) {

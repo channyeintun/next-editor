@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { PreviewEvent, Slide, SlideEvent } from "../slides";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
-import type { WhiteboardEvent } from "../whiteboard";
+import { EMPTY_WHITEBOARD_SCENE, type WhiteboardEvent } from "../whiteboard";
 import {
   getPreviewReplayResult,
   getRuntimeReplayResult,
@@ -800,18 +800,32 @@ describe("replayState", () => {
     expect(backward.stateToApply?.elements).toEqual(whiteboardEvents[0].upserts);
   });
 
-  it("returns no stateToApply when the index hasn't changed or precedes the first event", () => {
+  it("applies the empty scene before the first event and nothing when the index is unchanged", () => {
     const whiteboardEvents: WhiteboardEvent[] = [
       { timestamp: 100, upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false }] },
     ];
 
+    // Before the first event the board didn't exist yet, so the empty scene is
+    // the correct absolute state. The stable EMPTY_WHITEBOARD_SCENE reference
+    // matters (not just structural equality): the store's reference-equality
+    // guard is what makes the per-tick re-application free.
     const beforeFirstEvent = getWhiteboardReplayResult({
       whiteboardEvents,
       currentTime: 50,
       lastAppliedIndex: -1,
     });
     expect(beforeFirstEvent.nextIndex).toBe(-1);
-    expect(beforeFirstEvent.stateToApply).toBeUndefined();
+    expect(beforeFirstEvent.stateToApply).toBe(EMPTY_WHITEBOARD_SCENE);
+
+    // A backward seek to before the first event (index already reset to -1 by
+    // the SEEK handling) must clear the previously applied scene the same way.
+    const backwardPastFirstEvent = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 50,
+      lastAppliedIndex: 0,
+    });
+    expect(backwardPastFirstEvent.nextIndex).toBe(-1);
+    expect(backwardPastFirstEvent.stateToApply).toBe(EMPTY_WHITEBOARD_SCENE);
 
     const unchanged = getWhiteboardReplayResult({
       whiteboardEvents,
@@ -820,5 +834,32 @@ describe("replayState", () => {
     });
     expect(unchanged.nextIndex).toBe(0);
     expect(unchanged.stateToApply).toBeUndefined();
+  });
+
+  it("orders replayed whiteboard elements by fractional index so z-order changes survive", () => {
+    // Draw a then b ([a, b]); bring a to front — Excalidraw bumps a's version
+    // and gives it a fractional index sorting after b's. The replayed array
+    // must be [b, a]: Excalidraw's updateScene treats array order as the truth
+    // and would otherwise rewrite the recorded indices back to [a, b].
+    const whiteboardEvents: WhiteboardEvent[] = [
+      {
+        timestamp: 0,
+        upserts: [
+          { id: "a", version: 1, versionNonce: 1, isDeleted: false, index: "a0" },
+          { id: "b", version: 1, versionNonce: 2, isDeleted: false, index: "a1" },
+        ],
+      },
+      {
+        timestamp: 100,
+        upserts: [{ id: "a", version: 2, versionNonce: 3, isDeleted: false, index: "a2" }],
+      },
+    ];
+
+    const result = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 150,
+      lastAppliedIndex: -1,
+    });
+    expect(result.stateToApply?.elements.map((element) => element.id)).toEqual(["b", "a"]);
   });
 });

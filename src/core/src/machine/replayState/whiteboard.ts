@@ -1,5 +1,6 @@
 import {
   EMPTY_WHITEBOARD_SCENE,
+  type WhiteboardElementJSON,
   type WhiteboardEvent,
   type WhiteboardSceneState,
 } from "../../whiteboard";
@@ -27,6 +28,19 @@ export interface WhiteboardReplayResult {
 
 const whiteboardReplayIndexCache = new WeakMap<WhiteboardEvent[], WhiteboardReplayIndex>();
 
+// Excalidraw z-orders elements by their fractional `index` field (lexicographic
+// by design), but the fold below rebuilds the array in Map-insertion order —
+// an upsert of an existing id keeps its original slot even when the change was
+// a bring-to-front. Excalidraw's updateScene treats array order as the truth
+// and rewrites disagreeing `index` fields (syncInvalidIndices), so the array
+// must be sorted by `index` before it ever reaches updateScene.
+function compareElementIndices(a: WhiteboardElementJSON, b: WhiteboardElementJSON): number {
+  const aIndex = typeof a.index === "string" ? a.index : undefined;
+  const bIndex = typeof b.index === "string" ? b.index : undefined;
+  if (aIndex === undefined || bIndex === undefined || aIndex === bIndex) return 0;
+  return aIndex < bIndex ? -1 : 1;
+}
+
 function applyWhiteboardEvent(
   state: WhiteboardSceneState,
   event: WhiteboardEvent,
@@ -48,7 +62,7 @@ function applyWhiteboardEvent(
       }
     }
 
-    elements = Array.from(byId.values());
+    elements = Array.from(byId.values()).sort(compareElementIndices);
   }
 
   return {
@@ -90,7 +104,17 @@ export function getWhiteboardReplayResult({
 }): WhiteboardReplayResult {
   const nextIndex = findTimedEventIndexAtOrBefore(whiteboardEvents, currentTime, lastAppliedIndex);
 
-  if (nextIndex < 0 || nextIndex === lastAppliedIndex) {
+  // Before the first event the board did not exist yet, so the empty scene is
+  // the correct absolute state — without this, a backward seek (or replay
+  // restart) to a time before the first event would leave the previously
+  // applied scene on screen, since the SEEK reset makes `lastAppliedIndex`
+  // equal to `nextIndex` (-1). EMPTY_WHITEBOARD_SCENE is a stable singleton,
+  // so the store's reference-equality guard makes repeated applications free.
+  if (nextIndex < 0) {
+    return { nextIndex, stateToApply: EMPTY_WHITEBOARD_SCENE };
+  }
+
+  if (nextIndex === lastAppliedIndex) {
     return { nextIndex };
   }
 

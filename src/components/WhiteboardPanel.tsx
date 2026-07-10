@@ -9,6 +9,17 @@ import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import type { WhiteboardElementJSON } from "../core/src/whiteboard";
 
+// Excalidraw mutates the element objects it is handed in place (fractional-index
+// sync inside updateScene, and every live edit after playback hands control back).
+// The store's elements are the same objects held by `recording.whiteboardEvents`
+// and the replay fold cache, so hand Excalidraw per-element copies to keep the
+// recorded data pristine.
+function toExcalidrawElements(
+  elements: readonly WhiteboardElementJSON[],
+): OrderedExcalidrawElement[] {
+  return elements.map((element) => ({ ...element })) as unknown as OrderedExcalidrawElement[];
+}
+
 export default function WhiteboardPanel() {
   const { scene, isOpen, setOpen, handleExcalidrawChange } = useWhiteboardContext();
   const { usesPlaybackModel } = useNextEditorMetadata();
@@ -21,7 +32,7 @@ export default function WhiteboardPanel() {
   useEffect(() => {
     if (!apiRef.current || !usesPlaybackModel) return;
     apiRef.current.updateScene({
-      elements: scene.elements as unknown as OrderedExcalidrawElement[],
+      elements: toExcalidrawElements(scene.elements),
       appState: {
         scrollX: scene.view.scrollX,
         scrollY: scene.view.scrollY,
@@ -61,7 +72,7 @@ export default function WhiteboardPanel() {
             theme="dark"
             viewModeEnabled={usesPlaybackModel}
             initialData={{
-              elements: scene.elements as unknown as OrderedExcalidrawElement[],
+              elements: toExcalidrawElements(scene.elements),
               appState: {
                 scrollX: scene.view.scrollX,
                 scrollY: scene.view.scrollY,

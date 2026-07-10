@@ -401,6 +401,49 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  it("clears the whiteboard when seeking to before its first event", async () => {
+    const applied: Array<{ elementIds: string[]; isOpen: boolean }> = [];
+
+    // First whiteboard event lands mid-recording — the board didn't exist
+    // before it, so seeking back past it must clear the scene rather than
+    // leave the previously applied drawing on screen.
+    const recording: Recording = {
+      ...createRecording(),
+      whiteboardEvents: [
+        {
+          timestamp: 500,
+          upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false }],
+          isOpen: true,
+        },
+      ],
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        applyWhiteboardState: (state) => {
+          applied.push({
+            elementIds: state.elements.map((element) => element.id),
+            isOpen: state.isOpen,
+          });
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    applied.length = 0;
+    actor.send({ type: "SEEK", time: 600 });
+    expect(applied).toEqual([{ elementIds: ["a"], isOpen: true }]);
+
+    applied.length = 0;
+    actor.send({ type: "SEEK", time: 100 });
+    expect(applied).toEqual([{ elementIds: [], isOpen: false }]);
+
+    actor.stop();
+  });
+
   it("applies workspace, runtime, then preview snapshots during replay sync", async () => {
     const calls: string[] = [];
     const firstWorkspace = createWorkspaceSnapshot("first", 0);
