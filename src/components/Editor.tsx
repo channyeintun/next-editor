@@ -88,9 +88,9 @@ export function EditorLayout({
   const { isDragging, error: dropError, clearError: clearDropError } = useDragAndDropUrl();
 
   const { isRecording, isPlaying, currentRecording, hasEnded } = useNextEditorMetadata();
-  const { play } = useNextEditorActions();
-  const { editorActor } = useNextEditorPlayback();
-  const { autoplay } = usePlaybackSettings();
+  const { play, setPlaybackSpeed, setVolume } = useNextEditorActions();
+  const { editorActor, playbackSpeed, volume } = useNextEditorPlayback();
+  const { autoplay, speed: persistedSpeed, volume: persistedVolume } = usePlaybackSettings();
   const { target: postRecordingTarget, clear: clearPostRecordingTarget } = usePostRecordingTarget(
     isRecording,
     currentRecording,
@@ -115,6 +115,32 @@ export function EditorLayout({
     }
     wasEndedRef.current = hasEnded;
   }, [hasEnded, onEnded]);
+
+  // Hydrate the machine from the persisted player-level speed/volume. Keyed on
+  // currentRecording because SET_SPEED/SET_VOLUME are only handled inside the
+  // machine's playback state (earlier sends are dropped), and setRecording
+  // assigns a fresh recording object exactly when playback is (re)entered.
+  // MediaControls writes user changes to both the machine and the settings
+  // store, so after this first push the two stay equal and the effect no-ops.
+  useEffect(() => {
+    if (!currentRecording) {
+      return;
+    }
+    if (playbackSpeed !== persistedSpeed) {
+      setPlaybackSpeed(persistedSpeed);
+    }
+    if (volume !== persistedVolume) {
+      setVolume(persistedVolume);
+    }
+  }, [
+    currentRecording,
+    playbackSpeed,
+    persistedSpeed,
+    volume,
+    persistedVolume,
+    setPlaybackSpeed,
+    setVolume,
+  ]);
 
   // Autoplay: start playback once a read-only recording has finished loading, when
   // either the persisted Autoplay setting or a one-shot playlist override requests

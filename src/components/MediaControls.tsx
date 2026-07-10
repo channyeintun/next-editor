@@ -207,9 +207,19 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     seekTo(targetTime);
   };
 
+  // Speed/volume go to the machine (drives this playback immediately) AND the
+  // settings store (persists them as player-level settings — Editor re-applies
+  // them when a fresh machine instance loads a recording).
   const handleVolumeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(event.target.value);
     setVolume(newVolume);
+    playbackSettingsTrigger.setVolume({ volume: newVolume });
+  };
+
+  const handleSpeedChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newSpeed = parseFloat(event.target.value);
+    setPlaybackSpeed(newSpeed);
+    playbackSettingsTrigger.setSpeed({ speed: newSpeed });
   };
 
   const handleSelectMicrophoneAudio = () => {
@@ -624,7 +634,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                           max="2"
                           step="0.25"
                           value={playbackSpeed}
-                          onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                          onChange={handleSpeedChange}
                           className="flex-1 h-1 bg-slate-600 rounded appearance-none cursor-pointer accent-[#10c776]"
                         />
                       </div>
