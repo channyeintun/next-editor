@@ -17,7 +17,7 @@ import {
 } from "../../stores/apiClientStore";
 import type { ApiClientRequestTab } from "../../types/slides";
 
-const HTTP_METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+const HTTP_METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE", "QUERY"];
 
 // Module constants so MonacoEditor's options identity is stable across renders.
 const REQUEST_BODY_EDITOR_OPTIONS: MonacoEditorProps["options"] = {
@@ -52,6 +52,7 @@ const METHOD_COLORS: Record<HttpMethod, string> = {
   PUT: "text-blue-400",
   PATCH: "text-purple-400",
   DELETE: "text-red-400",
+  QUERY: "text-cyan-400",
 };
 
 function statusColor(status: number): string {

@@ -1,7 +1,7 @@
 import { createStore } from "@xstate/store-react";
 import type { ApiClientRecordedResult, ApiClientRequestTab } from "../types/slides";
 
-export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "QUERY";
 
 export interface ApiClientHeader {
   key: string;
