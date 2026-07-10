@@ -1,7 +1,20 @@
 import { fromCallback } from "xstate";
 import { getSupportedAudioMimeType } from "../utils/audioMimeType";
 
+/**
+ * Dead zone for the periodic SYNC safety net. Reseeking an HTMLAudioElement is
+ * audible (a brief gap), so routine ticks only correct gross drift.
+ */
 const AUDIO_SYNC_DRIFT_THRESHOLD_MS = 500;
+
+/**
+ * Dead zone for explicit repositioning (spawn/SEEK/PLAY) and for the re-anchor
+ * on the element's `playing` event. Kept just large enough to skip redundant
+ * micro-seeks; anything above ~50ms is within lip-sync perceptibility, so these
+ * paths correct it exactly instead of letting it persist under the SYNC
+ * threshold.
+ */
+const AUDIO_EXACT_SYNC_EPSILON_MS = 50;
 
 /**
  * MediaRecorder timeslice (ms). Emitting `ondataavailable` on an interval produces
@@ -230,8 +243,14 @@ export const audioRecordingActor = fromCallback<
 /**
  * Audio playback actor — plays recording audio through a native HTMLAudioElement, synchronized to the
  * editor timeline. By bypassing Web Audio API decoding, startup is instant.
- * Pitch preservation is disabled so that changing the playback rate resamples the audio smoothly
- * without algorithmic artifacts (at the cost of raising/lowering the pitch).
+ * Pitch is preserved across playback-rate changes (native time-stretching).
+ *
+ * Sync model: the machine's timeline (rAF wall clock) is the master. The machine
+ * reports timeline positions via SEEK (explicit) and SYNC (every ~250ms while
+ * playing). Between reports the target is extrapolated at the playback rate, so
+ * the re-anchor on the element's `playing` event — which fires only after
+ * `play()`'s real startup latency — can seek to where the timeline actually is
+ * by then, instead of freezing in the startup lag forever.
  */
 export const audioPlaybackActor = fromCallback<
   AudioPlaybackEvent,
@@ -239,13 +258,15 @@ export const audioPlaybackActor = fromCallback<
   AudioPlaybackEmit
 >(({ sendBack, receive, input }) => {
   let disposed = false;
-  let targetTimeMs = input.startPositionMs;
   let startOffsetMs = input.startOffsetMs ?? 0;
   let requestedPlay = false;
+  // Timeline position last reported by the machine, and when it was reported.
+  let lastKnownTimelineMs = input.startPositionMs;
+  let lastKnownAtPerf = performance.now();
 
   const audio = new Audio();
   audio.crossOrigin = "anonymous";
-  audio.preservesPitch = true; // User requested pitch shift instead of native time-stretching
+  audio.preservesPitch = true;
 
   let currentObjectUrl: string | null = null;
   if (input.audioUrl) {
@@ -258,15 +279,37 @@ export const audioPlaybackActor = fromCallback<
   audio.volume = input.volume;
   audio.playbackRate = input.playbackRate;
 
-  const applyTargetTime = () => {
-    const targetSec = Math.max(0, targetTimeMs - startOffsetMs) / 1000;
-    if (Math.abs(audio.currentTime - targetSec) > AUDIO_SYNC_DRIFT_THRESHOLD_MS / 1000) {
+  const setKnownTimelineTime = (timeMs: number) => {
+    lastKnownTimelineMs = timeMs;
+    lastKnownAtPerf = performance.now();
+  };
+
+  /** Where the machine's timeline is right now, extrapolated while playing. */
+  const currentTargetMs = () => {
+    const elapsed = requestedPlay ? (performance.now() - lastKnownAtPerf) * audio.playbackRate : 0;
+    return lastKnownTimelineMs + elapsed;
+  };
+
+  const applyTargetTime = (driftThresholdMs: number) => {
+    const targetSec = Math.max(0, currentTargetMs() - startOffsetMs) / 1000;
+    if (Math.abs(audio.currentTime - targetSec) > driftThresholdMs / 1000) {
       audio.currentTime = targetSec;
     }
   };
 
   // Seek immediately on spawn if needed
-  applyTargetTime();
+  applyTargetTime(AUDIO_EXACT_SYNC_EPSILON_MS);
+
+  audio.onplaying = () => {
+    if (disposed) return;
+    // Sound is actually flowing now — `play()` resolved some tens/hundreds of ms
+    // after the timeline started, and the audio began from the pre-latency seek
+    // position. Re-anchor to the extrapolated timeline so that startup lag does
+    // not persist below the SYNC dead zone for the rest of playback. The seek
+    // this triggers refires `playing`, but the residual drift is then just the
+    // seek latency, which lands inside the epsilon and terminates the cycle.
+    applyTargetTime(AUDIO_EXACT_SYNC_EPSILON_MS);
+  };
 
   audio.oncanplay = () => {
     if (disposed) return;
@@ -291,20 +334,26 @@ export const audioPlaybackActor = fromCallback<
     switch (event.type) {
       case "PLAY":
         requestedPlay = true;
-        applyTargetTime();
+        // Exact re-align at (re)start: a pause can leave the element a few
+        // hundred ms off the timeline, and letting that ride under the SYNC
+        // dead zone would accumulate more lag with every play/pause cycle.
+        applyTargetTime(AUDIO_EXACT_SYNC_EPSILON_MS);
         audio.play().catch(() => {});
         break;
       case "PAUSE":
+        // Freeze extrapolation at the current target before clearing the flag.
+        setKnownTimelineTime(currentTargetMs());
         requestedPlay = false;
         audio.pause();
         break;
       case "SEEK":
-        targetTimeMs = event.timeMs;
-        applyTargetTime();
+        // Explicit repositioning is exact — even a sub-500ms nudge must move the audio.
+        setKnownTimelineTime(event.timeMs);
+        applyTargetTime(AUDIO_EXACT_SYNC_EPSILON_MS);
         break;
       case "SYNC":
-        targetTimeMs = event.timeMs;
-        applyTargetTime();
+        setKnownTimelineTime(event.timeMs);
+        applyTargetTime(AUDIO_SYNC_DRIFT_THRESHOLD_MS);
         if (requestedPlay && audio.paused) {
           audio.play().catch(() => {});
         }
@@ -313,6 +362,9 @@ export const audioPlaybackActor = fromCallback<
         audio.volume = event.volume;
         break;
       case "SET_PLAYBACK_RATE":
+        // Re-anchor with the old rate first so the elapsed-time extrapolation
+        // never applies the new rate to the interval before the change.
+        setKnownTimelineTime(currentTargetMs());
         audio.playbackRate = event.rate;
         break;
     }

@@ -18,6 +18,13 @@ const OVERLAY_RADIUS = 32;
 const EDGE_PADDING = 24;
 const MEDIA_CONTROLS_CLEARANCE = 88;
 const DRIFT_THRESHOLD_MS = 250;
+/**
+ * Dead zone for the one-shot re-anchor on the element's `playing` event.
+ * `video.play()` delivers its first frame tens/hundreds of ms after the
+ * timeline starts, and the rAF loop's DRIFT_THRESHOLD_MS dead zone would
+ * otherwise preserve that startup lag for the whole playback.
+ */
+const START_SYNC_EPSILON_MS = 50;
 const MINIMIZED_HANDLE_HEIGHT = 56;
 
 /** Live-preview capture constraints; mirror the camera recorder so the framing matches. */
@@ -290,6 +297,21 @@ const CameraOverlay: React.FC = () => {
     }
 
     applyTimeline();
+
+    // Re-anchor once frames are actually flowing. The seek this triggers refires
+    // `playing`, but the residual drift is then just the seek latency, which
+    // lands inside the epsilon and terminates the cycle.
+    const handlePlaying = () => {
+      const { currentTime } = actorRef.getSnapshot().context.timeline;
+      const targetMs = Math.max(0, currentTime - cameraStartOffsetMs);
+      if (
+        Number.isFinite(targetMs) &&
+        Math.abs(video.currentTime * 1000 - targetMs) > START_SYNC_EPSILON_MS
+      ) {
+        video.currentTime = targetMs / 1000;
+      }
+    };
+    video.addEventListener("playing", handlePlaying);
     void video.play().catch(() => {});
 
     let animationFrameId = 0;
@@ -300,6 +322,7 @@ const CameraOverlay: React.FC = () => {
     animationFrameId = requestAnimationFrame(syncVideo);
 
     return () => {
+      video.removeEventListener("playing", handlePlaying);
       cancelAnimationFrame(animationFrameId);
     };
   }, [actorRef, cameraStartOffsetMs, isMinimized, isVisible, isPlaying, videoUrl]);
