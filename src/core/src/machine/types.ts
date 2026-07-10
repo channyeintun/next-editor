@@ -27,6 +27,7 @@ import type { DeltaFrame } from "../utils/deltaTypes";
 import type { FrameStreamEncoderState } from "../utils/frameStreamEncoder";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type { WhiteboardEvent, WhiteboardSceneState } from "../whiteboard";
 import type { CapturedViewStateRef } from "./editorMachineHelpers";
 
 // ============================================================================
@@ -122,6 +123,8 @@ export interface RecordingSession {
   runtimeEvents: RuntimeRecordingEvent[];
   /** High-cadence fake cursor samples during recording */
   cursorEvents: CursorRecordingEvent[];
+  /** Collected whiteboard change events during recording */
+  whiteboardEvents: WhiteboardEvent[];
   /**
    * Timeline-aware audio fragments captured during recording. For microphone recordings these are
    * `MediaRecorder` timeslice fragments; for a selected audio file it is the single file blob.
@@ -275,6 +278,10 @@ export interface EditorMachineContext {
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
   /** Callback to apply runtime snapshot during playback */
   applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
+  /** Callback to get whiteboard scene state during recording */
+  getWhiteboardState?: () => WhiteboardSceneState | null;
+  /** Callback to apply whiteboard scene state during playback */
+  applyWhiteboardState?: (state: WhiteboardSceneState) => void;
   /** Index of the last applied frame during playback */
   lastAppliedFrameIndex: number;
   /** Index of the last applied preview event during playback */
@@ -287,6 +294,8 @@ export interface EditorMachineContext {
   lastAppliedWorkspaceEventIndex: number;
   /** Index of the last applied runtime event during playback */
   lastAppliedRuntimeEventIndex: number;
+  /** Index of the last applied whiteboard event during playback */
+  lastAppliedWhiteboardEventIndex: number;
   /** Last applied preview state to avoid redundant updates */
   lastAppliedPreviewState?: PreviewState;
   /** Last time (performance.now()) audio was synced */
@@ -491,6 +500,12 @@ export type RuntimeEventOccurred = {
   type: "RUNTIME_EVENT";
 };
 
+/** Whiteboard event occurred */
+export type WhiteboardEventOccurred = {
+  type: "WHITEBOARD_EVENT";
+  event: WhiteboardEvent;
+};
+
 /** Audio chunk received */
 export type AudioChunkEvent = {
   type: "CHUNK";
@@ -561,6 +576,7 @@ export type EditorMachineEvent =
   | PreviewPatchBatchOccurred
   | WorkspaceEventOccurred
   | RuntimeEventOccurred
+  | WhiteboardEventOccurred
   | AudioChunkEvent
   | CameraActorStartedEvent
   | CameraChunkEvent
@@ -620,6 +636,8 @@ export interface EditorMachineInput {
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
   applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
+  getWhiteboardState?: () => WhiteboardSceneState | null;
+  applyWhiteboardState?: (state: WhiteboardSceneState) => void;
 }
 
 // ============================================================================
@@ -684,6 +702,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   lastAppliedSlideEventIndex: -1,
   lastAppliedWorkspaceEventIndex: -1,
   lastAppliedRuntimeEventIndex: -1,
+  lastAppliedWhiteboardEventIndex: -1,
   lastAppliedPreviewState: undefined,
   applySlideState: input.applySlideState,
   applySlides: input.applySlides,
@@ -696,6 +715,8 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   applyWorkspaceSnapshot: input.applyWorkspaceSnapshot,
   getRuntimeSnapshot: input.getRuntimeSnapshot,
   applyRuntimeSnapshot: input.applyRuntimeSnapshot,
+  getWhiteboardState: input.getWhiteboardState,
+  applyWhiteboardState: input.applyWhiteboardState,
   onRecordingStart: input.onRecordingStart,
   onRecordingStop: input.onRecordingStop,
   onPlaybackStart: input.onPlaybackStart,

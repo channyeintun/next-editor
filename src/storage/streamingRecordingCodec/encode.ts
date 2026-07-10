@@ -324,6 +324,7 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
   queueClusteredEventSegments(SEGMENT_KIND.workspace, normalized.workspaceEvents, 1);
   queueClusteredEventSegments(SEGMENT_KIND.runtime, normalized.runtimeEvents, 1);
   queueClusteredEventSegments(SEGMENT_KIND.cursor, normalized.cursorEvents, 1);
+  queueClusteredEventSegments(SEGMENT_KIND.whiteboard, normalized.whiteboardEvents, 1);
 
   pendingSegments
     .sort(

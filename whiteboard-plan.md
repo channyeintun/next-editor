@@ -1,6 +1,6 @@
 # Whiteboard Feature — Implementation Plan
 
-Status: **plan only, not implemented**. Written 2026-07-10 after codebase + library research.
+Status: **implemented** (2026-07-10). All phases (§11) landed: types/codec/capture/replay/UI, with unit + machine-level integration tests, `tsc`, and `bun run check` all green. One deviation from this plan's original design, made during implementation and left here for the record: the replay engine does **not** use periodic keyframes — see the note at the top of `src/core/src/machine/replayState/whiteboard.ts`, which caches a per-index reduced-scene fold (mirroring the preview track's `retainedStates` cache) so every seek is O(1) after the first pass, without needing keyframe rebasing at all. UI verified via `tsc`/tests only, per this repo's convention — not through a browser; the user should eyeball the actual drawing/record/replay flow before shipping.
 
 ## 1. Goal & scope
 
@@ -28,7 +28,7 @@ Why Excalidraw wins despite tldraw's better change API: the delta derivation we 
 
 Known costs, accepted:
 
-- **Bundle size** — several hundred KB gzipped. Mitigated: lazy `lazy(() => import(...))` chunk exactly like `Preview` ([CodeEditor.tsx:32](src/components/CodeEditor.tsx)). Never loaded unless the panel is opened or a recording contains a whiteboard track. No impact on the mobile landing path.
+- **Bundle size** — measured directly from the installed package: `dist/prod/index.js` is ~155 KB gzip, `index.css` ~23 KB gzip, ≈178 KB gzip total for the main chunk (fonts/locales/mermaid are separate chunks Excalidraw lazy-loads itself, not pulled in by default). Mitigated: lazy `lazy(() => import(...))` chunk exactly like `Preview` ([CodeEditor.tsx:32](src/components/CodeEditor.tsx)). Never loaded unless the panel is opened or a recording contains a whiteboard track. No impact on the mobile landing path.
 - **onChange gives full arrays, not deltas** — we diff by `(id, version)`; see §4.
 - **onChange fires per pointer-move while drawing** — we throttle/coalesce at capture; see §4.
 
@@ -160,7 +160,7 @@ Note for implementation sessions: serialize any subagent commits (pre-commit sta
 
 ## 12. Risks & open questions
 
-1. **`onChange` and deleted elements** — must verify in the pinned version whether soft-deleted elements are included; fallback API exists (§4). _Resolved in Phase 0._
+1. **`onChange` and deleted elements** — ~~must verify~~ **RESOLVED**: confirmed by reading `dist/dev/index.js` (`App.componentDidUpdate`) that `onChange` fires with `this.scene.getElementsIncludingDeleted()`, so soft-deleted elements are always present in the array; no fallback API call needed. Also confirmed `updateScene({ elements, appState, captureUpdate: CaptureUpdateAction.NEVER })` exists for applying replay state without polluting Excalidraw's own undo stack — use `NEVER` in `applyWhiteboardState`.
 2. **Excalidraw version pinning** — pin exact version in package.json; its scene schema is versioned but the React API has moved between 0.x minors.
 3. **Undo during recording** — arrives as ordinary version-bumped upserts; replay shows the undo happening. Expected behavior, but confirm it feels right.
 4. **Live board state vs playback** — when the user plays a recording while having their own live drawing open, playback overwrites the store. v1: snapshot/restore live scene around playback, or simply clear on playback start (decide in Phase 3; slides have the same semantics today).

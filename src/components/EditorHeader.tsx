@@ -13,11 +13,13 @@ import {
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  PenTool,
   Settings,
   Variable,
 } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
+import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
@@ -145,6 +147,23 @@ function PreviewHeaderButton() {
       className={`${HEADER_ICON_BUTTON_CLASS} ${HEADER_ICON_BUTTON_NEUTRAL_CLASS}`}
     >
       {isOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+    </button>
+  );
+}
+
+function WhiteboardHeaderButton() {
+  const { isOpen, setOpen } = useWhiteboardContext();
+
+  return (
+    <button
+      type="button"
+      aria-label={isOpen ? "Close whiteboard" : "Open whiteboard"}
+      aria-pressed={isOpen}
+      title={isOpen ? "Close whiteboard" : "Open whiteboard"}
+      onClick={() => setOpen(!isOpen)}
+      className={`${HEADER_ICON_BUTTON_CLASS} ${isOpen ? "bg-[#273449] text-white" : HEADER_ICON_BUTTON_NEUTRAL_CLASS}`}
+    >
+      <PenTool size={16} />
     </button>
   );
 }
@@ -659,6 +678,7 @@ function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
         <div className="h-4 w-px bg-slate-700 mx-1" />
         <div className="flex items-center gap-2">
           <SlidesButton presentationToggleOnly={!showImportExport} />
+          <WhiteboardHeaderButton />
           <PreviewHeaderButton />
         </div>
       </div>

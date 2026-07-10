@@ -4,6 +4,7 @@ import type {
   PreviewInitialDocument,
   SlideEvent,
 } from "../slides";
+import type { WhiteboardEvent } from "../whiteboard";
 import type { RuntimeRecordingSnapshot } from "../../../types/runtime";
 import {
   areWorkspaceSnapshotsEqual,
@@ -30,6 +31,17 @@ export function appendSlideRecordingEvent(
   event: SlideEvent,
 ): RecordingSession {
   session.slideEvents.push({
+    ...event,
+    timestamp: getRecordingTimestamp(session),
+  });
+  return session;
+}
+
+export function appendWhiteboardRecordingEvent(
+  session: RecordingSession,
+  event: WhiteboardEvent,
+): RecordingSession {
+  session.whiteboardEvents.push({
     ...event,
     timestamp: getRecordingTimestamp(session),
   });

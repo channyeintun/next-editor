@@ -69,3 +69,11 @@ export type {
   PreviewInitialDocument,
   PreviewRecordedEvent,
 } from "./slides";
+
+// Whiteboard type exports
+export type {
+  WhiteboardElementJSON,
+  WhiteboardView,
+  WhiteboardEvent,
+  WhiteboardSceneState,
+} from "./whiteboard";

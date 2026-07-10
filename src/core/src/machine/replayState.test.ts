@@ -2,10 +2,12 @@ import { describe, expect, it } from "vite-plus/test";
 import type { PreviewEvent, Slide, SlideEvent } from "../slides";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type { WhiteboardEvent } from "../whiteboard";
 import {
   getPreviewReplayResult,
   getRuntimeReplayResult,
   getSlideReplayResult,
+  getWhiteboardReplayResult,
   getWorkspaceReplayResult,
 } from "./replayState";
 
@@ -701,5 +703,122 @@ describe("replayState", () => {
 
     expect(result.nextIndex).toBe(1);
     expect(result.snapshotToApply).toEqual(runtimeEvents[1].snapshot);
+  });
+
+  it("reduces whiteboard deltas cumulatively to reconstruct the scene at a given time", () => {
+    const whiteboardEvents: WhiteboardEvent[] = [
+      {
+        timestamp: 0,
+        upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false, points: [[0, 0]] }],
+        isOpen: true,
+      },
+      {
+        timestamp: 100,
+        upserts: [
+          {
+            id: "a",
+            version: 2,
+            versionNonce: 2,
+            isDeleted: false,
+            points: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
+          { id: "b", version: 1, versionNonce: 3, isDeleted: false, points: [[5, 5]] },
+        ],
+      },
+      {
+        timestamp: 200,
+        removedIds: ["a"],
+        view: { scrollX: 10, scrollY: 20, zoom: 2 },
+      },
+    ];
+
+    const atFirstEvent = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 50,
+      lastAppliedIndex: -1,
+    });
+    expect(atFirstEvent.nextIndex).toBe(0);
+    expect(atFirstEvent.stateToApply?.elements).toEqual(whiteboardEvents[0].upserts);
+    expect(atFirstEvent.stateToApply?.isOpen).toBe(true);
+
+    const atSecondEvent = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 150,
+      lastAppliedIndex: 0,
+    });
+    expect(atSecondEvent.nextIndex).toBe(1);
+    expect(atSecondEvent.stateToApply?.elements).toEqual([
+      whiteboardEvents[1].upserts?.[0],
+      whiteboardEvents[1].upserts?.[1],
+    ]);
+    // isOpen carries forward from the first event since the second doesn't set it.
+    expect(atSecondEvent.stateToApply?.isOpen).toBe(true);
+
+    const atThirdEvent = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 250,
+      lastAppliedIndex: 1,
+    });
+    expect(atThirdEvent.nextIndex).toBe(2);
+    // "a" was removed, "b" survives.
+    expect(atThirdEvent.stateToApply?.elements).toEqual([whiteboardEvents[1].upserts?.[1]]);
+    expect(atThirdEvent.stateToApply?.view).toEqual({ scrollX: 10, scrollY: 20, zoom: 2 });
+  });
+
+  it("re-derives the whiteboard scene correctly on a backward seek", () => {
+    const whiteboardEvents: WhiteboardEvent[] = [
+      {
+        timestamp: 0,
+        upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false }],
+      },
+      {
+        timestamp: 100,
+        removedIds: ["a"],
+      },
+    ];
+
+    // Forward to the removal first.
+    const forward = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 150,
+      lastAppliedIndex: -1,
+    });
+    expect(forward.nextIndex).toBe(1);
+    expect(forward.stateToApply?.elements).toEqual([]);
+
+    // Seek backward past the removal — must reconstruct from the start, not
+    // carry the (now-stale) reduced state forward.
+    const backward = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 50,
+      lastAppliedIndex: forward.nextIndex,
+    });
+    expect(backward.nextIndex).toBe(0);
+    expect(backward.stateToApply?.elements).toEqual(whiteboardEvents[0].upserts);
+  });
+
+  it("returns no stateToApply when the index hasn't changed or precedes the first event", () => {
+    const whiteboardEvents: WhiteboardEvent[] = [
+      { timestamp: 100, upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false }] },
+    ];
+
+    const beforeFirstEvent = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 50,
+      lastAppliedIndex: -1,
+    });
+    expect(beforeFirstEvent.nextIndex).toBe(-1);
+    expect(beforeFirstEvent.stateToApply).toBeUndefined();
+
+    const unchanged = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 150,
+      lastAppliedIndex: 0,
+    });
+    expect(unchanged.nextIndex).toBe(0);
+    expect(unchanged.stateToApply).toBeUndefined();
   });
 });

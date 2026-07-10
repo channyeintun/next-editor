@@ -6,6 +6,7 @@
 //   * workspace.ts — workspace/file/sidebar snapshot
 //   * runtime.ts   — runtime snapshot
 //   * slide.ts     — slide deck state
+//   * whiteboard.ts — whiteboard scene state
 //
 // Re-exported here so callers keep importing from "replayState" unchanged.
 
@@ -22,3 +23,6 @@ export type { RuntimeReplayResult } from "./runtime";
 
 export { getSlideReplayResult } from "./slide";
 export type { SlideReplayApplication, SlideReplayResult } from "./slide";
+
+export { getWhiteboardReplayResult } from "./whiteboard";
+export type { WhiteboardReplayResult } from "./whiteboard";

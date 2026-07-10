@@ -104,6 +104,35 @@ describe("recordingCodec", () => {
     expect(reconstructed?.state.content).toBe("LINE one\nline two\nline three\nLINE four\n");
   });
 
+  it("round trips whiteboard events, including an unknown-kind-8 skip guard", async () => {
+    const recording = createRecording({
+      duration: 800,
+      whiteboardEvents: [
+        {
+          timestamp: 10,
+          upserts: [
+            { id: "el-1", version: 1, versionNonce: 111, isDeleted: false, type: "freedraw" },
+          ],
+          isOpen: true,
+        },
+        {
+          timestamp: 400,
+          upserts: [
+            { id: "el-1", version: 2, versionNonce: 222, isDeleted: false, type: "freedraw" },
+          ],
+          view: { scrollX: 10, scrollY: 20, zoom: 1.5 },
+        },
+        { timestamp: 600, removedIds: ["el-1"] },
+      ],
+    });
+
+    const encoded = await encodeRecordingToStream(recording);
+    const [decoded] = await decompressBinaryToRecordings(encoded);
+
+    expect(decoded.whiteboardEvents).toEqual(recording.whiteboardEvents);
+    expect(decoded.tracks?.some((track) => track.kind === "whiteboard")).toBe(true);
+  });
+
   it("incremental streaming reader matches a one-shot decode of the same bytes", async () => {
     const recording = createRecording({
       duration: 800,

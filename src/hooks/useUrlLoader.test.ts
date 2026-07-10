@@ -66,6 +66,7 @@ function makeActionsMock(): NextEditorActions {
     handlePreviewPatchBatch: vi.fn(),
     handleWorkspaceEvent: vi.fn(),
     handleRuntimeEvent: vi.fn(),
+    handleWhiteboardEvent: vi.fn(),
     exportAsFile: vi.fn(),
     importFromFile: vi.fn(),
     clearStorage: vi.fn(),

@@ -12,6 +12,7 @@ import type { TimelineActorRef } from "./machine/timelineMachine";
 import type { EditorActorRef } from "./useNextEditor";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../types/workspace";
+import type { WhiteboardEvent, WhiteboardSceneState } from "./whiteboard";
 
 /**
  * Audio storage placeholder for serialization
@@ -54,7 +55,8 @@ export type RecordingTrackKind =
   | "preview"
   | "workspace"
   | "runtime"
-  | "slide";
+  | "slide"
+  | "whiteboard";
 
 export interface RecordingTrackMeta {
   id: string;
@@ -201,6 +203,7 @@ export interface Recording {
   workspaceEvents?: WorkspaceRecordingEvent[];
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];
+  whiteboardEvents?: WhiteboardEvent[];
   captions?: CaptionTrack[];
   slides?: Slide[];
   tracks?: RecordingTrackMeta[];
@@ -310,6 +313,10 @@ export interface UseNextEditorConfig {
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
   applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
+
+  // Whiteboard state callbacks
+  getWhiteboardState?: () => WhiteboardSceneState | null;
+  applyWhiteboardState?: (state: WhiteboardSceneState) => void;
 }
 
 export interface PreviewPatchReplayInput {

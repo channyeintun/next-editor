@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import type { EditorFrame, MouseCursorPosition, Recording } from "../types";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
+import type { WhiteboardEvent } from "../whiteboard";
 import {
   toSidebarWidthDeltaSnapshot,
   type WorkspaceRecordingEvent,
@@ -18,6 +19,7 @@ import {
   appendPreviewRecordingEvent,
   appendRuntimeRecordingEvent,
   appendSlideRecordingEvent,
+  appendWhiteboardRecordingEvent,
   appendWorkspaceRecordingEvent,
 } from "./recordingSession";
 import {
@@ -207,6 +209,7 @@ export const initRecordingSession = ({
   const previewEvents: PreviewEvent[] = [];
   const workspaceEvents: WorkspaceRecordingEvent[] = [];
   const runtimeEvents: RuntimeRecordingEvent[] = [];
+  const whiteboardEvents: WhiteboardEvent[] = [];
   const initialMousePosition: MouseCursorPosition = { x: 0, y: 0, visible: false };
   const externalAudioFragment =
     context.audio.source === "external" && context.audio.blob
@@ -269,6 +272,19 @@ export const initRecordingSession = ({
     });
   }
 
+  // Capture initial whiteboard state if the board already has content (the presenter
+  // opened the panel and started drawing before hitting record).
+  const initialWhiteboardState = context.getWhiteboardState?.();
+  if (initialWhiteboardState?.isOpen || initialWhiteboardState?.elements.length) {
+    whiteboardEvents.push({
+      timestamp: 0,
+      upserts: initialWhiteboardState.elements,
+      view: initialWhiteboardState.view,
+      isOpen: initialWhiteboardState.isOpen,
+      isMaximized: initialWhiteboardState.isMaximized,
+    });
+  }
+
   return {
     session: {
       startedAt,
@@ -281,6 +297,7 @@ export const initRecordingSession = ({
       previewPatchBatches: [],
       workspaceEvents,
       runtimeEvents,
+      whiteboardEvents,
       cursorEvents: [{ timestamp: 0, ...initialMousePosition }],
       // External (selected file) audio is fully known at start, so seed it as the single
       // audio fragment. Microphone audio is appended as timeslice events. Camera video is
@@ -607,6 +624,20 @@ export const captureRuntimeEvent = ({
   return appendToSession(context, (session) => appendRuntimeRecordingEvent(session, snapshot));
 };
 
+export const captureWhiteboardEvent = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "WHITEBOARD_EVENT") return {};
+  return appendToSession(context, (session) => {
+    appendWhiteboardRecordingEvent(session, event.event);
+    return true;
+  });
+};
+
 export const finalizeRecording = ({
   context,
   event,
@@ -644,6 +675,7 @@ export const finalizeRecording = ({
     hasWorkspaceEvents: context.session.workspaceEvents.length > 0,
     hasRuntimeEvents: context.session.runtimeEvents.length > 0,
     hasCursorEvents: context.session.cursorEvents.length > 0,
+    hasWhiteboardEvents: context.session.whiteboardEvents.length > 0,
     audioMimeType: context.audio.mimeType || context.audio.blob?.type,
     audioSource: context.audio.source || undefined,
     audioStartOffsetMs: context.audio.startOffsetMs,
@@ -673,6 +705,7 @@ export const finalizeRecording = ({
     workspaceEvents: context.session.workspaceEvents,
     runtimeEvents: context.session.runtimeEvents,
     cursorEvents: context.session.cursorEvents,
+    whiteboardEvents: context.session.whiteboardEvents,
     slides: slides,
     tracks,
     clusters: clusters.length > 0 ? clusters : undefined,
@@ -718,6 +751,7 @@ export const finalizeRecording = ({
     lastAppliedSlideEventIndex: -1,
     lastAppliedWorkspaceEventIndex: -1,
     lastAppliedRuntimeEventIndex: -1,
+    lastAppliedWhiteboardEventIndex: -1,
   };
 };
 

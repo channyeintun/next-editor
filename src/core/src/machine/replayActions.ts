@@ -14,6 +14,7 @@ import {
   getPreviewReplayResult,
   getRuntimeReplayResult,
   getSlideReplayResult,
+  getWhiteboardReplayResult,
   getWorkspaceReplayResult,
   isSeekReplayEvent,
   resolveReplayTime,
@@ -104,6 +105,7 @@ export const setRecording = ({
     lastAppliedSlideEventIndex: -1,
     lastAppliedWorkspaceEventIndex: initialWorkspaceEvent ? 0 : -1,
     lastAppliedRuntimeEventIndex: initialRuntimeEvent ? 0 : -1,
+    lastAppliedWhiteboardEventIndex: -1,
     lastAppliedPreviewState: undefined,
   };
 };
@@ -279,6 +281,7 @@ export const seekToTime = ({
     lastAppliedSlideEventIndex: -1,
     lastAppliedPreviewEventIndex: -1,
     lastAppliedPreviewPatchBatchIndex: -1,
+    lastAppliedWhiteboardEventIndex: -1,
     // NOTE: `lastAppliedWorkspaceEventIndex` is intentionally NOT reset here.
     // Panel widths (sidebar/preview dock) replay as relative deltas folded
     // into the *live* width, so the net delta is computed between the last
@@ -445,6 +448,7 @@ export const resetPlayback = ({
   // relative panel-width deltas rewind from the current index back to the start
   // instead of re-summing from scratch onto the live width. See `seekToTime`.
   lastAppliedRuntimeEventIndex: -1,
+  lastAppliedWhiteboardEventIndex: -1,
   lastAppliedPreviewState: undefined,
 });
 
@@ -459,6 +463,7 @@ export const invalidateAppliedPlaybackState = (): Partial<EditorMachineContext> 
   // resuming/replaying does not re-apply the panel-width deltas on top of the
   // already-applied width. See `seekToTime`.
   lastAppliedRuntimeEventIndex: -1,
+  lastAppliedWhiteboardEventIndex: -1,
   lastAppliedPreviewState: undefined,
 });
 
@@ -472,6 +477,7 @@ export const detachPlaybackWorkspace = (): Partial<EditorMachineContext> => ({
   lastAppliedSlideEventIndex: -1,
   lastAppliedWorkspaceEventIndex: -1,
   lastAppliedRuntimeEventIndex: -1,
+  lastAppliedWhiteboardEventIndex: -1,
   lastAppliedPreviewState: undefined,
 });
 
@@ -512,6 +518,7 @@ export const clearRecording = {
   lastAppliedSlideEventIndex: -1,
   lastAppliedWorkspaceEventIndex: -1,
   lastAppliedRuntimeEventIndex: -1,
+  lastAppliedWhiteboardEventIndex: -1,
   lastAppliedPreviewState: undefined,
   timeline: ({ context }: { context: EditorMachineContext }) => ({
     ...context.timeline,
@@ -778,6 +785,37 @@ export const applyRuntimeEventsAtTime = ({
 
   if (replayResult.nextIndex !== lastAppliedRuntimeEventIndex) {
     return { lastAppliedRuntimeEventIndex: replayResult.nextIndex };
+  }
+
+  return {};
+};
+
+export const applyWhiteboardEventsAtTime = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  const { recording, applyWhiteboardState, lastAppliedWhiteboardEventIndex } = context;
+
+  if (!recording?.whiteboardEvents?.length || !applyWhiteboardState) {
+    return {};
+  }
+
+  const replayResult = getWhiteboardReplayResult({
+    whiteboardEvents: recording.whiteboardEvents,
+    currentTime: resolveReplayTime(event, context.timeline.currentTime),
+    lastAppliedIndex: lastAppliedWhiteboardEventIndex,
+  });
+
+  if (replayResult.stateToApply) {
+    applyWhiteboardState(replayResult.stateToApply);
+    return { lastAppliedWhiteboardEventIndex: replayResult.nextIndex };
+  }
+
+  if (replayResult.nextIndex !== lastAppliedWhiteboardEventIndex) {
+    return { lastAppliedWhiteboardEventIndex: replayResult.nextIndex };
   }
 
   return {};

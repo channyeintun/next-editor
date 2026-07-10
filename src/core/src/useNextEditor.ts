@@ -17,6 +17,7 @@ import type {
   PreviewInitialDocument,
   SlideEvent,
 } from "./slides";
+import type { WhiteboardEvent } from "./whiteboard";
 import { findFrameIndexAtTime, reconstructFrameAtIndex } from "./utils/frameDelta";
 import { PLAYBACK_END_EPSILON_MS } from "./machine/editorMachineHelpers";
 import type { TimelineActorRef } from "./machine/timelineMachine";
@@ -206,6 +207,10 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     actorRef.send({ type: "RUNTIME_EVENT" });
   };
 
+  const handleWhiteboardEvent = (event: WhiteboardEvent) => {
+    actorRef.send({ type: "WHITEBOARD_EVENT", event });
+  };
+
   return {
     startRecording,
     stopRecording,
@@ -228,6 +233,7 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     handlePreviewPatchBatch,
     handleWorkspaceEvent,
     handleRuntimeEvent,
+    handleWhiteboardEvent,
   };
 };
 
@@ -239,7 +245,7 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
  * Memoized via useState rather than relying on the React Compiler: this hook
  * contains no React hook calls in its action bodies, so the compiler skips it
  * entirely (no memo cache is emitted) and every render would otherwise produce
- * 21 fresh sender identities. That churn is not cosmetic — CodeEditor keys its
+ * 22 fresh sender identities. That churn is not cosmetic — CodeEditor keys its
  * unmount-cleanup effect on `syncEditorRef`, and that cleanup nulls
  * `editorRef.current` and detaches the editor from the machine, so unstable
  * identities silently break frame/cursor capture and replay.

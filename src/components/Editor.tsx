@@ -1,4 +1,4 @@
-import { lazy, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import type { Recording } from "../core/src";
@@ -7,6 +7,7 @@ import {
   useNextEditorMetadata,
   useNextEditorPlayback,
 } from "../hooks/useNextEditorContext";
+import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { selectLiveTime } from "../core/src/useNextEditor";
 import { usePostRecordingTarget } from "../hooks/usePostRecordingTarget";
 import { usePlaybackSettings } from "../hooks/usePlaybackSettings";
@@ -18,8 +19,10 @@ import FloatingPlayButton from "./FloatingPlayButton";
 import { NextEditorProvider } from "../contexts/NextEditorProvider.tsx";
 import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleContext";
 import { SlidesStoreProvider } from "../contexts/SlidesStoreContext";
+import { WhiteboardStoreProvider } from "../contexts/WhiteboardStoreContext";
 import { RuntimePanelStoreProvider } from "../contexts/RuntimePanelStoreContext";
 import { SlidesProvider } from "../contexts/SlidesContext";
+import { WhiteboardProvider } from "../contexts/WhiteboardContext";
 import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
@@ -35,6 +38,9 @@ import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
 import { startTour } from "./tour/productTour";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
+// Bundles Excalidraw (~180KB gzip) — deferred until the panel is actually opened,
+// not just until this component mounts (see the `isOpen` gate around its render).
+const WhiteboardPanel = lazy(() => import("./WhiteboardPanel"));
 
 // Initial value for the autoplay once-per-load guard below. A sentinel (not
 // undefined) because `recordingUrl` is legitimately undefined on ?url= and
@@ -88,6 +94,7 @@ export function EditorLayout({
   const { isDragging, error: dropError, clearError: clearDropError } = useDragAndDropUrl();
 
   const { isRecording, isPlaying, currentRecording, hasEnded } = useNextEditorMetadata();
+  const { isOpen: isWhiteboardOpen } = useWhiteboardContext();
   const { play, setPlaybackSpeed, setVolume } = useNextEditorActions();
   const { editorActor, playbackSpeed, volume } = useNextEditorPlayback();
   const { autoplay, speed: persistedSpeed, volume: persistedVolume } = usePlaybackSettings();
@@ -223,6 +230,11 @@ export function EditorLayout({
         <CameraOverlay />
         <CaptionsOverlay />
         <SlidePanel />
+        {isWhiteboardOpen ? (
+          <Suspense fallback={null}>
+            <WhiteboardPanel />
+          </Suspense>
+        ) : null}
 
         {/* Loading / error overlays live inside the (relative) editor surface so they
             center on the editor region in both viewport and `fill` layouts. */}
@@ -265,21 +277,25 @@ export default function Editor(props: EditorProps = {}) {
     <WorkspaceProvider>
       <WebContainerRuntimeProvider>
         <SlidesStoreProvider>
-          <RuntimePanelStoreProvider>
-            <PreviewAdapterHandleProvider>
-              <CaptionStoreProvider>
-                <ApiClientStoreProvider>
-                  <NextEditorProvider>
-                    <SlidesProvider>
-                      <PreviewPanelProvider>
-                        <EditorLayout {...props} />
-                      </PreviewPanelProvider>
-                    </SlidesProvider>
-                  </NextEditorProvider>
-                </ApiClientStoreProvider>
-              </CaptionStoreProvider>
-            </PreviewAdapterHandleProvider>
-          </RuntimePanelStoreProvider>
+          <WhiteboardStoreProvider>
+            <RuntimePanelStoreProvider>
+              <PreviewAdapterHandleProvider>
+                <CaptionStoreProvider>
+                  <ApiClientStoreProvider>
+                    <NextEditorProvider>
+                      <SlidesProvider>
+                        <WhiteboardProvider>
+                          <PreviewPanelProvider>
+                            <EditorLayout {...props} />
+                          </PreviewPanelProvider>
+                        </WhiteboardProvider>
+                      </SlidesProvider>
+                    </NextEditorProvider>
+                  </ApiClientStoreProvider>
+                </CaptionStoreProvider>
+              </PreviewAdapterHandleProvider>
+            </RuntimePanelStoreProvider>
+          </WhiteboardStoreProvider>
         </SlidesStoreProvider>
       </WebContainerRuntimeProvider>
     </WorkspaceProvider>

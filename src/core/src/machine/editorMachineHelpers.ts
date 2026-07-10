@@ -50,6 +50,7 @@ const PREVIEW_TRACK_ID = "preview";
 const WORKSPACE_TRACK_ID = "workspace";
 const RUNTIME_TRACK_ID = "runtime";
 const CURSOR_TRACK_ID = "cursor";
+const WHITEBOARD_TRACK_ID = "whiteboard";
 export const AUDIO_TRACK_ID = "audio";
 export const CAMERA_TRACK_ID = "camera";
 
@@ -118,6 +119,7 @@ export const buildTrackMetadata = ({
   hasWorkspaceEvents,
   hasRuntimeEvents,
   hasCursorEvents,
+  hasWhiteboardEvents,
   audioMimeType,
   audioSource,
   audioStartOffsetMs,
@@ -133,6 +135,7 @@ export const buildTrackMetadata = ({
   hasWorkspaceEvents: boolean;
   hasRuntimeEvents: boolean;
   hasCursorEvents: boolean;
+  hasWhiteboardEvents: boolean;
   audioMimeType?: string;
   audioSource?: Recording["audioSource"];
   audioStartOffsetMs: number;
@@ -164,6 +167,9 @@ export const buildTrackMetadata = ({
   }
   if (hasCursorEvents) {
     tracks.push({ id: CURSOR_TRACK_ID, kind: "cursor", durationMs });
+  }
+  if (hasWhiteboardEvents) {
+    tracks.push({ id: WHITEBOARD_TRACK_ID, kind: "whiteboard", durationMs });
   }
   if (hasAudio) {
     tracks.push({
@@ -459,6 +465,7 @@ export const APPLY_REPLAY_STATE_ACTIONS = [
   "applyPreviewPatchBatchesAtTime",
   "applyPreviewEventsAtTime",
   "applySlideEventsAtTime",
+  "applyWhiteboardEventsAtTime",
 ] as const;
 
 export const APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS = [

@@ -170,6 +170,9 @@ export function deriveRecordingTracks(recording: Recording): RecordingTrackMeta[
   if (recording.cursorEvents?.length) {
     tracks.push({ id: "cursor", kind: "cursor", durationMs: recording.duration });
   }
+  if (recording.whiteboardEvents?.length) {
+    tracks.push({ id: "whiteboard", kind: "whiteboard", durationMs: recording.duration });
+  }
   const hasInlineAudio = recording.audioBlob instanceof Blob && recording.audioBlob.size > 0;
   // External audio (sibling file/URL) carries no blob but is still an audio track.
   if (hasInlineAudio || recording.audioFile || recording.audioUrl) {

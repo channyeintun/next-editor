@@ -9,6 +9,7 @@ import { NextEditorActionsContext } from "./NextEditorContext";
 import { NextEditorActorContext } from "./NextEditorActorContext";
 import { usePreviewAdapterHandle } from "./PreviewAdapterHandleContext";
 import { useSlidesStore } from "./SlidesStoreContext";
+import { useWhiteboardStore } from "./WhiteboardStoreContext";
 import { useRuntimePanelStore } from "./RuntimePanelStoreContext";
 import { selectRecordingState } from "../stores/runtimePanelStore";
 import {
@@ -63,6 +64,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handlePreviewPatchBatch,
     handleWorkspaceEvent: handleWorkspaceEventBase,
     handleRuntimeEvent,
+    handleWhiteboardEvent,
   } = useNextEditorActorActions(actorRef);
   useNextEditorInteractionEffects(actorRef, config);
 
@@ -121,6 +123,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handlePreviewPatchBatch,
     handleWorkspaceEvent,
     handleRuntimeEvent,
+    handleWhiteboardEvent,
     clearRecording,
     exportAsFile,
     importFromFile,
@@ -139,6 +142,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   const recordingStorage = useRef(createRecordingStorage());
   const previewHandle = usePreviewAdapterHandle();
   const { store: slidesStore } = useSlidesStore();
+  const { store: whiteboardStore } = useWhiteboardStore();
   const { store: runtimePanelStore } = useRuntimePanelStore();
   const {
     getProject,
@@ -292,6 +296,10 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     },
     applyRuntimeSnapshot: (snapshot) => {
       runtimePanelStore.trigger.setPlaybackSnapshot({ snapshot });
+    },
+    getWhiteboardState: () => whiteboardStore.getSnapshot().context.scene,
+    applyWhiteboardState: (scene) => {
+      whiteboardStore.trigger.setScene({ scene });
     },
   };
 

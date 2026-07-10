@@ -1,0 +1,91 @@
+import { useEffect, useRef } from "react";
+import { X } from "lucide-react";
+import { CaptureUpdateAction, Excalidraw } from "@excalidraw/excalidraw";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { AppState, BinaryFiles, NormalizedZoomValue } from "@excalidraw/excalidraw/types";
+import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
+import "@excalidraw/excalidraw/index.css";
+import { useWhiteboardContext } from "../contexts/WhiteboardContext";
+import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
+import type { WhiteboardElementJSON } from "../core/src/whiteboard";
+
+export default function WhiteboardPanel() {
+  const { scene, isOpen, setOpen, handleExcalidrawChange } = useWhiteboardContext();
+  const { usesPlaybackModel } = useNextEditorMetadata();
+  const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
+
+  // Replay drives the board through the store; push its scene into Excalidraw.
+  // Live drawing never reaches here — while `usesPlaybackModel` is false, Excalidraw
+  // is already the source of truth for its own onChange output, so pushing it back
+  // would be a redundant, self-triggering round trip.
+  useEffect(() => {
+    if (!apiRef.current || !usesPlaybackModel) return;
+    apiRef.current.updateScene({
+      elements: scene.elements as unknown as OrderedExcalidrawElement[],
+      appState: {
+        scrollX: scene.view.scrollX,
+        scrollY: scene.view.scrollY,
+        zoom: { value: scene.view.zoom as NormalizedZoomValue },
+      },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+  }, [scene, usesPlaybackModel]);
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-90 backdrop-blur-md opacity-0 animate-[fade-in_0.2s_ease-out_forwards] motion-reduce:animate-none motion-reduce:opacity-100"
+        onClick={() => setOpen(false)}
+      />
+      <div className="fixed top-[5%] left-[5%] right-[5%] bottom-[5%] z-100 bg-slate-900 rounded-2xl overflow-hidden flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-4 py-2 bg-[#11141c] border-b border-white/10 shrink-0">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            Whiteboard
+          </span>
+          <button
+            type="button"
+            aria-label="Close whiteboard"
+            onClick={() => setOpen(false)}
+            className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="relative flex-1">
+          <Excalidraw
+            excalidrawAPI={(api) => {
+              apiRef.current = api;
+            }}
+            theme="dark"
+            viewModeEnabled={usesPlaybackModel}
+            initialData={{
+              elements: scene.elements as unknown as OrderedExcalidrawElement[],
+              appState: {
+                scrollX: scene.view.scrollX,
+                scrollY: scene.view.scrollY,
+                zoom: { value: scene.view.zoom as NormalizedZoomValue },
+              },
+            }}
+            onChange={(
+              elements: readonly OrderedExcalidrawElement[],
+              appState: AppState,
+              _files: BinaryFiles,
+            ) => {
+              handleExcalidrawChange(
+                elements as unknown as WhiteboardElementJSON[],
+                {
+                  scrollX: appState.scrollX,
+                  scrollY: appState.scrollY,
+                  zoom: appState.zoom.value,
+                },
+                usesPlaybackModel,
+              );
+            }}
+          />
+        </div>
+      </div>
+    </>
+  );
+}

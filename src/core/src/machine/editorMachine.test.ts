@@ -311,6 +311,96 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  it("captures whiteboard events during recording and finalizes them onto the recording", async () => {
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null } },
+    }).start();
+
+    actor.send({ type: "START_RECORDING" });
+    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+
+    actor.send({
+      type: "WHITEBOARD_EVENT",
+      event: {
+        timestamp: 0,
+        upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false }],
+        isOpen: true,
+      },
+    });
+    actor.send({
+      type: "WHITEBOARD_EVENT",
+      event: {
+        timestamp: 0,
+        upserts: [{ id: "a", version: 2, versionNonce: 2, isDeleted: false }],
+      },
+    });
+
+    const sessionEvents = actor.getSnapshot().context.session?.whiteboardEvents ?? [];
+    expect(sessionEvents.map((event) => event.upserts?.[0]?.version)).toEqual([1, 2]);
+
+    actor.send({ type: "STOP_RECORDING" });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    const recording = actor.getSnapshot().context.recording;
+    expect(recording?.whiteboardEvents?.length).toBe(2);
+    expect(recording?.tracks?.some((track) => track.kind === "whiteboard")).toBe(true);
+
+    actor.stop();
+  });
+
+  it("applies reduced whiteboard scene state during replay sync and seeks", async () => {
+    const applied: Array<{ elementIds: string[]; isOpen: boolean }> = [];
+
+    const recording: Recording = {
+      ...createRecording(),
+      whiteboardEvents: [
+        {
+          timestamp: 0,
+          upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false }],
+          isOpen: true,
+        },
+        {
+          timestamp: 100,
+          upserts: [{ id: "b", version: 1, versionNonce: 2, isDeleted: false }],
+          removedIds: ["a"],
+        },
+      ],
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        applyWhiteboardState: (state) => {
+          applied.push({
+            elementIds: state.elements.map((element) => element.id),
+            isOpen: state.isOpen,
+          });
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    expect(applied).toEqual([{ elementIds: ["a"], isOpen: true }]);
+
+    applied.length = 0;
+    actor.send({ type: "SEEK", time: 100 });
+    expect(applied).toEqual([{ elementIds: ["b"], isOpen: true }]);
+
+    // Seeking backward to the start and forward again must reconstruct the same
+    // state, not carry over any stale cached reduction.
+    applied.length = 0;
+    actor.send({ type: "SEEK", time: 0 });
+    actor.send({ type: "SEEK", time: 100 });
+    expect(applied).toEqual([
+      { elementIds: ["a"], isOpen: true },
+      { elementIds: ["b"], isOpen: true },
+    ]);
+
+    actor.stop();
+  });
+
   it("applies workspace, runtime, then preview snapshots during replay sync", async () => {
     const calls: string[] = [];
     const firstWorkspace = createWorkspaceSnapshot("first", 0);

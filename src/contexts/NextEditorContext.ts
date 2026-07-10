@@ -9,6 +9,7 @@ import type {
   PreviewInitialDocument,
   SlideEvent,
 } from "../types/slides";
+import type { WhiteboardEvent } from "../core/src/whiteboard";
 import type * as monaco from "monaco-editor";
 
 export type { TimelineActorRef, EditorActorRef };
@@ -40,6 +41,7 @@ export interface NextEditorActions {
     previewDockWidthDelta?: number;
   }) => void;
   handleRuntimeEvent: () => void;
+  handleWhiteboardEvent: (event: WhiteboardEvent) => void;
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;
   importFromFile: () => Promise<Recording[]>;
   clearStorage: () => Promise<void>;
