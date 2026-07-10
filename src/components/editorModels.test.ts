@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { Monaco } from "../monaco/runtime";
 import {
   disposePlaybackModels,
+  isPlaybackModelUri,
   syncPlaybackModel,
   syncWorkspaceModel,
   toMonacoModelPath,
@@ -155,6 +156,24 @@ describe("editor model helpers", () => {
         toString: () => "file:///__next-editor__/playback/src/App.tsx",
       }),
     ).toBeNull();
+  });
+
+  it("does not resolve other reserved next-editor URIs as writable workspace paths", () => {
+    expect(
+      workspacePathFromMonacoModelUri({
+        toString: () => "file:///__next-editor__/api-client/request-body.json",
+      }),
+    ).toBeNull();
+  });
+
+  it("identifies playback model URIs", () => {
+    expect(
+      isPlaybackModelUri({ toString: () => "file:///__next-editor__/playback/src/App.tsx" }),
+    ).toBe(true);
+    expect(isPlaybackModelUri({ toString: () => "file:///src/App.tsx" })).toBe(false);
+    expect(
+      isPlaybackModelUri({ toString: () => "file:///__next-editor__/api-client/request.json" }),
+    ).toBe(false);
   });
 
   it("disposes inactive playback models while preserving normal models", () => {

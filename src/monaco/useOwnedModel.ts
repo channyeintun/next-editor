@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useState } from "react";
 import { monaco } from "./runtime";
 
 interface UseOwnedModelOptions {
@@ -7,20 +7,36 @@ interface UseOwnedModelOptions {
   language: string;
 }
 
+/**
+ * Creates a Monaco model owned by the calling component and disposes it on
+ * unmount or URI change.
+ *
+ * Creation lives in a layout effect (not render) and the model is held in
+ * state so the ownership cycle survives StrictMode's dev-only effect replay:
+ * the replayed cleanup disposes the model, the replayed setup re-creates it,
+ * and the state update re-renders with the fresh instance. Returns null until
+ * the first effect commits — <MonacoEditor> accepts a null model and attaches
+ * it as soon as it arrives, all before paint.
+ */
 export function useOwnedModel({ uri, value, language }: UseOwnedModelOptions) {
-  const modelRef = useRef<monaco.editor.ITextModel | null>(null);
-  const parsedUri = useMemo(() => monaco.Uri.parse(uri), [uri]);
+  const [model, setModel] = useState<monaco.editor.ITextModel | null>(null);
 
-  if (!modelRef.current || modelRef.current.uri.toString() !== uri) {
-    modelRef.current?.dispose();
-    modelRef.current =
+  // Keyed by URI only: the model is created with whatever value/language are
+  // current at that point, and the sync effect below reconciles later changes.
+  useLayoutEffect(() => {
+    const parsedUri = monaco.Uri.parse(uri);
+    const ownedModel =
       monaco.editor.getModel(parsedUri) ?? monaco.editor.createModel(value, language, parsedUri);
-  }
+    setModel(ownedModel);
 
-  useEffect(() => {
-    const model = modelRef.current;
+    return () => {
+      setModel(null);
+      ownedModel.dispose();
+    };
+  }, [uri]);
 
-    if (!model) {
+  useLayoutEffect(() => {
+    if (!model || model.isDisposed()) {
       return;
     }
 
@@ -31,18 +47,7 @@ export function useOwnedModel({ uri, value, language }: UseOwnedModelOptions) {
     if (model.getValue() !== value) {
       model.setValue(value);
     }
-  }, [language, value]);
+  }, [language, model, value]);
 
-  useEffect(() => {
-    const model = modelRef.current;
-
-    return () => {
-      if (modelRef.current === model) {
-        modelRef.current = null;
-      }
-      model?.dispose();
-    };
-  }, [uri]);
-
-  return modelRef.current;
+  return model;
 }

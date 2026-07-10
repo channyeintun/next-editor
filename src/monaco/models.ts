@@ -1,7 +1,10 @@
 import type { Monaco } from "./runtime";
 import { normalizeWorkspacePath } from "../types/workspace";
 
-const PLAYBACK_MODEL_ROOT = "file:///__next-editor__/playback";
+// Everything under this root is an internal scratch buffer (playback models,
+// API-client request/response bodies, …) and never a writable workspace path.
+const NEXT_EDITOR_RESERVED_ROOT = "file:///__next-editor__/";
+const PLAYBACK_MODEL_ROOT = `${NEXT_EDITOR_RESERVED_ROOT}playback`;
 const FILE_URI_PREFIX = "file:///";
 
 export function toMonacoModelPath(workspacePath: string) {
@@ -12,7 +15,7 @@ export function toPlaybackModelPath(workspacePath: string) {
   return `${PLAYBACK_MODEL_ROOT}/${encodeURI(normalizeWorkspacePath(workspacePath))}`;
 }
 
-function isPlaybackModelUri(uri: { toString(): string }) {
+export function isPlaybackModelUri(uri: { toString(): string }) {
   return uri.toString().startsWith(`${PLAYBACK_MODEL_ROOT}/`);
 }
 
@@ -76,7 +79,7 @@ export function syncWorkspaceModel(
 export function workspacePathFromMonacoModelUri(uri: { toString(): string }) {
   const modelUri = uri.toString();
 
-  if (!modelUri.startsWith(FILE_URI_PREFIX) || isPlaybackModelUri(uri)) {
+  if (!modelUri.startsWith(FILE_URI_PREFIX) || modelUri.startsWith(NEXT_EDITOR_RESERVED_ROOT)) {
     return null;
   }
 

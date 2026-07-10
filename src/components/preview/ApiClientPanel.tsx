@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import { Clock, Loader2, Minus, Plus, Send, Trash2 } from "lucide-react";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
-import { MonacoEditor, useOwnedModel } from "../../monaco";
+import { MonacoEditor, useOwnedModel, type MonacoEditorProps } from "../../monaco";
 import {
   selectBody,
   selectHeaders,
@@ -18,6 +18,33 @@ import {
 import type { ApiClientRequestTab } from "../../types/slides";
 
 const HTTP_METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
+// Module constants so MonacoEditor's options identity is stable across renders.
+const REQUEST_BODY_EDITOR_OPTIONS: MonacoEditorProps["options"] = {
+  minimap: { enabled: false },
+  lineNumbers: "off",
+  scrollBeyondLastLine: false,
+  fontSize: 12,
+  padding: { top: 8, bottom: 8 },
+  renderLineHighlight: "none",
+  overviewRulerLanes: 0,
+  folding: false,
+  wordWrap: "on",
+};
+
+const RESPONSE_BODY_EDITOR_OPTIONS: MonacoEditorProps["options"] = {
+  readOnly: true,
+  minimap: { enabled: false },
+  lineNumbers: "off",
+  scrollBeyondLastLine: false,
+  fontSize: 12,
+  padding: { top: 8, bottom: 8 },
+  renderLineHighlight: "none",
+  overviewRulerLanes: 0,
+  folding: true,
+  wordWrap: "on",
+  domReadOnly: true,
+};
 
 const METHOD_COLORS: Record<HttpMethod, string> = {
   GET: "text-emerald-400",
@@ -178,17 +205,7 @@ export default function ApiClientPanel({
               className="size-full"
               model={requestModel}
               onChange={(value) => store.trigger.setBody({ body: value })}
-              options={{
-                minimap: { enabled: false },
-                lineNumbers: "off",
-                scrollBeyondLastLine: false,
-                fontSize: 12,
-                padding: { top: 8, bottom: 8 },
-                renderLineHighlight: "none",
-                overviewRulerLanes: 0,
-                folding: false,
-                wordWrap: "on",
-              }}
+              options={REQUEST_BODY_EDITOR_OPTIONS}
             />
           </div>
         ) : null}
@@ -418,19 +435,7 @@ function SuccessfulResponseView({
         <MonacoEditor
           className="size-full"
           model={responseModel}
-          options={{
-            readOnly: true,
-            minimap: { enabled: false },
-            lineNumbers: "off",
-            scrollBeyondLastLine: false,
-            fontSize: 12,
-            padding: { top: 8, bottom: 8 },
-            renderLineHighlight: "none",
-            overviewRulerLanes: 0,
-            folding: true,
-            wordWrap: "on",
-            domReadOnly: true,
-          }}
+          options={RESPONSE_BODY_EDITOR_OPTIONS}
         />
       </div>
     </div>

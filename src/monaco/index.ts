@@ -14,6 +14,7 @@ export {
 } from "./typescriptDefaults";
 export {
   disposePlaybackModels,
+  isPlaybackModelUri,
   syncPlaybackModel,
   syncWorkspaceModel,
   toMonacoModelPath,

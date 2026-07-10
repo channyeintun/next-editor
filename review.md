@@ -205,3 +205,38 @@ running app before touching it).
 2. F2 (silent UX regression, small `MonacoEditor` API addition).
 3. F7 tests alongside 1–2 to lock them in.
 4. F4, F5, F6, F8 as a single small cleanup pass.
+
+---
+
+## Resolution — 2026-07-10
+
+Implemented in the follow-up commit on this branch:
+
+- **F1 fixed.** `useOwnedModel` now creates/disposes the model in a
+  URI-keyed layout effect and holds it in state, so the StrictMode replay
+  re-creates it; `MonacoEditor` additionally guards against disposed models
+  (`attachableModel`) and accepts `model: null`. `detachEditorOnUnmount`
+  preserves the active playback model URI so the replayed editor never sees a
+  disposed playback model.
+- **F2 fixed.** New `MonacoEditor.onWillDispose` callback fires with the
+  editor still live, before disposal; `CodeEditor` saves the normal view
+  state there, covering binary transitions and unmount.
+- **F3 fixed for `useOwnedModel`** (no more render-phase create/dispose).
+  Deliberately **left open for `CodeEditor`'s `activeModel` memo**: the
+  render-phase `syncWorkspaceModel`/`syncPlaybackModel` calls are idempotent
+  and self-healing, and moving the main editor's model plumbing into effects
+  risks playback/ref-sync regressions for no observed defect.
+- **F4, F5, F6, F8 fixed** (init theme via `setActiveTheme`; stable options
+  identity via memo/module constants; `isPlaybackModelUri` exported and the
+  whole `file:///__next-editor__/` root excluded from workspace paths; stale
+  wrapper-era comments rewritten — the `"use no memo"` opt-out itself kept).
+- **F7 partially fixed.** Added `src/monaco/useOwnedModel.test.tsx` and
+  `src/monaco/MonacoEditor.test.tsx` (mocked `./runtime`, real React +
+  StrictMode: replay survival, callback ordering, `automaticLayout`
+  enforcement, disposed-model defense, `onWillDispose` timing), plus
+  reserved-root/predicate cases in `editorModels.test.ts`. The plan's
+  real-browser `editor.create` environment decision remains open.
+
+Post-fix verification: `bun run typecheck` ✅, `vp lint` ✅,
+`npx vp test run` 400/401 (the one failure is the pre-existing, unrelated
+`rrwebPreview` timeline test).

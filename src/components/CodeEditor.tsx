@@ -17,6 +17,7 @@ import TerminalPanel from "./TerminalPanel";
 import {
   disposePlaybackModels,
   getEditorOptions,
+  isPlaybackModelUri,
   MonacoEditor,
   monaco,
   setActiveTheme,
@@ -95,11 +96,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   breadcrumb,
 }) => {
   // Opt out of the React Compiler. Monaco is a heavily imperative integration:
-  // the theme is registered in `beforeMount`, and the model/language/tokenizer
-  // depend on the exact render-to-render flow of the <Editor> props and the
-  // onMount/useEffectEvent callbacks. The compiler's auto-memoization disrupts
-  // that flow and breaks syntax highlighting, so this component stays uncompiled.
-  // See [[react-compiler-babel-preset]].
+  // the active model is reconciled during render (syncWorkspaceModel /
+  // syncPlaybackModel below) and the editor is wired through the
+  // onMount/useEffectEvent callbacks. The compiler's auto-memoization has
+  // disrupted that flow before (broken syntax highlighting), so this
+  // component stays uncompiled. See [[react-compiler-babel-preset]].
   "use no memo";
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
@@ -145,6 +146,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     selectedLanguage,
     usesPlaybackModel,
   ]);
+
+  // Stable options identity so MonacoEditor's updateOptions only runs when
+  // playback state actually changes, not on every keystroke re-render.
+  const editorOptions = useMemo(() => getEditorOptions(isPlaying), [isPlaying]);
 
   const syncActivePlaybackModel = useEffectEvent((monaco: Monaco) => {
     if (!usesPlaybackModel || isBinaryActiveFile) {
@@ -277,7 +282,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const saveNormalViewState = useEffectEvent((editor: StandaloneEditor | null) => {
     const model = editor?.getModel();
 
-    if (!editor || !model || model.uri.toString().startsWith("file:///__next-editor__/playback/")) {
+    if (!editor || !model || isPlaybackModelUri(model.uri)) {
       return;
     }
 
@@ -286,7 +291,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
   const restoreNormalViewState = useEffectEvent(
     (editor: StandaloneEditor, model: monaco.editor.ITextModel | null) => {
-      if (!model || model.uri.toString().startsWith("file:///__next-editor__/playback/")) {
+      if (!model || isPlaybackModelUri(model.uri)) {
         return;
       }
 
@@ -299,12 +304,17 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   );
 
   const detachEditorOnUnmount = useEffectEvent(() => {
-    saveNormalViewState(editorRef.current);
+    // The view state was already saved by MonacoEditor's onWillDispose — its
+    // cleanup runs before this one and the editor is disposed by now.
     disposeEditorListeners();
     const monaco = monacoRef.current;
 
     if (monaco) {
-      disposePlaybackModels(monaco);
+      // Preserve the active playback model: during StrictMode's dev-only
+      // effect replay this teardown runs mid-cycle, and disposing the model
+      // memoized in activeModel would hand the replayed editor a disposed
+      // model. An idle leftover is disposed by disposePlaybackModelsIfIdle.
+      disposePlaybackModels(monaco, usesPlaybackModel ? editorModelPath : null);
     }
 
     editorRef.current = null;
@@ -369,16 +379,16 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     }
   }, [editorRef, isPlaying]);
 
-  // The Monaco <Editor> unmounts while a binary asset is shown; drop the stale
+  // MonacoEditor unmounts while a binary asset is shown; drop the stale
   // editor reference so recording/save paths don't touch a disposed instance.
+  // (The view state was saved by onWillDispose before the editor was disposed.)
   useEffect(() => {
     if (isBinaryActiveFile) {
-      saveNormalViewState(editorRef.current);
       disposeEditorListeners();
       editorRef.current = null;
       syncEditorRef(null);
     }
-  }, [editorRef, isBinaryActiveFile, saveNormalViewState, syncEditorRef]);
+  }, [editorRef, isBinaryActiveFile, syncEditorRef]);
 
   /**
    * Handle Monaco Editor mount event
@@ -451,7 +461,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
                   onMount={handleEditorDidMount}
                   onBeforeModelChange={saveNormalViewState}
                   onAfterModelChange={restoreNormalViewState}
-                  options={getEditorOptions(isPlaying)}
+                  onWillDispose={saveNormalViewState}
+                  options={editorOptions}
                 />
               )}
             </div>
