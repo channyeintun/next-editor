@@ -73,8 +73,19 @@ export default function UploadLessonModal({
     };
   }, [thumbnailPreviewUrl]);
 
+  // Reset the "Copied" indicator after 2 seconds, with proper cleanup on unmount.
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
   const handleSignIn = async () => {
-    await saveResumeIntent({ recordingId: recording.id, returnTo: window.location.pathname });
+    try {
+      await saveResumeIntent({ recordingId: recording.id, returnTo: window.location.pathname });
+    } catch (err) {
+      console.error("Failed to save resume intent", err);
+    }
     window.location.href = signInUrl(window.location.pathname);
   };
 
@@ -152,11 +163,15 @@ export default function UploadLessonModal({
       if (axios.isAxiosError(err) && err.response?.status === 401) {
         // Session expired mid-form — unlike the initial signed-out entry
         // (which never shows a form), typed values must survive this redirect.
-        await saveResumeIntent({
-          recordingId: recording.id,
-          returnTo: window.location.pathname,
-          draft: { title: trimmedTitle, description, tags: tagsInput },
-        });
+        try {
+          await saveResumeIntent({
+            recordingId: recording.id,
+            returnTo: window.location.pathname,
+            draft: { title: trimmedTitle, description, tags: tagsInput },
+          });
+        } catch (resumeErr) {
+          console.error("Failed to save resume intent", resumeErr);
+        }
         window.location.href = signInUrl(window.location.pathname);
         return;
       }
@@ -175,7 +190,6 @@ export default function UploadLessonModal({
     if (!uploadResult) return;
     copyTextToClipboard(`${window.location.origin}/learn/${uploadResult.slug}`);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   // Uploading past the halfway point (or once media, not just the tiny .ne,

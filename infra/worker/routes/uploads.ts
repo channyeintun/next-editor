@@ -23,8 +23,10 @@ const MAX_MEDIA_BYTES = 200 * 1024 * 1024;
 // <script>, and R2 objects are later served back same-origin at /media/<key>
 // (see routes/media.ts), which would let a script execute in the app's own
 // origin on direct navigation.
+// :id is interpolated into the R2 key, so it gets the same safe-charset
+// constraint as filename (lesson ids are client-generated UUIDs).
 uploadsRoute.put(
-  "/:id/media/:filename{[\\w-]+\\.(ne|ogg|weba|webm|mp4|mov|m4a|mp3|wav|png|jpg|jpeg)}",
+  "/:id{[\\w-]+}/media/:filename{[\\w-]+\\.(ne|ogg|weba|webm|mp4|mov|m4a|mp3|wav|png|jpg|jpeg)}",
   async (c) => {
     const user = await getCurrentUser(c);
     if (!user) {

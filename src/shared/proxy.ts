@@ -42,14 +42,22 @@ export function isPubliclyRoutableHost(hostname: string): boolean {
     return true;
   }
 
-  // IPv6 loopback/link-local/unique-local literals.
-  if (
-    host === "::1" ||
-    host.startsWith("fe80:") ||
-    host.startsWith("fc") ||
-    host.startsWith("fd")
-  ) {
-    return false;
+  // IPv6 loopback/link-local/unique-local literals. URL.hostname keeps the
+  // brackets on IPv6 literals ("[::1]", not "::1"), so strip them before
+  // comparing — and only run these checks on hosts that are actually IPv6
+  // literals (contain ":" once unbracketed), so ordinary domain names like
+  // fc2.com aren't misread as unique-local IPv6 addresses.
+  const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+  if (bare.includes(":")) {
+    if (
+      bare === "::" ||
+      bare === "::1" ||
+      bare.startsWith("fe80:") ||
+      bare.startsWith("fc") ||
+      bare.startsWith("fd")
+    ) {
+      return false;
+    }
   }
 
   return true;

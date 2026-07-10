@@ -62,6 +62,20 @@ function toStoredThumbnailPath(rawThumbnail: string): string {
     : toMediaPath(rawThumbnail);
 }
 
+// Mirrors the filename charset + extension allow-list that
+// PUT /api/uploads/:id/media/:filename enforces (routes/uploads.ts).
+const UPLOADED_FILENAME_RE = /^[\w-]+\.(?:ne|ogg|weba|webm|mp4|mov|m4a|mp3|wav|png|jpg|jpeg)$/;
+
+// The upload route enforces ownership when the bytes are written, but nothing
+// used to link the `ne`/`thumbnail` value stored on the lesson row back to
+// that check — a signed-in user could point their lesson at another lesson's
+// public media key. Require the value to sit under this lesson's own upload
+// prefix with an uploadable filename.
+function isOwnUploadPath(value: string, lessonId: string): boolean {
+  const prefix = `lessons/${lessonId}/`;
+  return value.startsWith(prefix) && UPLOADED_FILENAME_RE.test(value.slice(prefix.length));
+}
+
 // Mounted at /api/lessons in worker/index.ts. GET routes are public and
 // published-only — draft rows never reach the public gallery (see
 // docs/cloudflare-architecture.md). Everything else requires the signed-in
@@ -114,6 +128,16 @@ lessonsRoute.post("/", async (c) => {
   if (typeof body.ne !== "string" || !body.ne) {
     return c.json({ error: "ne is required" }, 400);
   }
+  if (!isOwnUploadPath(body.ne, body.id)) {
+    return c.json({ error: "ne must be a media path uploaded for this lesson" }, 400);
+  }
+  if (
+    typeof body.thumbnail === "string" &&
+    body.thumbnail !== DEFAULT_THUMBNAIL_PATH &&
+    !isOwnUploadPath(body.thumbnail, body.id)
+  ) {
+    return c.json({ error: "thumbnail must be a media path uploaded for this lesson" }, 400);
+  }
 
   const slug = `${slugify(title)}-${body.id.slice(0, 8)}`;
 
@@ -152,6 +176,7 @@ lessonsRoute.patch("/:id", async (c) => {
     return c.json({ error: "invalid body" }, 400);
   }
 
+  const id = c.req.param("id");
   const updateParams: UpdateLessonParams = {};
   if (typeof body.title === "string") {
     const trimmed = body.title.trim();
@@ -168,10 +193,12 @@ lessonsRoute.patch("/:id", async (c) => {
     updateParams.tags = tags;
   }
   if (typeof body.thumbnail === "string") {
+    if (body.thumbnail !== DEFAULT_THUMBNAIL_PATH && !isOwnUploadPath(body.thumbnail, id)) {
+      return c.json({ error: "thumbnail must be a media path uploaded for this lesson" }, 400);
+    }
     updateParams.thumbnail = toStoredThumbnailPath(body.thumbnail);
   }
 
-  const id = c.req.param("id");
   // Grabbed before the write because updateLesson's RETURNING reflects the
   // post-update row — the old value would otherwise already be gone by the
   // time we know whether the thumbnail actually changed.

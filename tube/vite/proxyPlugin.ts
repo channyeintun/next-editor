@@ -26,6 +26,11 @@ export function proxyPlugin(): Plugin {
             res.statusCode = 200;
             res.setHeader("Content-Type", result.contentType ?? "application/octet-stream");
             res.setHeader("Cache-Control", "public, max-age=86400");
+            // Same document-rendering guard as the Worker route (see
+            // infra/worker/routes/proxy.ts): proxied bytes must never render
+            // as an HTML document in this origin.
+            res.setHeader("X-Content-Type-Options", "nosniff");
+            res.setHeader("Content-Disposition", "attachment");
             res.end(Buffer.from(result.body));
           })
           .catch((error: unknown) => {

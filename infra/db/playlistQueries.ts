@@ -233,19 +233,20 @@ export async function addLessonToPlaylist(
 
   const now = Date.now();
   try {
-    await db
-      .prepare(
-        `INSERT INTO playlist_lessons (playlist_id, lesson_id, position, added_at)
-         VALUES (?, ?, COALESCE((SELECT MAX(position) + 1 FROM playlist_lessons WHERE playlist_id = ?), 0), ?)`,
-      )
-      .bind(playlistId, lessonId, playlistId, now)
-      .run();
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO playlist_lessons (playlist_id, lesson_id, position, added_at)
+           VALUES (?, ?, COALESCE((SELECT MAX(position) + 1 FROM playlist_lessons WHERE playlist_id = ?), 0), ?)`,
+        )
+        .bind(playlistId, lessonId, playlistId, now),
+      db.prepare("UPDATE playlists SET updated_at = ? WHERE id = ?").bind(now, playlistId),
+    ]);
   } catch (error) {
     if (String(error).includes("UNIQUE constraint failed")) return "already_added";
     throw error;
   }
 
-  await db.prepare("UPDATE playlists SET updated_at = ? WHERE id = ?").bind(now, playlistId).run();
   return "ok";
 }
 
@@ -261,17 +262,23 @@ export async function removeLessonFromPlaylist(
     .first();
   if (!playlist) return false;
 
-  const result = await db
-    .prepare("DELETE FROM playlist_lessons WHERE playlist_id = ? AND lesson_id = ?")
-    .bind(playlistId, lessonId)
-    .run();
-  if ((result.meta.changes ?? 0) > 0) {
-    await db
-      .prepare("UPDATE playlists SET updated_at = ? WHERE id = ?")
-      .bind(Date.now(), playlistId)
-      .run();
-  }
-  return (result.meta.changes ?? 0) > 0;
+  // One atomic batch so a failure can't leave updated_at out of sync with the
+  // membership row. The UPDATE runs first, gated on the membership existing —
+  // after the DELETE that evidence is gone, and a no-op remove must not bump
+  // updated_at (matching the pre-batch behavior).
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE playlists SET updated_at = ?
+         WHERE id = ?
+           AND EXISTS (SELECT 1 FROM playlist_lessons WHERE playlist_id = ? AND lesson_id = ?)`,
+      )
+      .bind(Date.now(), playlistId, playlistId, lessonId),
+    db
+      .prepare("DELETE FROM playlist_lessons WHERE playlist_id = ? AND lesson_id = ?")
+      .bind(playlistId, lessonId),
+  ]);
+  return (results[1].meta.changes ?? 0) > 0;
 }
 
 // Rewrites every membership row's position to match orderedLessonIds' index,

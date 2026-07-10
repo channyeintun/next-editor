@@ -14,6 +14,10 @@ compatibility_flags = ["nodejs_compat"]
 # override with the real production origin once one exists.
 [vars]
 PUBLIC_URL = "https://nexteditor.dev"
+# Required for authentication — auth fails at runtime without these. Set them with:
+#   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
+#   wrangler secret put GOOGLE_CLIENT_SECRET --config infra/wrangler.toml
+#   wrangler secret put SESSION_SECRET       --config infra/wrangler.toml
 # Optional Upstash Redis cache layer (infra/worker/cache.ts). Both values are
 # Worker secrets, never plaintext vars — the URL is project-identifying and
 # the token is a bearer credential for it, so neither belongs in a file

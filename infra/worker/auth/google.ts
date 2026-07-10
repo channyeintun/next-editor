@@ -112,7 +112,14 @@ googleAuthRoute.get("/callback", async (c) => {
     );
   }
 
-  const handshake = JSON.parse(handshakeJson) as HandshakePayload;
+  // The cookie is signed and self-set, so a parse failure means a corrupted
+  // or truncated cookie, not an attack — but it must not escape as a 500.
+  let handshake: HandshakePayload;
+  try {
+    handshake = JSON.parse(handshakeJson) as HandshakePayload;
+  } catch {
+    return c.text("OAuth error: malformed handshake cookie. Please try signing in again.", 400);
+  }
   if (handshake.state !== returnedState) {
     return c.text("OAuth error: state mismatch. Please try signing in again.", 400);
   }
@@ -139,7 +146,12 @@ googleAuthRoute.get("/callback", async (c) => {
     return c.text("OAuth error: Google's response had no id_token.", 502);
   }
 
-  const idTokenPayload = decodeIdTokenPayload(tokens.id_token);
+  let idTokenPayload: GoogleIdTokenPayload;
+  try {
+    idTokenPayload = decodeIdTokenPayload(tokens.id_token);
+  } catch {
+    return c.text("OAuth error: Google's id_token could not be decoded.", 502);
+  }
   const user = await upsertUserByGoogleSub(c.env.DB, {
     googleSub: idTokenPayload.sub,
     email: idTokenPayload.email,

@@ -12,7 +12,7 @@ const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 // Same shape the auto-generated usernames already satisfy (see
 // slugifyUsername in db/queries.ts): 3-32 chars, lowercase alphanumeric and
 // hyphens, no leading/trailing hyphen.
-const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
+const USERNAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/;
 
 function isHttps(c: Context): boolean {
   return new URL(c.req.url).protocol === "https:";

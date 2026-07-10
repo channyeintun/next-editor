@@ -31,6 +31,15 @@ proxyRoute.get("/", async (c) => {
     headers: {
       "Content-Type": result.contentType ?? "application/octet-stream",
       "Cache-Control": "public, max-age=86400",
+      // The proxied bytes are attacker-chosen (any public https URL) and come
+      // back same-origin, so they must never render as a document in this
+      // origin: nosniff stops the browser second-guessing the declared type,
+      // and Content-Disposition: attachment stops a top-level navigation to
+      // /api/proxy?url=<html page> executing its scripts here. Subresource
+      // consumers (<img>, fetch) ignore Content-Disposition, so the intended
+      // uses keep working.
+      "X-Content-Type-Options": "nosniff",
+      "Content-Disposition": "attachment",
     },
   });
 });
