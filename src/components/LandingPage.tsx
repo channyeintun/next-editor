@@ -154,6 +154,7 @@ const LandingPage = () => {
   const featuresSection = useInView();
   const stacksSection = useInView();
   const useCasesSection = useInView();
+  const architectureSection = useInView();
   const licenseSection = useInView();
   const starSection = useInView();
 
@@ -548,7 +549,34 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Section 3 — MIT Licensed / Free for everyone, forever */}
+      {/* Section 3 — Architecture */}
+      <section
+        ref={architectureSection.ref}
+        className={`relative py-24 px-6 text-center transition-opacity duration-1000 motion-reduce:transition-none ${
+          architectureSection.inView ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+          <div className="absolute top-[20%] left-[50%] -translate-x-1/2 size-100 md:size-175 bg-[radial-gradient(circle,hsla(174,76%,60%,0.12)_0%,hsla(174,76%,60%,0)_70%)] rounded-full" />
+        </div>
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-3xl md:text-5xl font-machina uppercase tracking-tight mb-6">
+            How It Works
+          </h2>
+          <p className="text-lg md:text-xl text-slate-400 font-telegraf mb-10 max-w-2xl mx-auto">
+            Curious about what's under the hood? Explore the technical architecture behind Next
+            Editor — from event-based recording to the runtime sandbox.
+          </p>
+          <Link
+            to="/architecture"
+            className="inline-flex items-center gap-2 px-10 py-4 rounded-full border-2 border-pinata-cyan text-pinata-cyan text-lg font-semibold hover:bg-pinata-cyan hover:text-slate-950 hover:scale-105 active:scale-95 transition-all"
+          >
+            View Architecture
+          </Link>
+        </div>
+      </section>
+
+      {/* Section 4 — MIT Licensed / Free for everyone, forever */}
       <section
         ref={licenseSection.ref}
         className={`relative py-24 px-6 text-center transition-opacity duration-1000 motion-reduce:transition-none ${
