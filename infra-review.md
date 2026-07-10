@@ -14,7 +14,7 @@ Overall the code is in good shape: SQL is fully parameterized, ownership checks 
 
 `GET /api/proxy?url=` is public and unauthenticated, forwards any public `https` URL, and returns the bytes with the **upstream's** `Content-Type` verbatim and no `X-Content-Type-Options: nosniff`. An attacker can point it at a URL that returns `text/html` with embedded script, and it renders in the `nexteditor.dev` origin (`GET /api/proxy?url=https://evil.example/x.html`). This is the same-origin script-execution risk the upload route deliberately guards against (it excludes `.svg` and the media route sets `nosniff`), but the proxy has neither defense.
 
-Recommended: add `X-Content-Type-Options: nosniff` to the proxy response so the browser won't sniff the bytes into an executable type. The 24h `Cache-Control: public` also makes the proxy usable as a free bandwidth/anonymizing relay — consider a host allow-list or auth if that matters.
+Recommended: add `X-Content-Type-Options: nosniff` — but be aware it only closes the sniffing sub-case. A response the upstream _explicitly_ labels `Content-Type: text/html` still renders and runs its scripts on top-level navigation to `/api/proxy?url=…`, `nosniff` present or not (nosniff stops the browser overriding a declared type, not honoring one). To actually prevent in-origin rendering, also send `Content-Disposition: attachment` or override the response `Content-Type` to a safe value. The 24h `Cache-Control: public` also makes the proxy usable as a free bandwidth/anonymizing relay — consider a host allow-list or auth if that matters.
 
 ### 2. IPv6 SSRF checks never match — private IPv6 literals are not blocked
 
@@ -24,21 +24,23 @@ Recommended: add `X-Content-Type-Options: nosniff` to the proxy response so the 
 
 This matters most for the shared module's other consumer, the Vite dev-server Node middleware, where `fetch` to internal addresses is genuinely reachable (on Workers the platform limits internal routing). Fix by stripping brackets before the comparisons, e.g. `host.replace(/^\[|\]$/g, "")`.
 
+Separately, the same block **over-blocks legitimate domains**: the IPv6 prefix checks `host.startsWith("fc")` / `host.startsWith("fd")` run for every non-IPv4 host, so ordinary names like `fc2.com` are rejected as unique-local IPv6. Gate those prefix checks to actual IPv6 literals (bracketed hosts) instead of applying them to all hostnames — stripping brackets alone enables the literal checks but doesn't fix this over-block.
+
 ### 3. `id_token` payload decode can throw an unhandled error
 
 **File:** [infra/worker/auth/google.ts:69](infra/worker/auth/google.ts:69), [infra/worker/auth/google.ts:115](infra/worker/auth/google.ts:115)
 
 `decodeIdTokenPayload` does `JSON.parse(base64UrlDecodeToString(...))` with no guard (line 69), and the callback parses the handshake cookie the same way (line 115). A malformed payload throws out of the handler and surfaces as a generic 500 instead of the route's own `502 "Google's response had no id_token"`-style error. The token is fetched server-to-server so this is unlikely, but the OAuth callback is the one place worth being defensive. Wrap both parses and return a 502/400. (Skipping JWT signature re-verification here is fine and correctly justified in the comment — the token comes straight from Google's token endpoint.)
 
+---
+
+## Low
+
 ### 4. Lesson `ne` / `thumbnail` paths are trusted from the request body
 
 **File:** [infra/worker/routes/lessons.ts:127-128](infra/worker/routes/lessons.ts:127), [infra/worker/routes/lessons.ts:171](infra/worker/routes/lessons.ts:171)
 
-`POST /api/lessons` and `PATCH /api/lessons/:id` accept any string for `ne`/`thumbnail` and store `media/<value>` without checking it points at an object this user actually uploaded (the upload route enforces ownership, but nothing links the stored path back to it). A signed-in user can set their lesson's media to another lesson's public key. Impact is content spoofing / referencing someone else's bytes, not data loss — hence Medium, not High. Consider validating the value matches `lessons/<id>/<allowed-filename>` for the lesson's own id.
-
----
-
-## Low
+`POST /api/lessons` and `PATCH /api/lessons/:id` accept any string for `ne`/`thumbnail` and store `media/<value>` without checking it points at an object this user actually uploaded (the upload route enforces ownership, but nothing links the stored path back to it). A signed-in user can set their lesson's media to another lesson's public key. But published-lesson media is already public and the write is still ownership-gated, so the impact is cosmetic content spoofing — displaying someone else's public bytes under your own lesson — with no confidentiality or integrity loss. Hence Low. Consider validating the value matches `lessons/<id>/<allowed-filename>` for the lesson's own id.
 
 ### 5. Username regex admits 1-char names despite the "3-32" contract
 
@@ -83,6 +85,7 @@ The size limit is enforced purely from the `Content-Length` header; there's no p
 - **Redundant blob-URL revocation** — [UploadLessonModal.tsx:104-107](infra/client/upload/UploadLessonModal.tsx:104) and the effect at [70-74](infra/client/upload/UploadLessonModal.tsx:70) both revoke the same URL. Idempotent, not a bug; just overlapping ownership.
 - **OAuth `state` compared with `!==`** — [google.ts:116](infra/worker/auth/google.ts:116). Not constant-time, but `state` is a 24-byte CSRF nonce, not a secret; timing is not a practical vector. No change needed.
 - **Handshake payload type-asserted, not validated** — [google.ts:115](infra/worker/auth/google.ts:115). The cookie is signed and self-set, so field validation adds little; covered by fixing #3's parse guard.
+- **Upload `:id` param is uncharted into the R2 key** — [uploads.ts:26-63](infra/worker/routes/uploads.ts:26). The route's `:id` has no charset constraint, so it's partly request-controlled in the key `lessons/${id}/${filename}`. Harmless today (R2 keys are literal — no `..` traversal, and a non-existent id just skips the ownership row), but constraining `:id` to the expected UUID charset would remove the sharp edge.
 
 ---
 
