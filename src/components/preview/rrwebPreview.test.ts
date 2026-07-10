@@ -69,6 +69,38 @@ describe("buildRrwebReplayEvents", () => {
       documentId: "doc-1",
       events: [event(4, PREVIEW_BASE), event(2, PREVIEW_BASE + 1)],
     };
+    // No drift: the batch's preview-clock lead over its recording time matches
+    // the seed's, so every event keeps its raw rrweb delta with the epoch-sized
+    // lead removed.
+    const batch: PreviewDomPatchBatch = {
+      version: 2,
+      time: 2200,
+      source: "runtime-preview",
+      documentId: "doc-1",
+      events: [event(3, PREVIEW_BASE + 2200), event(3, PREVIEW_BASE + 2210)],
+    };
+
+    const events = buildRrwebReplayEvents([seed], [batch]);
+
+    expect(events.map((entry) => entry.timestamp)).toEqual([0, 1, 2200, 2210]);
+  });
+
+  it("anchors on the largest preview-clock lead so replay never lags the recording clock", () => {
+    // The preview clock's lead over the recording clock can grow mid-recording
+    // (the recording clock stalls while the preview keeps ticking). Rebasing by
+    // the origin segment's smaller lead would replay later segments late vs the
+    // audio (see 88f8114 "Fix rrweb playback delay"); instead the largest lead
+    // wins: that segment lands exactly on its recording time, and segments with
+    // a smaller lead shift earlier, clamped at 0.
+    const PREVIEW_BASE = 1_700_000_000_000;
+    const seed: PreviewInitialDocument = {
+      version: 2,
+      time: 0,
+      documentId: "doc-1",
+      events: [event(4, PREVIEW_BASE), event(2, PREVIEW_BASE + 1)],
+    };
+    // Recorded 2200ms into the preview clock but only 500ms into the recording
+    // clock — a 1700ms larger lead than the seed's.
     const batch: PreviewDomPatchBatch = {
       version: 2,
       time: 500,
@@ -79,9 +111,8 @@ describe("buildRrwebReplayEvents", () => {
 
     const events = buildRrwebReplayEvents([seed], [batch]);
 
-    // Seed anchored at 0; later events keep their raw rrweb deltas, with the
-    // epoch-sized preview-clock lead removed.
-    expect(events.map((entry) => entry.timestamp)).toEqual([0, 1, 2200, 2210]);
+    // Batch anchored at its recording time (500); seed events clamp at 0.
+    expect(events.map((entry) => entry.timestamp)).toEqual([0, 0, 500, 510]);
   });
 });
 
