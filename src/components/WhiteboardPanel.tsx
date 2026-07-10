@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
-import { CaptureUpdateAction, Excalidraw } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, Excalidraw, MainMenu } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { AppState, BinaryFiles, NormalizedZoomValue } from "@excalidraw/excalidraw/types";
 import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
@@ -105,7 +105,22 @@ export default function WhiteboardPanel() {
                 usesPlaybackModel,
               );
             }}
-          />
+          >
+            {/* Custom menu = the default composition minus the "Excalidraw links"
+                socials group and ToggleTheme (theme is controlled, app is
+                dark-only). Providing any MainMenu child replaces the default. */}
+            <MainMenu>
+              <MainMenu.DefaultItems.LoadScene />
+              <MainMenu.DefaultItems.SaveToActiveFile />
+              <MainMenu.DefaultItems.Export />
+              <MainMenu.DefaultItems.SaveAsImage />
+              <MainMenu.DefaultItems.SearchMenu />
+              <MainMenu.DefaultItems.Help />
+              <MainMenu.DefaultItems.ClearCanvas />
+              <MainMenu.Separator />
+              <MainMenu.DefaultItems.ChangeCanvasBackground />
+            </MainMenu>
+          </Excalidraw>
         </div>
       </div>
     </>
