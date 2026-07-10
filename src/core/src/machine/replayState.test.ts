@@ -836,6 +836,189 @@ describe("replayState", () => {
     expect(unchanged.stateToApply).toBeUndefined();
   });
 
+  it("interpolates freedraw stroke growth between events so strokes animate on ticks", () => {
+    const whiteboardEvents: WhiteboardEvent[] = [
+      {
+        timestamp: 0,
+        upserts: [
+          {
+            id: "s",
+            version: 1,
+            versionNonce: 1,
+            isDeleted: false,
+            type: "freedraw",
+            points: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
+        ],
+        isOpen: true,
+      },
+      {
+        timestamp: 100,
+        upserts: [
+          {
+            id: "s",
+            version: 5,
+            versionNonce: 2,
+            isDeleted: false,
+            type: "freedraw",
+            points: [
+              [0, 0],
+              [1, 1],
+              [2, 2],
+              [3, 3],
+            ],
+            pressures: [0.1, 0.2, 0.3, 0.4],
+          },
+        ],
+      },
+    ];
+
+    // Halfway between the events, half of the new points are visible.
+    const midway = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 50,
+      lastAppliedIndex: 0,
+    });
+    expect(midway.nextIndex).toBe(0);
+    expect(midway.stateToApply?.elements[0]?.points).toEqual([
+      [0, 0],
+      [1, 1],
+      [2, 2],
+    ]);
+    // pressures must stay parallel to points.
+    expect(midway.stateToApply?.elements[0]?.pressures).toEqual([0.1, 0.2, 0.3]);
+    // Discrete state carries the base event's values mid-transition.
+    expect(midway.stateToApply?.elements[0]?.version).toBe(1);
+    expect(midway.stateToApply?.isOpen).toBe(true);
+  });
+
+  it("animates a brand-new stroke in from nothing just before its first event", () => {
+    const whiteboardEvents: WhiteboardEvent[] = [
+      {
+        timestamp: 500,
+        upserts: [
+          {
+            id: "s",
+            version: 1,
+            versionNonce: 1,
+            isDeleted: false,
+            type: "freedraw",
+            points: [
+              [0, 0],
+              [1, 1],
+              [2, 2],
+              [3, 3],
+            ],
+          },
+        ],
+      },
+    ];
+
+    // Well before the interpolation window: nothing yet (empty scene).
+    const before = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 200,
+      lastAppliedIndex: -1,
+    });
+    expect(before.stateToApply).toBe(EMPTY_WHITEBOARD_SCENE);
+
+    // Halfway through the 150ms window before the event (at t=425), half the
+    // stroke is drawn even though nextIndex is still -1.
+    const midway = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 425,
+      lastAppliedIndex: -1,
+    });
+    expect(midway.nextIndex).toBe(-1);
+    expect(midway.stateToApply?.elements[0]?.points).toEqual([
+      [0, 0],
+      [1, 1],
+    ]);
+  });
+
+  it("does not animate stroke growth across an idle gap, only inside the tail window", () => {
+    const stroke = (version: number, pointCount: number): WhiteboardEvent["upserts"] => [
+      {
+        id: "s",
+        version,
+        versionNonce: version,
+        isDeleted: false,
+        type: "freedraw",
+        points: Array.from({ length: pointCount }, (_, i) => [i, i]),
+      },
+    ];
+    const whiteboardEvents: WhiteboardEvent[] = [
+      { timestamp: 0, upserts: stroke(1, 2) },
+      // The presenter paused; these points were drawn just before t=1000.
+      { timestamp: 1000, upserts: stroke(9, 6) },
+    ];
+
+    // Mid-gap, outside the window: no interpolation, no redundant apply.
+    const midGap = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 500,
+      lastAppliedIndex: 0,
+    });
+    expect(midGap.stateToApply).toBeUndefined();
+
+    // Halfway into the 150ms tail window ([850, 1000] → t=925): 2 → 4 points.
+    const inWindow = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 925,
+      lastAppliedIndex: 0,
+    });
+    expect(inWindow.stateToApply?.elements[0]?.points).toHaveLength(4);
+  });
+
+  it("lerps element geometry between upserts while keeping discrete props at the base state", () => {
+    const whiteboardEvents: WhiteboardEvent[] = [
+      {
+        timestamp: 0,
+        upserts: [
+          {
+            id: "r",
+            version: 1,
+            versionNonce: 1,
+            isDeleted: false,
+            type: "rectangle",
+            x: 0,
+            width: 10,
+            strokeColor: "#000",
+          },
+        ],
+      },
+      {
+        timestamp: 100,
+        upserts: [
+          {
+            id: "r",
+            version: 4,
+            versionNonce: 2,
+            isDeleted: false,
+            type: "rectangle",
+            x: 100,
+            width: 50,
+            strokeColor: "#f00",
+          },
+        ],
+      },
+    ];
+
+    const midway = getWhiteboardReplayResult({
+      whiteboardEvents,
+      currentTime: 50,
+      lastAppliedIndex: 0,
+    });
+    const element = midway.stateToApply?.elements[0];
+    expect(element?.x).toBe(50);
+    expect(element?.width).toBe(30);
+    // Discrete props only change when the event actually applies.
+    expect(element?.strokeColor).toBe("#000");
+  });
+
   it("orders replayed whiteboard elements by fractional index so z-order changes survive", () => {
     // Draw a then b ([a, b]); bring a to front — Excalidraw bumps a's version
     // and gives it a fractional index sorting after b's. The replayed array
