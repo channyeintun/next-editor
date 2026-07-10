@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useSelector } from "@xstate/store-react";
 import {
   areWhiteboardViewsEqual,
-  deriveWhiteboardDelta,
+  snapshotWhiteboardDelta,
   type WhiteboardElementJSON,
   type WhiteboardEvent,
   type WhiteboardView,
@@ -61,17 +61,21 @@ export const useWhiteboardController = ({
     if (!elements) return;
 
     const current = store.getSnapshot().context.scene;
-    const { upserts, removedIds } = deriveWhiteboardDelta(current.elements, elements);
+    // Snapshots, not live references: Excalidraw mutates elements in place while
+    // drawing, so the store must hold clones for the diff (and the recorded
+    // upserts) to see each flush's intermediate state — that per-flush growth of
+    // a stroke's points is what makes it animate on replay.
+    const snapshot = snapshotWhiteboardDelta(current.elements, elements);
     const view = pendingViewRef.current;
     const viewChanged = Boolean(view) && !areWhiteboardViewsEqual(view, current.view);
 
-    if (!upserts.length && !removedIds.length && !viewChanged) {
+    if (!snapshot && !viewChanged) {
       return;
     }
 
     store.trigger.setScene({
       scene: {
-        elements: elements as WhiteboardElementJSON[],
+        elements: snapshot ? snapshot.nextElements : current.elements,
         view: viewChanged && view ? view : current.view,
         isOpen: current.isOpen,
         isMaximized: current.isMaximized,
@@ -80,8 +84,8 @@ export const useWhiteboardController = ({
 
     onWhiteboardEventRef.current?.({
       timestamp: performance.now(),
-      ...(upserts.length ? { upserts } : {}),
-      ...(removedIds.length ? { removedIds } : {}),
+      ...(snapshot?.upserts.length ? { upserts: snapshot.upserts } : {}),
+      ...(snapshot?.removedIds.length ? { removedIds: snapshot.removedIds } : {}),
       ...(viewChanged ? { view } : {}),
     });
   };

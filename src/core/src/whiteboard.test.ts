@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   areWhiteboardViewsEqual,
   deriveWhiteboardDelta,
+  snapshotWhiteboardDelta,
   type WhiteboardElementJSON,
 } from "./whiteboard";
 
@@ -71,6 +72,59 @@ describe("deriveWhiteboardDelta", () => {
 
     expect(delta.upserts).toEqual([next[1]]);
     expect(delta.removedIds).toEqual([]);
+  });
+});
+
+describe("snapshotWhiteboardDelta", () => {
+  it("records each flush of an element Excalidraw mutates in place, without drifting", () => {
+    // Excalidraw's mutation model: ONE object per element, mutated in place as
+    // the stroke grows (points appended, version bumped per pointermove).
+    const liveElement = makeElement({ id: "a", version: 1, points: [[0, 0]] });
+
+    const firstFlush = snapshotWhiteboardDelta([], [liveElement]);
+    expect(firstFlush).not.toBeNull();
+    expect(firstFlush?.upserts.map((element) => element.id)).toEqual(["a"]);
+
+    // The stroke continues: same object, new points, bumped version.
+    liveElement.version = 7;
+    liveElement.points = [
+      [0, 0],
+      [1, 1],
+    ];
+
+    // The second flush must still see the change — with live references the
+    // previous state would be the same object and the diff would find nothing.
+    const secondFlush = snapshotWhiteboardDelta(firstFlush!.nextElements, [liveElement]);
+    expect(secondFlush).not.toBeNull();
+    expect(secondFlush?.upserts[0].version).toBe(7);
+
+    // And the first flush's recorded upsert must have kept its intermediate
+    // state rather than aliasing the live element's final state.
+    expect(firstFlush?.upserts[0].version).toBe(1);
+    expect(firstFlush?.upserts[0].points).toEqual([[0, 0]]);
+  });
+
+  it("returns null when no element changed", () => {
+    const liveElement = makeElement({ id: "a", version: 1 });
+    const firstFlush = snapshotWhiteboardDelta([], [liveElement]);
+
+    expect(snapshotWhiteboardDelta(firstFlush!.nextElements, [liveElement])).toBeNull();
+  });
+
+  it("keeps the live array's order in nextElements, reusing unchanged snapshots", () => {
+    const liveA = makeElement({ id: "a", version: 1 });
+    const liveB = makeElement({ id: "b", version: 1 });
+    const firstFlush = snapshotWhiteboardDelta([], [liveA, liveB]);
+
+    // b changes and moves to the front (z-order change).
+    liveB.version = 2;
+    const secondFlush = snapshotWhiteboardDelta(firstFlush!.nextElements, [liveB, liveA]);
+
+    expect(secondFlush?.nextElements.map((element) => element.id)).toEqual(["b", "a"]);
+    // Unchanged element keeps its previous snapshot identity (no re-clone).
+    expect(secondFlush?.nextElements[1]).toBe(firstFlush!.nextElements[0]);
+    // Changed element is a fresh clone, not the live reference.
+    expect(secondFlush?.nextElements[0]).not.toBe(liveB);
   });
 });
 

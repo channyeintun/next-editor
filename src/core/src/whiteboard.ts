@@ -89,6 +89,48 @@ export function deriveWhiteboardDelta(
   return { upserts, removedIds };
 }
 
+/**
+ * Like {@link deriveWhiteboardDelta}, but returns *snapshots*: Excalidraw
+ * mutates its element objects in place while the user draws (`points` grows and
+ * `version` bumps on every pointermove), so holding live references would make
+ * the next diff compare an element's version against itself — nothing past an
+ * element's first appearance would ever record — and every recorded upsert
+ * would silently drift to the element's final state by encode time, making
+ * strokes pop in fully drawn on replay instead of animating.
+ *
+ * Returns `null` when no element changed. `nextElements` is the caller's new
+ * "previous" array: cloned upserts merged with the prior snapshots, in the live
+ * array's order (Excalidraw's array order is z-order, so it must be preserved).
+ */
+export function snapshotWhiteboardDelta(
+  previousElements: readonly WhiteboardElementJSON[],
+  liveElements: readonly WhiteboardElementJSON[],
+): {
+  upserts: WhiteboardElementJSON[];
+  removedIds: string[];
+  nextElements: WhiteboardElementJSON[];
+} | null {
+  const { upserts, removedIds } = deriveWhiteboardDelta(previousElements, liveElements);
+
+  if (!upserts.length && !removedIds.length) {
+    return null;
+  }
+
+  const clonedById = new Map(
+    upserts.map((element) => [element.id, structuredClone(element)] as const),
+  );
+  const previousById = new Map(previousElements.map((element) => [element.id, element]));
+
+  return {
+    upserts: Array.from(clonedById.values()),
+    removedIds,
+    nextElements: liveElements.map(
+      (element) =>
+        clonedById.get(element.id) ?? previousById.get(element.id) ?? structuredClone(element),
+    ),
+  };
+}
+
 export function areWhiteboardViewsEqual(
   a: WhiteboardView | undefined,
   b: WhiteboardView | undefined,
