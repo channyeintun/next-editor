@@ -21,6 +21,7 @@ import {
   playlistRowToOwnedPlaylistWithMembership,
   playlistRowToPlaylist,
 } from "../../db/types";
+import { generateUniqueSlug, isSlugUniqueViolation, MAX_SLUG_INSERT_ATTEMPTS } from "../../db/slug";
 import { getCurrentUser } from "../auth/session";
 import { cached, getCache, invalidateCache, playlistSlugKey } from "../cache";
 
@@ -64,18 +65,30 @@ playlistsRoute.post("/", async (c) => {
   }
 
   const id = crypto.randomUUID();
-  const slug = `${slugify(title)}-${id.slice(0, 8)}`;
-  const row = await insertPlaylist(c.env.DB, {
-    id,
-    slug,
-    ownerId: user.id,
-    title,
-    description: typeof body?.description === "string" ? body.description : null,
-  });
-  return c.json(
-    playlistRowToOwnedPlaylist({ ...row, lesson_count: 0, first_lesson_thumbnail: null }),
-    201,
-  );
+  for (let attempt = 1; ; attempt++) {
+    const slug = await generateUniqueSlug(c.env.DB, "playlists", slugify(title));
+    try {
+      const row = await insertPlaylist(c.env.DB, {
+        id,
+        slug,
+        ownerId: user.id,
+        title,
+        description: typeof body?.description === "string" ? body.description : null,
+      });
+      return c.json(
+        playlistRowToOwnedPlaylist({ ...row, lesson_count: 0, first_lesson_thumbnail: null }),
+        201,
+      );
+    } catch (error) {
+      // Two concurrent creates with the same title both passed
+      // generateUniqueSlug's read and raced to INSERT — retry picks the next
+      // suffix (D1 serializes writes, so the retry's read sees the winner).
+      if (!isSlugUniqueViolation(error, "playlists") || attempt >= MAX_SLUG_INSERT_ATTEMPTS) {
+        console.error("Failed to insert playlist", error);
+        return c.json({ error: "failed to create playlist" }, 500);
+      }
+    }
+  }
 });
 
 // Must be registered before the catch-all "/:slug" GET below, same ordering

@@ -12,6 +12,7 @@ import {
   updateLesson,
   type UpdateLessonParams,
 } from "../../db/queries";
+import { generateUniqueSlug, isSlugUniqueViolation, MAX_SLUG_INSERT_ATTEMPTS } from "../../db/slug";
 import { lessonRowToLesson, lessonRowToOwnedLesson } from "../../db/types";
 import { getCurrentUser } from "../auth/session";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
@@ -139,29 +140,41 @@ lessonsRoute.post("/", async (c) => {
     return c.json({ error: "thumbnail must be a media path uploaded for this lesson" }, 400);
   }
 
-  const slug = `${slugify(title)}-${body.id.slice(0, 8)}`;
-
-  try {
-    const row = await insertDraftLesson(c.env.DB, {
-      id: body.id,
-      slug,
-      ownerId: user.id,
-      title,
-      description: typeof body.description === "string" ? body.description : null,
-      thumbnail: typeof body.thumbnail === "string" ? toStoredThumbnailPath(body.thumbnail) : null,
-      ne: toMediaPath(body.ne),
-      duration: typeof body.duration === "string" ? body.duration : null,
-      tags: asStringArray(body.tags),
-      author: user.name,
-      authorUrl: `/learn/@${user.username}`,
-    });
-    return c.json(lessonRowToOwnedLesson(row), 201);
-  } catch (error) {
-    // Only realistic cause: `id` (the primary key) already exists — a
-    // vanishingly unlikely UUID collision, or a retried request reusing an
-    // id from an earlier attempt. Either way, ask the client to use a fresh id.
-    console.error("Failed to insert draft lesson", error);
-    return c.json({ error: "a lesson with this id already exists" }, 409);
+  for (let attempt = 1; ; attempt++) {
+    const slug = await generateUniqueSlug(c.env.DB, "lessons", slugify(title));
+    try {
+      const row = await insertDraftLesson(c.env.DB, {
+        id: body.id,
+        slug,
+        ownerId: user.id,
+        title,
+        description: typeof body.description === "string" ? body.description : null,
+        thumbnail:
+          typeof body.thumbnail === "string" ? toStoredThumbnailPath(body.thumbnail) : null,
+        ne: toMediaPath(body.ne),
+        duration: typeof body.duration === "string" ? body.duration : null,
+        tags: asStringArray(body.tags),
+        author: user.name,
+        authorUrl: `/learn/@${user.username}`,
+      });
+      return c.json(lessonRowToOwnedLesson(row), 201);
+    } catch (error) {
+      // Two concurrent creates with the same title both passed
+      // generateUniqueSlug's read and raced to INSERT — retry picks the next
+      // suffix (D1 serializes writes, so the retry's read sees the winner).
+      if (isSlugUniqueViolation(error, "lessons")) {
+        if (attempt >= MAX_SLUG_INSERT_ATTEMPTS) {
+          console.error("Failed to insert draft lesson after slug retries", error);
+          return c.json({ error: "failed to create lesson" }, 500);
+        }
+        continue;
+      }
+      // Only realistic cause: `id` (the primary key) already exists — a
+      // vanishingly unlikely UUID collision, or a retried request reusing an
+      // id from an earlier attempt. Either way, ask the client to use a fresh id.
+      console.error("Failed to insert draft lesson", error);
+      return c.json({ error: "a lesson with this id already exists" }, 409);
+    }
   }
 });
 

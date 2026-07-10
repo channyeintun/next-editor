@@ -18,8 +18,8 @@ CREATE TABLE sessions (
 
 -- lessons: user-generated only. The seed (introduction) is NOT in D1.
 CREATE TABLE lessons (
-  id            TEXT PRIMARY KEY,        -- uuid; also the R2 folder + slug base
-  slug          TEXT UNIQUE NOT NULL,    -- url-safe; "<kebab-title>-<short-id>"
+  id            TEXT PRIMARY KEY,        -- uuid; also the R2 folder
+  slug          TEXT UNIQUE NOT NULL,    -- url-safe "<kebab-title>", "-N" only on collision (pre-2026-07 rows: "<kebab-title>-<short-id>")
   owner_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title         TEXT NOT NULL,
   description   TEXT,
