@@ -677,8 +677,8 @@ function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
         <WorkspaceSettingsButton showImportExport={showImportExport} />
         <div className="h-4 w-px bg-slate-700 mx-1" />
         <div className="flex items-center gap-2">
-          <SlidesButton presentationToggleOnly={!showImportExport} />
           <WhiteboardHeaderButton />
+          <SlidesButton presentationToggleOnly={!showImportExport} />
           <PreviewHeaderButton />
         </div>
       </div>
