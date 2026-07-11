@@ -349,7 +349,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   return (
     <div
-      className={`${positioning} bottom-0 left-0 z-45 w-full border-t border-[#0f131a] bg-[#11141c] ${containerPadding} ${containerHeight} pointer-events-none`}
+      className={`${positioning} bottom-0 left-0 z-101 w-full border-t border-[#0f131a] bg-[#11141c] ${containerPadding} ${containerHeight} pointer-events-none`}
     >
       {/* Caption file picker — kept outside the record-only controls so "Import captions…"
           works once a recording is loaded (when the audio-source row is no longer rendered). */}
