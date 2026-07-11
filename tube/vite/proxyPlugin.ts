@@ -41,11 +41,6 @@ export function proxyPlugin(): Plugin {
           });
       };
       server.middlewares.use("/api/proxy", handler);
-      // Legacy alias: decks imported before the /api/proxy rename (408ab6a)
-      // have /api/slide-image?url=… hrefs persisted inside their slide SVGs
-      // (and inside recordings built from them), so the old path must keep
-      // resolving. Mirrors the same alias in infra/worker/index.ts.
-      server.middlewares.use("/api/slide-image", handler);
     },
   };
 }

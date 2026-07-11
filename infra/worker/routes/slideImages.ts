@@ -4,8 +4,8 @@ import { getCurrentUser } from "../auth/session";
 import { proxyUrl } from "../../../src/shared/proxy";
 import { isGoogleImageUrl } from "../../../src/shared/googleImageHosts";
 
-// Mounted at /api/slide-images in worker/index.ts (distinct from the legacy
-// /api/slide-image proxy alias). Called once per Google Slides deck import
+// Mounted at /api/slide-images in worker/index.ts. Called once per Google
+// Slides deck import
 // (src/googleSlides/storeImageHrefs.ts): copies each Google-hosted slide
 // image into R2 so the persisted SVG can reference /media/<key> — served
 // straight from R2 with immutable caching — instead of an /api/proxy href

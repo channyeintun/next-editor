@@ -162,8 +162,6 @@ export default defineConfig({
       // Slide-image R2 ingestion (Worker-only — R2 lives behind wrangler).
       // Without `dev:worker` running this proxy 500s and the import falls
       // back to /api/proxy hrefs client-side (src/googleSlides/storeImageHrefs.ts).
-      // Prefix matching can't swallow the legacy /api/slide-image path
-      // handled by proxyPlugin: that URL doesn't start with "/api/slide-images".
       "/api/slide-images": "http://localhost:8787",
       "/media": "http://localhost:8787",
       // /api/proxy is deliberately NOT proxied here — the Worker now

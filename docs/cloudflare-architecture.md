@@ -95,7 +95,6 @@ resolved by the `@app` alias in `vite.config.ts`.
                          │  /api/lessons*     → D1 query        ─────┼──► D1 (lessons, users)
                          │  /api/uploads/sign → presign R2 PUT       │
                          │  /media/*          → R2 get         ─────┼──► R2 (lesson bytes)
-                         │  /api/slide-image  → image proxy (moved)  │
                          │  /api/proxy        → cross-origin .ne proxy│
                          └───────────────────────────────────────────┘
 ```
@@ -282,7 +281,6 @@ sequencing.
 | `DELETE /api/lessons/:id`       | owner  | Delete row + R2 objects                                                              |
 | `GET /media/*`                  | —      | Stream R2 object (Range, immutable cache)                                            |
 | `POST /api/slide-images`        | cookie | Copy Google Slides deck images into R2 at import time (`slide-images/<hash>` keys)   |
-| `GET /api/slide-image?url=`     | —      | Google Slides image proxy                                                            |
 | `GET /api/proxy?url=`           | —      | Same-origin proxy for cross-origin `.ne` loads (path already used by `useUrlLoader`) |
 
 ## Upload & publish sequence

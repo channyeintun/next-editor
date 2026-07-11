@@ -41,13 +41,10 @@ app.route("/api/auth", authRoute);
 app.route("/api/auth/google", googleAuthRoute);
 app.route("/api/uploads", uploadsRoute);
 app.route("/api/proxy", proxyRoute);
-// Slide-image R2 ingestion (plural — not the legacy /api/slide-image proxy
-// alias below; Hono matches whole path segments, so the two never collide).
+// Slide-image R2 ingestion. The pre-/api/proxy-rename alias /api/slide-image
+// (singular) is gone: every persisted document that referenced it was
+// migrated to /media/slide-images/<hash> hrefs on 2026-07-11.
 app.route("/api/slide-images", slideImagesRoute);
-// Legacy alias: decks imported before the /api/proxy rename (408ab6a) were
-// persisted with /api/slide-image?url=… hrefs baked into their slide SVGs,
-// so this path must keep resolving for as long as those documents exist.
-app.route("/api/slide-image", proxyRoute);
 
 // Workers Static Assets already tried to match the request against dist/ and
 // missed before this Worker ran (exact-match static files — JS chunks, the
