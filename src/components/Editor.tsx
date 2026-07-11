@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
+import { usePostHog } from "@posthog/react";
 import type { Recording } from "../core/src";
 import {
   useNextEditorActions,
@@ -122,6 +123,20 @@ export function EditorLayout({
     }
     wasEndedRef.current = hasEnded;
   }, [hasEnded, onEnded]);
+
+  // PostHog session replay's DOM observer competes for CPU with lesson capture
+  // (content deltas + preview rrweb + audio); pause it while the user is
+  // actively recording and resume when they stop.
+  const posthog = usePostHog();
+  useEffect(() => {
+    if (!isRecording) {
+      return;
+    }
+    posthog?.stopSessionRecording();
+    return () => {
+      posthog?.startSessionRecording();
+    };
+  }, [isRecording, posthog]);
 
   // Hydrate the machine from the persisted player-level speed/volume. Keyed on
   // currentRecording because SET_SPEED/SET_VOLUME are only handled inside the
