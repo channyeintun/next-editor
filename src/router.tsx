@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import { useEffect, type ComponentType } from "react";
 import { createBrowserRouter, isRouteErrorResponse, useRouteError } from "react-router";
 import { usePostHog } from "@posthog/react";
 import LoadingSpinner from "./components/LoadingSpinner";
@@ -102,9 +102,13 @@ function RouteErrorBoundary() {
   const posthog = usePostHog();
   const dynamicImportError = isDynamicImportError(error);
 
-  if (!dynamicImportError) {
-    posthog?.captureException(error);
-  }
+  // In an effect, not during render: StrictMode double-invokes render and any
+  // re-render of the boundary would re-report the same error.
+  useEffect(() => {
+    if (!dynamicImportError) {
+      posthog?.captureException(error);
+    }
+  }, [error, dynamicImportError, posthog]);
 
   const title = dynamicImportError ? "App update required" : "Unexpected application error";
   const description = dynamicImportError
