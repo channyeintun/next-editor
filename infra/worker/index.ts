@@ -9,6 +9,7 @@ import { authRoute } from "./auth/session";
 import { googleAuthRoute } from "./auth/google";
 import { uploadsRoute } from "./routes/uploads";
 import { proxyRoute } from "./routes/proxy";
+import { slideImagesRoute } from "./routes/slideImages";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -40,6 +41,9 @@ app.route("/api/auth", authRoute);
 app.route("/api/auth/google", googleAuthRoute);
 app.route("/api/uploads", uploadsRoute);
 app.route("/api/proxy", proxyRoute);
+// Slide-image R2 ingestion (plural — not the legacy /api/slide-image proxy
+// alias below; Hono matches whole path segments, so the two never collide).
+app.route("/api/slide-images", slideImagesRoute);
 // Legacy alias: decks imported before the /api/proxy rename (408ab6a) were
 // persisted with /api/slide-image?url=… hrefs baked into their slide SVGs,
 // so this path must keep resolving for as long as those documents exist.
