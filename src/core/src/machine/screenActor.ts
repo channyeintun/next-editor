@@ -1,5 +1,6 @@
 import { fromCallback } from "xstate";
 import { getSupportedVideoMimeType, SCREEN_VIDEO_MIME_TYPES } from "../utils/videoMimeType";
+import { fixWebmDuration } from "../utils/webmDuration";
 
 const SCREEN_TIMESLICE_MS = 1000;
 
@@ -172,10 +173,20 @@ export const screenRecordingActor = fromCallback<
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: mimeType });
-        if (!disposed) {
-          sendBack({ type: "SCREEN_STOPPED", blob });
-        }
+        const rawBlob = new Blob(chunks, { type: mimeType });
+        // MediaRecorder WebM has no Duration header (Chromium issue 642012), so players can't build a
+        // seek bar. Inject the measured wall-clock length before handing the file off. MP4 already
+        // carries a duration; a non-WebM/failed patch falls back to the raw blob (see fixWebmDuration).
+        const durationMs =
+          startedAtPerfMs > 0 ? Math.max(0, performance.now() - startedAtPerfMs) : 0;
+        const finalize = mimeType.startsWith("video/webm")
+          ? fixWebmDuration(rawBlob, durationMs)
+          : Promise.resolve(rawBlob);
+        finalize.then((blob) => {
+          if (!disposed) {
+            sendBack({ type: "SCREEN_STOPPED", blob });
+          }
+        });
       };
 
       mediaRecorder.onstart = () => {

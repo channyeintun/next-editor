@@ -1085,11 +1085,13 @@ describe("editorMachine local screen recording", () => {
 
     actor.send({ type: "STOP_RECORDING" });
     await waitFor(actor, (s) => s.matches({ playback: "ready" }));
+    // The blob is patched (WebM duration) asynchronously in the actor's onstop, so SCREEN_STOPPED
+    // lands after the machine already reached playback — exactly the root-handler-any-state case.
+    await waitFor(actor, (s) => s.context.screen.isRecording === false);
 
     expect(ready).toHaveLength(1);
     expect(ready[0]?.blob).toBeInstanceOf(Blob);
     expect(ready[0]?.mimeType).toBe("video/webm;codecs=vp9,opus");
-    expect(actor.getSnapshot().context.screen.isRecording).toBe(false);
     expect(actor.getSnapshot().context.screenStream).toBeNull();
     expect(actor.getSnapshot().children.screenRecorder).toBeUndefined();
   });
