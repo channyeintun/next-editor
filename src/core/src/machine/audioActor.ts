@@ -374,7 +374,6 @@ export const audioPlaybackActor = fromCallback<
     disposed = true;
     audio.pause();
     audio.removeAttribute("src");
-    audio.load();
     if (currentObjectUrl) {
       URL.revokeObjectURL(currentObjectUrl);
       currentObjectUrl = null;
