@@ -52,7 +52,7 @@ export default function WhiteboardPanel() {
   return (
     <>
       <div
-        className="fixed inset-0 z-90 bg-[#0b0d12]/62 backdrop-blur-md opacity-0 animate-[fade-in_0.2s_ease-out_forwards] motion-reduce:animate-none motion-reduce:opacity-100"
+        className="fixed inset-0 z-90 bg-[#0b0d12]/62 opacity-0 animate-[fade-in_0.2s_ease-out_forwards] motion-reduce:animate-none motion-reduce:opacity-100"
         onClick={() => setOpen(false)}
       />
       <div className="fixed top-[5%] left-[5%] right-[5%] bottom-[5%] z-100 bg-slate-900 rounded-2xl overflow-hidden flex flex-col shadow-2xl">
