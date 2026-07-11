@@ -1,4 +1,4 @@
-# Remote Runtime — a WebContainer-compatible remote execution backend
+# Remote Runtime — a WebContainer-compatible remote execution backend on Cloudflare
 
 **Status:** Design — not yet implemented.
 **Companion doc:** [remote-runtime-implementation-plan.md](./remote-runtime-implementation-plan.md)
@@ -19,13 +19,20 @@ and arbitrary Linux toolchains**.
 This design introduces a **remote sandbox runtime** that is **API-compatible with
 `@webcontainer/api`**: a client SDK class (`RemoteContainer`) that implements the same
 `WebContainer` surface (`boot`, `mount`, `fs.*`, `spawn`, `on('server-ready')`, …) but executes
-everything in a per-session Linux container on a server, transported over one WebSocket.
+everything in a per-session Linux container **on Cloudflare** (Workers + Durable Objects +
+Containers), transported over one WebSocket.
+
+**Cloudflare is the backend — the only backend.** This repo already deploys a Worker with D1
+via wrangler; the remote runtime extends that same deploy. There is deliberately no
+backend-portability abstraction, no self-hosted broker, no second infrastructure to operate.
+Local development uses `wrangler dev`, which runs the container locally (Docker is required on
+dev machines only as wrangler's container build/run dependency).
 
 Because the API is compatible, the editor keeps both runtimes:
 
 |               | WebContainer (existing)    | Remote Runtime (new)                      |
 | ------------- | -------------------------- | ----------------------------------------- |
-| Where it runs | In the browser (WASM)      | Server-side Linux container               |
+| Where it runs | In the browser (WASM)      | Cloudflare Container (per session)        |
 | Languages     | Node.js only               | Anything installable in a container image |
 | Boot latency  | ~1–3 s, free               | Container cold start (~1–5 s) + network   |
 | Offline       | Yes                        | No                                        |
@@ -38,8 +45,9 @@ Because the API is compatible, the editor keeps both runtimes:
    editor's runtime hooks change only where they _obtain_ the instance, not how they use it.
 2. **Multi-language**: Go first (proof of generality), then Python; image-based so adding a
    language is adding a Dockerfile.
-3. **Backend-portable**: one wire protocol + one in-container agent; provisioning backends are
-   pluggable (Cloudflare Containers primary, local Docker for dev, others later).
+3. **Cloudflare-native, minimal ops**: everything server-side lives in the existing
+   `infra/` Worker project and ships with the existing `wrangler deploy` workflow. One new
+   Durable Object class, one container image family, zero new vendors.
 4. **Live preview parity**: `server-ready`/`port` events, per-port preview URLs, preview script
    injection (`setPreviewScript`) and `preview-message` error forwarding all keep working.
 
@@ -51,6 +59,8 @@ Because the API is compatible, the editor keeps both runtimes:
 - Multi-user collaboration on one sandbox (single editor session ↔ single sandbox).
 - Persisting sandboxes across editor sessions in v1 (workspace state already lives client-side;
   the sandbox is rebuilt from `mount()` on boot).
+- Portability to non-Cloudflare hosts. (The client↔agent protocol is host-agnostic by nature,
+  which keeps the door open, but we build no adapter layer for it.)
 
 ---
 
@@ -157,19 +167,20 @@ All `on()` calls return an `Unsubscribe` function.
 │               └────► RemoteContainer (client SDK)            │
 │                        │ 1 WebSocket (RCP, §6)   ▲ iframe    │
 └────────────────────────┼─────────────────────────┼───────────┘
-                         ▼                         │ https://{port}-{sid}.preview…
-┌─────────────────────── Control plane ────────────┼──────────┐
-│  Worker routes (Hono, existing infra/worker)     │          │
-│   • POST /api/runtime/sessions   (auth, provision)          │
+                         ▼                         │ https://p{port}-{sid}.preview…
+┌──────────── Cloudflare (the existing infra/ worker) ────────┐
+│  Worker routes (Hono)                            │          │
+│   • POST /api/runtime/sessions   (auth, quotas)             │
 │   • GET  /api/runtime/sessions/:id/ws   (WS proxy)          │
-│   • preview ingress: *.preview host → session port          │
+│   • preview ingress: host or /preview path → session port   │
 │     └ HTMLRewriter: inject preview script, set CORP headers │
 │  RuntimeSessionDO (Durable Object, 1 per session)           │
-│   • owns container lifecycle, idle timeout, auth token      │
+│   • extends Container (@cloudflare/containers)              │
+│   • lifecycle, idle timeout, preview-script storage         │
 └───────────────────────┬─────────────────────────────────────┘
                         ▼
-┌─────────────────────── Sandbox (per session) ───────────────┐
-│  OCI container (image: runtime-node | runtime-go | …)       │
+┌───────────── Cloudflare Container (per session) ────────────┐
+│  image: runtime-node22 | runtime-go1.24 | …                 │
 │   └─ agent (single Go binary, WS server)                    │
 │       • fs ops jailed to /workspace                         │
 │       • spawn: PTY (creack/pty) or pipes                    │
@@ -179,27 +190,36 @@ All `on()` calls return an `Unsubscribe` function.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 4.1 Core decision: one protocol, one agent, N backends
+### 4.1 Core decision: one protocol, one agent, thin Cloudflare control plane
 
 The **agent** is a single static Go binary baked into every runtime image. It implements the
 entire runtime semantics (fs, processes, watchers, port events) against the real Linux
 environment, exposed as one WebSocket endpoint.
 
-The **control plane** does _only_ auth, provisioning, routing, and preview ingress. It never
-interprets RCP frames (opaque proxy between client WS and agent WS).
+The **control plane** (Worker + `RuntimeSessionDO`) does _only_ auth, provisioning, routing,
+and preview ingress. It never interprets RCP frames — between the client WS and the agent WS
+it is an opaque byte proxy. All runtime semantics live in exactly two places: the client SDK
+and the agent.
 
-Consequences:
+Why keep a custom agent instead of leaning on `@cloudflare/sandbox` (the Sandbox SDK)?
+Resolved: **build on the thin official `@cloudflare/containers` `Container` class + our
+agent.** The Sandbox SDK's value (exec, file APIs, preview URLs) overlaps with what the agent
+must provide anyway, while the WebContainer semantics we're contractually bound to —
+interactive PTYs with resize, merged-output streams, recursive `fs.watch`, _automatic_ port
+detection driving `server-ready` — are not part of it. One abstraction (the agent), not two.
+The `Container` class still gives us the boring parts free: container lifecycle binding to the
+DO, `containerFetch`, sleep/wake.
 
-- The same image runs unchanged on Cloudflare Containers, local Docker, Fly Machines, or bare
-  `docker run` in CI — backends differ only in a small `provision/route/destroy` adapter (§9).
-- Integration tests for 90% of the system need only Docker, no cloud account (§13).
-- Local dev of the editor against a local sandbox has near-zero latency.
+A practical side benefit (not a portability goal): the agent + client SDK pair is fully
+testable in CI against a plain `docker run` of the image — no Cloudflare account in the loop
+for most tests (§13).
 
 ### 4.2 Why WebSocket (not WebTransport/HTTP)
 
-- Works today through Cloudflare Workers/DOs (including hibernatable WS), proxies, and vite dev.
-- Ordered delivery simplifies stream semantics; per-stream flow control handled at the RCP layer
-  (§6.6) rather than transport.
+- Works today end-to-end through Workers and Durable Objects (including WS hibernation
+  support on the DO side), and through `wrangler dev` locally.
+- Ordered delivery simplifies stream semantics; per-stream flow control handled at the RCP
+  layer (§6.6) rather than transport.
 - Binary frames give us zero-copy-ish file transfer without base64 inflation.
 
 WebTransport can be a later optimization behind the same frame codec.
@@ -214,9 +234,10 @@ Location: `src/runtime/remote/`. No React imports — plain TS class, same as `W
 
 ```ts
 export interface RemoteBootOptions extends BootOptions {
-  /** Runtime image selector, e.g. "node22", "go1.24", "python3.13", "full". */
+  /** Runtime image selector, e.g. "node22", "go1.24", "python3.13". */
   runtime?: string;
-  /** Base URL of the control plane; defaults to same-origin /api/runtime. */
+  /** Base URL of the control plane; defaults to same-origin /api/runtime.
+   *  In local dev, point it at the wrangler dev origin (e.g. http://localhost:8787/api/runtime). */
   endpoint?: string;
   /** Idle seconds before the server reclaims the sandbox. Default 300. */
   idleTimeoutSeconds?: number;
@@ -224,6 +245,13 @@ export interface RemoteBootOptions extends BootOptions {
 
 export class RemoteContainer /* satisfies RuntimeContainer */ {
   static async boot(options?: RemoteBootOptions): Promise<RemoteContainer>;
+  /** @internal test/tooling entry: skip provisioning, connect straight to a known agent WS.
+   *  Used by the conformance suite against a plain `docker run` of a runtime image. */
+  static async attach(target: {
+    wsUrl: string;
+    previewUrlTemplate: string;
+    workdirName?: string;
+  }): Promise<RemoteContainer>;
 }
 ```
 
@@ -231,7 +259,9 @@ export class RemoteContainer /* satisfies RuntimeContainer */ {
 
 1. `POST {endpoint}/sessions` with `{ runtime, workdirName, idleTimeoutSeconds }` → `201`
    `{ sessionId, wsUrl, previewUrlTemplate, token }`.
-   `previewUrlTemplate` example: `https://p{{port}}-{{sessionId}}.preview.example.com`.
+   `previewUrlTemplate` (produced server-side per environment):
+   - production: `https://p{{port}}-{{sessionId}}.preview.example.com`
+   - `wrangler dev`: `http://localhost:8787/preview/{{sessionId}}/{{port}}`
 2. Open WebSocket to `wsUrl` (token as query param or `Sec-WebSocket-Protocol` suffix).
 3. Send `session.hello { protocolVersion: 1, resumeToken?: string }` → receive
    `{ workdir, agentVersion }`. Resolve `boot()` only after hello succeeds.
@@ -247,7 +277,7 @@ for Node projects, can fall back to WebContainer.
   so multi-byte codepoints split across frames don't corrupt (this _will_ happen with box-drawing
   output from Go TUIs). Close the stream on `proc.exit`.
 - **`process.input`**: a `WritableStream<string>` whose `write(chunk)` encodes UTF-8 and sends a
-  binary frame on the stdin channel. `close()` sends `proc.stdinClose` (EOF).
+  binary frame on the stdin channel. `close()` sends FIN (EOF).
 - **Backpressure**: honor RCP credit frames (§6.6): the output stream's `pull()` grants credit;
   a paused consumer stops granting, and the agent stops reading the PTY, which back-pressures
   the child process naturally.
@@ -260,7 +290,7 @@ translations of agent `evt port` frames with URLs rendered from `previewUrlTempl
 
 ### 5.4 Reconnection
 
-Transient WS drops must not destroy the session (mobile networks, worker restarts):
+Transient WS drops must not destroy the session (mobile networks, DO restarts):
 
 - On close (not initiated by `teardown`), retry with exponential backoff (0.5 s → 8 s, max 5
   tries), sending `resumeToken` in `session.hello`.
@@ -268,10 +298,9 @@ Transient WS drops must not destroy the session (mobile networks, worker restart
   is buffered per-channel in a ring buffer (256 KiB); on resume, buffered frames flush.
 - Client re-registers `fs.watch` subscriptions after resume (agent watch state is dropped on
   disconnect; the client owns the watch list).
-- After final failure: emit `on("error", { message })`, resolve all pending `exit` promises
-  with `-1`? **No** — match WebContainer: leave `exit` unresolved but emit `error`; the app
-  reacts to `error` by resetting the runtime, which calls `kill()`/`teardown()` (see
-  `useWebContainerRuntimeSession.ts` reset path).
+- After final failure: match WebContainer — leave `exit` promises unresolved but emit
+  `on("error", { message })`; the app reacts to `error` by resetting the runtime, which calls
+  `kill()`/`teardown()` (see the reset path in `useWebContainerRuntimeSession.ts`).
 
 ### 5.5 The runtime factory (integration point)
 
@@ -322,34 +351,36 @@ Channels are allocated by control-frame handshakes (never implicitly). Channel 0
 
 ### 6.3 Method reference
 
-| Method              | Params → Result                                                                       | Notes                                                                                                                                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `session.hello`     | `{ protocolVersion, resumeToken? }` → `{ workdir, agentVersion, resumed }`            | Must be first frame.                                                                                                                                                                             |
-| `fs.readFile`       | `{ path }` → `{ ch }` then binary frames on `ch` ending FIN                           | Always binary over the wire; the **client** applies encoding.                                                                                                                                    |
-| `fs.writeFile`      | `{ path, ch }` → after client FINs `ch` → `ok {}`                                     | Client allocates `ch` (odd ids = client-allocated, even = agent-allocated).                                                                                                                      |
-| `fs.mkdir`          | `{ path, recursive }` → `{ created? }`                                                |                                                                                                                                                                                                  |
-| `fs.readdir`        | `{ path, withFileTypes }` → `{ entries: [{ name, kind: "file"\|"dir"\|"symlink" }] }` | Client materializes `DirEnt` methods.                                                                                                                                                            |
-| `fs.rm`             | `{ path, recursive, force }` → `{}`                                                   |                                                                                                                                                                                                  |
-| `fs.rename`         | `{ from, to }` → `{}`                                                                 |                                                                                                                                                                                                  |
-| `fs.watch`          | `{ watchId, path, recursive }` → `{}`                                                 | Events: `evt fs.watch { watchId, event: "rename"\|"change", filename }`.                                                                                                                         |
-| `fs.unwatch`        | `{ watchId }` → `{}`                                                                  |                                                                                                                                                                                                  |
-| `mount`             | `{ mountPoint?, ch }` (client streams zip on `ch`, FIN) → `{}` after unpack           | Zip via fflate on client; agent unpacks with symlink members supported. Applied atomically enough: unpack to temp dir, then move-merge.                                                          |
-| `export`            | `{ path, format, includes?, excludes? }` → `{ ch }` streaming zip/json down           |                                                                                                                                                                                                  |
-| `proc.spawn`        | `{ cmd, args, env, cwd?, terminal?, output }` → `{ pid, outCh, inCh }`                | Rejects `err ENOENT` if executable not found (the shell-candidate loop in the app relies on failure).                                                                                            |
-| `proc.resize`       | `{ pid, cols, rows }` → `{}`                                                          |                                                                                                                                                                                                  |
-| `proc.kill`         | `{ pid }` → `{}`                                                                      | SIGTERM to process group, SIGKILL after 2 s.                                                                                                                                                     |
-| `proc.stdinClose`   | via FIN flag on `inCh`                                                                |                                                                                                                                                                                                  |
-| `preview.setScript` | `{ src, options? }` → `{}`                                                            | Agent forwards to control plane? No — see §8.2: stored in the DO, agent not involved. The client SDK calls the control plane REST endpoint directly; keep a protocol method reserved but unused. |
-| `session.ping`      | `{}` → `{}`                                                                           | Keepalive.                                                                                                                                                                                       |
+| Method            | Params → Result                                                                       | Notes                                                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.hello`   | `{ protocolVersion, resumeToken? }` → `{ workdir, agentVersion, resumed }`            | Must be first frame.                                                                                                                    |
+| `fs.readFile`     | `{ path }` → `{ ch }` then binary frames on `ch` ending FIN                           | Always binary over the wire; the **client** applies encoding.                                                                           |
+| `fs.writeFile`    | `{ path, ch }` → after client FINs `ch` → `ok {}`                                     | Client allocates `ch` (odd ids = client-allocated, even = agent-allocated).                                                             |
+| `fs.mkdir`        | `{ path, recursive }` → `{ created? }`                                                |                                                                                                                                         |
+| `fs.readdir`      | `{ path, withFileTypes }` → `{ entries: [{ name, kind: "file"\|"dir"\|"symlink" }] }` | Client materializes `DirEnt` methods.                                                                                                   |
+| `fs.rm`           | `{ path, recursive, force }` → `{}`                                                   |                                                                                                                                         |
+| `fs.rename`       | `{ from, to }` → `{}`                                                                 |                                                                                                                                         |
+| `fs.watch`        | `{ watchId, path, recursive }` → `{}`                                                 | Events: `evt fs.watch { watchId, event: "rename"\|"change", filename }`.                                                                |
+| `fs.unwatch`      | `{ watchId }` → `{}`                                                                  |                                                                                                                                         |
+| `mount`           | `{ mountPoint?, ch }` (client streams zip on `ch`, FIN) → `{}` after unpack           | Zip via fflate on client; agent unpacks with symlink members supported. Applied atomically enough: unpack to temp dir, then move-merge. |
+| `export`          | `{ path, format, includes?, excludes? }` → `{ ch }` streaming zip/json down           |                                                                                                                                         |
+| `proc.spawn`      | `{ cmd, args, env, cwd?, terminal?, output }` → `{ pid, outCh, inCh }`                | Rejects `err ENOENT` if executable not found (the shell-candidate loop in the app relies on failure).                                   |
+| `proc.resize`     | `{ pid, cols, rows }` → `{}`                                                          |                                                                                                                                         |
+| `proc.kill`       | `{ pid }` → `{}`                                                                      | SIGTERM to process group, SIGKILL after 2 s.                                                                                            |
+| `proc.stdinClose` | via FIN flag on `inCh`                                                                |                                                                                                                                         |
+| `session.ping`    | `{}` → `{}`                                                                           | Keepalive.                                                                                                                              |
+
+(`setPreviewScript` is deliberately **not** an RCP method — it's a control-plane REST call,
+§8.2, because injection happens at the preview ingress, not in the container.)
 
 ### 6.4 Events (agent → client)
 
-| Event       | Payload                                                                                                                                                                             |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `port`      | `{ port, type: "open" \| "close" }` — client renders URL from template and emits both `port` and (on first open per port, or per WebContainer semantics every open) `server-ready`. |
-| `proc.exit` | `{ pid, code }` — agent then FINs `outCh`.                                                                                                                                          |
-| `fs.watch`  | `{ watchId, event, filename }`                                                                                                                                                      |
-| `fatal`     | `{ message }` → client emits `on("error")`.                                                                                                                                         |
+| Event       | Payload                                                                                                                    |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `port`      | `{ port, type: "open" \| "close" }` — client renders URL from template and emits both `port` and `server-ready` (on open). |
+| `proc.exit` | `{ pid, code }` — agent then FINs `outCh`.                                                                                 |
+| `fs.watch`  | `{ watchId, event, filename }`                                                                                             |
+| `fatal`     | `{ message }` → client emits `on("error")`.                                                                                |
 
 ### 6.5 Example trace — user opens a terminal and runs a Go server
 
@@ -371,10 +402,9 @@ a→c  {"t":"evt","m":"port","p":{"port":8080,"type":"close"}}
 
 ### 6.6 Flow control
 
-Per-channel credit: receiver sends `{"t":"req","m":"ch.credit","p":{"ch":2,"bytes":262144}}`
-(fire-and-forget, no reply needed — use `t:"evt"` form). Sender must not exceed outstanding
-credit. Initial credit per channel: 256 KiB. This is what stops a `yes`-spamming process from
-ballooning DO memory or the browser tab.
+Per-channel credit: receiver sends `{"t":"evt","m":"ch.credit","p":{"ch":2,"bytes":262144}}`
+(fire-and-forget). Sender must not exceed outstanding credit. Initial credit per channel:
+256 KiB. This is what stops a runaway process from ballooning DO memory or the browser tab.
 
 ### 6.7 Limits (agent-enforced, return `ELIMIT`)
 
@@ -388,8 +418,7 @@ Max file read/write 64 MiB, mount zip 256 MiB, 64 concurrent processes, 128 watc
 Location: `sandbox/agent/` (Go module, single `main` package plus internal packages). Go is
 chosen because: single static binary (scratch-friendly, ~8 MiB), first-class PTY
 (`github.com/creack/pty`), trivial concurrency for the mux, and it dogfoods the multi-language
-story. (A Node+node-pty agent is an acceptable fallback if Go review capacity is a concern —
-the protocol doesn't care — but Go is the recommendation.)
+story.
 
 ### 7.1 Process model
 
@@ -403,36 +432,35 @@ the protocol doesn't care — but Go is the recommendation.)
 
 Workspace root `/workspace/{workdirName}`. Every path from the wire is resolved with a
 `securejoin`-style function (lexical clean + reject `..` escapes + re-verify after symlink
-resolution stays under root). The agent runs as a non-root user (`uid 1000`); container-level
-isolation is the real boundary (§12), the jail just keeps the API honest.
+resolution stays under root). The agent runs as a non-root user (`uid 1000`);
+container-level isolation is the real boundary (§12), the jail just keeps the API honest.
 
 ### 7.3 Recursive watch
 
 Linux inotify is non-recursive; use `github.com/rjeczalik/notify` (recursive on Linux) or
 fsnotify + directory-walk auto-add. Map to WebContainer semantics: create/delete/move →
 `"rename"`, write/truncate → `"change"`; filename relative to watch root. Debounce duplicate
-events within 10 ms per path. Cap watched dirs (ELIMIT) to survive `node_modules`.
+events within 10 ms per path. Cap watched dirs (`ELIMIT`) to survive `node_modules`.
 
 ### 7.4 Port watcher (`server-ready` emulation)
 
 Poll `/proc/net/tcp` + `/proc/net/tcp6` every 300 ms; a socket in state `0A` (LISTEN) on
 `0.0.0.0`/`::`/`127.0.0.1` with a port not seen before ⇒ `evt port {open}`; disappeared ⇒
-`{close}`. Ignore the agent's own port and ports < 1024 except 80/443/8080-style dev ports —
-actually: ignore **only** the agent's own listen port; everything else is user traffic.
+`{close}`. Ignore **only** the agent's own listen port; everything else is user traffic.
 WebContainer emits `server-ready` per listening start; we mirror: client emits `server-ready`
 on every `open`.
 
-Note: preview traffic must reach `127.0.0.1`-bound servers too, so the in-container preview
-proxy path (§8.1) originates from inside the container (the agent proxies), not from the
-container's network namespace edge.
+Note: preview traffic must reach `127.0.0.1`-bound servers too, so the preview path proxies
+from **inside** the container (the agent's `/proxy` endpoint, §7.5), not from the container's
+network edge.
 
 ### 7.5 Agent HTTP surface (single port, e.g. `:8600`)
 
 - `GET /ws` — the RCP WebSocket.
 - `GET /proxy/{port}/{path…}` — reverse proxy to `127.0.0.1:{port}` **inside** the container,
-  streaming, WebSocket-upgrade passthrough (dev servers use WS for HMR). Used by preview
-  ingress (§8.1). Forwards method/body/headers; rewrites nothing (HTML injection happens at the
-  edge, §8.2).
+  streaming, WebSocket-upgrade passthrough (dev servers use WS for HMR). Used by the preview
+  ingress (§8.1). Forwards method/body/headers; rewrites nothing (HTML injection happens at
+  the edge, §8.2).
 - `GET /healthz`.
 
 ---
@@ -441,37 +469,38 @@ container's network namespace edge.
 
 ### 8.1 URL scheme and routing
 
-Preview URL template: `https://p{{port}}-{{sessionId}}.preview.{domain}`. The Worker matches the
-`*.preview.{domain}` host pattern, parses `port`+`sessionId`, authenticates via a signed cookie
-or capability embedded in the sessionId (v1: sessionIds are 128-bit random — unguessable
-capability; document the tradeoff), then forwards to the session's agent `GET /proxy/{port}/…`,
-streaming both directions including WebSocket upgrades (HMR).
+The Worker's preview ingress accepts **two routings to the same code path**:
 
-Local Docker backend: template `http://localhost:{brokerPort}/preview/{sessionId}/{port}/` —
-same agent `/proxy` path underneath. (Subdomainless; path-based works for most dev servers; the
-template keeps this per-backend.)
+- **Production (host-based)**: `https://p{{port}}-{{sessionId}}.preview.{domain}` — a wildcard
+  route on `*.preview.{domain}`. Parse `port` + `sessionId` from the host.
+- **Dev (path-based)**: `http://localhost:8787/preview/{{sessionId}}/{{port}}/{path…}` — used
+  under `wrangler dev`, where wildcard subdomains don't exist. (Works for most dev servers;
+  absolute-path asset URLs are the known limitation — acceptable for dev.)
+
+Either way: resolve `sessionId` → `RuntimeSessionDO` → `containerFetch` to agent
+`GET /proxy/{port}/…`, streaming both directions including WebSocket upgrades (HMR).
+Session ids are 128-bit random — the URL is an unguessable capability (v1 auth model;
+documented tradeoff).
 
 ### 8.2 `setPreviewScript` — HTML injection at the ingress
 
-WebContainer injects the script into every HTML response. Remotely, the natural interception
-point is the preview ingress Worker: `RemoteContainer.setPreviewScript(src)` →
+WebContainer injects the script into every HTML response. Remotely, the interception point is
+the preview ingress: `RemoteContainer.setPreviewScript(src)` →
 `PUT /api/runtime/sessions/{id}/preview-script` → stored in the session DO. The ingress applies
 `HTMLRewriter` to `text/html` responses, appending `<script>` (with `PreviewScriptOptions`
 type/defer/async attributes) into `<head>`. Non-HTML and streaming responses pass through
-untouched. The local broker does the same with a simple stream transformer (inject before
-`</head>` or at document start; keep the injector shared/ported logic with tests).
+untouched.
 
 ### 8.3 `preview-message` (forwarded preview errors)
 
-The app's recorder script and `forwardPreviewErrors` both ride on this. Remote design: the
-**compat layer adds a tiny forwarder prelude** ahead of the user's preview script when
-`forwardPreviewErrors` is enabled. The prelude registers `window.onerror`,
-`unhandledrejection`, and a `console.error` wrapper, and `parent.postMessage`s payloads shaped
-exactly like `PreviewMessage` (Appendix A §8, including `previewId`, `port`, `pathname`,
-`search`, `hash`) with `targetOrigin` = the editor origin (embedded in the prelude at injection
-time). The `RemoteContainer` instance adds a `window.addEventListener("message")` handler that
-validates `event.origin` against the session's preview origin and re-emits
-`on("preview-message")`.
+The app's recorder script and `forwardPreviewErrors` both ride on this. The compat layer adds
+a tiny **forwarder prelude** ahead of the user's preview script when `forwardPreviewErrors` is
+enabled. The prelude registers `window.onerror`, `unhandledrejection`, and a `console.error`
+wrapper, and `parent.postMessage`s payloads shaped exactly like `PreviewMessage` (Appendix A
+§A.6, including `previewId`, `port`, `pathname`, `search`, `hash`) with `targetOrigin` = the
+editor origin (embedded in the prelude at injection time). The `RemoteContainer` instance adds
+a `window.addEventListener("message")` handler that validates `event.origin` against the
+session's preview origin and re-emits `on("preview-message")`.
 
 ### 8.4 COEP/CORP — critical gotcha
 
@@ -485,62 +514,56 @@ Cross-Origin-Resource-Policy: cross-origin
 Cross-Origin-Embedder-Policy: unsafe-none      (don't cascade require-corp into user apps)
 ```
 
-and preview HTML must not be blocked by a restrictive default. Without CORP, remote previews
-render as blank frames while WebContainer previews work — an easy multi-hour debugging trap.
-Add an integration test asserting these headers.
+Without CORP, remote previews render as blank frames while WebContainer previews work — an
+easy multi-hour debugging trap. Add an integration test asserting these headers.
 
 `reloadPreview` compat export: re-set `iframe.src` with a cache-busting query param, falling
 back to `contentWindow.location.reload()` when same-origin (it never is, remotely).
 
 ---
 
-## 9. Control plane and backends
+## 9. Control plane (Cloudflare)
 
-### 9.1 Backend adapter interface
+All of this lives in the existing `infra/` Worker project and ships with `wrangler deploy`.
+**Implementers: load the `cloudflare`, `durable-objects`, and `sandbox-sdk`/containers skills
+(or fetch current CF docs) before coding — Containers config, instance types, and image-size
+limits change; do not code from memory.**
 
-```ts
-interface SandboxBackend {
-  provision(spec: {
-    runtime: string;
-    workdirName: string;
-    idleTimeoutSeconds: number;
-  }): Promise<{ sessionId: string; wsUrl: string; previewUrlTemplate: string }>;
-  destroy(sessionId: string): Promise<void>;
-}
-```
+### 9.1 `RuntimeSessionDO`
 
-Routing/proxying is backend-internal (the DO or broker owns it).
+One Durable Object per session, `extends Container` from **`@cloudflare/containers`** (the
+official thin DO↔container wrapper — decision rationale in §4.1). Responsibilities:
 
-### 9.2 Cloudflare backend (primary — matches the existing wrangler deploy)
+- Start the container with the selected image variant; wait healthy (`GET /healthz`).
+- Proxy the client WS ↔ agent `GET /ws` (opaque byte proxy; use hibernation-friendly WS
+  handling where practical — the RCP connection is long-lived).
+- Proxy preview requests to agent `GET /proxy/{port}/…` (streaming + WS upgrade).
+- Store the preview script (`setPreviewScript` REST target).
+- Idle timer: no client WS **and** no preview traffic for `idleTimeoutSeconds` ⇒ stop the
+  container (DO alarm). `teardown()`/DELETE ⇒ destroy immediately.
 
-- `RuntimeSessionDO` (Durable Object, new class in `infra/worker/`): one per session; owns a
-  Cloudflare Container instance (Containers are DO-attached; alternatively build on
-  `@cloudflare/sandbox` which wraps the same machinery — **decide at implementation time by
-  loading the `sandbox-sdk` and `durable-objects` skills / current CF docs**; prefer raw
-  Containers + our agent since the agent already covers exec/fs/ports and we avoid double
-  abstraction).
-- DO responsibilities: start container with the selected image, wait healthy (`/healthz`),
-  proxy `GET /ws` (use WS hibernation-friendly patterns where possible; the RCP connection is
-  long-lived), proxy preview requests to agent `/proxy/{port}`, store the preview script, run
-  the idle timer (no WS + no preview traffic for `idleTimeoutSeconds` ⇒ stop container),
-  `destroy()` on teardown.
-- Wrangler config: new `[[containers]]` + DO binding + `preview.{domain}` route in
-  `infra/wrangler.toml`. Images built/pushed in CI (`wrangler containers` tooling). Per repo
-  memory: deploy is `bun run build` + `wrangler deploy`; container image push becomes a
-  documented extra step.
-- Auth: `POST /sessions` requires the app's existing session auth (reuse whatever the worker
-  uses for its current API routes; if none, gate v1 behind a signed token issued by the worker
-  to the editor page). Include per-user concurrent-session and daily-minutes quotas in the DO
-  (D1 table for counters).
+### 9.2 Worker routes (Hono, alongside existing routes)
 
-### 9.3 Local Docker backend (dev + CI)
+- `POST /api/runtime/sessions` — requires the app's existing session auth (reuse whatever the
+  worker uses for its current API routes; if none exists yet, gate v1 behind a short-lived
+  signed token the worker issues to the editor page). Validates `runtime` against the image
+  allowlist; enforces per-user concurrent-session and daily-minutes quotas (D1 counters —
+  note: **remote** D1 migrations are a separately authorized step in this repo).
+- `GET /api/runtime/sessions/:id/ws` — token check, forward to DO.
+- `PUT /api/runtime/sessions/:id/preview-script` — store in DO.
+- `DELETE /api/runtime/sessions/:id` — teardown.
+- Preview ingress (§8.1): host-pattern match in production, `/preview/:sid/:port/*` in dev.
+  Applies HTMLRewriter injection (§8.2), CORP/COEP headers (§8.4), and strips editor cookies
+  before forwarding.
 
-`sandbox/local-broker/`: a small Bun/Node HTTP server (~300 lines):
-`POST /sessions` → `docker run -d --rm --memory 1g --cpus 1 --pids-limit 256 --network bridge
--p 0:8600 runtime-{runtime}` → returns `wsUrl: ws://localhost:{mapped}/ws` (direct to agent —
-no proxying needed locally) and a path-based preview template served by the broker (which
-proxies to agent `/proxy`, applying the same HTML injection logic). `DELETE /sessions/:id` →
-`docker rm -f`. This is also the test harness backend (§13).
+### 9.3 Local development — `wrangler dev`, no extra infrastructure
+
+`wrangler dev` runs the Worker, the DO, **and the container locally** (it builds and runs the
+image via Docker). The editor's vite dev server points `RemoteBootOptions.endpoint` at the
+wrangler dev origin. This replaces any need for a self-hosted broker/daemon: the dev loop is
+`docker` (installed) + `bun run dev` + `wrangler dev`. CI uses the same mechanism for
+full-stack tests, and plain `docker run` + `RemoteContainer.attach` (§5.1) for
+agent/SDK-level tests without the Worker in the loop.
 
 ### 9.4 Session lifecycle
 
@@ -557,49 +580,49 @@ it already does per session). Client maps `EGONE` on any request to `on("error")
 
 ## 10. Runtime images
 
-`sandbox/images/`:
+`sandbox/images/` — built and pushed with wrangler's container image tooling as part of the
+deploy workflow (image push is a documented, separately-authorized deploy step):
 
-| Image                | Contents                                                                                               | Notes                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| `runtime-base`       | debian-slim (glibc), agent binary, `bash`, coreutils, git, curl, ca-certs, non-root user, `/workspace` | Everything derives FROM this.                          |
-| `runtime-node22`     | + Node 22, npm/pnpm/bun                                                                                | Parity with WebContainer projects.                     |
-| `runtime-go1.24`     | + Go toolchain, `GOMODCACHE` pre-warmed with stdlib build cache                                        | First new-language target.                             |
-| `runtime-python3.13` | + CPython, uv                                                                                          | Second target.                                         |
-| `runtime-full`       | node+go+python                                                                                         | Convenience; watch image-size limits on CF Containers. |
+| Image                | Contents                                                                                               | Notes                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| `runtime-base`       | debian-slim (glibc), agent binary, `bash`, coreutils, git, curl, ca-certs, non-root user, `/workspace` | Everything derives FROM this.      |
+| `runtime-node22`     | + Node 22, npm/pnpm/bun                                                                                | Parity with WebContainer projects. |
+| `runtime-go1.24`     | + Go toolchain, pre-warmed stdlib build cache                                                          | First new-language target.         |
+| `runtime-python3.13` | + CPython, uv                                                                                          | Second target.                     |
 
-Version-pinned tags; `runtime` boot option maps to image tag through an allowlist in the
-control plane (never client-supplied image refs).
+Version-pinned tags; the `runtime` boot option maps to an image variant through an allowlist
+in the control plane (never client-supplied image refs). **Check current Cloudflare Containers
+image-size and instance-type limits before adding heavy toolchains** — a `runtime-full`
+(node+go+python) variant is desirable but may not fit; treat it as optional.
 
 ---
 
 ## 11. Behavioral differences vs WebContainer (accepted + mitigated)
 
-| Difference                                                | Impact                              | Mitigation                                                                                                                |
-| --------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| fs ops cost a network RTT                                 | mount/save slower                   | zip-batched mount; app reads-back only on save                                                                            |
-| `jsh` doesn't exist                                       | terminal shell candidate loop       | agent images ship `bash`; the app already falls back `jsh`→`bash`→`sh` — spawn must reject ENOENT for the loop to advance |
-| preview URL shape/origin differs                          | any URL parsing                     | `runtimePreview.ts` already normalizes; verify against new shape                                                          |
-| boot can take seconds & fail (capacity, quota)            | UX                                  | distinct status messages ("provisioning sandbox…"); fallback to WebContainer for node projects                            |
-| network egress exists (WC is sandboxed to a virtual net)  | user code can call the internet     | egress allowed in v1 (it's a feature: `go get`/`npm i` need it); rate/quota at backend                                    |
-| processes survive brief disconnects                       | none (improvement)                  | resume protocol §5.4                                                                                                      |
-| `output` chunk boundaries differ                          | apps that assume line-atomic chunks | none needed; xterm handles arbitrary chunking                                                                             |
-| clock/timezone/arch (containers are linux/amd64 or arm64) | rarely                              | document                                                                                                                  |
+| Difference                                               | Impact                              | Mitigation                                                                                                                |
+| -------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| fs ops cost a network RTT                                | mount/save slower                   | zip-batched mount; app reads-back only on save                                                                            |
+| `jsh` doesn't exist                                      | terminal shell candidate loop       | agent images ship `bash`; the app already falls back `jsh`→`bash`→`sh` — spawn must reject ENOENT for the loop to advance |
+| preview URL shape/origin differs                         | any URL parsing                     | `runtimePreview.ts` already normalizes; verify against new shape                                                          |
+| boot can take seconds & fail (capacity, quota)           | UX                                  | distinct status messages ("provisioning sandbox…"); fallback to WebContainer for node projects                            |
+| network egress exists (WC is sandboxed to a virtual net) | user code can call the internet     | egress allowed in v1 (it's a feature: `go get`/`npm i` need it); rate/quota at the platform level                         |
+| processes survive brief disconnects                      | none (improvement)                  | resume protocol §5.4                                                                                                      |
+| `output` chunk boundaries differ                         | apps that assume line-atomic chunks | none needed; xterm handles arbitrary chunking                                                                             |
+| clock/timezone/arch (linux/amd64 or arm64)               | rarely                              | document                                                                                                                  |
 
 ---
 
 ## 12. Security model
 
-- **Isolation boundary = the container/VM from the backend** (Cloudflare Containers are
-  isolated per instance; local broker is dev-only — never expose it publicly).
+- **Isolation boundary = the Cloudflare Container instance** (isolated per session).
 - Agent runs non-root; workspace-jailed fs API; but assume user code owns the container —
   design so that owning the container gains nothing beyond one's own session: the agent holds
   no secrets, the WS is authenticated per-session at the control plane, preview URLs are
-  per-session capabilities, no cross-session network path (backend-enforced).
-- Resource limits: memory/cpu/pids/disk per container (backend), plus RCP `ELIMIT`s (§6.7).
+  per-session capabilities, no cross-session network path.
+- Resource limits: memory/cpu/disk per container instance type, plus RCP `ELIMIT`s (§6.7).
 - The control plane validates `runtime` against the image allowlist and enforces quotas.
-- Preview ingress sets `X-Frame-Options`-free but CORP headers (§8.4); it must **not** forward
-  the editor's cookies to the sandbox (strip `Cookie` at the ingress unless same-session
-  preview auth requires its own cookie — keep preview auth cookie name-spaced).
+- Preview ingress sets CORP headers (§8.4) and must **not** forward the editor's cookies to
+  the sandbox (strip `Cookie` at the ingress).
 
 ---
 
@@ -607,15 +630,18 @@ control plane (never client-supplied image refs).
 
 1. **Protocol unit tests** (`src/runtime/rcp/*.test.ts`): frame codec, channel mux, credit
    accounting, error mapping — pure, no I/O.
-2. **Agent integration tests** (Go tests + a TS harness): run agent in Docker, drive RCP over
-   WS: fs matrix (incl. errno cases: ENOENT/EEXIST/ENOTEMPTY), spawn/PTY (resize reflected in
-   `stty size`, merged output ordering, exit codes, kill-tree), watch events, port events with
-   a real `python3 -m http.server`-style listener, mount+export round-trip.
+2. **Agent integration tests** (Go tests + a TS harness): run the agent image via plain
+   `docker run`, connect with `RemoteContainer.attach`, drive RCP over WS: fs matrix (incl.
+   errno cases: ENOENT/EEXIST/ENOTEMPTY), spawn/PTY (resize reflected in `stty size`, merged
+   output ordering, exit codes, kill-tree), watch events, port events with a real listener,
+   mount+export round-trip. No Cloudflare account needed.
 3. **Conformance suite** (the crown jewel): one Vitest spec file parameterized over
-   `RuntimeContainer` implementations — runs against `RemoteContainer`+local broker in CI
-   (node environment), and can be pointed at real `WebContainer` in a browser run to
-   detect semantic drift. Every Tier-1 row in §3 gets at least one assertion.
-4. **Preview tests**: header assertions (CORP! §8.4), HTML injection, WS-upgrade proxying.
+   `RuntimeContainer` implementations — runs against `RemoteContainer` in two modes
+   (`attach`+docker in CI always; full `boot()` against `wrangler dev` as a CI job), and can
+   be pointed at real `WebContainer` in a browser run to detect semantic drift. Every Tier-1
+   row in §3 gets at least one assertion.
+4. **Preview tests**: header assertions (CORP! §8.4), HTML injection, WS-upgrade proxying —
+   against `wrangler dev`, re-run against staging.
 5. **App-level**: existing runtime hook tests gain a `RuntimeKind` dimension with a mocked
    `RemoteContainer` (per repo test conventions; `npx vp test run`).
 
@@ -623,15 +649,13 @@ control plane (never client-supplied image refs).
 
 ## 14. Open questions (decide during implementation, don't block on them)
 
-1. Raw Cloudflare Containers vs `@cloudflare/sandbox` as the CF substrate (§9.2) — resolve by
-   reading current docs/skills; the agent design works with either.
-2. Workspace persistence across sessions (volume snapshot to R2 on idle?) — deferred; v1
+1. Workspace persistence across sessions (volume snapshot to R2 on idle?) — deferred; v1
    rebuilds from `mount()`.
-3. `server-ready` heuristics for multi-port apps (emit for every port vs first) — v1: every
+2. `server-ready` heuristics for multi-port apps (emit for every port vs first) — v1: every
    open, matching WC; the app takes the latest.
-4. WebTransport upgrade path; binary control frames (CBOR) — deferred.
-5. Per-language "runner presets" UI (e.g. default command `go run .`) — product question,
-   tracked in the plan's Phase 6.
+3. WebTransport upgrade path; binary control frames (CBOR) — deferred.
+4. Per-language "runner presets" UI (e.g. default command `go run .`) — product question,
+   tracked in the plan's editor-integration phase.
 
 ---
 
