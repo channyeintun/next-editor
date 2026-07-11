@@ -40,17 +40,17 @@ const TOUR_STEPS: Array<DriveStep & { element: string }> = [
     },
   },
   {
-    element: '[data-tour="slides"]',
-    popover: {
-      title: "Slides",
-      description: "Manage presentation slides to overlay on your recording.",
-    },
-  },
-  {
     element: '[data-tour="whiteboard"]',
     popover: {
       title: "Whiteboard",
       description: "Open the whiteboard to sketch and annotate alongside your code.",
+    },
+  },
+  {
+    element: '[data-tour="slides"]',
+    popover: {
+      title: "Slides",
+      description: "Manage presentation slides to overlay on your recording.",
     },
   },
   {
