@@ -9,6 +9,7 @@ import { saveResumeIntent } from "./resumeIntent";
 import { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./thumbnailConstraints";
 import { resizeThumbnail } from "./resizeThumbnail";
 import GoogleIcon from "@app/components/icon/Google";
+import { usePostHog } from "@posthog/react";
 
 export interface UploadLessonModalProps {
   recording: Recording;
@@ -47,6 +48,7 @@ export default function UploadLessonModal({
   initialDescription,
   initialTags,
 }: UploadLessonModalProps) {
+  const posthog = usePostHog();
   const { isSignedIn, isLoading: authLoading } = useAuth();
   const [title, setTitle] = useState(initialTitle ?? defaultTitle(recording.createdAt));
   const [description, setDescription] = useState(initialDescription ?? "");
@@ -81,6 +83,7 @@ export default function UploadLessonModal({
   }, [copied]);
 
   const handleSignIn = async () => {
+    posthog?.capture("sign_in_initiated", { trigger: "upload_modal" });
     try {
       await saveResumeIntent({ recordingId: recording.id, returnTo: window.location.pathname });
     } catch (err) {
@@ -159,6 +162,12 @@ export default function UploadLessonModal({
         },
       });
       setUploadResult(result);
+      posthog?.capture("lesson_uploaded", {
+        has_thumbnail: !!(thumbnailFile || useDefaultThumbnail),
+        has_description: !!description.trim(),
+        tag_count: parseTags(tagsInput).length,
+        recording_duration: recording.duration,
+      });
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 401) {
         // Session expired mid-form — unlike the initial signed-out entry
@@ -183,6 +192,7 @@ export default function UploadLessonModal({
   const handlePublish = async () => {
     if (!uploadResult) return;
     await publish.mutateAsync(uploadResult.id);
+    posthog?.capture("lesson_published", { lesson_id: uploadResult.id });
     onClose();
   };
 

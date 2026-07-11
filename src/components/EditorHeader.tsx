@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { usePostHog } from "@posthog/react";
 import {
   ChevronRight,
   Compass,
@@ -170,6 +171,7 @@ function WhiteboardHeaderButton() {
 }
 
 function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boolean }) {
+  const posthog = usePostHog();
   const [draftValue, setDraftValue] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
@@ -229,6 +231,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       const importedRecordings = await importFromFile();
       if (importedRecordings.length > 0) {
         loadRecording(importedRecordings[0]);
+        posthog?.capture("recording_imported");
       }
     } catch (error) {
       console.error("Import failed:", error);
@@ -244,6 +247,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
     try {
       await exportAsFile(currentRecording);
+      posthog?.capture("recording_exported", { recording_duration: currentRecording.duration });
     } catch (error) {
       console.error("Export failed:", error);
     }
@@ -254,6 +258,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
     try {
       await downloadWorkspaceProjectAsZip(getProject());
+      posthog?.capture("workspace_downloaded", { lesson_type: lessonType });
     } catch (error) {
       console.error("Zip download failed:", error);
     }
@@ -300,6 +305,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     loadProject(importedProject);
     saveProject();
     updateRunnerConfig({ enabled: true });
+    posthog?.capture("project_zip_imported");
     // Imported projects ship their own dependencies, so tear the runtime down to
     // force a fresh mount + `pnpm install` for the new project on next start.
     resetRuntime();
@@ -365,6 +371,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     loadProject(starterProject);
     saveProject();
     updateRunnerConfig({ enabled: true });
+    posthog?.capture("lesson_type_selected", { lesson_type: nextLessonType });
     // Each framework ships different dependencies, so tear the runtime down to
     // force a fresh mount + `pnpm install` for the new project on next start.
     resetRuntime();

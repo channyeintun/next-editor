@@ -1,16 +1,25 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { LibraryBig, LogOut, Plus } from "lucide-react";
 import { useAuth, useSignOut, signInUrl, avatarProxyUrl } from "./useAuth";
 import GoogleIcon from "@app/components/icon/Google";
+import { usePostHog } from "@posthog/react";
 
 // Sign-in link / avatar menu for the Navbar's `actions` slot. Matches the
 // existing pill-button style ("Start creating" in Navbar.tsx) so it reads as
 // part of the same nav, not a bolted-on widget.
 export default function AuthMenu() {
+  const posthog = usePostHog();
   const { user, isSignedIn, isLoading } = useAuth();
   const signOut = useSignOut();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Identify user on login and on every page load when already signed in.
+  useEffect(() => {
+    if (user) {
+      posthog?.identify(user.id, { username: user.username });
+    }
+  }, [user, posthog]);
 
   if (isLoading) {
     return <div className="size-9 rounded-full bg-white/5" aria-hidden="true" />;
@@ -88,6 +97,8 @@ export default function AuthMenu() {
               role="menuitem"
               onClick={() => {
                 setMenuOpen(false);
+                posthog?.capture("signed_out");
+                posthog?.reset();
                 signOut.mutate();
               }}
               disabled={signOut.isPending}

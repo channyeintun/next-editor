@@ -16,6 +16,7 @@ import Navbar from "./Navbar";
 import { useState, useEffect, useRef } from "react";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
 import { useGitHubStars } from "../hooks/useGitHubStars";
+import { usePostHog } from "@posthog/react";
 
 const FRAMEWORKS = [
   "React",
@@ -139,6 +140,7 @@ const DEMO_URL = "/code?url=/lessons/introduction/introduction.ne";
 const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true&largeControls=true`;
 
 const LandingPage = () => {
+  const posthog = usePostHog();
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -279,12 +281,18 @@ const LandingPage = () => {
                   <div className="flex flex-wrap gap-4">
                     <Link
                       to="/code"
+                      onClick={() =>
+                        posthog?.capture("start_creating_clicked", { location: "hero" })
+                      }
                       className="px-10 py-4 rounded-full bg-slate-950 text-white text-lg font-semibold hover:scale-105 active:scale-95 transition-all shadow-xl"
                     >
                       Start creating
                     </Link>
                     <Link
                       to="/learn"
+                      onClick={() =>
+                        posthog?.capture("watch_lessons_clicked", { location: "hero" })
+                      }
                       className="px-10 py-4 rounded-full border-2 border-slate-950 text-slate-950 text-lg font-semibold hover:bg-slate-950 hover:text-white hover:scale-105 active:scale-95 transition-all"
                     >
                       Watch lessons
@@ -625,6 +633,7 @@ const LandingPage = () => {
             href="https://github.com/channyeintun/next-editor"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => posthog?.capture("github_star_clicked")}
             className="inline-flex items-center gap-3 px-10 py-4 rounded-full bg-white text-slate-950 text-lg font-semibold hover:scale-105 active:scale-95 transition-all shadow-xl"
           >
             <svg className="size-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">

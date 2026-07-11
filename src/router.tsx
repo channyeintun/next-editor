@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { createBrowserRouter, isRouteErrorResponse, useRouteError } from "react-router";
+import { usePostHog } from "@posthog/react";
 import LoadingSpinner from "./components/LoadingSpinner";
 
 const DYNAMIC_IMPORT_RECOVERY_PARAM = "__route_reload";
@@ -98,7 +99,12 @@ function lazyRoute(importer: () => Promise<{ default: ComponentType }>, routePat
 
 function RouteErrorBoundary() {
   const error = useRouteError();
+  const posthog = usePostHog();
   const dynamicImportError = isDynamicImportError(error);
+
+  if (!dynamicImportError) {
+    posthog?.captureException(error);
+  }
 
   const title = dynamicImportError ? "App update required" : "Unexpected application error";
   const description = dynamicImportError
