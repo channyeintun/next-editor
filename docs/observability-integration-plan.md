@@ -1,7 +1,9 @@
 # Observability Integration Plan
 
-Status: **frontend Phase 1 landed** (PostHog via the wizard, commit 13c3bb8 + fix 75b9f8d,
-2026-07-12); everything else is still proposal.
+Status: **implemented 2026-07-12** — all phases done except Phase 5 (product-native `.ne` issue
+capture), and the paid OTLP-export phase was removed by decision. Remaining hands-on items: two
+PostHog dashboard toggles (billing limit $0, "Record user sessions" ON) and a deploy to activate
+Workers observability.
 Scope: **two tracks** — (A) backend: the `next-editor-tube` Worker (`infra/`) and later the
 remote-runtime Workers/DO/Containers; (B) frontend: user behavior, session-level tracing, and
 client-side issues in the SPA, **especially `/code`**.
@@ -25,9 +27,10 @@ Written: 2026-07-11. Pricing and beta statuses are as of this date — re-verify
 
 Backend:
 
-- `infra/wrangler.toml` has **no `[observability]` block** — Workers Logs and Traces are off.
-- 8 unstructured `console.error` calls (cache failures, lesson insert/delete cleanup). No request
-  IDs, no timing. Only live tool: `wrangler tail`.
+- **Workers Logs + Traces enabled** in `infra/wrangler.toml` (2026-07-12) — takes effect on the
+  next deploy. A `requestLog` middleware emits one structured line per `/api/*`/`/media/*`
+  request; error logs carry structured fields. `wrangler tail` + dashboard live tail for
+  streaming.
 - `run_worker_first = true` means every request — including each JS chunk and image — invokes the
   Worker (COEP/COOP headers), which multiplies observability event volume (§7). (The comment atop
   the catch-all in `infra/worker/index.ts` still describes pre-`run_worker_first` routing — stale.)
@@ -38,7 +41,9 @@ Frontend:
   `identify()` on auth resolve in `AuthMenu.tsx`, 12 semantic events across landing/upload/editor,
   and `captureException` in the route error boundary (moved into an effect in 75b9f8d). The
   `VITE_PUBLIC_POSTHOG_*` vars live in the gitignored `.env` — the build machine must have them.
-- Session replay and further error-tracking decisions (masking, sampling) are still open — Phase 2.
+- **Replay + exception autocapture configured** (2026-07-12): `capture_exceptions: true`, inputs
+  masked, Monaco/Excalidraw blocked, replay paused during lesson recording. Replay starts once
+  "Record user sessions" is toggled ON in PostHog project settings.
 - The `/code` page is heavy and unusual: Monaco editor, Excalidraw whiteboard, XState machines,
   WebContainers (requires `COEP: require-corp` + `COOP: same-origin` on **every** response),
   WASM dmp codec.
@@ -76,7 +81,7 @@ These are project-specific and rule tools in or out before features do:
 | Option                                                                                                                                                                   | Verdict                                                                                                                                 |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | **A. Cloudflare native Workers Logs + Traces** (config-only; auto-spans for handlers, D1/R2/KV/DO bindings, outbound fetch — Upstash included)                           | **Adopt.** Free-plan: 200k events/day, 3-day retention. Paid: ~20M events/mo pooled, 7-day. Custom spans not yet supported (roadmapped) |
-| **B. Native OTLP export → external backend** (dashboard-configured destination; traces+logs, no metrics, no binary OTLP; `persist=false` skips dashboard double-billing) | **Adopt when on Paid.** 10M exported events/mo included, then $0.05/M                                                                   |
+| **B. Native OTLP export → external backend** (dashboard-configured destination; traces+logs, no metrics, no binary OTLP; `persist=false` skips dashboard double-billing) | **Removed 2026-07-12** — requires Workers Paid ($5/mo); not worth it at current scale                                                   |
 | **C. `@microlabs/otel-cf-workers`** (in-code OTel SDK)                                                                                                                   | Reserve — only if custom spans needed before Cloudflare ships them                                                                      |
 | **D. Tail Worker forwarding**                                                                                                                                            | Rejected — custom plumbing made redundant by B                                                                                          |
 | **E. Workers Logpush**                                                                                                                                                   | Rejected — batch, no tracing; maybe future R2 log archival                                                                              |
@@ -143,35 +148,38 @@ Browser (SPA)
         ▼
 Worker (next-editor-tube)
 ├─ [observability] logs + traces      → CF dashboard    [auto-spans: D1/R2/fetch; live tail]
-│                                     → OTLP export → Grafana Cloud  [when on Paid]
-└─ structured log middleware          (logs request ID + PostHog session ID → cross-links
+└─ structured log middleware          (logs PostHog session/distinct IDs → cross-links
                                        a PostHog session to its backend requests)
 ```
 
-Cross-stack correlation note: PostHog is not a tracing backend, and Cloudflare's native tracing
+The OTLP-export → Grafana Cloud leg was **dropped 2026-07-12** (Chan's call: not worth the $5/mo
+Workers Paid prerequisite at current scale). The backend story is the Cloudflare dashboard on the
+free plan: 200k events/day, 3-day retention, live tail. If retention/alerting ever bites, the
+export design lives in git history and slots back in without code changes.
+
+Cross-stack correlation: PostHog is not a tracing backend, and Cloudflare's native tracing
 doesn't yet honor incoming W3C trace context (roadmapped). Correlation is therefore **by ID
-convention**: the SPA sends `X-Request-Id` (random per request) and the PostHog session ID on API
-calls; the Worker logs both in its structured line. The browser half is already wired: the wizard
-set `__add_tracing_headers` for the app host in `src/main.tsx`, which stamps
-`X-POSTHOG-SESSION-ID`/`X-POSTHOG-DISTINCT-ID` on same-host fetches — Phase 4 only needs the
-Worker middleware to log them. From a PostHog replay you can pull the exact
-backend logs/spans; from a backend error you can find the session replay. If true distributed
-tracing later becomes essential, that's the trigger to re-evaluate Sentry — or Cloudflare's trace
-propagation may have shipped by then.
+convention**, and both halves are wired: the SPA stamps `X-POSTHOG-SESSION-ID` /
+`X-POSTHOG-DISTINCT-ID` on same-host fetches (`__add_tracing_headers` in `src/main.tsx`), and the
+Worker's `requestLog` middleware logs them with route/status/duration. From a PostHog replay you
+can pull the exact backend logs/spans; from a backend error you can find the session replay. If
+true distributed tracing later becomes essential, that's the trigger to re-evaluate Sentry — or
+Cloudflare's trace propagation may have shipped by then.
 
 ## 7. Phased rollout
 
-| Phase | Track    | Cost            | What                                                                                                                                                                                                                                                   |
-| ----- | -------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **0** | Backend  | $0, config-only | `[observability]` logs + traces in `infra/wrangler.toml`; deploy; watch the usage meter a week (asset-traffic multiplier, §8)                                                                                                                          |
-| **1** | Frontend | $0              | ✅ **Done** (13c3bb8, 75b9f8d): PostHog via npm, `identify()` on login, 12 custom events, error boundary capture. Remaining: pin billing limit to $0 in the PostHog dashboard; add `.env.example`; source-map upload for de-minified prod stack traces |
-| **2** | Frontend | $0              | Session replay (sampled; paused during active lesson recording) + error tracking; decide Monaco/whiteboard masking (§9)                                                                                                                                |
-| **3** | Backend  | $5/mo plan      | Workers Paid; OTLP destination → Grafana Cloud free tier (50 GB logs + 50 GB traces, 14-day retention, alerting); p95 + 5xx alerts                                                                                                                     |
-| **4** | Both     | $0, small code  | Structured-log Hono middleware on `/api/*` + `/media/*` (`{route, status, durationMs, requestId, phSessionId, userId?}`); upgrade the 8 `console.error` sites to structured fields                                                                     |
-| **5** | Frontend | $0, custom code | Product-native `.ne` issue capture on `/code` → R2 + D1 + admin replay view                                                                                                                                                                            |
-| **6** | Backend  | —               | Remote runtime: same `[observability]` on runtime Workers (DO auto-traced); Containers export OTel directly from inside the container to the same backend                                                                                              |
+| Phase | Track    | Cost            | What                                                                                                                                                                                                                                                                                              |
+| ----- | -------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** | Backend  | $0, config-only | ✅ **Done 2026-07-12**: `[observability]` logs + traces in `infra/wrangler.toml`. Activates on next deploy; watch the usage meter a week (asset-traffic multiplier, §8)                                                                                                                           |
+| **1** | Frontend | $0              | ✅ **Done** (13c3bb8, 75b9f8d): PostHog via npm, `identify()` on login, 12 custom events, error boundary capture. Remaining: pin billing limit to $0 in the PostHog dashboard; add `.env.example`; source-map upload for de-minified prod stack traces                                            |
+| **2** | Frontend | $0              | ✅ **Done 2026-07-12** (client side): `capture_exceptions: true`; replay masking (`maskAllInputs` + block `.monaco-editor`/`.excalidraw`); replay paused during active lesson recording. Remaining: flip "Record user sessions" ON in PostHog project settings — replay does not start without it |
+| ~~3~~ | Backend  | ~~$5/mo~~       | **Removed 2026-07-12** — was Workers Paid + OTLP export → Grafana Cloud. Not worth the fixed cost at current scale; free-plan dashboard suffices. Resurrect from git history if export/retention/alerting is ever needed                                                                          |
+| **4** | Both     | $0, small code  | ✅ **Done 2026-07-12**: `requestLog` middleware on `/api/*` + `/media/*` (`{method, path, status, durationMs, phSessionId, phDistinctId}`); the 5 `console.error` sites with positional IDs now log structured fields                                                                             |
+| **5** | Frontend | $0, custom code | Product-native `.ne` issue capture on `/code` → R2 + D1 + admin replay view. **Only remaining build item** — blocked on decision §9.5 (report-button vs auto-capture) and needs its own UX pass                                                                                                   |
+| **6** | Backend  | —               | Remote runtime: same `[observability]` on runtime Workers (DO auto-traced); Containers ship logs to the CF dashboard (`observability` in the container Worker config)                                                                                                                             |
 
-Phases 0–2 are independent and can all happen now on the free plan.
+Everything except Phase 5 is done and free. Backend observability activates on the next
+`bun run build` + `wrangler deploy --config infra/wrangler.toml`.
 
 ## 8. Cost controls
 
@@ -181,30 +189,29 @@ Phases 0–2 are independent and can all happen now on the free plan.
   investigation); `invocation_logs = false`; per-signal `head_sampling_rate` last (it dilutes API
   traces too, since it's per-Worker not per-route).
 - **PostHog:** autocapture on a busy SPA is chatty but 1M events/mo is roomy at current scale;
-  set the billing limit to $0 (hard cap), sample replays (e.g. 100% on `/code`, 10% elsewhere),
-  and drop noisy autocapture via allow/deny lists if the meter climbs.
-- **Expected steady state:** $0 until Workers Paid is needed, then **$5/mo total**.
+  set the billing limit to $0 (hard cap), sample replays in project settings if the 5k/mo meter
+  climbs, and drop noisy autocapture via allow/deny lists if the event meter climbs.
+- **Expected steady state:** **$0** (both Cloudflare and PostHog inside free tiers).
 
-## 9. Open decisions
+## 9. Decisions
 
-1. **Replay masking policy** — mask Monaco/whiteboard (privacy-safe, less useful replays) or
-   record them (better debugging; users' code lands in PostHog)? Suggest: mask by default, rely
-   on Phase 5 `.ne` capture — which the user explicitly triggers — for content-level repro.
-2. **PostHog Cloud region** — US vs EU project (data residency; pick once, migration is manual).
-3. **When to flip Workers Paid** — Phase 3 requires it; if the Containers runtime work is near,
-   do Phases 0–4 in one push.
-4. **Grafana Cloud confirmed as the backend sink?** Free accounts are disposable — trialing is
-   cheap.
-5. **Auto-capture `.ne` on unhandled `/code` errors** (upload without user action) or
-   report-button only? Auto-capture is more complete but uploads user content without an explicit
-   click — consent implications overlap with decision 1.
+1. **Replay masking policy — RESOLVED (2026-07-12): mask by default.** `maskAllInputs: true` and
+   `blockSelector: ".monaco-editor, .excalidraw"` in `src/main.tsx`; users' code and drawings
+   never reach PostHog. Content-level repro is Phase 5's job (explicitly user-triggered).
+2. **PostHog Cloud region — RESOLVED: US** (project created on us.posthog.com by the wizard).
+3. ~~When to flip Workers Paid~~ — moot; the paid phase was removed. Revisit only when the
+   Containers runtime lands (which forces Paid anyway).
+4. ~~Grafana Cloud as backend sink~~ — moot; export phase removed.
+5. **OPEN: `.ne` capture trigger for Phase 5** — report-button only (explicit consent, suggested)
+   vs auto-capture on unhandled `/code` errors (more complete, uploads user content without a
+   click).
 
 ## 10. Explicit non-goals (for now)
 
 - OTLP **metrics** export (Cloudflare doesn't support it yet; derive rates/latencies from spans).
 - Log/replay archival beyond free-tier retention (Logpush→R2 later if ever needed).
-- Uptime checks — a free external ping (Grafana Synthetics is in the free tier) is orthogonal;
-  add with Phase 3.
+- Uptime checks — a free external ping (e.g. UptimeRobot, Grafana Synthetics free tier) is
+  orthogonal; add anytime.
 - A/B testing / feature-flag rollout tooling (PostHog has it free if wanted later — not part of
   this plan).
 
