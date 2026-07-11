@@ -33,6 +33,14 @@ const TOUR_STEPS: Array<DriveStep & { element: string }> = [
     },
   },
   {
+    element: '[data-tour="screen"]',
+    popover: {
+      title: "Screen",
+      description:
+        "Toggle screen recording to capture your lesson. This is only required if you want to upload your lesson to YouTube or other platforms.",
+    },
+  },
+  {
     element: '[data-tour="settings"]',
     popover: {
       title: "Settings",
