@@ -1,7 +1,8 @@
 # Remote Runtime — a WebContainer-compatible remote execution backend on Cloudflare
 
 **Status:** Design — not yet implemented.
-**Companion doc:** [remote-runtime-implementation-plan.md](./remote-runtime-implementation-plan.md)
+**Companion docs:** [remote-runtime-implementation-plan.md](./remote-runtime-implementation-plan.md) ·
+[remote-runtime-cloudflare-setup.md](./remote-runtime-cloudflare-setup.md) (manual dashboard setup)
 **Audience:** implementing agents/engineers. This document is self-contained: it embeds the
 exact `@webcontainer/api@1.6.4` surface to replicate (Appendix A) and the exact call sites in
 this repo that consume it (Appendix B). You should not need to reverse-engineer either.

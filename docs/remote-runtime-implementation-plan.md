@@ -34,6 +34,11 @@ Repo conventions that override generic habits:
    `cloudflare`, `durable-objects`, and `sandbox-sdk` skills (or fetch current CF docs) —
    Containers config, instance types, and image-size limits change quickly; do not code from
    memory. `wrangler dev` with containers requires Docker running locally (and in CI).
+   The one-time manual account work (billing plan, preview DNS/TLS, tokens, secrets) is a
+   **human** prerequisite documented in
+   [remote-runtime-cloudflare-setup.md](./remote-runtime-cloudflare-setup.md) — check it is
+   done (or flag it to the user) before starting 4.x tasks; in particular the preview
+   hostname scheme chosen there (Option A/B/C) determines the ingress host-parsing in 4.4.
 7. **xstate is pinned to 5.32.2** (tsgo bug). Don't bump it while touching runtime code.
 8. **Don't use the in-app preview browser to verify** — typecheck + tests; the user eyeballs UI.
 9. **Deploy** (when asked): `bun run build` then `wrangler deploy` from `infra/`; remote D1
