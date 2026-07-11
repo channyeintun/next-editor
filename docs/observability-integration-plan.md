@@ -1,6 +1,7 @@
 # Observability Integration Plan
 
-Status: **proposal — nothing implemented yet**
+Status: **frontend Phase 1 landed** (PostHog via the wizard, commit 13c3bb8 + fix 75b9f8d,
+2026-07-12); everything else is still proposal.
 Scope: **two tracks** — (A) backend: the `next-editor-tube` Worker (`infra/`) and later the
 remote-runtime Workers/DO/Containers; (B) frontend: user behavior, session-level tracing, and
 client-side issues in the SPA, **especially `/code`**.
@@ -33,8 +34,11 @@ Backend:
 
 Frontend:
 
-- **No analytics, error tracking, or RUM of any kind today.** A user hitting a broken `/code`
-  session is invisible unless they report it manually.
+- **PostHog is integrated** (wizard, commit 13c3bb8): `PostHogProvider` in `src/main.tsx`,
+  `identify()` on auth resolve in `AuthMenu.tsx`, 12 semantic events across landing/upload/editor,
+  and `captureException` in the route error boundary (moved into an effect in 75b9f8d). The
+  `VITE_PUBLIC_POSTHOG_*` vars live in the gitignored `.env` — the build machine must have them.
+- Session replay and further error-tracking decisions (masking, sampling) are still open — Phase 2.
 - The `/code` page is heavy and unusual: Monaco editor, Excalidraw whiteboard, XState machines,
   WebContainers (requires `COEP: require-corp` + `COOP: same-origin` on **every** response),
   WASM dmp codec.
@@ -47,11 +51,12 @@ Frontend:
 
 These are project-specific and rule tools in or out before features do:
 
-1. **Cross-origin isolation (COEP/COOP).** Third-party SDKs must be **npm-bundled**. SDKs that
-   lazy-load scripts from their CDN at runtime (e.g. posthog-js lazy-loads its session-replay
-   recorder by default) will be blocked under `COEP: require-corp` unless the CDN serves CORP
-   headers. Mitigations exist (PostHog full-bundle import or self-hosted assets) — treat as a
-   hard implementation checkpoint. Telemetry **ingestion** via `fetch` is unaffected (CORS, not
+1. **Cross-origin isolation (COEP/COOP).** Third-party SDKs must be **npm-bundled**, and any
+   scripts they lazy-load from their CDN must survive `COEP: require-corp`. **Verified OK for
+   posthog-js (2026-07-12):** it injects lazy scripts with `crossorigin="anonymous"` and the
+   PostHog CDN answers with `access-control-allow-origin: *`, so CORS-mode loading satisfies COEP
+   — no full-bundle import or self-hosted assets needed. Re-verify if switching SDKs or if
+   PostHog's asset CDN changes. Telemetry **ingestion** via `fetch` is unaffected (CORS, not
    CORP).
 2. **Session-replay tools are page-level rrweb recorders** (PostHog Replay and Sentry Replay are
    both rrweb-based). On `/code` that means observing the Monaco DOM (large, mutation-heavy) and
@@ -146,22 +151,25 @@ Worker (next-editor-tube)
 Cross-stack correlation note: PostHog is not a tracing backend, and Cloudflare's native tracing
 doesn't yet honor incoming W3C trace context (roadmapped). Correlation is therefore **by ID
 convention**: the SPA sends `X-Request-Id` (random per request) and the PostHog session ID on API
-calls; the Worker logs both in its structured line. From a PostHog replay you can pull the exact
+calls; the Worker logs both in its structured line. The browser half is already wired: the wizard
+set `__add_tracing_headers` for the app host in `src/main.tsx`, which stamps
+`X-POSTHOG-SESSION-ID`/`X-POSTHOG-DISTINCT-ID` on same-host fetches — Phase 4 only needs the
+Worker middleware to log them. From a PostHog replay you can pull the exact
 backend logs/spans; from a backend error you can find the session replay. If true distributed
 tracing later becomes essential, that's the trigger to re-evaluate Sentry — or Cloudflare's trace
 propagation may have shipped by then.
 
 ## 7. Phased rollout
 
-| Phase | Track    | Cost            | What                                                                                                                                                                               |
-| ----- | -------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** | Backend  | $0, config-only | `[observability]` logs + traces in `infra/wrangler.toml`; deploy; watch the usage meter a week (asset-traffic multiplier, §8)                                                      |
-| **1** | Frontend | $0              | PostHog via npm (full bundle — COEP checkpoint), `identify()` on login, autocapture on, ~10 custom events for the `/code` lifecycle, billing limit $0                              |
-| **2** | Frontend | $0              | Session replay (sampled; paused during active lesson recording) + error tracking; decide Monaco/whiteboard masking (§9)                                                            |
-| **3** | Backend  | $5/mo plan      | Workers Paid; OTLP destination → Grafana Cloud free tier (50 GB logs + 50 GB traces, 14-day retention, alerting); p95 + 5xx alerts                                                 |
-| **4** | Both     | $0, small code  | Structured-log Hono middleware on `/api/*` + `/media/*` (`{route, status, durationMs, requestId, phSessionId, userId?}`); upgrade the 8 `console.error` sites to structured fields |
-| **5** | Frontend | $0, custom code | Product-native `.ne` issue capture on `/code` → R2 + D1 + admin replay view                                                                                                        |
-| **6** | Backend  | —               | Remote runtime: same `[observability]` on runtime Workers (DO auto-traced); Containers export OTel directly from inside the container to the same backend                          |
+| Phase | Track    | Cost            | What                                                                                                                                                                                                                                                   |
+| ----- | -------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **0** | Backend  | $0, config-only | `[observability]` logs + traces in `infra/wrangler.toml`; deploy; watch the usage meter a week (asset-traffic multiplier, §8)                                                                                                                          |
+| **1** | Frontend | $0              | ✅ **Done** (13c3bb8, 75b9f8d): PostHog via npm, `identify()` on login, 12 custom events, error boundary capture. Remaining: pin billing limit to $0 in the PostHog dashboard; add `.env.example`; source-map upload for de-minified prod stack traces |
+| **2** | Frontend | $0              | Session replay (sampled; paused during active lesson recording) + error tracking; decide Monaco/whiteboard masking (§9)                                                                                                                                |
+| **3** | Backend  | $5/mo plan      | Workers Paid; OTLP destination → Grafana Cloud free tier (50 GB logs + 50 GB traces, 14-day retention, alerting); p95 + 5xx alerts                                                                                                                     |
+| **4** | Both     | $0, small code  | Structured-log Hono middleware on `/api/*` + `/media/*` (`{route, status, durationMs, requestId, phSessionId, userId?}`); upgrade the 8 `console.error` sites to structured fields                                                                     |
+| **5** | Frontend | $0, custom code | Product-native `.ne` issue capture on `/code` → R2 + D1 + admin replay view                                                                                                                                                                            |
+| **6** | Backend  | —               | Remote runtime: same `[observability]` on runtime Workers (DO auto-traced); Containers export OTel directly from inside the container to the same backend                                                                                              |
 
 Phases 0–2 are independent and can all happen now on the free plan.
 
