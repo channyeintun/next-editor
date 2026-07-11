@@ -245,6 +245,7 @@ const clientChips: Array<Omit<ChipProps, "x" | "y" | "width">> = [
   { title: "rrweb recorder", lines: ["DOM capture + corrective snapshots"], tag: 7 },
   { title: "dmp (Rust→WASM) + fflate", lines: ["delta codec for the SCR3 stream"], tag: 8 },
   { title: "xterm.js", lines: ["in-browser terminal"], tag: 9 },
+  { title: "PostHog SDK", lines: ["analytics · replay · errors → PostHog (US)"], tag: 10 },
 ];
 
 const notes: Array<{ n: string; title: string; detail: string }> = [
@@ -288,32 +289,38 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
   { n: "09", title: "xterm.js", detail: "terminal emulator for the WebContainer shell." },
   {
     n: "10",
+    title: "PostHog SDK",
+    detail:
+      "autocapture + custom events, exception capture, privacy-masked session replay (inputs masked, Monaco/Excalidraw blocked); replay pauses during lesson recording.",
+  },
+  {
+    n: "11",
     title: "Hono API routes",
     detail: "lessons, playlists, authors, search, auth, uploads.",
   },
   {
-    n: "11",
+    n: "12",
     title: "Static assets",
     detail: "Cloudflare Static Assets binding serves the built client.",
   },
   {
-    n: "12",
+    n: "13",
     title: "/api/proxy",
     detail: "fetch proxy for the preview; blocks loopback/private hosts.",
   },
   {
-    n: "13",
+    n: "14",
     title: "Google OAuth 2.0",
     detail: "sign-in; edge issues its own session cookie afterward.",
   },
-  { n: "14", title: "D1", detail: "SQLite at the edge; relational data for accounts and content." },
+  { n: "15", title: "D1", detail: "SQLite at the edge; relational data for accounts and content." },
   {
-    n: "15",
+    n: "16",
     title: "R2",
     detail: "object storage for editor state and recorded media, up to 200MB/upload.",
   },
   {
-    n: "16",
+    n: "17",
     title: "Upstash Redis",
     detail: "read-through cache; app degrades gracefully if unset.",
   },
@@ -352,22 +359,23 @@ export default function ArchitecturePage() {
               </div>
               <div>
                 <b>rev</b>
-                <span>—</span>
+                <span>A</span>
               </div>
               <div>
                 <b>date</b>
-                <span>2026-07-11</span>
+                <span>2026-07-12</span>
               </div>
             </div>
           </div>
 
           <div className="diagram-wrap">
-            <svg viewBox="0 0 1320 950" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
+            <svg viewBox="0 0 1320 1038" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
               <title>Layered architecture: browser client, Cloudflare edge, storage</title>
               <desc>
                 User's browser runs the client app and connects over HTTPS to a Cloudflare Worker
                 edge, which talks to Google OAuth externally and reads/writes Cloudflare D1, R2 and
-                an optional external Redis cache.
+                an optional external Redis cache. The client also sends analytics events, masked
+                session replay and error reports to PostHog Cloud (US).
               </desc>
 
               <defs>
@@ -464,7 +472,7 @@ export default function ArchitecturePage() {
                 x={40}
                 y={90}
                 width={1240}
-                height={380}
+                height={468}
                 rx={6}
                 fill="var(--paper-strong)"
                 stroke="var(--blue)"
@@ -496,16 +504,16 @@ export default function ArchitecturePage() {
 
               <line
                 x1={660}
-                y1={470}
+                y1={558}
                 x2={660}
-                y2={522}
+                y2={610}
                 stroke="var(--ink-soft)"
                 strokeWidth={1.4}
                 markerEnd="url(#arch-arrow)"
               />
               <text
                 x={672}
-                y={500}
+                y={588}
                 fontFamily="var(--font-mono)"
                 fontSize={11}
                 fill="var(--ink-faint)"
@@ -515,7 +523,7 @@ export default function ArchitecturePage() {
 
               <rect
                 x={40}
-                y={530}
+                y={618}
                 width={860}
                 height={168}
                 rx={6}
@@ -525,7 +533,7 @@ export default function ArchitecturePage() {
               />
               <text
                 x={64}
-                y={558}
+                y={646}
                 fontFamily="var(--font-mono)"
                 fontWeight={500}
                 fontSize={15}
@@ -533,55 +541,55 @@ export default function ArchitecturePage() {
               >
                 EDGE — cloudflare worker
               </text>
-              <text x={64} y={577} fontSize={12} fill="var(--ink-soft)">
+              <text x={64} y={665} fontSize={12} fill="var(--ink-soft)">
                 request handling at the edge
               </text>
 
               <Chip
                 x={64}
-                y={596}
+                y={684}
                 width={256}
                 title="Hono API routes"
                 lines={["lessons, playlists,", "authors, search, uploads"]}
-                tag={10}
-              />
-              <Chip
-                x={336}
-                y={596}
-                width={256}
-                title="static assets"
-                lines={["serves built dist/ via", "ASSETS binding"]}
                 tag={11}
               />
               <Chip
+                x={336}
+                y={684}
+                width={256}
+                title="static assets"
+                lines={["serves built dist/ via", "ASSETS binding"]}
+                tag={12}
+              />
+              <Chip
                 x={608}
-                y={596}
+                y={684}
                 width={256}
                 title="/api/proxy"
                 lines={["SSRF-guarded fetch,", "blocks private hosts"]}
-                tag={12}
+                tag={13}
               />
 
               <ExternalBox
                 x={948}
-                y={562}
+                y={650}
                 title="Google OAuth 2.0"
                 lines={["external identity provider", "session cookie issued by edge"]}
-                tag={13}
+                tag={14}
               />
 
               <line
                 x1={470}
-                y1={698}
+                y1={786}
                 x2={470}
-                y2={750}
+                y2={838}
                 stroke="var(--ink-soft)"
                 strokeWidth={1.4}
                 markerEnd="url(#arch-arrow)"
               />
               <text
                 x={482}
-                y={728}
+                y={816}
                 fontFamily="var(--font-mono)"
                 fontSize={11}
                 fill="var(--ink-faint)"
@@ -591,7 +599,7 @@ export default function ArchitecturePage() {
 
               <rect
                 x={40}
-                y={758}
+                y={846}
                 width={860}
                 height={168}
                 rx={6}
@@ -601,7 +609,7 @@ export default function ArchitecturePage() {
               />
               <text
                 x={64}
-                y={786}
+                y={874}
                 fontFamily="var(--font-mono)"
                 fontWeight={500}
                 fontSize={15}
@@ -609,33 +617,33 @@ export default function ArchitecturePage() {
               >
                 STORAGE
               </text>
-              <text x={64} y={805} fontSize={12} fill="var(--ink-soft)">
+              <text x={64} y={893} fontSize={12} fill="var(--ink-soft)">
                 cloudflare-managed data
               </text>
 
               <Chip
                 x={64}
-                y={824}
+                y={912}
                 width={398}
                 title="D1 (SQLite)"
                 lines={["users, sessions, lessons,", "playlists, playlist_lessons"]}
-                tag={14}
+                tag={15}
               />
               <Chip
                 x={480}
-                y={824}
+                y={912}
                 width={384}
                 title="R2 (object storage)"
                 lines={[".ne files, audio/video,", "thumbnails · served /media/:key"]}
-                tag={15}
+                tag={16}
               />
 
               <ExternalBox
                 x={948}
-                y={790}
+                y={878}
                 title="Upstash Redis"
                 lines={["optional cache layer", "lesson/playlist reads, ttl 1–5 min"]}
-                tag={16}
+                tag={17}
               />
             </svg>
           </div>
@@ -730,6 +738,16 @@ export default function ArchitecturePage() {
                     <code>vitest</code>{" "}
                     <span className="note-inline">
                       run via <code>vp test</code>
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td>observability</td>
+                  <td>
+                    <code>posthog</code>
+                    <code>workers logs + traces</code>{" "}
+                    <span className="note-inline">
+                      edge request logs carry X-POSTHOG-* headers to cross-link sessions
                     </span>
                   </td>
                 </tr>
