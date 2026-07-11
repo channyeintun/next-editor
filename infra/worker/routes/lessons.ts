@@ -239,7 +239,7 @@ lessonsRoute.patch("/:id", async (c) => {
     try {
       await c.env.BUCKET.delete(previousThumbnail.replace(/^media\//, ""));
     } catch (error) {
-      console.error("Failed to delete superseded thumbnail for lesson", id, error);
+      console.error("Failed to delete superseded thumbnail", { lessonId: id }, error);
     }
   }
 
@@ -301,7 +301,7 @@ lessonsRoute.delete("/:id", async (c) => {
       await c.env.BUCKET.delete(listed.objects.map((object) => object.key));
     }
   } catch (error) {
-    console.error("Failed to clean up R2 objects for lesson", id, error);
+    console.error("Failed to clean up R2 objects", { lessonId: id }, error);
   }
 
   await deleteLesson(c.env.DB, id, user.id);

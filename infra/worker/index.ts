@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { MiddlewareHandler } from "hono";
 import type { Env } from "./env";
 import { lessonsRoute } from "./routes/lessons";
 import { playlistsRoute } from "./routes/playlists";
@@ -29,6 +30,27 @@ app.use("*", async (c, next) => {
     headers,
   });
 });
+
+// One structured, queryable log line per API/media request (Workers Logs
+// indexes the object's fields). The X-POSTHOG-* headers are stamped on
+// same-host fetches by the SPA (__add_tracing_headers in src/main.tsx), so a
+// PostHog session/replay can be cross-referenced with its backend requests
+// and vice versa. Deliberately not registered on "*": static-asset traffic
+// would drown the 200k events/day free-plan quota.
+const requestLog: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+  const startedAt = Date.now();
+  await next();
+  console.log("request", {
+    method: c.req.method,
+    path: c.req.path,
+    status: c.res.status,
+    durationMs: Date.now() - startedAt,
+    phSessionId: c.req.header("X-POSTHOG-SESSION-ID") ?? null,
+    phDistinctId: c.req.header("X-POSTHOG-DISTINCT-ID") ?? null,
+  });
+};
+app.use("/api/*", requestLog);
+app.use("/media/*", requestLog);
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 

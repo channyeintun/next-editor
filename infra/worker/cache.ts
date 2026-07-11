@@ -51,7 +51,7 @@ export async function cached<T>(
       return hit;
     }
   } catch (error) {
-    console.error("Cache read failed for key", key, error);
+    console.error("Cache read failed", { key }, error);
   }
 
   const value = await loader();
@@ -59,7 +59,7 @@ export async function cached<T>(
   try {
     await cache.set(key, value, { ex: ttlSeconds });
   } catch (error) {
-    console.error("Cache write failed for key", key, error);
+    console.error("Cache write failed", { key }, error);
   }
 
   return value;
@@ -72,6 +72,6 @@ export async function invalidateCache(cache: Redis | null, key: string): Promise
   try {
     await cache.del(key);
   } catch (error) {
-    console.error("Cache invalidation failed for key", key, error);
+    console.error("Cache invalidation failed", { key }, error);
   }
 }
