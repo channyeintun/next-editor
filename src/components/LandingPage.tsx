@@ -556,9 +556,6 @@ const LandingPage = () => {
           architectureSection.inView ? "opacity-100" : "opacity-0"
         }`}
       >
-        <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
-          <div className="absolute top-[20%] left-[50%] -translate-x-1/2 size-100 md:size-175 bg-[radial-gradient(circle,hsla(174,76%,60%,0.12)_0%,hsla(174,76%,60%,0)_70%)] rounded-full" />
-        </div>
         <div className="max-w-3xl mx-auto">
           <h2 className="text-3xl md:text-5xl font-machina uppercase tracking-tight mb-6">
             How It Works
