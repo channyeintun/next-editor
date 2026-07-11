@@ -7,6 +7,8 @@ import {
   Mic,
   Video,
   VideoOff,
+  Monitor,
+  MonitorOff,
   X,
   Captions,
   Check,
@@ -33,6 +35,8 @@ import {
 } from "./CameraOverlay";
 import { useCaptionStore, useCaptionStoreTrigger } from "../hooks/useCaptionStore";
 import { usePlaybackSettings, usePlaybackSettingsTrigger } from "../hooks/usePlaybackSettings";
+import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
+import { isMobileBrowser } from "../utils/isMobileBrowser";
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -62,6 +66,56 @@ const formatTime = (milliseconds: number): string => {
 const readCameraOverlayVisibility = (): boolean => {
   if (typeof window === "undefined") return true;
   return window.localStorage.getItem(CAMERA_OVERLAY_VISIBILITY_KEY) !== "false";
+};
+
+/**
+ * Whether opt-in screen recording can be offered. `getDisplayMedia` is desktop-only (absent on
+ * mobile browsers and inside iframes without the `display-capture` permission), and we also gate
+ * out mobile explicitly given the landing-demo embed / OOM constraints.
+ */
+const isScreenCaptureSupported = (): boolean =>
+  typeof navigator !== "undefined" &&
+  typeof navigator.mediaDevices?.getDisplayMedia === "function" &&
+  !isMobileBrowser();
+
+/**
+ * Acquire the display capture stream. MUST be called as the first `await` inside the record-button
+ * click handler: `getDisplayMedia` consumes transient user activation, which expires ~5s and would
+ * be gone if we waited until the recording machine reached its `recording` state.
+ *
+ * The extra members below are Chromium-only hints (other browsers ignore unknown options), so they
+ * are passed unconditionally via a widened options object.
+ */
+const acquireDisplayStream = async (): Promise<MediaStream> => {
+  const displayOptions = {
+    // Native surface size — downscaling screen text destroys readability; let bitrate do the work.
+    video: { frameRate: { ideal: 30, max: 30 } },
+    // When sharing a tab, Chromium offers "Also share tab audio", which captures app-emitted sound
+    // (runtime preview, external-audio narration). Firefox/Safari return no audio track — handled.
+    audio: true,
+    preferCurrentTab: true,
+    selfBrowserSurface: "include",
+    surfaceSwitching: "include",
+    systemAudio: "exclude",
+  };
+
+  // Keep focus on this tab at share start (Chromium 109+); feature-detected and non-fatal.
+  const CaptureControllerCtor = (
+    window as Window & {
+      CaptureController?: new () => { setFocusBehavior?: (behavior: string) => void };
+    }
+  ).CaptureController;
+  if (CaptureControllerCtor) {
+    try {
+      const controller = new CaptureControllerCtor();
+      controller.setFocusBehavior?.("no-focus-change");
+      (displayOptions as Record<string, unknown>).controller = controller;
+    } catch {
+      // Older/partial implementations — proceed without the controller.
+    }
+  }
+
+  return navigator.mediaDevices.getDisplayMedia(displayOptions as DisplayMediaStreamOptions);
 };
 
 const PlaybackProgress = ({
@@ -153,6 +207,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const captionTrigger = useCaptionStoreTrigger();
   const { autoplay, continueToNext } = usePlaybackSettings();
   const playbackSettingsTrigger = usePlaybackSettingsTrigger();
+  const { screenRecordingEnabled } = useRecordingSettings();
+  const recordingSettingsTrigger = useRecordingSettingsTrigger();
   const [showSettings, setShowSettings] = useState(false);
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -160,6 +216,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     useState<RecordingAudioSourceOption>("microphone");
   const [enableCameraForNextRecording, setEnableCameraForNextRecording] = useState(false);
   const [isCameraSupported, setIsCameraSupported] = useState(false);
+  const [isScreenSupported, setIsScreenSupported] = useState(false);
   const [isCameraOverlayVisible, setIsCameraOverlayVisible] = useState(readCameraOverlayVisibility);
   const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement>(null);
@@ -167,6 +224,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   useEffect(() => {
     setIsCameraSupported(Boolean(navigator.mediaDevices?.getUserMedia));
+    setIsScreenSupported(isScreenCaptureSupported());
   }, []);
 
   // Update recording time every 100ms when recording
@@ -292,7 +350,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     });
   };
 
-  const handleRecordButtonClick = () => {
+  const handleRecordButtonClick = async () => {
     if (isRecording) {
       stopRecording();
       onStopRecording?.();
@@ -304,21 +362,34 @@ const MediaControls: React.FC<MediaControlsProps> = ({
       return;
     }
 
-    if (recordingAudioSource === "external") {
-      if (!selectedAudioFile) {
-        audioFileInputRef.current?.click();
-        return;
-      }
-
-      startRecording({
-        audioBlob: selectedAudioFile,
-        enableCamera: enableCameraForNextRecording,
-      });
-      onRecord?.();
+    // External audio with no file picked yet: open the picker and bail — no capture, no session.
+    // Kept above the gDM await so we never open the surface picker just to prompt for an audio file.
+    if (recordingAudioSource === "external" && !selectedAudioFile) {
+      audioFileInputRef.current?.click();
       return;
     }
 
-    startRecording({ enableCamera: enableCameraForNextRecording });
+    // gDM must be the FIRST await (transient-activation constraint, §2.1). A dismissed picker
+    // (NotAllowedError) is non-fatal: the session recording is the primary artifact, so we record
+    // without screen capture rather than aborting the take.
+    let screenStream: MediaStream | undefined;
+    if (screenRecordingEnabled && isScreenSupported) {
+      try {
+        screenStream = await acquireDisplayStream();
+      } catch (error) {
+        console.warn("Screen capture not started; recording without it:", error);
+      }
+    }
+
+    if (recordingAudioSource === "external") {
+      startRecording({
+        audioBlob: selectedAudioFile ?? undefined,
+        enableCamera: enableCameraForNextRecording,
+        screenStream,
+      });
+    } else {
+      startRecording({ enableCamera: enableCameraForNextRecording, screenStream });
+    }
     onRecord?.();
   };
 
@@ -466,6 +537,35 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                   <VideoOff size={13} aria-hidden="true" />
                 )}
                 <span className="hidden sm:inline">Camera</span>
+              </button>
+            ) : null}
+            {isScreenSupported ? (
+              <button
+                data-tour="screen"
+                type="button"
+                onClick={() =>
+                  recordingSettingsTrigger.setScreenRecordingEnabled({
+                    enabled: !screenRecordingEnabled,
+                  })
+                }
+                aria-pressed={screenRecordingEnabled}
+                title={
+                  screenRecordingEnabled
+                    ? "Also screen-record (saved locally only, never uploaded)"
+                    : "Do not screen-record"
+                }
+                className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold shadow-sm transition-colors ${
+                  screenRecordingEnabled
+                    ? "border-pinata-cyan bg-pinata-cyan text-slate-950"
+                    : "border-slate-700 bg-slate-900/90 text-slate-400 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                {screenRecordingEnabled ? (
+                  <Monitor size={13} aria-hidden="true" />
+                ) : (
+                  <MonitorOff size={13} aria-hidden="true" />
+                )}
+                <span className="hidden sm:inline">Screen</span>
               </button>
             ) : null}
           </div>

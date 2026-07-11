@@ -1,4 +1,5 @@
 import { fromCallback } from "xstate";
+import { getSupportedVideoMimeType, CAMERA_VIDEO_MIME_TYPES } from "../utils/videoMimeType";
 
 const CAMERA_TIMESLICE_MS = 1000;
 
@@ -12,22 +13,6 @@ export type CameraRecordingEmit =
   | { type: "CAMERA_STARTED"; mimeType: string; startedAtMs: number; startedAtPerf: number }
   | { type: "CAMERA_STOPPED"; blob: Blob }
   | { type: "CAMERA_ERROR"; error: string };
-
-const getSupportedVideoMimeType = (): string => {
-  const mimeTypes = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"];
-
-  if (typeof MediaRecorder === "undefined") {
-    return "";
-  }
-
-  for (const mimeType of mimeTypes) {
-    if (MediaRecorder.isTypeSupported(mimeType)) {
-      return mimeType;
-    }
-  }
-
-  return "";
-};
 
 export const cameraRecordingActor = fromCallback<
   CameraRecordingEvent,
@@ -74,7 +59,7 @@ export const cameraRecordingActor = fromCallback<
         return;
       }
 
-      mimeType = getSupportedVideoMimeType();
+      mimeType = getSupportedVideoMimeType(CAMERA_VIDEO_MIME_TYPES);
       if (!mimeType) {
         cleanupStream();
         if (!disposed) {

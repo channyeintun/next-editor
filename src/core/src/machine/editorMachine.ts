@@ -5,6 +5,7 @@ import type { MouseCursorPosition, Recording } from "../types";
 import { timelineMachine } from "./timelineMachine";
 import { audioRecordingActor, audioPlaybackActor } from "./audioActor";
 import { cameraRecordingActor } from "./cameraActor";
+import { screenRecordingActor } from "./screenActor";
 import { mouseTrackingActor } from "./mouseTrackingActor";
 import { calculateDurationFromFileReader } from "../utils/audioDuration";
 import {
@@ -47,6 +48,12 @@ import {
   captureAudioChunk,
   storeCameraStarted,
   handleCameraError,
+  setScreenStream,
+  storeScreenStarted,
+  notifyScreenRecordingReady,
+  clearScreenRecording,
+  handleScreenError,
+  releaseScreenStream,
 } from "./captureActions";
 import {
   setRecording,
@@ -97,6 +104,7 @@ export const editorMachine = setup({
     timeline: timelineMachine,
     audioRecording: audioRecordingActor,
     cameraRecording: cameraRecordingActor,
+    screenRecording: screenRecordingActor,
     audioPlayback: audioPlaybackActor,
     mouseTracking: mouseTrackingActor,
     loadRecording: fromPromise<
@@ -172,6 +180,12 @@ export const editorMachine = setup({
     captureAudioChunk: assign(captureAudioChunk),
     storeCameraStarted: assign(storeCameraStarted),
     handleCameraError: assign(handleCameraError),
+    setScreenStream: assign(setScreenStream),
+    storeScreenStarted: assign(storeScreenStarted),
+    notifyScreenRecordingReady,
+    clearScreenRecording: assign(clearScreenRecording),
+    handleScreenError: assign(handleScreenError),
+    releaseScreenStream: assign(releaseScreenStream),
 
     // Playback (replay-side) actions — bodies live in replayActions.ts, wrapped
     // here so `setup()` can infer this machine's exact context/event/actor types.
@@ -243,6 +257,19 @@ export const editorMachine = setup({
     REMOVE_CAPTION_TRACK: {
       actions: "removeCaptionTrack",
     },
+    // Screen recording is independent of the session's finalize join: its blob never enters the
+    // `Recording`, so these are handled at the machine root and fire in any state. SCREEN_STOPPED
+    // may land after the machine has already moved on to `loading`/`playback` — that's fine, the
+    // root handler saves the blob and clears context whenever it arrives.
+    SCREEN_STARTED: {
+      actions: "storeScreenStarted",
+    },
+    SCREEN_STOPPED: {
+      actions: ["notifyScreenRecordingReady", stopChild("screenRecorder"), "clearScreenRecording"],
+    },
+    SCREEN_ERROR: {
+      actions: ["handleScreenError", stopChild("screenRecorder")],
+    },
   },
   states: {
     idle: {
@@ -253,6 +280,7 @@ export const editorMachine = setup({
             guard: "hasExternalAudioBlob",
             actions: [
               "setCameraRecordingEnabled",
+              "setScreenStream",
               "prepareExternalAudioRecording",
               "initRecordingSession",
               "captureInitialFrame",
@@ -264,12 +292,13 @@ export const editorMachine = setup({
           {
             target: "startingRecording",
             guard: ({ context }) => context.enableAudioRecording,
-            actions: "setCameraRecordingEnabled",
+            actions: ["setCameraRecordingEnabled", "setScreenStream"],
           },
           {
             target: "recording",
             actions: [
               "setCameraRecordingEnabled",
+              "setScreenStream",
               "initRecordingSession",
               "captureInitialFrame",
               "notifyRecordingStart",
@@ -327,6 +356,9 @@ export const editorMachine = setup({
           actions: [
             stopChild("audioRecorder"),
             "resetAudioAfterRecorderStop",
+            // gDM ran at click time, so a display stream may be held even though the actor never
+            // spawned. Release it here or the browser's "sharing this tab" indicator leaks forever.
+            "releaseScreenStream",
             assign({
               error: ({ event }) =>
                 event.type === "ERROR" ? event.error : "Failed to start audio",
@@ -336,7 +368,11 @@ export const editorMachine = setup({
         },
         STOP_RECORDING: {
           target: "idle",
-          actions: [stopChild("audioRecorder"), "resetAudioAfterRecorderStop"],
+          actions: [
+            stopChild("audioRecorder"),
+            "resetAudioAfterRecorderStop",
+            "releaseScreenStream",
+          ],
         },
       },
     },
@@ -376,8 +412,42 @@ export const editorMachine = setup({
             },
           });
         }),
+        enqueueActions(({ context, enqueue }) => {
+          if (!context.screenStream) return;
+
+          // Spawn the screen recorder with the pre-acquired display stream (it owns it now) plus a
+          // *clone* of the live microphone track so narration is muxed into a standalone video. The
+          // clone is essential: the actor stops its tracks on teardown, and stopping the original
+          // would kill the session's own mic recorder. Absent in external-audio mode (no mic recorder).
+          const micTrack = context.audio.mediaRecorder?.stream.getAudioTracks()[0]?.clone() ?? null;
+          enqueue.spawnChild("screenRecording", {
+            id: "screenRecorder",
+            input: { stream: context.screenStream, micTrack },
+          });
+          enqueue.sendTo("screenRecorder", { type: "START" });
+          enqueue.assign({
+            screen: {
+              ...context.screen,
+              isRecording: true,
+              mimeType: "",
+              startOffsetMs: 0,
+            },
+          });
+        }),
       ],
-      exit: [stopChild("recordingAudioPlayer")],
+      exit: [
+        stopChild("recordingAudioPlayer"),
+        // Every exit from `recording` ends the session (→ stoppingRecording / loading / idle), so
+        // this single line stops the screen recorder on all of them — including the external-audio
+        // and no-audio paths that bypass `stoppingRecording`. The actor's STOP → onstop → root
+        // SCREEN_STOPPED handler then saves the blob (which can land after we've reached playback).
+        // Skipped when the user already ended the share early (isRecording cleared on SCREEN_STOPPED).
+        enqueueActions(({ context, enqueue }) => {
+          if (context.screen.isRecording) {
+            enqueue.sendTo("screenRecorder", { type: "STOP" });
+          }
+        }),
+      ],
       on: {
         CAPTURE_FRAME: {
           actions: ["captureFrame", "notifyFrame"],

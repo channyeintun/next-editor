@@ -22,6 +22,7 @@ import type {
   RecordingMediaFragment,
   RecordingTrackMeta,
   PreviewPatchReplayInput,
+  ScreenRecordingReadyPayload,
 } from "../types";
 import type { DeltaFrame } from "../utils/deltaTypes";
 import type { FrameStreamEncoderState } from "../utils/frameStreamEncoder";
@@ -201,6 +202,27 @@ export interface CameraState {
 }
 
 /**
+ * Local screen-recording state (opt-in, captured in parallel with the session).
+ *
+ * Deliberately minimal and fully separate from `CameraState`: the screen video is a
+ * keep-forever local artifact and must never be folded into the `Recording`. There is no
+ * `blob`/`source` field here — the blob exits the machine directly via `onScreenRecordingReady`
+ * and is never retained on context. See the publish-safety guardrails in docs/video-plan.md.
+ */
+export interface ScreenState {
+  /** Whether a screen recording is active (its actor has been spawned and started). */
+  isRecording: boolean;
+  /** Detected MIME type of the screen recording container. */
+  mimeType: string;
+  /**
+   * Milliseconds between the recording-session origin (`session.startedAtPerf`) and the moment
+   * the screen MediaRecorder actually started. Reported alongside the blob so a consumer could
+   * later align the local video against the session timeline.
+   */
+  startOffsetMs: number;
+}
+
+/**
  * Editor references and decorations
  */
 export interface EditorRefs {
@@ -239,6 +261,15 @@ export interface EditorMachineContext {
   audio: AudioState;
   /** Camera state */
   camera: CameraState;
+  /** Local screen-recording state (opt-in; blob never persisted to context). */
+  screen: ScreenState;
+  /**
+   * Display capture stream acquired at record-button click time (transient-activation
+   * constraint), carried on the START_RECORDING event. Owned by the screen actor once spawned;
+   * held here only across the arming gap so abort paths can release it. Null when screen
+   * recording is off or after the actor has taken ownership/finished.
+   */
+  screenStream: MediaStream | null;
   /** Editor references */
   editorRefs: EditorRefs;
   /** Getter for the live Monaco editor instance */
@@ -330,6 +361,8 @@ export interface EditorMachineContext {
   onStateChange?: (state: EditorFrame["state"]) => void;
   /** Callback invoked after playback time/frame updates */
   onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
+  /** Callback invoked once a local screen recording finishes assembling (local-save only). */
+  onScreenRecordingReady?: (payload: ScreenRecordingReadyPayload) => void;
 }
 
 // ============================================================================
@@ -341,6 +374,8 @@ export type StartRecordingEvent = {
   type: "START_RECORDING";
   audioUrl?: string;
   enableCamera?: boolean;
+  /** Pre-acquired display capture stream (opt-in screen recording); undefined when off. */
+  screenStream?: MediaStream;
 };
 
 /** Stop recording event */
@@ -536,6 +571,20 @@ export type CameraActorStoppedEvent = { type: "CAMERA_STOPPED"; blob: Blob };
 /** Camera actor error event */
 export type CameraActorErrorEvent = { type: "CAMERA_ERROR"; error: string };
 
+/** Screen actor started event */
+export type ScreenActorStartedEvent = {
+  type: "SCREEN_STARTED";
+  mimeType: string;
+  startedAtMs: number;
+  startedAtPerf: number;
+};
+
+/** Screen actor stopped event (blob exits via onScreenRecordingReady, never persisted). */
+export type ScreenActorStoppedEvent = { type: "SCREEN_STOPPED"; blob: Blob };
+
+/** Screen actor error event */
+export type ScreenActorErrorEvent = { type: "SCREEN_ERROR"; error: string };
+
 /** Add or replace a caption track on the loaded recording */
 export type AddCaptionTrackEvent = {
   type: "ADD_CAPTION_TRACK";
@@ -582,6 +631,9 @@ export type EditorMachineEvent =
   | CameraChunkEvent
   | CameraActorStoppedEvent
   | CameraActorErrorEvent
+  | ScreenActorStartedEvent
+  | ScreenActorStoppedEvent
+  | ScreenActorErrorEvent
   | AddCaptionTrackEvent
   | RemoveCaptionTrackEvent
   | AudioPlaybackReadyEvent
@@ -620,6 +672,7 @@ export interface EditorMachineInput {
   onFrame?: (frame: EditorFrame) => void;
   onStateChange?: (state: EditorFrame["state"]) => void;
   onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
+  onScreenRecordingReady?: (payload: ScreenRecordingReadyPayload) => void;
   onSlideEvent?: (event: SlideEvent) => void;
   getSlideState?: () => {
     previewState: SlidePreviewState;
@@ -682,6 +735,12 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     source: null,
     startOffsetMs: 0,
   },
+  screen: {
+    isRecording: false,
+    mimeType: "",
+    startOffsetMs: 0,
+  },
+  screenStream: null,
   editorRefs: {
     editor: input.editorRef.current,
     cursorDecorationsCollection: null,
@@ -727,4 +786,5 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   onFrame: input.onFrame,
   onStateChange: input.onStateChange,
   onPlaybackUpdate: input.onPlaybackUpdate,
+  onScreenRecordingReady: input.onScreenRecordingReady,
 });

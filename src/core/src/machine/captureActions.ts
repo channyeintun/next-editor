@@ -892,3 +892,104 @@ export const handleCameraError = ({
     },
   };
 };
+
+// ============================================================================
+// Local screen-recording action bodies
+//
+// The screen video is a keep-forever, local-only artifact. It rides in on the
+// START_RECORDING event as a pre-acquired display stream (acquired in the click
+// handler to keep transient user activation) and exits via `onScreenRecordingReady`.
+// It is NEVER folded into the `Recording` — see the publish-safety guardrails in
+// docs/video-plan.md. Nothing here writes a `screen*` field onto the finalized recording.
+// ============================================================================
+
+export const setScreenStream = ({
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "START_RECORDING") return {};
+  return { screenStream: event.screenStream ?? null };
+};
+
+export const storeScreenStarted = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "SCREEN_STARTED") return {};
+  // The screen MediaRecorder starts a beat after the session origin (picker + getDisplayMedia
+  // ran before START_RECORDING, but MediaRecorder.start resolves at spawn). Capture the offset
+  // on the same monotonic clock as the session so a consumer can realign the local video.
+  const startOffsetMs = context.session
+    ? Math.max(0, event.startedAtPerf - context.session.startedAtPerf)
+    : 0;
+  return {
+    screen: {
+      ...context.screen,
+      mimeType: event.mimeType,
+      startOffsetMs,
+    },
+  };
+};
+
+export const notifyScreenRecordingReady = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): void => {
+  if (event.type !== "SCREEN_STOPPED") return;
+  context.onScreenRecordingReady?.({
+    blob: event.blob,
+    mimeType: context.screen.mimeType || event.blob.type,
+    startOffsetMs: context.screen.startOffsetMs,
+  });
+};
+
+/** Reset screen slices after the blob has exited. Tracks are stopped by the actor's teardown (via stopChild). */
+export const clearScreenRecording = (): Partial<EditorMachineContext> => ({
+  screen: {
+    isRecording: false,
+    mimeType: "",
+    startOffsetMs: 0,
+  },
+  screenStream: null,
+});
+
+export const handleScreenError = ({
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "SCREEN_ERROR") return {};
+  console.warn("Screen recording disabled:", event.error);
+  return {
+    screen: {
+      isRecording: false,
+      mimeType: "",
+      startOffsetMs: 0,
+    },
+    screenStream: null,
+  };
+};
+
+/**
+ * Stop and drop a pre-acquired display stream that never reached the actor. Used only on the
+ * arming-gap abort paths (mic ERROR / early STOP_RECORDING before the screen actor spawns) —
+ * once the actor owns the stream, its own teardown handles track cleanup instead.
+ */
+export const releaseScreenStream = ({
+  context,
+}: {
+  context: EditorMachineContext;
+}): Partial<EditorMachineContext> => {
+  if (!context.screenStream) return {};
+  context.screenStream.getTracks().forEach((track) => track.stop());
+  return { screenStream: null };
+};

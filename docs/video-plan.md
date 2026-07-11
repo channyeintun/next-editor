@@ -1,6 +1,6 @@
 # Local Screen Recording Alongside Session Recording — Plan
 
-Status: **proposed** (2026-07-11). Not implemented. This document is the design + implementation guide.
+Status: **implemented** (2026-07-12). Original design + implementation guide below; see §8 for the atomic steps that were carried out. One deviation from the literal plan: the screen recorder is stopped from the `recording` state's `exit` action rather than only `stoppingRecording`'s entry, so the external-audio and no-audio stop paths (which bypass `stoppingRecording`) also finalize the video.
 
 ## 1. Goal & scope
 

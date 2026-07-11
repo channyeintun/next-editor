@@ -19,6 +19,7 @@ import {
 import { useWorkspaceActions } from "../hooks/useWorkspace";
 import { useRecordingStreamSink } from "../hooks/useRecordingStreamSink";
 import { createRecordingStorage } from "../storage/RecordingStorage";
+import { saveScreenRecordingLocally } from "../storage/screenRecordingSave";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
 import type { WorkspaceRecordingSnapshot } from "../types/workspace";
 
@@ -301,6 +302,10 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     applyWhiteboardState: (scene) => {
       whiteboardStore.trigger.setScene({ scene });
     },
+    // Local-only: the screen-capture video is handed straight to a disk download and never touches
+    // the Recording, the .ne codec, IndexedDB, or any upload path. `saveScreenRecordingLocally` is
+    // the blob's sole exit.
+    onScreenRecordingReady: (payload) => saveScreenRecordingLocally(payload),
   };
 
   return (

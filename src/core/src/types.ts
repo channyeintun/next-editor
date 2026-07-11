@@ -317,6 +317,24 @@ export interface UseNextEditorConfig {
   // Whiteboard state callbacks
   getWhiteboardState?: () => WhiteboardSceneState | null;
   applyWhiteboardState?: (state: WhiteboardSceneState) => void;
+
+  /**
+   * Invoked once a local screen recording (opt-in, captured in parallel with the session)
+   * finishes assembling. The blob is saved to the user's disk only and never enters the
+   * `Recording`, `.ne` codec, storage, or any upload path — see `saveScreenRecordingLocally`.
+   */
+  onScreenRecordingReady?: (payload: ScreenRecordingReadyPayload) => void;
+}
+
+/**
+ * Payload handed to `onScreenRecordingReady` when a local screen recording finalizes.
+ * The video bytes are local-only by construction; this is their sole exit from the machine.
+ */
+export interface ScreenRecordingReadyPayload {
+  blob: Blob;
+  mimeType: string;
+  /** Milliseconds between the recording-session origin and the first captured screen frame. */
+  startOffsetMs: number;
 }
 
 export interface PreviewPatchReplayInput {
@@ -365,7 +383,11 @@ export interface UseNextEditorReturn {
   actualDuration: number;
 
   // Recording Controls
-  startRecording: (options?: { audioBlob?: Blob; enableCamera?: boolean }) => void;
+  startRecording: (options?: {
+    audioBlob?: Blob;
+    enableCamera?: boolean;
+    screenStream?: MediaStream;
+  }) => void;
   stopRecording: () => void;
 
   // Playback Controls

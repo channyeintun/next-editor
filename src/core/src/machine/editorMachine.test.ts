@@ -909,3 +909,251 @@ describe("getPlaybackAudioState", () => {
     expect(state!.startOffsetMs).toBe(500);
   });
 });
+
+// ===========================================================================
+// Local screen recording (opt-in, saved locally only)
+// ===========================================================================
+
+class FakeScreenTrack {
+  kind: "video" | "audio";
+  stopped = false;
+  private listeners: Record<string, Array<() => void>> = {};
+
+  constructor(kind: "video" | "audio") {
+    this.kind = kind;
+  }
+
+  stop() {
+    this.stopped = true;
+  }
+
+  clone() {
+    return new FakeScreenTrack(this.kind);
+  }
+
+  addEventListener(type: string, cb: () => void) {
+    (this.listeners[type] ??= []).push(cb);
+  }
+
+  removeEventListener(type: string, cb: () => void) {
+    this.listeners[type] = (this.listeners[type] ?? []).filter((l) => l !== cb);
+  }
+
+  dispatch(type: string) {
+    (this.listeners[type] ?? []).forEach((cb) => cb());
+  }
+}
+
+class FakeScreenStream {
+  private tracks: FakeScreenTrack[];
+
+  constructor(tracks: FakeScreenTrack[] = []) {
+    this.tracks = tracks;
+  }
+
+  getTracks() {
+    return this.tracks;
+  }
+
+  getVideoTracks() {
+    return this.tracks.filter((t) => t.kind === "video");
+  }
+
+  getAudioTracks() {
+    return this.tracks.filter((t) => t.kind === "audio");
+  }
+}
+
+class FakeScreenMediaRecorder {
+  static supported = true;
+  static instances: FakeScreenMediaRecorder[] = [];
+
+  static isTypeSupported() {
+    return FakeScreenMediaRecorder.supported;
+  }
+
+  state: "inactive" | "recording" = "inactive";
+  mimeType: string;
+  ondataavailable: ((event: { data: Blob }) => void) | null = null;
+  onstop: (() => void) | null = null;
+  onstart: (() => void) | null = null;
+
+  constructor(_stream: unknown, options?: { mimeType?: string }) {
+    this.mimeType = options?.mimeType ?? "";
+    FakeScreenMediaRecorder.instances.push(this);
+  }
+
+  start(_timeslice?: number) {
+    this.state = "recording";
+    this.onstart?.();
+  }
+
+  stop() {
+    if (this.state === "inactive") return;
+    this.state = "inactive";
+    this.ondataavailable?.({ data: new Blob(["v"], { type: this.mimeType }) });
+    this.onstop?.();
+  }
+}
+
+describe("editorMachine local screen recording", () => {
+  const originalMediaStream = Object.getOwnPropertyDescriptor(globalThis, "MediaStream");
+  const originalMediaRecorder = Object.getOwnPropertyDescriptor(globalThis, "MediaRecorder");
+  const originalMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+  let actors: Array<ReturnType<typeof createActor>> = [];
+
+  beforeEach(() => {
+    FakeScreenMediaRecorder.instances = [];
+    FakeScreenMediaRecorder.supported = true;
+    Object.defineProperty(globalThis, "MediaStream", {
+      configurable: true,
+      value: FakeScreenStream,
+    });
+    Object.defineProperty(globalThis, "MediaRecorder", {
+      configurable: true,
+      value: FakeScreenMediaRecorder,
+    });
+    // Deterministic microphone-denied path for the arming-abort test.
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: () => Promise.reject(new Error("denied")) },
+    });
+  });
+
+  afterEach(() => {
+    for (const actor of actors) actor.stop();
+    actors = [];
+    if (originalMediaStream) {
+      Object.defineProperty(globalThis, "MediaStream", originalMediaStream);
+    } else {
+      delete (globalThis as Record<string, unknown>).MediaStream;
+    }
+    if (originalMediaRecorder) {
+      Object.defineProperty(globalThis, "MediaRecorder", originalMediaRecorder);
+    } else {
+      delete (globalThis as Record<string, unknown>).MediaRecorder;
+    }
+    if (originalMediaDevices) {
+      Object.defineProperty(navigator, "mediaDevices", originalMediaDevices);
+    } else {
+      delete (navigator as unknown as Record<string, unknown>).mediaDevices;
+    }
+  });
+
+  const makeDisplayStream = () =>
+    new FakeScreenStream([new FakeScreenTrack("video")]) as unknown as MediaStream;
+
+  const start = (
+    overrides: Parameters<typeof createActor<typeof editorMachine>>[1] extends { input: infer I }
+      ? Partial<I>
+      : never = {},
+  ) => {
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null }, ...overrides },
+    }).start();
+    actors.push(actor);
+    return actor;
+  };
+
+  it("does not spawn a screen actor when no screenStream is provided", async () => {
+    const actor = start();
+    actor.send({ type: "START_RECORDING" });
+    await waitFor(actor, (s) => s.value === "recording");
+
+    expect(actor.getSnapshot().children.screenRecorder).toBeUndefined();
+    expect(actor.getSnapshot().context.screen.isRecording).toBe(false);
+  });
+
+  it("spawns the screen actor and records the start offset on SCREEN_STARTED", async () => {
+    const actor = start();
+    actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
+    await waitFor(actor, (s) => s.value === "recording");
+
+    expect(actor.getSnapshot().children.screenRecorder).toBeDefined();
+    const screen = actor.getSnapshot().context.screen;
+    expect(screen.isRecording).toBe(true);
+    expect(screen.mimeType).toBe("video/webm;codecs=vp9,opus");
+    expect(screen.startOffsetMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("saves the screen blob after stop — even once the machine reaches playback — and clears context", async () => {
+    const ready: Array<{ blob: Blob; mimeType: string; startOffsetMs: number }> = [];
+    const actor = start({ onScreenRecordingReady: (payload) => ready.push(payload) });
+
+    actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
+    await waitFor(actor, (s) => s.value === "recording");
+
+    actor.send({ type: "STOP_RECORDING" });
+    await waitFor(actor, (s) => s.matches({ playback: "ready" }));
+
+    expect(ready).toHaveLength(1);
+    expect(ready[0]?.blob).toBeInstanceOf(Blob);
+    expect(ready[0]?.mimeType).toBe("video/webm;codecs=vp9,opus");
+    expect(actor.getSnapshot().context.screen.isRecording).toBe(false);
+    expect(actor.getSnapshot().context.screenStream).toBeNull();
+    expect(actor.getSnapshot().children.screenRecorder).toBeUndefined();
+  });
+
+  it("delivers a partial blob when the share ends early and keeps the session recording", async () => {
+    const ready: Blob[] = [];
+    const display = new FakeScreenStream([new FakeScreenTrack("video")]);
+    const videoTrack = display.getVideoTracks()[0] as unknown as FakeScreenTrack;
+    const actor = start({ onScreenRecordingReady: (payload) => ready.push(payload.blob) });
+
+    actor.send({ type: "START_RECORDING", screenStream: display as unknown as MediaStream });
+    await waitFor(actor, (s) => s.value === "recording");
+
+    // User clicks the browser's native "Stop sharing".
+    videoTrack.dispatch("ended");
+    await waitFor(actor, (s) => s.context.screen.isRecording === false);
+
+    expect(ready).toHaveLength(1);
+    expect(actor.getSnapshot().value).toBe("recording"); // session unaffected
+    expect(actor.getSnapshot().children.screenRecorder).toBeUndefined();
+  });
+
+  it("releases a pending display stream when microphone arming fails", async () => {
+    const display = new FakeScreenStream([new FakeScreenTrack("video")]);
+    const videoTrack = display.getVideoTracks()[0] as unknown as FakeScreenTrack;
+    const actor = start({ enableAudioRecording: true });
+
+    actor.send({ type: "START_RECORDING", screenStream: display as unknown as MediaStream });
+    // getUserMedia rejects → audio ERROR → startingRecording returns to idle.
+    await waitFor(actor, (s) => s.value === "idle");
+
+    expect(videoTrack.stopped).toBe(true);
+    expect(actor.getSnapshot().context.screenStream).toBeNull();
+  });
+
+  it("treats a screen MIME failure as non-fatal and keeps the session recording", async () => {
+    FakeScreenMediaRecorder.supported = false;
+    const ready: Blob[] = [];
+    const actor = start({ onScreenRecordingReady: (payload) => ready.push(payload.blob) });
+
+    actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
+    await waitFor(actor, (s) => s.value === "recording");
+    await waitFor(actor, (s) => s.context.screen.isRecording === false);
+
+    expect(ready).toHaveLength(0);
+    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().context.screenStream).toBeNull();
+    expect(actor.getSnapshot().children.screenRecorder).toBeUndefined();
+  });
+
+  it("guardrail: the finalized recording carries no screen fields", async () => {
+    const stopped: { value: Recording | null } = { value: null };
+    const actor = start({ onRecordingStop: (recording) => (stopped.value = recording) });
+
+    actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
+    await waitFor(actor, (s) => s.value === "recording");
+    actor.send({ type: "STOP_RECORDING" });
+    await waitFor(actor, (s) => s.matches({ playback: "ready" }));
+
+    const recording = stopped.value;
+    expect(recording).not.toBeNull();
+    const screenKeys = Object.keys(recording ?? {}).filter((key) =>
+      key.toLowerCase().startsWith("screen"),
+    );
+    expect(screenKeys).toEqual([]);
+  });
+});
