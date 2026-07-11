@@ -173,7 +173,7 @@ function SlidePreview({
       />
 
       <div
-        className={`${positioning} top-[10%] left-[10%] right-[10%] bottom-[10%] z-100 bg-slate-900 rounded-2xl overflow-hidden flex flex-col shadow-2xl transition-shadow size-[80%]`}
+        className={`${positioning} inset-1/2 -translate-1/2 z-100 bg-slate-900 rounded-2xl overflow-hidden flex flex-col shadow-2xl transition-shadow w-full max-w-7xl aspect-video`}
         data-cursor-replay-target="slide-preview"
         onClick={(e) => {
           e.stopPropagation();
