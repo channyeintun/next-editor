@@ -1,0 +1,55 @@
+import { describe, expect, it } from "vitest";
+import type { WorkspaceProject } from "../types/workspace";
+import { buildSystemPrompt } from "./systemPrompt";
+
+function makeProject(): WorkspaceProject {
+  return {
+    id: "test",
+    name: "Test",
+    lessonType: "react",
+    entryFilePath: "src/App.tsx",
+    folders: ["src"],
+    files: {
+      "src/App.tsx": {
+        path: "src/App.tsx",
+        name: "App.tsx",
+        language: "typescript",
+        content: "export default function App() {}",
+      },
+    },
+  };
+}
+
+describe("buildSystemPrompt", () => {
+  it("states the WebContainer-supported stack and forbids other runtimes", () => {
+    const prompt = buildSystemPrompt(makeProject(), { toolNames: ["read"], hasBash: true });
+
+    expect(prompt).toContain("HTML, CSS, JavaScript, TypeScript, Node.js");
+    expect(prompt).toContain("WebContainer");
+    // A couple of the explicitly out-of-scope runtimes must be named so the model
+    // doesn't reach for them.
+    expect(prompt).toContain("Python");
+    expect(prompt).toContain("native binaries");
+  });
+
+  it("lists the enabled tools and workspace context", () => {
+    const prompt = buildSystemPrompt(makeProject(), {
+      toolNames: ["read", "edit"],
+      hasBash: false,
+    });
+
+    expect(prompt).toContain("- read");
+    expect(prompt).toContain("- edit");
+    expect(prompt).toContain("Lesson type: react");
+    expect(prompt).toContain("Entry file: src/App.tsx");
+    expect(prompt).toContain("src/App.tsx");
+  });
+
+  it("omits the bash note when bash is disabled", () => {
+    const withBash = buildSystemPrompt(makeProject(), { toolNames: ["bash"], hasBash: true });
+    const withoutBash = buildSystemPrompt(makeProject(), { toolNames: [], hasBash: false });
+
+    expect(withBash).toContain("bash tool runs commands");
+    expect(withoutBash).not.toContain("bash tool runs commands");
+  });
+});

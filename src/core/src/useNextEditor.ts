@@ -18,6 +18,7 @@ import type {
   SlideEvent,
 } from "./slides";
 import type { WhiteboardEvent } from "./whiteboard";
+import type { ChatCheckpoint, ChatDelta } from "../../types/chat";
 import { findFrameIndexAtTime, reconstructFrameAtIndex } from "./utils/frameDelta";
 import { PLAYBACK_END_EPSILON_MS } from "./machine/editorMachineHelpers";
 import type { TimelineActorRef } from "./machine/timelineMachine";
@@ -216,6 +217,10 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     actorRef.send({ type: "WHITEBOARD_EVENT", event });
   };
 
+  const handleChatEvent = (event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint }) => {
+    actorRef.send({ type: "CHAT_EVENT", event });
+  };
+
   return {
     startRecording,
     stopRecording,
@@ -239,6 +244,7 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     handleWorkspaceEvent,
     handleRuntimeEvent,
     handleWhiteboardEvent,
+    handleChatEvent,
   };
 };
 

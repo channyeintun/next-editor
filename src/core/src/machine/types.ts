@@ -29,6 +29,7 @@ import type { FrameStreamEncoderState } from "../utils/frameStreamEncoder";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "../whiteboard";
+import type { ChatCheckpoint, ChatDelta, ChatRecordingEvent } from "../../../types/chat";
 import type { CapturedViewStateRef } from "./editorMachineHelpers";
 
 // ============================================================================
@@ -126,6 +127,8 @@ export interface RecordingSession {
   cursorEvents: CursorRecordingEvent[];
   /** Collected whiteboard change events during recording */
   whiteboardEvents: WhiteboardEvent[];
+  /** Collected coding-agent chat deltas + sparse checkpoints during recording */
+  chatEvents: ChatRecordingEvent[];
   /**
    * Timeline-aware audio fragments captured during recording. For microphone recordings these are
    * `MediaRecorder` timeslice fragments; for a selected audio file it is the single file blob.
@@ -309,6 +312,8 @@ export interface EditorMachineContext {
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
   /** Callback to apply runtime snapshot during playback */
   applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
+  /** Callback to apply the folded chat transcript during playback (replayState/chat.ts) */
+  applyChatSnapshot?: (snapshot: ChatCheckpoint) => void;
   /** Callback to get whiteboard scene state during recording */
   getWhiteboardState?: () => WhiteboardSceneState | null;
   /** Callback to apply whiteboard scene state during playback */
@@ -327,6 +332,8 @@ export interface EditorMachineContext {
   lastAppliedRuntimeEventIndex: number;
   /** Index of the last applied whiteboard event during playback */
   lastAppliedWhiteboardEventIndex: number;
+  /** Index of the last applied chat event during playback */
+  lastAppliedChatEventIndex: number;
   /** Last applied preview state to avoid redundant updates */
   lastAppliedPreviewState?: PreviewState;
   /** Last time (performance.now()) audio was synced */
@@ -541,6 +548,12 @@ export type WhiteboardEventOccurred = {
   event: WhiteboardEvent;
 };
 
+/** Coding-agent chat delta or checkpoint occurred */
+export type ChatEventOccurred = {
+  type: "CHAT_EVENT";
+  event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint };
+};
+
 /** Audio chunk received */
 export type AudioChunkEvent = {
   type: "CHUNK";
@@ -626,6 +639,7 @@ export type EditorMachineEvent =
   | WorkspaceEventOccurred
   | RuntimeEventOccurred
   | WhiteboardEventOccurred
+  | ChatEventOccurred
   | AudioChunkEvent
   | CameraActorStartedEvent
   | CameraChunkEvent
@@ -689,6 +703,7 @@ export interface EditorMachineInput {
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
   applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
+  applyChatSnapshot?: (snapshot: ChatCheckpoint) => void;
   getWhiteboardState?: () => WhiteboardSceneState | null;
   applyWhiteboardState?: (state: WhiteboardSceneState) => void;
 }
@@ -762,6 +777,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   lastAppliedWorkspaceEventIndex: -1,
   lastAppliedRuntimeEventIndex: -1,
   lastAppliedWhiteboardEventIndex: -1,
+  lastAppliedChatEventIndex: -1,
   lastAppliedPreviewState: undefined,
   applySlideState: input.applySlideState,
   applySlides: input.applySlides,
@@ -774,6 +790,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   applyWorkspaceSnapshot: input.applyWorkspaceSnapshot,
   getRuntimeSnapshot: input.getRuntimeSnapshot,
   applyRuntimeSnapshot: input.applyRuntimeSnapshot,
+  applyChatSnapshot: input.applyChatSnapshot,
   getWhiteboardState: input.getWhiteboardState,
   applyWhiteboardState: input.applyWhiteboardState,
   onRecordingStart: input.onRecordingStart,

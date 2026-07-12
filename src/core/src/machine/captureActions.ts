@@ -14,6 +14,7 @@ import {
 } from "../../../types/workspace";
 import { createFrameStreamEncoder, pushFrame } from "../utils/frameStreamEncoder";
 import {
+  appendChatDelta,
   appendPreviewInitialDocument,
   appendPreviewPatchBatch,
   appendPreviewRecordingEvent,
@@ -298,6 +299,7 @@ export const initRecordingSession = ({
       workspaceEvents,
       runtimeEvents,
       whiteboardEvents,
+      chatEvents: [],
       cursorEvents: [{ timestamp: 0, ...initialMousePosition }],
       // External (selected file) audio is fully known at start, so seed it as the single
       // audio fragment. Microphone audio is appended as timeslice events. Camera video is
@@ -624,6 +626,17 @@ export const captureRuntimeEvent = ({
   return appendToSession(context, (session) => appendRuntimeRecordingEvent(session, snapshot));
 };
 
+export const captureChatEvent = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "CHAT_EVENT") return {};
+  return appendToSession(context, (session) => appendChatDelta(session, event.event));
+};
+
 export const captureWhiteboardEvent = ({
   context,
   event,
@@ -676,6 +689,7 @@ export const finalizeRecording = ({
     hasRuntimeEvents: context.session.runtimeEvents.length > 0,
     hasCursorEvents: context.session.cursorEvents.length > 0,
     hasWhiteboardEvents: context.session.whiteboardEvents.length > 0,
+    hasChatEvents: context.session.chatEvents.length > 0,
     audioMimeType: context.audio.mimeType || context.audio.blob?.type,
     audioSource: context.audio.source || undefined,
     audioStartOffsetMs: context.audio.startOffsetMs,
@@ -706,6 +720,7 @@ export const finalizeRecording = ({
     runtimeEvents: context.session.runtimeEvents,
     cursorEvents: context.session.cursorEvents,
     whiteboardEvents: context.session.whiteboardEvents,
+    chatEvents: context.session.chatEvents,
     slides: slides,
     tracks,
     clusters: clusters.length > 0 ? clusters : undefined,

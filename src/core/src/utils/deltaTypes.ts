@@ -8,6 +8,7 @@ import type {
 } from "../slides";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent } from "../../../types/workspace";
+import type { ChatRecordingEvent } from "../../../types/chat";
 
 // ============================================================================
 // Delta Compression Types
@@ -132,6 +133,7 @@ export interface DeltaRecording {
   workspaceEvents?: WorkspaceRecordingEvent[];
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];
+  chatEvents?: ChatRecordingEvent[];
   slides?: Array<{
     id: string;
     imageUrl: string;

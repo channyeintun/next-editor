@@ -10,6 +10,7 @@ import type {
   SlideEvent,
 } from "../types/slides";
 import type { WhiteboardEvent } from "../core/src/whiteboard";
+import type { ChatCheckpoint, ChatDelta } from "../types/chat";
 import type * as monaco from "monaco-editor";
 
 export type { TimelineActorRef, EditorActorRef };
@@ -46,6 +47,7 @@ export interface NextEditorActions {
   }) => void;
   handleRuntimeEvent: () => void;
   handleWhiteboardEvent: (event: WhiteboardEvent) => void;
+  handleChatEvent: (event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint }) => void;
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;
   importFromFile: () => Promise<Recording[]>;
   clearStorage: () => Promise<void>;

@@ -39,6 +39,7 @@ import {
   captureWorkspaceEvent,
   captureRuntimeEvent,
   captureWhiteboardEvent,
+  captureChatEvent,
   finalizeRecording,
   notifyRecordingStart,
   notifyRecordingStop,
@@ -88,6 +89,7 @@ import {
   applyRuntimeEventsAtTime,
   applySlideEventsAtTime,
   applyWhiteboardEventsAtTime,
+  applyChatEventsAtTime,
 } from "./replayActions";
 
 // ============================================================================
@@ -171,6 +173,7 @@ export const editorMachine = setup({
     captureWorkspaceEvent: assign(captureWorkspaceEvent),
     captureRuntimeEvent: assign(captureRuntimeEvent),
     captureWhiteboardEvent: assign(captureWhiteboardEvent),
+    captureChatEvent: assign(captureChatEvent),
     finalizeRecording: assign(finalizeRecording),
     notifyRecordingStart,
     notifyRecordingStop,
@@ -221,6 +224,7 @@ export const editorMachine = setup({
     applyRuntimeEventsAtTime: assign(applyRuntimeEventsAtTime),
     applySlideEventsAtTime: assign(applySlideEventsAtTime),
     applyWhiteboardEventsAtTime: assign(applyWhiteboardEventsAtTime),
+    applyChatEventsAtTime: assign(applyChatEventsAtTime),
 
     // Shared/general — neither pure capture nor pure replay
     setError: assign(({ event }) => {
@@ -521,6 +525,9 @@ export const editorMachine = setup({
         },
         WHITEBOARD_EVENT: {
           actions: "captureWhiteboardEvent",
+        },
+        CHAT_EVENT: {
+          actions: "captureChatEvent",
         },
         STOP_RECORDING: [
           {

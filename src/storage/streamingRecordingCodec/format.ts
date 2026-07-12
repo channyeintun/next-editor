@@ -74,8 +74,9 @@ export const SEGMENT_KIND = {
   runtime: 6,
   cursor: 7,
   whiteboard: 8,
+  chat: 9,
   // Media is never stored inline in the stream — audio as a sibling file referenced by
-  // `audioFile`/`audioUrl`, camera as a sibling video. 9+ are free for future segment kinds.
+  // `audioFile`/`audioUrl`, camera as a sibling video. 10+ are free for future segment kinds.
 } as const;
 
 export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
@@ -323,7 +324,7 @@ export function readSegmentHeader(view: DataView, offset: number): SegmentHeader
 }
 
 export function isKnownSegmentKind(kind: number): boolean {
-  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.whiteboard;
+  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.chat;
 }
 
 // ----------------------------------------------------------------------------

@@ -14,6 +14,7 @@ import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import BinaryFilePreview from "./BinaryFilePreview";
 import TerminalPanel from "./TerminalPanel";
+import AgentPanel from "./agent/AgentPanel";
 import {
   disposePlaybackModels,
   getEditorOptions,
@@ -467,6 +468,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               )}
             </div>
             {lessonRunsInWebContainer(lessonType) ? <TerminalPanel /> : null}
+            <AgentPanel />
           </div>
           <Suspense fallback={null}>
             <Preview />

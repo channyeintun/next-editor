@@ -11,6 +11,7 @@ import { normalizeEditorFrame, normalizeRecordingData } from "../utils/editorSta
 import { isValidFrameState } from "../utils/validation";
 import { arePreviewSizesEqual } from "../../../utils/equality";
 import {
+  getChatReplayResult,
   getPreviewReplayResult,
   getRuntimeReplayResult,
   getSlideReplayResult,
@@ -78,6 +79,14 @@ export const setRecording = ({
     context.applyRuntimeSnapshot(recording.runtimeSnapshot);
   }
 
+  // A conversation never pre-exists a recording, so the chat panel always starts
+  // empty on load. Resetting here (rather than relying on the first delta) means a
+  // recording with no chat events never shows a previous replay's stale transcript
+  // — `applyChatEventsAtTime` no-ops for chat-less recordings and would leave it.
+  if (context.applyChatSnapshot) {
+    context.applyChatSnapshot({ messages: [], status: "idle" });
+  }
+
   return {
     recording,
     hasManualWorkspaceOverride: false,
@@ -106,6 +115,9 @@ export const setRecording = ({
     lastAppliedWorkspaceEventIndex: initialWorkspaceEvent ? 0 : -1,
     lastAppliedRuntimeEventIndex: initialRuntimeEvent ? 0 : -1,
     lastAppliedWhiteboardEventIndex: -1,
+    // Chat has no time-0 seed (a conversation never pre-exists before a recording
+    // starts), so it always starts folded from empty — no `initialChatEvent` needed.
+    lastAppliedChatEventIndex: -1,
     lastAppliedPreviewState: undefined,
   };
 };
@@ -290,6 +302,7 @@ export const seekToTime = ({
     // so repeated seeks make the panels grow/shrink without bound. Keeping
     // the true index lets the replay reverse/advance the exact net delta.
     lastAppliedRuntimeEventIndex: -1,
+    lastAppliedChatEventIndex: -1,
   };
 };
 
@@ -449,6 +462,7 @@ export const resetPlayback = ({
   // instead of re-summing from scratch onto the live width. See `seekToTime`.
   lastAppliedRuntimeEventIndex: -1,
   lastAppliedWhiteboardEventIndex: -1,
+  lastAppliedChatEventIndex: -1,
   lastAppliedPreviewState: undefined,
 });
 
@@ -464,6 +478,7 @@ export const invalidateAppliedPlaybackState = (): Partial<EditorMachineContext> 
   // already-applied width. See `seekToTime`.
   lastAppliedRuntimeEventIndex: -1,
   lastAppliedWhiteboardEventIndex: -1,
+  lastAppliedChatEventIndex: -1,
   lastAppliedPreviewState: undefined,
 });
 
@@ -478,6 +493,7 @@ export const detachPlaybackWorkspace = (): Partial<EditorMachineContext> => ({
   lastAppliedWorkspaceEventIndex: -1,
   lastAppliedRuntimeEventIndex: -1,
   lastAppliedWhiteboardEventIndex: -1,
+  lastAppliedChatEventIndex: -1,
   lastAppliedPreviewState: undefined,
 });
 
@@ -519,6 +535,7 @@ export const clearRecording = {
   lastAppliedWorkspaceEventIndex: -1,
   lastAppliedRuntimeEventIndex: -1,
   lastAppliedWhiteboardEventIndex: -1,
+  lastAppliedChatEventIndex: -1,
   lastAppliedPreviewState: undefined,
   timeline: ({ context }: { context: EditorMachineContext }) => ({
     ...context.timeline,
@@ -785,6 +802,37 @@ export const applyRuntimeEventsAtTime = ({
 
   if (replayResult.nextIndex !== lastAppliedRuntimeEventIndex) {
     return { lastAppliedRuntimeEventIndex: replayResult.nextIndex };
+  }
+
+  return {};
+};
+
+export const applyChatEventsAtTime = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  const { recording, applyChatSnapshot, lastAppliedChatEventIndex } = context;
+
+  if (!recording?.chatEvents?.length || !applyChatSnapshot) {
+    return {};
+  }
+
+  const replayResult = getChatReplayResult({
+    chatEvents: recording.chatEvents,
+    currentTime: resolveReplayTime(event, context.timeline.currentTime),
+    lastAppliedIndex: lastAppliedChatEventIndex,
+  });
+
+  if (replayResult.snapshotToApply) {
+    applyChatSnapshot(replayResult.snapshotToApply);
+    return { lastAppliedChatEventIndex: replayResult.nextIndex };
+  }
+
+  if (replayResult.nextIndex !== lastAppliedChatEventIndex) {
+    return { lastAppliedChatEventIndex: replayResult.nextIndex };
   }
 
   return {};
