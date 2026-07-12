@@ -27,7 +27,10 @@ const TIMECODE_SCALE_ID = [0x2a, 0xd7, 0xb1];
 
 const DEFAULT_TIMECODE_SCALE_NS = 1_000_000; // 1ms per timecode unit — MediaRecorder's default.
 
-const concat = (...parts: Uint8Array[]): Uint8Array => {
+// Return the precise `ArrayBuffer`-backed type (not the bare `Uint8Array`, which
+// widens the buffer to `ArrayBufferLike` and so no longer satisfies `BlobPart`) —
+// `new Uint8Array(total)` always allocates a plain ArrayBuffer, so this is exact.
+const concat = (...parts: Uint8Array[]): Uint8Array<ArrayBuffer> => {
   const total = parts.reduce((sum, part) => sum + part.length, 0);
   const out = new Uint8Array(total);
   let offset = 0;
