@@ -307,15 +307,24 @@ src/agent/
     workspaceFs.ts      # thin helpers over workspaceStore (read/list/mutate)
     editDiff.ts         # unique-match apply + unified diff (port of pi's edit-diff)
   agentStore.ts         # @xstate/store-react: messages, status, streamed text, error
+  chatRecording.ts      # agent chat → insert/remove deltas + checkpoints (only while recording)
   credentials.ts        # in-memory cred + optional persistence (see Security)
   types.ts
 src/components/agent/
-  AgentPanel.tsx        # the CLI surface (xterm or transcript) + wiring
+  AgentPanel.tsx        # CLI surface (live) + read-only replay mode
 ```
 
 Wire `AgentPanel` into the existing editor chrome next to the terminal/preview. It reads the
 active `WorkspaceStoreInstance` from `WorkspaceStoreContext` and the WebContainer from the
 existing runtime context.
+
+The chat **recording/playback** track is cross-cutting and lives with the other tracks, not under
+`src/agent/`: `ChatRecordingEvent` in [`src/types/chat.ts`](src/types/chat.ts); `chatEvents` +
+`appendChatDelta` in [`recordingSession.ts`](src/core/src/machine/recordingSession.ts) and
+`DeltaRecording` ([`deltaTypes.ts`](src/core/src/utils/deltaTypes.ts)); a `SEGMENT_KIND.chat` case
+in the [`streamingRecordingCodec`](src/storage/streamingRecordingCodec); and
+`replayState/chat.ts`. `chatRecording.ts` is just the thin seam that turns agent-store deltas into
+`appendChatDelta` calls (§9.2).
 
 ## 7. Model & cost
 
@@ -353,16 +362,105 @@ the user selects Sonnet/Opus. Note Haiku's smaller **200K context** and **64K ou
   which bounds its blast radius. An optional approval gate for `bash`/`deleteFile` is available if
   we want a human in the loop.
 
-## 9. Lesson-recording integration (the "why")
+## 9. Recording & playback
 
-Because the agent mutates the **same `workspaceStore`** the editor already records
-(`WorkspaceRecordingSnapshot`/`WorkspaceRecordingEvent` in `src/types/workspace.ts`), agent file
-operations land in the workspace the recorder observes — an agent-driven build can become lesson
-content. **Caveat to verify:** the fine-grained _content-delta_ recording (the dmp codec) is
-driven by the Monaco editor's own edit events, so a store write to a **non-active** file may not
-produce a content delta on its own. Making agent edits show up as recorded keystrokes/deltas
-(vs. just a snapshot diff) likely needs explicit wiring into the recording stream. Treat this as a
-**follow-up design decision**, not a free win — the minimal agent doesn't require it.
+Two things change during an agent session and **both** must be captured and replayable: the
+**workspace** (files) and the **chat conversation** (prompts, streamed assistant text, tool
+calls/results). The workspace half already flows through the existing recorder; the chat half is a
+**new track** we add to the same multi-track recording.
+
+### 9.1 Workspace changes — already recorded (one caveat)
+
+Because the agent mutates the same `workspaceStore` the editor records (`WorkspaceRecordingEvent` →
+`DeltaRecording.workspaceEvents`), agent file operations already land in the recording and replay
+through [`replayState/workspace.ts`](src/core/src/machine/replayState/workspace.ts). **Caveat:**
+the fine-grained _content-delta_ track (the dmp codec) is driven by Monaco's own edit events, so a
+store write to a **non-active** file yields a workspace snapshot diff but **no** keystroke-level
+content delta. Agent edits therefore replay as file-state jumps, not typed-out text, unless we feed
+them into the content-delta stream — a **follow-up** (§11.6) the minimal agent doesn't require.
+
+### 9.2 Chat conversation — a new recording track
+
+The recording format is already multi-track: `DeltaRecording` (v4,
+[`deltaTypes.ts`](src/core/src/utils/deltaTypes.ts)) carries parallel `workspaceEvents`,
+`runtimeEvents`, `cursorEvents`, … each a `{ timestamp, snapshot }[]` on one shared, audio-anchored
+clock. The editor's own main track is already stored as **deltas**, not snapshots: `frames` is a stream of
+`FrameDelta`s punctuated by a full `Keyframe` every `KEYFRAME_INTERVAL` for seeking
+([`deltaTypes.ts`](src/core/src/utils/deltaTypes.ts)). The chat track follows **that** model — a
+stream of insert/remove deltas with sparse seek checkpoints. (The runtime/workspace tracks store a full snapshot
+per event; we deliberately do **not** copy that here.)
+
+**Model — delta events + sparse checkpoints (never a per-event transcript snapshot).**
+
+```ts
+type ChatStatus = "idle" | "streaming" | "running-tool" | "done" | "error";
+
+// Every delta records ONLY what changed: a node inserted/removed, or text
+// inserted/removed inside the active message. No full-state records here.
+type ChatDelta =
+  | { k: "message_start"; id: string; role: "assistant" } // insert an empty message node
+  | { k: "content"; delta: ContentDelta } // dmp insert/remove on the active message's text
+  | { k: "tool_use"; id: string; name: string; input: unknown; path?: string } // insert a tool-call node
+  | { k: "tool_result"; toolUseId: string; content: string; isError?: boolean } // insert a tool-result node
+  | { k: "remove"; fromId: string } // drop nodes from `fromId` onward (aborted / retried turn)
+  | { k: "message_end"; id: string; usage?: { input: number; output: number } }
+  | { k: "status"; status: ChatStatus };
+
+// ContentDelta is the SAME dmp primitive the editor content track uses
+// (deltaTypes.ts, via getDmpCodec) — it encodes inserts AND removes, not just appends.
+
+// Seek keyframe ONLY (frames-style), emitted sparsely — never the recording unit.
+// The insert/remove delta log above is authoritative and fully reconstructs the transcript.
+interface ChatCheckpoint {
+  messages: ChatMessage[];
+  status: ChatStatus;
+}
+
+interface ChatRecordingEvent {
+  timestamp: number;
+  event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint };
+}
+```
+
+Content changes reuse the project's existing delta primitive — the dmp `ContentDelta` (Myers diff,
+`getDmpCodec()`) that already powers the editor content track — so each `content` delta carries
+exactly the chars **inserted or removed** in the active message, nothing more. Streaming is usually
+a pure append (an insert), but an aborted, edited, or retried turn diffs to a **removal** for free;
+`remove` drops whole nodes when a turn is truncated.
+
+Replay is a **reducer**: rebuild the transcript by applying the insert/remove deltas in order. The
+**delta log alone is authoritative and sufficient** — the `checkpoint` is only the frames-style
+_seek keyframe_ so scrubbing to _T_ needn't replay from zero (restore nearest checkpoint ≤ _T_, then
+apply deltas forward, exactly how the `frames` track seeks). A half-streamed message renders
+mid-word, just as recorded. Because a chat keyframe is a full transcript (unlike the **bounded**
+editor keyframe), keep it **sparse** (§11.5); it is never the recording unit.
+
+**Touch-points** — plumbing mirrors the other event tracks; delta/replay mechanics mirror the
+`frames` keyframe+delta track:
+
+| Layer     | Template                                              | Add (chat)                                                             |
+| --------- | ----------------------------------------------------- | ---------------------------------------------------------------------- |
+| Type      | `RuntimeRecordingEvent` (`types/runtime.ts`)          | `ChatRecordingEvent` — `{ timestamp, event }` (`types/chat.ts`)        |
+| Container | `DeltaRecording.runtimeEvents`                        | `DeltaRecording.chatEvents`                                            |
+| Capture   | `appendRuntimeRecordingEvent` (`recordingSession.ts`) | `appendChatDelta` — push a delta; emit a `checkpoint` on a cadence     |
+| Codec     | `SEGMENT_KIND.runtime = 6` + encode/decode/cluster    | `SEGMENT_KIND.chat = 9` (9+ reserved) + matching encode/decode/cluster |
+| Replay    | **`frames` keyframe+delta** (`applyFrameDelta`)       | `replayState/chat.ts` — reducer from the nearest checkpoint            |
+| UI        | runtime dock panel                                    | `AgentPanel` in **read-only replay mode** rendering the reduced state  |
+
+**The one real gotcha — timeline anchoring.** Chat deltas arrive on async SSE callbacks from
+Anthropic. Stamp each with the recorder's clock (`getRecordingTimestamp(session)`) **at capture
+time** — never `Date.now()` rebased later. That mismatch is exactly the preview-drift bug already
+fixed once. Because chat and workspace tracks then ride the **same** clock, "running `edit` on
+`App.tsx`…" in the transcript lines up with the file change in the workspace track automatically —
+no cross-track syncing needed.
+
+**Checkpoints are the anti-drift mechanism.** Emit a `checkpoint` on a bounded cadence (e.g. every
+~30 s of wall-clock or every _K_ messages), never per event — sparse enough that the
+growing-transcript cost stays sub-dominant to the insert/remove deltas (which are O(total text), optimal).
+Besides enabling seeks, a checkpoint **re-seats replay** if a delta is ever dropped or mis-ordered —
+the same corrective-checkpoint fix that resolved the preview-replay append bug. Coalesce streamed
+`text` deltas to ~10 Hz so recording stays a few events per second. **Capture only while a recording
+session is active;** running the agent outside a recording captures nothing.
 
 ## 10. Build plan (decomposed, parallelizable)
 
@@ -387,7 +485,9 @@ Ordered by dependency; independent streams marked **∥** can be built in parall
 
 **Phase 2 — Integration** 4. `agentLoop.ts` — wire provider + tools + store + abort into the streaming loop. 5. `AgentPanel.tsx` — the CLI surface; mount in the editor chrome.
 
-**Phase 3 — Hardening** 6. Unit tests per tool (fake store), a loop test (mocked SDK stream), credential-handling test. 7. `tsc` + `bun run test` green; author eyeballs the panel (no browser-automation verification —
+**Phase 3 — Chat recording & playback track (after Phase 2)** 6. Types + container: `ChatRecordingEvent` in `src/types/chat.ts`; add `chatEvents?` to `DeltaRecording` (`deltaTypes.ts`). 7. Capture: `appendChatDelta` in `recordingSession.ts` + `chatRecording.ts` emitting insert/remove deltas (coalesced ~10 Hz) and periodic checkpoints while a session records. 8. Codec: `SEGMENT_KIND.chat = 9` + the encode line, decode case, and cluster check; add a round-trip test. 9. Replay: `replayState/chat.ts` — reducer from the nearest checkpoint (mirrors the `frames` keyframe+delta apply), wire into the replay tick; `AgentPanel` read-only replay mode.
+
+**Phase 4 — Hardening** 10. Unit tests per tool (fake store), a loop test (mocked SDK stream), credential-handling test, a chat-codec round-trip + chat-replay test. 11. `tsc` + `bun run test` green; author eyeballs the panel (no browser-automation verification —
 per project convention).
 
 Each tool + the loop should have a focused unit test; the tools are the natural unit of parallel
@@ -400,10 +500,15 @@ work.
 3. **Approval gate:** none (pi-style) vs. a confirm on `bash`/`deleteFile`?
 4. **Credential storage default:** memory-only (re-enter each session) vs. `sessionStorage` vs.
    opt-in `localStorage`?
-5. **Recording integration now or later:** wire agent edits into the dmp content-delta stream in
-   v1, or ship the agent standalone and add recording capture as a follow-up?
+5. **Checkpoint cadence:** how often to emit a chat `checkpoint` seek-anchor — every ~30 s of
+   wall-clock, every _K_ messages, or both? (Delta encoding is decided; this only tunes seek
+   granularity vs. size.)
+6. **Agent edits as keystrokes:** replay agent file edits as content-delta "typing" (wire into the
+   dmp stream) in v1, or accept file-state jumps and defer (see §9.1)?
 
-_Decided: model default is **`claude-haiku-4-5`** (Haiku 4.5), user-switchable up to Sonnet/Opus._
+_Decided: model default is **`claude-haiku-4-5`** (Haiku 4.5), user-switchable up to Sonnet/Opus.
+Chat recording/playback is **delta-based** — insert/remove deltas + sparse corrective checkpoints, never
+full-snapshot-per-event._
 
 ## 12. Appendix — pi source references
 
