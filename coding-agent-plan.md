@@ -487,7 +487,7 @@ Ordered by dependency; independent streams marked **∥** can be built in parall
 
 **Phase 3 — Chat recording & playback track (after Phase 2)** 6. Types + container: `ChatRecordingEvent` in `src/types/chat.ts`; add `chatEvents?` to `DeltaRecording` (`deltaTypes.ts`). 7. Capture: `appendChatDelta` in `recordingSession.ts` + `chatRecording.ts` emitting insert/remove deltas (coalesced ~10 Hz) and periodic checkpoints while a session records. 8. Codec: `SEGMENT_KIND.chat = 9` + the encode line, decode case, and cluster check; add a round-trip test. 9. Replay: `replayState/chat.ts` — reducer from the nearest checkpoint (mirrors the `frames` keyframe+delta apply), wire into the replay tick; `AgentPanel` read-only replay mode.
 
-**Phase 4 — Hardening** 10. Unit tests per tool (fake store), a loop test (mocked SDK stream), credential-handling test, a chat-codec round-trip + chat-replay test. 11. `tsc` + `bun run test` green; author eyeballs the panel (no browser-automation verification —
+**Phase 4 — Hardening** 10. Unit tests per tool (fake store), a loop test (mocked SDK stream), credential-handling test, a chat-codec round-trip + chat-replay test. 11. `bun run typecheck` + `bun run test` green; author eyeballs the panel (no browser-automation verification —
 per project convention).
 
 Each tool + the loop should have a focused unit test; the tools are the natural unit of parallel
@@ -518,6 +518,70 @@ full-snapshot-per-event._
 - Anthropic transport: `packages/ai/src/api/anthropic-messages.ts`,
   `providers/anthropic.ts`, `env-api-keys.ts`
 - CLI shape: `packages/coding-agent/src/{cli,main}.ts`, `src/cli/args.ts`
+
+## 13. Implementation handoff (read before building)
+
+De-risking notes for whoever builds this. None change the design — they pin seams the plan leaves
+implicit, so an implementer needn't guess.
+
+**Types to define first (referenced above but not yet specified):**
+
+- `ChatMessage` (used by `ChatCheckpoint`): make it the Anthropic wire shape so the loop and the
+  recorder share one type — a structural clone of the loop's `messages` (`Anthropic.MessageParam[]`)
+  plus a stable per-message `id` for `tool_use`/`tool_result` correlation and `remove` targeting.
+- `Tool`: `{ name; description; input_schema; execute(input, ctx): Promise<{ content: string |
+ContentBlock[]; is_error?: boolean }> }`. `ctx` carries the workspace store, a WebContainer
+  accessor, and the loop's `AbortSignal`.
+- `workspaceFs.ts` surface (the shared seam every tool + the recorder use): `readFile(path)`,
+  `listDir(path?)`, `exists(path)`, `writeFile(path, content, encoding?)`, and `mutate(event,
+payload)` (thin wrapper over `store.trigger`).
+
+**Where the chat track wires into replay (named, not "the replay tick"):**
+
+- Add `getChatReplayResult({ chatEvents, currentTime, lastAppliedIndex })` in
+  `src/core/src/machine/replayState/chat.ts`; export from
+  [`replayState/index.ts`](src/core/src/machine/replayState/index.ts); consume in
+  [`replayActions.ts`](src/core/src/machine/replayActions.ts) next to the `getRuntimeReplayResult`
+  call (~L775).
+- **It is not a copy of `runtime.ts`.** Runtime returns "the latest snapshot"; chat must **fold** —
+  from the nearest `checkpoint ≤ currentTime`, apply every `ChatDelta` up to `currentTime` and return
+  the materialized transcript. Seeking backward past `lastAppliedIndex` re-folds from the preceding
+  checkpoint. `AgentPanel` reads live-vs-replay from the machine's play state (same signal the other
+  panels use) and renders the folded transcript read-only.
+
+**Emit chat deltas at these loop points** (§5.2): `message_start` on stream start · `content` (dmp)
+on each `stream.on("text")` chunk, coalesced ~10 Hz · `tool_use` **before** invoking the tool (so
+its order precedes the workspace mutation it triggers) · `tool_result` after each tool ·
+`message_end` on `finalMessage()` · `status` on state changes. Chat and workspace ride one clock, so
+this ordering is exactly what aligns them on replay.
+
+**Codec compatibility:** `SEGMENT_KIND.chat = 9` + optional `chatEvents` needs **no format-version
+bump** — tracks are optional segments; old `.ne` files decode with `chatEvents: undefined`. Confirm
+the decoder skips unrecognized segment kinds (so a newer recording won't crash an older build), and
+add a codec round-trip test both with and without `chatEvents`. **Dedup:** unlike the runtime/
+workspace tracks, chat deltas are each a real change — **do not dedup** (except idempotent `status`
+repeats). Default checkpoint cadence: every `message_end` and every ~200 deltas (tunable, §11.5).
+
+**Repo conventions (so the handoff is self-contained):**
+
+- Package manager is **bun** — never npm/yarn/pnpm. Gate on `bun run typecheck` (`tsc -b
+tsconfig.json`) + `bun run test` (`vp test`), not bare `tsc`/`vitest`.
+- **Do not bump xstate** (pinned 5.32.2; newer crashes tsgo typecheck). Agent store =
+  `@xstate/store-react` `createStore`, modeled on [`apiClientStore.ts`](src/stores/apiClientStore.ts).
+- **React Compiler is on:** no `useCallback`/`useMemo`; but a `use*` function with zero hook calls
+  gets no memoization — keep `AgentPanel`'s hooks real.
+- dmp: `getDmpCodec()` singleton; reuse `ContentDelta { delta: Uint8Array }` for chat `content`
+  deltas.
+
+**Definition of done (acceptance):**
+
+- Tools: unit-test each against a fake workspace store; `edit` rejects a non-unique `oldText`;
+  `glob`/`grep` skip base64 files.
+- Loop: mocked SDK stream → all `tool_result`s land in one user message, `is_error` propagates,
+  `maxIterations` caps, `AbortController` cancels mid-stream.
+- Chat track: codec round-trip (±`chatEvents`); reducer test — deltas rebuild the transcript,
+  seek-from-checkpoint equals full replay, `remove` truncates a retried turn; timeline test — a
+  `tool_use` delta and its workspace mutation replay at the same time.
 
 ---
 
