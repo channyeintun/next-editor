@@ -1,11 +1,12 @@
 import axios from "axios";
 import { apiClient } from "../apiClient";
-import type { AuthorSummary } from "../../db/types";
+import type { AuthorSummary, PlaylistSummary } from "../../db/types";
 import type { Lesson } from "../../../tube/src/types";
 
 export interface AuthorProfile {
   user: AuthorSummary;
   lessons: Lesson[];
+  playlists: PlaylistSummary[];
 }
 
 // null (not undefined — Query rejects undefined) when the username doesn't

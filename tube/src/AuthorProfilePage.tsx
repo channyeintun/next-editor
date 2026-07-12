@@ -5,6 +5,7 @@ import { AuthMenu, avatarProxyUrl, useAuth, useAuthorProfile } from "@next-edito
 import Breadcrumb from "./components/Breadcrumb";
 import MyLibraryGrid from "./components/MyLibraryGrid";
 import LessonCard from "./components/LessonCard";
+import PlaylistSummaryCard from "./components/PlaylistSummaryCard";
 import UsernameEditor from "./components/UsernameEditor";
 
 // /learn/@username (routed through LearnSlugRoute, which strips the "@"):
@@ -110,13 +111,38 @@ function PublicAuthorProfile({ username }: { username: string }) {
         </div>
       </div>
 
-      {data.lessons.length === 0 ? (
+      {data.playlists.length === 0 && data.lessons.length === 0 ? (
         <div className="flex justify-center py-20 text-slate-400">No published lessons yet.</div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 pb-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {data.lessons.map((lesson) => (
-            <LessonCard key={lesson.slug} lesson={lesson} />
-          ))}
+        <div className="space-y-10">
+          {data.playlists.length > 0 && (
+            <section>
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.06em] text-slate-400">
+                Playlists
+              </h2>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {data.playlists.map((playlist) => (
+                  <PlaylistSummaryCard key={playlist.slug} playlist={playlist} />
+                ))}
+              </div>
+            </section>
+          )}
+          {data.lessons.length > 0 && (
+            <section>
+              {/* Heading only when playlists share the page — otherwise the
+                  profile is just a lesson grid, same as before this section existed. */}
+              {data.playlists.length > 0 && (
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.06em] text-slate-400">
+                  Lessons
+                </h2>
+              )}
+              <div className="grid grid-cols-1 gap-5 pb-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {data.lessons.map((lesson) => (
+                  <LessonCard key={lesson.slug} lesson={lesson} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
     </Shell>

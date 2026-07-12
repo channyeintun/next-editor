@@ -30,6 +30,6 @@ export {
   useRemoveLessonFromPlaylist,
   useReorderPlaylistLessons,
 } from "./playlists/usePlaylists";
-export type { OwnedPlaylist, OwnedPlaylistWithMembership } from "../db/types";
+export type { OwnedPlaylist, OwnedPlaylistWithMembership, PlaylistSummary } from "../db/types";
 export { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./upload/thumbnailConstraints";
 export { resizeThumbnail } from "./upload/resizeThumbnail";

@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
 import { getUserByUsername, listPublishedLessonsByOwner } from "../../db/queries";
-import { lessonRowToLesson, userRowToAuthorSummary } from "../../db/types";
+import { listPublishedPlaylistsByOwner } from "../../db/playlistQueries";
+import {
+  lessonRowToLesson,
+  playlistRowToPlaylistSummary,
+  userRowToAuthorSummary,
+} from "../../db/types";
 
 // Mounted at /api/authors in worker/index.ts. Public, published-only — backs
 // the /learn/@username profile view for anyone but the profile's own owner
@@ -14,9 +19,13 @@ authorsRoute.get("/:username", async (c) => {
     return c.json({ error: "not found" }, 404);
   }
 
-  const rows = await listPublishedLessonsByOwner(c.env.DB, user.id);
+  const [lessonRows, playlistRows] = await Promise.all([
+    listPublishedLessonsByOwner(c.env.DB, user.id),
+    listPublishedPlaylistsByOwner(c.env.DB, user.id),
+  ]);
   return c.json({
     user: userRowToAuthorSummary(user),
-    lessons: rows.map(lessonRowToLesson),
+    lessons: lessonRows.map(lessonRowToLesson),
+    playlists: playlistRows.map(playlistRowToPlaylistSummary),
   });
 });

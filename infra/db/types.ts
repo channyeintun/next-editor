@@ -183,6 +183,32 @@ export function playlistRowToOwnedPlaylist(row: PlaylistRowWithCount): OwnedPlay
   };
 }
 
+/**
+ * Public playlist card shape for the author profile — like OwnedPlaylist but
+ * without the owner-only `id`/`updatedAt` (the public profile only links by
+ * slug and has no manage actions). `lessonCount` here is the published-member
+ * count (see listPublishedPlaylistsByOwner), matching what the public playlist
+ * page actually shows.
+ */
+export interface PlaylistSummary {
+  slug: string;
+  title: string;
+  description: string;
+  lessonCount: number;
+  /** Cover image — the first published member's thumbnail, or null. */
+  thumbnail: string | null;
+}
+
+export function playlistRowToPlaylistSummary(row: PlaylistRowWithCount): PlaylistSummary {
+  return {
+    slug: row.slug,
+    title: row.title,
+    description: row.description ?? "",
+    lessonCount: row.lesson_count,
+    thumbnail: row.first_lesson_thumbnail,
+  };
+}
+
 /** listOwnedPlaylistsForLesson's row shape — adds an EXISTS(...) membership flag. */
 export interface PlaylistRowWithMembership extends PlaylistRowWithCount {
   contains_lesson: number;

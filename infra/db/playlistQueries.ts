@@ -159,6 +159,38 @@ export async function listOwnedPlaylists(
   return result.results ?? [];
 }
 
+// Backs the public author profile (/learn/@username, for anyone but the
+// owner): the owner's playlists that currently have at least one published
+// member. Mirrors listPublishedLessonsByOwner's "published only" convention —
+// lesson_count here counts published members only (not every member like
+// listOwnedPlaylists), and a playlist with no currently-published lesson is
+// omitted entirely so the public profile never shows an empty/all-draft card.
+export async function listPublishedPlaylistsByOwner(
+  db: D1Database,
+  ownerId: string,
+): Promise<PlaylistRowWithCount[]> {
+  const result = await db
+    .prepare(
+      `SELECT playlists.*, (
+         SELECT COUNT(*) FROM playlist_lessons
+         JOIN lessons ON lessons.id = playlist_lessons.lesson_id
+         WHERE playlist_lessons.playlist_id = playlists.id AND lessons.status = 'published'
+       ) AS lesson_count,
+       ${FIRST_LESSON_THUMBNAIL_SUBQUERY}
+       FROM playlists
+       WHERE owner_id = ?
+         AND EXISTS (
+           SELECT 1 FROM playlist_lessons
+           JOIN lessons ON lessons.id = playlist_lessons.lesson_id
+           WHERE playlist_lessons.playlist_id = playlists.id AND lessons.status = 'published'
+         )
+       ORDER BY updated_at DESC`,
+    )
+    .bind(ownerId)
+    .all<PlaylistRowWithCount>();
+  return result.results ?? [];
+}
+
 // Backs the "Add to playlist" popover: every one of the owner's playlists,
 // each flagged with whether `lessonId` is already a member — one request
 // instead of the popover fetching each playlist's full membership to figure
