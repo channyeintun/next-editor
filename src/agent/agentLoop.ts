@@ -14,7 +14,7 @@ import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatDelta, ChatItem } from "../types/chat";
 import { outputMessageText, toResponsesInput } from "../types/chat";
 import { createContentDelta } from "../core/src/utils/frameDelta";
-import { getDmpCodec, isDmpCodecLoaded, loadDmpCodec } from "../storage/dmpCodec/dmpCodec";
+import { isDmpCodecLoaded, loadDmpCodec } from "../storage/dmpCodec/dmpCodec";
 
 const MAX_OUTPUT_TOKENS = 32000;
 const MAX_STEPS = 30;
@@ -85,7 +85,6 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
   if (!isDmpCodecLoaded()) {
     await loadDmpCodec();
   }
-  getDmpCodec();
 
   const project = getProject(workspace);
 
