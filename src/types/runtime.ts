@@ -1,4 +1,4 @@
-export type RuntimeDockTab = "runner" | "terminal" | "console";
+export type RuntimeDockTab = "runner" | "terminal" | "console" | "agent";
 export type RuntimeTerminalScrollLines = Record<string, number>;
 
 export interface RuntimeTerminalSessionSnapshot {

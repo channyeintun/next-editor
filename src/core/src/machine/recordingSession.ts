@@ -6,6 +6,7 @@ import type {
 } from "../slides";
 import type { WhiteboardEvent } from "../whiteboard";
 import type { RuntimeRecordingSnapshot } from "../../../types/runtime";
+import type { ChatCheckpoint, ChatDelta } from "../../../types/chat";
 import {
   areWorkspaceSnapshotsEqual,
   toWorkspaceDeltaSnapshot,
@@ -122,6 +123,33 @@ export function appendRuntimeRecordingEvent(
   session.runtimeEvents.push({
     timestamp: getRecordingTimestamp(session),
     snapshot,
+  });
+  return true;
+}
+
+/**
+ * Unlike the runtime/workspace appenders, chat deltas are each a real change and
+ * are never deduplicated — except a `status` repeat, which is idempotent (the
+ * loop may emit the same status across several no-op ticks).
+ */
+export function appendChatDelta(
+  session: RecordingSession,
+  event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint },
+): boolean {
+  const previousEvent = session.chatEvents[session.chatEvents.length - 1]?.event;
+
+  if (
+    previousEvent &&
+    previousEvent.k === "status" &&
+    event.k === "status" &&
+    previousEvent.status === event.status
+  ) {
+    return false;
+  }
+
+  session.chatEvents.push({
+    timestamp: getRecordingTimestamp(session),
+    event,
   });
   return true;
 }

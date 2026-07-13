@@ -13,6 +13,7 @@ import { normalizeDeltaFrame, normalizeRecordingData } from "../../core/src/util
 import type { RuntimeRecordingEvent } from "../../types/runtime";
 import type { WorkspaceRecordingEvent } from "../../types/workspace";
 import type { WhiteboardEvent } from "../../core/src/whiteboard";
+import type { ChatRecordingEvent } from "../../types/chat";
 import {
   decodeRecords,
   findFooterStart,
@@ -124,6 +125,7 @@ interface DecodedStreamState {
   runtimeEvents: RuntimeRecordingEvent[];
   cursorEvents: CursorRecordingEvent[];
   whiteboardEvents: WhiteboardEvent[];
+  chatEvents: ChatRecordingEvent[];
   clusterSummaries: RecordingClusterMeta[];
 }
 
@@ -158,6 +160,7 @@ function assembleRecording(state: DecodedStreamState): Recording {
     runtimeEvents: state.runtimeEvents.length > 0 ? state.runtimeEvents : undefined,
     cursorEvents: state.cursorEvents.length > 0 ? state.cursorEvents : undefined,
     whiteboardEvents: state.whiteboardEvents.length > 0 ? state.whiteboardEvents : undefined,
+    chatEvents: state.chatEvents.length > 0 ? state.chatEvents : undefined,
     captions: meta.captions,
     captionFiles: meta.captionFiles,
     slides: meta.slides,
@@ -217,6 +220,7 @@ function decodeSegments(bytes: Uint8Array): Recording {
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const cursorEvents: CursorRecordingEvent[] = [];
   const whiteboardEvents: WhiteboardEvent[] = [];
+  const chatEvents: ChatRecordingEvent[] = [];
   const clusterMap = new Map<number, RecordingClusterMeta>();
   let hasSegments = false;
   let maxSegmentTimeMs = meta.duration;
@@ -271,6 +275,9 @@ function decodeSegments(bytes: Uint8Array): Recording {
       case SEGMENT_KIND.whiteboard:
         whiteboardEvents.push(...decodeRecords<WhiteboardEvent>(segment.payload));
         break;
+      case SEGMENT_KIND.chat:
+        chatEvents.push(...decodeRecords<ChatRecordingEvent>(segment.payload));
+        break;
     }
   }
 
@@ -283,6 +290,7 @@ function decodeSegments(bytes: Uint8Array): Recording {
   runtimeEvents.sort((left, right) => left.timestamp - right.timestamp);
   cursorEvents.sort((left, right) => left.timestamp - right.timestamp);
   whiteboardEvents.sort((left, right) => left.timestamp - right.timestamp);
+  chatEvents.sort((left, right) => left.timestamp - right.timestamp);
 
   return assembleRecording({
     meta,
@@ -298,6 +306,7 @@ function decodeSegments(bytes: Uint8Array): Recording {
     runtimeEvents,
     cursorEvents,
     whiteboardEvents,
+    chatEvents,
     clusterSummaries: Array.from(clusterMap.values()),
   });
 }
@@ -358,6 +367,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const cursorEvents: CursorRecordingEvent[] = [];
   const whiteboardEvents: WhiteboardEvent[] = [];
+  const chatEvents: ChatRecordingEvent[] = [];
   const clusterMap = new Map<number, RecordingClusterMeta>();
   // Segments arrive in stream (= encode) order, so one carry map per reader mirrors
   // the writer's stripper state (see workspaceEventDedup.ts).
@@ -472,6 +482,11 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         commit = () => whiteboardEvents.push(...records);
         break;
       }
+      case SEGMENT_KIND.chat: {
+        const records = decodeRecords<ChatRecordingEvent>(payload);
+        commit = () => chatEvents.push(...records);
+        break;
+      }
       default:
         commit = () => {};
     }
@@ -562,6 +577,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         runtimeEvents: runtimeEvents.slice(),
         cursorEvents: cursorEvents.slice(),
         whiteboardEvents: whiteboardEvents.slice(),
+        chatEvents: chatEvents.slice(),
         clusterSummaries: Array.from(clusterMap.values()),
       });
     },

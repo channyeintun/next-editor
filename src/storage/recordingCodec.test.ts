@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Recording } from "../core/src";
-import { createFrameDelta, reconstructFrameAtIndex } from "../core/src/utils/frameDelta";
+import {
+  createContentDelta,
+  createFrameDelta,
+  reconstructFrameAtIndex,
+} from "../core/src/utils/frameDelta";
 import { decompressBinaryToRecordings } from "./recordingCodec";
 import {
   createStreamingRecordingReader,
@@ -131,6 +135,59 @@ describe("recordingCodec", () => {
 
     expect(decoded.whiteboardEvents).toEqual(recording.whiteboardEvents);
     expect(decoded.tracks?.some((track) => track.kind === "whiteboard")).toBe(true);
+  });
+
+  it("round trips chat events (deltas + a checkpoint)", async () => {
+    const contentDelta = createContentDelta("", "Hello!");
+    expect(contentDelta).not.toBeNull();
+
+    const recording = createRecording({
+      duration: 800,
+      chatEvents: [
+        { timestamp: 0, event: { k: "message_start", id: "msg-1", role: "user" } },
+        { timestamp: 5, event: { k: "content", delta: contentDelta! } },
+        { timestamp: 20, event: { k: "message_start", id: "msg-2", role: "assistant" } },
+        {
+          timestamp: 30,
+          event: {
+            k: "tool_call",
+            id: "tool-1",
+            callId: "call-1",
+            name: "read",
+            arguments: '{"path":"src/App.tsx"}',
+          },
+        },
+        {
+          timestamp: 50,
+          event: { k: "tool_result", callId: "call-1", output: "file contents" },
+        },
+        {
+          timestamp: 60,
+          event: {
+            k: "checkpoint",
+            state: {
+              items: [{ kind: "message", id: "msg-1", role: "user", text: "Hello!" }],
+              status: "streaming",
+            },
+          },
+        },
+      ],
+    });
+
+    const encoded = await encodeRecordingToStream(recording);
+    const [decoded] = await decompressBinaryToRecordings(encoded);
+
+    expect(decoded.chatEvents).toEqual(recording.chatEvents);
+    expect(decoded.tracks?.some((track) => track.kind === "chat")).toBe(true);
+  });
+
+  it("decodes a recording without chatEvents (no format-version bump needed)", async () => {
+    const recording = createRecording({ duration: 800 });
+
+    const encoded = await encodeRecordingToStream(recording);
+    const [decoded] = await decompressBinaryToRecordings(encoded);
+
+    expect(decoded.chatEvents).toBeUndefined();
   });
 
   it("incremental streaming reader matches a one-shot decode of the same bytes", async () => {

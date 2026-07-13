@@ -21,6 +21,9 @@ export type { WorkspaceReplayResult } from "./workspace";
 export { getRuntimeReplayResult } from "./runtime";
 export type { RuntimeReplayResult } from "./runtime";
 
+export { getChatReplayResult } from "./chat";
+export type { ChatReplayResult } from "./chat";
+
 export { getSlideReplayResult } from "./slide";
 export type { SlideReplayApplication, SlideReplayResult } from "./slide";
 

@@ -173,6 +173,9 @@ export function deriveRecordingTracks(recording: Recording): RecordingTrackMeta[
   if (recording.whiteboardEvents?.length) {
     tracks.push({ id: "whiteboard", kind: "whiteboard", durationMs: recording.duration });
   }
+  if (recording.chatEvents?.length) {
+    tracks.push({ id: "chat", kind: "chat", durationMs: recording.duration });
+  }
   const hasInlineAudio = recording.audioBlob instanceof Blob && recording.audioBlob.size > 0;
   // External audio (sibling file/URL) carries no blob but is still an audio track.
   if (hasInlineAudio || recording.audioFile || recording.audioUrl) {

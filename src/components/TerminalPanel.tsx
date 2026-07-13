@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import { ChevronDown, ChevronUp, Diamond, Plus, Settings, SquareTerminal, X } from "lucide-react";
+import {
+  Bot,
+  ChevronDown,
+  ChevronUp,
+  Diamond,
+  Plus,
+  Settings,
+  SquareTerminal,
+  X,
+} from "lucide-react";
+import AgentPanel from "./agent/AgentPanel";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import {
   selectActiveTab,
@@ -100,6 +110,11 @@ const DOCK_TABS: RuntimeDockTabConfig[] = [
     id: "console",
     label: "Console",
     icon: <SquareTerminal size={13} />,
+  },
+  {
+    id: "agent",
+    label: "Agent",
+    icon: <Bot size={14} />,
   },
 ];
 
@@ -625,6 +640,8 @@ function TerminalPanel() {
                 />
               </div>
             )}
+
+            {displayActiveTab === "agent" && <AgentPanel />}
           </>
         )}
       </div>

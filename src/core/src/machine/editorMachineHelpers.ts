@@ -51,6 +51,7 @@ const WORKSPACE_TRACK_ID = "workspace";
 const RUNTIME_TRACK_ID = "runtime";
 const CURSOR_TRACK_ID = "cursor";
 const WHITEBOARD_TRACK_ID = "whiteboard";
+const CHAT_TRACK_ID = "chat";
 export const AUDIO_TRACK_ID = "audio";
 export const CAMERA_TRACK_ID = "camera";
 
@@ -120,6 +121,7 @@ export const buildTrackMetadata = ({
   hasRuntimeEvents,
   hasCursorEvents,
   hasWhiteboardEvents,
+  hasChatEvents,
   audioMimeType,
   audioSource,
   audioStartOffsetMs,
@@ -136,6 +138,7 @@ export const buildTrackMetadata = ({
   hasRuntimeEvents: boolean;
   hasCursorEvents: boolean;
   hasWhiteboardEvents: boolean;
+  hasChatEvents: boolean;
   audioMimeType?: string;
   audioSource?: Recording["audioSource"];
   audioStartOffsetMs: number;
@@ -170,6 +173,9 @@ export const buildTrackMetadata = ({
   }
   if (hasWhiteboardEvents) {
     tracks.push({ id: WHITEBOARD_TRACK_ID, kind: "whiteboard", durationMs });
+  }
+  if (hasChatEvents) {
+    tracks.push({ id: CHAT_TRACK_ID, kind: "chat", durationMs });
   }
   if (hasAudio) {
     tracks.push({
@@ -466,6 +472,7 @@ export const APPLY_REPLAY_STATE_ACTIONS = [
   "applyPreviewEventsAtTime",
   "applySlideEventsAtTime",
   "applyWhiteboardEventsAtTime",
+  "applyChatEventsAtTime",
 ] as const;
 
 export const APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS = [

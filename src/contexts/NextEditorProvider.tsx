@@ -22,6 +22,7 @@ import { createRecordingStorage } from "../storage/RecordingStorage";
 import { saveScreenRecordingLocally } from "../storage/screenRecordingSave";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
 import type { WorkspaceRecordingSnapshot } from "../types/workspace";
+import { getAgentStore } from "../agent/agentStore";
 
 interface NextEditorProviderProps {
   children: React.ReactNode;
@@ -66,6 +67,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handleWorkspaceEvent: handleWorkspaceEventBase,
     handleRuntimeEvent,
     handleWhiteboardEvent,
+    handleChatEvent,
   } = useNextEditorActorActions(actorRef);
   useNextEditorInteractionEffects(actorRef, config);
 
@@ -125,6 +127,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handleWorkspaceEvent,
     handleRuntimeEvent,
     handleWhiteboardEvent,
+    handleChatEvent,
     clearRecording,
     exportAsFile,
     importFromFile,
@@ -297,6 +300,9 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     },
     applyRuntimeSnapshot: (snapshot) => {
       runtimePanelStore.trigger.setPlaybackSnapshot({ snapshot });
+    },
+    applyChatSnapshot: (snapshot) => {
+      getAgentStore().trigger.applyReplaySnapshot({ snapshot });
     },
     getWhiteboardState: () => whiteboardStore.getSnapshot().context.scene,
     applyWhiteboardState: (scene) => {

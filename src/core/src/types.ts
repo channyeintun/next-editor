@@ -13,6 +13,7 @@ import type { EditorActorRef } from "./useNextEditor";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../types/workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "./whiteboard";
+import type { ChatCheckpoint, ChatRecordingEvent } from "../../types/chat";
 
 /**
  * Audio storage placeholder for serialization
@@ -56,7 +57,8 @@ export type RecordingTrackKind =
   | "workspace"
   | "runtime"
   | "slide"
-  | "whiteboard";
+  | "whiteboard"
+  | "chat";
 
 export interface RecordingTrackMeta {
   id: string;
@@ -204,6 +206,7 @@ export interface Recording {
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];
   whiteboardEvents?: WhiteboardEvent[];
+  chatEvents?: ChatRecordingEvent[];
   captions?: CaptionTrack[];
   slides?: Slide[];
   tracks?: RecordingTrackMeta[];
@@ -313,6 +316,10 @@ export interface UseNextEditorConfig {
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
   applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
+
+  // Chat (coding-agent) replay — folded from the nearest checkpoint, not a
+  // "latest snapshot" like runtime/workspace; see replayState/chat.ts.
+  applyChatSnapshot?: (snapshot: ChatCheckpoint) => void;
 
   // Whiteboard state callbacks
   getWhiteboardState?: () => WhiteboardSceneState | null;
