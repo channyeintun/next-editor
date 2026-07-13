@@ -226,6 +226,11 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
     let pendingText = "";
     let snapshotText = "";
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    // tool_use blocks that were streamed (folded into the transcript) this
+    // iteration. On the happy path they each get a real tool_result below; on an
+    // interrupt/error before that, they'd otherwise be left dangling — see the
+    // catch handler.
+    const streamedToolUseIds: string[] = [];
 
     const flush = () => {
       if (!pendingText) {
@@ -250,6 +255,7 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
 
     stream.on("contentBlock", (block) => {
       if (block.type === "tool_use") {
+        streamedToolUseIds.push(block.id);
         onDelta({ k: "tool_use", toolUseId: block.id, name: block.name, input: block.input });
       }
     });
@@ -264,6 +270,21 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
       }
       flush();
       onDelta({ k: "message_end", id: assistantMessageId });
+
+      // The stream failed after one or more tool_use blocks were already streamed
+      // and folded, but before their tools ran — so the transcript now holds a
+      // tool_use with no matching tool_result. Left as-is, that history feeds the
+      // *next* run and Anthropic rejects the request (every tool_use must be
+      // answered). Close each unresolved tool_use with a synthetic error result so
+      // the live transcript, the recording, and the continued conversation stay valid.
+      for (const toolUseId of streamedToolUseIds) {
+        onDelta({
+          k: "tool_result",
+          toolUseId,
+          content: "Interrupted before this tool ran.",
+          isError: true,
+        });
+      }
 
       if (error instanceof APIUserAbortError) {
         onDelta({ k: "status", status: "done" });

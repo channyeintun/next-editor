@@ -313,4 +313,45 @@ describe("runAgentLoop", () => {
     expect(deltas.filter((d) => d.k === "status").at(-1)).toEqual({ k: "status", status: "done" });
     expect(deltas.some((d) => d.k === "status" && d.status === "error")).toBe(false);
   });
+
+  it("closes a streamed tool_use with a synthetic result when the turn is aborted mid-stream", async () => {
+    const controller = new AbortController();
+    const streamFn = vi
+      .fn<(body: { messages: Anthropic.MessageParam[] }) => FakeStream>()
+      .mockReturnValue(
+        // The tool_use block finished streaming (contentBlock fires, folding it into
+        // the transcript) but the turn is then aborted before its tool ever runs.
+        createFakeStream(
+          makeMessage({
+            stop_reason: "tool_use",
+            content: [toolUseBlock("call-aborted", "read", { path: "index.html" })],
+          }),
+          new APIUserAbortError(),
+        ),
+      );
+    vi.mocked(createAnthropicClient).mockReturnValue({
+      messages: { stream: streamFn },
+    } as unknown as Anthropic);
+
+    const { deltas, ...options } = baseOptions();
+    await runAgentLoop({
+      ...options,
+      signal: controller.signal,
+      tools: [],
+      prompt: "read then cancel",
+      onDelta: (d) => deltas.push(d),
+    });
+
+    // Every streamed tool_use must be answered, or the next request 400s.
+    const toolUseIds = deltas.filter((d) => d.k === "tool_use").map((d) => d.toolUseId);
+    const answeredIds = new Set(
+      deltas.filter((d) => d.k === "tool_result").map((d) => d.toolUseId),
+    );
+    expect(toolUseIds).toEqual(["call-aborted"]);
+    expect(toolUseIds.every((id) => answeredIds.has(id))).toBe(true);
+    expect(
+      deltas.some((d) => d.k === "tool_result" && d.toolUseId === "call-aborted" && d.isError),
+    ).toBe(true);
+    expect(deltas.filter((d) => d.k === "status").at(-1)).toEqual({ k: "status", status: "done" });
+  });
 });
