@@ -279,13 +279,12 @@ function TerminalPanel() {
       }
 
       appendConsoleLine(message);
-      setActiveTab("console");
     };
 
     return () => {
       consoleAppender.current = null;
     };
-  }, [appendConsoleLine, consoleAppender, isPlaybackSnapshotActive, setActiveTab]);
+  }, [appendConsoleLine, consoleAppender, isPlaybackSnapshotActive]);
 
   useEffect(() => {
     consoleOpener.current = () => {
@@ -351,7 +350,6 @@ function TerminalPanel() {
     appendConsoleLine(
       `[preview:${latestPreviewMessage.kind}]${location} ${latestPreviewMessage.text}`.trim(),
     );
-    setActiveTab("console");
   }, [appendConsoleLine, isPlaybackSnapshotActive, latestPreviewMessage]);
 
   const runtimeEventState: RuntimeEventState = {
