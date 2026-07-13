@@ -15,6 +15,7 @@ import type { ChatDelta, ChatImage, ChatItem } from "../types/chat";
 import { outputMessageText, toEasyInputMessage, toResponsesInput } from "../types/chat";
 import { createContentDelta } from "../core/src/utils/frameDelta";
 import { isDmpCodecLoaded, loadDmpCodec } from "../storage/dmpCodec/dmpCodec";
+import { AgentProviderError } from "./agentError";
 
 const MAX_OUTPUT_TOKENS = 32000;
 const MAX_STEPS = 30;
@@ -149,6 +150,33 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
     stopWhen: stepCountIs(maxSteps),
   });
 
+  // getItemsStream intentionally filters terminal API events. Observe the full
+  // stream in parallel so a response.failed event's structured provider error is
+  // still available if the SDK later throws only a generic message.
+  let providerError: unknown = null;
+  const providerErrorObserver =
+    "getFullResponsesStream" in result && typeof result.getFullResponsesStream === "function"
+      ? (async () => {
+          try {
+            for await (const event of result.getFullResponsesStream()) {
+              if (event.type === "response.failed") {
+                const failure = {
+                  error: event.response.error,
+                  openrouterMetadata: event.response.openrouterMetadata,
+                };
+                providerError = providerError ? [providerError, failure] : failure;
+              } else if (event.type === "error") {
+                providerError = providerError ? [providerError, event] : event;
+              }
+            }
+          } catch (observerError) {
+            // The item stream remains authoritative. Retain this only as extra
+            // diagnostic context if it is the sole error the observer saw.
+            providerError ??= observerError;
+          }
+        })()
+      : Promise.resolve();
+
   const onAbort = () => {
     void result.cancel();
   };
@@ -233,11 +261,18 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
       onDelta({ k: "status", status: "done" });
       return;
     }
+    await providerErrorObserver;
     onDelta({ k: "status", status: "error" });
-    throw error;
+    throw providerError ? new AgentProviderError(error, providerError) : error;
   }
 
   signal.removeEventListener("abort", onAbort);
+  await providerErrorObserver;
+  if (providerError) {
+    balanceUnansweredCalls();
+    onDelta({ k: "status", status: "error" });
+    throw new AgentProviderError(new Error("Provider returned an error."), providerError);
+  }
   balanceUnansweredCalls();
 
   if (onUsage) {

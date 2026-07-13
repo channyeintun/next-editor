@@ -5,6 +5,7 @@ import { createChatRecorder, type ChatEventHandler } from "./chatRecording";
 import type { AgentModelId, ToolConfirmationRequest } from "./types";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatImage } from "../types/chat";
+import { formatAgentError } from "./agentError";
 
 export interface PendingConfirmation {
   id: number;
@@ -14,6 +15,7 @@ export interface PendingConfirmation {
 interface AgentSessionContext {
   pending: PendingConfirmation[];
   isRunning: boolean;
+  canRetry: boolean;
 }
 
 // Run state that must outlive the AgentPanel component — the panel mounts and
@@ -26,9 +28,11 @@ interface AgentSessionContext {
 let abortController: AbortController | null = null;
 const resolvers = new Map<number, (approved: boolean) => void>();
 let nextConfirmationId = 0;
+let retryOptions: (Omit<StartAgentRunOptions, "apiKey" | "model"> & { fromId?: string }) | null =
+  null;
 
 const agentSessionStore = createStore({
-  context: { pending: [], isRunning: false } as AgentSessionContext,
+  context: { pending: [], isRunning: false, canRetry: false } as AgentSessionContext,
   on: {
     setRunning: (context, event: { isRunning: boolean }) => ({
       ...context,
@@ -43,6 +47,10 @@ const agentSessionStore = createStore({
       pending: context.pending.filter((item) => item.id !== event.id),
     }),
     clear: (context) => ({ ...context, pending: [] }),
+    setCanRetry: (context, event: { canRetry: boolean }) => ({
+      ...context,
+      canRetry: event.canRetry,
+    }),
   },
 });
 
@@ -53,15 +61,32 @@ export function getAgentSessionStore() {
 export const selectPending = (context: AgentSessionContext): PendingConfirmation[] =>
   context.pending;
 export const selectIsRunning = (context: AgentSessionContext): boolean => context.isRunning;
+export const selectCanRetry = (context: AgentSessionContext): boolean => context.canRetry;
 
 // Passed to the loop as `requestConfirmation` — enqueues a pending item the panel
 // renders and resolves via `resolveConfirmation`.
-function requestConfirmation(request: ToolConfirmationRequest): Promise<boolean> {
+function requestConfirmation(
+  request: ToolConfirmationRequest,
+  signal: AbortSignal,
+): Promise<boolean> {
   return new Promise((resolve) => {
     nextConfirmationId += 1;
     const id = nextConfirmationId;
-    resolvers.set(id, resolve);
+    let settled = false;
+    const onAbort = () => resolveConfirmation(id, false);
+    resolvers.set(id, (approved) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      resolve(approved);
+    });
     agentSessionStore.trigger.enqueue({ item: { id, request } });
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) {
+      resolveConfirmation(id, false);
+    }
   });
 }
 
@@ -76,10 +101,9 @@ export function resolveConfirmation(id: number, approved: boolean): void {
 }
 
 function settlePendingConfirmations(approved: boolean): void {
-  for (const resolve of resolvers.values()) {
-    resolve(approved);
+  for (const id of resolvers.keys()) {
+    resolveConfirmation(id, approved);
   }
-  resolvers.clear();
   agentSessionStore.trigger.clear();
 }
 
@@ -97,12 +121,42 @@ export interface StartAgentRunOptions {
   handleChatEvent: ChatEventHandler;
 }
 
+export function clearAgentRetry(): void {
+  retryOptions = null;
+  agentSessionStore.trigger.setCanRetry({ canRetry: false });
+}
+
+export async function retryAgentRun(options: {
+  apiKey: string;
+  model: AgentModelId;
+}): Promise<void> {
+  if (agentSessionStore.getSnapshot().context.isRunning || !retryOptions) {
+    return;
+  }
+
+  const retry = retryOptions;
+  clearAgentRetry();
+
+  if (retry.fromId) {
+    const delta = { k: "remove", fromId: retry.fromId } as const;
+    getAgentStore().trigger.applyDelta({ delta });
+    retry.handleChatEvent(delta);
+  }
+
+  await runAgentRun({ ...retry, ...options });
+}
+
 /** Drives one user turn; no-ops if a run is already in flight (the panel guards on `isRunning`). */
 export async function startAgentRun(options: StartAgentRunOptions): Promise<void> {
   if (agentSessionStore.getSnapshot().context.isRunning) {
     return;
   }
 
+  clearAgentRetry();
+  await runAgentRun(options);
+}
+
+async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
   const agentStore = getAgentStore();
   agentStore.trigger.setError({ message: null });
 
@@ -122,7 +176,7 @@ export async function startAgentRun(options: StartAgentRunOptions): Promise<void
       prompt: options.prompt,
       images: options.images,
       signal: controller.signal,
-      requestConfirmation,
+      requestConfirmation: (request) => requestConfirmation(request, controller.signal),
       onDelta: (delta) => {
         agentStore.trigger.applyDelta({ delta });
         recordChatDelta(delta);
@@ -133,8 +187,17 @@ export async function startAgentRun(options: StartAgentRunOptions): Promise<void
     });
   } catch (error) {
     agentStore.trigger.setError({
-      message: error instanceof Error ? error.message : String(error),
+      message: formatAgentError(error),
     });
+    const firstTurnItem = agentStore.getSnapshot().context.items[history.length];
+    retryOptions = {
+      workspace: options.workspace,
+      prompt: options.prompt,
+      images: options.images,
+      handleChatEvent: options.handleChatEvent,
+      ...(firstTurnItem ? { fromId: firstTurnItem.id } : {}),
+    };
+    agentSessionStore.trigger.setCanRetry({ canRetry: true });
   } finally {
     abortController = null;
     // Settle any confirmation still pending on abort/error as declined, so a tool

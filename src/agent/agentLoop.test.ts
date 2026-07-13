@@ -89,6 +89,39 @@ function baseOptions() {
 }
 
 describe("runAgentLoop", () => {
+  it("preserves structured details from a provider failure event", async () => {
+    const { deltas, ...options } = baseOptions();
+    const providerError = {
+      code: "server_error",
+      message: "Provider returned error",
+      metadata: { raw: '{"error":{"message":"Model is overloaded"}}' },
+    };
+    const callModel = (() => ({
+      getFullResponsesStream: async function* () {
+        yield {
+          type: "response.failed",
+          response: { error: providerError },
+        };
+      },
+      getItemsStream: async function* () {
+        yield { type: "provider_failure_pending" };
+        throw new Error("Response failed");
+      },
+      getResponse: async () => ({ usage: undefined }),
+      cancel: async () => {},
+    })) as unknown as NonNullable<RunAgentLoopOptions["callModel"]>;
+
+    await expect(
+      runAgentLoop({
+        ...options,
+        prompt: "hi",
+        callModel,
+        onDelta: (delta) => deltas.push(delta),
+      }),
+    ).rejects.toMatchObject({ providerError: { error: providerError } });
+    expect(deltas.at(-1)).toEqual({ k: "status", status: "error" });
+  });
+
   it("streams a plain text turn into message_start + content and ends done", async () => {
     const { deltas, ...options } = baseOptions();
     const { callModel } = fakeCallModel([messageItem("m1", "Hello there")]);

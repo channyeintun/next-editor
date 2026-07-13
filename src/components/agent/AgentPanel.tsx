@@ -1,6 +1,17 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import { Bot, Plus, Send, Settings, Square, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  Check,
+  Plus,
+  RotateCcw,
+  Send,
+  Settings,
+  ShieldCheck,
+  Square,
+  X,
+} from "lucide-react";
 import { WorkspaceStoreContext } from "../../stores/workspaceStore";
 import {
   getAgentStore,
@@ -20,7 +31,10 @@ import {
 } from "../../agent/credentials";
 import {
   getAgentSessionStore,
+  clearAgentRetry,
+  retryAgentRun,
   resolveConfirmation,
+  selectCanRetry,
   selectIsRunning,
   selectPending,
   startAgentRun,
@@ -178,6 +192,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   // dock tab switches / collapses that mount and unmount this panel — see agentSession.ts.
   const isRunning = useSelector(sessionStore, (s) => selectIsRunning(s.context));
   const pending = useSelector(sessionStore, (s) => selectPending(s.context));
+  const canRetry = useSelector(sessionStore, (s) => selectCanRetry(s.context));
 
   // While replaying a recording (and not live-recording over it), render the folded
   // chat track instead of the live agent store. A recording with no agent activity
@@ -245,11 +260,19 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
     stopAgentRun();
   };
 
+  const handleRetry = () => {
+    if (isBusy || !canRetry || !apiKey || isReplayActive) {
+      return;
+    }
+    void retryAgentRun({ apiKey, model });
+  };
+
   const handleNewChat = () => {
     if (isBusy || isReplayActive) {
       return;
     }
     agentStore.trigger.reset();
+    clearAgentRetry();
     setAttachmentError(null);
   };
 
@@ -345,35 +368,74 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                 ))}
               </div>
             )}
-            {error ? (
-              <div className="mt-2 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300">
-                {error}
+            {error && !isReplayActive ? (
+              <div
+                className="mt-3 rounded-lg border border-red-500/25 bg-red-500/[0.07] p-3"
+                role="alert"
+              >
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0 text-red-400" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-red-200">The agent hit an error</p>
+                    <pre className="mt-1 whitespace-pre-wrap wrap-break-word font-sans text-xs leading-5 text-red-300/90">
+                      {error}
+                    </pre>
+                    <p className="mt-2 text-[11px] text-slate-500">
+                      Try again. If it keeps failing, check the provider status or choose another
+                      model.
+                    </p>
+                  </div>
+                </div>
+                {canRetry ? (
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleRetry}
+                      disabled={isBusy || !apiKey}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#173925] px-3 text-xs font-semibold text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <RotateCcw size={13} />
+                      Retry
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             <div ref={transcriptEndRef} />
           </div>
 
           {activeConfirmation ? (
-            <div className="mx-3 mb-2 rounded-md border border-amber-800 bg-amber-950/40 px-3 py-2">
-              <p className="text-xs font-semibold text-amber-300">
-                Run this {activeConfirmation.request.toolName} command?
-              </p>
-              <pre className="mt-1 whitespace-pre-wrap wrap-break-word font-mono text-xs text-amber-200">
+            <div className="mx-3 mb-3 rounded-lg border border-[#64a3ff]/25 bg-[#1a202a] p-3 shadow-[0_8px_20px_rgba(0,0,0,0.16)]">
+              <div className="flex items-start gap-2.5">
+                <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-[#64a3ff]/10 text-[#64a3ff]">
+                  <ShieldCheck size={15} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#64a3ff]">
+                    Permission required
+                  </p>
+                  <p className="mt-0.5 text-xs font-medium text-slate-200">
+                    Allow {activeConfirmation.request.toolName} to run this command?
+                  </p>
+                </div>
+              </div>
+              <pre className="mt-3 max-h-32 overflow-auto whitespace-pre-wrap wrap-break-word rounded-md border border-slate-800 bg-[#0f1319] px-3 py-2 font-mono text-xs leading-5 text-slate-300">
                 {activeConfirmation.request.summary}
               </pre>
-              <div className="mt-2 flex justify-end gap-2">
+              <div className="mt-3 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => resolveConfirmation(activeConfirmation.id, false)}
-                  className="rounded-md px-3 py-1 text-xs font-semibold text-slate-400 hover:text-white"
+                  className="h-8 rounded-md border border-slate-700 bg-transparent px-3 text-xs font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
                 >
                   Deny
                 </button>
                 <button
                   type="button"
                   onClick={() => resolveConfirmation(activeConfirmation.id, true)}
-                  className="rounded-md bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-500"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#173925] px-3 text-xs font-semibold text-[#58d88d] transition-colors hover:bg-[#1f4a31]"
                 >
+                  <Check size={13} />
                   Allow
                 </button>
               </div>
