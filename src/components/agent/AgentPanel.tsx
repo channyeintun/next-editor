@@ -135,7 +135,7 @@ function TranscriptItem({ item }: { item: ChatItem }) {
   return <ToolResultRow item={item} />;
 }
 
-function AgentPanel() {
+function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const workspaceStore = useContext(WorkspaceStoreContext);
   const agentStore = getAgentStore();
   const credentialStore = getAgentCredentialStore();
@@ -212,7 +212,10 @@ function AgentPanel() {
 
   return (
     <>
-      <div className="flex h-72 flex-col bg-[#15191f]" data-cursor-replay-target="agent-panel">
+      <div
+        className={`flex ${isFullHeight ? "min-h-0 flex-1" : "h-72"} flex-col bg-[#15191f]`}
+        data-cursor-replay-target="agent-panel"
+      >
         <div className="flex min-h-11 items-center gap-2 border-b border-[#11151d] bg-[#191d25] px-4 py-2.5">
           <Bot size={14} className="text-[#64a3ff]" />
           <span className="truncate text-[11px] font-semibold text-slate-400">

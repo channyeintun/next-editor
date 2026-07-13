@@ -9,6 +9,7 @@ import type {
 export interface RuntimePanelContext {
   activeTab: RuntimeDockTab;
   isCollapsed: boolean;
+  isFullHeight: boolean;
   isSettingsOpen: boolean;
   consoleLines: string[];
   terminalScrollLines: RuntimeTerminalScrollLines;
@@ -21,6 +22,7 @@ export type ConsoleOpener = () => void;
 const DEFAULT_CONTEXT: RuntimePanelContext = {
   activeTab: "runner",
   isCollapsed: false,
+  isFullHeight: false,
   isSettingsOpen: false,
   consoleLines: [],
   terminalScrollLines: {},
@@ -37,6 +39,10 @@ export function createRuntimePanelStore() {
         event.collapsed === context.isCollapsed
           ? context
           : { ...context, isCollapsed: event.collapsed },
+      setIsFullHeight: (context, event: { fullHeight: boolean }) =>
+        event.fullHeight === context.isFullHeight
+          ? context
+          : { ...context, isFullHeight: event.fullHeight },
       setIsSettingsOpen: (context, event: { open: boolean }) =>
         event.open === context.isSettingsOpen
           ? context
@@ -64,6 +70,7 @@ export type RuntimePanelStoreInstance = ReturnType<typeof createRuntimePanelStor
 
 export const selectActiveTab = (context: RuntimePanelContext): RuntimeDockTab => context.activeTab;
 export const selectIsCollapsed = (context: RuntimePanelContext): boolean => context.isCollapsed;
+export const selectIsFullHeight = (context: RuntimePanelContext): boolean => context.isFullHeight;
 export const selectIsSettingsOpen = (context: RuntimePanelContext): boolean =>
   context.isSettingsOpen;
 export const selectConsoleLines = (context: RuntimePanelContext): string[] => context.consoleLines;
@@ -78,6 +85,7 @@ export const selectPlaybackSnapshot = (
 export const selectRecordingState = (context: RuntimePanelContext): RuntimePanelRecordingState => ({
   activeTab: context.activeTab,
   isCollapsed: context.isCollapsed,
+  isFullHeight: context.isFullHeight,
   isSettingsOpen: context.isSettingsOpen,
   consoleLines: context.consoleLines,
   terminalScrollLines: context.terminalScrollLines,

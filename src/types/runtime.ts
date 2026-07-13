@@ -10,6 +10,7 @@ export interface RuntimeTerminalSessionSnapshot {
 export interface RuntimePanelRecordingState {
   activeTab?: RuntimeDockTab;
   isCollapsed?: boolean;
+  isFullHeight?: boolean;
   isSettingsOpen?: boolean;
   consoleLines?: string[];
   terminalScrollLines?: RuntimeTerminalScrollLines;

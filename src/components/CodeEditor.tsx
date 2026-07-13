@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
+import { useSelector } from "@xstate/store-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
   useWorkspaceActions,
@@ -9,6 +10,9 @@ import {
   useWorkspaceSidebarState,
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
+import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
+import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
+import { selectIsCollapsed, selectIsFullHeight } from "../stores/runtimePanelStore";
 import { lessonRunsInWebContainer } from "../types/workspace";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
@@ -108,6 +112,17 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const saveWorkspace = useWebContainerRuntimeSaveWorkspace();
   const { activeFile } = useWorkspaceEditorState();
   const lessonType = useWorkspaceLessonType();
+  const { store: runtimePanelStore } = useRuntimePanelStore();
+  const isCollapsed = useSelector(runtimePanelStore, (s) => selectIsCollapsed(s.context));
+  const isFullHeight = useSelector(runtimePanelStore, (s) => selectIsFullHeight(s.context));
+  const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
+  const displayIsCollapsed = isPlaybackSnapshotActive
+    ? (recordedRuntimeSnapshot?.isCollapsed ?? false)
+    : isCollapsed;
+  const displayIsFullHeight = isPlaybackSnapshotActive
+    ? (recordedRuntimeSnapshot?.isFullHeight ?? false)
+    : isFullHeight;
+  const isRunnerDockFullHeight = displayIsFullHeight && !displayIsCollapsed;
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
   const viewStatesRef = useRef(new Map<string, monaco.editor.ICodeEditorViewState | null>());
@@ -448,7 +463,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             <div
               className={
                 "editor-paint-layer min-h-0 flex-1 overflow-hidden rounded-t-md" +
-                (isPlaying ? " playback-mode" : "")
+                (isPlaying ? " playback-mode" : "") +
+                (isRunnerDockFullHeight ? " hidden" : "")
               }
               data-cursor-replay-target="code-editor"
             >

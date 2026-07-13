@@ -5,6 +5,8 @@ import {
   ChevronDown,
   ChevronUp,
   Diamond,
+  Maximize2,
+  Minimize2,
   Plus,
   Settings,
   SquareTerminal,
@@ -16,12 +18,13 @@ import {
   selectActiveTab,
   selectConsoleLines,
   selectIsCollapsed,
+  selectIsFullHeight,
   selectIsSettingsOpen,
-  selectPlaybackSnapshot,
   selectTerminalScrollLines,
 } from "../stores/runtimePanelStore";
 import XtermTerminal from "./XtermTerminal";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
+import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
@@ -165,17 +168,17 @@ function TerminalPanel() {
   const { store: runtimePanelStore, consoleAppender, consoleOpener } = useRuntimePanelStore();
   const activeTab = useSelector(runtimePanelStore, (s) => selectActiveTab(s.context));
   const isCollapsed = useSelector(runtimePanelStore, (s) => selectIsCollapsed(s.context));
+  const isFullHeight = useSelector(runtimePanelStore, (s) => selectIsFullHeight(s.context));
   const isSettingsOpen = useSelector(runtimePanelStore, (s) => selectIsSettingsOpen(s.context));
   const consoleLines = useSelector(runtimePanelStore, (s) => selectConsoleLines(s.context));
   const terminalScrollLines = useSelector(runtimePanelStore, (s) =>
     selectTerminalScrollLines(s.context),
   );
-  const playbackRuntimeSnapshot = useSelector(runtimePanelStore, (s) =>
-    selectPlaybackSnapshot(s.context),
-  );
   const setActiveTab = (tab: RuntimeDockTab) => runtimePanelStore.trigger.setActiveTab({ tab });
   const setIsCollapsed = (collapsed: boolean) =>
     runtimePanelStore.trigger.setIsCollapsed({ collapsed });
+  const setIsFullHeight = (fullHeight: boolean) =>
+    runtimePanelStore.trigger.setIsFullHeight({ fullHeight });
   const setIsSettingsOpen = (open: boolean) =>
     runtimePanelStore.trigger.setIsSettingsOpen({ open });
   const [isCreatingTerminal, setIsCreatingTerminal] = useState(false);
@@ -202,21 +205,17 @@ function TerminalPanel() {
     runnerConfig,
     terminalSessions,
   } = useWebContainerRuntimeMetadata();
-  const { currentRecording, isPlaying, isRecording } = useNextEditorMetadata();
-  const recordedRuntimeSnapshot =
-    isPlaying && !isRecording
-      ? (playbackRuntimeSnapshot ??
-        currentRecording?.runtimeEvents?.[0]?.snapshot ??
-        currentRecording?.runtimeSnapshot ??
-        null)
-      : null;
-  const isPlaybackSnapshotActive = Boolean(recordedRuntimeSnapshot);
+  const { currentRecording, isRecording } = useNextEditorMetadata();
+  const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
   const displayActiveTab = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.activeTab ?? "runner")
     : activeTab;
   const displayIsCollapsed = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.isCollapsed ?? false)
     : isCollapsed;
+  const displayIsFullHeight = isPlaybackSnapshotActive
+    ? (recordedRuntimeSnapshot?.isFullHeight ?? false)
+    : isFullHeight;
   const displayIsSettingsOpen = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.isSettingsOpen ?? false)
     : isSettingsOpen;
@@ -421,11 +420,15 @@ function TerminalPanel() {
 
   const runnerCommand = runnerConfig.runCommand.trim() || "Runner disabled";
   const runnerOutput = content || "Waiting for runner output...";
+  const dockContentSizeClass =
+    displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
 
   return (
     <>
       <div
-        className="flex shrink-0 flex-col overflow-hidden rounded-t-md bg-[#15191f]"
+        className={`flex flex-col overflow-hidden rounded-t-md bg-[#15191f] ${
+          displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "shrink-0"
+        }`}
         data-cursor-replay-target="runtime-dock"
       >
         <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">
@@ -513,11 +516,30 @@ function TerminalPanel() {
           </button>
 
           <button
+            type="button"
+            disabled={isPlaybackSnapshotActive || displayIsCollapsed}
+            onClick={() => setIsFullHeight(!runtimePanelStore.getSnapshot().context.isFullHeight)}
+            className="ml-auto inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:opacity-40 disabled:hover:text-slate-500"
+            aria-label={
+              displayIsFullHeight
+                ? "Restore runtime dock height"
+                : "Expand runtime dock to full height"
+            }
+            title={
+              displayIsFullHeight
+                ? "Restore runtime dock height"
+                : "Expand runtime dock to full height"
+            }
+          >
+            {displayIsFullHeight ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+
+          <button
             data-tour="runner"
             type="button"
             disabled={isPlaybackSnapshotActive}
             onClick={() => setIsCollapsed(!runtimePanelStore.getSnapshot().context.isCollapsed)}
-            className="ml-auto inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
+            className="inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
             aria-label={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
             title={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
           >
@@ -528,7 +550,7 @@ function TerminalPanel() {
         {!displayIsCollapsed && (
           <>
             {displayActiveTab === "runner" && (
-              <div className={`flex h-72 flex-col ${RUNTIME_PANEL_BG}`}>
+              <div className={`flex ${dockContentSizeClass} flex-col ${RUNTIME_PANEL_BG}`}>
                 <div className={RUNTIME_COMMAND_BAR_CLASS}>
                   <div className="flex min-w-0 items-center gap-2.5">
                     <p className={RUNTIME_COMMAND_TEXT_CLASS}>
@@ -580,7 +602,9 @@ function TerminalPanel() {
             )}
 
             {displayActiveTab === "terminal" && (
-              <div className={`flex h-72 flex-col px-5 py-6 ${RUNTIME_PANEL_BG}`}>
+              <div
+                className={`flex ${dockContentSizeClass} flex-col px-5 py-6 ${RUNTIME_PANEL_BG}`}
+              >
                 <div className="relative min-h-0 flex-1 overflow-hidden">
                   {!effectiveActiveTerminalSessionId && (
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center font-mono text-[13px] text-slate-500">
@@ -628,7 +652,9 @@ function TerminalPanel() {
             )}
 
             {displayActiveTab === "console" && (
-              <div className={`h-72 overflow-hidden px-5 py-6 ${RUNTIME_PANEL_BG}`}>
+              <div
+                className={`${dockContentSizeClass} overflow-hidden px-5 py-6 ${RUNTIME_PANEL_BG}`}
+              >
                 <XtermTerminal
                   sessionId="console"
                   output={consoleContent}
@@ -641,7 +667,9 @@ function TerminalPanel() {
               </div>
             )}
 
-            {displayActiveTab === "agent" && <AgentPanel />}
+            {displayActiveTab === "agent" && (
+              <AgentPanel isFullHeight={dockContentSizeClass !== "h-72"} />
+            )}
           </>
         )}
       </div>
