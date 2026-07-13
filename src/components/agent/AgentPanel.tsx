@@ -235,121 +235,94 @@ function AgentPanel() {
           </button>
         </div>
 
-        {!apiKey && !isReplayActive ? (
-          <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-            <p className="text-xs text-slate-400">
-              Paste your OpenRouter API key to start the coding agent. It's kept in memory only
-              unless you opt into persistence in settings.
-            </p>
-            {/* ph-no-capture blocks this field from PostHog session replays so the
-                API key is never recorded, independent of the global maskAllInputs
-                setting (see posthog init in src/main.tsx). */}
-            <input
-              type="password"
-              value={keyDraft}
-              onChange={(event) => setKeyDraft(event.target.value)}
-              placeholder="sk-or-v1-..."
-              className="ph-no-capture mt-3 h-9 w-full max-w-xs rounded-md border border-slate-700 bg-[#11141c] px-3 font-mono text-xs text-slate-100 outline-none focus:border-slate-500"
-            />
-            <button
-              type="button"
-              disabled={!keyDraft.trim()}
-              onClick={handleSaveKey}
-              className="mt-2 w-full max-w-xs rounded-md bg-[#173925] py-1.5 text-xs font-bold uppercase tracking-wide text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Save key
-            </button>
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              {items.length === 0 ? (
-                <p className="px-1 text-xs text-slate-500">
-                  Ask the agent to build or fix something in this workspace.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {items.map((item) => (
-                    <TranscriptItem key={item.id} item={item} />
-                  ))}
-                </div>
-              )}
-              {error ? (
-                <div className="mt-2 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300">
-                  {error}
-                </div>
-              ) : null}
-              <div ref={transcriptEndRef} />
-            </div>
-
-            {activeConfirmation ? (
-              <div className="mx-3 mb-2 rounded-md border border-amber-800 bg-amber-950/40 px-3 py-2">
-                <p className="text-xs font-semibold text-amber-300">
-                  Run this {activeConfirmation.request.toolName} command?
-                </p>
-                <pre className="mt-1 whitespace-pre-wrap wrap-break-word font-mono text-xs text-amber-200">
-                  {activeConfirmation.request.summary}
-                </pre>
-                <div className="mt-2 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => resolveConfirmation(activeConfirmation.id, false)}
-                    className="rounded-md px-3 py-1 text-xs font-semibold text-slate-400 hover:text-white"
-                  >
-                    Deny
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => resolveConfirmation(activeConfirmation.id, true)}
-                    className="rounded-md bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-500"
-                  >
-                    Allow
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {isReplayActive ? (
-              <div className="border-t border-[#11151d] px-3 py-2.5 text-center text-[11px] text-slate-500">
-                Replaying recorded transcript — read only.
-              </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {items.length === 0 ? (
+              <p className="px-1 text-xs text-slate-500">
+                Ask the agent to build or fix something in this workspace.
+              </p>
             ) : (
-              <div className="flex items-end gap-2 border-t border-[#11151d] p-3">
-                <textarea
-                  value={promptInput}
-                  onChange={(event) => setPromptInput(event.target.value)}
-                  onKeyDown={handleKeyDown}
-                  disabled={isBusy}
-                  placeholder="Ask the agent…"
-                  rows={2}
-                  className="h-16 min-h-16 flex-1 resize-none rounded-md border border-slate-700 bg-[#11141c] px-3 py-2 text-[13px] text-slate-100 outline-none focus:border-slate-500 disabled:opacity-60"
-                />
-                {isBusy ? (
-                  <button
-                    type="button"
-                    onClick={handleStop}
-                    className="inline-flex size-9 items-center justify-center rounded-md bg-red-900 text-red-200 transition-colors hover:bg-red-800"
-                    aria-label="Stop"
-                    title="Stop"
-                  >
-                    <Square size={14} />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void handleSubmit()}
-                    disabled={!promptInput.trim()}
-                    className="inline-flex size-9 items-center justify-center rounded-md bg-[#173925] text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label="Send"
-                    title="Send"
-                  >
-                    <Send size={14} />
-                  </button>
-                )}
+              <div className="flex flex-col gap-2">
+                {items.map((item) => (
+                  <TranscriptItem key={item.id} item={item} />
+                ))}
               </div>
             )}
+            {error ? (
+              <div className="mt-2 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+                {error}
+              </div>
+            ) : null}
+            <div ref={transcriptEndRef} />
           </div>
-        )}
+
+          {activeConfirmation ? (
+            <div className="mx-3 mb-2 rounded-md border border-amber-800 bg-amber-950/40 px-3 py-2">
+              <p className="text-xs font-semibold text-amber-300">
+                Run this {activeConfirmation.request.toolName} command?
+              </p>
+              <pre className="mt-1 whitespace-pre-wrap wrap-break-word font-mono text-xs text-amber-200">
+                {activeConfirmation.request.summary}
+              </pre>
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => resolveConfirmation(activeConfirmation.id, false)}
+                  className="rounded-md px-3 py-1 text-xs font-semibold text-slate-400 hover:text-white"
+                >
+                  Deny
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resolveConfirmation(activeConfirmation.id, true)}
+                  className="rounded-md bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-500"
+                >
+                  Allow
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {isReplayActive ? (
+            <div className="border-t border-[#11151d] px-3 py-2.5 text-center text-[11px] text-slate-500">
+              Replaying recorded transcript — read only.
+            </div>
+          ) : (
+            <div className="flex items-end gap-2 border-t border-[#11151d] p-3">
+              <textarea
+                value={promptInput}
+                onChange={(event) => setPromptInput(event.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isBusy}
+                placeholder="Ask the agent…"
+                rows={2}
+                className="h-16 min-h-16 flex-1 resize-none rounded-md border border-slate-700 bg-[#11141c] px-3 py-2 text-[13px] text-slate-100 outline-none focus:border-slate-500 disabled:opacity-60"
+              />
+              {isBusy ? (
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  className="inline-flex size-9 items-center justify-center rounded-md bg-red-900 text-red-200 transition-colors hover:bg-red-800"
+                  aria-label="Stop"
+                  title="Stop"
+                >
+                  <Square size={14} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleSubmit()}
+                  disabled={!promptInput.trim()}
+                  className="inline-flex size-9 items-center justify-center rounded-md bg-[#173925] text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Send"
+                  title="Send"
+                >
+                  <Send size={14} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {isSettingsOpen ? (
