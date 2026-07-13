@@ -436,6 +436,7 @@ function TerminalPanel() {
             return (
               <button
                 key={tab.id}
+                data-tour={tab.id === "agent" ? "agent" : undefined}
                 type="button"
                 disabled={isPlaybackSnapshotActive}
                 onClick={() => setActiveTab(tab.id)}

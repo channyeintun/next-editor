@@ -3,7 +3,12 @@ import "driver.js/dist/driver.css";
 
 const TOUR_SEEN_KEY = "next-editor.tour.v1.seen";
 
-const TOUR_STEPS: Array<DriveStep & { element: string }> = [
+type ProductTourStep = DriveStep & {
+  element: string;
+  mountsAfter?: string;
+};
+
+const TOUR_STEPS: ProductTourStep[] = [
   {
     element: '[data-tour="record"]',
     popover: {
@@ -76,10 +81,44 @@ const TOUR_STEPS: Array<DriveStep & { element: string }> = [
         "Toggle the runner dock here to show or hide the terminal and dev-server output.",
     },
   },
+  {
+    element: '[data-tour="agent"]',
+    popover: {
+      title: "Agent",
+      description: "Open the Agent tab to ask for changes, fixes, or help with this workspace.",
+      onNextClick: (element, _step, { driver: tourDriver }) => {
+        // The settings button is mounted inside the Agent panel. Open the tab and,
+        // when necessary, expand the dock before advancing to that target.
+        if (element instanceof HTMLElement) {
+          element.click();
+        }
+
+        const dockToggle = document.querySelector<HTMLElement>('[data-tour="runner"]');
+        if (dockToggle?.getAttribute("aria-label") === "Expand runtime dock") {
+          dockToggle.click();
+        }
+
+        requestAnimationFrame(() => tourDriver.moveNext());
+      },
+    },
+  },
+  {
+    element: '[data-tour="agent-settings"]',
+    // This control is mounted only after the preceding Agent step opens the panel.
+    mountsAfter: '[data-tour="agent"]',
+    popover: {
+      title: "Agent settings",
+      description: "Choose a model, add your OpenRouter API key, and control where it is stored.",
+    },
+  },
 ];
 
 function buildTourSteps(): DriveStep[] {
-  return TOUR_STEPS.filter((step) => document.querySelector(step.element));
+  return TOUR_STEPS.filter(
+    (step) =>
+      document.querySelector(step.element) ||
+      (step.mountsAfter && document.querySelector(step.mountsAfter)),
+  ).map(({ mountsAfter: _mountsAfter, ...step }) => step);
 }
 
 export function hasSeenTour(): boolean {

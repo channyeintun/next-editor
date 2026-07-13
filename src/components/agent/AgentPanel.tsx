@@ -431,6 +431,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
             <Plus size={16} />
           </button>
           <button
+            data-tour="agent-settings"
             type="button"
             onClick={() => setIsSettingsOpen(true)}
             className="inline-flex size-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-200"
