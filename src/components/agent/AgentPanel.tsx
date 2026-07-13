@@ -279,12 +279,15 @@ function AgentPanel() {
               Paste your Anthropic API key to start the coding agent. It's kept in memory only
               unless you opt into persistence in settings.
             </p>
+            {/* ph-no-capture blocks this field from PostHog session replays so the
+                Anthropic API key is never recorded, independent of the global
+                maskAllInputs setting (see posthog init in src/main.tsx). */}
             <input
               type="password"
               value={keyDraft}
               onChange={(event) => setKeyDraft(event.target.value)}
               placeholder="sk-ant-api..."
-              className="mt-3 h-9 w-full max-w-xs rounded-md border border-slate-700 bg-[#11141c] px-3 font-mono text-xs text-slate-100 outline-none focus:border-slate-500"
+              className="ph-no-capture mt-3 h-9 w-full max-w-xs rounded-md border border-slate-700 bg-[#11141c] px-3 font-mono text-xs text-slate-100 outline-none focus:border-slate-500"
             />
             <button
               type="button"
@@ -433,12 +436,15 @@ function AgentPanel() {
 
               <div>
                 <p className="text-sm font-medium text-slate-100">API key</p>
+                {/* ph-no-capture blocks this field from PostHog session replays so the
+                    Anthropic API key is never recorded, independent of the global
+                    maskAllInputs setting (see posthog init in src/main.tsx). */}
                 <input
                   type="password"
                   value={keyDraft}
                   onChange={(event) => setKeyDraft(event.target.value)}
                   placeholder={apiKey ? "•••• (set) — paste to replace" : "sk-ant-api..."}
-                  className="mt-2 h-9 w-full rounded-md border border-slate-700 bg-[#11141c] px-3 font-mono text-xs text-slate-100 outline-none focus:border-slate-500"
+                  className="ph-no-capture mt-2 h-9 w-full rounded-md border border-slate-700 bg-[#11141c] px-3 font-mono text-xs text-slate-100 outline-none focus:border-slate-500"
                 />
                 <div className="mt-2 flex gap-2">
                   <button
