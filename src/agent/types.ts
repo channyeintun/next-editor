@@ -1,10 +1,7 @@
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 
-/** OpenRouter model slugs offered in the picker. */
-export type AgentModelId =
-  | "anthropic/claude-haiku-4.5"
-  | "openai/gpt-5.4-mini"
-  | "google/gemma-4-31b-it:free";
+/** OpenRouter model slug selected from its live model catalog. */
+export type AgentModelId = string;
 
 export const DEFAULT_AGENT_MODEL: AgentModelId = "anthropic/claude-haiku-4.5";
 

@@ -6,6 +6,7 @@ import {
   Check,
   Plus,
   RotateCcw,
+  Search,
   Send,
   Settings,
   ShieldCheck,
@@ -40,7 +41,7 @@ import {
   startAgentRun,
   stopAgentRun,
 } from "../../agent/agentSession";
-import type { AgentModelId, CredentialStorage } from "../../agent/types";
+import type { CredentialStorage } from "../../agent/types";
 import type { ChatItem, ChatStatus } from "../../types/chat";
 import {
   createChatImage,
@@ -48,13 +49,12 @@ import {
   MAX_CHAT_IMAGES,
 } from "../../agent/imageAttachments";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
+import {
+  FALLBACK_MODEL_OPTIONS,
+  fetchOpenRouterModelOptions,
+  filterModelOptions,
+} from "../../agent/modelCatalog";
 import { formatToolResultOutput } from "./toolResultOutput";
-
-const MODEL_OPTIONS: { id: AgentModelId; label: string }[] = [
-  { id: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5 (fast)" },
-  { id: "openai/gpt-5.4-mini", label: "GPT-5.4 mini" },
-  { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B (free)" },
-];
 
 const STORAGE_OPTIONS: { id: CredentialStorage; label: string; description: string }[] = [
   { id: "memory", label: "Memory only", description: "Cleared on reload. Safest." },
@@ -206,8 +206,13 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [modelOptions, setModelOptions] = useState(FALLBACK_MODEL_OPTIONS);
+  const [modelQuery, setModelQuery] = useState("");
+  const [isModelCatalogLoading, setIsModelCatalogLoading] = useState(false);
+  const [modelCatalogError, setModelCatalogError] = useState<string | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const wasRecordingRef = useRef(false);
+  const hasLoadedModelCatalogRef = useRef(false);
 
   // Seed the track with a draft that was already present when recording began.
   // Subsequent edits are captured directly by `applyDraft` below.
@@ -222,12 +227,50 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
     transcriptEndRef.current?.scrollIntoView({ block: "end" });
   }, [items]);
 
+  useEffect(() => {
+    if (!isSettingsOpen || hasLoadedModelCatalogRef.current) {
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsModelCatalogLoading(true);
+    setModelCatalogError(null);
+
+    void fetchOpenRouterModelOptions(controller.signal)
+      .then((options) => {
+        if (options.length > 0) {
+          setModelOptions(options);
+          hasLoadedModelCatalogRef.current = true;
+        } else {
+          setModelCatalogError("OpenRouter returned no compatible models; showing fallbacks.");
+        }
+      })
+      .catch((catalogError: unknown) => {
+        if (!controller.signal.aborted) {
+          setModelCatalogError(
+            catalogError instanceof Error
+              ? `${catalogError.message}; showing fallback models.`
+              : "Could not load OpenRouter models; showing fallbacks.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsModelCatalogLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [isSettingsOpen]);
+
   // Reflects the actual live run (for Send/Stop + input disable); the status label/
   // spinner below tracks the displayed status, which during replay is the recorded one.
   const isBusy = isRunning;
   const isActiveStatus =
     status === "streaming" || status === "running-tool" || status === "waiting-confirmation";
   const activeConfirmation = pending[0] ?? null;
+  const filteredModelOptions = filterModelOptions(modelOptions, modelQuery);
+  const selectedModelLabel = modelOptions.find((option) => option.id === model)?.label ?? model;
 
   const applyDraft = (text: string) => {
     const delta = { k: "draft", text } as const;
@@ -488,7 +531,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                   className="max-w-[calc(100%-3rem)] truncate rounded px-1.5 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
                   title="Choose agent model"
                 >
-                  {MODEL_OPTIONS.find((option) => option.id === model)?.label ?? "Choose model"}
+                  {selectedModelLabel}
                 </button>
                 {isBusy && !isReplayActive ? (
                   <button
@@ -543,22 +586,53 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
             <div className="space-y-5 overflow-y-auto p-5">
               <div>
                 <p className="text-sm font-medium text-slate-100">Model</p>
-                <div className="mt-2 flex flex-col gap-1.5">
-                  {MODEL_OPTIONS.map((option) => (
+                <div className="relative mt-2">
+                  <Search
+                    size={14}
+                    className="pointer-events-none absolute left-3 top-2.5 text-slate-500"
+                  />
+                  <input
+                    type="search"
+                    value={modelQuery}
+                    onChange={(event) => setModelQuery(event.target.value)}
+                    placeholder="Search OpenRouter models"
+                    aria-label="Search OpenRouter models"
+                    className="h-9 w-full rounded-md border border-slate-700 bg-[#11141c] pl-9 pr-3 text-xs text-slate-100 outline-none placeholder:text-slate-600 focus:border-slate-500"
+                  />
+                </div>
+                <div className="mt-2 flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-md border border-slate-800 p-2">
+                  {filteredModelOptions.map((option) => (
                     <label
                       key={option.id}
-                      className="flex items-center gap-2 text-xs text-slate-300"
+                      className="flex cursor-pointer items-start gap-2 rounded px-1.5 py-1 text-xs text-slate-300 hover:bg-slate-800/70"
                     >
                       <input
                         type="radio"
                         name="agent-model"
                         checked={model === option.id}
                         onChange={() => agentStore.trigger.setModel({ model: option.id })}
+                        className="mt-0.5"
                       />
-                      {option.label}
+                      <span className="min-w-0">
+                        <span className="block truncate">{option.label}</span>
+                        <span className="block truncate font-mono text-[10px] text-slate-600">
+                          {option.id}
+                        </span>
+                      </span>
                     </label>
                   ))}
+                  {filteredModelOptions.length === 0 ? (
+                    <p className="px-1.5 py-2 text-xs text-slate-500">
+                      No compatible models match “{modelQuery.trim()}”.
+                    </p>
+                  ) : null}
                 </div>
+                <p className="mt-2 text-[11px] text-slate-500">
+                  {isModelCatalogLoading
+                    ? "Loading tool-capable models from OpenRouter…"
+                    : modelCatalogError ??
+                      `${modelOptions.length} tool-capable text models from OpenRouter. Free variants are hidden.`}
+                </p>
                 <p className="mt-2 text-[11px] text-slate-500">
                   Usage this session: {usage.inputTokens} in / {usage.outputTokens} out tokens.
                 </p>
