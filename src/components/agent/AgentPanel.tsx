@@ -288,38 +288,51 @@ function AgentPanel() {
               Replaying recorded transcript — read only.
             </div>
           ) : (
-            <div className="flex items-end gap-2 border-t border-[#11151d] p-3">
-              <textarea
-                value={promptInput}
-                onChange={(event) => setPromptInput(event.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isBusy}
-                placeholder="Ask the agent…"
-                rows={2}
-                className="h-16 min-h-16 flex-1 resize-none rounded-md border border-slate-700 bg-[#11141c] px-3 py-2 text-[13px] text-slate-100 outline-none focus:border-slate-500 disabled:opacity-60"
-              />
-              {isBusy ? (
-                <button
-                  type="button"
-                  onClick={handleStop}
-                  className="inline-flex size-9 items-center justify-center rounded-md bg-red-900 text-red-200 transition-colors hover:bg-red-800"
-                  aria-label="Stop"
-                  title="Stop"
-                >
-                  <Square size={14} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void handleSubmit()}
-                  disabled={!promptInput.trim()}
-                  className="inline-flex size-9 items-center justify-center rounded-md bg-[#173925] text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-label="Send"
-                  title="Send"
-                >
-                  <Send size={14} />
-                </button>
-              )}
+            <div className="border-t border-[#11151d] bg-[#13171e] p-3">
+              <div className="rounded-lg border border-slate-700/80 bg-[#0f1319] shadow-[0_8px_20px_rgba(0,0,0,0.18)] transition-colors focus-within:border-[#64a3ff]/70 focus-within:ring-1 focus-within:ring-[#64a3ff]/25">
+                <textarea
+                  value={promptInput}
+                  onChange={(event) => setPromptInput(event.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={isBusy}
+                  aria-label="Message the agent"
+                  placeholder="Ask anything about this workspace"
+                  rows={2}
+                  className="h-14 min-h-14 w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                />
+                <div className="flex items-center justify-between gap-2 border-t border-slate-800/80 px-2 py-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="max-w-[calc(100%-3rem)] truncate rounded px-1.5 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300"
+                    title="Choose agent model"
+                  >
+                    {MODEL_OPTIONS.find((option) => option.id === model)?.label ?? "Choose model"}
+                  </button>
+                  {isBusy ? (
+                    <button
+                      type="button"
+                      onClick={handleStop}
+                      className="inline-flex size-7 shrink-0 items-center justify-center rounded bg-red-900/80 text-red-200 transition-colors hover:bg-red-800"
+                      aria-label="Stop agent"
+                      title="Stop agent"
+                    >
+                      <Square size={12} fill="currentColor" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleSubmit()}
+                      disabled={!promptInput.trim() || !apiKey}
+                      className="inline-flex size-7 shrink-0 items-center justify-center rounded bg-[#58d88d] text-[#0b2416] transition-colors hover:bg-[#7ce5a5] disabled:cursor-not-allowed disabled:bg-[#27382f] disabled:text-slate-500"
+                      aria-label="Send message"
+                      title="Send message"
+                    >
+                      <Send size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
