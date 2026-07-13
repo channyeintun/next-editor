@@ -31,6 +31,7 @@ import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNext
 const MODEL_OPTIONS: { id: AgentModelId; label: string }[] = [
   { id: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5 (fast)" },
   { id: "openai/gpt-5.4-mini", label: "GPT-5.4 mini" },
+  { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B (free)" },
 ];
 
 const STORAGE_OPTIONS: { id: CredentialStorage; label: string; description: string }[] = [
