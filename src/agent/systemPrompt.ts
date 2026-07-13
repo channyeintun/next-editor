@@ -30,7 +30,16 @@ function buildToolList(toolNames: string[]): string {
 }
 
 function buildBashNote(): string {
-  return "The bash tool runs commands in a sandboxed in-browser Node.js-like runtime (WebContainer) with no access to the host machine. It may be unavailable on some devices (e.g., mobile)—if so, the tool will report that the runtime is unavailable.";
+  return [
+    "Bash/WebContainer safety rules (strict):",
+    "- The bash tool runs in a resource-constrained, sandboxed in-browser WebContainer, not a normal host shell. It has no host access, supports only Node.js/web tooling, and may be unavailable on mobile or without cross-origin isolation.",
+    "- Run only short, bounded, foreground commands that are expected to exit promptly. Never start background processes or use &, nohup, disown, job control, or similar techniques.",
+    "- Never start persistent or watch-mode processes, including dev servers, preview servers, file watchers, or interactive programs. The editor already owns the workspace dev server.",
+    "- Never run broad or resource-heavy commands such as npm run build, pnpm build, full-project builds, repo-wide typechecks, or full test suites. Prefer file tools and narrow inspection; run a targeted check only when it is clearly necessary and guaranteed to terminate.",
+    "- Use pnpm exclusively for package operations and scripts. Never use npm, npx, yarn, bun, or another package manager, and do not install packages unless the user explicitly asks.",
+    "- Do not pipe, redirect, or wrap a dev-server/watch command to capture its output; the pipeline can remain open indefinitely. When WebContainer runtime, preview, or dev-server errors are present in the conversation, diagnose those errors directly instead of launching another server or build.",
+    "- WebContainer process cancellation is best-effort: Stop, kill, or a timeout may not promptly settle a blocked process through the browser API. Never rely on cancellation to make a potentially hanging command safe. If a useful check might stay alive, do not run it; explain the limitation and continue with file-based reasoning.",
+  ].join("\n");
 }
 
 function buildFileTree(project: WorkspaceProject): string {

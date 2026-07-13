@@ -52,4 +52,20 @@ describe("buildSystemPrompt", () => {
     expect(withBash).toContain("bash tool runs commands");
     expect(withoutBash).not.toContain("bash tool runs commands");
   });
+
+  it("strictly constrains bash to safe, bounded WebContainer commands", () => {
+    const prompt = buildSystemPrompt(makeProject(), { toolNames: ["bash"], hasBash: true });
+
+    expect(prompt).toContain("Run only short, bounded, foreground commands");
+    expect(prompt).toContain("Never start background processes");
+    expect(prompt).toContain("Never start persistent or watch-mode processes");
+    expect(prompt).toContain("npm run build");
+    expect(prompt).toContain("repo-wide typechecks");
+    expect(prompt).toContain("full test suites");
+    expect(prompt).toContain("Use pnpm exclusively");
+    expect(prompt).toContain("Never use npm, npx, yarn, bun");
+    expect(prompt).toContain("Do not pipe, redirect, or wrap a dev-server/watch command");
+    expect(prompt).toContain("process cancellation is best-effort");
+    expect(prompt).toContain("Stop, kill, or a timeout may not promptly settle");
+  });
 });
