@@ -82,6 +82,8 @@ export function useWebContainerRuntimeSession({
   const previewUrlRef = useRef<string | null>(null);
   const previewPortRef = useRef<number | null>(null);
   const errorMessageRef = useRef<string | null>(null);
+  const latestPreviewMessageRef = useRef<RuntimePreviewMessage | null>(null);
+  const latestLifecycleEventRef = useRef<RuntimeLifecycleEvent | null>(null);
   const lastOutputRef = useRef<string | null>(null);
   const activeTerminalSessionIdRef = useRef<string | null>(null);
   const activeCommandRef = useRef<string | null>(null);
@@ -92,13 +94,11 @@ export function useWebContainerRuntimeSession({
   const [previewUrl, setPreviewUrlState] = useState<string | null>(null);
   const [previewPort, setPreviewPortState] = useState<number | null>(null);
   const [errorMessage, setErrorMessageState] = useState<string | null>(null);
-  const [latestPreviewMessage, setLatestPreviewMessage] = useState<RuntimePreviewMessage | null>(
-    null,
-  );
+  const [latestPreviewMessage, setLatestPreviewMessageState] =
+    useState<RuntimePreviewMessage | null>(null);
   const [openPorts, setOpenPorts] = useState<RuntimePort[]>([]);
-  const [latestLifecycleEvent, setLatestLifecycleEvent] = useState<RuntimeLifecycleEvent | null>(
-    null,
-  );
+  const [latestLifecycleEvent, setLatestLifecycleEventState] =
+    useState<RuntimeLifecycleEvent | null>(null);
   const [lastOutput, setLastOutputState] = useState<string | null>(null);
   const [terminalSessions, setTerminalSessions] = useState<RuntimeTerminalSessionSnapshot[]>([]);
   const [activeTerminalSessionId, setActiveTerminalSessionId] = useState<string | null>(null);
@@ -147,6 +147,16 @@ export function useWebContainerRuntimeSession({
   const setActiveCommand = (nextCommand: string | null) => {
     activeCommandRef.current = nextCommand;
     setActiveCommandState(nextCommand);
+  };
+
+  const setLatestPreviewMessage = (message: RuntimePreviewMessage | null) => {
+    latestPreviewMessageRef.current = message;
+    setLatestPreviewMessageState(message);
+  };
+
+  const setLatestLifecycleEvent = (event: RuntimeLifecycleEvent | null) => {
+    latestLifecycleEventRef.current = event;
+    setLatestLifecycleEventState(event);
   };
 
   const appendOutput = (chunk: string, options?: { logToConsole?: boolean }) => {
@@ -814,6 +824,8 @@ export function useWebContainerRuntimeSession({
       title,
     })),
     activeTerminalSessionId: activeTerminalSessionIdRef.current,
+    latestPreviewMessage: latestPreviewMessageRef.current,
+    latestLifecycleEvent: latestLifecycleEventRef.current,
   });
 
   useEffect(() => {

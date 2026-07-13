@@ -21,6 +21,7 @@ import {
   useWebContainerRuntimeMetadata,
 } from "../../hooks/useWebContainerRuntime";
 import { IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE } from "../../utils/iframeInteractionCapture";
+import { requestPreviewScreenshot } from "../../utils/iframeScreenshotBridge";
 import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRuntimeContext";
 import type {
   ApiClientRecordedRequest,
@@ -326,6 +327,32 @@ export function usePreviewController(): PreviewController {
       setActiveMode("browser");
     }
   }, [activeMode, showModeToggle]);
+
+  useEffect(() => {
+    previewHandle.livePreviewInspectionGetter.current = () => {
+      const html = lastRuntimeSnapshotRef.current;
+      if (!html) {
+        return null;
+      }
+
+      const iframe = iframeRef.current;
+      return {
+        capturedAt: Date.now(),
+        height: iframe?.clientHeight ?? 0,
+        html,
+        route: previewRouteRef.current,
+        url: effectiveRuntimePreviewUrl,
+        width: iframe?.clientWidth ?? 0,
+      };
+    };
+    previewHandle.previewScreenshotCapturer.current = () =>
+      requestPreviewScreenshot(iframeRef.current);
+
+    return () => {
+      previewHandle.livePreviewInspectionGetter.current = null;
+      previewHandle.previewScreenshotCapturer.current = null;
+    };
+  }, [effectiveRuntimePreviewUrl, previewHandle]);
 
   // The store instance is created once in its provider, so it is referentially
   // stable and safe to close over directly (no ref indirection needed).

@@ -2,7 +2,7 @@ import { createStore } from "@xstate/store-react";
 import { runAgentLoop } from "./agentLoop";
 import { getAgentStore } from "./agentStore";
 import { createChatRecorder, type ChatEventHandler } from "./chatRecording";
-import type { AgentModelId, ToolConfirmationRequest } from "./types";
+import type { AgentModelId, ToolConfirmationRequest, ToolContext } from "./types";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatImage } from "../types/chat";
 import { formatAgentError } from "./agentError";
@@ -119,6 +119,9 @@ export interface StartAgentRunOptions {
   prompt: string;
   images?: ChatImage[];
   handleChatEvent: ChatEventHandler;
+  getRuntimeDiagnostics?: ToolContext["getRuntimeDiagnostics"];
+  getPreviewInspection?: ToolContext["getPreviewInspection"];
+  capturePreviewScreenshot?: ToolContext["capturePreviewScreenshot"];
 }
 
 export function clearAgentRetry(): void {
@@ -177,6 +180,9 @@ async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
       images: options.images,
       signal: controller.signal,
       requestConfirmation: (request) => requestConfirmation(request, controller.signal),
+      getRuntimeDiagnostics: options.getRuntimeDiagnostics,
+      getPreviewInspection: options.getPreviewInspection,
+      capturePreviewScreenshot: options.capturePreviewScreenshot,
       onDelta: (delta) => {
         agentStore.trigger.applyDelta({ delta });
         recordChatDelta(delta);
@@ -195,6 +201,9 @@ async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
       prompt: options.prompt,
       images: options.images,
       handleChatEvent: options.handleChatEvent,
+      getRuntimeDiagnostics: options.getRuntimeDiagnostics,
+      getPreviewInspection: options.getPreviewInspection,
+      capturePreviewScreenshot: options.capturePreviewScreenshot,
       ...(firstTurnItem ? { fromId: firstTurnItem.id } : {}),
     };
     agentSessionStore.trigger.setCanRetry({ canRetry: true });

@@ -91,6 +91,8 @@ export interface WebContainerRuntimeRecordingSnapshot {
   errorMessage: string | null;
   terminalSessions: RuntimeTerminalSessionSnapshot[];
   activeTerminalSessionId: string | null;
+  latestPreviewMessage: RuntimePreviewMessage | null;
+  latestLifecycleEvent: RuntimeLifecycleEvent | null;
 }
 
 export const WebContainerRuntimeActionsContext = createContext<WebContainerRuntimeActions | null>(

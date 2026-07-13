@@ -38,6 +38,9 @@ export interface RunAgentLoopOptions {
   images?: ChatImage[];
   signal: AbortSignal;
   requestConfirmation: (request: ToolConfirmationRequest) => Promise<boolean>;
+  getRuntimeDiagnostics?: ToolContext["getRuntimeDiagnostics"];
+  getPreviewInspection?: ToolContext["getPreviewInspection"];
+  capturePreviewScreenshot?: ToolContext["capturePreviewScreenshot"];
   onDelta: (delta: ChatDelta) => void;
   onUsage?: (usage: AgentUsage) => void;
   maxSteps?: number;
@@ -117,7 +120,14 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
     }
   };
 
-  const toolContext: ToolContext = { workspace, signal, requestConfirmation: gatedConfirmation };
+  const toolContext: ToolContext = {
+    workspace,
+    signal,
+    requestConfirmation: gatedConfirmation,
+    getRuntimeDiagnostics: options.getRuntimeDiagnostics,
+    getPreviewInspection: options.getPreviewInspection,
+    capturePreviewScreenshot: options.capturePreviewScreenshot,
+  };
   const tools = createCodingTools(toolContext);
   const systemPrompt = buildSystemPrompt(project, {
     toolNames: CODING_TOOL_NAMES,

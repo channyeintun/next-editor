@@ -49,6 +49,11 @@ import {
   MAX_CHAT_IMAGES,
 } from "../../agent/imageAttachments";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
+import { usePreviewAdapterHandle } from "../../contexts/PreviewAdapterHandleContext";
+import {
+  useWebContainerRuntimeMetadata,
+  useWebContainerRuntimeSnapshotGetter,
+} from "../../hooks/useWebContainerRuntime";
 import {
   FALLBACK_MODEL_OPTIONS,
   fetchOpenRouterModelOptions,
@@ -177,6 +182,9 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const sessionStore = getAgentSessionStore();
   const { handleChatEvent } = useNextEditorActions();
   const { isPlaying, isRecording } = useNextEditorMetadata();
+  const previewHandle = usePreviewAdapterHandle();
+  const runtimeMetadata = useWebContainerRuntimeMetadata();
+  const getRuntimeSnapshot = useWebContainerRuntimeSnapshotGetter();
 
   const liveItems = useSelector(agentStore, (s) => selectItems(s.context));
   const liveStatus = useSelector(agentStore, (s) => selectStatus(s.context));
@@ -213,6 +221,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const wasRecordingRef = useRef(false);
   const hasLoadedModelCatalogRef = useRef(false);
+  const runtimeMetadataRef = useRef(runtimeMetadata);
 
   // Seed the track with a draft that was already present when recording began.
   // Subsequent edits are captured directly by `applyDraft` below.
@@ -226,6 +235,10 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ block: "end" });
   }, [items]);
+
+  useEffect(() => {
+    runtimeMetadataRef.current = runtimeMetadata;
+  }, [runtimeMetadata]);
 
   useEffect(() => {
     if (!isSettingsOpen || hasLoadedModelCatalogRef.current) {
@@ -270,7 +283,8 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
     status === "streaming" || status === "running-tool" || status === "waiting-confirmation";
   const activeConfirmation = pending[0] ?? null;
   const filteredModelOptions = filterModelOptions(modelOptions, modelQuery);
-  const selectedModelLabel = modelOptions.find((option) => option.id === model)?.label ?? model;
+  const selectedModelOption = modelOptions.find((option) => option.id === model);
+  const selectedModelLabel = selectedModelOption?.label ?? model;
 
   const applyDraft = (text: string) => {
     const delta = { k: "draft", text } as const;
@@ -296,6 +310,35 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
       prompt,
       images,
       handleChatEvent,
+      getRuntimeDiagnostics: () => {
+        const metadata = runtimeMetadataRef.current;
+        const snapshot = getRuntimeSnapshot();
+        return {
+          activeCommand: snapshot.activeCommand,
+          errorMessage: snapshot.errorMessage,
+          isSupported: metadata.isSupported,
+          lastOutput: snapshot.lastOutput,
+          latestLifecycleEvent: snapshot.latestLifecycleEvent,
+          latestPreviewMessage: snapshot.latestPreviewMessage,
+          previewPort: snapshot.previewPort,
+          previewUrl: snapshot.previewUrl,
+          status: snapshot.status,
+        };
+      },
+      getPreviewInspection: () =>
+        previewHandle.livePreviewInspectionGetter.current?.() ?? null,
+      capturePreviewScreenshot: async () => {
+        if (!selectedModelOption?.supportsImages) {
+          throw new Error(
+            `${selectedModelLabel} does not advertise image input support on OpenRouter. Use inspect_preview instead.`,
+          );
+        }
+        const capture = previewHandle.previewScreenshotCapturer.current;
+        if (!capture) {
+          throw new Error("The live preview is not mounted.");
+        }
+        return capture();
+      },
     });
   };
 
@@ -617,6 +660,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                         <span className="block truncate">{option.label}</span>
                         <span className="block truncate font-mono text-[10px] text-slate-600">
                           {option.id}
+                          {!option.supportsImages ? " · no image input" : ""}
                         </span>
                       </span>
                     </label>

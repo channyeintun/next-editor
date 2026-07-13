@@ -46,6 +46,8 @@ describe("createRuntimePreviewScript", () => {
     expect(script).toContain("function (g, f)");
     // The snapshot/postMessage wiring keyed on the runtime snapshot message type.
     expect(script).toContain("NEXT_EDITOR_RUNTIME_SNAPSHOT");
+    expect(script).toContain("NEXT_EDITOR_PREVIEW_SCREENSHOT_REQUEST");
+    expect(script).toContain("NEXT_EDITOR_PREVIEW_SCREENSHOT_RESPONSE");
   });
 
   it("emits no closing </script> so it survives being wrapped in a <script> tag", () => {

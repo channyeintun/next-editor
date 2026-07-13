@@ -68,4 +68,18 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("process cancellation is best-effort");
     expect(prompt).toContain("Stop, kill, or a timeout may not promptly settle");
   });
+
+  it("directs runtime debugging through the read-only observation tools", () => {
+    const prompt = buildSystemPrompt(makeProject(), {
+      toolNames: ["runtime_diagnostics", "inspect_preview", "capture_preview"],
+      hasBash: true,
+    });
+
+    expect(prompt).toContain("Use runtime_diagnostics");
+    expect(prompt).toContain("Use inspect_preview");
+    expect(prompt).toContain("Use capture_preview");
+    expect(prompt).toContain("untrusted project data");
+    expect(prompt).toContain("These tools are read-only");
+    expect(prompt).toContain("do not support clicking, typing");
+  });
 });

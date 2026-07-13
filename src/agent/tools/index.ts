@@ -7,12 +7,18 @@ import { makeLsTool } from "./ls";
 import { makeGlobTool } from "./glob";
 import { makeGrepTool } from "./grep";
 import { makeBashTool } from "./bash";
+import { makeRuntimeDiagnosticsTool } from "./runtimeDiagnostics";
+import { makeInspectPreviewTool } from "./inspectPreview";
+import { makeCapturePreviewTool } from "./capturePreview";
 
 const CODING_TOOL_DEFINITIONS = [
   ["read", makeReadTool],
   ["ls", makeLsTool],
   ["glob", makeGlobTool],
   ["grep", makeGrepTool],
+  ["runtime_diagnostics", makeRuntimeDiagnosticsTool],
+  ["inspect_preview", makeInspectPreviewTool],
+  ["capture_preview", makeCapturePreviewTool],
   ["write", makeWriteTool],
   ["edit", makeEditTool],
   ["bash", makeBashTool],
@@ -28,6 +34,9 @@ export {
   makeGlobTool,
   makeGrepTool,
   makeBashTool,
+  makeRuntimeDiagnosticsTool,
+  makeInspectPreviewTool,
+  makeCapturePreviewTool,
 };
 
 /**

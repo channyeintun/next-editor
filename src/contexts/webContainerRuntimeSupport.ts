@@ -17,6 +17,7 @@ import {
   type WorkspaceProject,
 } from "../types/workspace";
 import { createRrwebPreviewRecorderScript } from "../components/preview/rrwebPreview";
+import { createIframeScreenshotBridgeScript } from "../utils/iframeScreenshotBridge";
 import { createIframeConsoleBridgeScript } from "../utils/iframeConsoleBridge";
 import { createApiClientProxyScript } from "../utils/apiClientBridge";
 import { createIframeInteractionCaptureScript } from "../utils/iframeInteractionCapture";
@@ -41,6 +42,7 @@ export const TERMINAL_SHELL_CANDIDATES = [
 const RUNTIME_ENVIRONMENT_STORAGE_KEY = "next-editor-runtime-environment";
 const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
 const RUNTIME_SNAPSHOT_SCRIPT_MARKER = "__NEXT_EDITOR_RUNTIME_SNAPSHOT__";
+const RUNTIME_SCREENSHOT_BRIDGE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_SCREENSHOT_BRIDGE__";
 const RUNTIME_CONSOLE_BRIDGE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_CONSOLE_BRIDGE__";
 const RUNTIME_INTERACTION_CAPTURE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_INTERACTION_CAPTURE__";
 const RUNTIME_RRWEB_RECORD_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_RRWEB_RECORD__";
@@ -175,6 +177,9 @@ export function createRuntimePreviewScript(): string {
   });
 
   const apiClientProxyScript = createApiClientProxyScript(RUNTIME_API_CLIENT_PROXY_SETUP_MARKER);
+  const screenshotBridgeScript = createIframeScreenshotBridgeScript(
+    RUNTIME_SCREENSHOT_BRIDGE_SETUP_MARKER,
+  );
 
   const snapshotScript = `(function(){const marker=${JSON.stringify(
     RUNTIME_SNAPSHOT_SCRIPT_MARKER,
@@ -182,7 +187,7 @@ export function createRuntimePreviewScript(): string {
     RUNTIME_SNAPSHOT_MESSAGE_TYPE,
   )};${consoleBridgeScript}${interactionCaptureScript}const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML.replace(/<script[\\s\\S]*?<\\/script>/gi,"")}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();`;
 
-  return `${rrwebRecordScript}\n${apiClientProxyScript}\n${snapshotScript}`;
+  return `${rrwebRecordScript}\n${apiClientProxyScript}\n${screenshotBridgeScript}\n${snapshotScript}`;
 }
 
 function getNormalizedProjectFiles(project: WorkspaceProject | null): Map<string, WorkspaceFile> {

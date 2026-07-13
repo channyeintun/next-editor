@@ -1,4 +1,14 @@
 import type { PreviewDomPatchBatch, PreviewInitialDocument, PreviewState } from "../types/slides";
+import type { PreviewScreenshotResult } from "../utils/iframeScreenshotBridge";
+
+export interface LivePreviewInspection {
+  capturedAt: number;
+  height: number;
+  html: string;
+  route: string;
+  url: string | null;
+  width: number;
+}
 
 export interface PreviewPatchReplayInput {
   recordingId: string;
@@ -13,12 +23,16 @@ export type SnapshotGetter = () => PreviewState | null;
 export type SnapshotApplier = (previewState: PreviewState) => void;
 export type PatchReplayApplier = (input: PreviewPatchReplayInput) => number;
 export type DockWidthDeltaApplier = (delta: number) => void;
+export type LivePreviewInspectionGetter = () => LivePreviewInspection | null;
+export type PreviewScreenshotCapturer = () => Promise<PreviewScreenshotResult>;
 
 export interface PreviewAdapterHandle {
   snapshotGetter: { current: SnapshotGetter | null };
   snapshotApplier: { current: SnapshotApplier | null };
   patchReplayApplier: { current: PatchReplayApplier | null };
   dockWidthDeltaApplier: { current: DockWidthDeltaApplier | null };
+  livePreviewInspectionGetter: { current: LivePreviewInspectionGetter | null };
+  previewScreenshotCapturer: { current: PreviewScreenshotCapturer | null };
 }
 
 export function createPreviewAdapterHandle(): PreviewAdapterHandle {
@@ -27,5 +41,7 @@ export function createPreviewAdapterHandle(): PreviewAdapterHandle {
     snapshotApplier: { current: null },
     patchReplayApplier: { current: null },
     dockWidthDeltaApplier: { current: null },
+    livePreviewInspectionGetter: { current: null },
+    previewScreenshotCapturer: { current: null },
   };
 }

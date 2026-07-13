@@ -1,4 +1,10 @@
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
+import type {
+  RuntimeLifecycleEvent,
+  RuntimePreviewMessage,
+} from "../contexts/WebContainerRuntimeContext";
+import type { LivePreviewInspection } from "../stores/previewAdapterHandle";
+import type { PreviewScreenshotResult } from "../utils/iframeScreenshotBridge";
 
 /** OpenRouter model slug selected from its live model catalog. */
 export type AgentModelId = string;
@@ -9,6 +15,18 @@ export interface ToolConfirmationRequest {
   toolName: string;
   /** Short human-readable description of what's about to happen, shown in the confirm prompt. */
   summary: string;
+}
+
+export interface AgentRuntimeDiagnostics {
+  activeCommand: string | null;
+  errorMessage: string | null;
+  isSupported: boolean;
+  lastOutput: string | null;
+  latestLifecycleEvent: RuntimeLifecycleEvent | null;
+  latestPreviewMessage: RuntimePreviewMessage | null;
+  previewPort: number | null;
+  previewUrl: string | null;
+  status: string;
 }
 
 /**
@@ -23,6 +41,9 @@ export interface ToolContext {
   signal: AbortSignal;
   /** Resolves `true` to proceed. Only the `bash` tool requests it (confirm-gate). */
   requestConfirmation: (request: ToolConfirmationRequest) => Promise<boolean>;
+  getRuntimeDiagnostics?: () => AgentRuntimeDiagnostics;
+  getPreviewInspection?: () => LivePreviewInspection | null;
+  capturePreviewScreenshot?: () => Promise<PreviewScreenshotResult>;
 }
 
 /** Content-array output blocks a tool may return instead of a plain string (e.g. images). */
