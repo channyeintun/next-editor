@@ -961,21 +961,23 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           return context;
         }
 
-        return withDirtyState({
-          ...context,
-          project: {
-            ...context.project,
-            files: {
-              ...context.project.files,
-              [normalizedPath]: {
-                ...existingFile,
-                content: event.content,
+        return withDirtyState(
+          withRefreshedWorkspaceSlices({
+            ...context,
+            project: {
+              ...context.project,
+              files: {
+                ...context.project.files,
+                [normalizedPath]: {
+                  ...existingFile,
+                  content: event.content,
+                },
               },
             },
-          },
-          previewVersion: context.previewVersion + 1,
-          syncVersion: context.syncVersion + 1,
-        });
+            previewVersion: context.previewVersion + 1,
+            syncVersion: context.syncVersion + 1,
+          }),
+        );
       },
       updateLessonType: (
         context,
