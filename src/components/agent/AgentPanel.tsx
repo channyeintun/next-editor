@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import { Bot, Send, Settings, Square, X } from "lucide-react";
+import { Bot, Plus, Send, Settings, Square, X } from "lucide-react";
 import { WorkspaceStoreContext } from "../../stores/workspaceStore";
 import {
   getAgentStore,
@@ -194,6 +194,13 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
     stopAgentRun();
   };
 
+  const handleNewChat = () => {
+    if (isBusy || isReplayActive) {
+      return;
+    }
+    agentStore.trigger.reset();
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -229,8 +236,18 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
           ) : null}
           <button
             type="button"
+            onClick={handleNewChat}
+            disabled={isBusy || isReplayActive}
+            className="ml-auto inline-flex size-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="New chat"
+            title="New chat"
+          >
+            <Plus size={16} />
+          </button>
+          <button
+            type="button"
             onClick={() => setIsSettingsOpen(true)}
-            className="ml-auto inline-flex size-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-200"
+            className="inline-flex size-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-200"
             aria-label="Open agent settings"
             title="Agent settings"
           >
