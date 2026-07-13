@@ -5,6 +5,7 @@ import App from "./App.tsx";
 import { loadDmpCodec } from "./storage/dmpCodec/dmpCodec";
 import posthog from "posthog-js";
 import { PostHogProvider } from "@posthog/react";
+import { shouldSendPostHogEvent } from "./utils/posthogExceptionFilter";
 
 posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN, {
   api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
@@ -13,6 +14,7 @@ posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN, {
   // Uncaught errors/rejections anywhere in the app — the route error boundary
   // only sees render-path failures.
   capture_exceptions: true,
+  before_send: (event) => (shouldSendPostHogEvent(event) ? event : null),
   session_recording: {
     // Users' code and drawings must not land in third-party replays: block
     // Monaco and Excalidraw wholesale, mask every input
