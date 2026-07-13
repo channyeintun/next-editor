@@ -28,6 +28,7 @@ import {
 import type { AgentModelId, CredentialStorage } from "../../agent/types";
 import type { ChatItem, ChatStatus } from "../../types/chat";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
+import { formatToolResultOutput } from "./toolResultOutput";
 
 const MODEL_OPTIONS: { id: AgentModelId; label: string }[] = [
   { id: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5 (fast)" },
@@ -77,7 +78,7 @@ function ToolCallChip({ item }: { item: Extract<ChatItem, { kind: "tool_call" }>
 
 function ToolResultRow({ item }: { item: Extract<ChatItem, { kind: "tool_result" }> }) {
   const [expanded, setExpanded] = useState(false);
-  const text = item.output.trim();
+  const text = formatToolResultOutput(item.output);
   const isLong = text.length > 300;
   const shown = expanded || !isLong ? text : `${text.slice(0, 300)}…`;
 
