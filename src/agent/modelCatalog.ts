@@ -11,9 +11,7 @@ interface OpenRouterModel {
   name?: unknown;
   architecture?: {
     input_modalities?: unknown;
-    output_modalities?: unknown;
   };
-  supported_parameters?: unknown;
 }
 
 interface OpenRouterModelsResponse {
@@ -34,25 +32,12 @@ export const FALLBACK_MODEL_OPTIONS: AgentModelOption[] = [
   { id: "openai/gpt-5.6-luna", label: "OpenAI: GPT-5.6 Luna", supportsImages: true },
   { id: "openai/gpt-5.6-luna-pro", label: "OpenAI: GPT-5.6 Luna Pro", supportsImages: true },
   { id: "google/gemma-4-26b-a4b-it", label: "Google: Gemma 4 26B A4B", supportsImages: true },
-  { id: "google/gemma-4-31b-it", label: "Google: Gemma 4 31B", supportsImages: true },
   { id: "google/gemini-3.1-pro-preview", label: "Google: Gemini 3.1 Pro Preview", supportsImages: true },
   { id: "google/gemini-3-flash-preview", label: "Google: Gemini 3 Flash Preview", supportsImages: true },
 ];
 
-function isToolCapableTextModel(model: OpenRouterModel): model is OpenRouterModel & { id: string } {
-  const parameters = Array.isArray(model.supported_parameters)
-    ? model.supported_parameters
-    : [];
-  const outputModalities = Array.isArray(model.architecture?.output_modalities)
-    ? model.architecture.output_modalities
-    : [];
-
-  return (
-    typeof model.id === "string" &&
-    !model.id.endsWith(":free") &&
-    parameters.includes("tools") &&
-    outputModalities.includes("text")
-  );
+function hasModelId(model: OpenRouterModel): model is OpenRouterModel & { id: string } {
+  return typeof model.id === "string";
 }
 
 export async function fetchOpenRouterModelOptions(
@@ -72,7 +57,7 @@ export async function fetchOpenRouterModelOptions(
   const models = Array.isArray(payload.data) ? (payload.data as OpenRouterModel[]) : [];
 
   return models
-    .filter(isToolCapableTextModel)
+    .filter(hasModelId)
     .map((model) => ({
       id: model.id,
       label: typeof model.name === "string" && model.name.trim() ? model.name : model.id,

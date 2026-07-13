@@ -255,7 +255,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
           setModelOptions(options);
           hasLoadedModelCatalogRef.current = true;
         } else {
-          setModelCatalogError("OpenRouter returned no compatible models; showing fallbacks.");
+          setModelCatalogError("OpenRouter returned no models; showing fallbacks.");
         }
       })
       .catch((catalogError: unknown) => {
@@ -667,15 +667,14 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                   ))}
                   {filteredModelOptions.length === 0 ? (
                     <p className="px-1.5 py-2 text-xs text-slate-500">
-                      No compatible models match “{modelQuery.trim()}”.
+                      No models match “{modelQuery.trim()}”.
                     </p>
                   ) : null}
                 </div>
                 <p className="mt-2 text-[11px] text-slate-500">
                   {isModelCatalogLoading
-                    ? "Loading tool-capable models from OpenRouter…"
-                    : modelCatalogError ??
-                      `${modelOptions.length} tool-capable text models from OpenRouter. Free variants are hidden.`}
+                    ? "Loading models from OpenRouter…"
+                    : modelCatalogError ?? `${modelOptions.length} models from OpenRouter.`}
                 </p>
                 <p className="mt-2 text-[11px] text-slate-500">
                   Usage this session: {usage.inputTokens} in / {usage.outputTokens} out tokens.
