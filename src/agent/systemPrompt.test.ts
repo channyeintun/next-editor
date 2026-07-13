@@ -49,8 +49,10 @@ describe("buildSystemPrompt", () => {
     const withBash = buildSystemPrompt(makeProject(), { toolNames: ["bash"], hasBash: true });
     const withoutBash = buildSystemPrompt(makeProject(), { toolNames: [], hasBash: false });
 
-    expect(withBash).toContain("bash tool runs commands");
-    expect(withoutBash).not.toContain("bash tool runs commands");
+    expect(withBash).toContain("Bash/WebContainer safety rules (strict)");
+    expect(withBash).toContain("The bash tool runs in");
+    expect(withoutBash).not.toContain("Bash/WebContainer safety rules (strict)");
+    expect(withoutBash).not.toContain("The bash tool runs in");
   });
 
   it("strictly constrains bash to safe, bounded WebContainer commands", () => {
