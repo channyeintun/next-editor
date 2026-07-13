@@ -1,5 +1,5 @@
 import { stepCountIs } from "@openrouter/agent";
-import type { EasyInputMessage, FunctionCallOutputItem, Item, OpenRouter } from "@openrouter/agent";
+import type { FunctionCallOutputItem, Item, OpenRouter } from "@openrouter/agent";
 import { createOpenRouterClient } from "./openrouterClient";
 import {
   DEFAULT_AGENT_MODEL,
@@ -7,12 +7,12 @@ import {
   type ToolConfirmationRequest,
   type ToolContext,
 } from "./types";
-import { createCodingTools } from "./tools/index";
+import { CODING_TOOL_NAMES, createCodingTools } from "./tools/index";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getProject } from "./tools/workspaceFs";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
-import type { ChatDelta, ChatItem } from "../types/chat";
-import { outputMessageText, toResponsesInput } from "../types/chat";
+import type { ChatDelta, ChatImage, ChatItem } from "../types/chat";
+import { outputMessageText, toEasyInputMessage, toResponsesInput } from "../types/chat";
 import { createContentDelta } from "../core/src/utils/frameDelta";
 import { isDmpCodecLoaded, loadDmpCodec } from "../storage/dmpCodec/dmpCodec";
 
@@ -34,6 +34,7 @@ export interface RunAgentLoopOptions {
   /** Prior folded transcript to continue from; empty for a fresh conversation. */
   history: ChatItem[];
   prompt: string;
+  images?: ChatImage[];
   signal: AbortSignal;
   requestConfirmation: (request: ToolConfirmationRequest) => Promise<boolean>;
   onDelta: (delta: ChatDelta) => void;
@@ -75,6 +76,7 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
     workspace,
     history,
     prompt,
+    images = [],
     signal,
     requestConfirmation,
     onDelta,
@@ -117,22 +119,25 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
   const toolContext: ToolContext = { workspace, signal, requestConfirmation: gatedConfirmation };
   const tools = createCodingTools(toolContext);
   const systemPrompt = buildSystemPrompt(project, {
-    // The SDK nests tool metadata under `.function`; the `Tool` union doesn't
-    // surface it, so read the name through a narrow structural cast.
-    toolNames: tools.map((tool) => (tool as { function: { name: string } }).function.name),
+    toolNames: CODING_TOOL_NAMES,
     hasBash: true,
   });
 
   // Emit the user's prompt as a whole message item (it's already fully typed).
   const userMessageId = nextId("msg");
-  onDelta({ k: "message_start", id: userMessageId, role: "user" });
+  onDelta({
+    k: "message_start",
+    id: userMessageId,
+    role: "user",
+    ...(images.length ? { images } : {}),
+  });
   const userDelta = createContentDelta("", prompt);
   if (userDelta) {
     onDelta({ k: "content", delta: userDelta });
   }
   onDelta({ k: "status", status: "streaming" });
 
-  const userMessage: EasyInputMessage = { role: "user", content: prompt };
+  const userMessage = toEasyInputMessage({ role: "user", text: prompt, images });
   const input: Item[] = [...toResponsesInput(history), userMessage as Item];
 
   const result = callModel({

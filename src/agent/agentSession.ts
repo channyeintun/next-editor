@@ -4,6 +4,7 @@ import { getAgentStore } from "./agentStore";
 import { createChatRecorder, type ChatEventHandler } from "./chatRecording";
 import type { AgentModelId, ToolConfirmationRequest } from "./types";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
+import type { ChatImage } from "../types/chat";
 
 export interface PendingConfirmation {
   id: number;
@@ -74,8 +75,17 @@ export function resolveConfirmation(id: number, approved: boolean): void {
   resolve(approved);
 }
 
+function settlePendingConfirmations(approved: boolean): void {
+  for (const resolve of resolvers.values()) {
+    resolve(approved);
+  }
+  resolvers.clear();
+  agentSessionStore.trigger.clear();
+}
+
 export function stopAgentRun(): void {
   abortController?.abort();
+  settlePendingConfirmations(false);
 }
 
 export interface StartAgentRunOptions {
@@ -83,6 +93,7 @@ export interface StartAgentRunOptions {
   model: AgentModelId;
   workspace: WorkspaceStoreInstance;
   prompt: string;
+  images?: ChatImage[];
   handleChatEvent: ChatEventHandler;
 }
 
@@ -109,6 +120,7 @@ export async function startAgentRun(options: StartAgentRunOptions): Promise<void
       workspace: options.workspace,
       history,
       prompt: options.prompt,
+      images: options.images,
       signal: controller.signal,
       requestConfirmation,
       onDelta: (delta) => {
@@ -127,11 +139,7 @@ export async function startAgentRun(options: StartAgentRunOptions): Promise<void
     abortController = null;
     // Settle any confirmation still pending on abort/error as declined, so a tool
     // blocked on `await requestConfirmation` unblocks instead of hanging forever.
-    for (const [id, resolve] of resolvers) {
-      resolvers.delete(id);
-      resolve(false);
-    }
-    agentSessionStore.trigger.clear();
+    settlePendingConfirmations(false);
     agentSessionStore.trigger.setRunning({ isRunning: false });
   }
 }

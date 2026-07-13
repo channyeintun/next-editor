@@ -1,12 +1,21 @@
 import type {
   EasyInputMessage,
+  EasyInputMessageContentInputImage,
   FunctionCallOutputItem,
+  InputText,
   Item,
   OutputFunctionCallItem,
   ResponseOutputText,
 } from "@openrouter/agent";
 
 export type ChatRole = "user" | "assistant";
+
+export interface ChatImage {
+  id: string;
+  dataUrl: string;
+  mimeType: string;
+  name?: string;
+}
 
 export type ChatStatus =
   | "idle"
@@ -24,7 +33,7 @@ export type ChatStatus =
  * SDK's `Item[]` so a recorded transcript can be replayed to the model as history.
  */
 export type ChatItem =
-  | { kind: "message"; id: string; role: ChatRole; text: string }
+  | { kind: "message"; id: string; role: ChatRole; text: string; images?: ChatImage[] }
   | { kind: "tool_call"; id: string; callId: string; name: string; arguments: string }
   | { kind: "tool_result"; id: string; callId: string; output: string; isError?: boolean };
 
@@ -50,8 +59,8 @@ export type ChatDelta =
   // Replace the text currently visible in the prompt composer. Recording this
   // separately from user messages preserves typing before a prompt is sent.
   | { k: "draft"; text: string }
-  // Append an empty message item and make it the active one for `content` deltas.
-  | { k: "message_start"; id: string; role: ChatRole }
+  // Append a message shell (plus any user images) and make it active for text deltas.
+  | { k: "message_start"; id: string; role: ChatRole; images?: ChatImage[] }
   // dmp text delta applied to the active message item's text.
   | { k: "content"; delta: ChatContentDelta }
   // Append a completed tool call (arguments already fully streamed).
@@ -80,6 +89,27 @@ export interface ChatRecordingEvent {
   event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint };
 }
 
+export function toEasyInputMessage({
+  role,
+  text,
+  images,
+}: Pick<Extract<ChatItem, { kind: "message" }>, "role" | "text" | "images">): EasyInputMessage {
+  const content = images?.length
+    ? [
+        ...(text ? ([{ type: "input_text", text }] satisfies InputText[]) : []),
+        ...images.map(
+          (image): EasyInputMessageContentInputImage => ({
+            type: "input_image",
+            imageUrl: image.dataUrl,
+            detail: "auto",
+          }),
+        ),
+      ]
+    : text;
+
+  return { role, content };
+}
+
 /**
  * Map a folded `ChatItem[]` transcript back to the SDK `Item[]` input format so a
  * continued conversation replays prior turns as history: assistant/user text become
@@ -91,8 +121,7 @@ export interface ChatRecordingEvent {
 export function toResponsesInput(items: ChatItem[]): Item[] {
   return items.map((item): Item => {
     if (item.kind === "message") {
-      const message: EasyInputMessage = { role: item.role, content: item.text };
-      return message as Item;
+      return toEasyInputMessage(item) as Item;
     }
 
     if (item.kind === "tool_call") {

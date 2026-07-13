@@ -40,6 +40,20 @@ describe("applyChatDelta", () => {
     ]);
   });
 
+  it("keeps pasted images on the user message for transcript replay", () => {
+    const image = {
+      id: "image-1",
+      dataUrl: "data:image/png;base64,AA==",
+      mimeType: "image/png",
+      name: "clipboard.png",
+    };
+    const state = fold([{ k: "message_start", id: "msg-1", role: "user", images: [image] }]);
+
+    expect(state.items).toEqual([
+      { kind: "message", id: "msg-1", role: "user", text: "", images: [image] },
+    ]);
+  });
+
   it("appends a tool_call item after the active message (does not intercept its text)", () => {
     const state = fold([
       { k: "message_start", id: "msg-1", role: "assistant" },

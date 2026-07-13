@@ -164,6 +164,36 @@ describe("runAgentLoop", () => {
     expect(input.at(-1)).toEqual({ role: "user", content: "continue" });
   });
 
+  it("sends pasted images as user input content", async () => {
+    const { deltas, ...options } = baseOptions();
+    const { callModel, calls } = fakeCallModel([messageItem("m1", "I can see it")]);
+    const image = {
+      id: "image-1",
+      dataUrl: "data:image/png;base64,AA==",
+      mimeType: "image/png",
+    };
+
+    await runAgentLoop({
+      ...options,
+      prompt: "What is wrong here?",
+      images: [image],
+      callModel,
+      onDelta: (delta) => deltas.push(delta),
+    });
+
+    const input = calls[0].input as Array<{ role?: string; content?: unknown }>;
+    expect(input.at(-1)?.content).toEqual([
+      { type: "input_text", text: "What is wrong here?" },
+      { type: "input_image", imageUrl: image.dataUrl, detail: "auto" },
+    ]);
+    expect(deltas).toContainEqual({
+      k: "message_start",
+      id: expect.any(String),
+      role: "user",
+      images: [image],
+    });
+  });
+
   it("reports token usage through onUsage", async () => {
     const { deltas, ...options } = baseOptions();
     const { callModel } = fakeCallModel([messageItem("m1", "done")], {

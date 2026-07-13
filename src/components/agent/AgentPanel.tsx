@@ -5,6 +5,7 @@ import { WorkspaceStoreContext } from "../../stores/workspaceStore";
 import {
   getAgentStore,
   selectDraft,
+  selectDraftImages,
   selectError,
   selectItems,
   selectModel,
@@ -27,6 +28,11 @@ import {
 } from "../../agent/agentSession";
 import type { AgentModelId, CredentialStorage } from "../../agent/types";
 import type { ChatItem, ChatStatus } from "../../types/chat";
+import {
+  createChatImage,
+  getClipboardImageFiles,
+  MAX_CHAT_IMAGES,
+} from "../../agent/imageAttachments";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
 import { formatToolResultOutput } from "./toolResultOutput";
 
@@ -109,7 +115,7 @@ function ToolResultRow({ item }: { item: Extract<ChatItem, { kind: "tool_result"
 }
 
 function MessageRow({ item }: { item: Extract<ChatItem, { kind: "message" }> }) {
-  if (!item.text) {
+  if (!item.text && !item.images?.length) {
     return null;
   }
 
@@ -117,11 +123,23 @@ function MessageRow({ item }: { item: Extract<ChatItem, { kind: "message" }> }) 
     <div className={item.role === "user" ? "flex justify-end" : ""}>
       <div className={item.role === "user" ? "max-w-[85%]" : "w-full"}>
         <div
-          className={`whitespace-pre-wrap wrap-break-word rounded-md px-3 py-2 text-[13px] leading-6 ${
+          className={`rounded-md px-3 py-2 text-[13px] leading-6 ${
             item.role === "user" ? "bg-[#233047] text-slate-100" : "bg-transparent text-slate-200"
           }`}
         >
-          {item.text}
+          {item.images?.length ? (
+            <div className={`mb-2 grid gap-2 ${item.images.length > 1 ? "grid-cols-2" : ""}`}>
+              {item.images.map((image) => (
+                <img
+                  key={image.id}
+                  src={image.dataUrl}
+                  alt={image.name ?? "Pasted image"}
+                  className="max-h-56 w-full rounded border border-slate-700 object-contain"
+                />
+              ))}
+            </div>
+          ) : null}
+          {item.text ? <div className="whitespace-pre-wrap wrap-break-word">{item.text}</div> : null}
         </div>
       </div>
     </div>
@@ -149,6 +167,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const liveItems = useSelector(agentStore, (s) => selectItems(s.context));
   const liveStatus = useSelector(agentStore, (s) => selectStatus(s.context));
   const liveDraft = useSelector(agentStore, (s) => selectDraft(s.context));
+  const liveDraftImages = useSelector(agentStore, (s) => selectDraftImages(s.context));
   const replaySnapshot = useSelector(agentStore, (s) => selectReplaySnapshot(s.context));
   const error = useSelector(agentStore, (s) => selectError(s.context));
   const usage = useSelector(agentStore, (s) => selectUsage(s.context));
@@ -167,9 +186,11 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const items = isReplayActive ? (replaySnapshot?.items ?? []) : liveItems;
   const status = isReplayActive ? (replaySnapshot?.status ?? "idle") : liveStatus;
   const promptInput = isReplayActive ? (replaySnapshot?.draft ?? "") : liveDraft;
+  const promptImages = isReplayActive ? [] : liveDraftImages;
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const wasRecordingRef = useRef(false);
 
@@ -202,12 +223,22 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const handleSubmit = () => {
     const prompt = promptInput.trim();
 
-    if (!prompt || isBusy || !apiKey || !workspaceStore || isReplayActive) {
+    if ((!prompt && promptImages.length === 0) || isBusy || !apiKey || !workspaceStore || isReplayActive) {
       return;
     }
 
+    const images = promptImages;
     applyDraft("");
-    void startAgentRun({ apiKey, model, workspace: workspaceStore, prompt, handleChatEvent });
+    agentStore.trigger.clearDraftImages();
+    setAttachmentError(null);
+    void startAgentRun({
+      apiKey,
+      model,
+      workspace: workspaceStore,
+      prompt,
+      images,
+      handleChatEvent,
+    });
   };
 
   const handleStop = () => {
@@ -219,6 +250,32 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
       return;
     }
     agentStore.trigger.reset();
+    setAttachmentError(null);
+  };
+
+  const handlePaste = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = getClipboardImageFiles(event.clipboardData);
+    if (files.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    const availableSlots = MAX_CHAT_IMAGES - agentStore.getSnapshot().context.draftImages.length;
+    if (availableSlots <= 0) {
+      setAttachmentError(`You can attach up to ${MAX_CHAT_IMAGES} images.`);
+      return;
+    }
+
+    try {
+      const images = await Promise.all(files.slice(0, availableSlots).map(createChatImage));
+      const latestSlots = MAX_CHAT_IMAGES - agentStore.getSnapshot().context.draftImages.length;
+      agentStore.trigger.addDraftImages({ images: images.slice(0, latestSlots) });
+      setAttachmentError(
+        files.length > availableSlots ? `Only the first ${availableSlots} images were attached.` : null,
+      );
+    } catch (pasteError) {
+      setAttachmentError(pasteError instanceof Error ? pasteError.message : String(pasteError));
+    }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -325,16 +382,42 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
 
           <div className="border-t border-[#11151d] bg-[#13171e] p-3">
             <div className="rounded-lg border border-slate-700/80 bg-[#0f1319] shadow-[0_8px_20px_rgba(0,0,0,0.18)] transition-colors focus-within:border-[#64a3ff]/70 focus-within:ring-1 focus-within:ring-[#64a3ff]/25">
+              {promptImages.length > 0 ? (
+                <div className="flex gap-2 overflow-x-auto border-b border-slate-800/80 p-2">
+                  {promptImages.map((image) => (
+                    <div key={image.id} className="group relative size-14 shrink-0">
+                      <img
+                        src={image.dataUrl}
+                        alt={image.name ?? "Pasted image"}
+                        className="size-full rounded border border-slate-700 object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => agentStore.trigger.removeDraftImage({ id: image.id })}
+                        className="absolute -right-1 -top-1 inline-flex size-5 items-center justify-center rounded-full bg-slate-900 text-slate-300 shadow hover:bg-red-900 hover:text-red-100"
+                        aria-label={`Remove ${image.name ?? "pasted image"}`}
+                        title="Remove image"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <textarea
                 value={promptInput}
                 onChange={(event) => applyDraft(event.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={(event) => void handlePaste(event)}
                 disabled={isBusy || isReplayActive}
                 aria-label="Message the agent"
                 placeholder="Ask anything about this workspace"
                 rows={2}
                 className="h-14 min-h-14 w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
               />
+              {attachmentError ? (
+                <p className="px-3 pb-2 text-[11px] text-amber-400">{attachmentError}</p>
+              ) : null}
               <div className="flex items-center justify-between gap-2 border-t border-slate-800/80 px-2 py-1.5">
                 <button
                   type="button"
@@ -359,7 +442,9 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                   <button
                     type="button"
                     onClick={() => void handleSubmit()}
-                    disabled={!promptInput.trim() || !apiKey || isReplayActive}
+                    disabled={
+                      (!promptInput.trim() && promptImages.length === 0) || !apiKey || isReplayActive
+                    }
                     className="inline-flex size-7 shrink-0 items-center justify-center rounded bg-[#58d88d] text-[#0b2416] transition-colors hover:bg-[#7ce5a5] disabled:cursor-not-allowed disabled:bg-[#27382f] disabled:text-slate-500"
                     aria-label="Send message"
                     title="Send message"

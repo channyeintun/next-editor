@@ -1,5 +1,5 @@
 import { createStore } from "@xstate/store-react";
-import type { ChatCheckpoint, ChatDelta, ChatItem, ChatStatus } from "../types/chat";
+import type { ChatCheckpoint, ChatDelta, ChatImage, ChatItem, ChatStatus } from "../types/chat";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE } from "../core/src/utils/chatDelta";
 import { DEFAULT_AGENT_MODEL, type AgentModelId } from "./types";
 
@@ -13,6 +13,7 @@ export interface AgentStoreContext {
   items: ChatItem[];
   status: ChatStatus;
   draft: string;
+  draftImages: ChatImage[];
   error: string | null;
   usage: AgentUsage;
   /** Set by `applyChatSnapshot` during recording playback; null while live (see AgentPanel). */
@@ -25,6 +26,7 @@ function initialContext(): AgentStoreContext {
     items: INITIAL_CHAT_FOLD_STATE.items,
     status: INITIAL_CHAT_FOLD_STATE.status,
     draft: INITIAL_CHAT_FOLD_STATE.draft,
+    draftImages: [],
     error: null,
     usage: { inputTokens: 0, outputTokens: 0 },
     replaySnapshot: null,
@@ -64,6 +66,19 @@ export function createAgentStore() {
         },
       }),
 
+      addDraftImages: (context, event: { images: ChatImage[] }) => ({
+        ...context,
+        draftImages: [...context.draftImages, ...event.images],
+      }),
+
+      removeDraftImage: (context, event: { id: string }) => ({
+        ...context,
+        draftImages: context.draftImages.filter((image) => image.id !== event.id),
+      }),
+
+      clearDraftImages: (context) =>
+        context.draftImages.length === 0 ? context : { ...context, draftImages: [] },
+
       setError: (context, event: { message: string | null }) => ({
         ...context,
         error: event.message,
@@ -84,6 +99,7 @@ export type AgentStoreInstance = ReturnType<typeof createAgentStore>;
 export const selectItems = (context: AgentStoreContext): ChatItem[] => context.items;
 export const selectStatus = (context: AgentStoreContext): ChatStatus => context.status;
 export const selectDraft = (context: AgentStoreContext): string => context.draft;
+export const selectDraftImages = (context: AgentStoreContext): ChatImage[] => context.draftImages;
 export const selectError = (context: AgentStoreContext): string | null => context.error;
 export const selectUsage = (context: AgentStoreContext): AgentUsage => context.usage;
 export const selectModel = (context: AgentStoreContext): AgentModelId => context.model;

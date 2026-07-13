@@ -37,7 +37,16 @@ export function applyChatDelta(state: ChatFoldState, delta: ChatDelta): ChatFold
     case "message_start":
       return {
         ...state,
-        items: [...state.items, { kind: "message", id: delta.id, role: delta.role, text: "" }],
+        items: [
+          ...state.items,
+          {
+            kind: "message",
+            id: delta.id,
+            role: delta.role,
+            text: "",
+            ...(delta.images?.length ? { images: delta.images } : {}),
+          },
+        ],
       };
 
     case "content": {
