@@ -144,7 +144,9 @@ describe("recordingCodec", () => {
     const recording = createRecording({
       duration: 800,
       chatEvents: [
-        { timestamp: 0, event: { k: "message_start", id: "msg-1", role: "user" } },
+        { timestamp: 0, event: { k: "draft", text: "Hello!" } },
+        { timestamp: 1, event: { k: "draft", text: "" } },
+        { timestamp: 2, event: { k: "message_start", id: "msg-1", role: "user" } },
         { timestamp: 5, event: { k: "content", delta: contentDelta! } },
         { timestamp: 20, event: { k: "message_start", id: "msg-2", role: "assistant" } },
         {
@@ -168,6 +170,7 @@ describe("recordingCodec", () => {
             state: {
               items: [{ kind: "message", id: "msg-1", role: "user", text: "Hello!" }],
               status: "streaming",
+              draft: "",
             },
           },
         },

@@ -129,8 +129,8 @@ export function appendRuntimeRecordingEvent(
 
 /**
  * Unlike the runtime/workspace appenders, chat deltas are each a real change and
- * are never deduplicated — except a `status` repeat, which is idempotent (the
- * loop may emit the same status across several no-op ticks).
+ * are never deduplicated — except idempotent repeats of `status` and `draft`.
+ * The latter can happen around component lifecycle boundaries.
  */
 export function appendChatDelta(
   session: RecordingSession,
@@ -140,9 +140,10 @@ export function appendChatDelta(
 
   if (
     previousEvent &&
-    previousEvent.k === "status" &&
-    event.k === "status" &&
-    previousEvent.status === event.status
+    ((previousEvent.k === "status" &&
+      event.k === "status" &&
+      previousEvent.status === event.status) ||
+      (previousEvent.k === "draft" && event.k === "draft" && previousEvent.text === event.text))
   ) {
     return false;
   }

@@ -39,13 +39,17 @@ export interface ChatContentDelta {
 }
 
 /**
- * Every delta records ONLY what changed. Text streams into the active (most recently
+ * Transcript text records only what changed: it streams into the active (most recently
  * started) message item as a dmp `content` delta; tool calls and results are appended
- * whole. No full-transcript records here — see `ChatCheckpoint` for the sparse seek
- * anchor. Replay is a reducer that folds these in order (src/core/src/machine/
- * replayState/chat.ts).
+ * whole. Prompt drafts are small replacement values so arbitrary typing/deletion is
+ * replayable without becoming transcript content. No full-transcript records here —
+ * see `ChatCheckpoint` for the sparse seek anchor. Replay is a reducer that folds these
+ * in order (src/core/src/machine/replayState/chat.ts).
  */
 export type ChatDelta =
+  // Replace the text currently visible in the prompt composer. Recording this
+  // separately from user messages preserves typing before a prompt is sent.
+  | { k: "draft"; text: string }
   // Append an empty message item and make it the active one for `content` deltas.
   | { k: "message_start"; id: string; role: ChatRole }
   // dmp text delta applied to the active message item's text.
@@ -67,6 +71,8 @@ export type ChatDelta =
 export interface ChatCheckpoint {
   items: ChatItem[];
   status: ChatStatus;
+  /** Prompt composer text at this point in the recording. Absent in older recordings. */
+  draft?: string;
 }
 
 export interface ChatRecordingEvent {

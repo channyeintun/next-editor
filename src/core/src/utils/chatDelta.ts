@@ -4,9 +4,10 @@ import { applyContentDelta } from "./frameDelta";
 export interface ChatFoldState {
   items: ChatItem[];
   status: ChatStatus;
+  draft: string;
 }
 
-export const INITIAL_CHAT_FOLD_STATE: ChatFoldState = { items: [], status: "idle" };
+export const INITIAL_CHAT_FOLD_STATE: ChatFoldState = { items: [], status: "idle", draft: "" };
 
 /** Index of the active message item: the last `message` in the list, or -1. */
 function lastMessageIndex(items: ChatItem[]): number {
@@ -30,6 +31,9 @@ function lastMessageIndex(items: ChatItem[]): number {
  */
 export function applyChatDelta(state: ChatFoldState, delta: ChatDelta): ChatFoldState {
   switch (delta.k) {
+    case "draft":
+      return delta.text === state.draft ? state : { ...state, draft: delta.text };
+
     case "message_start":
       return {
         ...state,

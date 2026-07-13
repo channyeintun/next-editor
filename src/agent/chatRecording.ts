@@ -31,7 +31,7 @@ export function createChatRecorder(
     const context = agentStore.getSnapshot().context;
     handleChatEvent({
       k: "checkpoint",
-      state: { items: context.items, status: context.status },
+      state: { items: context.items, status: context.status, draft: context.draft },
     });
     deltasSinceCheckpoint = 0;
   };

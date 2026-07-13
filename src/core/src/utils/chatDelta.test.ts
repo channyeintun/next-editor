@@ -17,6 +17,17 @@ function insertDelta(prev: string, next: string) {
 }
 
 describe("applyChatDelta", () => {
+  it("tracks prompt composer edits and clearing independently from transcript items", () => {
+    const typed = fold([
+      { k: "draft", text: "fix" },
+      { k: "draft", text: "fix the bug" },
+    ]);
+
+    expect(typed.draft).toBe("fix the bug");
+    expect(typed.items).toEqual([]);
+    expect(fold([{ k: "draft", text: "" }], typed).draft).toBe("");
+  });
+
   it("streams text into the active message via message_start + content", () => {
     const state = fold([
       { k: "message_start", id: "msg-1", role: "assistant" },

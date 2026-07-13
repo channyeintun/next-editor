@@ -12,6 +12,7 @@ export interface AgentStoreContext {
   model: AgentModelId;
   items: ChatItem[];
   status: ChatStatus;
+  draft: string;
   error: string | null;
   usage: AgentUsage;
   /** Set by `applyChatSnapshot` during recording playback; null while live (see AgentPanel). */
@@ -23,6 +24,7 @@ function initialContext(): AgentStoreContext {
     model: DEFAULT_AGENT_MODEL,
     items: INITIAL_CHAT_FOLD_STATE.items,
     status: INITIAL_CHAT_FOLD_STATE.status,
+    draft: INITIAL_CHAT_FOLD_STATE.draft,
     error: null,
     usage: { inputTokens: 0, outputTokens: 0 },
     replaySnapshot: null,
@@ -43,10 +45,15 @@ export function createAgentStore() {
 
       applyDelta: (context, event: { delta: ChatDelta }) => {
         const folded = applyChatDelta(
-          { items: context.items, status: context.status },
+          { items: context.items, status: context.status, draft: context.draft },
           event.delta,
         );
-        return { ...context, items: folded.items, status: folded.status };
+        return {
+          ...context,
+          items: folded.items,
+          status: folded.status,
+          draft: folded.draft,
+        };
       },
 
       addUsage: (context, event: { usage: AgentUsage }) => ({
@@ -76,6 +83,7 @@ export type AgentStoreInstance = ReturnType<typeof createAgentStore>;
 
 export const selectItems = (context: AgentStoreContext): ChatItem[] => context.items;
 export const selectStatus = (context: AgentStoreContext): ChatStatus => context.status;
+export const selectDraft = (context: AgentStoreContext): string => context.draft;
 export const selectError = (context: AgentStoreContext): string | null => context.error;
 export const selectUsage = (context: AgentStoreContext): AgentUsage => context.usage;
 export const selectModel = (context: AgentStoreContext): AgentModelId => context.model;

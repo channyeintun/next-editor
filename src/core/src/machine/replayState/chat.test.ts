@@ -29,6 +29,23 @@ const CHAT_EVENTS: ChatRecordingEvent[] = [
 ];
 
 describe("getChatReplayResult", () => {
+  it("replays prompt composer typing and clearing at their recorded times", () => {
+    const events: ChatRecordingEvent[] = [
+      { timestamp: 5, event: { k: "draft", text: "fix" } },
+      { timestamp: 10, event: { k: "draft", text: "fix the bug" } },
+      { timestamp: 15, event: { k: "draft", text: "" } },
+    ];
+
+    expect(
+      getChatReplayResult({ chatEvents: events, currentTime: 10, lastAppliedIndex: -1 })
+        .snapshotToApply?.draft,
+    ).toBe("fix the bug");
+    expect(
+      getChatReplayResult({ chatEvents: events, currentTime: 15, lastAppliedIndex: 1 })
+        .snapshotToApply?.draft,
+    ).toBe("");
+  });
+
   it("folds from empty when there is no checkpoint yet", () => {
     const result = getChatReplayResult({
       chatEvents: CHAT_EVENTS,
