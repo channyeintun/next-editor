@@ -1,9 +1,10 @@
 import type { ChatCheckpoint, ChatDelta } from "../types/chat";
 import type { AgentStoreInstance } from "./agentStore";
 
-// Every message_end, and otherwise every ~200 deltas (plan §13) — sparse enough
-// that checkpoint cost stays sub-dominant to the delta log, bounded enough that
-// a seek never re-folds from empty on a long-running conversation.
+// Checkpoint on every run completion (status → done/error) and otherwise every
+// ~200 deltas — sparse enough that checkpoint cost stays sub-dominant to the
+// delta log, bounded enough that a seek never re-folds from empty on a long
+// conversation.
 const CHECKPOINT_DELTA_INTERVAL = 200;
 
 export type ChatEventHandler = (
@@ -13,9 +14,8 @@ export type ChatEventHandler = (
 /**
  * Turns an agent loop's delta stream into recorded chat events. `handleChatEvent`
  * is `NextEditorActions.handleChatEvent`, which no-ops while no recording session
- * is active (`captureChatEvent` → `appendToSession` in captureActions.ts) — so
- * this recorder can run unconditionally; it captures only while recording, per
- * plan §9.2.
+ * is active — so this recorder can run unconditionally; it captures only while
+ * recording.
  *
  * Callers must apply each delta to `agentStore` (`trigger.applyDelta`) *before*
  * calling the returned function, since a checkpoint is folded from the store's
@@ -31,7 +31,7 @@ export function createChatRecorder(
     const context = agentStore.getSnapshot().context;
     handleChatEvent({
       k: "checkpoint",
-      state: { messages: context.messages, status: context.status },
+      state: { items: context.items, status: context.status },
     });
     deltasSinceCheckpoint = 0;
   };
@@ -40,7 +40,9 @@ export function createChatRecorder(
     handleChatEvent(delta);
     deltasSinceCheckpoint += 1;
 
-    if (delta.k === "message_end" || deltasSinceCheckpoint >= CHECKPOINT_DELTA_INTERVAL) {
+    const runSettled =
+      delta.k === "status" && (delta.status === "done" || delta.status === "error");
+    if (runSettled || deltasSinceCheckpoint >= CHECKPOINT_DELTA_INTERVAL) {
       emitCheckpoint();
     }
   };

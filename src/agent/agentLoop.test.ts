@@ -1,15 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type Anthropic from "@anthropic-ai/sdk";
-import { APIUserAbortError } from "@anthropic-ai/sdk";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
-import type { Tool, ToolExecuteResult } from "./types";
 import type { ChatDelta } from "../types/chat";
-import { runAgentLoop } from "./agentLoop";
-import { createAnthropicClient } from "./anthropicClient";
-
-vi.mock("./anthropicClient", () => ({
-  createAnthropicClient: vi.fn<() => Anthropic>(),
-}));
+import { runAgentLoop, type RunAgentLoopOptions } from "./agentLoop";
 
 function createFakeWorkspaceStore(): WorkspaceStoreInstance {
   return {
@@ -34,73 +26,59 @@ function createFakeWorkspaceStore(): WorkspaceStoreInstance {
       },
     }),
     trigger: {},
-    // Rest of the store surface is unused by the loop in this unit test — tool
-    // behavior against a real store is covered by each tool's own tests.
   } as unknown as WorkspaceStoreInstance;
 }
 
-function makeUsage(): Anthropic.Usage {
-  return {
-    input_tokens: 10,
-    output_tokens: 5,
-    cache_creation: null,
-    cache_creation_input_tokens: null,
-    cache_read_input_tokens: null,
-    inference_geo: null,
-    server_tool_use: null,
-  } as unknown as Anthropic.Usage;
+// Minimal stand-ins for the SDK's streamed output items the loop reads.
+type StreamItem = Record<string, unknown>;
+const messageItem = (id: string, text: string): StreamItem => ({
+  type: "message",
+  id,
+  role: "assistant",
+  status: "completed",
+  content: [{ type: "output_text", text }],
+});
+const functionCallItem = (callId: string, name: string, args: string): StreamItem => ({
+  type: "function_call",
+  callId,
+  name,
+  arguments: args,
+  status: "completed",
+});
+const functionOutputItem = (callId: string, output: string): StreamItem => ({
+  type: "function_call_output",
+  callId,
+  output,
+});
+
+interface FakeModelInput {
+  input: unknown;
+  instructions?: unknown;
+  model?: unknown;
 }
 
-function makeMessage(overrides: Partial<Anthropic.Message> = {}): Anthropic.Message {
-  return {
-    id: "msg_1",
-    type: "message",
-    role: "assistant",
-    model: "claude-haiku-4-5",
-    content: [],
-    stop_reason: "end_turn",
-    stop_sequence: null,
-    usage: makeUsage(),
-    ...overrides,
-  } as Anthropic.Message;
-}
-
-type Listener = (...args: unknown[]) => void;
-
-function createFakeStream(finalMessage: Anthropic.Message, finalError?: Error) {
-  const listeners = new Map<string, Listener[]>();
-
-  const fakeStream = {
-    on(event: string, cb: Listener) {
-      const existing = listeners.get(event) ?? [];
-      existing.push(cb);
-      listeners.set(event, existing);
-      return fakeStream;
-    },
-    finalMessage: async () => {
-      for (const block of finalMessage.content) {
-        if (block.type === "tool_use") {
-          for (const cb of listeners.get("contentBlock") ?? []) cb(block);
+function fakeCallModel(items: StreamItem[], usage?: { inputTokens: number; outputTokens: number }) {
+  const calls: FakeModelInput[] = [];
+  const cancel = vi.fn<() => Promise<void>>(async () => {});
+  const callModel = ((request: FakeModelInput) => {
+    calls.push(request);
+    return {
+      getItemsStream: async function* () {
+        for (const item of items) {
+          yield item;
         }
-      }
-      if (finalError) throw finalError;
-      return finalMessage;
-    },
-  };
-
-  return fakeStream;
-}
-
-type FakeStream = ReturnType<typeof createFakeStream>;
-
-function toolUseBlock(id: string, name: string, input: unknown): Anthropic.ToolUseBlock {
-  return { type: "tool_use", id, name, input } as Anthropic.ToolUseBlock;
+      },
+      getResponse: async () => ({ usage }),
+      cancel,
+    };
+  }) as unknown as NonNullable<RunAgentLoopOptions["callModel"]>;
+  return { callModel, calls, cancel };
 }
 
 function baseOptions() {
   const deltas: ChatDelta[] = [];
   return {
-    apiKey: "sk-ant-test",
+    apiKey: "sk-or-test",
     workspace: createFakeWorkspaceStore(),
     history: [],
     signal: new AbortController().signal,
@@ -111,247 +89,115 @@ function baseOptions() {
 }
 
 describe("runAgentLoop", () => {
-  it("finishes after a plain text turn with no tool calls", async () => {
-    const streamFn = vi
-      .fn<(body: { messages: Anthropic.MessageParam[] }) => FakeStream>()
-      .mockReturnValue(
-        createFakeStream(
-          makeMessage({ content: [{ type: "text", text: "hi" } as Anthropic.TextBlock] }),
-        ),
-      );
-    vi.mocked(createAnthropicClient).mockReturnValue({
-      messages: { stream: streamFn },
-    } as unknown as Anthropic);
-
+  it("streams a plain text turn into message_start + content and ends done", async () => {
     const { deltas, ...options } = baseOptions();
-    await runAgentLoop({ ...options, tools: [], prompt: "hello", onDelta: (d) => deltas.push(d) });
+    const { callModel } = fakeCallModel([messageItem("m1", "Hello there")]);
 
-    expect(streamFn).toHaveBeenCalledTimes(1);
+    await runAgentLoop({ ...options, prompt: "hi", callModel, onDelta: (d) => deltas.push(d) });
+
     expect(deltas.at(-1)).toEqual({ k: "status", status: "done" });
-    expect(deltas.some((d) => d.k === "tool_use")).toBe(false);
-    // Haiku (the default) must not receive thinking/effort — the API errors on them.
-    const body = streamFn.mock.calls[0][0] as Record<string, unknown>;
-    expect(body.thinking).toBeUndefined();
-    expect(body.output_config).toBeUndefined();
+    // A user message and an assistant message were started.
+    const starts = deltas.filter((d) => d.k === "message_start");
+    expect(starts.map((d) => d.k === "message_start" && d.role)).toEqual(["user", "assistant"]);
+    expect(deltas.some((d) => d.k === "tool_call")).toBe(false);
   });
 
-  it("enables adaptive thinking + effort only when the model is switched up to Sonnet/Opus", async () => {
-    const streamFn = vi
-      .fn<(body: { messages: Anthropic.MessageParam[] }) => FakeStream>()
-      .mockReturnValue(
-        createFakeStream(
-          makeMessage({ content: [{ type: "text", text: "ok" } as Anthropic.TextBlock] }),
-        ),
-      );
-    vi.mocked(createAnthropicClient).mockReturnValue({
-      messages: { stream: streamFn },
-    } as unknown as Anthropic);
-
+  it("emits a tool_call and its matching tool_result for an executed tool", async () => {
     const { deltas, ...options } = baseOptions();
+    const { callModel } = fakeCallModel([
+      messageItem("m1", "reading"),
+      functionCallItem("call-1", "read", '{"path":"index.html"}'),
+      functionOutputItem("call-1", "<html></html>"),
+    ]);
+
     await runAgentLoop({
       ...options,
-      model: "claude-sonnet-5",
-      tools: [],
-      prompt: "hard task",
+      prompt: "read it",
+      callModel,
       onDelta: (d) => deltas.push(d),
     });
 
-    const body = streamFn.mock.calls[0][0] as Record<string, unknown>;
-    expect(body.thinking).toEqual({ type: "adaptive" });
-    expect(body.output_config).toEqual({ effort: "high" });
+    const toolCall = deltas.find((d) => d.k === "tool_call");
+    expect(toolCall).toMatchObject({ callId: "call-1", name: "read" });
+    const toolResult = deltas.find((d) => d.k === "tool_result");
+    expect(toolResult).toMatchObject({ callId: "call-1", output: "<html></html>" });
   });
 
-  it("collects every tool_result into a single follow-up user message and reports is_error", async () => {
-    const okTool: Tool = {
-      name: "ok",
-      description: "ok",
-      input_schema: { type: "object", properties: {} },
-      execute: async (): Promise<ToolExecuteResult> => ({ content: "ok output" }),
-    };
-    const failingTool: Tool = {
-      name: "failing",
-      description: "failing",
-      input_schema: { type: "object", properties: {} },
-      execute: async (): Promise<ToolExecuteResult> => ({ content: "boom", is_error: true }),
-    };
-
-    const firstMessage = makeMessage({
-      stop_reason: "tool_use",
-      content: [toolUseBlock("call-1", "ok", {}), toolUseBlock("call-2", "failing", {})],
-    });
-    const secondMessage = makeMessage({
-      content: [{ type: "text", text: "done" } as Anthropic.TextBlock],
-    });
-
-    const streamFn = vi
-      .fn<(body: { messages: Anthropic.MessageParam[] }) => FakeStream>()
-      .mockReturnValueOnce(createFakeStream(firstMessage))
-      .mockReturnValueOnce(createFakeStream(secondMessage));
-    vi.mocked(createAnthropicClient).mockReturnValue({
-      messages: { stream: streamFn },
-    } as unknown as Anthropic);
-
+  it("closes a tool_call that never produced an output with a synthetic error result", async () => {
     const { deltas, ...options } = baseOptions();
+    // A completed function_call but no matching function_call_output — the run
+    // stopped between the call and its result.
+    const { callModel } = fakeCallModel([
+      messageItem("m1", "let me run that"),
+      functionCallItem("call-x", "bash", '{"command":"ls"}'),
+    ]);
+
+    await runAgentLoop({ ...options, prompt: "run", callModel, onDelta: (d) => deltas.push(d) });
+
+    const callIds = deltas
+      .filter((d) => d.k === "tool_call")
+      .map((d) => d.k === "tool_call" && d.callId);
+    const answered = new Set(
+      deltas.filter((d) => d.k === "tool_result").map((d) => d.k === "tool_result" && d.callId),
+    );
+    expect(callIds).toEqual(["call-x"]);
+    expect(answered.has("call-x")).toBe(true);
+    expect(deltas.some((d) => d.k === "tool_result" && d.callId === "call-x" && d.isError)).toBe(
+      true,
+    );
+  });
+
+  it("replays prior transcript items as history input ahead of the new user message", async () => {
+    const { deltas, ...options } = baseOptions();
+    const { callModel, calls } = fakeCallModel([messageItem("m1", "ok")]);
+
     await runAgentLoop({
       ...options,
-      tools: [okTool, failingTool],
-      prompt: "do two things",
+      history: [{ kind: "message", id: "m0", role: "assistant", text: "earlier reply" }],
+      prompt: "continue",
+      callModel,
       onDelta: (d) => deltas.push(d),
     });
 
-    expect(streamFn).toHaveBeenCalledTimes(2);
-    const secondCallMessages = streamFn.mock.calls[1][0].messages as Anthropic.MessageParam[];
-    const toolResultMessage = secondCallMessages.at(-1)!;
-    expect(toolResultMessage.role).toBe("user");
-    expect(toolResultMessage.content).toHaveLength(2);
-    const resultBlocks = toolResultMessage.content as Anthropic.ToolResultBlockParam[];
-    expect(resultBlocks.map((b) => b.tool_use_id)).toEqual(["call-1", "call-2"]);
-    expect(resultBlocks[0].is_error).toBeUndefined();
-    expect(resultBlocks[1].is_error).toBe(true);
-
-    const toolResultDeltas = deltas.filter((d) => d.k === "tool_result");
-    expect(toolResultDeltas).toHaveLength(2);
-    expect(toolResultDeltas[1]).toMatchObject({ toolUseId: "call-2", isError: true });
+    const input = calls[0].input as Array<{ role?: string; content?: string }>;
+    expect(input[0]).toEqual({ role: "assistant", content: "earlier reply" });
+    expect(input.at(-1)).toEqual({ role: "user", content: "continue" });
   });
 
-  it("emits waiting-confirmation while a gated tool is blocked, then restores running-tool", async () => {
-    const gatedTool: Tool = {
-      name: "gated",
-      description: "gated",
-      input_schema: { type: "object", properties: {} },
-      execute: async (_input, ctx): Promise<ToolExecuteResult> => {
-        const approved = await ctx.requestConfirmation({ toolName: "gated", summary: "do it" });
-        return { content: approved ? "ran" : "declined", is_error: !approved };
-      },
-    };
-
-    const firstMessage = makeMessage({
-      stop_reason: "tool_use",
-      content: [toolUseBlock("call-1", "gated", {})],
-    });
-    const secondMessage = makeMessage({
-      content: [{ type: "text", text: "done" } as Anthropic.TextBlock],
-    });
-    const streamFn = vi
-      .fn<(body: { messages: Anthropic.MessageParam[] }) => FakeStream>()
-      .mockReturnValueOnce(createFakeStream(firstMessage))
-      .mockReturnValueOnce(createFakeStream(secondMessage));
-    vi.mocked(createAnthropicClient).mockReturnValue({
-      messages: { stream: streamFn },
-    } as unknown as Anthropic);
-
+  it("reports token usage through onUsage", async () => {
     const { deltas, ...options } = baseOptions();
+    const { callModel } = fakeCallModel([messageItem("m1", "done")], {
+      inputTokens: 12,
+      outputTokens: 7,
+    });
+    const onUsage = vi.fn<(usage: { inputTokens: number; outputTokens: number }) => void>();
+
     await runAgentLoop({
       ...options,
-      tools: [gatedTool],
-      prompt: "run the gated tool",
-      requestConfirmation: async () => true,
+      prompt: "hi",
+      callModel,
+      onUsage,
       onDelta: (d) => deltas.push(d),
     });
 
-    const statuses = deltas.filter((d) => d.k === "status").map((d) => d.status);
-    // running-tool → waiting-confirmation (gate opens) → running-tool (gate closes)
-    const waitingIndex = statuses.indexOf("waiting-confirmation");
-    expect(waitingIndex).toBeGreaterThan(-1);
-    expect(statuses[waitingIndex - 1]).toBe("running-tool");
-    expect(statuses[waitingIndex + 1]).toBe("running-tool");
+    expect(onUsage).toHaveBeenCalledWith({ inputTokens: 12, outputTokens: 7 });
   });
 
-  it("caps iterations when the model keeps requesting tools forever", async () => {
-    const loopingTool: Tool = {
-      name: "loop",
-      description: "loop",
-      input_schema: { type: "object", properties: {} },
-      execute: async (): Promise<ToolExecuteResult> => ({ content: "again" }),
-    };
-    const foreverToolUse = () =>
-      createFakeStream(
-        makeMessage({ stop_reason: "tool_use", content: [toolUseBlock("call-x", "loop", {})] }),
-      );
-
-    const streamFn = vi
-      .fn<(body: { messages: Anthropic.MessageParam[] }) => FakeStream>()
-      .mockImplementation(foreverToolUse);
-    vi.mocked(createAnthropicClient).mockReturnValue({
-      messages: { stream: streamFn },
-    } as unknown as Anthropic);
-
-    const { deltas, ...options } = baseOptions();
-    await runAgentLoop({
-      ...options,
-      tools: [loopingTool],
-      prompt: "loop forever",
-      maxIterations: 3,
-      onDelta: (d) => deltas.push(d),
-    });
-
-    expect(streamFn).toHaveBeenCalledTimes(3);
-    expect(deltas.at(-1)).toEqual({ k: "status", status: "done" });
-  });
-
-  it("stops without error when the stream is aborted mid-turn", async () => {
+  it("ends with status done (no error) when the signal is already aborted", async () => {
     const controller = new AbortController();
-    const abortError = new APIUserAbortError();
-    const streamFn = vi
-      .fn<(body: { messages: Anthropic.MessageParam[] }) => FakeStream>()
-      .mockReturnValue(createFakeStream(makeMessage(), abortError));
-    vi.mocked(createAnthropicClient).mockReturnValue({
-      messages: { stream: streamFn },
-    } as unknown as Anthropic);
-
+    controller.abort();
     const { deltas, ...options } = baseOptions();
-    await expect(
-      runAgentLoop({
-        ...options,
-        signal: controller.signal,
-        tools: [],
-        prompt: "cancel me",
-        onDelta: (d) => deltas.push(d),
-      }),
-    ).resolves.toBeUndefined();
+    const { callModel } = fakeCallModel([messageItem("m1", "unused")]);
 
-    expect(deltas.filter((d) => d.k === "status").at(-1)).toEqual({ k: "status", status: "done" });
-    expect(deltas.some((d) => d.k === "status" && d.status === "error")).toBe(false);
-  });
-
-  it("closes a streamed tool_use with a synthetic result when the turn is aborted mid-stream", async () => {
-    const controller = new AbortController();
-    const streamFn = vi
-      .fn<(body: { messages: Anthropic.MessageParam[] }) => FakeStream>()
-      .mockReturnValue(
-        // The tool_use block finished streaming (contentBlock fires, folding it into
-        // the transcript) but the turn is then aborted before its tool ever runs.
-        createFakeStream(
-          makeMessage({
-            stop_reason: "tool_use",
-            content: [toolUseBlock("call-aborted", "read", { path: "index.html" })],
-          }),
-          new APIUserAbortError(),
-        ),
-      );
-    vi.mocked(createAnthropicClient).mockReturnValue({
-      messages: { stream: streamFn },
-    } as unknown as Anthropic);
-
-    const { deltas, ...options } = baseOptions();
     await runAgentLoop({
       ...options,
       signal: controller.signal,
-      tools: [],
-      prompt: "read then cancel",
+      prompt: "cancel",
+      callModel,
       onDelta: (d) => deltas.push(d),
     });
 
-    // Every streamed tool_use must be answered, or the next request 400s.
-    const toolUseIds = deltas.filter((d) => d.k === "tool_use").map((d) => d.toolUseId);
-    const answeredIds = new Set(
-      deltas.filter((d) => d.k === "tool_result").map((d) => d.toolUseId),
-    );
-    expect(toolUseIds).toEqual(["call-aborted"]);
-    expect(toolUseIds.every((id) => answeredIds.has(id))).toBe(true);
-    expect(
-      deltas.some((d) => d.k === "tool_result" && d.toolUseId === "call-aborted" && d.isError),
-    ).toBe(true);
     expect(deltas.filter((d) => d.k === "status").at(-1)).toEqual({ k: "status", status: "done" });
+    expect(deltas.some((d) => d.k === "status" && d.status === "error")).toBe(false);
   });
 });

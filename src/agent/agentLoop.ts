@@ -1,59 +1,46 @@
-import Anthropic, { APIUserAbortError } from "@anthropic-ai/sdk";
-import { createAnthropicClient } from "./anthropicClient";
+import { stepCountIs } from "@openrouter/agent";
+import type { EasyInputMessage, FunctionCallOutputItem, Item, OpenRouter } from "@openrouter/agent";
+import { createOpenRouterClient } from "./openrouterClient";
 import {
   DEFAULT_AGENT_MODEL,
-  modelSupportsThinking,
   type AgentModelId,
-  type Tool,
   type ToolConfirmationRequest,
   type ToolContext,
-  type ToolExecuteResult,
 } from "./types";
-import { createToolMap, toAnthropicToolSchemas } from "./tools/index";
+import { createCodingTools } from "./tools/index";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getProject } from "./tools/workspaceFs";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
-import type { ChatDelta, ChatMessage } from "../types/chat";
-import { toMessageParams } from "../types/chat";
+import type { ChatDelta, ChatItem } from "../types/chat";
+import { outputMessageText, toResponsesInput } from "../types/chat";
 import { createContentDelta } from "../core/src/utils/frameDelta";
 import { getDmpCodec, isDmpCodecLoaded, loadDmpCodec } from "../storage/dmpCodec/dmpCodec";
 
-// Default cap; Haiku 4.5's ceiling is 64K but every model here is well above this,
-// and streaming means a large max_tokens never risks an HTTP timeout either way.
-const MAX_TOKENS = 32000;
-const MAX_ITERATIONS = 30;
-// Coalesce streamed text into recorded/live deltas at ~10 Hz (plan §9.2) instead
-// of one dmp delta per SSE chunk, so recording stays a few events per second.
-const CONTENT_COALESCE_MS = 100;
+const MAX_OUTPUT_TOKENS = 32000;
+const MAX_STEPS = 30;
 
-// Adaptive thinking + effort are Sonnet/Opus-only (plan §5.2/§7): Haiku 4.5 errors
-// on `effort` and supports neither, so these are omitted entirely for the default
-// model and only sent when the user switches up for a harder task.
-function reasoningParams(
-  model: AgentModelId,
-): Pick<Anthropic.MessageStreamParams, "thinking" | "output_config"> {
-  if (!modelSupportsThinking(model)) {
-    return {};
-  }
+/** The one bound `callModel` method off an `OpenRouter` client — the only surface this loop needs. */
+type CallModel = OpenRouter["callModel"];
 
-  return {
-    thinking: { type: "adaptive" },
-    output_config: { effort: "high" },
-  };
+export interface AgentUsage {
+  inputTokens: number;
+  outputTokens: number;
 }
 
 export interface RunAgentLoopOptions {
   apiKey: string;
   model?: AgentModelId;
   workspace: WorkspaceStoreInstance;
-  tools: Tool[];
   /** Prior folded transcript to continue from; empty for a fresh conversation. */
-  history: ChatMessage[];
+  history: ChatItem[];
   prompt: string;
   signal: AbortSignal;
   requestConfirmation: (request: ToolConfirmationRequest) => Promise<boolean>;
   onDelta: (delta: ChatDelta) => void;
-  maxIterations?: number;
+  onUsage?: (usage: AgentUsage) => void;
+  maxSteps?: number;
+  /** Test seam: inject a fake `callModel` instead of constructing a real client. */
+  callModel?: CallModel;
 }
 
 let idCounter = 0;
@@ -62,89 +49,37 @@ function nextId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${idCounter}`;
 }
 
-function summarizeToolContent(content: ToolExecuteResult["content"]): string {
-  if (typeof content === "string") {
-    return content;
+function extractOutput(output: FunctionCallOutputItem["output"]): string {
+  if (typeof output === "string") {
+    return output;
   }
-
-  return content
-    .map((block) =>
-      block.type === "text"
-        ? block.text
-        : `[image: ${block.source.type === "base64" ? block.source.media_type : block.source.url}]`,
-    )
-    .join("\n");
-}
-
-/** Emits a whole-text insert in one delta — the prompt is already fully typed, not streamed. */
-function emitFullTextMessage(
-  onDelta: (delta: ChatDelta) => void,
-  role: "user" | "assistant",
-  text: string,
-): void {
-  const id = nextId("msg");
-  onDelta({ k: "message_start", id, role });
-  const delta = createContentDelta("", text);
-  if (delta) {
-    onDelta({ k: "content", delta });
+  if (Array.isArray(output)) {
+    return output
+      .map((part) => (part.type === "input_text" ? part.text : `[${part.type}]`))
+      .join("\n");
   }
-  onDelta({ k: "message_end", id });
-}
-
-async function runTool(
-  block: Anthropic.ToolUseBlock,
-  toolMap: Map<string, Tool>,
-  toolContext: ToolContext,
-  onDelta: (delta: ChatDelta) => void,
-): Promise<Anthropic.ToolResultBlockParam> {
-  const tool = toolMap.get(block.name);
-
-  if (!tool) {
-    const content = `Unknown tool: ${block.name}`;
-    onDelta({ k: "tool_result", toolUseId: block.id, content, isError: true });
-    return { type: "tool_result", tool_use_id: block.id, content, is_error: true };
-  }
-
-  try {
-    const result = await tool.execute(block.input, toolContext);
-    onDelta({
-      k: "tool_result",
-      toolUseId: block.id,
-      content: summarizeToolContent(result.content),
-      isError: result.is_error,
-    });
-    return {
-      type: "tool_result",
-      tool_use_id: block.id,
-      content: result.content,
-      is_error: result.is_error,
-    };
-  } catch (error) {
-    const content = error instanceof Error ? error.message : String(error);
-    onDelta({ k: "tool_result", toolUseId: block.id, content, isError: true });
-    return { type: "tool_result", tool_use_id: block.id, content, is_error: true };
-  }
+  return "";
 }
 
 /**
- * Runs one user turn to completion: streams the assistant's reply, executes any
- * tool calls, feeds results back, and repeats until the model stops asking for
- * tools (or `maxIterations` is hit). Emits a `ChatDelta` at every step (plan
- * §13) so a caller can drive both live UI (agentStore) and the recording track
- * (chatRecording.ts) off the same event stream.
+ * Runs one user turn to completion via the OpenRouter agent SDK: `callModel` owns
+ * the tool loop (auto-executing our tools, whose `execute` closures still drive the
+ * bash confirmation gate), and we map its single ordered `getItemsStream()` onto the
+ * item-based `ChatDelta` stream so the same events feed both the live UI (agentStore)
+ * and the recording track (chatRecording.ts).
  */
 export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> {
   const {
     apiKey,
     model = DEFAULT_AGENT_MODEL,
     workspace,
-    tools,
     history,
     prompt,
     signal,
     requestConfirmation,
     onDelta,
-    maxIterations = MAX_ITERATIONS,
+    onUsage,
+    maxSteps = MAX_STEPS,
   } = options;
 
   if (!isDmpCodecLoaded()) {
@@ -159,15 +94,11 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
     throw new Error("No workspace loaded — the agent has no files to work with.");
   }
 
-  const client = createAnthropicClient(apiKey);
-  const toolMap = createToolMap(tools);
-  const toolSchemas = toAnthropicToolSchemas(tools);
+  const callModel = options.callModel ?? createOpenRouterClient(apiKey).callModel;
 
-  // The confirm gate lives inside a tool's execute, but the loop owns the status
-  // lifecycle — so wrap `requestConfirmation` here to surface `waiting-confirmation`
-  // while any tool is blocked on the user, then fall back to `running-tool`. The
-  // counter keeps the status correct when several gated tools run in one parallel
-  // batch (status only leaves/returns on the first-in / last-out transitions).
+  // Surface `waiting-confirmation` while any tool is blocked on the user, then fall
+  // back to `running-tool`. The counter keeps the status correct when several gated
+  // tools run in one parallel batch (only the first-in / last-out transition moves it).
   let pendingConfirmations = 0;
   const gatedConfirmation = async (request: ToolConfirmationRequest): Promise<boolean> => {
     pendingConfirmations += 1;
@@ -184,150 +115,140 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
     }
   };
 
-  const toolContext: ToolContext = {
-    workspace,
-    signal,
-    requestConfirmation: gatedConfirmation,
-  };
+  const toolContext: ToolContext = { workspace, signal, requestConfirmation: gatedConfirmation };
+  const tools = createCodingTools(toolContext);
   const systemPrompt = buildSystemPrompt(project, {
-    toolNames: tools.map((tool) => tool.name),
-    hasBash: toolMap.has("bash"),
+    // The SDK nests tool metadata under `.function`; the `Tool` union doesn't
+    // surface it, so read the name through a narrow structural cast.
+    toolNames: tools.map((tool) => (tool as { function: { name: string } }).function.name),
+    hasBash: true,
   });
 
-  emitFullTextMessage(onDelta, "user", prompt);
+  // Emit the user's prompt as a whole message item (it's already fully typed).
+  const userMessageId = nextId("msg");
+  onDelta({ k: "message_start", id: userMessageId, role: "user" });
+  const userDelta = createContentDelta("", prompt);
+  if (userDelta) {
+    onDelta({ k: "content", delta: userDelta });
+  }
   onDelta({ k: "status", status: "streaming" });
 
-  let messages: Anthropic.MessageParam[] = [
-    ...toMessageParams(history),
-    { role: "user", content: prompt },
-  ];
+  const userMessage: EasyInputMessage = { role: "user", content: prompt };
+  const input: Item[] = [...toResponsesInput(history), userMessage as Item];
 
-  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+  const result = callModel({
+    model,
+    instructions: systemPrompt,
+    input,
+    tools,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    stopWhen: stepCountIs(maxSteps),
+  });
+
+  const onAbort = () => {
+    void result.cancel();
+  };
+  signal.addEventListener("abort", onAbort);
+
+  // Adapter state: one active assistant message item at a time, plus the tool calls
+  // seen this run (so a call is emitted once, and every emitted call is answered).
+  let activeMessageId: string | null = null;
+  let messageSnapshot = "";
+  const pendingCalls = new Map<string, { name: string; args: string }>();
+  const emittedCalls = new Set<string>();
+  const answeredCalls = new Set<string>();
+
+  /** Emit a `tool_call` delta once per callId. Returns true if it was newly emitted. */
+  const emitToolCall = (callId: string): boolean => {
+    if (emittedCalls.has(callId)) {
+      return false;
+    }
+    const call = pendingCalls.get(callId);
+    if (!call) {
+      return false;
+    }
+    emittedCalls.add(callId);
+    onDelta({ k: "tool_call", id: callId, callId, name: call.name, arguments: call.args });
+    return true;
+  };
+
+  const answerCall = (callId: string, output: string, isError?: boolean): void => {
+    if (answeredCalls.has(callId)) {
+      return;
+    }
+    answeredCalls.add(callId);
+    onDelta({ k: "tool_result", callId, output, isError });
+  };
+
+  // A `tool_call` that streamed but never got a result — the run stopped or was
+  // interrupted between the call and its output — would leave the transcript (and
+  // the history it feeds the next run) with an unanswered call, which the API
+  // rejects. Close each one with a synthetic error result.
+  const balanceUnansweredCalls = (): void => {
+    for (const callId of pendingCalls.keys()) {
+      emitToolCall(callId);
+      answerCall(callId, "Interrupted before this tool ran.", true);
+    }
+  };
+
+  try {
+    for await (const item of result.getItemsStream()) {
+      if (signal.aborted) {
+        break;
+      }
+
+      if (item.type === "message") {
+        if (item.id !== activeMessageId) {
+          activeMessageId = item.id;
+          messageSnapshot = "";
+          onDelta({ k: "message_start", id: activeMessageId, role: "assistant" });
+          onDelta({ k: "status", status: "streaming" });
+        }
+        const text = outputMessageText(item.content);
+        const delta = createContentDelta(messageSnapshot, text);
+        if (delta) {
+          messageSnapshot = text;
+          onDelta({ k: "content", delta });
+        }
+      } else if (item.type === "function_call") {
+        pendingCalls.set(item.callId, { name: item.name, args: item.arguments });
+        if (item.status === "completed" && emitToolCall(item.callId)) {
+          onDelta({ k: "status", status: "running-tool" });
+        }
+      } else if (item.type === "function_call_output") {
+        if (emitToolCall(item.callId)) {
+          onDelta({ k: "status", status: "running-tool" });
+        }
+        answerCall(item.callId, extractOutput(item.output));
+      }
+    }
+  } catch (error) {
+    signal.removeEventListener("abort", onAbort);
+    balanceUnansweredCalls();
     if (signal.aborted) {
       onDelta({ k: "status", status: "done" });
       return;
     }
+    onDelta({ k: "status", status: "error" });
+    throw error;
+  }
 
-    const assistantMessageId = nextId("msg");
-    onDelta({ k: "message_start", id: assistantMessageId, role: "assistant" });
+  signal.removeEventListener("abort", onAbort);
+  balanceUnansweredCalls();
 
-    const stream = client.messages.stream(
-      {
-        model,
-        max_tokens: MAX_TOKENS,
-        system: systemPrompt,
-        tools: toolSchemas,
-        messages,
-        ...reasoningParams(model),
-      },
-      { signal },
-    );
-
-    let pendingText = "";
-    let snapshotText = "";
-    let flushTimer: ReturnType<typeof setTimeout> | null = null;
-    // tool_use blocks that were streamed (folded into the transcript) this
-    // iteration. On the happy path they each get a real tool_result below; on an
-    // interrupt/error before that, they'd otherwise be left dangling — see the
-    // catch handler.
-    const streamedToolUseIds: string[] = [];
-
-    const flush = () => {
-      if (!pendingText) {
-        return;
-      }
-      const nextText = snapshotText + pendingText;
-      const contentDelta = createContentDelta(snapshotText, nextText);
-      pendingText = "";
-      snapshotText = nextText;
-      if (contentDelta) {
-        onDelta({ k: "content", delta: contentDelta });
-      }
-    };
-
-    stream.on("text", (textDelta) => {
-      pendingText += textDelta;
-      flushTimer ??= setTimeout(() => {
-        flushTimer = null;
-        flush();
-      }, CONTENT_COALESCE_MS);
-    });
-
-    stream.on("contentBlock", (block) => {
-      if (block.type === "tool_use") {
-        streamedToolUseIds.push(block.id);
-        onDelta({ k: "tool_use", toolUseId: block.id, name: block.name, input: block.input });
-      }
-    });
-
-    let finalMessage: Anthropic.Message;
-
+  if (onUsage) {
     try {
-      finalMessage = await stream.finalMessage();
-    } catch (error) {
-      if (flushTimer) {
-        clearTimeout(flushTimer);
+      const response = await result.getResponse();
+      const usage = response.usage as
+        | { inputTokens?: number; outputTokens?: number }
+        | null
+        | undefined;
+      if (usage) {
+        onUsage({ inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0 });
       }
-      flush();
-      onDelta({ k: "message_end", id: assistantMessageId });
-
-      // The stream failed after one or more tool_use blocks were already streamed
-      // and folded, but before their tools ran — so the transcript now holds a
-      // tool_use with no matching tool_result. Left as-is, that history feeds the
-      // *next* run and Anthropic rejects the request (every tool_use must be
-      // answered). Close each unresolved tool_use with a synthetic error result so
-      // the live transcript, the recording, and the continued conversation stay valid.
-      for (const toolUseId of streamedToolUseIds) {
-        onDelta({
-          k: "tool_result",
-          toolUseId,
-          content: "Interrupted before this tool ran.",
-          isError: true,
-        });
-      }
-
-      if (error instanceof APIUserAbortError) {
-        onDelta({ k: "status", status: "done" });
-        return;
-      }
-
-      onDelta({ k: "status", status: "error" });
-      throw error;
+    } catch {
+      // Usage is best-effort — never fail a completed run over it.
     }
-
-    if (flushTimer) {
-      clearTimeout(flushTimer);
-    }
-    flush();
-
-    onDelta({
-      k: "message_end",
-      id: assistantMessageId,
-      usage: {
-        input: finalMessage.usage.input_tokens,
-        output: finalMessage.usage.output_tokens,
-      },
-    });
-
-    messages = [...messages, { role: "assistant", content: finalMessage.content }];
-
-    if (finalMessage.stop_reason !== "tool_use") {
-      onDelta({ k: "status", status: "done" });
-      return;
-    }
-
-    onDelta({ k: "status", status: "running-tool" });
-
-    const toolUseBlocks = finalMessage.content.filter(
-      (block): block is Anthropic.ToolUseBlock => block.type === "tool_use",
-    );
-
-    const results = await Promise.all(
-      toolUseBlocks.map((block) => runTool(block, toolMap, toolContext, onDelta)),
-    );
-
-    messages = [...messages, { role: "user", content: results }];
-    onDelta({ k: "status", status: "streaming" });
   }
 
   onDelta({ k: "status", status: "done" });

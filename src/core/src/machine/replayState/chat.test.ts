@@ -9,25 +9,22 @@ function insertDelta(prev: string, next: string) {
   return delta;
 }
 
-// A conversation with a checkpoint roughly halfway through, matching the
-// "checkpoint every message_end" cadence (plan §13).
+// A conversation with a checkpoint roughly halfway through.
 const CHAT_EVENTS: ChatRecordingEvent[] = [
   { timestamp: 0, event: { k: "message_start", id: "msg-1", role: "user" } },
   { timestamp: 10, event: { k: "content", delta: insertDelta("", "fix the bug") } },
-  { timestamp: 20, event: { k: "message_end", id: "msg-1" } },
   {
     timestamp: 30,
     event: {
       k: "checkpoint",
       state: {
-        messages: [{ id: "msg-1", role: "user", content: [{ type: "text", text: "fix the bug" }] }],
+        items: [{ kind: "message", id: "msg-1", role: "user", text: "fix the bug" }],
         status: "streaming",
       },
     },
   },
   { timestamp: 40, event: { k: "message_start", id: "msg-2", role: "assistant" } },
   { timestamp: 50, event: { k: "content", delta: insertDelta("", "Looking into it") } },
-  { timestamp: 60, event: { k: "message_end", id: "msg-2", usage: { input: 5, output: 3 } } },
   { timestamp: 70, event: { k: "status", status: "done" } },
 ];
 
@@ -39,41 +36,40 @@ describe("getChatReplayResult", () => {
       lastAppliedIndex: -1,
     });
 
-    expect(result.snapshotToApply?.messages).toEqual([
-      { id: "msg-1", role: "user", content: [{ type: "text", text: "fix the bug" }] },
+    expect(result.snapshotToApply?.items).toEqual([
+      { kind: "message", id: "msg-1", role: "user", text: "fix the bug" },
     ]);
   });
 
   it("folding from the nearest checkpoint matches folding from empty at the same time", () => {
     const fromScratch = getChatReplayResult({
       chatEvents: CHAT_EVENTS,
-      currentTime: 65,
+      currentTime: 55,
       lastAppliedIndex: -1,
     });
 
-    // Seek that lands after the checkpoint (index 3) — exercises the
+    // Seek that lands after the checkpoint (index 2) — exercises the
     // checkpoint-seed path instead of folding from empty.
     const fromCheckpoint = getChatReplayResult({
       chatEvents: CHAT_EVENTS,
-      currentTime: 65,
-      lastAppliedIndex: 3,
+      currentTime: 55,
+      lastAppliedIndex: 2,
     });
 
     expect(fromCheckpoint.snapshotToApply).toEqual(fromScratch.snapshotToApply);
     expect(fromScratch.snapshotToApply?.status).toBe("streaming");
-    expect(fromScratch.snapshotToApply?.messages).toHaveLength(2);
+    expect(fromScratch.snapshotToApply?.items).toHaveLength(2);
   });
 
-  it("seeking backward past a checkpoint re-folds from the preceding checkpoint, not incrementally", () => {
-    // lastAppliedIndex parked at the end; seek back to before the checkpoint.
+  it("seeking backward past a checkpoint re-folds from the preceding checkpoint", () => {
     const seekedBack = getChatReplayResult({
       chatEvents: CHAT_EVENTS,
       currentTime: 10,
-      lastAppliedIndex: 7,
+      lastAppliedIndex: 5,
     });
 
-    expect(seekedBack.snapshotToApply?.messages).toEqual([
-      { id: "msg-1", role: "user", content: [{ type: "text", text: "fix the bug" }] },
+    expect(seekedBack.snapshotToApply?.items).toEqual([
+      { kind: "message", id: "msg-1", role: "user", text: "fix the bug" },
     ]);
   });
 

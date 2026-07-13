@@ -1,12 +1,11 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import type Anthropic from "@anthropic-ai/sdk";
 import { Bot, Send, Settings, Square, X } from "lucide-react";
 import { WorkspaceStoreContext } from "../../stores/workspaceStore";
 import {
   getAgentStore,
   selectError,
-  selectMessages,
+  selectItems,
   selectModel,
   selectReplaySnapshot,
   selectStatus,
@@ -25,15 +24,13 @@ import {
   startAgentRun,
   stopAgentRun,
 } from "../../agent/agentSession";
-import type { AgentModelId } from "../../agent/types";
-import type { ChatMessage, ChatStatus } from "../../types/chat";
-import type { CredentialStorage } from "../../agent/types";
+import type { AgentModelId, CredentialStorage } from "../../agent/types";
+import type { ChatItem, ChatStatus } from "../../types/chat";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
 
 const MODEL_OPTIONS: { id: AgentModelId; label: string }[] = [
-  { id: "claude-haiku-4-5", label: "Haiku 4.5 (fast)" },
-  { id: "claude-sonnet-5", label: "Sonnet 5" },
-  { id: "claude-opus-4-8", label: "Opus 4.8" },
+  { id: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5 (fast)" },
+  { id: "openai/gpt-5.4-mini", label: "GPT-5.4 mini" },
 ];
 
 const STORAGE_OPTIONS: { id: CredentialStorage; label: string; description: string }[] = [
@@ -55,56 +52,30 @@ const STATUS_LABEL: Record<ChatStatus, string> = {
   error: "Error",
 };
 
-function getMessageText(message: ChatMessage): string {
-  return message.content.map((block) => (block.type === "text" ? block.text : "")).join("");
-}
-
-function getToolUseBlocks(message: ChatMessage): Anthropic.ToolUseBlockParam[] {
-  return message.content.filter(
-    (block): block is Anthropic.ToolUseBlockParam => block.type === "tool_use",
-  );
-}
-
-function getSoleToolResultBlock(message: ChatMessage): Anthropic.ToolResultBlockParam | null {
-  const [block] = message.content;
-  return message.content.length === 1 && block?.type === "tool_result" ? block : null;
-}
-
-function toolResultText(block: Anthropic.ToolResultBlockParam): string {
-  if (typeof block.content === "string") {
-    return block.content;
-  }
-  if (!block.content) {
+function summarizeToolArguments(rawArguments: string): string {
+  try {
+    const parsed = JSON.parse(rawArguments) as Record<string, unknown>;
+    const candidate = parsed.path ?? parsed.command ?? parsed.pattern;
+    return typeof candidate === "string" ? candidate : "";
+  } catch {
     return "";
   }
-  return block.content
-    .map((part) => (part.type === "text" ? part.text : `[${part.type}]`))
-    .join("\n");
 }
 
-function summarizeToolInput(input: unknown): string {
-  if (!input || typeof input !== "object") {
-    return "";
-  }
-  const record = input as Record<string, unknown>;
-  const candidate = record.path ?? record.command ?? record.pattern;
-  return typeof candidate === "string" ? candidate : "";
-}
-
-function ToolUseChip({ block }: { block: Anthropic.ToolUseBlockParam }) {
-  const summary = summarizeToolInput(block.input);
+function ToolCallChip({ item }: { item: Extract<ChatItem, { kind: "tool_call" }> }) {
+  const summary = summarizeToolArguments(item.arguments);
 
   return (
     <div className="ml-4 inline-flex max-w-full items-center gap-1.5 rounded-md bg-[#1e2129] px-2.5 py-1 font-mono text-[11px] text-slate-400">
-      <span className="text-[#64a3ff]">{block.name}</span>
+      <span className="text-[#64a3ff]">{item.name}</span>
       {summary ? <span className="truncate text-slate-500">{summary}</span> : null}
     </div>
   );
 }
 
-function ToolResultRow({ block }: { block: Anthropic.ToolResultBlockParam }) {
+function ToolResultRow({ item }: { item: Extract<ChatItem, { kind: "tool_result" }> }) {
   const [expanded, setExpanded] = useState(false);
-  const text = toolResultText(block).trim();
+  const text = item.output.trim();
   const isLong = text.length > 300;
   const shown = expanded || !isLong ? text : `${text.slice(0, 300)}…`;
 
@@ -115,7 +86,7 @@ function ToolResultRow({ block }: { block: Anthropic.ToolResultBlockParam }) {
   return (
     <div
       className={`ml-4 rounded-md border px-3 py-2 font-mono text-xs ${
-        block.is_error
+        item.isError
           ? "border-red-900 bg-red-950/40 text-red-300"
           : "border-slate-800 bg-[#171b22] text-slate-400"
       }`}
@@ -134,40 +105,34 @@ function ToolResultRow({ block }: { block: Anthropic.ToolResultBlockParam }) {
   );
 }
 
-function TranscriptMessage({ message }: { message: ChatMessage }) {
-  const toolResultBlock = getSoleToolResultBlock(message);
-
-  if (toolResultBlock) {
-    return <ToolResultRow block={toolResultBlock} />;
+function MessageRow({ item }: { item: Extract<ChatItem, { kind: "message" }> }) {
+  if (!item.text) {
+    return null;
   }
 
-  const text = getMessageText(message);
-  const toolUseBlocks = getToolUseBlocks(message);
-
   return (
-    <div className={message.role === "user" ? "flex justify-end" : ""}>
-      <div className={message.role === "user" ? "max-w-[85%]" : "w-full"}>
-        {text ? (
-          <div
-            className={`whitespace-pre-wrap wrap-break-word rounded-md px-3 py-2 text-[13px] leading-6 ${
-              message.role === "user"
-                ? "bg-[#233047] text-slate-100"
-                : "bg-transparent text-slate-200"
-            }`}
-          >
-            {text}
-          </div>
-        ) : null}
-        {toolUseBlocks.length > 0 ? (
-          <div className="mt-1 flex flex-col gap-1">
-            {toolUseBlocks.map((block) => (
-              <ToolUseChip key={block.id} block={block} />
-            ))}
-          </div>
-        ) : null}
+    <div className={item.role === "user" ? "flex justify-end" : ""}>
+      <div className={item.role === "user" ? "max-w-[85%]" : "w-full"}>
+        <div
+          className={`whitespace-pre-wrap wrap-break-word rounded-md px-3 py-2 text-[13px] leading-6 ${
+            item.role === "user" ? "bg-[#233047] text-slate-100" : "bg-transparent text-slate-200"
+          }`}
+        >
+          {item.text}
+        </div>
       </div>
     </div>
   );
+}
+
+function TranscriptItem({ item }: { item: ChatItem }) {
+  if (item.kind === "message") {
+    return <MessageRow item={item} />;
+  }
+  if (item.kind === "tool_call") {
+    return <ToolCallChip item={item} />;
+  }
+  return <ToolResultRow item={item} />;
 }
 
 function AgentPanel() {
@@ -178,7 +143,7 @@ function AgentPanel() {
   const { handleChatEvent } = useNextEditorActions();
   const { isPlaying, isRecording } = useNextEditorMetadata();
 
-  const liveMessages = useSelector(agentStore, (s) => selectMessages(s.context));
+  const liveItems = useSelector(agentStore, (s) => selectItems(s.context));
   const liveStatus = useSelector(agentStore, (s) => selectStatus(s.context));
   const replaySnapshot = useSelector(agentStore, (s) => selectReplaySnapshot(s.context));
   const error = useSelector(agentStore, (s) => selectError(s.context));
@@ -191,14 +156,11 @@ function AgentPanel() {
   const isRunning = useSelector(sessionStore, (s) => selectIsRunning(s.context));
   const pending = useSelector(sessionStore, (s) => selectPending(s.context));
 
-  // Mirrors TerminalPanel's isPlaybackSnapshotActive: while replaying a recording
-  // (and not live-recording over it), render the folded chat track instead of the
-  // live agent store. During replay the transcript comes only from the recorded chat
-  // track: a recording with no agent activity shows an empty panel (fall back to `[]`,
-  // not the live conversation). `setRecording` resets `replaySnapshot` to empty on
-  // load so a chat-less recording never surfaces a previous replay's transcript.
+  // While replaying a recording (and not live-recording over it), render the folded
+  // chat track instead of the live agent store. A recording with no agent activity
+  // shows an empty panel (fall back to `[]`, not the live conversation).
   const isReplayActive = isPlaying && !isRecording;
-  const messages = isReplayActive ? (replaySnapshot?.messages ?? []) : liveMessages;
+  const items = isReplayActive ? (replaySnapshot?.items ?? []) : liveItems;
   const status = isReplayActive ? (replaySnapshot?.status ?? "idle") : liveStatus;
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -208,7 +170,7 @@ function AgentPanel() {
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ block: "end" });
-  }, [messages]);
+  }, [items]);
 
   // Reflects the actual live run (for Send/Stop + input disable); the status label/
   // spinner below tracks the displayed status, which during replay is the recorded one.
@@ -276,17 +238,17 @@ function AgentPanel() {
         {!apiKey && !isReplayActive ? (
           <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
             <p className="text-xs text-slate-400">
-              Paste your Anthropic API key to start the coding agent. It's kept in memory only
+              Paste your OpenRouter API key to start the coding agent. It's kept in memory only
               unless you opt into persistence in settings.
             </p>
             {/* ph-no-capture blocks this field from PostHog session replays so the
-                Anthropic API key is never recorded, independent of the global
-                maskAllInputs setting (see posthog init in src/main.tsx). */}
+                API key is never recorded, independent of the global maskAllInputs
+                setting (see posthog init in src/main.tsx). */}
             <input
               type="password"
               value={keyDraft}
               onChange={(event) => setKeyDraft(event.target.value)}
-              placeholder="sk-ant-api..."
+              placeholder="sk-or-v1-..."
               className="ph-no-capture mt-3 h-9 w-full max-w-xs rounded-md border border-slate-700 bg-[#11141c] px-3 font-mono text-xs text-slate-100 outline-none focus:border-slate-500"
             />
             <button
@@ -301,14 +263,14 @@ function AgentPanel() {
         ) : (
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              {messages.length === 0 ? (
+              {items.length === 0 ? (
                 <p className="px-1 text-xs text-slate-500">
                   Ask the agent to build or fix something in this workspace.
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {messages.map((message) => (
-                    <TranscriptMessage key={message.id} message={message} />
+                  {items.map((item) => (
+                    <TranscriptItem key={item.id} item={item} />
                   ))}
                 </div>
               )}
@@ -437,13 +399,13 @@ function AgentPanel() {
               <div>
                 <p className="text-sm font-medium text-slate-100">API key</p>
                 {/* ph-no-capture blocks this field from PostHog session replays so the
-                    Anthropic API key is never recorded, independent of the global
-                    maskAllInputs setting (see posthog init in src/main.tsx). */}
+                    API key is never recorded, independent of the global maskAllInputs
+                    setting (see posthog init in src/main.tsx). */}
                 <input
                   type="password"
                   value={keyDraft}
                   onChange={(event) => setKeyDraft(event.target.value)}
-                  placeholder={apiKey ? "•••• (set) — paste to replace" : "sk-ant-api..."}
+                  placeholder={apiKey ? "•••• (set) — paste to replace" : "sk-or-v1-..."}
                   className="ph-no-capture mt-2 h-9 w-full rounded-md border border-slate-700 bg-[#11141c] px-3 font-mono text-xs text-slate-100 outline-none focus:border-slate-500"
                 />
                 <div className="mt-2 flex gap-2">

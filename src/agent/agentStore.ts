@@ -1,5 +1,5 @@
 import { createStore } from "@xstate/store-react";
-import type { ChatCheckpoint, ChatDelta, ChatMessage, ChatStatus } from "../types/chat";
+import type { ChatCheckpoint, ChatDelta, ChatItem, ChatStatus } from "../types/chat";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE } from "../core/src/utils/chatDelta";
 import { DEFAULT_AGENT_MODEL, type AgentModelId } from "./types";
 
@@ -10,7 +10,7 @@ export interface AgentUsage {
 
 export interface AgentStoreContext {
   model: AgentModelId;
-  messages: ChatMessage[];
+  items: ChatItem[];
   status: ChatStatus;
   error: string | null;
   usage: AgentUsage;
@@ -21,7 +21,7 @@ export interface AgentStoreContext {
 function initialContext(): AgentStoreContext {
   return {
     model: DEFAULT_AGENT_MODEL,
-    messages: INITIAL_CHAT_FOLD_STATE.messages,
+    items: INITIAL_CHAT_FOLD_STATE.items,
     status: INITIAL_CHAT_FOLD_STATE.status,
     error: null,
     usage: { inputTokens: 0, outputTokens: 0 },
@@ -30,10 +30,9 @@ function initialContext(): AgentStoreContext {
 }
 
 /**
- * Live agent UI state — mirrors `apiClientStore.ts`. `applyDelta` reuses the same
- * `applyChatDelta` reducer the recording replay track folds from (see
- * `core/src/utils/chatDelta.ts`), so the live transcript and a replayed one are
- * built by identical logic.
+ * Live agent UI state. `applyDelta` reuses the same `applyChatDelta` reducer the
+ * recording replay track folds from (see `core/src/utils/chatDelta.ts`), so the
+ * live transcript and a replayed one are built by identical logic.
  */
 export function createAgentStore() {
   return createStore({
@@ -44,19 +43,19 @@ export function createAgentStore() {
 
       applyDelta: (context, event: { delta: ChatDelta }) => {
         const folded = applyChatDelta(
-          { messages: context.messages, status: context.status },
+          { items: context.items, status: context.status },
           event.delta,
         );
-        const usage =
-          event.delta.k === "message_end" && event.delta.usage
-            ? {
-                inputTokens: context.usage.inputTokens + event.delta.usage.input,
-                outputTokens: context.usage.outputTokens + event.delta.usage.output,
-              }
-            : context.usage;
-
-        return { ...context, messages: folded.messages, status: folded.status, usage };
+        return { ...context, items: folded.items, status: folded.status };
       },
+
+      addUsage: (context, event: { usage: AgentUsage }) => ({
+        ...context,
+        usage: {
+          inputTokens: context.usage.inputTokens + event.usage.inputTokens,
+          outputTokens: context.usage.outputTokens + event.usage.outputTokens,
+        },
+      }),
 
       setError: (context, event: { message: string | null }) => ({
         ...context,
@@ -75,7 +74,7 @@ export function createAgentStore() {
 
 export type AgentStoreInstance = ReturnType<typeof createAgentStore>;
 
-export const selectMessages = (context: AgentStoreContext): ChatMessage[] => context.messages;
+export const selectItems = (context: AgentStoreContext): ChatItem[] => context.items;
 export const selectStatus = (context: AgentStoreContext): ChatStatus => context.status;
 export const selectError = (context: AgentStoreContext): string | null => context.error;
 export const selectUsage = (context: AgentStoreContext): AgentUsage => context.usage;

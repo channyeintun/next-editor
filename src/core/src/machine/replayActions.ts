@@ -84,7 +84,7 @@ export const setRecording = ({
   // recording with no chat events never shows a previous replay's stale transcript
   // — `applyChatEventsAtTime` no-ops for chat-less recordings and would leave it.
   if (context.applyChatSnapshot) {
-    context.applyChatSnapshot({ messages: [], status: "idle" });
+    context.applyChatSnapshot({ items: [], status: "idle" });
   }
 
   return {

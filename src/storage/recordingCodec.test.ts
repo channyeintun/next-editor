@@ -146,33 +146,27 @@ describe("recordingCodec", () => {
       chatEvents: [
         { timestamp: 0, event: { k: "message_start", id: "msg-1", role: "user" } },
         { timestamp: 5, event: { k: "content", delta: contentDelta! } },
-        { timestamp: 10, event: { k: "message_end", id: "msg-1" } },
         { timestamp: 20, event: { k: "message_start", id: "msg-2", role: "assistant" } },
         {
           timestamp: 30,
           event: {
-            k: "tool_use",
-            toolUseId: "tool-1",
+            k: "tool_call",
+            id: "tool-1",
+            callId: "call-1",
             name: "read",
-            input: { path: "src/App.tsx" },
+            arguments: '{"path":"src/App.tsx"}',
           },
         },
         {
-          timestamp: 40,
-          event: { k: "message_end", id: "msg-2", usage: { input: 10, output: 5 } },
-        },
-        {
           timestamp: 50,
-          event: { k: "tool_result", toolUseId: "tool-1", content: "file contents" },
+          event: { k: "tool_result", callId: "call-1", output: "file contents" },
         },
         {
           timestamp: 60,
           event: {
             k: "checkpoint",
             state: {
-              messages: [
-                { id: "msg-1", role: "user", content: [{ type: "text", text: "Hello!" }] },
-              ],
+              items: [{ kind: "message", id: "msg-1", role: "user", text: "Hello!" }],
               status: "streaming",
             },
           },

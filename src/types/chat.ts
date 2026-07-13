@@ -1,4 +1,10 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import type {
+  EasyInputMessage,
+  FunctionCallOutputItem,
+  Item,
+  OutputFunctionCallItem,
+  ResponseOutputText,
+} from "@openrouter/agent";
 
 export type ChatRole = "user" | "assistant";
 
@@ -11,17 +17,16 @@ export type ChatStatus =
   | "error";
 
 /**
- * A single message in the agent transcript, keyed by a stable id so tool_use/
- * tool_result deltas and `remove` (retry/abort truncation) can target it. `content`
- * mirrors `Anthropic.MessageParam["content"]` in its always-array form so a
- * `ChatMessage[]` converts to `Anthropic.MessageParam[]` (see `toMessageParams`)
- * without reshaping — the loop and the recorder share this one type.
+ * A single transcript entry, modeled directly on the OpenRouter Responses "items"
+ * the agent SDK streams (see `getItemsStream()`): a flat, ordered list of assistant/
+ * user messages, tool calls, and tool results — not the nested Anthropic content-block
+ * shape this used to carry. `toResponsesInput` maps a `ChatItem[]` straight back to the
+ * SDK's `Item[]` so a recorded transcript can be replayed to the model as history.
  */
-export interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  content: Anthropic.ContentBlockParam[];
-}
+export type ChatItem =
+  | { kind: "message"; id: string; role: ChatRole; text: string }
+  | { kind: "tool_call"; id: string; callId: string; name: string; arguments: string }
+  | { kind: "tool_result"; id: string; callId: string; output: string; isError?: boolean };
 
 /**
  * Same dmp (Myers diff) patch primitive as `ContentDelta` in
@@ -34,38 +39,33 @@ export interface ChatContentDelta {
 }
 
 /**
- * Every delta records ONLY what changed: a node inserted/removed, or text
- * inserted/removed inside the active (most recently started, unclosed) message.
- * No full-transcript records here — see `ChatCheckpoint` for the sparse seek
+ * Every delta records ONLY what changed. Text streams into the active (most recently
+ * started) message item as a dmp `content` delta; tool calls and results are appended
+ * whole. No full-transcript records here — see `ChatCheckpoint` for the sparse seek
  * anchor. Replay is a reducer that folds these in order (src/core/src/machine/
  * replayState/chat.ts).
  */
 export type ChatDelta =
-  // Insert an empty message node and make it the "active" message for
-  // subsequent `content`/`tool_use` deltas until its `message_end`.
+  // Append an empty message item and make it the active one for `content` deltas.
   | { k: "message_start"; id: string; role: ChatRole }
-  // Insert or remove text from the active message's trailing text block
-  // (a new text block is appended first if the active message has none yet).
+  // dmp text delta applied to the active message item's text.
   | { k: "content"; delta: ChatContentDelta }
-  // Insert a tool_use content block into the active (assistant) message.
-  | { k: "tool_use"; toolUseId: string; name: string; input: unknown; path?: string }
-  // Insert a tool_result message (its own user-role message, matching the
-  // Anthropic wire format) for a prior tool_use.
-  | { k: "tool_result"; toolUseId: string; content: string; isError?: boolean }
-  // Drop the message `fromId` and every message recorded after it — an
-  // aborted or retried turn rewinds the transcript instead of appending.
+  // Append a completed tool call (arguments already fully streamed).
+  | { k: "tool_call"; id: string; callId: string; name: string; arguments: string }
+  // Append the result of a prior tool call, matched by `callId`.
+  | { k: "tool_result"; callId: string; output: string; isError?: boolean }
+  // Drop the item `fromId` and everything recorded after it — an aborted or
+  // retried turn rewinds the transcript instead of appending.
   | { k: "remove"; fromId: string }
-  | { k: "message_end"; id: string; usage?: { input: number; output: number } }
   | { k: "status"; status: ChatStatus };
 
 /**
- * Seek keyframe only (frames-style), emitted sparsely — never the recording
- * unit. The `ChatDelta` log alone is authoritative and fully reconstructs the
- * transcript; a checkpoint just lets seeking skip replaying from zero, and
- * re-seats replay if a delta is ever dropped or mis-ordered.
+ * Seek keyframe only (frames-style), emitted sparsely — never the recording unit.
+ * The `ChatDelta` log alone is authoritative and fully reconstructs the transcript;
+ * a checkpoint just lets seeking skip replaying from zero.
  */
 export interface ChatCheckpoint {
-  messages: ChatMessage[];
+  items: ChatItem[];
   status: ChatStatus;
 }
 
@@ -74,7 +74,47 @@ export interface ChatRecordingEvent {
   event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint };
 }
 
-/** Strip the recorder-only `id` so a `ChatMessage[]` transcript can be sent as-is. */
-export function toMessageParams(messages: ChatMessage[]): Anthropic.MessageParam[] {
-  return messages.map((message) => ({ role: message.role, content: message.content }));
+/**
+ * Map a folded `ChatItem[]` transcript back to the SDK `Item[]` input format so a
+ * continued conversation replays prior turns as history: assistant/user text become
+ * `EasyInputMessage`s, tool calls become `function_call` items, and tool results
+ * become `function_call_output` items (paired by `callId`). The agent SDK's own `Item`
+ * union is documented as non-exhaustive, so the final assertion bridges the hand-built
+ * (but wire-valid) items to it.
+ */
+export function toResponsesInput(items: ChatItem[]): Item[] {
+  return items.map((item): Item => {
+    if (item.kind === "message") {
+      const message: EasyInputMessage = { role: item.role, content: item.text };
+      return message as Item;
+    }
+
+    if (item.kind === "tool_call") {
+      const call: OutputFunctionCallItem = {
+        type: "function_call",
+        callId: item.callId,
+        name: item.name,
+        arguments: item.arguments,
+      };
+      return call as Item;
+    }
+
+    const result: FunctionCallOutputItem = {
+      type: "function_call_output",
+      callId: item.callId,
+      output: item.output,
+    };
+    return result as Item;
+  });
+}
+
+/** Pull plain text out of a streamed assistant `message` item's content parts. */
+export function outputMessageText(content: ReadonlyArray<ResponseOutputText | unknown>): string {
+  let text = "";
+  for (const part of content) {
+    if (part && typeof part === "object" && (part as { type?: unknown }).type === "output_text") {
+      text += (part as ResponseOutputText).text;
+    }
+  }
+  return text;
 }

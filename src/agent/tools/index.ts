@@ -1,29 +1,37 @@
-import type Anthropic from "@anthropic-ai/sdk";
-import type { Tool } from "../types";
-import { readTool } from "./read";
-import { writeTool } from "./write";
-import { editTool } from "./edit";
-import { lsTool } from "./ls";
-import { globTool } from "./glob";
-import { grepTool } from "./grep";
-import { bashTool } from "./bash";
+import type { Tool } from "@openrouter/agent";
+import type { ToolContext } from "../types";
+import { makeReadTool } from "./read";
+import { makeWriteTool } from "./write";
+import { makeEditTool } from "./edit";
+import { makeLsTool } from "./ls";
+import { makeGlobTool } from "./glob";
+import { makeGrepTool } from "./grep";
+import { makeBashTool } from "./bash";
 
-export { readTool, writeTool, editTool, lsTool, globTool, grepTool, bashTool };
+export {
+  makeReadTool,
+  makeWriteTool,
+  makeEditTool,
+  makeLsTool,
+  makeGlobTool,
+  makeGrepTool,
+  makeBashTool,
+};
 
-/** Mirrors pi's `createReadOnlyTools()` — browsing only, no mutation. */
-export const READ_ONLY_TOOLS: Tool[] = [readTool, lsTool, globTool, grepTool];
-
-/** Mirrors pi's `createCodingTools()` plus the read-only set — the default registry. */
-export const CODING_TOOLS: Tool[] = [...READ_ONLY_TOOLS, writeTool, editTool, bashTool];
-
-export function createToolMap(tools: Tool[]): Map<string, Tool> {
-  return new Map(tools.map((tool) => [tool.name, tool]));
-}
-
-export function toAnthropicToolSchemas(tools: Tool[]): Anthropic.Tool[] {
-  return tools.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    input_schema: tool.input_schema,
-  }));
+/**
+ * Builds the default coding tool set for a run. Each tool's `execute` closes over
+ * `ctx` (workspace store, abort signal, confirmation gate), so tools are created
+ * per run rather than shared as singletons — that's what lets the `bash` tool
+ * await the user's confirmation inline inside its own `execute`.
+ */
+export function createCodingTools(ctx: ToolContext): Tool[] {
+  return [
+    makeReadTool(ctx),
+    makeLsTool(ctx),
+    makeGlobTool(ctx),
+    makeGrepTool(ctx),
+    makeWriteTool(ctx),
+    makeEditTool(ctx),
+    makeBashTool(ctx),
+  ] as unknown as Tool[];
 }

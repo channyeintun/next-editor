@@ -1,11 +1,21 @@
-import type { ToolContext, ToolExecuteResult, Tool } from "../types";
+import { tool } from "@openrouter/agent";
+import { z } from "zod";
+import type { ToolContext } from "../types";
 import { getProject } from "./workspaceFs";
 
-export interface GlobToolInput {
-  pattern: string;
-  path?: string;
-  limit?: number;
-}
+const inputSchema = z.object({
+  pattern: z
+    .string()
+    .describe(
+      "Glob pattern to match files (e.g., '**/*.tsx', 'src/*.ts', '*.json'). " +
+        "* matches any sequence except /, ** matches any sequence including /, ? matches single char except /.",
+    ),
+  path: z
+    .string()
+    .optional()
+    .describe("Optional folder prefix to scope the search (workspace-relative, no slashes)"),
+  limit: z.number().optional().describe("Maximum number of results to return (default 200)"),
+});
 
 function globToRegex(pattern: string): RegExp {
   let regex = "";
@@ -43,75 +53,54 @@ function globToRegex(pattern: string): RegExp {
   return new RegExp("^" + regex + "$");
 }
 
-async function execute(input: GlobToolInput, ctx: ToolContext): Promise<ToolExecuteResult> {
-  const project = getProject(ctx.workspace);
+export function makeGlobTool(ctx: ToolContext) {
+  return tool({
+    name: "glob",
+    description:
+      "Search for files in the workspace using a glob pattern. Supports *, **, and ? wildcards. " +
+      "Returns matching file paths sorted alphabetically, optionally scoped to a folder.",
+    inputSchema,
+    execute: (input): string => {
+      const project = getProject(ctx.workspace);
 
-  if (!project) {
-    return { content: "No workspace loaded.", is_error: true };
-  }
+      if (!project) {
+        return "No workspace loaded.";
+      }
 
-  const baseFolder = input.path ? input.path.replace(/^\/+|\/+$/g, "") : "";
-  const baseFolderPrefix = baseFolder ? baseFolder + "/" : "";
+      const baseFolder = input.path ? input.path.replace(/^\/+|\/+$/g, "") : "";
+      const baseFolderPrefix = baseFolder ? baseFolder + "/" : "";
 
-  let filePaths = Object.keys(project.files);
-  if (baseFolder) {
-    filePaths = filePaths.filter((p) => p.startsWith(baseFolderPrefix));
-  }
+      let filePaths = Object.keys(project.files);
+      if (baseFolder) {
+        filePaths = filePaths.filter((p) => p.startsWith(baseFolderPrefix));
+      }
 
-  const globRegex = globToRegex(input.pattern);
-  const matches: string[] = [];
+      const globRegex = globToRegex(input.pattern);
+      const matches: string[] = [];
 
-  for (const filePath of filePaths) {
-    const relativeToSearch = baseFolder ? filePath.slice(baseFolderPrefix.length) : filePath;
-    if (globRegex.test(relativeToSearch)) {
-      matches.push(filePath);
-    }
-  }
+      for (const filePath of filePaths) {
+        const relativeToSearch = baseFolder ? filePath.slice(baseFolderPrefix.length) : filePath;
+        if (globRegex.test(relativeToSearch)) {
+          matches.push(filePath);
+        }
+      }
 
-  matches.sort();
+      matches.sort();
 
-  const limit = input.limit ?? 200;
-  const truncated = matches.length > limit;
-  const displayMatches = matches.slice(0, limit);
+      const limit = input.limit ?? 200;
+      const truncated = matches.length > limit;
+      const displayMatches = matches.slice(0, limit);
 
-  if (displayMatches.length === 0) {
-    return { content: "No files matched." };
-  }
+      if (displayMatches.length === 0) {
+        return "No files matched.";
+      }
 
-  let result = displayMatches.join("\n");
-  if (truncated) {
-    result += `\n... ${matches.length - limit} more matches`;
-  }
+      let result = displayMatches.join("\n");
+      if (truncated) {
+        result += `\n... ${matches.length - limit} more matches`;
+      }
 
-  return { content: result };
-}
-
-export const globTool: Tool<GlobToolInput> = {
-  name: "glob",
-  description:
-    "Search for files in the workspace using a glob pattern. Supports *, **, and ? wildcards. " +
-    "Returns matching file paths sorted alphabetically, optionally scoped to a folder.",
-  input_schema: {
-    type: "object",
-    properties: {
-      pattern: {
-        type: "string",
-        description:
-          "Glob pattern to match files (e.g., '**/*.tsx', 'src/*.ts', '*.json'). " +
-          "* matches any sequence except /, ** matches any sequence including /, ? matches single char except /.",
-      },
-      path: {
-        type: "string",
-        description:
-          "Optional folder prefix to scope the search (workspace-relative, no leading/trailing slash)",
-      },
-      limit: {
-        type: "number",
-        description: "Maximum number of results to return (default 200)",
-      },
+      return result;
     },
-    required: ["pattern"],
-    additionalProperties: false,
-  },
-  execute,
-};
+  });
+}

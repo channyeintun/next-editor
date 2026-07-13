@@ -2,7 +2,6 @@ import { createStore } from "@xstate/store-react";
 import { runAgentLoop } from "./agentLoop";
 import { getAgentStore } from "./agentStore";
 import { createChatRecorder, type ChatEventHandler } from "./chatRecording";
-import { CODING_TOOLS } from "./tools";
 import type { AgentModelId, ToolConfirmationRequest } from "./types";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 
@@ -100,7 +99,7 @@ export async function startAgentRun(options: StartAgentRunOptions): Promise<void
   abortController = controller;
   agentSessionStore.trigger.setRunning({ isRunning: true });
 
-  const history = agentStore.getSnapshot().context.messages;
+  const history = agentStore.getSnapshot().context.items;
   const recordChatDelta = createChatRecorder(agentStore, options.handleChatEvent);
 
   try {
@@ -108,7 +107,6 @@ export async function startAgentRun(options: StartAgentRunOptions): Promise<void
       apiKey: options.apiKey,
       model: options.model,
       workspace: options.workspace,
-      tools: CODING_TOOLS,
       history,
       prompt: options.prompt,
       signal: controller.signal,
@@ -116,6 +114,9 @@ export async function startAgentRun(options: StartAgentRunOptions): Promise<void
       onDelta: (delta) => {
         agentStore.trigger.applyDelta({ delta });
         recordChatDelta(delta);
+      },
+      onUsage: (usage) => {
+        agentStore.trigger.addUsage({ usage });
       },
     });
   } catch (error) {

@@ -1,34 +1,21 @@
-import type Anthropic from "@anthropic-ai/sdk";
-import type { ChatDelta, ChatMessage, ChatStatus } from "../../../types/chat";
+import type { ChatDelta, ChatItem, ChatStatus } from "../../../types/chat";
 import { applyContentDelta } from "./frameDelta";
 
 export interface ChatFoldState {
-  messages: ChatMessage[];
+  items: ChatItem[];
   status: ChatStatus;
 }
 
-export const INITIAL_CHAT_FOLD_STATE: ChatFoldState = { messages: [], status: "idle" };
+export const INITIAL_CHAT_FOLD_STATE: ChatFoldState = { items: [], status: "idle" };
 
-function getTrailingText(message: ChatMessage): string {
-  const lastBlock = message.content[message.content.length - 1];
-  return lastBlock?.type === "text" ? lastBlock.text : "";
-}
-
-function withTrailingText(message: ChatMessage, text: string): ChatMessage {
-  const content = message.content.slice();
-  const lastBlock = content[content.length - 1];
-
-  if (lastBlock?.type === "text") {
-    content[content.length - 1] = { type: "text", text };
-  } else {
-    content.push({ type: "text", text });
+/** Index of the active message item: the last `message` in the list, or -1. */
+function lastMessageIndex(items: ChatItem[]): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (items[index].kind === "message") {
+      return index;
+    }
   }
-
-  return { ...message, content };
-}
-
-function withAppendedBlock(message: ChatMessage, block: Anthropic.ContentBlockParam): ChatMessage {
-  return { ...message, content: [...message.content, block] };
+  return -1;
 }
 
 /**
@@ -36,68 +23,68 @@ function withAppendedBlock(message: ChatMessage, block: Anthropic.ContentBlockPa
  * (src/agent/agentStore.ts) and the recording replay reducer
  * (replayState/chat.ts) so "what does each delta kind do" has one definition.
  *
- * `content`/`tool_use` always target the last message in the array: the loop
- * only ever streams text into, or appends a tool_use block onto, the most
- * recently started message, and `message_start`/`tool_result` are what push a
- * new one — so no separate "active message id" bookkeeping is needed.
+ * `content` always targets the active message — the last `message` item in the
+ * list. Tool-call/tool-result items appended after it never intercept text,
+ * because they are not messages; the next `message_start` is what moves the
+ * active message forward.
  */
 export function applyChatDelta(state: ChatFoldState, delta: ChatDelta): ChatFoldState {
   switch (delta.k) {
     case "message_start":
       return {
         ...state,
-        messages: [...state.messages, { id: delta.id, role: delta.role, content: [] }],
+        items: [...state.items, { kind: "message", id: delta.id, role: delta.role, text: "" }],
       };
 
     case "content": {
-      const lastMessage = state.messages[state.messages.length - 1];
-      if (!lastMessage) {
+      const index = lastMessageIndex(state.items);
+      if (index === -1) {
         return state;
       }
-      const nextText = applyContentDelta(getTrailingText(lastMessage), delta.delta);
+      const message = state.items[index];
+      if (message.kind !== "message") {
+        return state;
+      }
+      const nextText = applyContentDelta(message.text, delta.delta);
+      const items = state.items.slice();
+      items[index] = { ...message, text: nextText };
+      return { ...state, items };
+    }
+
+    case "tool_call":
       return {
         ...state,
-        messages: [...state.messages.slice(0, -1), withTrailingText(lastMessage, nextText)],
-      };
-    }
-
-    case "tool_use": {
-      const lastMessage = state.messages[state.messages.length - 1];
-      if (!lastMessage) {
-        return state;
-      }
-      const nextMessage = withAppendedBlock(lastMessage, {
-        type: "tool_use",
-        id: delta.toolUseId,
-        name: delta.name,
-        input: delta.input,
-      });
-      return { ...state, messages: [...state.messages.slice(0, -1), nextMessage] };
-    }
-
-    case "tool_result": {
-      const resultMessage: ChatMessage = {
-        id: `tool_result:${delta.toolUseId}`,
-        role: "user",
-        content: [
+        items: [
+          ...state.items,
           {
-            type: "tool_result",
-            tool_use_id: delta.toolUseId,
-            content: delta.content,
-            is_error: delta.isError,
+            kind: "tool_call",
+            id: delta.id,
+            callId: delta.callId,
+            name: delta.name,
+            arguments: delta.arguments,
           },
         ],
       };
-      return { ...state, messages: [...state.messages, resultMessage] };
-    }
+
+    case "tool_result":
+      return {
+        ...state,
+        items: [
+          ...state.items,
+          {
+            kind: "tool_result",
+            id: `out:${delta.callId}`,
+            callId: delta.callId,
+            output: delta.output,
+            isError: delta.isError,
+          },
+        ],
+      };
 
     case "remove": {
-      const cutIndex = state.messages.findIndex((message) => message.id === delta.fromId);
-      return cutIndex === -1 ? state : { ...state, messages: state.messages.slice(0, cutIndex) };
+      const cutIndex = state.items.findIndex((item) => item.id === delta.fromId);
+      return cutIndex === -1 ? state : { ...state, items: state.items.slice(0, cutIndex) };
     }
-
-    case "message_end":
-      return state;
 
     case "status":
       return { ...state, status: delta.status };

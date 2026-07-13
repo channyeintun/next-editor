@@ -40,7 +40,7 @@ function foldChatEventsUpTo(chatEvents: ChatRecordingEvent[], targetIndex: numbe
   if (checkpointIndex >= 0) {
     const checkpointEvent = chatEvents[checkpointIndex].event;
     if (isCheckpointEvent(checkpointEvent)) {
-      state = { messages: checkpointEvent.state.messages, status: checkpointEvent.state.status };
+      state = { items: checkpointEvent.state.items, status: checkpointEvent.state.status };
       foldStart = checkpointIndex + 1;
     }
   }
@@ -78,6 +78,6 @@ export function getChatReplayResult({
 
   return {
     nextIndex: replayCursor.nextIndex,
-    snapshotToApply: { messages: folded.messages, status: folded.status },
+    snapshotToApply: { items: folded.items, status: folded.status },
   };
 }

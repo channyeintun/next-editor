@@ -19,7 +19,7 @@ const support = vi.hoisted(() => ({
 
 vi.mock("../../contexts/webContainerRuntimeSupport", () => support);
 
-const { bashTool } = await import("./bash");
+const { makeBashTool } = await import("./bash");
 
 function makeFile(path: string, content: string): WorkspaceFile {
   return { path, name: path.split("/").pop() ?? path, language: "plaintext", content };
@@ -46,9 +46,9 @@ function makeStore(files: WorkspaceFile[]) {
 
 function makeCtx(
   store: ReturnType<typeof makeStore>,
-  signal = new AbortController().signal,
+  requestConfirmation: () => Promise<boolean> = async () => true,
 ): ToolContext {
-  return { workspace: store, signal, requestConfirmation: async () => true };
+  return { workspace: store, signal: new AbortController().signal, requestConfirmation };
 }
 
 function createFakeProcess(outputChunks: string[], exitCode: number): WebContainerProcess {
@@ -58,35 +58,10 @@ function createFakeProcess(outputChunks: string[], exitCode: number): WebContain
       controller.close();
     },
   });
-
   return {
     output,
     exit: Promise.resolve(exitCode),
     kill: vi.fn<() => void>(),
-    input: new WritableStream(),
-    resize: vi.fn<() => void>(),
-  } as unknown as WebContainerProcess;
-}
-
-function createAbortableFakeProcess(): WebContainerProcess {
-  let resolveExit: (code: number) => void = () => {};
-  let controllerRef!: ReadableStreamDefaultController<string>;
-  const exit = new Promise<number>((resolve) => {
-    resolveExit = resolve;
-  });
-  const output = new ReadableStream<string>({
-    start(controller) {
-      controllerRef = controller;
-    },
-  });
-
-  return {
-    output,
-    exit,
-    kill: vi.fn<() => void>(() => {
-      controllerRef.close();
-      resolveExit(-1);
-    }),
     input: new WritableStream(),
     resize: vi.fn<() => void>(),
   } as unknown as WebContainerProcess;
@@ -99,125 +74,47 @@ function makeFakeInstance(process: WebContainerProcess): WebContainer {
   } as unknown as WebContainer;
 }
 
-describe("bashTool", () => {
-  it("reports unavailable without prompting or booting a container when unsupported", async () => {
+const run = (ctx: ToolContext) => makeBashTool(ctx).function.execute;
+
+describe("bash tool", () => {
+  it("reports unavailable when the runtime is unsupported", async () => {
     support.isWebContainerRuntimeSupported.mockReturnValue(false);
-    const store = makeStore([makeFile("index.html", "<html></html>")]);
-    const requestConfirmation = vi.fn<() => Promise<boolean>>();
+    const result = await run(makeCtx(makeStore([makeFile("index.html", "")])))({ command: "ls" });
+    expect(result).toContain("unavailable");
+  });
 
-    const result = await bashTool.execute(
-      { command: "echo hi" },
-      { workspace: store, signal: new AbortController().signal, requestConfirmation },
-    );
-
-    expect(result.is_error).toBe(true);
-    expect(result.content).toContain("unavailable");
-    expect(requestConfirmation).not.toHaveBeenCalled();
+  it("does not run a declined command", async () => {
+    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    const store = makeStore([makeFile("index.html", "")]);
+    const result = await run(makeCtx(store, async () => false))({ command: "rm -rf /" });
+    expect(result).toContain("declined");
     expect(support.getOrBootSharedWebContainer).not.toHaveBeenCalled();
   });
 
-  it("does not run the command when the user declines confirmation", async () => {
+  it("runs an approved command and folds container changes back into the store", async () => {
     support.isWebContainerRuntimeSupported.mockReturnValue(true);
     const store = makeStore([makeFile("index.html", "<html></html>")]);
-
-    const result = await bashTool.execute(
-      { command: "rm -rf /" },
-      {
-        workspace: store,
-        signal: new AbortController().signal,
-        requestConfirmation: async () => false,
-      },
-    );
-
-    expect(result.is_error).toBe(true);
-    expect(result.content).toContain("declined");
-    expect(support.getOrBootSharedWebContainer).not.toHaveBeenCalled();
-  });
-
-  it("runs the command, reports exit code + output, and folds new container files into the store", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
-    const process = createFakeProcess(["hello from container"], 0);
-    const instance = makeFakeInstance(process);
+    const instance = makeFakeInstance(createFakeProcess(["hello from container"], 0));
     support.getOrBootSharedWebContainer.mockResolvedValue(instance);
     support.readWorkspaceProject.mockResolvedValue(
       makeProject([makeFile("index.html", "<html></html>"), makeFile("generated.txt", "new file")]),
     );
 
-    const store = makeStore([makeFile("index.html", "<html></html>")]);
-    const result = await bashTool.execute({ command: "touch generated.txt" }, makeCtx(store));
+    const result = await run(makeCtx(store))({ command: "touch generated.txt" });
 
-    expect(result.is_error).toBe(false);
-    expect(result.content).toContain("exit code 0");
-    expect(result.content).toContain("hello from container");
+    expect(result).toContain("exit code 0");
+    expect(result).toContain("hello from container");
     expect(getProject(store)?.files["generated.txt"]?.content).toBe("new file");
   });
 
-  it("marks the result as an error when the process exits non-zero", async () => {
+  it("surfaces a non-zero exit code", async () => {
     support.isWebContainerRuntimeSupported.mockReturnValue(true);
-    const process = createFakeProcess(["boom"], 1);
-    const instance = makeFakeInstance(process);
+    const store = makeStore([makeFile("index.html", "")]);
+    const instance = makeFakeInstance(createFakeProcess([""], 1));
     support.getOrBootSharedWebContainer.mockResolvedValue(instance);
-    support.readWorkspaceProject.mockResolvedValue(
-      makeProject([makeFile("index.html", "<html></html>")]),
-    );
+    support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
 
-    const store = makeStore([makeFile("index.html", "<html></html>")]);
-    const result = await bashTool.execute({ command: "false" }, makeCtx(store));
-
-    expect(result.is_error).toBe(true);
-    expect(result.content).toContain("exit code 1");
-  });
-
-  it("kills the process and reports abort when the signal fires mid-command", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
-    const process = createAbortableFakeProcess();
-    const instance = makeFakeInstance(process);
-    const controller = new AbortController();
-    // Fire the abort right as the process spawns — the realistic "Stop was
-    // clicked while the command was already running" case — rather than
-    // during the earlier confirmation/boot awaits, which bash.ts short-circuits
-    // before ever spawning (covered by the aborted-signal check at the top).
-    instance.spawn = vi.fn<() => Promise<WebContainerProcess>>().mockImplementation(async () => {
-      controller.abort();
-      return process;
-    });
-    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
-    support.readWorkspaceProject.mockResolvedValue(
-      makeProject([makeFile("index.html", "<html></html>")]),
-    );
-
-    const store = makeStore([makeFile("index.html", "<html></html>")]);
-
-    const result = await bashTool.execute(
-      { command: "sleep 1000" },
-      makeCtx(store, controller.signal),
-    );
-
-    expect(process.kill).toHaveBeenCalled();
-    expect(result.is_error).toBe(true);
-    expect(result.content).toContain("aborted");
-  });
-
-  it("short-circuits without ever spawning when the signal aborts during confirmation", async () => {
-    support.isWebContainerRuntimeSupported.mockReturnValue(true);
-    const instance = makeFakeInstance(createFakeProcess([], 0));
-    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
-
-    const store = makeStore([makeFile("index.html", "<html></html>")]);
-    const controller = new AbortController();
-    const requestConfirmation = () =>
-      new Promise<boolean>((resolve) => {
-        controller.abort();
-        resolve(true);
-      });
-
-    const result = await bashTool.execute(
-      { command: "sleep 1000" },
-      { workspace: store, signal: controller.signal, requestConfirmation },
-    );
-
-    expect(result.is_error).toBe(true);
-    expect(result.content).toContain("aborted");
-    expect(instance.spawn).not.toHaveBeenCalled();
+    const result = await run(makeCtx(store))({ command: "false" });
+    expect(result).toContain("exit code 1");
   });
 });

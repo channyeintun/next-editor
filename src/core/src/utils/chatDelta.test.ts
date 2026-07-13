@@ -24,60 +24,69 @@ describe("applyChatDelta", () => {
       { k: "content", delta: insertDelta("Hello", "Hello world") },
     ]);
 
-    expect(state.messages).toEqual([
-      { id: "msg-1", role: "assistant", content: [{ type: "text", text: "Hello world" }] },
+    expect(state.items).toEqual([
+      { kind: "message", id: "msg-1", role: "assistant", text: "Hello world" },
     ]);
   });
 
-  it("appends a tool_use block onto the active (last) message", () => {
+  it("appends a tool_call item after the active message (does not intercept its text)", () => {
     const state = fold([
       { k: "message_start", id: "msg-1", role: "assistant" },
       { k: "content", delta: insertDelta("", "Reading a file...") },
-      { k: "tool_use", toolUseId: "tool-1", name: "read", input: { path: "src/App.tsx" } },
+      {
+        k: "tool_call",
+        id: "tool-1",
+        callId: "call-1",
+        name: "read",
+        arguments: '{"path":"a.ts"}',
+      },
+      { k: "content", delta: insertDelta("Reading a file...", "Reading a file... done") },
     ]);
 
-    expect(state.messages).toHaveLength(1);
-    expect(state.messages[0].content).toEqual([
-      { type: "text", text: "Reading a file..." },
-      { type: "tool_use", id: "tool-1", name: "read", input: { path: "src/App.tsx" } },
+    expect(state.items).toEqual([
+      { kind: "message", id: "msg-1", role: "assistant", text: "Reading a file... done" },
+      {
+        kind: "tool_call",
+        id: "tool-1",
+        callId: "call-1",
+        name: "read",
+        arguments: '{"path":"a.ts"}',
+      },
     ]);
   });
 
-  it("tool_result pushes its own user-role message (matching the Anthropic wire shape)", () => {
+  it("tool_result appends its own item keyed by callId", () => {
     const state = fold([
       { k: "message_start", id: "msg-1", role: "assistant" },
-      { k: "tool_use", toolUseId: "tool-1", name: "read", input: { path: "a.ts" } },
-      { k: "message_end", id: "msg-1" },
-      { k: "tool_result", toolUseId: "tool-1", content: "file contents", isError: false },
+      { k: "tool_call", id: "tool-1", callId: "call-1", name: "read", arguments: "{}" },
+      { k: "tool_result", callId: "call-1", output: "file contents", isError: false },
     ]);
 
-    expect(state.messages).toHaveLength(2);
-    expect(state.messages[1]).toEqual({
-      id: "tool_result:tool-1",
-      role: "user",
-      content: [
-        { type: "tool_result", tool_use_id: "tool-1", content: "file contents", is_error: false },
-      ],
+    expect(state.items).toHaveLength(3);
+    expect(state.items[2]).toEqual({
+      kind: "tool_result",
+      id: "out:call-1",
+      callId: "call-1",
+      output: "file contents",
+      isError: false,
     });
   });
 
-  it("message_end and status are no-ops on the message list, status updates status", () => {
+  it("status updates status; message_start with empty text yields an empty message item", () => {
     const state = fold([
       { k: "status", status: "streaming" },
       { k: "message_start", id: "msg-1", role: "assistant" },
-      { k: "message_end", id: "msg-1" },
       { k: "status", status: "done" },
     ]);
 
     expect(state.status).toBe("done");
-    expect(state.messages).toEqual([{ id: "msg-1", role: "assistant", content: [] }]);
+    expect(state.items).toEqual([{ kind: "message", id: "msg-1", role: "assistant", text: "" }]);
   });
 
-  it("remove truncates the transcript from the target message onward (aborted/retried turn)", () => {
+  it("remove truncates the transcript from the target item onward (aborted/retried turn)", () => {
     const state = fold([
       { k: "message_start", id: "msg-1", role: "user" },
       { k: "content", delta: insertDelta("", "hi") },
-      { k: "message_end", id: "msg-1" },
       { k: "message_start", id: "msg-2", role: "assistant" },
       { k: "content", delta: insertDelta("", "partial reply that gets retried") },
       { k: "remove", fromId: "msg-2" },
@@ -85,25 +94,23 @@ describe("applyChatDelta", () => {
       { k: "content", delta: insertDelta("", "final reply") },
     ]);
 
-    expect(state.messages).toEqual([
-      { id: "msg-1", role: "user", content: [{ type: "text", text: "hi" }] },
-      { id: "msg-3", role: "assistant", content: [{ type: "text", text: "final reply" }] },
+    expect(state.items).toEqual([
+      { kind: "message", id: "msg-1", role: "user", text: "hi" },
+      { kind: "message", id: "msg-3", role: "assistant", text: "final reply" },
     ]);
   });
 
-  it("a full fold from empty equals folding the same deltas onto an intermediate state incrementally", () => {
+  it("a full fold equals folding onto an intermediate checkpoint state incrementally", () => {
     const deltas: ChatDelta[] = [
       { k: "message_start", id: "msg-1", role: "user" },
       { k: "content", delta: insertDelta("", "hello") },
-      { k: "message_end", id: "msg-1" },
       { k: "message_start", id: "msg-2", role: "assistant" },
       { k: "content", delta: insertDelta("", "hi there") },
-      { k: "message_end", id: "msg-2" },
     ];
 
     const fullFold = fold(deltas);
-    const midpoint = fold(deltas.slice(0, 3));
-    const resumedFold = fold(deltas.slice(3), midpoint);
+    const midpoint = fold(deltas.slice(0, 2));
+    const resumedFold = fold(deltas.slice(2), midpoint);
 
     expect(resumedFold).toEqual(fullFold);
   });
