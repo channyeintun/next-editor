@@ -5,6 +5,7 @@ import wasm from "vite-plugin-wasm";
 import { fileURLToPath } from "node:url";
 
 import { proxyPlugin } from "./tube/vite/proxyPlugin";
+import { openrouterProxyPlugin } from "./tube/vite/openrouterProxyPlugin";
 
 const crossOriginHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -21,6 +22,10 @@ export default defineConfig({
     // `bun run dev` resolve the same /api/proxy route the Worker
     // serves in production.
     proxyPlugin() as unknown as PluginOption,
+    // Dev-server equivalent of infra/worker/routes/openrouter.ts: lets
+    // `bun run dev` resolve the same /api/openrouter/responses route the
+    // Worker serves in production (see src/shared/openrouterProxy.ts).
+    openrouterProxyPlugin() as unknown as PluginOption,
     wasm() as unknown as PluginOption,
     tailwindcss() as unknown as PluginOption,
     lazyPlugins(async () => {

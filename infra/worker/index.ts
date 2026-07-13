@@ -11,6 +11,7 @@ import { googleAuthRoute } from "./auth/google";
 import { uploadsRoute } from "./routes/uploads";
 import { proxyRoute } from "./routes/proxy";
 import { slideImagesRoute } from "./routes/slideImages";
+import { openrouterRoute } from "./routes/openrouter";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -63,6 +64,7 @@ app.route("/api/auth", authRoute);
 app.route("/api/auth/google", googleAuthRoute);
 app.route("/api/uploads", uploadsRoute);
 app.route("/api/proxy", proxyRoute);
+app.route("/api/openrouter", openrouterRoute);
 // Slide-image R2 ingestion. The pre-/api/proxy-rename alias /api/slide-image
 // (singular) is gone: every persisted document that referenced it was
 // migrated to /media/slide-images/<hash> hrefs on 2026-07-11.
