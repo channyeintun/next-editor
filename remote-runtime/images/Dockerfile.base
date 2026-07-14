@@ -1,0 +1,21 @@
+FROM golang:1.24.5-bookworm AS agent-build
+WORKDIR /src
+COPY agent/go.mod agent/go.sum ./
+RUN go mod download
+COPY agent/ ./
+ARG AGENT_VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${AGENT_VERSION}" -o /out/runtime-agent .
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash ca-certificates coreutils curl git tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 1000 --create-home --shell /bin/bash runtime \
+    && mkdir -p /workspace/project \
+    && chown -R runtime:runtime /workspace
+COPY --from=agent-build /out/runtime-agent /usr/local/bin/runtime-agent
+USER runtime
+WORKDIR /workspace/project
+EXPOSE 8600
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/runtime-agent"]
+CMD ["--port", "8600", "--workspace", "/workspace/project"]

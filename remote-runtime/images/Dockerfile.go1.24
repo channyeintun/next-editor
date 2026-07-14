@@ -1,0 +1,7 @@
+ARG BASE_IMAGE=next-editor-runtime-base:0.1.0
+FROM ${BASE_IMAGE}
+USER root
+COPY --from=golang:1.24.5-bookworm /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:${PATH}" GOCACHE=/home/runtime/.cache/go-build
+RUN mkdir -p /home/runtime/.cache/go-build && chown -R runtime:runtime /home/runtime/.cache
+USER runtime
