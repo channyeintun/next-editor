@@ -1,5 +1,5 @@
 import { decode as msgpackDecode, encode as msgpackEncode } from "@msgpack/msgpack";
-import { zlibSync, unzlibSync } from "fflate";
+import { Unzlib, zlibSync } from "fflate";
 import type {
   CaptionTrack,
   RecordingAudioSource,
@@ -63,6 +63,12 @@ const FOOTER_TRAILER_SIZE = 8;
 const U32_MAX = 0xffffffff;
 export const DEFAULT_AUDIO_TRACK_ID = "audio";
 export const DEFAULT_CAMERA_TRACK_ID = "camera";
+export const MAX_STREAM_BYTES = 256 * 1024 * 1024;
+export const MAX_COMPRESSED_META_BYTES = 4 * 1024 * 1024;
+export const MAX_INFLATED_META_BYTES = 8 * 1024 * 1024;
+export const MAX_COMPRESSED_SEGMENT_BYTES = 32 * 1024 * 1024;
+export const MAX_INFLATED_SEGMENT_BYTES = 64 * 1024 * 1024;
+export const MAX_DECODED_RECORDS = 1_000_000;
 
 export const SEGMENT_KIND = {
   frames: 0,
@@ -159,9 +165,32 @@ export function encodeRecords(records: ReadonlyArray<unknown>): Uint8Array {
   return zlibSync(msgpackEncode(records, { ignoreUndefined: true }));
 }
 
+function boundedUnzlib(payload: Uint8Array, maxBytes: number, label: string): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const inflater = new Unzlib((chunk) => {
+    total += chunk.byteLength;
+    if (total > maxBytes) {
+      throw new Error(`Invalid SCR3 stream: ${label} exceeds the decoded size limit`);
+    }
+    chunks.push(chunk);
+  });
+  inflater.push(payload, true);
+  return concatChunks(chunks, total);
+}
+
 export function decodeRecords<T>(payload: Uint8Array): T[] {
-  const decoded = msgpackDecode(unzlibSync(payload));
-  return Array.isArray(decoded) ? (decoded as T[]) : [];
+  if (payload.byteLength > MAX_COMPRESSED_SEGMENT_BYTES) {
+    throw new Error("Invalid SCR3 stream: segment exceeds the compressed size limit");
+  }
+  const decoded = msgpackDecode(
+    boundedUnzlib(payload, MAX_INFLATED_SEGMENT_BYTES, "segment"),
+  );
+  if (!Array.isArray(decoded)) return [];
+  if (decoded.length > MAX_DECODED_RECORDS) {
+    throw new Error("Invalid SCR3 stream: segment contains too many records");
+  }
+  return decoded as T[];
 }
 
 export function readRecordTimestamp(record: unknown): number {
@@ -273,10 +302,12 @@ export function parseHeader(bytes: Uint8Array): {
   const metaLength = view.getUint32(8, true);
   const metaStart = HEADER_PREFIX_SIZE;
   const metaEnd = metaStart + metaLength;
-  if (metaLength === 0 || metaEnd > bytes.length) {
+  if (metaLength === 0 || metaLength > MAX_COMPRESSED_META_BYTES || metaEnd > bytes.length) {
     throw new Error("Invalid SCR3 stream: bad header length");
   }
-  const meta = msgpackDecode(unzlibSync(bytes.subarray(metaStart, metaEnd))) as RecordingStreamMeta;
+  const meta = msgpackDecode(
+    boundedUnzlib(bytes.subarray(metaStart, metaEnd), MAX_INFLATED_META_BYTES, "header"),
+  ) as RecordingStreamMeta;
   return { meta, headerEnd: metaEnd };
 }
 

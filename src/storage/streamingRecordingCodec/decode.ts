@@ -1,5 +1,3 @@
-import { decode as msgpackDecode } from "@msgpack/msgpack";
-import { unzlibSync } from "fflate";
 import type { Recording } from "../../core/src";
 import type { CursorRecordingEvent, RecordingClusterMeta } from "../../core/src/types";
 import type {
@@ -25,6 +23,10 @@ import {
   SEGMENT_HEADER_SIZE,
   SEGMENT_KIND,
   STREAM_FORMAT_VERSION,
+  MAX_COMPRESSED_META_BYTES,
+  MAX_COMPRESSED_SEGMENT_BYTES,
+  MAX_DECODED_RECORDS,
+  MAX_STREAM_BYTES,
   type RecordingStreamMeta,
   type SegmentHeaderFields,
 } from "./format";
@@ -279,6 +281,20 @@ function decodeSegments(bytes: Uint8Array): Recording {
         chatEvents.push(...decodeRecords<ChatRecordingEvent>(segment.payload));
         break;
     }
+    const decodedRecordCount =
+      frames.length +
+      slideEvents.length +
+      previewEvents.length +
+      previewInitialDocuments.length +
+      previewPatchBatches.length +
+      workspaceEvents.length +
+      runtimeEvents.length +
+      cursorEvents.length +
+      whiteboardEvents.length +
+      chatEvents.length;
+    if (decodedRecordCount > MAX_DECODED_RECORDS) {
+      throw new Error("Invalid SCR3 stream: recording contains too many records");
+    }
   }
 
   frames.sort((left, right) => left.timestamp - right.timestamp);
@@ -317,6 +333,9 @@ function decodeSegments(bytes: Uint8Array): Recording {
  * `streamFinalized: false`, so callers can progressively decode a growing download.
  */
 export function decodeRecordingStream(bytes: Uint8Array): Recording {
+  if (bytes.byteLength > MAX_STREAM_BYTES) {
+    throw new Error("Invalid SCR3 stream: recording exceeds the size limit");
+  }
   return decodeSegments(bytes);
 }
 
@@ -380,6 +399,9 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   let maxSegmentTimeMs = 0;
 
   const grow = (incoming: Uint8Array): void => {
+    if (length + incoming.length > MAX_STREAM_BYTES) {
+      throw new Error("Invalid SCR3 stream: recording exceeds the size limit");
+    }
     if (length + incoming.length > buffer.length) {
       let capacity = buffer.length || STREAMING_READER_INITIAL_CAPACITY;
       while (capacity < length + incoming.length) {
@@ -400,7 +422,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     }
     const view = new DataView(buffer.buffer, 0, length);
     const metaLength = view.getUint32(8, true);
-    if (metaLength === 0) {
+    if (metaLength === 0 || metaLength > MAX_COMPRESSED_META_BYTES) {
       throw new Error("Invalid SCR3 stream: bad header length");
     }
     const metaEnd = HEADER_PREFIX_SIZE + metaLength;
@@ -410,9 +432,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     if (formatVersion !== STREAM_FORMAT_VERSION) {
       throw new Error(`Unsupported SCR3 format version: ${formatVersion}`);
     }
-    meta = msgpackDecode(
-      unzlibSync(buffer.subarray(HEADER_PREFIX_SIZE, metaEnd)),
-    ) as RecordingStreamMeta;
+    meta = parseHeader(buffer.subarray(0, metaEnd)).meta;
     headerEnd = metaEnd;
     cursor = metaEnd;
     headerParsed = true;
@@ -423,8 +443,12 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   // cursor untouched and the parse can be safely retried or rolled back.
   const ingestSegment = (header: SegmentHeaderFields, payload: Uint8Array): void => {
     if (!meta) return;
+    if (header.byteLength > MAX_COMPRESSED_SEGMENT_BYTES) {
+      throw new Error("Invalid SCR3 stream: segment exceeds the compressed size limit");
+    }
 
     let commit: () => void;
+    let pendingRecordCount = 0;
     switch (header.kind) {
       case SEGMENT_KIND.frames: {
         // Resolve per-segment previewState-content markers first (self-contained,
@@ -435,26 +459,31 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         const records = hydrateFramePreviewContent(decodeRecords<DeltaFrame>(payload)).map(
           normalizeDeltaFrame,
         );
+        pendingRecordCount = records.length;
         commit = () => frames.push(...records);
         break;
       }
       case SEGMENT_KIND.slide: {
         const records = decodeRecords<SlideEvent>(payload);
+        pendingRecordCount = records.length;
         commit = () => slideEvents.push(...records);
         break;
       }
       case SEGMENT_KIND.preview: {
         const records = decodeRecords<PreviewEvent>(payload);
+        pendingRecordCount = records.length;
         commit = () => previewEvents.push(...records);
         break;
       }
       case SEGMENT_KIND.previewDoc: {
         const records = decodeRecords<PreviewInitialDocument>(payload);
+        pendingRecordCount = records.length;
         commit = () => previewInitialDocuments.push(...records);
         break;
       }
       case SEGMENT_KIND.previewPatch: {
         const records = decodeRecords<PreviewDomPatchBatch>(payload);
+        pendingRecordCount = records.length;
         // Hydration advances the template list, so it runs inside `commit` — a
         // decode throw above must leave the dedup state untouched.
         commit = () => previewPatchBatches.push(...hydratePreviewPatchBatches(records));
@@ -462,6 +491,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       }
       case SEGMENT_KIND.workspace: {
         const records = decodeRecords<WorkspaceRecordingEvent>(payload);
+        pendingRecordCount = records.length;
         // Hydration advances the carry map, so it runs inside `commit` — a decode
         // throw above must leave the dedup state untouched along with the arrays.
         commit = () => workspaceEvents.push(...hydrateWorkspaceEvents(records));
@@ -469,21 +499,25 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       }
       case SEGMENT_KIND.runtime: {
         const records = decodeRecords<RuntimeRecordingEvent>(payload);
+        pendingRecordCount = records.length;
         commit = () => runtimeEvents.push(...records);
         break;
       }
       case SEGMENT_KIND.cursor: {
         const records = decodeRecords<CursorRecordingEvent>(payload);
+        pendingRecordCount = records.length;
         commit = () => cursorEvents.push(...records);
         break;
       }
       case SEGMENT_KIND.whiteboard: {
         const records = decodeRecords<WhiteboardEvent>(payload);
+        pendingRecordCount = records.length;
         commit = () => whiteboardEvents.push(...records);
         break;
       }
       case SEGMENT_KIND.chat: {
         const records = decodeRecords<ChatRecordingEvent>(payload);
+        pendingRecordCount = records.length;
         commit = () => chatEvents.push(...records);
         break;
       }
@@ -491,6 +525,20 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         commit = () => {};
     }
 
+    const decodedRecordCount =
+      frames.length +
+      slideEvents.length +
+      previewEvents.length +
+      previewInitialDocuments.length +
+      previewPatchBatches.length +
+      workspaceEvents.length +
+      runtimeEvents.length +
+      cursorEvents.length +
+      whiteboardEvents.length +
+      chatEvents.length;
+    if (decodedRecordCount + pendingRecordCount > MAX_DECODED_RECORDS) {
+      throw new Error("Invalid SCR3 stream: recording contains too many records");
+    }
     segmentCount += 1;
     maxSegmentTimeMs = Math.max(maxSegmentTimeMs, header.startTimeMs, header.endTimeMs);
     mergeClusterSummary(

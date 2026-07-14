@@ -18,6 +18,8 @@ import {
  * and stall the runtime. 50 MB matches the per-asset cap used for local uploads.
  */
 export const MAX_IMPORTED_PROJECT_BYTES = 50 * 1024 * 1024;
+export const MAX_IMPORTED_PROJECT_ENTRIES = 10_000;
+export const MAX_IMPORTED_ARCHIVE_BYTES = 100 * 1024 * 1024;
 
 /**
  * Development artifacts that should never travel into the workspace: they are
@@ -217,9 +219,34 @@ function createWorkspaceFile(
 export async function importWorkspaceProjectFromZip(file: File): Promise<WorkspaceProject> {
   let archive: Record<string, Uint8Array>;
 
+  if (file.size > MAX_IMPORTED_ARCHIVE_BYTES) {
+    throw new WorkspaceZipImportError("The zip file is larger than the 100 MB archive limit.");
+  }
+
   try {
-    archive = unzipSync(new Uint8Array(await file.arrayBuffer()));
-  } catch {
+    let declaredBytes = 0;
+    let entryCount = 0;
+    archive = unzipSync(new Uint8Array(await file.arrayBuffer()), {
+      filter: (entry) => {
+        entryCount += 1;
+        declaredBytes += entry.originalSize;
+        if (
+          entryCount > MAX_IMPORTED_PROJECT_ENTRIES ||
+          declaredBytes > MAX_IMPORTED_PROJECT_BYTES
+        ) {
+          throw new WorkspaceZipImportError("Archive exceeds the project import limits");
+        }
+        return true;
+      },
+    });
+  } catch (error) {
+    if (error instanceof WorkspaceZipImportError) {
+      throw new WorkspaceZipImportError(
+        `This project exceeds the ${Math.round(
+          MAX_IMPORTED_PROJECT_BYTES / (1024 * 1024),
+        )} MB or ${MAX_IMPORTED_PROJECT_ENTRIES.toLocaleString()} file import limit.`,
+      );
+    }
     throw new WorkspaceZipImportError(
       "That file could not be read as a .zip archive. Please pick a valid zip file.",
     );
