@@ -21,6 +21,8 @@ export interface ConnectionOptions {
   token?: string;
   workdirName?: string;
   WebSocketImpl?: typeof WebSocket;
+  reconnectDelaysMs?: number[];
+  handshakeTimeoutMs?: number;
 }
 
 export class RcpConnection {
@@ -34,6 +36,9 @@ export class RcpConnection {
   private readonly WebSocketImpl: typeof WebSocket;
   private keepalive?: ReturnType<typeof setInterval>;
   private closed = false;
+  private reconnecting = false;
+  private resumeToken?: string;
+  private readonly reconnectListeners = new Set<() => void | Promise<void>>();
 
   constructor(private readonly options: ConnectionOptions) {
     this.WebSocketImpl = options.WebSocketImpl ?? WebSocket;
@@ -45,24 +50,33 @@ export class RcpConnection {
   }
 
   async open(resumeToken?: string): Promise<void> {
+    this.closed = false;
+    await this.openSocket(resumeToken);
+    this.startKeepalive();
+  }
+
+  private async openSocket(resumeToken?: string): Promise<void> {
     const url = new URL(this.options.wsUrl);
     if (this.options.token) url.searchParams.set("token", this.options.token);
     const socket = new this.WebSocketImpl(url);
     socket.binaryType = "arraybuffer";
     this.socket = socket;
-    await new Promise<void>((resolve, reject) => {
+    await this.withTimeout(new Promise<void>((resolve, reject) => {
       const onOpen = () => { cleanup(); resolve(); };
       const onError = () => { cleanup(); reject(new RcpError("EGONE", "WebSocket open failed")); };
       const cleanup = () => { socket.removeEventListener("open", onOpen); socket.removeEventListener("error", onError); };
       socket.addEventListener("open", onOpen);
       socket.addEventListener("error", onError);
-    });
+    }), "WebSocket open timed out");
     socket.addEventListener("message", (event) => this.handleMessage(event));
-    socket.addEventListener("close", () => this.handleClose());
-    const hello = await this.request("session.hello", { protocolVersion, resumeToken });
+    socket.addEventListener("close", () => { if (this.socket === socket) void this.handleClose(); });
+    const hello = await this.withTimeout(
+      this.request("session.hello", { protocolVersion, resumeToken }),
+      "session.hello timed out",
+    );
     this.workdir = hello.workdir;
     this.agentVersion = hello.agentVersion;
-    this.keepalive = setInterval(() => { void this.request("session.ping", {}).catch(() => {}); }, 20_000);
+    this.resumeToken = hello.resumeToken ?? resumeToken;
   }
 
   request<M extends Method>(method: M, params: MethodParams<M>): Promise<MethodResult<M>> {
@@ -92,11 +106,21 @@ export class RcpConnection {
     return () => listeners!.delete(listener as (payload: never) => void);
   }
 
+  onReconnect(listener: () => void | Promise<void>): () => void {
+    this.reconnectListeners.add(listener);
+    return () => this.reconnectListeners.delete(listener);
+  }
+
   close(): void {
     this.closed = true;
     if (this.keepalive) clearInterval(this.keepalive);
     this.socket?.close();
     this.rejectPending(new RcpError("EGONE", "connection closed"));
+  }
+
+  private startKeepalive(): void {
+    if (this.keepalive) clearInterval(this.keepalive);
+    this.keepalive = setInterval(() => { void this.request("session.ping", {}).catch(() => {}); }, 20_000);
   }
 
   private send(data: string | Uint8Array): void {
@@ -141,14 +165,50 @@ export class RcpConnection {
     }
   }
 
-  private handleClose(): void {
-    if (this.closed) return;
+  private async handleClose(): Promise<void> {
+    if (this.closed || this.reconnecting) return;
+    this.reconnecting = true;
+    if (this.keepalive) clearInterval(this.keepalive);
     this.rejectPending(new RcpError("EGONE", "connection lost"));
-    this.emit({ t: "evt", m: "fatal", p: { message: "Remote runtime connection lost" } });
+    const delays = this.options.reconnectDelaysMs ?? [500, 1_000, 2_000, 4_000, 8_000];
+    let lastError: unknown = new Error("connection lost");
+    for (const delay of delays) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      if (this.closed) { this.reconnecting = false; return; }
+      try {
+        await this.openSocket(this.resumeToken);
+        for (const listener of this.reconnectListeners) await listener();
+        this.startKeepalive();
+        this.reconnecting = false;
+        return;
+      } catch (error) {
+        lastError = error;
+        this.socket?.close();
+      }
+    }
+    this.reconnecting = false;
+    this.emit({ t: "evt", m: "fatal", p: {
+      message: `Remote runtime connection lost: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+    } });
   }
 
   private rejectPending(error: Error): void {
     for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+    const timeoutMs = this.options.handshakeTimeoutMs ?? 10_000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(() => reject(new RcpError("EGONE", message)), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 }

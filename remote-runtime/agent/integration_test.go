@@ -20,6 +20,21 @@ type testClient struct {
 	nextID uint64
 }
 
+func dialTestClient(t *testing.T, serverURL, resumeToken string) *testClient {
+	t.Helper()
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(serverURL, "http")+"/ws", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &testClient{t: t, conn: conn}
+	params := map[string]any{"protocolVersion": 1}
+	if resumeToken != "" {
+		params["resumeToken"] = resumeToken
+	}
+	client.request("session.hello", params)
+	return client
+}
+
 func newTestClient(t *testing.T) (*testClient, func()) {
 	t.Helper()
 	a := newAgent(t.TempDir(), 8600)
@@ -27,14 +42,8 @@ func newTestClient(t *testing.T) (*testClient, func()) {
 	mux.HandleFunc("/ws", a.serveWS)
 	mux.Handle("/proxy/", a.proxyHandler())
 	server := httptest.NewServer(mux)
-	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/ws", nil)
-	if err != nil {
-		server.Close()
-		t.Fatal(err)
-	}
-	client := &testClient{t: t, conn: conn}
-	client.request("session.hello", map[string]any{"protocolVersion": 1})
-	return client, func() { _ = conn.Close(); server.Close() }
+	client := dialTestClient(t, server.URL, "")
+	return client, func() { _ = client.conn.Close(); server.Close() }
 }
 
 func (c *testClient) sendRequest(method string, params any) uint64 {
@@ -168,6 +177,29 @@ func TestAgentProcessAndPTY(t *testing.T) {
 	}
 	if got := client.collectChannel(spawned.Out); !strings.Contains(got, "37 91") {
 		t.Fatalf("unexpected PTY size output %q", got)
+	}
+}
+
+func TestAgentResumeFlushesBufferedProcessOutput(t *testing.T) {
+	a := newAgent(t.TempDir(), 8600)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", a.serveWS)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	first := dialTestClient(t, server.URL, "")
+	var spawned struct {
+		Out uint32 `json:"outCh"`
+	}
+	params := map[string]any{"cmd": "sh", "args": []string{"-c", "sleep 0.1; printf resumed-output"}, "env": map[string]string{}, "output": true}
+	if err := json.Unmarshal(first.request("proc.spawn", params), &spawned); err != nil {
+		t.Fatal(err)
+	}
+	_ = first.conn.Close()
+	time.Sleep(200 * time.Millisecond)
+	second := dialTestClient(t, server.URL, a.resumeToken)
+	defer second.conn.Close()
+	if got := second.collectChannel(spawned.Out); !strings.Contains(got, "resumed-output") {
+		t.Fatalf("missing buffered output: %q", got)
 	}
 }
 

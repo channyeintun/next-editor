@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ type agent struct {
 	nextPID     int
 	processes   map[int]*runningProcess
 	watches     map[int]context.CancelFunc
+	resumeToken string
 }
 
 type session struct {
@@ -37,6 +39,7 @@ type session struct {
 	credits    map[uint32]int64
 	creditCond *sync.Cond
 	closed     chan struct{}
+	resuming   bool
 }
 
 type upload struct {
@@ -53,11 +56,20 @@ type runningProcess struct {
 	inChannel  uint32
 	stdin      io.WriteCloser
 	pty        *os.File
+	mu         sync.Mutex
+	session    *session
+	buffered   []byte
+	exitCode   *int
 }
 
 func newAgent(root string, port int) *agent {
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		panic(err)
+	}
 	return &agent{root: newJail(root), port: port, nextChannel: 2, nextPID: 1,
-		processes: make(map[int]*runningProcess), watches: make(map[int]context.CancelFunc)}
+		processes: make(map[int]*runningProcess), watches: make(map[int]context.CancelFunc),
+		resumeToken: fmt.Sprintf("%x", tokenBytes)}
 }
 
 var upgrader = websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
@@ -71,7 +83,16 @@ func (a *agent) serveWS(w http.ResponseWriter, r *http.Request) {
 		credits: make(map[uint32]int64), closed: make(chan struct{})}
 	s.creditCond = sync.NewCond(&s.writeMu)
 	go s.watchPorts()
-	defer func() { close(s.closed); s.creditCond.Broadcast(); _ = conn.Close() }()
+	defer func() {
+		close(s.closed)
+		s.creditCond.Broadcast()
+		_ = conn.Close()
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		for _, process := range a.processes {
+			process.detach(s)
+		}
+	}()
 	for {
 		messageType, data, err := conn.ReadMessage()
 		if err != nil {
@@ -114,7 +135,7 @@ func (a *agent) serveWS(w http.ResponseWriter, r *http.Request) {
 				s.writeText(failure(req.ID, fail("EPROTO", "session.hello must be first")))
 				continue
 			}
-			go s.handle(req)
+			s.handle(req)
 		case websocket.BinaryMessage:
 			s.handleBinary(data)
 		}
@@ -182,6 +203,20 @@ func (s *session) handle(req request) {
 	}
 	if result != nil {
 		s.writeText(success(req.ID, result))
+		if req.Method == "session.hello" && s.resuming {
+			s.bindProcesses()
+		}
+	}
+}
+
+func (s *session) bindProcesses() {
+	s.agent.mu.Lock()
+	defer s.agent.mu.Unlock()
+	for _, process := range s.agent.processes {
+		s.writeMu.Lock()
+		s.credits[process.outChannel] = initialChannelCredit
+		s.writeMu.Unlock()
+		process.bind(s)
 	}
 }
 
@@ -198,8 +233,13 @@ func (s *session) dispatch(req request) (any, error) {
 		if p.ProtocolVersion != protocolVersion {
 			return nil, fail("EPROTO", "unsupported protocol version")
 		}
+		resumed := p.ResumeToken != ""
+		if resumed && p.ResumeToken != s.agent.resumeToken {
+			return nil, fail("EGONE", "resume token is no longer valid")
+		}
 		s.ready = true
-		return map[string]any{"workdir": s.agent.root.root, "agentVersion": version, "resumed": false}, nil
+		s.resuming = resumed
+		return map[string]any{"workdir": s.agent.root.root, "agentVersion": version, "resumed": resumed, "resumeToken": s.agent.resumeToken}, nil
 	case "session.ping":
 		return map[string]any{}, nil
 	case "ch.credit":

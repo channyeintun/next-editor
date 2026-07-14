@@ -27,8 +27,15 @@ async function collect(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> 
 
 export class RemoteFs {
   private nextWatchId = 1;
+  private readonly watches = new Map<number, { path: string; recursive: boolean }>();
 
-  constructor(private readonly connection: RcpConnection) {}
+  constructor(private readonly connection: RcpConnection) {
+    connection.onReconnect(async () => {
+      for (const [watchId, watch] of this.watches) {
+        await connection.request("fs.watch", { watchId, ...watch });
+      }
+    });
+  }
 
   async readFile(path: string, encoding?: string | null): Promise<string | Uint8Array> {
     const { ch } = await this.connection.request("fs.readFile", { path });
@@ -89,6 +96,7 @@ export class RemoteFs {
     const listener = typeof options === "function" ? options : callback;
     const recursive = typeof options === "object" ? options.recursive ?? false : false;
     const watchId = this.nextWatchId++;
+    this.watches.set(watchId, { path, recursive });
     let closed = false;
     const unsubscribe = this.connection.on("fs.watch", (event) => {
       if (event.watchId === watchId) listener?.(event.event, event.filename);
@@ -96,7 +104,7 @@ export class RemoteFs {
     void this.connection.request("fs.watch", { watchId, path, recursive }).catch(() => close());
     const close = () => {
       if (closed) return;
-      closed = true; unsubscribe();
+      closed = true; this.watches.delete(watchId); unsubscribe();
       void this.connection.request("fs.unwatch", { watchId }).catch(() => {});
     };
     return { close };

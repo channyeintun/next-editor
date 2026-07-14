@@ -304,7 +304,7 @@ func (s *session) spawn(req request) (any, error) {
 	inCh = s.agent.nextChannel
 	s.agent.nextChannel += 2
 	s.agent.mu.Unlock()
-	proc := &runningProcess{id: pid, cmd: cmd, outChannel: outCh, inChannel: inCh}
+	proc := &runningProcess{id: pid, cmd: cmd, outChannel: outCh, inChannel: inCh, session: s}
 	var output io.ReadCloser
 	if p.Terminal != nil {
 		// pty.StartWithSize creates a new session whose id is also the process group id.
@@ -345,9 +345,7 @@ func (s *session) streamProcess(proc *runningProcess, output io.ReadCloser, enab
 		for {
 			n, err := output.Read(buffer)
 			if n > 0 {
-				if s.writeBinary(proc.outChannel, buffer[:n], false) != nil {
-					break
-				}
+				proc.deliver(buffer[:n])
 			}
 			if err != nil {
 				break
@@ -358,11 +356,64 @@ func (s *session) streamProcess(proc *runningProcess, output io.ReadCloser, enab
 	}
 	waitErr := proc.cmd.Wait()
 	code := processExitCode(waitErr)
-	s.agent.mu.Lock()
-	delete(s.agent.processes, proc.id)
-	s.agent.mu.Unlock()
-	s.writeText(event("proc.exit", map[string]any{"pid": proc.id, "code": code}))
-	_ = s.writeBinary(proc.outChannel, nil, true)
+	proc.finish(code)
+	go func() {
+		time.Sleep(60 * time.Second)
+		s.agent.mu.Lock()
+		if s.agent.processes[proc.id] == proc {
+			delete(s.agent.processes, proc.id)
+		}
+		s.agent.mu.Unlock()
+	}()
+}
+
+func (process *runningProcess) deliver(data []byte) {
+	process.mu.Lock()
+	defer process.mu.Unlock()
+	if process.session != nil && process.session.writeBinary(process.outChannel, data, false) == nil {
+		return
+	}
+	process.session = nil
+	process.buffered = append(process.buffered, data...)
+	if excess := len(process.buffered) - initialChannelCredit; excess > 0 {
+		copy(process.buffered, process.buffered[excess:])
+		process.buffered = process.buffered[:initialChannelCredit]
+	}
+}
+
+func (process *runningProcess) finish(code int) {
+	process.mu.Lock()
+	defer process.mu.Unlock()
+	process.exitCode = &code
+	if process.session != nil {
+		process.session.writeText(event("proc.exit", map[string]any{"pid": process.id, "code": code}))
+		_ = process.session.writeBinary(process.outChannel, nil, true)
+	}
+}
+
+func (process *runningProcess) detach(session *session) {
+	process.mu.Lock()
+	defer process.mu.Unlock()
+	if process.session == session {
+		process.session = nil
+	}
+}
+
+func (process *runningProcess) bind(session *session) {
+	process.mu.Lock()
+	defer process.mu.Unlock()
+	process.session = session
+	if len(process.buffered) > 0 {
+		if session.writeBinary(process.outChannel, process.buffered, false) != nil {
+			process.session = nil
+			return
+		}
+		process.buffered = nil
+	}
+	if process.exitCode != nil {
+		session.writeText(event("proc.exit", map[string]any{"pid": process.id, "code": *process.exitCode}))
+		_ = session.writeBinary(process.outChannel, nil, true)
+	}
 }
 
 func processExitCode(waitErr error) int {

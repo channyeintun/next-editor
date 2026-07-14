@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["vitest/globals"]
   },
-  "include": ["src/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "conformance/**/*.ts", "vitest.config.ts"]
 }
