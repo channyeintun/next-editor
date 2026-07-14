@@ -14,6 +14,41 @@ written to be executable by a focused agent with only: this file, the design doc
 repo. Tasks list their inputs, outputs, and acceptance criteria. Tasks marked ∥ within a phase
 are independent and may run in parallel.
 
+## Implementation progress (updated 2026-07-14)
+
+The current implementation was deliberately built as the isolated
+[`remote-runtime/`](../remote-runtime/README.md) package. Per the implementation request, it
+does **not** modify the editor or the existing `infra/` deployment yet. The target layout below
+remains the intended layout for the later integration step; current standalone paths are documented
+in `remote-runtime/README.md`.
+
+Status meanings:
+
+- **Complete** — implementation is present and bounded package-level checks pass.
+- **Validation pending** — implementation and its harness are present, but the acceptance check
+  requires Docker, `wrangler dev`, Cloudflare credentials, staging, or a long-running soak and has
+  not been executed on the current host.
+- **Deferred by scope** — intentionally excluded because it integrates the standalone package into
+  the editor or existing deployment.
+
+| Phase | Implementation status | Verification status | Current location / notes |
+| ----- | --------------------- | ------------------- | ------------------------ |
+| P0 — app compatibility seam | **Deferred by scope** | Not run | Requires editor changes under `src/`; begin when integration is authorized. |
+| P1 — RCP TypeScript library | **Complete** | Typecheck and focused unit tests pass | `remote-runtime/src/rcp/`, commit `007c29d`; flow-control hardening in `3b4e287`. |
+| P2 — Go agent + images | **Complete for Go 1.26.5** | Go 1.26.5 unit/in-process integration tests and `go vet` pass; Docker build/smoke **pending** | `remote-runtime/agent/`, `remote-runtime/Dockerfile.go1.26.5`; commits `3a36dfd`, `6a2fcac`. |
+| P3 — client SDK + conformance | **Complete** | Typecheck and focused tests pass; attach/boot Docker conformance **pending** | `remote-runtime/src/remote/`, `remote-runtime/conformance/`; commits `3307100`, `c6aac3c`. |
+| P4 — Cloudflare backend | **Complete as a standalone Worker** | Worker typecheck and focused tests pass; `wrangler dev`, staging, HMR, and deploy checks **pending** | `remote-runtime/worker/`; commits `599cde7`, `0e8bec6`. Manual prerequisites in its README remain required. |
+| P5 — editor integration | **Deferred by scope** | Not run | No runtime selection, hooks, presets, UI, fallback, or editor teardown changes have been made. |
+| P6 — hardening & rollout | **Hardening implementation complete; rollout deferred** | Limits/tests pass; fuzz target and 30-minute soak are present but extended runs are **pending** | `remote-runtime/HARDENING.md`, commit `3b4e287`; editor feature flag/rollout remains part of P5 integration. |
+
+Current bounded results: 17 standalone SDK/protocol tests pass, 9 Worker tests pass, and the
+Go 1.26.5 agent suite plus `go vet` pass. Six environment-dependent conformance/soak cases are
+checked in and skipped without an endpoint. No Docker image, `wrangler dev`, remote D1 migration,
+Cloudflare deployment, staging check, or long-running soak has been executed.
+
+This progress ledger records implementation status only; it does not change the v1 definition of
+done at the end of this document, which still requires editor integration and staging evidence.
+
 ---
 
 ## 0. Ground rules for implementers (read first)
@@ -78,7 +113,7 @@ src/runtime/remote/mountZip.ts     FileSystemTree ⇄ zip (fflate)
 src/runtime/remote/previewMessages.ts  postMessage listener → on("preview-message")
 
 sandbox/agent/                     Go module (see Phase 2 for internal layout)
-sandbox/images/                    Dockerfile.base, Dockerfile.node22, Dockerfile.go1.24, …
+sandbox/images/                    Dockerfile.base, Dockerfile.node22, Dockerfile.go1.26.5, …
 sandbox/conformance/               cross-runtime conformance spec + fixtures (Phase 3)
 
 infra/worker/runtime/routes.ts     /api/runtime/* + preview ingress
@@ -163,7 +198,7 @@ sandbox/agent/internal/proxy/      /proxy/{port}/… reverse proxy w/ WS passthr
 | 2.4 ∥ | `watch`                                                               | Recursive watcher per §7.3: rename/change mapping, relative `/`-separated filenames, 10 ms per-path debounce, watch-count limit → `ELIMIT`.                                                                                                                                                                                                                             | Tests: create/modify/delete/mv files in nested dirs produce expected event streams.                                                                                                                 |
 | 2.5 ∥ | `ports` + `proxy`                                                     | §7.4 poller (300 ms, state 0A, dedupe, ignore agent's own port) emitting `evt port`; §7.5 reverse proxy at `/proxy/{port}/…` with WebSocket upgrade passthrough and streaming bodies.                                                                                                                                                                                   | Tests: in-test HTTP listener → open event within 1 s, close on exit; proxy passes chunked bodies and a WS echo.                                                                                     |
 | 2.6 ∥ | `mount` / `export`                                                    | Unpack uploaded zip (temp dir → move-merge, symlinks honored, `mountPoint` support); export walks tree honoring `includes`/`excludes` globs → zip or JSON-tree per §6.3.                                                                                                                                                                                                | Round-trip test vs the fixtures used by TS test 1.5 (share a `sandbox/conformance/fixtures/` zip corpus so Go and TS agree byte-for-byte on format).                                                |
-| 2.7   | Images: `Dockerfile.base` + `Dockerfile.node22` + `Dockerfile.go1.24` | Design §10: debian-slim, non-root uid 1000, agent as entrypoint, `bash`/git/curl/ca-certs; language layers on top. **Check current CF Containers image-size limits and slim accordingly** (rule 0.6).                                                                                                                                                                   | `docker build` all; `docker run runtime-go1.24` then WS smoke test: spawn `go version` exits 0 with output.                                                                                         |
+| 2.7   | Images: `Dockerfile.base` + `Dockerfile.node22` + `Dockerfile.go1.26.5` | Design §10: debian-slim, non-root uid 1000, agent as entrypoint, `bash`/git/curl/ca-certs; language layers on top. **Check current CF Containers image-size limits and slim accordingly** (rule 0.6).                                                                                                                                                                   | `docker build` all; `docker run runtime-go1.26.5` then WS smoke test: spawn `go version` exits 0 with output.                                                                                         |
 
 2.2–2.6 are parallelizable after 2.1. Commits: `feat(agent): …` per task.
 
@@ -213,7 +248,7 @@ serialize if parallel agents).
 
 | #   | Task                                 | Details                                                                                                                                                                                                                                                                                                                                                                          | Acceptance                                                                                                                                                    |
 | --- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 5.1 | Factory: `"remote"` kind + selection | Extend `getOrBootSharedRuntime` with the remote branch (`RemoteBootOptions` from settings/env: endpoint, runtime). Selection policy per design §5.5: explicit project setting wins; else detect `go.mod`/`*.go` → `go1.24`, `pyproject.toml`/`requirements.txt` → `python3.13`, else webcontainer. Setting stored via the existing `@xstate/store-react` conventions (rule 0.4). | Unit tests for detection; JS projects still boot WebContainer untouched.                                                                                      |
+| 5.1 | Factory: `"remote"` kind + selection | Extend `getOrBootSharedRuntime` with the remote branch (`RemoteBootOptions` from settings/env: endpoint, runtime). Selection policy per design §5.5: explicit project setting wins; else detect `go.mod`/`*.go` → `go1.26.5`, `pyproject.toml`/`requirements.txt` → `python3.13`, else webcontainer. Setting stored via the existing `@xstate/store-react` conventions (rule 0.4). | Unit tests for detection; JS projects still boot WebContainer untouched.                                                                                      |
 | 5.2 | Runtime session hooks over remote    | Audit `useWebContainerRuntimeSession.ts` / `useWebContainerWorkspaceSync.ts` against `RemoteContainer`: shell candidates (`jsh` will ENOENT → loop must advance to `bash` — verify the try/catch), boot-status surface gains "provisioning sandbox…" state, `error` event → reset path releases the remote session.                                                              | Hook tests with mocked RemoteContainer (add the RuntimeKind dimension); manual via `wrangler dev`: terminal into a Go container, `go run .`, preview appears. |
 | 5.3 | Runner presets + minimal UI          | Per-runtime default runner commands (`go run .`, `python main.py`, existing node presets) where the runner config initializes; runtime picker in project settings (smallest viable UI — this repo's owner eyeballs UI himself, rule 0.8; consider the `frontend-ux-design` skill for the picker).                                                                                | Preset appears for a fresh Go project; picker persists per project.                                                                                           |
 | 5.4 | Failure UX + fallback                | Provisioning failure for node-capable projects → offer/auto fallback to WebContainer with a status note; quota errors surfaced with actionable message; teardown on tab close (`beforeunload` best-effort DELETE via `sendBeacon`).                                                                                                                                              | Tests for fallback path; no orphaned sessions after normal close (DO idle alarm as backstop).                                                                 |
