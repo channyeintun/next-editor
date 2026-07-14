@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@webcontainer/api": "^1.6.4",
     "fflate": "^0.8.3"
   },
   "devDependencies": {
