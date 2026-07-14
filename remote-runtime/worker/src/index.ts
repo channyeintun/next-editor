@@ -2,6 +2,7 @@ import { bearer, signToken, verifyToken } from "./auth";
 import { RuntimeGoSessionDO } from "./sessionDo";
 import type { Env, SessionRecord } from "./types";
 import { previewTarget, type PreviewTarget } from "./routing";
+import { runtimeMetric } from "./telemetry";
 
 export { RuntimeGoSessionDO };
 
@@ -40,12 +41,16 @@ async function createSession(request: Request, env: Env): Promise<Response> {
   const active = await env.RUNTIME_QUOTAS.prepare(
     "SELECT COUNT(*) AS count FROM runtime_sessions WHERE user_id = ? AND ended_at IS NULL",
   ).bind(claims.userId).first<{ count: number }>();
-  if ((active?.count ?? 0) >= maxConcurrent) return json({ code: "EQUOTA", message: "Concurrent runtime limit reached" }, 429);
+  if ((active?.count ?? 0) >= maxConcurrent) {
+    runtimeMetric("quota_hit", { kind: "concurrent", userId: claims.userId });
+    return json({ code: "EQUOTA", message: "Concurrent runtime limit reached" }, 429);
+  }
   const day = new Date().toISOString().slice(0, 10);
   const usage = await env.RUNTIME_QUOTAS.prepare(
     "SELECT minutes FROM runtime_daily_usage WHERE user_id = ? AND day = ?",
   ).bind(claims.userId, day).first<{ minutes: number }>();
   if ((usage?.minutes ?? 0) >= Number(env.MAX_DAILY_MINUTES || 120)) {
+    runtimeMetric("quota_hit", { kind: "daily_minutes", userId: claims.userId });
     return json({ code: "EQUOTA", message: "Daily runtime minutes exhausted" }, 429);
   }
 
@@ -75,6 +80,7 @@ async function createSession(request: Request, env: Env): Promise<Response> {
   const origin = new URL(request.url);
   const wsProtocol = origin.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl = `${wsProtocol}//${origin.host}/api/runtime/sessions/${sessionId}/ws`;
+  runtimeMetric("session_created", { sessionId, userId: claims.userId, runtime: "go1.26.5" });
   return json({
     sessionId, token, wsUrl,
     previewUrlTemplate: env.PREVIEW_URL_TEMPLATE.replaceAll("{{sessionId}}", sessionId),

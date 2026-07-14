@@ -118,6 +118,12 @@ export class RcpConnection {
     this.rejectPending(new RcpError("EGONE", "connection closed"));
   }
 
+  /** @internal Conformance/soak hook. */
+  forceDisconnectForTesting(): void {
+    if (this.closed) throw new RcpError("EGONE", "connection is closed");
+    this.socket?.close();
+  }
+
   private startKeepalive(): void {
     if (this.keepalive) clearInterval(this.keepalive);
     this.keepalive = setInterval(() => { void this.request("session.ping", {}).catch(() => {}); }, 20_000);

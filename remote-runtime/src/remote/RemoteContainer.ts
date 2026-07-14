@@ -151,6 +151,11 @@ export class RemoteContainer {
     }).catch(() => {});
   }
 
+  /** @internal Conformance/soak hook; not part of the WebContainer-compatible surface. */
+  forceReconnectForTesting(): void {
+    this.connection.forceDisconnectForTesting();
+  }
+
   private previewUrl(port: number): string {
     return renderPreviewUrl(this.previewUrlTemplate, this.control?.sessionId ?? "", port);
   }

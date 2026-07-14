@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
@@ -497,6 +499,12 @@ func (s *session) export(req request) (any, error) {
 		}
 		rel, _ := filepath.Rel(root, path)
 		rel = filepath.ToSlash(rel)
+		if !matchesExportPath(rel, p.Includes, p.Excludes) {
+			if info.IsDir() && matchesAny(rel, p.Excludes) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		if info.IsDir() {
 			_, e := zw.Create(rel + "/")
 			return e
@@ -539,4 +547,43 @@ func (s *session) export(req request) (any, error) {
 	channel := s.allocateChannel()
 	go s.writeBinary(channel, buffer.Bytes(), true)
 	return map[string]any{"ch": channel}, nil
+}
+
+func matchesExportPath(name string, includes, excludes []string) bool {
+	if matchesAny(name, excludes) {
+		return false
+	}
+	return len(includes) == 0 || matchesAny(name, includes)
+}
+
+func matchesAny(name string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if globMatch(pattern, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func globMatch(pattern, name string) bool {
+	var expression strings.Builder
+	expression.WriteByte('^')
+	for i := 0; i < len(pattern); i++ {
+		switch pattern[i] {
+		case '*':
+			if i+1 < len(pattern) && pattern[i+1] == '*' {
+				expression.WriteString(".*")
+				i++
+			} else {
+				expression.WriteString("[^/]*")
+			}
+		case '?':
+			expression.WriteString("[^/]")
+		default:
+			expression.WriteString(regexp.QuoteMeta(string(pattern[i])))
+		}
+	}
+	expression.WriteByte('$')
+	matched, err := regexp.MatchString(expression.String(), name)
+	return err == nil && matched
 }

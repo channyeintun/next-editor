@@ -309,6 +309,7 @@ func (s *session) handleBinary(frame []byte) {
 		}
 		if len(payload) > 0 {
 			_, _ = proc.stdin.Write(payload)
+			s.writeText(event("ch.credit", map[string]any{"ch": channel, "bytes": len(payload)}))
 		}
 		if fin {
 			_ = proc.stdin.Close()
@@ -325,6 +326,9 @@ func (s *session) handleBinary(frame []byte) {
 		return
 	}
 	_, _ = upload.buf.Write(payload)
+	if len(payload) > 0 {
+		s.writeText(event("ch.credit", map[string]any{"ch": channel, "bytes": len(payload)}))
+	}
 	if !fin {
 		return
 	}

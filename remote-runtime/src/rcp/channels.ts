@@ -10,6 +10,7 @@ interface ChannelState {
   credit: number;
   waiters: Array<() => void>;
   closed: boolean;
+  pendingCredit: number;
 }
 
 export class ChannelMux {
@@ -40,8 +41,10 @@ export class ChannelMux {
       },
       pull: async (controller) => {
         const desired = Math.max(0, controller.desiredSize ?? 1);
-        if (desired > 0 && !state.closed) {
-          await this.sendCredit(channelId, RCP_LIMITS.initialChannelCredit);
+        if (desired > 0 && !state.closed && state.pendingCredit > 0) {
+          const bytes = state.pendingCredit;
+          state.pendingCredit = 0;
+          await this.sendCredit(channelId, bytes);
         }
       },
       cancel: () => {
@@ -84,6 +87,7 @@ export class ChannelMux {
     if (frame.payload.byteLength > 0) {
       if (!state.controller) throw new RcpError("EPROTO", `channel ${frame.channelId} has no reader`);
       state.controller.enqueue(frame.payload);
+      state.pendingCredit += frame.payload.byteLength;
     }
     if (frame.fin) {
       state.closed = true;
@@ -113,7 +117,7 @@ export class ChannelMux {
   private getState(channelId: number): ChannelState {
     let state = this.channels.get(channelId);
     if (!state) {
-      state = { credit: RCP_LIMITS.initialChannelCredit, waiters: [], closed: false };
+      state = { credit: RCP_LIMITS.initialChannelCredit, waiters: [], closed: false, pendingCredit: 0 };
       this.channels.set(channelId, state);
     }
     return state;

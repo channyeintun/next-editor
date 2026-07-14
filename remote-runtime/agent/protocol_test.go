@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -76,6 +77,43 @@ func TestSignaledExitCode(t *testing.T) {
 	err := cmd.Run()
 	if code := processExitCode(err); code != 128+int(syscall.SIGTERM) {
 		t.Fatalf("got %d", code)
+	}
+}
+
+func TestJailPathDepthLimit(t *testing.T) {
+	j := newJail(t.TempDir())
+	deep := strings.Repeat("dir/", 64) + "file"
+	if _, err := j.resolve(deep, true); err == nil || !strings.HasPrefix(err.Error(), "ELIMIT:") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func FuzzParseBinaryFrame(f *testing.F) {
+	valid, _ := binaryFrame(7, []byte("seed"), true)
+	f.Add(valid)
+	f.Add([]byte{0, 0, 0, 0, 0})
+	f.Fuzz(func(t *testing.T, data []byte) {
+		channel, payload, _, err := parseBinaryFrame(data)
+		if err == nil {
+			if channel == 0 {
+				t.Fatal("accepted reserved channel")
+			}
+			if len(payload) > maxBinaryPayload {
+				t.Fatal("accepted oversized payload")
+			}
+		}
+	})
+}
+
+func TestExportGlobs(t *testing.T) {
+	if !matchesExportPath("src/main.go", []string{"src/**"}, []string{"**/*.test.go"}) {
+		t.Fatal("expected include")
+	}
+	if matchesExportPath("src/main.test.go", []string{"src/**"}, []string{"**/*.test.go"}) {
+		t.Fatal("expected exclude")
+	}
+	if matchesExportPath("README.md", []string{"src/**"}, nil) {
+		t.Fatal("unexpected include")
 	}
 }
 

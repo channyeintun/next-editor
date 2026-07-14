@@ -95,4 +95,16 @@ func main() { _ = http.ListenAndServe(":18080", http.HandlerFunc(func(w http.Res
     server.kill();
     await server.exit;
   });
+
+  it.runIf(process.env.REMOTE_RUNTIME_SOAK === "1")("preserves ordered output through a 30-minute reconnect soak", async () => {
+    const process = await container.spawn("sh", ["-c", "i=1; while [ $i -le 1800 ]; do echo $i; i=$((i+1)); sleep 1; done"]);
+    const output = collect(process.output);
+    for (let drop = 0; drop < 180; drop += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      container.forceReconnectForTesting();
+    }
+    expect(await process.exit).toBe(0);
+    const records = (await output).trim().split(/\r?\n/).map(Number);
+    expect(records).toEqual(Array.from({ length: 1800 }, (_, index) => index + 1));
+  }, 31 * 60_000);
 });

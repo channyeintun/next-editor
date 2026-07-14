@@ -20,6 +20,9 @@ func (j jail) resolve(name string, allowMissing bool) (string, error) {
 		return "", fail("EACCES", "absolute paths are not allowed")
 	}
 	clean := filepath.Clean(name)
+	if clean != "." && len(strings.Split(filepath.ToSlash(clean), "/")) > 64 {
+		return "", fail("ELIMIT", "path depth exceeds 64 components")
+	}
 	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 		return "", fail("EACCES", "path escapes workspace")
 	}

@@ -38,4 +38,16 @@ describe("channel mux", () => {
     await write;
     expect(finished).toBe(true);
   });
+
+  it("replenishes only bytes consumed by a readable channel", async () => {
+    const credits: number[] = [];
+    const mux = new ChannelMux("client", () => {}, (_channel, bytes) => { credits.push(bytes); });
+    const reader = mux.readable(2).getReader();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(credits).toEqual([]);
+    mux.receive({ channelId: 2, fin: false, payload: new Uint8Array(17) });
+    await reader.read();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(credits).toEqual([17]);
+  });
 });

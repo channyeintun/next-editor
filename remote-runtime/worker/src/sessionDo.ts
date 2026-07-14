@@ -2,6 +2,7 @@ import { Container } from "@cloudflare/containers";
 import type { StopParams } from "@cloudflare/containers";
 import type { Env } from "./types";
 import { previewResponseHeaders, previewScriptMarkup } from "./preview";
+import { runtimeMetric } from "./telemetry";
 
 interface PreviewScript {
   src: string;
@@ -14,6 +15,10 @@ export class RuntimeGoSessionDO extends Container<Env> {
   defaultPort = 8600;
   requiredPorts = [8600];
   sleepAfter = "5m";
+
+  override onStart(): void {
+    runtimeMetric("container_started", { sessionId: this.ctx.id.toString() });
+  }
 
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -61,6 +66,7 @@ export class RuntimeGoSessionDO extends Container<Env> {
         ON CONFLICT(user_id, day) DO UPDATE SET minutes = minutes + excluded.minutes`).bind(config.userId, day, minutes),
     ]);
     await this.ctx.storage.put("usageFinalized", true);
+    runtimeMetric("session_stopped", { sessionId: config.sessionId, minutes });
   }
 
   private async decoratePreview(response: Response): Promise<Response> {
