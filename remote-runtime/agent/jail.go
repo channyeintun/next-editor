@@ -28,13 +28,24 @@ func (j jail) resolve(name string, allowMissing bool) (string, error) {
 	if allowMissing {
 		check = filepath.Dir(joined)
 	}
-	real, err := filepath.EvalSymlinks(check)
-	if err != nil {
-		if allowMissing && errors.Is(err, fs.ErrNotExist) {
-			real = check
-		} else {
-			return "", mapFsError(err)
+	existing := check
+	for {
+		_, statErr := os.Lstat(existing)
+		if statErr == nil {
+			break
 		}
+		if !errors.Is(statErr, fs.ErrNotExist) {
+			return "", mapFsError(statErr)
+		}
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return "", fail("EACCES", "cannot resolve workspace path")
+		}
+		existing = parent
+	}
+	real, err := filepath.EvalSymlinks(existing)
+	if err != nil {
+		return "", mapFsError(err)
 	}
 	rel, err := filepath.Rel(j.root, real)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -44,6 +55,15 @@ func (j jail) resolve(name string, allowMissing bool) (string, error) {
 }
 
 func mapFsError(err error) error {
+	text := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(text, "directory not empty"):
+		return fail("ENOTEMPTY", err.Error())
+	case strings.Contains(text, "not a directory"):
+		return fail("ENOTDIR", err.Error())
+	case strings.Contains(text, "is a directory"):
+		return fail("EISDIR", err.Error())
+	}
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return fail("ENOENT", err.Error())
@@ -52,15 +72,6 @@ func mapFsError(err error) error {
 	case errors.Is(err, fs.ErrPermission):
 		return fail("EACCES", err.Error())
 	default:
-		text := strings.ToLower(err.Error())
-		switch {
-		case strings.Contains(text, "not a directory"):
-			return fail("ENOTDIR", err.Error())
-		case strings.Contains(text, "is a directory"):
-			return fail("EISDIR", err.Error())
-		case strings.Contains(text, "directory not empty"):
-			return fail("ENOTEMPTY", err.Error())
-		}
 		return fail("EPROTO", err.Error())
 	}
 }

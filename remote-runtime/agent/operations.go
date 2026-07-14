@@ -283,7 +283,6 @@ func (s *session) spawn(req request) (any, error) {
 		return nil, fail("ENOENT", "executable not found: "+p.Cmd)
 	}
 	cmd := exec.Command(commandPath, p.Args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Env = os.Environ()
 	for k, v := range p.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
@@ -308,6 +307,7 @@ func (s *session) spawn(req request) (any, error) {
 	proc := &runningProcess{id: pid, cmd: cmd, outChannel: outCh, inChannel: inCh}
 	var output io.ReadCloser
 	if p.Terminal != nil {
+		// pty.StartWithSize creates a new session whose id is also the process group id.
 		terminal, e := pty.StartWithSize(cmd, &pty.Winsize{Cols: p.Terminal.Cols, Rows: p.Terminal.Rows})
 		if e != nil {
 			return nil, mapFsError(e)
@@ -316,6 +316,7 @@ func (s *session) spawn(req request) (any, error) {
 		proc.stdin = terminal
 		output = terminal
 	} else {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		stdin, e := cmd.StdinPipe()
 		if e != nil {
 			return nil, fail("EPROTO", e.Error())
@@ -356,19 +357,26 @@ func (s *session) streamProcess(proc *runningProcess, output io.ReadCloser, enab
 		_, _ = io.Copy(io.Discard, output)
 	}
 	waitErr := proc.cmd.Wait()
-	code := 0
-	if waitErr != nil {
-		if exit, ok := waitErr.(*exec.ExitError); ok {
-			code = exit.ExitCode()
-		} else {
-			code = 1
-		}
-	}
+	code := processExitCode(waitErr)
 	s.agent.mu.Lock()
 	delete(s.agent.processes, proc.id)
 	s.agent.mu.Unlock()
 	s.writeText(event("proc.exit", map[string]any{"pid": proc.id, "code": code}))
 	_ = s.writeBinary(proc.outChannel, nil, true)
+}
+
+func processExitCode(waitErr error) int {
+	if waitErr == nil {
+		return 0
+	}
+	exit, ok := waitErr.(*exec.ExitError)
+	if !ok {
+		return 1
+	}
+	if status, ok := exit.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+		return 128 + int(status.Signal())
+	}
+	return exit.ExitCode()
 }
 
 func (s *session) resize(req request) (any, error) {

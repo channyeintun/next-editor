@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 )
 
@@ -30,6 +32,50 @@ func TestJailRejectsEscapes(t *testing.T) {
 	}
 	if _, err := j.resolve("link/file", true); err == nil {
 		t.Fatal("accepted symlink escape")
+	}
+	if err := os.Mkdir(filepath.Join(root, "safe"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "safe", "nested-link")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := j.resolve("safe/nested-link/missing/child", true); err == nil {
+		t.Fatal("accepted missing path beneath symlink escape")
+	}
+}
+
+func TestFilesystemErrnoMapping(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "dir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "dir", "file"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name, code string
+		err        error
+	}{
+		{"missing", "ENOENT", func() error { _, err := os.ReadFile(filepath.Join(root, "missing")); return err }()},
+		{"existing", "EEXIST", os.Mkdir(filepath.Join(root, "dir"), 0o755)},
+		{"not-empty", "ENOTEMPTY", os.Remove(filepath.Join(root, "dir"))},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mapped := mapFsError(tc.err)
+			re, ok := mapped.(*rcpError)
+			if !ok || re.code != tc.code {
+				t.Fatalf("got %v, want %s", mapped, tc.code)
+			}
+		})
+	}
+}
+
+func TestSignaledExitCode(t *testing.T) {
+	cmd := exec.Command("sh", "-c", "kill -TERM $$")
+	err := cmd.Run()
+	if code := processExitCode(err); code != 128+int(syscall.SIGTERM) {
+		t.Fatalf("got %d", code)
 	}
 }
 
