@@ -30,11 +30,11 @@ copy the agent module:
 
 ```sh
 docker build --platform linux/amd64 -f images/Dockerfile.base -t next-editor-runtime-base:0.1.0 .
-docker build --platform linux/amd64 -f images/Dockerfile.go1.24 -t next-editor-runtime-go1.24:0.1.0 .
+docker build --platform linux/amd64 -f Dockerfile.go1.26.5 -t next-editor-runtime-go1.26.5:0.1.0 .
 docker build --platform linux/amd64 -f images/Dockerfile.node22 -t next-editor-runtime-node22:0.1.0 .
 ```
 
-The Go image should use Cloudflare's `basic` instance type: its 1 GiB memory and 4 GB disk are a
+The Go 1.26.5 image should use Cloudflare's `basic` instance type: its 1 GiB memory and 4 GB disk are a
 safer starting point for compilation than `lite`. `wrangler deploy` builds and pushes a local
 Dockerfile automatically; prebuilt images can instead be pushed with `wrangler containers build
 -p`. Docker must be running for either local build path.

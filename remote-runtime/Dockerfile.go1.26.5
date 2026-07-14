@@ -11,9 +11,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends bash ca-certificates coreutils curl git tini \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 1000 --create-home --shell /bin/bash runtime \
-    && mkdir -p /workspace/project \
-    && chown -R runtime:runtime /workspace
+    && mkdir -p /workspace/project /home/runtime/.cache/go-build \
+    && chown -R runtime:runtime /workspace /home/runtime/.cache
 COPY --from=agent-build /out/runtime-agent /usr/local/bin/runtime-agent
+COPY --from=agent-build /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:${PATH}" GOCACHE=/home/runtime/.cache/go-build
 USER runtime
 WORKDIR /workspace/project
 EXPOSE 8600

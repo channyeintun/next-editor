@@ -59,7 +59,7 @@ export class RemoteContainer {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        runtime: options.runtime ?? "node22",
+        runtime: options.runtime ?? "go1.26.5",
         workdirName: options.workdirName ?? "project",
         idleTimeoutSeconds: options.idleTimeoutSeconds ?? 300,
       }),
