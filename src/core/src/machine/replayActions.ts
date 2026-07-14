@@ -35,6 +35,15 @@ import { applyFrameState, getLoadedRecordingPayload } from "./editorMachineHelpe
 // machine file reads as wiring; zero behavior change.
 // ============================================================================
 
+const resolveBoundedReplayTime = (
+  context: EditorMachineContext,
+  event: EditorMachineEvent,
+): number =>
+  Math.max(
+    0,
+    Math.min(resolveReplayTime(event, context.timeline.currentTime), context.timeline.duration),
+  );
+
 export const setRecording = ({
   context,
   event,
@@ -160,7 +169,7 @@ export const applyFrameAtTime = ({
     event.type === "TICK"
       ? event.currentTime
       : event.type === "SEEK"
-        ? event.time
+        ? Math.max(0, Math.min(event.time, context.timeline.duration))
         : context.timeline.currentTime;
 
   if (!recording || !editorRefs.editor || context.pendingPlaybackEditorSync) {
@@ -599,7 +608,7 @@ export const notifySeek = ({
   event: EditorMachineEvent;
 }): void => {
   if (event.type === "SEEK") {
-    context.onSeek?.(event.time);
+    context.onSeek?.(Math.max(0, Math.min(event.time, context.timeline.duration)));
   }
 };
 
@@ -664,7 +673,7 @@ export const applyPreviewEventsAtTime = ({
 
   const replayResult = getPreviewReplayResult({
     previewEvents: recording.previewEvents,
-    currentTime: resolveReplayTime(event, context.timeline.currentTime),
+    currentTime: resolveBoundedReplayTime(context, event),
     lastAppliedIndex: lastAppliedPreviewEventIndex,
     lastAppliedState: context.lastAppliedPreviewState,
     isSeeking: isSeekReplayEvent(event),
@@ -706,7 +715,7 @@ export const applyPreviewPatchBatchesAtTime = ({
 
   const nextIndex = applyPreviewPatchReplay({
     recordingId: recording.id,
-    currentTime: resolveReplayTime(event, context.timeline.currentTime),
+    currentTime: resolveBoundedReplayTime(context, event),
     isSeeking: isSeekReplayEvent(event),
     initialDocuments: recording.previewInitialDocuments,
     patchBatches: recording.previewPatchBatches,
@@ -747,7 +756,7 @@ export const applyWorkspaceEventsAtTime = ({
   const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
   const replayResult = getWorkspaceReplayResult({
     workspaceEvents: recording.workspaceEvents,
-    currentTime: resolveReplayTime(event, context.timeline.currentTime),
+    currentTime: resolveBoundedReplayTime(context, event),
     currentSnapshot: currentWorkspaceSnapshot,
     lastAppliedIndex: lastAppliedWorkspaceEventIndex,
   });
@@ -791,7 +800,7 @@ export const applyRuntimeEventsAtTime = ({
 
   const replayResult = getRuntimeReplayResult({
     runtimeEvents: recording.runtimeEvents,
-    currentTime: resolveReplayTime(event, context.timeline.currentTime),
+    currentTime: resolveBoundedReplayTime(context, event),
     lastAppliedIndex: lastAppliedRuntimeEventIndex,
   });
 
@@ -822,7 +831,7 @@ export const applyChatEventsAtTime = ({
 
   const replayResult = getChatReplayResult({
     chatEvents: recording.chatEvents,
-    currentTime: resolveReplayTime(event, context.timeline.currentTime),
+    currentTime: resolveBoundedReplayTime(context, event),
     lastAppliedIndex: lastAppliedChatEventIndex,
   });
 
@@ -853,7 +862,7 @@ export const applyWhiteboardEventsAtTime = ({
 
   const replayResult = getWhiteboardReplayResult({
     whiteboardEvents: recording.whiteboardEvents,
-    currentTime: resolveReplayTime(event, context.timeline.currentTime),
+    currentTime: resolveBoundedReplayTime(context, event),
     lastAppliedIndex: lastAppliedWhiteboardEventIndex,
   });
 
@@ -884,7 +893,7 @@ export const applySlideEventsAtTime = ({
   const replayResult = getSlideReplayResult({
     slideEvents: recording.slideEvents,
     slides: recording.slides,
-    currentTime: resolveReplayTime(event, context.timeline.currentTime),
+    currentTime: resolveBoundedReplayTime(context, event),
     lastAppliedIndex: lastAppliedSlideEventIndex,
     isSeeking: isSeekReplayEvent(event),
   });

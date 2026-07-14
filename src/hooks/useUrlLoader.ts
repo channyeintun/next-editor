@@ -222,11 +222,11 @@ async function fetchNextEditorUrl(url: string, init?: RequestInit): Promise<Resp
  * cheapest; some hosts (e.g. S3 presigned URLs scoped to `GetObject`) reject `HEAD`, so a
  * ranged `GET` is the fallback.
  */
-async function probeMediaUrl(url: string): Promise<boolean> {
+async function probeMediaUrl(url: string, signal?: AbortSignal): Promise<boolean> {
   try {
-    let response = await fetchNextEditorUrl(url, { method: "HEAD" });
+    let response = await fetchNextEditorUrl(url, { method: "HEAD", signal });
     if (!response.ok) {
-      response = await fetchNextEditorUrl(url, { headers: { Range: "bytes=0-0" } });
+      response = await fetchNextEditorUrl(url, { headers: { Range: "bytes=0-0" }, signal });
     }
     if (!response.ok) {
       return false;
@@ -400,6 +400,7 @@ export const useUrlLoader = () => {
   const findWorkingAudioBlob = async (
     recording: Recording,
     neUrl: string | undefined,
+    signal?: AbortSignal,
   ): Promise<{ url: string; blob: Blob } | null> => {
     if (recording.audioBlob instanceof Blob) {
       return null;
@@ -413,7 +414,7 @@ export const useUrlLoader = () => {
     );
     for (const url of candidates) {
       try {
-        const response = await fetchNextEditorUrl(url);
+        const response = await fetchNextEditorUrl(url, { signal });
         if (!response.ok) {
           console.warn(`External audio fetch failed (${response.status}): ${url}`);
           continue;
@@ -447,6 +448,7 @@ export const useUrlLoader = () => {
   const findWorkingCameraUrl = async (
     recording: Recording,
     neUrl: string | undefined,
+    signal?: AbortSignal,
   ): Promise<string | null> => {
     const candidates = buildMediaCandidates(
       recording.cameraUrl,
@@ -455,7 +457,7 @@ export const useUrlLoader = () => {
       "webm",
     );
     for (const url of candidates) {
-      if (await probeMediaUrl(url)) {
+      if (await probeMediaUrl(url, signal)) {
         return url !== recording.cameraUrl ? url : null;
       }
     }
@@ -471,22 +473,27 @@ export const useUrlLoader = () => {
    * carry both fixes — audio's full download happens after, folding in whatever the camera
    * probe found instead of racing it.
    */
-  const resolveExternalMedia = async (recording: Recording, neUrl: string | undefined) => {
+  const resolveExternalMedia = async (
+    recording: Recording,
+    neUrl: string | undefined,
+    isStale: () => boolean,
+    signal: AbortSignal,
+  ) => {
     let current = recording;
 
     if (current.cameraFile || current.cameraUrl) {
-      const cameraUrl = await findWorkingCameraUrl(current, neUrl);
+      const cameraUrl = await findWorkingCameraUrl(current, neUrl, signal);
       if (cameraUrl) {
         current = { ...current, cameraUrl };
       }
     }
 
-    const audio = await findWorkingAudioBlob(current, neUrl);
+    const audio = await findWorkingAudioBlob(current, neUrl, signal);
     if (audio) {
       current = { ...current, audioUrl: audio.url, audioBlob: audio.blob };
     }
 
-    if (current !== recording) {
+    if (current !== recording && !isStale()) {
       extendRecording(current);
     }
   };
@@ -551,7 +558,7 @@ export const useUrlLoader = () => {
 
       // Externalized audio/camera resolve out-of-band, after the (now tiny) `.ne` finished.
       if (loaded && !isStale()) {
-        void resolveExternalMedia(loaded, url);
+        void resolveExternalMedia(loaded, url, isStale, abortController.signal);
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {

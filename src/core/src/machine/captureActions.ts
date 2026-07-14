@@ -67,20 +67,24 @@ export const prepareExternalAudioRecording = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
-  if (event.type !== "START_RECORDING" || typeof event.audioUrl !== "string") {
+  if (
+    event.type !== "START_RECORDING" ||
+    !(event.audioBlob instanceof Blob) ||
+    event.audioBlob.size === 0
+  ) {
     return {};
   }
 
   return {
     audio: {
       ...context.audio,
-      url: event.audioUrl,
-      blob: null,
+      url: null,
+      blob: event.audioBlob,
       element: null,
       isRecording: true,
       mediaRecorder: null,
       chunks: [],
-      mimeType: "audio/webm", // Default or extract from URL if needed
+      mimeType: event.audioBlob.type || "audio/webm",
       source: "external" as const,
       externalDurationMs: null,
     },
@@ -94,7 +98,7 @@ export interface RecordingAudioPlayerEnqueue {
       id: "recordingAudioPlayer";
       input: {
         blob: Blob;
-        audioUrl: string;
+        audioUrl?: string;
         volume: number;
         playbackRate: number;
         startPositionMs: number;
@@ -113,18 +117,18 @@ export const startExternalAudioPlayback = ({
   event: EditorMachineEvent;
   enqueue: RecordingAudioPlayerEnqueue;
 }): void => {
-  if (event.type !== "START_RECORDING" || typeof event.audioUrl !== "string") {
+  if (
+    event.type !== "START_RECORDING" ||
+    !(event.audioBlob instanceof Blob) ||
+    event.audioBlob.size === 0
+  ) {
     return;
   }
 
   enqueue.spawnChild("audioPlayback", {
     id: "recordingAudioPlayer",
     input: {
-      // This actor always plays an external audio track (audioUrl) during
-      // recording — no local blob exists. An empty blob satisfies the required
-      // field; audioUrl takes precedence and is what actually loads.
-      blob: new Blob([], { type: "audio/webm" }),
-      audioUrl: event.audioUrl,
+      blob: event.audioBlob,
       volume: context.timeline.volume,
       playbackRate: 1,
       startPositionMs: 0,

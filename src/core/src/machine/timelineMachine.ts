@@ -53,9 +53,9 @@ export const timelineMachine = setup({
   }),
   on: {
     SEEK: {
-      actions: assign(({ event }) => ({
-        currentTime: event.time,
-        accumulatedTime: event.time,
+      actions: assign(({ context, event }) => ({
+        currentTime: Math.max(0, Math.min(event.time, context.duration)),
+        accumulatedTime: Math.max(0, Math.min(event.time, context.duration)),
       })),
     },
     SET_DURATION: {
@@ -103,9 +103,9 @@ export const timelineMachine = setup({
         PAUSE: "paused",
         STOP: "stopped",
         SEEK: {
-          actions: assign(({ event }) => ({
-            currentTime: event.time,
-            accumulatedTime: event.time,
+          actions: assign(({ context, event }) => ({
+            currentTime: Math.max(0, Math.min(event.time, context.duration)),
+            accumulatedTime: Math.max(0, Math.min(event.time, context.duration)),
             startedAt: performance.now(),
           })),
         },

@@ -379,7 +379,8 @@ export interface EditorMachineContext {
 /** Start recording event */
 export type StartRecordingEvent = {
   type: "START_RECORDING";
-  audioUrl?: string;
+  /** User-selected audio file to play while recording and retain for immediate playback/export. */
+  audioBlob?: Blob;
   enableCamera?: boolean;
   /** Pre-acquired display capture stream (opt-in screen recording); undefined when off. */
   screenStream?: MediaStream;

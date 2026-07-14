@@ -136,7 +136,9 @@ export const editorMachine = setup({
     canPlay: ({ context }) =>
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
     hasExternalAudioBlob: ({ event }) =>
-      event.type === "START_RECORDING" && typeof event.audioUrl === "string",
+      event.type === "START_RECORDING" &&
+      event.audioBlob instanceof Blob &&
+      event.audioBlob.size > 0,
     isMicrophoneAudioRecording: ({ context }) =>
       context.enableAudioRecording &&
       context.audio.isRecording &&
@@ -718,7 +720,10 @@ export const editorMachine = setup({
             "notifySeek",
             "notifyPlaybackUpdate",
             enqueueActions(({ context, event, enqueue }) => {
-              const time = event.type === "SEEK" ? event.time : 0;
+              const time =
+                event.type === "SEEK"
+                  ? Math.max(0, Math.min(event.time, context.timeline.duration))
+                  : 0;
               enqueue.sendTo("timelineActor", { type: "SEEK", time });
               if (hasSpawnedPlaybackAudio(context)) {
                 enqueue.sendTo("audioPlayer", {
@@ -875,7 +880,10 @@ export const editorMachine = setup({
                 "notifySeek",
                 "notifyPlaybackUpdate",
                 enqueueActions(({ context, event, enqueue }) => {
-                  const time = event.type === "SEEK" ? event.time : 0;
+                  const time =
+                    event.type === "SEEK"
+                      ? Math.max(0, Math.min(event.time, context.timeline.duration))
+                      : 0;
                   enqueue.sendTo("timelineActor", { type: "SEEK", time });
                   if (hasSpawnedPlaybackAudio(context)) {
                     enqueue.sendTo("audioPlayer", {

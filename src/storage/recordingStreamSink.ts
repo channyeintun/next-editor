@@ -72,6 +72,7 @@ export class RecordingStreamBridge {
   /** Serializes sink writes so the consumer receives bytes in stream order. */
   private writeChain: Promise<void> = Promise.resolve();
   private started = false;
+  private aborted = false;
   private lastSession: RecordingSession | null = null;
   private readonly sink: RecordingStreamSink;
 
@@ -129,7 +130,9 @@ export class RecordingStreamBridge {
 
   /** Closes the sink without finalizing (e.g. on unmount mid-recording). */
   abort(): void {
-    void this.closeSink();
+    if (this.aborted) return;
+    this.aborted = true;
+    void this.appendQueue.then(() => this.closeSink());
   }
 
   private collectSessionSegments(
@@ -164,7 +167,7 @@ export class RecordingStreamBridge {
   }
 
   private enqueueSegments(segments: PendingStreamSegment[]): void {
-    if (segments.length === 0) return;
+    if (segments.length === 0 || this.aborted) return;
     const orderedSegments = [...segments].sort(
       (left, right) =>
         left.clusterIndex - right.clusterIndex ||
@@ -174,7 +177,9 @@ export class RecordingStreamBridge {
 
     this.appendQueue = this.appendQueue.then(async () => {
       for (const segment of orderedSegments) {
+        if (this.aborted) break;
         await segment.write();
+        if (this.aborted) break;
         this.flush();
       }
     });
