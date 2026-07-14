@@ -5,10 +5,10 @@
     "": {
       "name": "@next-editor/remote-runtime",
       "dependencies": {
-        "@webcontainer/api": "^1.6.4",
         "fflate": "^0.8.3",
       },
       "devDependencies": {
+        "@webcontainer/api": "^1.6.4",
         "typescript": "7.0.2",
         "vitest": "^4.1.10",
       },
