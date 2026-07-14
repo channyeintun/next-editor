@@ -39,6 +39,8 @@ export interface RemoteBootOptions {
   forwardPreviewErrors?: boolean | "exceptions-only";
   runtime?: string;
   endpoint?: string;
+  /** Application bearer token used only to authorize session provisioning. */
+  authorizationToken?: string;
   idleTimeoutSeconds?: number;
 }
 

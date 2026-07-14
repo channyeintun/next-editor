@@ -2,9 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RemoteContainer } from "../src/remote/RemoteContainer";
 
 const agentUrl = process.env.REMOTE_RUNTIME_AGENT_WS;
-if (process.env.CI && !agentUrl) {
-  throw new Error("REMOTE_RUNTIME_AGENT_WS is required for remote-runtime conformance in CI");
+const endpoint = process.env.REMOTE_RUNTIME_ENDPOINT;
+if (process.env.CI && !agentUrl && !endpoint) {
+  throw new Error("REMOTE_RUNTIME_AGENT_WS or REMOTE_RUNTIME_ENDPOINT is required for conformance in CI");
 }
+if (endpoint && !process.env.REMOTE_RUNTIME_AUTH_TOKEN) throw new Error("REMOTE_RUNTIME_AUTH_TOKEN is required in boot mode");
 
 async function collect(stream: ReadableStream<string>): Promise<string> {
   const reader = stream.getReader();
@@ -12,14 +14,16 @@ async function collect(stream: ReadableStream<string>): Promise<string> {
   while (true) { const { done, value } = await reader.read(); if (done) return output; output += value; }
 }
 
-describe.skipIf(!agentUrl)("RemoteContainer attach conformance", () => {
+describe.skipIf(!agentUrl && !endpoint)("RemoteContainer conformance", () => {
   let container: RemoteContainer;
 
   beforeAll(async () => {
-    container = await RemoteContainer.attach({
-      wsUrl: agentUrl!,
-      previewUrlTemplate: "http://127.0.0.1:8600/proxy/{{port}}",
-    });
+    container = endpoint
+      ? await RemoteContainer.boot({ endpoint, runtime: "go1.26.5", authorizationToken: process.env.REMOTE_RUNTIME_AUTH_TOKEN })
+      : await RemoteContainer.attach({
+          wsUrl: agentUrl!,
+          previewUrlTemplate: "http://127.0.0.1:8600/proxy/{{port}}",
+        });
   });
 
   afterAll(() => container?.teardown());

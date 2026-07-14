@@ -1,6 +1,7 @@
 import { bearer, signToken, verifyToken } from "./auth";
 import { RuntimeGoSessionDO } from "./sessionDo";
 import type { Env, SessionRecord } from "./types";
+import { previewTarget, type PreviewTarget } from "./routing";
 
 export { RuntimeGoSessionDO };
 
@@ -53,6 +54,21 @@ async function createSession(request: Request, env: Env): Promise<Response> {
   await env.RUNTIME_QUOTAS.prepare(
     "INSERT INTO runtime_sessions (session_id, user_id, runtime, created_at) VALUES (?, ?, 'go1.26.5', ?)",
   ).bind(sessionId, claims.userId, createdAt).run();
+  const configured = await sessionStub(env, sessionId).fetch(new Request("http://do/__runtime/configure", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionId,
+      userId: claims.userId,
+      createdAt,
+      idleTimeoutSeconds: body.idleTimeoutSeconds ?? 300,
+    }),
+  }));
+  if (!configured.ok) {
+    await env.RUNTIME_QUOTAS.prepare("UPDATE runtime_sessions SET ended_at = ? WHERE session_id = ?")
+      .bind(Date.now(), sessionId).run();
+    return json({ code: "EPROVISION", message: "Failed to configure runtime session" }, 503);
+  }
   const token = await signToken(env.RUNTIME_SESSION_SECRET, {
     userId: claims.userId, sessionId, exp: Math.floor(Date.now() / 1000) + 3600,
   });
@@ -66,17 +82,8 @@ async function createSession(request: Request, env: Env): Promise<Response> {
 }
 
 async function closeSession(request: Request, env: Env, sessionId: string): Promise<Response> {
-  const record = await authorizeSession(request, env, sessionId);
-  const response = await sessionStub(env, sessionId).fetch(new Request("http://do/__runtime/destroy", { method: "DELETE" }));
-  const endedAt = Date.now();
-  const minutes = Math.max(1, Math.ceil((endedAt - record.createdAt) / 60_000));
-  const day = new Date(endedAt).toISOString().slice(0, 10);
-  await env.RUNTIME_QUOTAS.batch([
-    env.RUNTIME_QUOTAS.prepare("UPDATE runtime_sessions SET ended_at = ? WHERE session_id = ?").bind(endedAt, sessionId),
-    env.RUNTIME_QUOTAS.prepare(`INSERT INTO runtime_daily_usage (user_id, day, minutes) VALUES (?, ?, ?)
-      ON CONFLICT(user_id, day) DO UPDATE SET minutes = minutes + excluded.minutes`).bind(record.userId, day, minutes),
-  ]);
-  return response;
+  await authorizeSession(request, env, sessionId);
+  return sessionStub(env, sessionId).fetch(new Request("http://do/__runtime/destroy", { method: "DELETE" }));
 }
 
 async function apiRoute(request: Request, env: Env, path: string): Promise<Response> {
@@ -97,16 +104,7 @@ async function apiRoute(request: Request, env: Env, path: string): Promise<Respo
   return new Response("Not found", { status: 404 });
 }
 
-function previewTarget(request: Request): { sessionId: string; port: number; path: string } | null {
-  const url = new URL(request.url);
-  const pathMatch = url.pathname.match(/^\/preview\/([0-9a-f-]+)\/(\d+)(\/.*)?$/);
-  if (pathMatch) return { sessionId: pathMatch[1]!, port: Number(pathMatch[2]), path: pathMatch[3] ?? "/" };
-  const hostMatch = url.hostname.match(/^p(\d+)-([0-9a-f-]+)(?:\.|-preview\.)/);
-  if (hostMatch) return { sessionId: hostMatch[2]!, port: Number(hostMatch[1]), path: url.pathname };
-  return null;
-}
-
-async function preview(request: Request, env: Env, target: NonNullable<ReturnType<typeof previewTarget>>): Promise<Response> {
+async function preview(request: Request, env: Env, target: PreviewTarget): Promise<Response> {
   if (target.port < 1 || target.port > 65535 || !(await sessionRecord(env, target.sessionId))) return new Response("Not found", { status: 404 });
   const headers = new Headers(request.headers); headers.delete("Cookie"); headers.delete("Authorization");
   const url = new URL(request.url);

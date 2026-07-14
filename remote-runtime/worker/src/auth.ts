@@ -14,9 +14,13 @@ function decodeBase64url(value: string): Uint8Array {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
+async function hmacKey(secret: string, usages: KeyUsage[]): Promise<CryptoKey> {
+  return crypto.subtle.importKey("raw", encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, usages);
+}
+
 async function signature(secret: string, payload: string): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const key = await hmacKey(secret, ["sign"]);
   return base64url(new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(payload))));
 }
 
@@ -27,7 +31,14 @@ export async function signToken(secret: string, claims: AuthClaims & { sessionId
 
 export async function verifyToken(secret: string, token: string): Promise<AuthClaims & { sessionId?: string }> {
   const [payload, provided, extra] = token.split(".");
-  if (!payload || !provided || extra || await signature(secret, payload) !== provided) throw new Error("invalid token");
+  if (!payload || !provided || extra) throw new Error("invalid token");
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    await hmacKey(secret, ["verify"]),
+    decodeBase64url(provided).slice().buffer as ArrayBuffer,
+    encoder.encode(payload),
+  );
+  if (!valid) throw new Error("invalid token");
   const claims = JSON.parse(new TextDecoder().decode(decodeBase64url(payload))) as AuthClaims & { sessionId?: string };
   if (!claims.userId || !Number.isFinite(claims.exp) || claims.exp < Date.now() / 1000) throw new Error("expired token");
   return claims;

@@ -23,6 +23,11 @@ cd agent
 GOCACHE=/tmp/next-editor-go-cache GOMODCACHE=/tmp/next-editor-go-mod go test ./...
 ```
 
+The conformance suite accepts either `REMOTE_RUNTIME_AGENT_WS=ws://…/ws` for direct attach mode,
+or `REMOTE_RUNTIME_ENDPOINT=http://localhost:8787/api/runtime` plus
+`REMOTE_RUNTIME_AUTH_TOKEN=…` for full control-plane boot mode. It skips when neither endpoint is
+present locally and fails loudly when CI is missing both.
+
 ## Images
 
 Cloudflare Containers require `linux/amd64`. Build from this directory so the base Dockerfile can

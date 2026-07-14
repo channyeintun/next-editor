@@ -57,7 +57,10 @@ export class RemoteContainer {
     const endpoint = (options.endpoint ?? "/api/runtime").replace(/\/$/, "");
     const response = await fetch(`${endpoint}/sessions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.authorizationToken ? { Authorization: `Bearer ${options.authorizationToken}` } : {}),
+      },
       body: JSON.stringify({
         runtime: options.runtime ?? "go1.26.5",
         workdirName: options.workdirName ?? "project",
