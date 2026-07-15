@@ -447,6 +447,11 @@ export function useWebContainerRuntimeSession({
               }
             },
           }),
+          // The process lifecycle owns shutdown (via process.kill()). Allowing
+          // pipeTo to cancel the source during teardown races WebContainer's
+          // own reader cleanup, which can try to cancel an already-released
+          // reader.
+          { preventCancel: true },
         )
         .catch((error) => {
           if (
@@ -549,6 +554,9 @@ export function useWebContainerRuntimeSession({
               }
             },
           }),
+          // process.kill(), not this consumer, owns the output stream's
+          // cancellation; see the matching foreground-command pipe above.
+          { preventCancel: true },
         )
         .catch((error) => {
           if (
@@ -671,6 +679,9 @@ export function useWebContainerRuntimeSession({
                   }
                 },
               }),
+              // Closing a terminal kills its process. Do not also have
+              // pipeTo cancel the WebContainer stream during that teardown.
+              { preventCancel: true },
             )
             .catch((error) => {
               const activeSession = terminalSessionsRef.current.find(
