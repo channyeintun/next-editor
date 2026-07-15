@@ -1,6 +1,6 @@
 # Code review findings
 
-Scope: static repository-wide review of tracked human-authored application code, tests, configuration, scripts, and documentation in the root app, `src/core`, `infra`, and `tube`. The `remote-runtime` package was excluded. Generated/minified code, lockfiles, fonts, WASM, and binary/media assets were inventoried but not line-reviewed as source. Per the constraints, no implementation changes were made, no agents/background processes were used, and no full-repository typecheck or test suite was run.
+Scope: static repository-wide review of tracked human-authored application code, tests, configuration, scripts, and documentation in the root app, `src/core`, `infra`, and `tube`. The `remote-runtime` package was excluded. Generated/minified code, lockfiles, fonts, WASM, and binary/media assets were inventoried but not line-reviewed as source. The findings below were subsequently remediated in the commits listed under resolution status; no background processes, full-repository typecheck, or full test suite was run.
 
 ## Findings
 
@@ -66,4 +66,19 @@ Media responses are cached as `max-age=31536000, immutable`, while the upload ro
 
 ## Verification notes
 
-This review was static and deliberately resource-bounded for the 900 MB host. Targeted searches and per-file inspection were used; no background command, full-repository typecheck, or full test run was performed. Findings are ordered by impact, not by file order.
+This review and remediation were deliberately resource-bounded for the 900 MB host. Targeted searches, per-file inspection, and `git diff --check` were used; no background command, full-repository typecheck, or full test run was performed. The targeted test runner could not start because dependencies are absent (`vp: not found`), and dependencies were not installed on the constrained host. Findings are ordered by impact, not by file order.
+
+## Resolution status
+
+| Finding | Status | Remediation commit |
+| --- | --- | --- |
+| P0 untrusted slide execution | Fixed | `e31f7b3` |
+| P1 redirect validation | Mitigated: manual validated hops, timeout, literal-host checks; generic cross-runtime DNS rebinding remains a deployment concern | `4b71dcd` |
+| P1 proxy response buffering | Fixed | `4b71dcd` |
+| P1 ZIP decompression | Fixed | `1a22f6e` |
+| P1 SCR3 decompression | Fixed | `1a22f6e` |
+| P1 external-audio blob handoff | Fixed | `3545356` |
+| P1 stale media resolution | Fixed | `3545356` |
+| P2 seek propagation | Fixed | `3545356` |
+| P2 recording-sink abort ordering | Fixed | `3545356` |
+| P2 mutable immutable-cache keys | Fixed | `db4667f` |
