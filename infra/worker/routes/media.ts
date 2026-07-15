@@ -37,11 +37,13 @@ mediaRoute.get("/:key{.+}", async (c) => {
   // content-type was stored — the upload route's extension allow-list is the
   // primary defense (see routes/uploads.ts).
   headers.set("x-content-type-options", "nosniff");
-  // Lesson media files are never mutated in place (an edit uploads a new
-  // lesson id), so it's safe to cache forever. Content-Length is left to the
-  // runtime, which infers it correctly from the streamed body in both branches
-  // below (verified against local Miniflare).
-  headers.set("cache-control", "public, max-age=31536000, immutable");
+  // Upload retries and owner edits may replace an existing key. Keep the ETag
+  // available for validators, but require clients/CDNs to revalidate rather
+  // than serving an obsolete recording, thumbnail, or companion track for a
+  // year. Content-Length is left to the runtime, which infers it correctly
+  // from the streamed body in both branches below (verified against local
+  // Miniflare).
+  headers.set("cache-control", "public, max-age=0, must-revalidate");
 
   // R2 resolves `object.range` to the whole object (e.g. {offset: 0, length:
   // <full size>}) even for a plain request with no Range header, when `range`
