@@ -3,7 +3,16 @@ import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatDelta } from "../types/chat";
 import { runAgentLoop, type RunAgentLoopOptions } from "./agentLoop";
 
-function createFakeWorkspaceStore(): WorkspaceStoreInstance {
+function createFakeWorkspaceStore(
+  files: Record<string, { path: string; name: string; language: string; content: string }> = {
+    "index.html": {
+      path: "index.html",
+      name: "index.html",
+      language: "html",
+      content: "<html></html>",
+    },
+  },
+): WorkspaceStoreInstance {
   return {
     getSnapshot: () => ({
       context: {
@@ -14,14 +23,7 @@ function createFakeWorkspaceStore(): WorkspaceStoreInstance {
           lessonType: "html-css",
           entryFilePath: "index.html",
           folders: [],
-          files: {
-            "index.html": {
-              path: "index.html",
-              name: "index.html",
-              language: "html",
-              content: "<html></html>",
-            },
-          },
+          files,
         },
       },
     }),
@@ -133,6 +135,7 @@ describe("runAgentLoop", () => {
     const starts = deltas.filter((d) => d.k === "message_start");
     expect(starts.map((d) => d.k === "message_start" && d.role)).toEqual(["user", "assistant"]);
     expect(deltas.some((d) => d.k === "tool_call")).toBe(false);
+    expect(calls[0].instructions).not.toContain("Workspace session memory:");
   });
 
   it("emits a tool_call and its matching tool_result for an executed tool", async () => {
@@ -195,6 +198,49 @@ describe("runAgentLoop", () => {
     const input = calls[0].input as Array<{ role?: string; content?: string }>;
     expect(input[0]).toEqual({ role: "assistant", content: "earlier reply" });
     expect(input.at(-1)).toEqual({ role: "user", content: "continue" });
+  });
+
+  it("passes root session-memory files to the model as instructions", async () => {
+    const { deltas, ...options } = baseOptions();
+    const { callModel, calls } = fakeCallModel([messageItem("m1", "ok")]);
+    const workspace = createFakeWorkspaceStore({
+      "index.html": {
+        path: "index.html",
+        name: "index.html",
+        language: "html",
+        content: "<html></html>",
+      },
+      "CLAUDE.md": {
+        path: "CLAUDE.md",
+        name: "CLAUDE.md",
+        language: "markdown",
+        content: "# Claude instructions\nUse our coral design tokens.",
+      },
+      "AGENTS.md": {
+        path: "AGENTS.md",
+        name: "AGENTS.md",
+        language: "markdown",
+        content: "# Agent instructions\nRun the focused test before handing off.",
+      },
+      "docs/AGENTS.md": {
+        path: "docs/AGENTS.md",
+        name: "AGENTS.md",
+        language: "markdown",
+        content: "NESTED MEMORY MUST NOT BE AUTOMATICALLY INJECTED.",
+      },
+    });
+
+    await runAgentLoop({
+      ...options,
+      workspace,
+      prompt: "continue",
+      callModel,
+      onDelta: (d) => deltas.push(d),
+    });
+
+    expect(calls[0].instructions).toContain("Use our coral design tokens.");
+    expect(calls[0].instructions).toContain("Run the focused test before handing off.");
+    expect(calls[0].instructions).not.toContain("NESTED MEMORY MUST NOT BE AUTOMATICALLY INJECTED.");
   });
 
   it("sends pasted images as user input content", async () => {

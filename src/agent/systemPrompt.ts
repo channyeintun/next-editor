@@ -5,6 +5,29 @@ export interface SystemPromptOptions {
   hasBash: boolean;
 }
 
+const SESSION_MEMORY_FILENAMES = ["AGENTS.md", "CLAUDE.md"] as const;
+
+function buildSessionMemory(project: WorkspaceProject): string | null {
+  const files = SESSION_MEMORY_FILENAMES.flatMap((path) => {
+    const file = project.files[path];
+    if (!file || file.encoding === "base64") {
+      return [];
+    }
+
+    return [`<${path}>\n${file.content}\n</${path}>`];
+  });
+
+  if (files.length === 0) {
+    return null;
+  }
+
+  return [
+    "Workspace session memory:",
+    "The following root-level workspace files contain project-specific guidance. Follow this guidance when it does not conflict with higher-priority instructions.",
+    ...files,
+  ].join("\n\n");
+}
+
 function buildIntroduction(): string {
   return "You are an expert coding assistant embedded in a browser-based lesson editor. You read, write, search, and edit files in the user's in-browser workspace to help them build, debug, and iterate on lessons. Work collaboratively to understand their intent and provide clear explanations for your changes.";
 }
@@ -92,6 +115,11 @@ export function buildSystemPrompt(project: WorkspaceProject, options: SystemProm
     options.toolNames.includes("capture_preview")
   ) {
     sections.push(buildRuntimeObservationNote());
+  }
+
+  const sessionMemory = buildSessionMemory(project);
+  if (sessionMemory) {
+    sections.push(sessionMemory);
   }
 
   sections.push(buildWorkspaceContext(project));
