@@ -1,5 +1,6 @@
 import type { Connect, Plugin } from "vite";
 import type { ServerResponse } from "node:http";
+import { Readable } from "node:stream";
 import { proxyUrl } from "../../src/shared/proxy";
 
 /**
@@ -32,7 +33,9 @@ export function proxyPlugin(): Plugin {
             // as an HTML document in this origin.
             res.setHeader("X-Content-Type-Options", "nosniff");
             res.setHeader("Content-Disposition", "attachment");
-            res.end(Buffer.from(result.body));
+            Readable.fromWeb(result.body as never)
+              .on("error", () => res.destroy())
+              .pipe(res);
           })
           .catch((error: unknown) => {
             res.statusCode = 500;

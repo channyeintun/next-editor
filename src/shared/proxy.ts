@@ -1,84 +1,136 @@
-// Generic same-origin fetch proxy. Originally built just for Google Slides
-// images (whose CDN sends a Cross-Origin-Resource-Policy header that the
-// app's COEP:require-corp blocks from a direct <img>/fetch()), it now backs
-// any "fetch this URL server-side and hand back the bytes same-origin" need
-// — e.g. Google avatar images hit the same COEP problem. The original bytes
-// are deliberately not stored; this runs live, at render time, on every call.
-//
-// This module is imported by both the Vite dev-server middleware
-// (tube/vite/proxyPlugin.ts) and the Cloudflare Worker route
-// (infra/worker/routes/proxy.ts) so the validation/fetch logic is written
-// once. It only uses the Web-standard fetch/Request/Response APIs, available
-// in both.
-//
-// The route this backs is public and unauthenticated, and proxies arbitrary
-// https URLs (no host allowlist) — so it must never be allowed to reach
-// private/internal network state. isPubliclyRoutableHost blocks loopback,
-// private, and link-local hosts as a baseline SSRF guard.
+// Shared same-origin HTTPS fetch proxy for the Worker and Vite development server.
+// It intentionally accepts public hosts, so each outbound request must be validated
+// before it is sent and the response body must remain bounded while streaming.
 
 const BLOCKED_HOSTS = new Set(["localhost"]);
+export const MAX_PROXY_REDIRECTS = 5;
+export const MAX_PROXY_RESPONSE_BYTES = 200 * 1024 * 1024;
+export const PROXY_TIMEOUT_MS = 15_000;
 
-/**
- * True if `hostname` is not an obvious loopback/private/link-local address.
- * This is not a full SSRF defense (it doesn't resolve DNS to catch hostnames
- * that merely point at a private IP), just a baseline check against the
- * common cases of someone passing a literal internal address.
- */
+function isBlockedIpv4(host: string): boolean {
+  const parts = host.split(".");
+  if (parts.length !== 4 || !parts.every((part) => /^\d{1,3}$/.test(part))) return false;
+  const octets = parts.map(Number);
+  if (octets.some((octet) => octet > 255)) return true;
+  const [a, b, c] = octets;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 192 && b === 0 && c === 0) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
+  );
+}
+
+/** Rejects literal loopback, private, link-local, multicast, and reserved hosts. */
 export function isPubliclyRoutableHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
-  if (BLOCKED_HOSTS.has(host)) return false;
-  if (host.endsWith(".local")) return false;
+  if (BLOCKED_HOSTS.has(host) || host.endsWith(".local")) return false;
+  if (isBlockedIpv4(host)) return false;
 
-  // IPv4 literal checks.
-  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4) {
-    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
-    if (a === 127) return false; // loopback
-    if (a === 10) return false; // private
-    if (a === 172 && b >= 16 && b <= 31) return false; // private
-    if (a === 192 && b === 168) return false; // private
-    if (a === 169 && b === 254) return false; // link-local
-    if (a === 0) return false;
-    return true;
-  }
-
-  // IPv6 loopback/link-local/unique-local literals. URL.hostname keeps the
-  // brackets on IPv6 literals ("[::1]", not "::1"), so strip them before
-  // comparing — and only run these checks on hosts that are actually IPv6
-  // literals (contain ":" once unbracketed), so ordinary domain names like
-  // fc2.com aren't misread as unique-local IPv6 addresses.
   const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
   if (bare.includes(":")) {
-    if (
+    return !(
       bare === "::" ||
       bare === "::1" ||
       bare.startsWith("fe80:") ||
       bare.startsWith("fc") ||
-      bare.startsWith("fd")
-    ) {
-      return false;
-    }
+      bare.startsWith("fd") ||
+      bare.startsWith("ff")
+    );
   }
-
   return true;
+}
+
+function validateTarget(url: URL): string | null {
+  if (url.protocol !== "https:") return "Only https: URLs may be proxied.";
+  if (url.username || url.password) return "URLs with credentials may not be proxied.";
+  if (url.port && url.port !== "443") return "Only the standard HTTPS port may be proxied.";
+  if (!isPubliclyRoutableHost(url.hostname)) return `Host '${url.hostname}' is not allowed.`;
+  return null;
+}
+
+function isRedirect(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+function parseContentLength(response: Response): number | null {
+  const raw = response.headers.get("content-length");
+  if (!raw) return null;
+  const length = Number(raw);
+  return Number.isSafeInteger(length) && length >= 0 ? length : null;
+}
+
+function limitBody(
+  body: ReadableStream<Uint8Array>,
+  abortController: AbortController,
+  onFinished: () => void,
+): ReadableStream<Uint8Array> {
+  let bytes = 0;
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        bytes += chunk.byteLength;
+        if (bytes > MAX_PROXY_RESPONSE_BYTES) {
+          abortController.abort();
+          onFinished();
+          throw new Error("Upstream response exceeds the proxy size limit.");
+        }
+        controller.enqueue(chunk);
+      },
+      flush() {
+        onFinished();
+      },
+    }),
+  );
 }
 
 export interface ProxyResult {
   status: number;
-  body?: ArrayBuffer;
+  body?: ReadableStream<Uint8Array>;
   contentType?: string;
   error?: string;
 }
 
-/**
- * Validates and performs the proxied fetch. Returns a plain result object
- * (not a Response) so both the Vite middleware and the Worker route can
- * adapt it to their own response type.
- */
-export async function proxyUrl(rawUrl: string | null): Promise<ProxyResult> {
-  if (!rawUrl) {
-    return { status: 400, error: "Missing required 'url' query parameter." };
+/** Reads a bounded proxy body for consumers that must persist bytes (such as R2 image ingestion). */
+export async function readProxyBody(
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel("Consumer size limit exceeded");
+        throw new Error("Upstream response exceeds the consumer size limit.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
   }
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
+}
+
+/** Validates and fetches an external URL without buffering its successful response. */
+export async function proxyUrl(rawUrl: string | null): Promise<ProxyResult> {
+  if (!rawUrl) return { status: 400, error: "Missing required 'url' query parameter." };
 
   let url: URL;
   try {
@@ -86,39 +138,58 @@ export async function proxyUrl(rawUrl: string | null): Promise<ProxyResult> {
   } catch {
     return { status: 400, error: "Invalid 'url' query parameter." };
   }
+  const initialError = validateTarget(url);
+  if (initialError) return { status: 400, error: initialError };
 
-  if (url.protocol !== "https:") {
-    return { status: 400, error: "Only https: URLs may be proxied." };
-  }
-  if (!isPubliclyRoutableHost(url.hostname)) {
-    return { status: 400, error: `Host '${url.hostname}' is not allowed.` };
-  }
-
-  let response: Response;
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), PROXY_TIMEOUT_MS);
+  let responseStreamOwnsTimeout = false;
   try {
-    response = await fetch(url.toString(), { redirect: "follow" });
-  } catch (cause) {
-    return { status: 502, error: `Upstream fetch failed: ${String(cause)}` };
-  }
+    for (let redirectCount = 0; redirectCount <= MAX_PROXY_REDIRECTS; redirectCount += 1) {
+      let response: Response;
+      try {
+        response = await fetch(url.toString(), {
+          redirect: "manual",
+          signal: abortController.signal,
+          headers: { Accept: "*/*" },
+        });
+      } catch (cause) {
+        return { status: 502, error: `Upstream fetch failed: ${String(cause)}` };
+      }
 
-  // Defense in depth: if the fetch followed a redirect into private network
-  // space, reject the final response even though the request itself targeted
-  // a publicly routable host.
-  let finalHostname: string;
-  try {
-    finalHostname = new URL(response.url).hostname;
-  } catch {
-    finalHostname = url.hostname;
-  }
-  if (!isPubliclyRoutableHost(finalHostname)) {
-    return { status: 400, error: `Redirected to a disallowed host '${finalHostname}'.` };
-  }
+      if (isRedirect(response.status)) {
+        if (redirectCount === MAX_PROXY_REDIRECTS) {
+          return { status: 502, error: "Upstream exceeded the redirect limit." };
+        }
+        const location = response.headers.get("location");
+        if (!location) return { status: 502, error: "Upstream redirect had no location." };
+        try {
+          url = new URL(location, url);
+        } catch {
+          return { status: 502, error: "Upstream redirect had an invalid location." };
+        }
+        const redirectError = validateTarget(url);
+        if (redirectError) return { status: 400, error: redirectError };
+        continue;
+      }
 
-  if (!response.ok) {
-    return { status: 502, error: `Upstream responded with HTTP ${response.status}.` };
+      if (!response.ok) {
+        return { status: 502, error: `Upstream responded with HTTP ${response.status}.` };
+      }
+      const contentLength = parseContentLength(response);
+      if (contentLength !== null && contentLength > MAX_PROXY_RESPONSE_BYTES) {
+        return { status: 413, error: "Upstream response exceeds the proxy size limit." };
+      }
+      if (!response.body) return { status: 502, error: "Upstream response had no body." };
+      responseStreamOwnsTimeout = true;
+      return {
+        status: 200,
+        body: limitBody(response.body, abortController, () => clearTimeout(timeout)),
+        contentType: response.headers.get("content-type") ?? "",
+      };
+    }
+    return { status: 502, error: "Upstream exceeded the redirect limit." };
+  } finally {
+    if (!responseStreamOwnsTimeout) clearTimeout(timeout);
   }
-
-  const contentType = response.headers.get("content-type") ?? "";
-  const body = await response.arrayBuffer();
-  return { status: 200, body, contentType };
 }

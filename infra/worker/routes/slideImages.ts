@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
 import { getCurrentUser } from "../auth/session";
-import { proxyUrl } from "../../../src/shared/proxy";
+import { proxyUrl, readProxyBody } from "../../../src/shared/proxy";
 import { isGoogleImageUrl } from "../../../src/shared/googleImageHosts";
 
 // Mounted at /api/slide-images in worker/index.ts. Called once per Google
@@ -74,11 +74,14 @@ async function ingestImage(bucket: R2Bucket, url: string): Promise<IngestResult>
   if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
     return { url, error: `Unsupported content type '${contentType}'.` };
   }
-  if (result.body.byteLength > MAX_IMAGE_BYTES) {
+  let body: Uint8Array;
+  try {
+    body = await readProxyBody(result.body, MAX_IMAGE_BYTES);
+  } catch {
     return { url, error: "Image too large." };
   }
 
-  await bucket.put(key, result.body, { httpMetadata: { contentType } });
+  await bucket.put(key, body, { httpMetadata: { contentType } });
   return { url, path: key };
 }
 
