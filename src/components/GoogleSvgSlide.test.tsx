@@ -67,4 +67,16 @@ describe("GoogleSvgSlide", () => {
     const svg = rootDiv.querySelector("svg");
     expect(svg).toBeInstanceOf(SVGSVGElement);
   });
+
+  it("removes active SVG content while retaining drawable elements", () => {
+    const { container } = render(
+      <GoogleSvgSlide
+        content={'<svg viewBox="0 0 10 10"><script>alert(1)</script><rect id="r1" onclick="alert(1)"/><foreignObject><div>bad</div></foreignObject></svg>'}
+        stepsRevealed={0}
+      />,
+    );
+    expect(container.querySelector("rect#r1")).not.toBeNull();
+    expect(container.querySelector("rect#r1")?.getAttribute("onclick")).toBeNull();
+    expect(container.querySelector("script, foreignObject")).toBeNull();
+  });
 });

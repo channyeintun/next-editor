@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { marked } from "marked";
 import type { Slide } from "../types/slides";
 import { getSlideBackgroundImage } from "../config/slideBackgrounds";
+import { sanitizeSlideContent } from "../utils/sanitizeSlideContent";
 import GoogleSvgSlide from "./GoogleSvgSlide";
 
 interface CustomSlideRendererProps {
@@ -19,29 +20,17 @@ function RawHtmlSlide({ content }: { content: string }) {
       return;
     }
 
-    container.innerHTML = content;
-
-    for (const script of Array.from(container.querySelectorAll("script"))) {
-      const nextScript = document.createElement("script");
-
-      for (const { name, value } of Array.from(script.attributes)) {
-        nextScript.setAttribute(name, value);
-      }
-
-      nextScript.textContent = script.textContent;
-      script.replaceWith(nextScript);
-    }
+    container.innerHTML = sanitizeSlideContent(content, "text/html");
   }, [content]);
 
   return <div ref={contentRef} className="size-full" />;
 }
 
 function MarkdownSlide({ content }: { content: string }) {
-  const html = marked(content, { async: false });
+  const html = sanitizeSlideContent(marked(content, { async: false }), "text/html");
 
   return (
-    // eslint-disable-next-line react/no-danger -- markdown is the slide's own
-    // authored content, same trust level as RawHtmlSlide's innerHTML injection.
+    // eslint-disable-next-line react/no-danger -- output is sanitized before insertion.
     <div className="slide-markdown size-full p-12" dangerouslySetInnerHTML={{ __html: html }} />
   );
 }

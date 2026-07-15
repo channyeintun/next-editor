@@ -30,6 +30,29 @@ describe("CustomSlideRenderer", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Hello");
   });
 
+  it("removes executable HTML from untrusted slide content", () => {
+    const slides = [
+      htmlSlide(
+        "a",
+        '<h1 onclick="window.__slideXss = true">Hello</h1><script>window.__slideXss = true</script><a href="javascript:alert(1)">bad</a>',
+      ),
+    ];
+    const { container } = render(
+      <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
+    );
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.querySelector("h1")?.getAttribute("onclick")).toBeNull();
+    expect(container.querySelector("a")?.getAttribute("href")).toBeNull();
+  });
+
+  it("sanitizes raw HTML embedded in markdown", () => {
+    const slides = [markdownSlide("a", "# Title\n\n<img src=x onerror=alert(1)>")];
+    const { container } = render(
+      <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
+    );
+    expect(container.querySelector("img")?.getAttribute("onerror")).toBeNull();
+  });
+
   it("renders markdown slide content as HTML", () => {
     const slides = [markdownSlide("a", "# Title\n\nBody text")];
     const { container } = render(

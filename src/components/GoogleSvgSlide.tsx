@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { DeckStepAnimator } from "../googleSlides/animator";
 import type { DeckStep } from "../googleSlides/types";
+import { sanitizeSlideContent } from "../utils/sanitizeSlideContent";
 
 interface GoogleSvgSlideProps {
   /** Normalized inline SVG markup for one slide. */
@@ -25,7 +26,7 @@ export default function GoogleSvgSlide({ content, steps, stepsRevealed }: Google
     const container = containerRef.current;
     if (!container) return;
 
-    container.innerHTML = content;
+    container.innerHTML = sanitizeSlideContent(content, "image/svg+xml");
     const svg = container.querySelector("svg");
 
     animatorRef.current?.dispose();
