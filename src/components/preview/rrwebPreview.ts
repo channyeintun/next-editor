@@ -49,18 +49,16 @@ const RRWEB_INCREMENTAL_SOURCE_MUTATION = 0;
 // hundreds of MB on continuously-mutating pages, where the snapshots are also
 // near-identical and almost always redundant.
 //
-// Instead we snapshot only when drift is actually present. rrweb keeps a mirror
-// (`record.mirror`) of the DOM it has captured; when it drops a `remove`, the
-// mirror retains a node that is no longer connected to the live document. After a
-// mutation we cheaply scan the mirror for such detached nodes and take a
-// FullSnapshot only if any exist (resetting the mirror first, so the snapshot
-// re-establishes it from the live DOM and the dropped node does not linger and
-// retrigger snapshots forever). On a well-behaved page this never fires, so the
-// recording carries zero redundant full frames; on the buggy htmx case it fires
-// exactly when (and only when) a remove was dropped. The throttle caps how often
-// the scan/snapshot runs on continuously-mutating pages, bounding worst-case drift
-// to one interval. The scan runs on a microtask so a corrective snapshot lands in
-// the SAME animation-frame batch as the swap that drifted (no visible stale frame).
+// Instead we snapshot only when drift is actually present. Alongside rrweb's live
+// mirror, the recorder maintains a lightweight topology of the structural events
+// it actually emitted. A dropped `remove` is then visible whether rrweb retained a
+// detached mirror node or already deleted the node internally (the latter is what
+// issue.ne demonstrates). A corrective FullSnapshot resets both views to the live
+// DOM. On a well-behaved page they stay equal, so no redundant full frame is
+// recorded. The throttle caps how often the comparison/snapshot runs on a
+// continuously-mutating page, bounding worst-case drift to one interval. The
+// comparison runs on a microtask when unthrottled so the corrective snapshot lands
+// in the same animation-frame batch as the mutation.
 const RRWEB_CHECKPOINT_THROTTLE_MS = 200;
 
 // Scroll events are throttled at the rrweb source (one sample per this many ms,
@@ -78,6 +76,12 @@ const RRWEB_SCROLL_SAMPLING_MS = 33;
 export interface RrwebRecordingMirror {
   getIds(): number[];
   getNode(id: number): Node | null;
+}
+
+export interface RrwebCapturedDomModel {
+  resetFromSnapshot(node: unknown): void;
+  applyMutation(data: unknown): void;
+  collectMirrorDriftNodeIds(mirror: RrwebRecordingMirror, doc: Document): number[];
 }
 
 // Finds the mirror ids whose nodes are no longer connected to the recorded
@@ -104,6 +108,124 @@ export function collectStaleMirrorNodeIds(mirror: RrwebRecordingMirror, doc: Doc
     }
   }
   return stale;
+}
+
+// Tracks the topology described by the events that actually leave the recorder.
+// rrweb can update its mirror correctly while omitting a remove from the emitted
+// Mutation event. In that failure mode a detached-node scan cannot help because
+// the stale node is already absent from the mirror, although replay will retain
+// it. Comparing this emitted-event model with the mirror catches both forms of
+// drift without taking full-document checkpoints after every normal mutation.
+//
+// This function is self-contained because its source is inlined into the preview
+// realm. Keep its implementation compatible with a classic browser script.
+export function createRrwebCapturedDomModel(): RrwebCapturedDomModel {
+  var capturedIds = new Set<number>();
+  var childIdsByParent = new Map<number, Set<number>>();
+  var parentIdByNode = new Map<number, number>();
+
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+  }
+
+  function getNodeId(value: unknown): number | null {
+    if (!isRecord(value) || typeof value.id !== "number" || value.id < 0) {
+      return null;
+    }
+    return value.id;
+  }
+
+  function detachFromParent(id: number): void {
+    var parentId = parentIdByNode.get(id);
+    if (parentId === undefined) return;
+    var siblings = childIdsByParent.get(parentId);
+    if (siblings) {
+      siblings.delete(id);
+      if (siblings.size === 0) childIdsByParent.delete(parentId);
+    }
+    parentIdByNode.delete(id);
+  }
+
+  function removeNodeTree(id: number): void {
+    var children = childIdsByParent.get(id);
+    if (children) {
+      Array.from(children).forEach(removeNodeTree);
+      childIdsByParent.delete(id);
+    }
+    detachFromParent(id);
+    capturedIds.delete(id);
+  }
+
+  function registerNode(node: unknown, parentId?: number): void {
+    var id = getNodeId(node);
+    if (id === null || !isRecord(node)) return;
+
+    detachFromParent(id);
+    capturedIds.add(id);
+
+    if (typeof parentId === "number" && parentId >= 0) {
+      var siblings = childIdsByParent.get(parentId);
+      if (!siblings) {
+        siblings = new Set<number>();
+        childIdsByParent.set(parentId, siblings);
+      }
+      siblings.add(id);
+      parentIdByNode.set(id, parentId);
+    }
+
+    if (Array.isArray(node.childNodes)) {
+      node.childNodes.forEach(function (child) {
+        registerNode(child, id);
+      });
+    }
+  }
+
+  return {
+    resetFromSnapshot: function (node: unknown): void {
+      capturedIds = new Set<number>();
+      childIdsByParent = new Map<number, Set<number>>();
+      parentIdByNode = new Map<number, number>();
+      registerNode(node);
+    },
+    applyMutation: function (data: unknown): void {
+      if (!isRecord(data) || data.source !== 0) return;
+
+      if (Array.isArray(data.removes)) {
+        data.removes.forEach(function (remove) {
+          var id = getNodeId(remove);
+          if (id !== null) removeNodeTree(id);
+        });
+      }
+
+      if (Array.isArray(data.adds)) {
+        data.adds.forEach(function (add) {
+          if (!isRecord(add)) return;
+          registerNode(add.node, typeof add.parentId === "number" ? add.parentId : undefined);
+        });
+      }
+    },
+    collectMirrorDriftNodeIds: function (mirror: RrwebRecordingMirror, doc: Document): number[] {
+      var drifted = new Set<number>();
+      var mirrorIds = new Set<number>();
+
+      mirror.getIds().forEach(function (id) {
+        if (typeof id !== "number" || id < 0) return;
+        mirrorIds.add(id);
+        if (!capturedIds.has(id)) drifted.add(id);
+
+        var node = mirror.getNode(id);
+        if (node && node.nodeType !== 9 && node !== doc && !node.isConnected) {
+          drifted.add(id);
+        }
+      });
+
+      capturedIds.forEach(function (id) {
+        if (!mirrorIds.has(id)) drifted.add(id);
+      });
+
+      return Array.from(drifted);
+    },
+  };
 }
 
 interface CreateRrwebPreviewRecorderScriptOptions {
@@ -149,10 +271,11 @@ export function createRrwebPreviewRecorderScript({
       var hostSnapshotRequested = false;
       var pendingRefreshMeta = null;
 
-      // Inlined from collectStaleMirrorNodeIds() in rrwebPreview.ts (single source
-      // of truth). Detects nodes rrweb's mirror still tracks but that have been
-      // removed from the live DOM — the signal that a corrective snapshot is needed.
-      var collectStaleMirrorNodeIds = ${collectStaleMirrorNodeIds.toString()};
+      // Independently model the topology described by emitted events. This catches
+      // a remove omitted from the stream even if rrweb already removed the node
+      // from its own mirror (the failure demonstrated by issue.ne).
+      var createRrwebCapturedDomModel = ${createRrwebCapturedDomModel.toString()};
+      var capturedDomModel = createRrwebCapturedDomModel();
 
       function getRoute() {
         return (window.location.pathname || '/') + (window.location.search || '') + (window.location.hash || '');
@@ -192,10 +315,9 @@ export function createRrwebPreviewRecorderScript({
         try {
           var mirror = window.rrweb.record && window.rrweb.record.mirror;
           if (!mirror) return;
-          // Only escalate to a full snapshot when rrweb's mirror has actually
-          // drifted from the live DOM (a dropped remove). On well-behaved pages
-          // this is empty every time, so no redundant full frame is recorded.
-          if (collectStaleMirrorNodeIds(mirror, document).length === 0) return;
+          // Only escalate when the topology replay will build differs from rrweb's
+          // current mirror/live DOM. On a well-behaved page this remains empty.
+          if (capturedDomModel.collectMirrorDriftNodeIds(mirror, document).length === 0) return;
           // Reset the mirror first so the snapshot fully re-establishes it from the
           // live DOM. takeFullSnapshot reuses existing ids and never prunes the
           // dropped node, so without this the drift lingers in the mirror and would
@@ -212,7 +334,6 @@ export function createRrwebPreviewRecorderScript({
       // the mutation that triggered it: on replay the stale add and the corrective
       // rebuild share a timestamp, so a dropped remove is overwritten in the same
       // frame (no visible flash). The throttle caps how often the scan/snapshot runs
-      // on continuously-mutating pages (falling back to a trailing run), which also
       // bounds worst-case drift to one interval.
       function scheduleCheckpoint() {
         if (!sentInitial || checkpointScheduled) return;
@@ -229,6 +350,14 @@ export function createRrwebPreviewRecorderScript({
       }
 
       function emit(event) {
+        // Maintain the model from exactly the structural data sent to replay.
+        // FullSnapshots are authoritative and reset the model after checkpoints.
+        if (event.type === fullSnapshotType && event.data && event.data.node) {
+          capturedDomModel.resetFromSnapshot(event.data.node);
+        } else if (event.type === incrementalType && event.data && event.data.source === mutationSource) {
+          capturedDomModel.applyMutation(event.data);
+        }
+
         // Host-requested snapshot (recording start): bundle the Meta+FullSnapshot
         // pair into a refresh:true initial document instead of the patch stream,
         // so the recording seeds replay from the live recording-start state
@@ -298,6 +427,11 @@ export function createRrwebPreviewRecorderScript({
         if (!data || data.type !== ${JSON.stringify(RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE)}) return;
         if (!sentInitial) return;
         try {
+          // Pre-recording mutations are already represented by this fresh baseline.
+          // Do not flush them afterwards as incrementals and add the same nodes twice.
+          if (frame) window.cancelAnimationFrame(frame);
+          frame = 0;
+          pendingEvents = [];
           lastCheckpointAt = getMessageTime();
           hostSnapshotRequested = true;
           window.rrweb.takeFullSnapshot();
