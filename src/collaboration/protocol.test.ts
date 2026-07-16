@@ -6,11 +6,13 @@ import {
   MAX_ENCODED_YJS_UPDATE_LENGTH,
   canPublishCollaborationUpdate,
   collaborationDocumentUpdateInputSchema,
+  collaborationCreateRoomInputSchema,
   collaborationRoomChannel,
   roomIdFromCollaborationChannel,
 } from "./protocol";
 import {
   applyEncodedYjsUpdate,
+  createCollaborationRoomSnapshot,
   createCollaborationDocumentUpdate,
   decodeYjsUpdate,
   encodeYjsUpdate,
@@ -68,6 +70,19 @@ describe("collaboration protocol", () => {
     expect(
       collaborationDocumentUpdateInputSchema.safeParse({ ...base, protocolVersion: 2 }).success,
     ).toBe(false);
+  });
+
+  it("allows bounded room snapshots larger than an individual live update", () => {
+    const doc = new Y.Doc();
+    doc.getText("content").insert(0, "x".repeat(80 * 1024));
+
+    const snapshot = createCollaborationRoomSnapshot(doc, CLIENT_ID);
+    expect(collaborationCreateRoomInputSchema.safeParse(snapshot).success).toBe(true);
+    expect(collaborationDocumentUpdateInputSchema.safeParse({
+      ...snapshot,
+      update: snapshot.snapshot,
+      snapshot: undefined,
+    }).success).toBe(false);
   });
 
   it("parses only exact room channels and applies write roles", () => {

@@ -1,0 +1,479 @@
+import * as Y from "yjs";
+import {
+  COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+  type CollaborationRole,
+} from "./protocol";
+import {
+  DEFAULT_WORKSPACE_ENTRY_PATH,
+  collectWorkspaceFolders,
+  inferLanguageFromPath,
+  parseWorkspacePath,
+  type WorkspaceFile,
+  type WorkspaceFileEncoding,
+  type WorkspaceLessonType,
+  type WorkspaceProject,
+} from "../types/workspace";
+
+export const COLLABORATION_PROJECT_ROOT = "project";
+export const COLLABORATION_PROJECT_METADATA = "metadata";
+export const COLLABORATION_PROJECT_NODES = "nodes";
+export const COLLABORATION_PROJECT_TEXTS = "texts";
+export const COLLABORATION_RECOVERY_FOLDER_NAME = "Recovered items";
+
+export const COLLABORATION_ORIGIN = {
+  seed: "collaboration-seed",
+  localEditor: "local-editor",
+  localTreeCommand: "local-tree-command",
+  remoteProvider: "remote-provider",
+  workspaceProjection: "workspace-projection",
+  playback: "playback",
+} as const;
+
+export type CollaborationTransactionOrigin =
+  (typeof COLLABORATION_ORIGIN)[keyof typeof COLLABORATION_ORIGIN];
+export type CollaborationNodeKind = "file" | "folder";
+
+interface CollaborationNodeSnapshot {
+  id: string;
+  kind: CollaborationNodeKind;
+  name: string;
+  parentId: string | null;
+  orderKey: string;
+  deleted: boolean;
+  encoding: WorkspaceFileEncoding;
+}
+
+export interface CollaborationProjectionIssue {
+  nodeId: string;
+  kind: "invalid-parent" | "parent-cycle" | "name-collision" | "missing-text";
+}
+
+export interface CollaborationProjectProjection {
+  project: WorkspaceProject;
+  nodeIdByPath: ReadonlyMap<string, string>;
+  pathByNodeId: ReadonlyMap<string, string>;
+  issues: readonly CollaborationProjectionIssue[];
+}
+
+export class CollaborationProjectError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CollaborationProjectError";
+  }
+}
+
+function projectRoot(doc: Y.Doc): Y.Map<unknown> {
+  return doc.getMap(COLLABORATION_PROJECT_ROOT);
+}
+
+function childMap<T>(root: Y.Map<unknown>, key: string): Y.Map<T> {
+  const value = root.get(key);
+  if (value instanceof Y.Map) return value as Y.Map<T>;
+
+  const map = new Y.Map<T>();
+  root.set(key, map);
+  return map;
+}
+
+export function getCollaborationMetadata(doc: Y.Doc): Y.Map<unknown> {
+  return childMap(projectRoot(doc), COLLABORATION_PROJECT_METADATA);
+}
+
+export function getCollaborationNodes(doc: Y.Doc): Y.Map<Y.Map<unknown>> {
+  return childMap(projectRoot(doc), COLLABORATION_PROJECT_NODES);
+}
+
+export function getCollaborationTexts(doc: Y.Doc): Y.Map<Y.Text> {
+  return childMap(projectRoot(doc), COLLABORATION_PROJECT_TEXTS);
+}
+
+function splitPath(path: string): { parentPath: string; name: string } {
+  const normalized = parseWorkspacePath(path);
+  const separator = normalized.lastIndexOf("/");
+  return separator < 0
+    ? { parentPath: "", name: normalized }
+    : { parentPath: normalized.slice(0, separator), name: normalized.slice(separator + 1) };
+}
+
+function sortedFolderPaths(project: WorkspaceProject): string[] {
+  return Array.from(
+    new Set(
+      collectWorkspaceFolders(Object.keys(project.files), project.folders).map((path) =>
+        parseWorkspacePath(path),
+      ),
+    ),
+  )
+    .filter(Boolean)
+    .sort((left, right) => {
+      const depth = left.split("/").length - right.split("/").length;
+      return depth || left.localeCompare(right);
+    });
+}
+
+function orderedKey(index: number): string {
+  return index.toString(36).padStart(8, "0");
+}
+
+function createNodeMap(node: CollaborationNodeSnapshot): Y.Map<unknown> {
+  const map = new Y.Map<unknown>();
+  map.set("kind", node.kind);
+  map.set("name", node.name);
+  map.set("parentId", node.parentId);
+  map.set("orderKey", node.orderKey);
+  map.set("deleted", node.deleted);
+  map.set("encoding", node.encoding);
+  return map;
+}
+
+export interface SeedCollaborationProjectOptions {
+  idFactory?: () => string;
+  origin?: CollaborationTransactionOrigin;
+}
+
+/**
+ * Seeds an empty collaborative document exactly once. The room-creation route
+ * persists this update before another member can join, so clients never race
+ * to import the same path-based project with different stable node IDs.
+ */
+export function seedCollaborationProject(
+  doc: Y.Doc,
+  project: WorkspaceProject,
+  options: SeedCollaborationProjectOptions = {},
+): void {
+  const root = projectRoot(doc);
+  const nodes = getCollaborationNodes(doc);
+  if (nodes.size > 0 || root.get("schemaVersion") !== undefined) {
+    throw new CollaborationProjectError("The collaboration document has already been seeded");
+  }
+
+  const idFactory = options.idFactory ?? (() => crypto.randomUUID());
+  const pathIds = new Map<string, string>();
+  const unsupportedAsset = Object.values(project.files).find(
+    (file) => (file.encoding ?? "utf-8") !== "utf-8",
+  );
+  if (unsupportedAsset) {
+    throw new CollaborationProjectError(
+      `Binary asset ${unsupportedAsset.path} must be uploaded before a collaboration room is created`,
+    );
+  }
+
+  doc.transact(() => {
+    root.set("schemaVersion", COLLABORATION_DOCUMENT_SCHEMA_VERSION);
+    const metadata = getCollaborationMetadata(doc);
+    const texts = getCollaborationTexts(doc);
+    metadata.set("projectId", project.id);
+    metadata.set("name", project.name);
+    metadata.set("lessonType", project.lessonType);
+
+    let order = 0;
+    for (const path of sortedFolderPaths(project)) {
+      const { parentPath, name } = splitPath(path);
+      const id = idFactory();
+      pathIds.set(path, id);
+      nodes.set(
+        id,
+        createNodeMap({
+          id,
+          kind: "folder",
+          name,
+          parentId: parentPath ? (pathIds.get(parentPath) ?? null) : null,
+          orderKey: orderedKey(order++),
+          deleted: false,
+          encoding: "utf-8",
+        }),
+      );
+    }
+
+    const files = Object.values(project.files).sort((left, right) =>
+      left.path.localeCompare(right.path),
+    );
+    for (const file of files) {
+      const normalizedPath = parseWorkspacePath(file.path);
+      const { parentPath, name } = splitPath(normalizedPath);
+      const id = idFactory();
+      pathIds.set(normalizedPath, id);
+      nodes.set(
+        id,
+        createNodeMap({
+          id,
+          kind: "file",
+          name,
+          parentId: parentPath ? (pathIds.get(parentPath) ?? null) : null,
+          orderKey: orderedKey(order++),
+          deleted: false,
+          encoding: "utf-8",
+        }),
+      );
+      const text = new Y.Text();
+      text.insert(0, file.content);
+      texts.set(id, text);
+    }
+
+    metadata.set("entryNodeId", pathIds.get(parseWorkspacePath(project.entryFilePath)) ?? null);
+  }, options.origin ?? COLLABORATION_ORIGIN.seed);
+}
+
+function readString(map: Y.Map<unknown>, key: string, fallback: string): string {
+  const value = map.get(key);
+  return typeof value === "string" ? value : fallback;
+}
+
+function readNode(id: string, value: Y.Map<unknown>): CollaborationNodeSnapshot | null {
+  const kind = value.get("kind");
+  if (kind !== "file" && kind !== "folder") return null;
+  const parentId = value.get("parentId");
+  const encoding = value.get("encoding");
+  return {
+    id,
+    kind,
+    name: readString(value, "name", kind === "file" ? "untitled.txt" : "untitled"),
+    parentId: typeof parentId === "string" ? parentId : null,
+    orderKey: readString(value, "orderKey", id),
+    deleted: value.get("deleted") === true,
+    encoding: encoding === "base64" ? "base64" : "utf-8",
+  };
+}
+
+const UNSAFE_NODE_NAMES = new Set(["", ".", "..", "__proto__", "prototype", "constructor"]);
+
+function safeNodeName(node: CollaborationNodeSnapshot): string {
+  const withoutControls = Array.from(node.name.trim())
+    .filter((character) => {
+      const point = character.codePointAt(0) ?? 0;
+      return point > 0x1f && point !== 0x7f && character !== "/" && character !== "\\";
+    })
+    .join("");
+  if (UNSAFE_NODE_NAMES.has(withoutControls)) {
+    return node.kind === "file" ? "untitled.txt" : "untitled";
+  }
+  return withoutControls;
+}
+
+const ROOT_PARENT = "__root__";
+const RECOVERY_PARENT = "__recovery__";
+
+function effectiveParents(
+  nodes: ReadonlyMap<string, CollaborationNodeSnapshot>,
+  issues: CollaborationProjectionIssue[],
+): Map<string, string> {
+  const result = new Map<string, string>();
+
+  for (const node of nodes.values()) {
+    if (!node.parentId) {
+      result.set(node.id, ROOT_PARENT);
+      continue;
+    }
+    const parent = nodes.get(node.parentId);
+    if (!parent || parent.kind !== "folder" || parent.id === node.id) {
+      result.set(node.id, RECOVERY_PARENT);
+      issues.push({ nodeId: node.id, kind: "invalid-parent" });
+      continue;
+    }
+    result.set(node.id, parent.id);
+  }
+
+  // Parent edges have out-degree one, so walking from every node is enough to
+  // find each cycle. Breaking the greatest stable ID produces the same tree in
+  // every client regardless of update arrival order.
+  const repairedCycles = new Set<string>();
+  for (const startId of nodes.keys()) {
+    const seenAt = new Map<string, number>();
+    const path: string[] = [];
+    let current: string | undefined = startId;
+    while (current && current !== ROOT_PARENT && current !== RECOVERY_PARENT) {
+      const cycleStart = seenAt.get(current);
+      if (cycleStart !== undefined) {
+        const cycle = path.slice(cycleStart);
+        const breakId = cycle.sort((left, right) => left.localeCompare(right)).at(-1);
+        if (breakId && !repairedCycles.has(breakId)) {
+          result.set(breakId, RECOVERY_PARENT);
+          issues.push({ nodeId: breakId, kind: "parent-cycle" });
+          repairedCycles.add(breakId);
+        }
+        break;
+      }
+      seenAt.set(current, path.length);
+      path.push(current);
+      current = result.get(current);
+    }
+  }
+
+  return result;
+}
+
+function shortStableId(id: string, length: number): string {
+  const compact = id.replaceAll("-", "").toLowerCase();
+  return compact.slice(0, Math.min(length, compact.length)) || "node";
+}
+
+function namesByNode(
+  children: readonly CollaborationNodeSnapshot[],
+  issues: CollaborationProjectionIssue[],
+): Map<string, string> {
+  const byBase = new Map<string, CollaborationNodeSnapshot[]>();
+  for (const child of children) {
+    const name = safeNodeName(child);
+    const group = byBase.get(name) ?? [];
+    group.push(child);
+    byBase.set(name, group);
+  }
+
+  const result = new Map<string, string>();
+  for (const [base, group] of byBase) {
+    group.sort((left, right) => left.id.localeCompare(right.id));
+    group.forEach((node, index) => {
+      result.set(node.id, index === 0 ? base : `${base}~${shortStableId(node.id, 8)}`);
+      if (index > 0) issues.push({ nodeId: node.id, kind: "name-collision" });
+    });
+  }
+
+  // An explicit name can equal another node's generated conflict name. Grow
+  // stable-ID suffixes until every sibling name is unique.
+  for (let suffixLength = 10; suffixLength <= 32; suffixLength += 2) {
+    const claimants = new Map<string, string[]>();
+    for (const [id, name] of result) {
+      const ids = claimants.get(name) ?? [];
+      ids.push(id);
+      claimants.set(name, ids);
+    }
+    const collisions = Array.from(claimants.values()).filter((ids) => ids.length > 1);
+    if (collisions.length === 0) break;
+    for (const ids of collisions) {
+      ids.sort((left, right) => left.localeCompare(right));
+      for (const id of ids.slice(1)) {
+        const node = children.find((candidate) => candidate.id === id);
+        if (node) result.set(id, `${safeNodeName(node)}~${shortStableId(id, suffixLength)}`);
+      }
+    }
+  }
+
+  return result;
+}
+
+function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
+  return (
+    typeof value === "string" &&
+    [
+      "html-css",
+      "react",
+      "vue",
+      "solid",
+      "svelte",
+      "htmx-express",
+      "alpine-express",
+      "express-ts",
+    ].includes(value)
+  );
+}
+
+export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectProjection {
+  const root = projectRoot(doc);
+  if (root.get("schemaVersion") !== COLLABORATION_DOCUMENT_SCHEMA_VERSION) {
+    throw new CollaborationProjectError("Unsupported collaboration document schema version");
+  }
+
+  const metadata = getCollaborationMetadata(doc);
+  const sharedNodes = getCollaborationNodes(doc);
+  const texts = getCollaborationTexts(doc);
+  const nodes = new Map<string, CollaborationNodeSnapshot>();
+  for (const [id, value] of sharedNodes) {
+    if (!(value instanceof Y.Map)) continue;
+    const node = readNode(id, value);
+    if (node && !node.deleted) nodes.set(id, node);
+  }
+
+  const issues: CollaborationProjectionIssue[] = [];
+  const parents = effectiveParents(nodes, issues);
+  const children = new Map<string, CollaborationNodeSnapshot[]>();
+  for (const node of nodes.values()) {
+    const parent = parents.get(node.id) ?? RECOVERY_PARENT;
+    const siblings = children.get(parent) ?? [];
+    siblings.push(node);
+    children.set(parent, siblings);
+  }
+  for (const siblings of children.values()) {
+    siblings.sort(
+      (left, right) => left.orderKey.localeCompare(right.orderKey) || left.id.localeCompare(right.id),
+    );
+  }
+
+  const files: Record<string, WorkspaceFile> = {};
+  const folders: string[] = [];
+  const nodeIdByPath = new Map<string, string>();
+  const pathByNodeId = new Map<string, string>();
+  const recoveryChildren = children.get(RECOVERY_PARENT) ?? [];
+  let recoveryPath = COLLABORATION_RECOVERY_FOLDER_NAME;
+  const rootNames = new Set(
+    (children.get(ROOT_PARENT) ?? []).map((node) => safeNodeName(node).toLocaleLowerCase()),
+  );
+  if (rootNames.has(recoveryPath.toLocaleLowerCase())) {
+    recoveryPath = `${COLLABORATION_RECOVERY_FOLDER_NAME}~system`;
+  }
+  if (recoveryChildren.length > 0) folders.push(recoveryPath);
+
+  const visit = (parentId: string, parentPath: string) => {
+    const siblings = children.get(parentId) ?? [];
+    const resolvedNames = namesByNode(siblings, issues);
+    for (const node of siblings) {
+      const name = resolvedNames.get(node.id) ?? safeNodeName(node);
+      const path = parentPath ? `${parentPath}/${name}` : name;
+      nodeIdByPath.set(path, node.id);
+      pathByNodeId.set(node.id, path);
+      if (node.kind === "folder") {
+        folders.push(path);
+        visit(node.id, path);
+        continue;
+      }
+
+      const text = texts.get(node.id);
+      if (!(text instanceof Y.Text)) {
+        issues.push({ nodeId: node.id, kind: "missing-text" });
+      }
+      files[path] = {
+        path,
+        name,
+        language: inferLanguageFromPath(path),
+        content: text instanceof Y.Text ? text.toString() : "",
+        ...(node.encoding === "base64" ? { encoding: node.encoding } : {}),
+      };
+    }
+  };
+
+  visit(ROOT_PARENT, "");
+  if (recoveryChildren.length > 0) visit(RECOVERY_PARENT, recoveryPath);
+
+  const sortedPaths = Object.keys(files).sort((left, right) => left.localeCompare(right));
+  const entryNodeId = metadata.get("entryNodeId");
+  const requestedEntry = typeof entryNodeId === "string" ? pathByNodeId.get(entryNodeId) : undefined;
+  const entryFilePath =
+    (requestedEntry && files[requestedEntry] ? requestedEntry : undefined) ??
+    (files[DEFAULT_WORKSPACE_ENTRY_PATH] ? DEFAULT_WORKSPACE_ENTRY_PATH : sortedPaths[0]) ??
+    DEFAULT_WORKSPACE_ENTRY_PATH;
+  if (sortedPaths.length === 0) {
+    files[entryFilePath] = {
+      path: entryFilePath,
+      name: entryFilePath,
+      language: inferLanguageFromPath(entryFilePath),
+      content: "",
+    };
+  }
+
+  const lessonTypeValue = metadata.get("lessonType");
+  return {
+    project: {
+      id: readString(metadata, "projectId", "collaboration-project"),
+      name: readString(metadata, "name", "Collaborative project"),
+      lessonType: isWorkspaceLessonType(lessonTypeValue) ? lessonTypeValue : "html-css",
+      entryFilePath,
+      folders: Array.from(new Set(folders)).sort((left, right) => left.localeCompare(right)),
+      files,
+    },
+    nodeIdByPath,
+    pathByNodeId,
+    issues,
+  };
+}
+
+export function canWriteCollaborationDocument(role: CollaborationRole): boolean {
+  return role === "owner" || role === "editor";
+}

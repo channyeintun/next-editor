@@ -1,6 +1,6 @@
 # Live Collaboration Feature Plan
 
-Status: proposed
+Status: implementation in progress
 
 Deployment evaluations:
 

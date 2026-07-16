@@ -18,8 +18,18 @@ export { useAuthorProfile } from "./authors/useAuthorProfile";
 export type { AuthorProfile } from "./authors/authorsApi";
 export {
   createCollaborationRoom,
+  claimCollaborationInvitation,
+  closeCollaborationRoom,
+  createCollaborationInvitation,
+  getCollaborationBootstrap,
   getCollaborationRoom,
+  listCollaborationInvitations,
+  listCollaborationMembers,
+  listCollaborationRooms,
   publishCollaborationUpdate,
+  removeCollaborationMember,
+  revokeCollaborationInvitation,
+  updateCollaborationMemberRole,
 } from "./collaboration/collaborationApi";
 export {
   CollaborationRealtimeProvider,

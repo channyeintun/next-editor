@@ -57,11 +57,20 @@ The first Option A foundation is implemented:
   compaction exists.
 - [`CollaborationRealtimeProvider.tsx`](../infra/client/collaboration/CollaborationRealtimeProvider.tsx)
   configures the same-origin, cookie-authenticated Realtime endpoint for later provider actors.
+- [`projectDocument.ts`](../src/collaboration/projectDocument.ts) defines the versioned Yjs project
+  tree, stable file IDs, deterministic sibling collision names, orphan/cycle recovery, and a
+  path-based workspace projection.
+- [`0005_collaboration_access.sql`](../infra/db/migrations/0005_collaboration_access.sql) and the
+  collaboration routes add expiring, revocable invitation tokens, idempotent claims, room limits,
+  member listing, role changes, removal, and owner-controlled room closure.
+- [`documentStore.ts`](../infra/worker/collaboration/documentStore.ts) persists an initial snapshot,
+  deduplicates durable updates, serves paginated snapshot-plus-tail bootstrap data, and compacts an
+  immutable stream cutoff without dropping concurrently appended updates.
 
-This slice is infrastructure, not a usable room UI. Monaco/Yjs projection, invitations and member
-management, awareness, offline update buffering, snapshots and compaction, QStash jobs, recording
-host guards, and room lifecycle UI remain subsequent work. Realtime must still pass the transport
-spike in this document before the fallback WebSocket option is discarded.
+This is still infrastructure, not a usable room UI. Monaco/Yjs bindings, awareness, offline update
+buffering, QStash scheduling, recording host guards, and room lifecycle UI remain subsequent work.
+Realtime must still pass the transport spike in this document before the fallback WebSocket option
+is discarded.
 
 ## Existing Redis integration is not collaboration infrastructure
 
