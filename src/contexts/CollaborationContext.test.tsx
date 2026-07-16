@@ -138,6 +138,28 @@ describe("CollaborationProvider", () => {
     view.unmount();
   });
 
+  it("does not project or mutate an empty collaboration document before bootstrap", async () => {
+    mocks.getRoom.mockImplementation(() => new Promise(() => {}));
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+
+    const view = render(
+      <MemoryRouter initialEntries={[`/code?room=${roomSession.room.id}`]}>
+        <CollaborationProvider>
+          <Probe />
+        </CollaborationProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(collaboration!.provider).not.toBeNull());
+    expect(collaboration!.error).toBeNull();
+    expect(collaboration!.doc?.getMap("project").get("texts")).toBeUndefined();
+    view.unmount();
+  });
+
   it("uploads binary files before publishing descriptor-only room updates", async () => {
     currentProject = structuredClone(project);
     currentProject.files["logo.png"] = {

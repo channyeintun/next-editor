@@ -331,11 +331,22 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       undoManagerRef.current = null;
       return;
     }
-    const manager = createCollaborationUndoManager(provider.doc);
-    undoManagerRef.current = manager;
+
+    let manager: Y.UndoManager | null = null;
+    const initializeUndoManager = () => {
+      // The undo scope helper creates a missing Y.Map. Waiting for SYNCED
+      // prevents that local map from racing the seeded map in bootstrap.
+      if (manager || provider.connectionState !== "live") return;
+      manager = createCollaborationUndoManager(provider.doc);
+      undoManagerRef.current = manager;
+    };
+    const subscription = provider.subscribe(initializeUndoManager);
+    initializeUndoManager();
+
     return () => {
+      subscription.unsubscribe();
       if (undoManagerRef.current === manager) undoManagerRef.current = null;
-      manager.destroy();
+      manager?.destroy();
     };
   }, [provider]);
 

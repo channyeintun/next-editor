@@ -555,18 +555,25 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         publishCollaborationCursor(editor);
       }),
       editor.onDidChangeModelContent(() => {
+        // syncWorkspaceModel can synchronously emit Monaco events while React
+        // is rendering. Check the ref before entering a useEffectEvent wrapper,
+        // which React intentionally rejects during render (error #440).
+        if (isApplyingExternalModelValueRef.current) return;
         syncEditorContentToWorkspace(editor);
         onEditorChange();
       }),
       editor.onDidChangeCursorPosition(() => {
+        if (isApplyingExternalModelValueRef.current) return;
         onEditorChange();
         publishCollaborationCursor(editor);
       }),
       editor.onDidChangeCursorSelection(() => {
+        if (isApplyingExternalModelValueRef.current) return;
         onEditorChange();
         publishCollaborationCursor(editor);
       }),
       editor.onDidScrollChange(() => {
+        if (isApplyingExternalModelValueRef.current) return;
         onEditorChange();
       }),
     ];
