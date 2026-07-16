@@ -5,7 +5,6 @@ import type { PreviewRecordedEvent } from "../../types/slides";
 import {
   buildRrwebReplayEvents,
   collectStaleMirrorNodeIds,
-  createRrwebCapturedDomModel,
   createRrwebPreviewRecorderScript,
   type RrwebRecordingMirror,
 } from "./rrwebPreview";
@@ -231,84 +230,13 @@ describe("collectStaleMirrorNodeIds", () => {
   });
 });
 
-describe("createRrwebCapturedDomModel", () => {
-  it("detects an emitted remove that rrweb omitted after updating its own mirror", () => {
-    document.body.innerHTML = `<main><div id="result"><p id="next">next</p></div></main>`;
-    const result = document.getElementById("result")!;
-    const next = document.getElementById("next")!;
-    const model = createRrwebCapturedDomModel();
-
-    model.resetFromSnapshot({
-      id: 1,
-      type: 0,
-      childNodes: [
-        {
-          id: 2,
-          type: 2,
-          tagName: "div",
-          childNodes: [{ id: 3, type: 2, tagName: "p", childNodes: [] }],
-        },
-      ],
-    });
-
-    // issue.ne has this exact shape: replay is told to append the replacement,
-    // but the old subtree's remove is absent. rrweb's mirror already reflects the
-    // live replacement, so detached-node-only detection cannot see id 3 anymore.
-    model.applyMutation({
-      source: 0,
-      removes: [],
-      adds: [{ parentId: 2, node: { id: 4, type: 2, tagName: "p", childNodes: [] } }],
-    });
-
-    const mirror = fakeMirror([
-      [1, document],
-      [2, result],
-      [4, next],
-    ]);
-    expect(model.collectMirrorDriftNodeIds(mirror, document)).toEqual([3]);
-  });
-
-  it("stays clean when the emitted remove and add match rrweb's mirror", () => {
-    document.body.innerHTML = `<main><div id="result"><p id="next">next</p></div></main>`;
-    const result = document.getElementById("result")!;
-    const next = document.getElementById("next")!;
-    const model = createRrwebCapturedDomModel();
-
-    model.resetFromSnapshot({
-      id: 1,
-      type: 0,
-      childNodes: [
-        {
-          id: 2,
-          type: 2,
-          tagName: "div",
-          childNodes: [{ id: 3, type: 2, tagName: "p", childNodes: [] }],
-        },
-      ],
-    });
-    model.applyMutation({
-      source: 0,
-      removes: [{ id: 3, parentId: 2 }],
-      adds: [{ parentId: 2, node: { id: 4, type: 2, tagName: "p", childNodes: [] } }],
-    });
-
-    const mirror = fakeMirror([
-      [1, document],
-      [2, result],
-      [4, next],
-    ]);
-    expect(model.collectMirrorDriftNodeIds(mirror, document)).toEqual([]);
-  });
-});
-
 describe("corrective checkpoint recovery", () => {
   it("wires a drift-gated FullSnapshot checkpoint into the recorder", () => {
     const script = createRrwebPreviewRecorderScript({ setupMarker: "__CHK__" });
     expect(script).toContain("takeFullSnapshot");
     expect(script).toContain("scheduleCheckpoint");
     // The snapshot is gated on detected drift, not taken after every mutation.
-    expect(script).toContain("createRrwebCapturedDomModel");
-    expect(script).toContain("collectMirrorDriftNodeIds");
+    expect(script).toContain("collectStaleMirrorNodeIds");
     expect(script).toContain("record.mirror");
   });
 
