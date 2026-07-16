@@ -25,6 +25,10 @@ import FileSidebar from "./FileSidebar";
 import BinaryFilePreview from "./BinaryFilePreview";
 import TerminalPanel from "./TerminalPanel";
 import {
+  CollaborationCursorLabelManager,
+  type CollaborationCursorLabel,
+} from "./collaborationCursorLabels";
+import {
   disposePlaybackModels,
   getEditorOptions,
   isPlaybackModelUri,
@@ -139,6 +143,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const viewStatesRef = useRef(new Map<string, monaco.editor.ICodeEditorViewState | null>());
   const isApplyingExternalModelValueRef = useRef(false);
   const remoteDecorationIdsRef = useRef<string[]>([]);
+  const remoteCursorLabelManagerRef = useRef<CollaborationCursorLabelManager | null>(null);
 
   // Only subscribe to the flags we actually need for rendering decisions
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
@@ -376,6 +381,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     // The view state was already saved by MonacoEditor's onWillDispose — its
     // cleanup runs before this one and the editor is disposed by now.
     disposeEditorListeners();
+    remoteCursorLabelManagerRef.current?.clear();
     const monaco = monacoRef.current;
 
     if (monaco) {
@@ -445,7 +451,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   useEffect(() => {
     const editor = editorRef.current;
     const model = editor?.getModel();
+    const cursorLabelManager =
+      remoteCursorLabelManagerRef.current ?? new CollaborationCursorLabelManager();
+    remoteCursorLabelManagerRef.current = cursorLabelManager;
     if (!editor || !model || !collaboration?.provider || !collaboration.doc) {
+      cursorLabelManager.clear();
       if (editor && remoteDecorationIdsRef.current.length > 0) {
         remoteDecorationIdsRef.current = editor.deltaDecorations(
           remoteDecorationIdsRef.current,
@@ -460,9 +470,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         activeFile.path,
       );
     } catch {
+      cursorLabelManager.clear();
       return;
     }
     const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+    const cursorLabels: CollaborationCursorLabel[] = [];
     for (const participant of collaboration.participants) {
       if (
         participant.sessionId === collaboration.provider.awarenessSessionId ||
@@ -479,17 +491,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       const start = startsBeforeHead ? anchor : head;
       const end = startsBeforeHead ? head : anchor;
       const color = collaborationParticipantColorIndex(participant);
+      const participantName = displayParticipantName(participant);
       if (cursor.anchorOffset !== cursor.headOffset) {
         decorations.push({
-          range: new monaco.Range(
-            start.lineNumber,
-            start.column,
-            end.lineNumber,
-            end.column,
-          ),
+          range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
           options: {
             className: `collaboration-selection collaboration-color-${color}`,
-            hoverMessage: { value: displayParticipantName(participant) },
+            hoverMessage: { value: participantName },
           },
         });
       }
@@ -497,10 +505,20 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         range: new monaco.Range(head.lineNumber, head.column, head.lineNumber, head.column),
         options: {
           beforeContentClassName: `collaboration-cursor collaboration-color-${color}`,
-          hoverMessage: { value: displayParticipantName(participant) },
+          hoverMessage: { value: participantName },
         },
       });
+      cursorLabels.push({
+        id: `${participant.actorId}:${participant.sessionId}`,
+        name: participantName,
+        colorIndex: color,
+        position: head,
+      });
     }
+    cursorLabelManager.reconcile(editor, cursorLabels, [
+      monaco.editor.ContentWidgetPositionPreference.ABOVE,
+      monaco.editor.ContentWidgetPositionPreference.BELOW,
+    ]);
     remoteDecorationIdsRef.current = editor.deltaDecorations(
       remoteDecorationIdsRef.current,
       decorations,
