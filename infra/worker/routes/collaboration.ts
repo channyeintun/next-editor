@@ -25,17 +25,21 @@ import {
   claimCollaborationInvitation,
   createCollaborationInvitation,
   getCollaborationRoomAccess,
+  getCollaborationRoomById,
   getCollaborationInvitationByHash,
   listCollaborationInvitations,
   listCollaborationRoomMembers,
   listCollaborationRoomsForUser,
   removeCollaborationMember,
+  markCollaborationRoomPurged,
+  recordCollaborationAuditEvent,
   revokeCollaborationInvitation,
   setCollaborationRoomStatus,
   updateCollaborationMemberRole,
   type CollaborationInvitationRow,
   type CollaborationRoomAccess,
   type CollaborationRoomRow,
+  CollaborationRoomQuotaError,
 } from "../../db/collaborationQueries";
 import { getCurrentUser } from "../auth/session";
 import {
@@ -45,8 +49,12 @@ import {
 } from "../collaboration/realtime";
 import {
   appendCollaborationUpdate,
+  CollaborationDocumentQuotaError,
   compactCollaborationDocument,
+  deleteCollaborationDocument,
+  exportCollaborationDocument,
   getCollaborationBootstrap,
+  getCollaborationSnapshotGeneration,
   initializeCollaborationDocument,
   shouldCompactCollaborationDocument,
 } from "../collaboration/documentStore";
@@ -57,12 +65,25 @@ import {
   publishCollaborationAwareness,
   publishCollaborationControl,
 } from "../collaboration/awarenessStore";
+import {
+  CollaborationRateLimitError,
+  enforceCollaborationConnectionRateLimit,
+  enforceCollaborationUpdateRateLimit,
+} from "../collaboration/rateLimits";
+import {
+  collaborationMaintenanceDestination,
+  collaborationMaintenanceJobSchema,
+  publishCollaborationMaintenanceJob,
+  verifyQStashSignature,
+} from "../collaboration/qstash";
 import type { Env } from "../env";
 
 const MAX_UPDATE_REQUEST_BYTES = MAX_ENCODED_YJS_UPDATE_LENGTH + 2 * 1024;
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
 const MAX_AWARENESS_REQUEST_BYTES = 8 * 1024;
+const MAX_MAINTENANCE_REQUEST_BYTES = 2 * 1024;
 const MAX_CHANNELS_PER_CONNECTION = 4;
+const CLOSED_ROOM_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 type CollaborationContext = Context<{ Bindings: Env }>;
 
@@ -181,6 +202,44 @@ async function readBoundedJson(
   }
 }
 
+async function readBoundedText(
+  c: CollaborationContext,
+  maxBytes: number,
+): Promise<{ ok: true; body: string } | { ok: false; status: 400 | 413 }> {
+  const contentLengthHeader = c.req.header("content-length");
+  if (contentLengthHeader) {
+    const contentLength = Number(contentLengthHeader);
+    if (!Number.isFinite(contentLength) || contentLength < 0) return { ok: false, status: 400 };
+    if (contentLength > maxBytes) return { ok: false, status: 413 };
+  }
+  const stream = c.req.raw.body;
+  if (!stream) return { ok: false, status: 400 };
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      await reader.cancel();
+      return { ok: false, status: 413 };
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return { ok: true, body: new TextDecoder("utf-8", { fatal: true }).decode(bytes) };
+  } catch {
+    return { ok: false, status: 400 };
+  }
+}
+
 async function parseUpdateBody(c: CollaborationContext): Promise<ParsedUpdateBody> {
   const json = await readBoundedJson(c, MAX_UPDATE_REQUEST_BYTES);
   if (!json.ok) {
@@ -265,9 +324,156 @@ function scheduleControlEvent(
   }
 }
 
+function scheduleAuditEvent(
+  c: CollaborationContext,
+  input: Parameters<typeof recordCollaborationAuditEvent>[1],
+): void {
+  c.executionCtx.waitUntil(
+    recordCollaborationAuditEvent(c.env.DB, input).catch((error) => {
+      console.error("Failed to record collaboration audit event", {
+        roomId: input.roomId,
+        action: input.action,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }),
+  );
+}
+
+function scheduleCompaction(
+  c: CollaborationContext,
+  roomId: string,
+  expectedGeneration: number,
+): void {
+  c.executionCtx.waitUntil(
+    (async () => {
+      const queued = await publishCollaborationMaintenanceJob(c.env, {
+        kind: "compact-room",
+        roomId,
+        expectedGeneration,
+      });
+      if (!queued) {
+        await compactCollaborationDocument(getCollaborationRedis(c.env), roomId, expectedGeneration);
+      }
+    })().catch((error) => {
+      console.error("Failed to schedule collaboration compaction", {
+        roomId,
+        expectedGeneration,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }),
+  );
+}
+
+function scheduleClosedRoomCleanup(
+  c: CollaborationContext,
+  roomId: string,
+  closedAt: number,
+): void {
+  c.executionCtx.waitUntil(
+    publishCollaborationMaintenanceJob(
+      c.env,
+      { kind: "cleanup-room", roomId, closedAt },
+      { delay: "8d" },
+    ).catch((error) => {
+      console.error("Failed to schedule collaboration cleanup", {
+        roomId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }),
+  );
+}
+
 // Mounted at /api/collaboration in worker/index.ts. D1 is the room/role
 // control plane; Redis Streams and Realtime are the document data plane.
 export const collaborationRoute = new Hono<{ Bindings: Env }>();
+
+collaborationRoute.post("/jobs/maintenance", async (c) => {
+  if (!c.env.QSTASH_CURRENT_SIGNING_KEY || !c.env.QSTASH_NEXT_SIGNING_KEY) {
+    return c.json({ error: "maintenance receiver unavailable" }, 503);
+  }
+  const raw = await readBoundedText(c, MAX_MAINTENANCE_REQUEST_BYTES);
+  if (!raw.ok) return c.json({ error: "invalid maintenance job" }, raw.status);
+  const signature = c.req.header("upstash-signature");
+  if (
+    !signature ||
+    !(await verifyQStashSignature({
+      signature,
+      body: raw.body,
+      url: collaborationMaintenanceDestination(c.env),
+      currentSigningKey: c.env.QSTASH_CURRENT_SIGNING_KEY,
+      nextSigningKey: c.env.QSTASH_NEXT_SIGNING_KEY,
+    }))
+  ) {
+    return c.json({ error: "invalid maintenance signature" }, 401);
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(raw.body) as unknown;
+  } catch {
+    json = null;
+  }
+  const job = collaborationMaintenanceJobSchema.safeParse(json);
+  if (!job.success) {
+    return new Response(JSON.stringify({ error: "invalid maintenance job" }), {
+      status: 489,
+      headers: {
+        "Content-Type": "application/json",
+        "Upstash-NonRetryable-Error": "true",
+      },
+    });
+  }
+
+  const room = await getCollaborationRoomById(c.env.DB, job.data.roomId);
+  if (!room || room.purged_at !== null) return c.body(null, 204);
+  const redis = getCollaborationRedis(c.env);
+  if (job.data.kind === "compact-room") {
+    if (room.status !== "active" && room.status !== "closed") return c.body(null, 204);
+    const result = await compactCollaborationDocument(
+      redis,
+      room.id,
+      job.data.expectedGeneration,
+    );
+    if (result.compacted) {
+      scheduleAuditEvent(c, {
+        roomId: room.id,
+        actorUserId: null,
+        action: "room.compacted",
+      });
+    }
+    console.log("collaboration_maintenance", {
+      kind: job.data.kind,
+      roomId: room.id,
+      compacted: result.compacted,
+      generation: result.generation ?? null,
+    });
+    return c.json(result);
+  }
+
+  if (
+    room.status !== "closed" ||
+    room.closed_at !== job.data.closedAt ||
+    Date.now() < job.data.closedAt + CLOSED_ROOM_RETENTION_MS
+  ) {
+    return c.body(null, 204);
+  }
+  const deletedKeys = await deleteCollaborationDocument(redis, room.id);
+  const marked = await markCollaborationRoomPurged(c.env.DB, room.id, job.data.closedAt);
+  if (marked) {
+    scheduleAuditEvent(c, {
+      roomId: room.id,
+      actorUserId: null,
+      action: "room.purged",
+    });
+  }
+  console.log("collaboration_maintenance", {
+    kind: job.data.kind,
+    roomId: room.id,
+    deletedKeys,
+    marked,
+  });
+  return c.json({ purged: marked, deletedKeys });
+});
 
 collaborationRoute.get("/rooms", async (c) => {
   const user = await getCurrentUser(c);
@@ -294,11 +500,19 @@ collaborationRoute.post("/rooms", async (c) => {
     throw error;
   }
 
-  const room = await createProvisioningCollaborationRoom(c.env.DB, {
-    ownerId: user.id,
-    protocolVersion: COLLABORATION_PROTOCOL_VERSION,
-    documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
-  });
+  let room: CollaborationRoomRow;
+  try {
+    room = await createProvisioningCollaborationRoom(c.env.DB, {
+      ownerId: user.id,
+      protocolVersion: COLLABORATION_PROTOCOL_VERSION,
+      documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+    });
+  } catch (error) {
+    if (error instanceof CollaborationRoomQuotaError) {
+      return c.json({ error: "active collaboration room limit reached" }, 409);
+    }
+    throw error;
+  }
   try {
     await initializeCollaborationDocument(redis, room.id, parsed.data.snapshot);
   } catch (error) {
@@ -316,6 +530,12 @@ collaborationRoute.post("/rooms", async (c) => {
     console.error("Failed to activate collaboration room", { roomId: room.id });
     return c.json({ error: "failed to activate collaboration room" }, 500);
   }
+
+  scheduleAuditEvent(c, {
+    roomId: activeRoom.id,
+    actorUserId: user.id,
+    action: "room.created",
+  });
 
   return c.json(roomResponse(activeRoom, "owner"), 201);
 });
@@ -355,6 +575,48 @@ collaborationRoute.get("/rooms/:roomId/bootstrap", async (c) => {
       error: error instanceof Error ? error.message : String(error),
     });
     return c.json({ error: "failed to synchronize collaboration room" }, 503);
+  }
+});
+
+collaborationRoute.get("/rooms/:roomId/export", async (c) => {
+  const user = await getCurrentUser(c);
+  if (!user) return c.json({ error: "not signed in" }, 401);
+  const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
+  if (!roomIdResult.success) return c.json({ error: "invalid room id" }, 400);
+  const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
+  if (!access || access.member_role !== "owner") return c.json({ error: "not found" }, 404);
+  if (access.purged_at !== null) return c.json({ error: "room document has expired" }, 410);
+  try {
+    const document = await exportCollaborationDocument(
+      getCollaborationRedis(c.env),
+      access.id,
+    );
+    scheduleAuditEvent(c, {
+      roomId: access.id,
+      actorUserId: user.id,
+      action: "room.exported",
+    });
+    return c.json(
+      {
+        exportedAt: Date.now(),
+        room: roomResponse(access, access.member_role).room,
+        document,
+      },
+      200,
+      {
+        "Cache-Control": "no-store",
+        "Content-Disposition": `attachment; filename="collaboration-${access.id}.json"`,
+      },
+    );
+  } catch (error) {
+    if (error instanceof CollaborationConfigurationError) {
+      return c.json({ error: "collaboration unavailable" }, 503);
+    }
+    console.error("Failed to export collaboration room", {
+      roomId: access.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.json({ error: "failed to export collaboration room" }, 503);
   }
 });
 
@@ -476,6 +738,11 @@ collaborationRoute.post("/rooms/:roomId/invitations", async (c) => {
     maxUses: input.data.maxUses,
     expiresAt: Date.now() + input.data.expiresInHours * 60 * 60 * 1000,
   });
+  scheduleAuditEvent(c, {
+    roomId: access.id,
+    actorUserId: user.id,
+    action: "invitation.created",
+  });
   return c.json({ ...invitationResponse(invitation), token }, 201);
 });
 
@@ -495,7 +762,13 @@ collaborationRoute.delete("/rooms/:roomId/invitations/:invitationId", async (c) 
     invitationIdResult.data,
     user.id,
   );
-  return revoked ? c.body(null, 204) : c.json({ error: "not found" }, 404);
+  if (!revoked) return c.json({ error: "not found" }, 404);
+  scheduleAuditEvent(c, {
+    roomId: roomIdResult.data,
+    actorUserId: user.id,
+    action: "invitation.revoked",
+  });
+  return c.body(null, 204);
 });
 
 collaborationRoute.patch("/rooms/:roomId/members/:userId", async (c) => {
@@ -525,6 +798,12 @@ collaborationRoute.patch("/rooms/:roomId/members/:userId", async (c) => {
       targetUserId: member.user_id,
     });
   }
+  scheduleAuditEvent(c, {
+    roomId: roomIdResult.data,
+    actorUserId: user.id,
+    action: "member.role_changed",
+    targetUserId: member.user_id,
+  });
   return c.json({ member: memberResponse(member) });
 });
 
@@ -550,6 +829,12 @@ collaborationRoute.delete("/rooms/:roomId/members/:userId", async (c) => {
       targetUserId: userIdResult.data,
     });
   }
+  scheduleAuditEvent(c, {
+    roomId: roomIdResult.data,
+    actorUserId: user.id,
+    action: "member.removed",
+    targetUserId: userIdResult.data,
+  });
   return c.body(null, 204);
 });
 
@@ -569,6 +854,12 @@ collaborationRoute.post("/rooms/:roomId/close", async (c) => {
     roleVersion: room.role_version,
     targetUserId: null,
   });
+  scheduleAuditEvent(c, {
+    roomId: room.id,
+    actorUserId: user.id,
+    action: "room.closed",
+  });
+  if (room.closed_at !== null) scheduleClosedRoomCleanup(c, room.id, room.closed_at);
   return c.json(roomResponse(room, "owner"));
 });
 
@@ -589,6 +880,12 @@ collaborationRoute.post("/invitations/claim", async (c) => {
     kind: "membership-changed",
     roomId: access.id,
     roleVersion: access.role_version,
+    targetUserId: user.id,
+  });
+  scheduleAuditEvent(c, {
+    roomId: access.id,
+    actorUserId: user.id,
+    action: "invitation.claimed",
     targetUserId: user.id,
   });
   return c.json(roomResponse(access, access.member_role));
@@ -615,22 +912,38 @@ collaborationRoute.post("/rooms/:roomId/updates", async (c) => {
 
   const event = eventFor(parsed.data, access.id, user.id);
   try {
-    const result = await appendCollaborationUpdate(getCollaborationRedis(c.env), event);
+    const redis = getCollaborationRedis(c.env);
+    await enforceCollaborationUpdateRateLimit(redis, access.id, user.id);
+    const result = await appendCollaborationUpdate(redis, event);
     if (shouldCompactCollaborationDocument(result.updateCount)) {
-      c.executionCtx.waitUntil(
-        compactCollaborationDocument(getCollaborationRedis(c.env), access.id).catch((error) => {
-          console.error("Failed to compact collaboration room", {
-            roomId: access.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }),
-      );
+      const generation = await getCollaborationSnapshotGeneration(redis, access.id);
+      scheduleCompaction(c, access.id, generation);
     }
+    console.log("collaboration_update", {
+      roomId: access.id,
+      actorId: user.id,
+      bytes: Math.floor((event.update.length * 3) / 4),
+      duplicate: result.duplicate,
+      updateCount: result.updateCount,
+    });
     return c.json(
       { accepted: true, updateId: event.updateId, streamId: result.streamId },
       result.duplicate ? 200 : 202,
     );
   } catch (error) {
+    if (error instanceof CollaborationRateLimitError) {
+      return c.json(
+        { error: "collaboration update rate limit exceeded" },
+        429,
+        { "Retry-After": "1" },
+      );
+    }
+    if (error instanceof CollaborationDocumentQuotaError) {
+      return c.json({ error: "collaboration room document quota exceeded" }, 413);
+    }
+    if (error instanceof CollaborationConfigurationError) {
+      return c.json({ error: "collaboration unavailable" }, 503);
+    }
     console.error("Failed to publish collaboration update", {
       roomId: access.id,
       updateId: event.updateId,
@@ -643,6 +956,22 @@ collaborationRoute.post("/rooms/:roomId/updates", async (c) => {
 collaborationRoute.get("/realtime", async (c) => {
   const user = await getCurrentUser(c);
   if (!user) return c.json({ error: "not signed in" }, 401);
+
+  try {
+    await enforceCollaborationConnectionRateLimit(getCollaborationRedis(c.env), user.id);
+  } catch (error) {
+    if (error instanceof CollaborationRateLimitError) {
+      return c.json(
+        { error: "collaboration connection rate limit exceeded" },
+        429,
+        { "Retry-After": "60" },
+      );
+    }
+    if (error instanceof CollaborationConfigurationError) {
+      return c.json({ error: "collaboration unavailable" }, 503);
+    }
+    throw error;
+  }
 
   const realtimeResult = getRealtime(c);
   if (!realtimeResult.ok) return realtimeResult.response;

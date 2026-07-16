@@ -15,6 +15,7 @@ import {
   closeCollaborationRoom,
   createCollaborationInvitation,
   createCollaborationRoom,
+  exportCollaborationRoom,
   getCollaborationBootstrap,
   getCollaborationRoom,
   listCollaborationAwareness,
@@ -84,6 +85,7 @@ interface CollaborationContextValue {
   leaveRoom: () => void;
   retry: () => Promise<void>;
   closeRoom: () => Promise<void>;
+  exportRoom: () => Promise<Blob>;
   refreshRoomData: () => Promise<void>;
   createInvitation: (role: CollaborationInviteRole) => Promise<CreatedCollaborationInvitation>;
   revokeInvitation: (invitationId: string) => Promise<void>;
@@ -527,6 +529,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     await refreshRoomDataFor(current.room.id, current.membership.role === "owner");
   }, [refreshRoomDataFor]);
 
+  const exportRoom = useCallback(async () => {
+    const current = providerRef.current?.session;
+    if (!current || current.membership.role !== "owner") {
+      throw new Error("Only the room owner can export a recovery snapshot.");
+    }
+    return exportCollaborationRoom(current.room.id);
+  }, []);
+
   const createInvitation = useCallback(async (inviteRole: CollaborationInviteRole) => {
     const current = providerRef.current?.session;
     if (!current || current.membership.role !== "owner") {
@@ -602,6 +612,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       leaveRoom,
       retry,
       closeRoom,
+      exportRoom,
       refreshRoomData,
       createInvitation,
       revokeInvitation,
@@ -617,6 +628,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       connectionState,
       createInvitation,
       createRoom,
+      exportRoom,
       invitations,
       isFollowingHost,
       leaveRoom,

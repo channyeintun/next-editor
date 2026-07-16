@@ -80,6 +80,18 @@ export default function CollaborationPanel() {
     setTimeout(() => setCopied(false), 2_000);
   };
 
+  const downloadRecoveryExport = async () => {
+    await run(async () => {
+      const blob = await collaboration.exportRoom();
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = `collaboration-${collaboration.session?.room.id ?? "room"}.json`;
+      anchor.click();
+      URL.revokeObjectURL(href);
+    });
+  };
+
   const isInRoom = Boolean(collaboration.provider);
   const status = STATUS_LABELS[collaboration.connectionState];
 
@@ -363,6 +375,15 @@ export default function CollaborationPanel() {
                         </div>
                       </section>
                     ) : null}
+
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => void downloadRecoveryExport()}
+                      className="w-full rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/[0.03] disabled:opacity-50"
+                    >
+                      Export room recovery snapshot
+                    </button>
                   </>
                 ) : null}
 

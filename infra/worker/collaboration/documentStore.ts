@@ -20,6 +20,14 @@ const MAX_COMPACTION_UPDATES = 10_000;
 const COMPACTION_EVERY_UPDATES = 200;
 const DEDUPLICATION_TTL_SECONDS = 7 * 24 * 60 * 60;
 const COMPACTION_LOCK_SECONDS = 60;
+const MAX_COLLABORATION_ROOM_ACCEPTED_BYTES = 64 * 1024 * 1024;
+
+export class CollaborationDocumentQuotaError extends Error {
+  constructor() {
+    super("collaboration room document byte quota exceeded");
+    this.name = "CollaborationDocumentQuotaError";
+  }
+}
 
 interface CollaborationSnapshotMetadata {
   generation: number;
@@ -52,8 +60,31 @@ function updateCountKey(roomId: string): string {
   return `collab:${roomId}:update-count`;
 }
 
+function acceptedBytesKey(roomId: string): string {
+  return `collab:${roomId}:accepted-bytes`;
+}
+
 function compactionLockKey(roomId: string): string {
   return `collab:${roomId}:compaction-lock`;
+}
+
+function decodedBase64ByteLength(value: string): number {
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  return (value.length / 4) * 3 - padding;
+}
+
+async function reserveAcceptedBytes(redis: Redis, roomId: string, bytes: number): Promise<void> {
+  const result = await redis.eval(
+    `-- collaboration-byte-quota
+     local current = tonumber(redis.call("get", KEYS[1]) or "0")
+     local next = current + tonumber(ARGV[1])
+     if next > tonumber(ARGV[2]) then return -1 end
+     redis.call("set", KEYS[1], next)
+     return next`,
+    [acceptedBytesKey(roomId)],
+    [String(bytes), String(MAX_COLLABORATION_ROOM_ACCEPTED_BYTES)],
+  );
+  if (Number(result) < 0) throw new CollaborationDocumentQuotaError();
 }
 
 function parseSnapshotMetadata(value: unknown): CollaborationSnapshotMetadata {
@@ -97,8 +128,14 @@ export async function initializeCollaborationDocument(
   try {
     await redis.set(snapshotKey(roomId), initialUpdate);
     await redis.set(updateCountKey(roomId), 0);
+    await redis.set(acceptedBytesKey(roomId), decodedBase64ByteLength(initialUpdate));
   } catch (error) {
-    await redis.del(snapshotMetadataKey(roomId), snapshotKey(roomId), updateCountKey(roomId));
+    await redis.del(
+      snapshotMetadataKey(roomId),
+      snapshotKey(roomId),
+      updateCountKey(roomId),
+      acceptedBytesKey(roomId),
+    );
     throw error;
   }
 }
@@ -146,7 +183,11 @@ export async function appendCollaborationUpdate(
   }
 
   const channel = collaborationRoomChannel(parsed.roomId);
+  const acceptedBytes = decodedBase64ByteLength(parsed.update);
+  let bytesReserved = false;
   try {
+    await reserveAcceptedBytes(redis, parsed.roomId, acceptedBytes);
+    bytesReserved = true;
     const streamId = await redis.xadd(channel, "*", {
       data: parsed,
       event: "document.update",
@@ -167,10 +208,41 @@ export async function appendCollaborationUpdate(
     });
     return { streamId, updateCount, duplicate: false };
   } catch (error) {
+    if (bytesReserved) await redis.incrby(acceptedBytesKey(parsed.roomId), -acceptedBytes);
     const storedId = await redis.get<string>(deduplicationKey);
     if (!storedId || storedId === "pending") await redis.del(deduplicationKey);
     throw error;
   }
+}
+
+export async function getCollaborationSnapshotGeneration(
+  redis: Redis,
+  roomId: string,
+): Promise<number> {
+  return parseSnapshotMetadata(await redis.get<unknown>(snapshotMetadataKey(roomId))).generation;
+}
+
+export async function exportCollaborationDocument(
+  redis: Redis,
+  roomId: string,
+): Promise<CollaborationBootstrapResponse> {
+  await compactCollaborationDocument(redis, roomId);
+  return getCollaborationBootstrap(redis, roomId);
+}
+
+export async function deleteCollaborationDocument(redis: Redis, roomId: string): Promise<number> {
+  let cursor = 0;
+  let deleted = 0;
+  for (let page = 0; page < 100; page += 1) {
+    const [nextCursor, keys] = await redis.scan(cursor, {
+      match: `collab:${roomId}:*`,
+      count: 100,
+    });
+    if (keys.length > 0) deleted += await redis.del(...keys.map(String));
+    cursor = Number(nextCursor);
+    if (cursor === 0) return deleted;
+  }
+  throw new Error("collaboration cleanup scan limit exceeded");
 }
 
 export function shouldCompactCollaborationDocument(updateCount: number): boolean {
@@ -234,6 +306,7 @@ async function releaseLock(redis: Redis, key: string, value: string): Promise<vo
 export async function compactCollaborationDocument(
   redis: Redis,
   roomId: string,
+  expectedGeneration?: number,
 ): Promise<{ compacted: boolean; generation?: number; streamCutoff?: string }> {
   const lockKey = compactionLockKey(roomId);
   const lockValue = crypto.randomUUID();
@@ -247,6 +320,9 @@ export async function compactCollaborationDocument(
       redis.xrevrange<StoredRealtimeMessage>(collaborationRoomChannel(roomId), "+", "-", 1),
     ]);
     const metadata = parseSnapshotMetadata(rawMetadata);
+    if (expectedGeneration !== undefined && metadata.generation !== expectedGeneration) {
+      return { compacted: false, generation: metadata.generation };
+    }
     if (!snapshot) throw new Error("collaboration snapshot is missing");
     const cutoff = Object.keys(latestEntries)[0];
     if (!cutoff || cutoff === metadata.streamCutoff) return { compacted: false };

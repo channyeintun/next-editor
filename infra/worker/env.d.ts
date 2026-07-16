@@ -16,4 +16,9 @@ export interface Env {
   // Redis database with an independent budget and failure boundary.
   COLLAB_REDIS_REST_URL?: string;
   COLLAB_REDIS_REST_TOKEN?: string;
+  // Optional in local development. When configured together, QStash handles
+  // collaboration compaction and delayed room cleanup outside the edit path.
+  QSTASH_TOKEN?: string;
+  QSTASH_CURRENT_SIGNING_KEY?: string;
+  QSTASH_NEXT_SIGNING_KEY?: string;
 }

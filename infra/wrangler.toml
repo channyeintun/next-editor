@@ -30,6 +30,11 @@ PUBLIC_URL = "https://nexteditor.dev"
 # to reuse one database by setting both pairs to the same values:
 #   wrangler secret put COLLAB_REDIS_REST_URL   --config infra/wrangler.toml
 #   wrangler secret put COLLAB_REDIS_REST_TOKEN --config infra/wrangler.toml
+# QStash is optional for local development. Production should configure all
+# three values; job routes fail closed if either signing key is absent:
+#   wrangler secret put QSTASH_TOKEN               --config infra/wrangler.toml
+#   wrangler secret put QSTASH_CURRENT_SIGNING_KEY --config infra/wrangler.toml
+#   wrangler secret put QSTASH_NEXT_SIGNING_KEY    --config infra/wrangler.toml
 
 # Custom Domain: routes all paths of nexteditor.dev to this Worker. Requires
 # the zone to already be on Cloudflare (nameservers pointed here) — done by

@@ -47,6 +47,12 @@ class MemoryRedis {
     return next;
   }
 
+  async incrby(key: string, amount: number) {
+    const next = Number(this.values.get(key) ?? 0) + amount;
+    this.values.set(key, next);
+    return next;
+  }
+
   async xadd(key: string, _id: string, value: Record<string, unknown>) {
     const id = `${++this.sequence}-0`;
     const stream = this.streams.get(key) ?? new Map();
@@ -99,7 +105,14 @@ class MemoryRedis {
     };
   }
 
-  async eval(_script: string, keys: string[], args: string[]) {
+  async eval(script: string, keys: string[], args: string[]) {
+    if (script.includes("collaboration-byte-quota")) {
+      const current = Number(this.values.get(keys[0]) ?? 0);
+      const next = current + Number(args[0]);
+      if (next > Number(args[1])) return -1;
+      this.values.set(keys[0], next);
+      return next;
+    }
     if (this.values.get(keys[0]) === args[0]) return this.del(keys[0]);
     return 0;
   }
@@ -193,5 +206,17 @@ describe("collaboration Redis document store", () => {
     const restored = new Y.Doc();
     applyEncodedYjsSnapshot(restored, bootstrap.snapshot.update);
     expect(restored.getText("source").toString()).toBe("ab");
+  });
+
+  it("treats a stale queued compaction generation as an idempotent no-op", async () => {
+    const fake = new MemoryRedis();
+    const initial = new Y.Doc();
+    initial.getText("source").insert(0, "a");
+    await initializeCollaborationDocument(redis(fake), ROOM_ID, encodeYjsDocument(initial));
+
+    expect(await compactCollaborationDocument(redis(fake), ROOM_ID, 2)).toEqual({
+      compacted: false,
+      generation: 1,
+    });
   });
 });

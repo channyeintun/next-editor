@@ -14,6 +14,7 @@ vi.mock("@next-editor/infra", () => ({
   closeCollaborationRoom: vi.fn(),
   createCollaborationInvitation: vi.fn(),
   createCollaborationRoom: mocks.createRoom,
+  exportCollaborationRoom: vi.fn(),
   getCollaborationBootstrap: vi.fn(),
   getCollaborationRoom: mocks.getRoom,
   listCollaborationAwareness: vi.fn(async () => []),

@@ -21,6 +21,7 @@ export {
   claimCollaborationInvitation,
   closeCollaborationRoom,
   createCollaborationInvitation,
+  exportCollaborationRoom,
   getCollaborationBootstrap,
   getCollaborationRoom,
   listCollaborationInvitations,

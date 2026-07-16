@@ -16,7 +16,17 @@ export interface CollaborationRoomRow {
   created_at: number;
   updated_at: number;
   closed_at: number | null;
+  purged_at: number | null;
 }
+
+export class CollaborationRoomQuotaError extends Error {
+  constructor() {
+    super("active collaboration room quota exceeded");
+    this.name = "CollaborationRoomQuotaError";
+  }
+}
+
+const MAX_ACTIVE_ROOMS_PER_OWNER = 5;
 
 export interface CollaborationMemberRow {
   user_id: string;
@@ -56,6 +66,16 @@ export async function createProvisioningCollaborationRoom(
   db: D1Database,
   params: CreateCollaborationRoomParams,
 ): Promise<CollaborationRoomRow> {
+  const activeRooms = await db
+    .prepare(
+      `SELECT COUNT(*) AS count FROM collaboration_rooms
+       WHERE owner_id = ? AND status IN ('provisioning', 'active')`,
+    )
+    .bind(params.ownerId)
+    .first<{ count: number }>();
+  if ((activeRooms?.count ?? 0) >= MAX_ACTIVE_ROOMS_PER_OWNER) {
+    throw new CollaborationRoomQuotaError();
+  }
   const now = Date.now();
   const room: CollaborationRoomRow = {
     id: crypto.randomUUID(),
@@ -69,6 +89,7 @@ export async function createProvisioningCollaborationRoom(
     created_at: now,
     updated_at: now,
     closed_at: null,
+    purged_at: null,
   };
 
   await db.batch([
@@ -99,6 +120,71 @@ export async function createProvisioningCollaborationRoom(
   ]);
 
   return room;
+}
+
+export async function getCollaborationRoomById(
+  db: D1Database,
+  roomId: string,
+): Promise<CollaborationRoomRow | null> {
+  const row = await db
+    .prepare("SELECT * FROM collaboration_rooms WHERE id = ?")
+    .bind(roomId)
+    .first<CollaborationRoomRow>();
+  return row ?? null;
+}
+
+export async function markCollaborationRoomPurged(
+  db: D1Database,
+  roomId: string,
+  closedAt: number,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE collaboration_rooms
+       SET purged_at = COALESCE(purged_at, ?), updated_at = ?
+       WHERE id = ? AND status = 'closed' AND closed_at = ?`,
+    )
+    .bind(Date.now(), Date.now(), roomId, closedAt)
+    .run();
+  return result.meta.changes > 0;
+}
+
+export type CollaborationAuditAction =
+  | "room.created"
+  | "invitation.created"
+  | "invitation.revoked"
+  | "invitation.claimed"
+  | "member.role_changed"
+  | "member.removed"
+  | "room.closed"
+  | "room.exported"
+  | "room.compacted"
+  | "room.purged";
+
+export async function recordCollaborationAuditEvent(
+  db: D1Database,
+  input: {
+    roomId: string;
+    actorUserId: string | null;
+    action: CollaborationAuditAction;
+    targetUserId?: string | null;
+  },
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO collaboration_audit_events
+         (id, room_id, actor_user_id, action, target_user_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      crypto.randomUUID(),
+      input.roomId,
+      input.actorUserId,
+      input.action,
+      input.targetUserId ?? null,
+      Date.now(),
+    )
+    .run();
 }
 
 export async function setCollaborationRoomStatus(

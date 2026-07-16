@@ -146,6 +146,14 @@ export async function closeCollaborationRoom(roomId: string): Promise<Collaborat
   return response.data;
 }
 
+export async function exportCollaborationRoom(roomId: string): Promise<Blob> {
+  const response = await apiClient.get<Blob>(
+    `/collaboration/rooms/${encodeURIComponent(roomId)}/export`,
+    { responseType: "blob" },
+  );
+  return response.data;
+}
+
 export async function publishCollaborationUpdate(
   roomId: string,
   update: CollaborationDocumentUpdateInput,
