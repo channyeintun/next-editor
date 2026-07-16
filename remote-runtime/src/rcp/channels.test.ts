@@ -50,4 +50,10 @@ describe("channel mux", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(credits).toEqual([17]);
   });
+
+  it("rejects credit that would overflow safe integer accounting", () => {
+    const mux = new ChannelMux("client", () => {}, () => {});
+    const channel = mux.allocate();
+    expect(() => mux.grantCredit(channel, Number.MAX_SAFE_INTEGER)).toThrow("ELIMIT:");
+  });
 });

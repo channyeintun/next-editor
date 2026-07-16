@@ -9,8 +9,32 @@ export { RuntimeGoSessionDO };
 const jsonHeaders = { "Content-Type": "application/json" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: jsonHeaders });
 
+class ApiError extends Error {
+  constructor(readonly status: number, readonly code: string, message: string) {
+    super(message);
+  }
+}
+
+function positiveInteger(value: string, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function sessionSecret(env: Env): string {
+  if (typeof env.RUNTIME_SESSION_SECRET !== "string"
+    || new TextEncoder().encode(env.RUNTIME_SESSION_SECRET).byteLength < 32) {
+    throw new ApiError(503, "ECONFIG", "RUNTIME_SESSION_SECRET must contain at least 32 bytes");
+  }
+  return env.RUNTIME_SESSION_SECRET;
+}
+
 async function authenticated(request: Request, env: Env) {
-  return verifyToken(env.RUNTIME_SESSION_SECRET, bearer(request));
+  const secret = sessionSecret(env);
+  try {
+    return await verifyToken(secret, bearer(request));
+  } catch (error) {
+    throw new ApiError(401, "EAUTH", error instanceof Error ? error.message : "Unauthorized");
+  }
 }
 
 function sessionStub(env: Env, sessionId: string): DurableObjectStub {
@@ -25,56 +49,106 @@ async function sessionRecord(env: Env, sessionId: string): Promise<SessionRecord
 }
 
 async function authorizeSession(request: Request, env: Env, sessionId: string): Promise<SessionRecord> {
-  const queryToken = new URL(request.url).searchParams.get("token");
-  const claims = await verifyToken(env.RUNTIME_SESSION_SECRET, queryToken ?? bearer(request));
-  if (claims.sessionId !== sessionId) throw new Error("token does not match session");
+  let claims: Awaited<ReturnType<typeof verifyToken>>;
+  const secret = sessionSecret(env);
+  try {
+    const queryToken = new URL(request.url).searchParams.get("token");
+    claims = await verifyToken(secret, queryToken ?? bearer(request));
+  } catch (error) {
+    throw new ApiError(401, "EAUTH", error instanceof Error ? error.message : "Unauthorized");
+  }
+  if (claims.sessionId !== sessionId) throw new ApiError(401, "EAUTH", "token does not match session");
   const record = await sessionRecord(env, sessionId);
-  if (!record || record.userId !== claims.userId) throw new Error("session not found");
+  if (!record || record.userId !== claims.userId) throw new ApiError(401, "EAUTH", "session not found");
   return record;
 }
 
 async function createSession(request: Request, env: Env): Promise<Response> {
   const claims = await authenticated(request, env);
-  const body = await request.json<{ runtime?: string; workdirName?: string; idleTimeoutSeconds?: number }>();
-  if ((body.runtime ?? "go1.26.5") !== "go1.26.5") return json({ code: "ERUNTIME", message: "Only go1.26.5 is enabled" }, 400);
-  const maxConcurrent = Number(env.MAX_CONCURRENT_SESSIONS || 2);
-  const active = await env.RUNTIME_QUOTAS.prepare(
-    "SELECT COUNT(*) AS count FROM runtime_sessions WHERE user_id = ? AND ended_at IS NULL",
-  ).bind(claims.userId).first<{ count: number }>();
-  if ((active?.count ?? 0) >= maxConcurrent) {
-    runtimeMetric("quota_hit", { kind: "concurrent", userId: claims.userId });
-    return json({ code: "EQUOTA", message: "Concurrent runtime limit reached" }, 429);
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    throw new ApiError(400, "EBADREQUEST", "Request body must be valid JSON");
   }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new ApiError(400, "EBADREQUEST", "Request body must be a JSON object");
+  }
+  const options = body as { runtime?: unknown; workdirName?: unknown; idleTimeoutSeconds?: unknown };
+  if (options.idleTimeoutSeconds !== undefined
+    && (typeof options.idleTimeoutSeconds !== "number" || !Number.isFinite(options.idleTimeoutSeconds))) {
+    throw new ApiError(400, "EBADREQUEST", "idleTimeoutSeconds must be a finite number");
+  }
+  if ((options.runtime ?? "go1.26.5") !== "go1.26.5") return json({ code: "ERUNTIME", message: "Only go1.26.5 is enabled" }, 400);
+  const workdirName = options.workdirName ?? "project";
+  if (typeof workdirName !== "string") {
+    return json({ code: "EWORKDIR", message: "Invalid workdirName" }, 400);
+  }
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(workdirName)
+    || workdirName === "." || workdirName === "..") {
+    return json({ code: "EWORKDIR", message: "Invalid workdirName" }, 400);
+  }
+  const maxConcurrent = positiveInteger(env.MAX_CONCURRENT_SESSIONS, 2);
+  const maxDailyMinutes = positiveInteger(env.MAX_DAILY_MINUTES, 120);
   const day = new Date().toISOString().slice(0, 10);
-  const usage = await env.RUNTIME_QUOTAS.prepare(
-    "SELECT minutes FROM runtime_daily_usage WHERE user_id = ? AND day = ?",
-  ).bind(claims.userId, day).first<{ minutes: number }>();
-  if ((usage?.minutes ?? 0) >= Number(env.MAX_DAILY_MINUTES || 120)) {
-    runtimeMetric("quota_hit", { kind: "daily_minutes", userId: claims.userId });
-    return json({ code: "EQUOTA", message: "Daily runtime minutes exhausted" }, 429);
-  }
-
   const sessionId = crypto.randomUUID();
   const createdAt = Date.now();
-  await env.RUNTIME_QUOTAS.prepare(
-    "INSERT INTO runtime_sessions (session_id, user_id, runtime, created_at) VALUES (?, ?, 'go1.26.5', ?)",
-  ).bind(sessionId, claims.userId, createdAt).run();
-  const configured = await sessionStub(env, sessionId).fetch(new Request("http://do/__runtime/configure", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const reservation = await env.RUNTIME_QUOTAS.prepare(`INSERT INTO runtime_sessions
+      (session_id, user_id, runtime, created_at)
+    SELECT ?, ?, 'go1.26.5', ?
+    WHERE (SELECT COUNT(*) FROM runtime_sessions WHERE user_id = ? AND ended_at IS NULL) < ?
+      AND COALESCE((SELECT minutes FROM runtime_daily_usage WHERE user_id = ? AND day = ?), 0) < ?`)
+    .bind(
       sessionId,
-      userId: claims.userId,
+      claims.userId,
       createdAt,
-      idleTimeoutSeconds: body.idleTimeoutSeconds ?? 300,
-    }),
-  }));
+      claims.userId,
+      maxConcurrent,
+      claims.userId,
+      day,
+      maxDailyMinutes,
+    )
+    .run();
+  if (reservation.meta.changes !== 1) {
+    const [active, usage] = await Promise.all([
+      env.RUNTIME_QUOTAS.prepare(
+        "SELECT COUNT(*) AS count FROM runtime_sessions WHERE user_id = ? AND ended_at IS NULL",
+      ).bind(claims.userId).first<{ count: number }>(),
+      env.RUNTIME_QUOTAS.prepare(
+        "SELECT minutes FROM runtime_daily_usage WHERE user_id = ? AND day = ?",
+      ).bind(claims.userId, day).first<{ minutes: number }>(),
+    ]);
+    const concurrent = (active?.count ?? 0) >= maxConcurrent;
+    runtimeMetric("quota_hit", { kind: concurrent ? "concurrent" : "daily_minutes", userId: claims.userId });
+    return json({
+      code: "EQUOTA",
+      message: concurrent ? "Concurrent runtime limit reached" : "Daily runtime minutes exhausted",
+    }, 429);
+  }
+  let configured: Response;
+  try {
+    configured = await sessionStub(env, sessionId).fetch(new Request("http://do/__runtime/configure", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        userId: claims.userId,
+        createdAt,
+        idleTimeoutSeconds: options.idleTimeoutSeconds ?? 300,
+        workdirName,
+      }),
+    }));
+  } catch (error) {
+    await env.RUNTIME_QUOTAS.prepare("UPDATE runtime_sessions SET ended_at = ? WHERE session_id = ?")
+      .bind(Date.now(), sessionId).run();
+    throw error;
+  }
   if (!configured.ok) {
     await env.RUNTIME_QUOTAS.prepare("UPDATE runtime_sessions SET ended_at = ? WHERE session_id = ?")
       .bind(Date.now(), sessionId).run();
     return json({ code: "EPROVISION", message: "Failed to configure runtime session" }, 503);
   }
-  const token = await signToken(env.RUNTIME_SESSION_SECRET, {
+  const token = await signToken(sessionSecret(env), {
     userId: claims.userId, sessionId, exp: Math.floor(Date.now() / 1000) + 3600,
   });
   const origin = new URL(request.url);
@@ -127,8 +201,10 @@ export default {
       if (target) return await preview(request, env, target);
       return new Response("Not found", { status: 404 });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unauthorized";
-      return json({ code: "EAUTH", message }, 401);
+      if (error instanceof ApiError) return json({ code: error.code, message: error.message }, error.status);
+      console.error("Remote runtime worker error", error);
+      const message = error instanceof Error ? error.message : "Internal error";
+      return json({ code: "EINTERNAL", message }, 500);
     }
   },
 } satisfies ExportedHandler<Env>;

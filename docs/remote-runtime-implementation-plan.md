@@ -14,7 +14,7 @@ written to be executable by a focused agent with only: this file, the design doc
 repo. Tasks list their inputs, outputs, and acceptance criteria. Tasks marked ∥ within a phase
 are independent and may run in parallel.
 
-## Implementation progress (updated 2026-07-14)
+## Implementation progress (updated 2026-07-16)
 
 The current implementation was deliberately built as the isolated
 [`remote-runtime/`](../remote-runtime/README.md) package. Per the implementation request, it
@@ -41,10 +41,13 @@ Status meanings:
 | P5 — editor integration | **Deferred by scope** | Not run | No runtime selection, hooks, presets, UI, fallback, or editor teardown changes have been made. |
 | P6 — hardening & rollout | **Hardening implementation complete; rollout deferred** | Limits/tests pass; fuzz target and 30-minute soak are present but extended runs are **pending** | `remote-runtime/HARDENING.md`, commit `3b4e287`; editor feature flag/rollout remains part of P5 integration. |
 
-Current bounded results: 17 standalone SDK/protocol tests pass, 9 Worker tests pass, and the
-Go 1.26.5 agent suite plus `go vet` pass. Six environment-dependent conformance/soak cases are
+Current bounded results: 23 standalone SDK/protocol tests pass, 17 Worker tests pass, and the
+Go 1.26.5 agent suite plus `go vet` pass. Seven environment-dependent conformance/soak cases are
 checked in and skipped without an endpoint. No Docker image, `wrangler dev`, remote D1 migration,
 Cloudflare deployment, staging check, or long-running soak has been executed.
+
+The 2026-07-16 implementation audit and its resolved findings are recorded in
+[`remote-runtime-review.md`](./remote-runtime-review.md).
 
 This progress ledger records implementation status only; it does not change the v1 definition of
 done at the end of this document, which still requires editor integration and staging evidence.

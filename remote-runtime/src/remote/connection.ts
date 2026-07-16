@@ -1,14 +1,16 @@
 import { ChannelMux } from "../rcp/channels";
 import { fromWireError, RcpError } from "../rcp/errors";
-import { parseBinaryFrame, parseControlFrame } from "../rcp/frames";
+import { encodeControlFrame, parseBinaryFrame, parseControlFrame } from "../rcp/frames";
 import {
   protocolVersion,
+  type ControlFrame,
   type EventFrame,
   type EventMap,
   type EventMethod,
   type Method,
   type MethodParams,
   type MethodResult,
+  type RequestFrame,
 } from "../rcp/types";
 
 interface PendingRequest {
@@ -45,14 +47,21 @@ export class RcpConnection {
     this.channels = new ChannelMux(
       "client",
       (frame) => this.send(frame),
-      (ch, bytes) => this.send(JSON.stringify({ t: "evt", m: "ch.credit", p: { ch, bytes } })),
+      (ch, bytes) => this.sendControl({ t: "evt", m: "ch.credit", p: { ch, bytes } }),
     );
   }
 
   async open(resumeToken?: string): Promise<void> {
     this.closed = false;
-    await this.openSocket(resumeToken);
-    this.startKeepalive();
+    try {
+      await this.openSocket(resumeToken);
+      this.startKeepalive();
+    } catch (error) {
+      this.closed = true;
+      this.socket?.close();
+      this.rejectPending(error instanceof Error ? error : new RcpError("EGONE", String(error)));
+      throw error;
+    }
   }
 
   private async openSocket(resumeToken?: string): Promise<void> {
@@ -92,10 +101,11 @@ export class RcpConnection {
       throw new RcpError("EGONE", "connection is not open");
     }
     const id = this.nextRequestId++;
+    const encoded = encodeControlFrame({ t: "req", id, m: method, p: params } as RequestFrame);
     const response = new Promise<MethodResult<M>>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
     });
-    this.send(JSON.stringify({ t: "req", id, m: method, p: params }));
+    this.send(encoded);
     return { id, response };
   }
 
@@ -134,6 +144,10 @@ export class RcpConnection {
       throw new RcpError("EGONE", "connection is not open");
     }
     this.socket.send(typeof data === "string" ? data : data.slice().buffer as ArrayBuffer);
+  }
+
+  private sendControl(frame: ControlFrame): void {
+    this.send(encodeControlFrame(frame));
   }
 
   private handleMessage(message: MessageEvent): void {

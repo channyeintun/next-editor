@@ -101,6 +101,9 @@ export class ChannelMux {
       throw new RcpError("EPROTO", "credit must be a positive integer");
     }
     const state = this.getState(channelId);
+    if (!Number.isSafeInteger(state.credit + bytes)) {
+      throw new RcpError("ELIMIT", "channel credit overflow");
+    }
     state.credit += bytes;
     this.wakeAll(state);
   }

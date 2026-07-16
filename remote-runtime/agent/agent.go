@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,22 +13,29 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 type agent struct {
-	root        jail
-	port        int
-	mu          sync.Mutex
-	nextChannel uint32
-	nextPID     int
-	processes   map[int]*runningProcess
-	watches     map[int]context.CancelFunc
-	resumeToken string
+	root            jail
+	port            int
+	mu              sync.Mutex
+	nextChannel     uint32
+	nextPID         int
+	processes       map[int]*runningProcess
+	watches         map[int]context.CancelFunc
+	resumeToken     string
+	sessionEpoch    uint64
+	initialized     bool
+	resumeGrace     time.Duration
+	onResumeExpired func()
 }
 
 type session struct {
@@ -40,6 +48,7 @@ type session struct {
 	creditCond *sync.Cond
 	closed     chan struct{}
 	resuming   bool
+	epoch      uint64
 }
 
 type upload struct {
@@ -47,6 +56,11 @@ type upload struct {
 	kind      string
 	path      string
 	buf       bytes.Buffer
+}
+
+type deferredResponse struct {
+	result any
+	after  func()
 }
 
 type runningProcess struct {
@@ -62,14 +76,18 @@ type runningProcess struct {
 	exitCode   *int
 }
 
-func newAgent(root string, port int) *agent {
+func newResumeToken() string {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		panic(err)
 	}
+	return fmt.Sprintf("%x", tokenBytes)
+}
+
+func newAgent(root string, port int) *agent {
 	return &agent{root: newJail(root), port: port, nextChannel: 2, nextPID: 1,
 		processes: make(map[int]*runningProcess), watches: make(map[int]context.CancelFunc),
-		resumeToken: fmt.Sprintf("%x", tokenBytes)}
+		resumeToken: newResumeToken(), resumeGrace: 60 * time.Second, onResumeExpired: func() {}}
 }
 
 var upgrader = websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
@@ -88,9 +106,13 @@ func (a *agent) serveWS(w http.ResponseWriter, r *http.Request) {
 		s.creditCond.Broadcast()
 		_ = conn.Close()
 		a.mu.Lock()
-		defer a.mu.Unlock()
 		for _, process := range a.processes {
 			process.detach(s)
+		}
+		epoch := s.epoch
+		a.mu.Unlock()
+		if epoch != 0 {
+			a.scheduleResumeExpiry(epoch)
 		}
 	}()
 	for {
@@ -118,10 +140,13 @@ func (a *agent) serveWS(w http.ResponseWriter, r *http.Request) {
 					Channel uint32 `json:"ch"`
 					Bytes   int64  `json:"bytes"`
 				}
-				if decodeParams(envelope.Params, &p) == nil && p.Channel > 0 && p.Bytes > 0 {
+				if decodeParams(envelope.Params, &p) == nil && p.Channel > 0 && p.Channel%2 == 0 &&
+					p.Bytes > 0 && p.Bytes <= maxBinaryPayload {
 					s.writeMu.Lock()
-					s.credits[p.Channel] += p.Bytes
-					s.creditCond.Broadcast()
+					if credit, ok := s.credits[p.Channel]; ok && credit <= int64(maxMountBytes)-p.Bytes {
+						s.credits[p.Channel] += p.Bytes
+						s.creditCond.Broadcast()
+					}
 					s.writeMu.Unlock()
 				}
 				continue
@@ -142,6 +167,41 @@ func (a *agent) serveWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (a *agent) scheduleResumeExpiry(epoch uint64) {
+	time.AfterFunc(a.resumeGrace, func() {
+		a.mu.Lock()
+		if a.sessionEpoch != epoch {
+			a.mu.Unlock()
+			return
+		}
+		a.sessionEpoch++
+		a.resumeToken = newResumeToken()
+		processes := a.processes
+		a.processes = make(map[int]*runningProcess)
+		for _, cancel := range a.watches {
+			cancel()
+		}
+		a.watches = make(map[int]context.CancelFunc)
+		a.mu.Unlock()
+
+		for _, process := range processes {
+			process.mu.Lock()
+			active := process.exitCode == nil && process.cmd != nil && process.cmd.Process != nil
+			pid := 0
+			if active {
+				pid = process.cmd.Process.Pid
+			}
+			process.mu.Unlock()
+			if pid != 0 {
+				_ = syscall.Kill(-pid, syscall.SIGKILL)
+			}
+		}
+		if a.onResumeExpired != nil {
+			a.onResumeExpired()
+		}
+	})
+}
+
 func (s *session) writeText(data []byte) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -149,13 +209,19 @@ func (s *session) writeText(data []byte) {
 }
 
 func (s *session) writeBinary(channel uint32, data []byte, fin bool) error {
+	_, err := s.writeBinaryProgress(channel, data, fin)
+	return err
+}
+
+func (s *session) writeBinaryProgress(channel uint32, data []byte, fin bool) (int, error) {
+	written := 0
 	for len(data) > 0 {
 		s.writeMu.Lock()
 		for s.credits[channel] <= 0 {
 			select {
 			case <-s.closed:
 				s.writeMu.Unlock()
-				return io.ErrClosedPipe
+				return written, io.ErrClosedPipe
 			default:
 			}
 			s.creditCond.Wait()
@@ -172,26 +238,29 @@ func (s *session) writeBinary(channel uint32, data []byte, fin bool) error {
 		err := s.conn.WriteMessage(websocket.BinaryMessage, frame)
 		s.writeMu.Unlock()
 		if err != nil {
-			return err
+			return written, err
 		}
 		data = data[n:]
+		written += n
 	}
 	if fin {
 		frame, _ := binaryFrame(channel, nil, true)
 		s.writeMu.Lock()
 		err := s.conn.WriteMessage(websocket.BinaryMessage, frame)
 		s.writeMu.Unlock()
-		return err
+		return written, err
 	}
-	return nil
+	return written, nil
 }
 
 func (s *session) allocateChannel() uint32 {
 	s.agent.mu.Lock()
-	defer s.agent.mu.Unlock()
 	id := s.agent.nextChannel
 	s.agent.nextChannel += 2
+	s.agent.mu.Unlock()
+	s.writeMu.Lock()
 	s.credits[id] = initialChannelCredit
+	s.writeMu.Unlock()
 	return id
 }
 
@@ -202,9 +271,21 @@ func (s *session) handle(req request) {
 		return
 	}
 	if result != nil {
-		s.writeText(success(req.ID, result))
+		var after func()
+		if deferred, ok := result.(deferredResponse); ok {
+			result, after = deferred.result, deferred.after
+		}
+		response := success(req.ID, result)
+		if len(response) > maxControlFrame {
+			response = failure(req.ID, fail("ELIMIT", "control response exceeds 1 MiB"))
+			after = nil
+		}
+		s.writeText(response)
 		if req.Method == "session.hello" && s.resuming {
 			s.bindProcesses()
+		}
+		if after != nil {
+			after()
 		}
 	}
 }
@@ -234,12 +315,23 @@ func (s *session) dispatch(req request) (any, error) {
 			return nil, fail("EPROTO", "unsupported protocol version")
 		}
 		resumed := p.ResumeToken != ""
+		s.agent.mu.Lock()
+		if !resumed && s.agent.initialized {
+			s.agent.mu.Unlock()
+			return nil, fail("EGONE", "session already requires a resume token")
+		}
 		if resumed && p.ResumeToken != s.agent.resumeToken {
+			s.agent.mu.Unlock()
 			return nil, fail("EGONE", "resume token is no longer valid")
 		}
+		s.agent.sessionEpoch++
+		s.agent.initialized = true
+		s.epoch = s.agent.sessionEpoch
+		resumeToken := s.agent.resumeToken
+		s.agent.mu.Unlock()
 		s.ready = true
 		s.resuming = resumed
-		return map[string]any{"workdir": s.agent.root.root, "agentVersion": version, "resumed": resumed, "resumeToken": s.agent.resumeToken}, nil
+		return map[string]any{"workdir": s.agent.root.root, "agentVersion": version, "resumed": resumed, "resumeToken": resumeToken}, nil
 	case "session.ping":
 		return map[string]any{}, nil
 	case "ch.credit":
@@ -250,10 +342,19 @@ func (s *session) dispatch(req request) (any, error) {
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
+		if p.Channel == 0 || p.Channel%2 != 0 || p.Bytes <= 0 || p.Bytes > maxBinaryPayload {
+			return nil, fail("EPROTO", "invalid channel credit")
+		}
 		s.writeMu.Lock()
-		s.credits[p.Channel] += p.Bytes
-		s.creditCond.Broadcast()
+		credit, ok := s.credits[p.Channel]
+		if ok && credit <= int64(maxMountBytes)-p.Bytes {
+			s.credits[p.Channel] += p.Bytes
+			s.creditCond.Broadcast()
+		}
 		s.writeMu.Unlock()
+		if !ok {
+			return nil, fail("EPROTO", "unknown channel")
+		}
 		return map[string]any{}, nil
 	case "fs.readFile":
 		return s.readFile(req)
@@ -345,13 +446,28 @@ func (s *session) handleBinary(frame []byte) {
 	} else {
 		destination, resolveErr := s.agent.root.resolve(upload.path, true)
 		if resolveErr == nil {
-			resolveErr = os.MkdirAll(destination, 0o755)
+			resolveErr = os.MkdirAll(filepath.Dir(destination), 0o755)
+		}
+		var staging string
+		if resolveErr == nil {
+			staging, resolveErr = os.MkdirTemp(filepath.Dir(destination), ".remote-mount-*")
 		}
 		if resolveErr == nil {
-			resolveErr = unpackZip(bytes.NewReader(upload.buf.Bytes()), int64(upload.buf.Len()), destination)
+			resolveErr = unpackZip(bytes.NewReader(upload.buf.Bytes()), int64(upload.buf.Len()), staging)
+		}
+		if resolveErr == nil {
+			resolveErr = mergeMount(staging, destination)
+		}
+		if staging != "" {
+			_ = os.RemoveAll(staging)
 		}
 		if resolveErr != nil {
-			s.writeText(failure(upload.requestID, resolveErr))
+			var protocolError *rcpError
+			if errors.As(resolveErr, &protocolError) {
+				s.writeText(failure(upload.requestID, resolveErr))
+			} else {
+				s.writeText(failure(upload.requestID, mapFsError(resolveErr)))
+			}
 			return
 		}
 	}

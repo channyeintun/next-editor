@@ -43,6 +43,26 @@ func TestJailRejectsEscapes(t *testing.T) {
 	if _, err := j.resolve("safe/nested-link/missing/child", true); err == nil {
 		t.Fatal("accepted missing path beneath symlink escape")
 	}
+	outsideFile := filepath.Join(outside, "outside.txt")
+	if err := os.WriteFile(outsideFile, []byte("outside"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideFile, filepath.Join(root, "final-link")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := j.resolve("final-link", true); err == nil {
+		t.Fatal("accepted a final symlink escaping the workspace for a following operation")
+	}
+	if got, err := j.resolveEntry("final-link", false); err != nil || got != filepath.Join(root, "final-link") {
+		t.Fatalf("could not resolve the symlink entry itself: %q %v", got, err)
+	}
+	absoluteInside := filepath.Join(root, "safe", "file.txt")
+	if got, err := j.resolve(absoluteInside, true); err != nil || got != absoluteInside {
+		t.Fatalf("workspace absolute path did not round-trip: %q %v", got, err)
+	}
+	if _, err := j.resolve(outsideFile, false); err == nil {
+		t.Fatal("accepted an absolute path outside the workspace")
+	}
 }
 
 func TestFilesystemErrnoMapping(t *testing.T) {
@@ -77,6 +97,34 @@ func TestSignaledExitCode(t *testing.T) {
 	err := cmd.Run()
 	if code := processExitCode(err); code != 128+int(syscall.SIGTERM) {
 		t.Fatalf("got %d", code)
+	}
+}
+
+func TestProcessLimitCountsOnlyActiveProcesses(t *testing.T) {
+	exited := 0
+	a := &agent{processes: map[int]*runningProcess{
+		1: {id: 1},
+		2: {id: 2, exitCode: &exited},
+	}}
+	a.mu.Lock()
+	count := a.activeProcessCountLocked()
+	a.mu.Unlock()
+	if count != 1 {
+		t.Fatalf("counted %d active processes, want 1", count)
+	}
+}
+
+func TestEstablishedSessionRequiresResumeToken(t *testing.T) {
+	a := newAgent(t.TempDir(), 8600)
+	first := &session{agent: a}
+	params := []byte(`{"protocolVersion":1}`)
+	if _, err := first.dispatch(request{Method: "session.hello", Params: params}); err != nil {
+		t.Fatal(err)
+	}
+	second := &session{agent: a}
+	if _, err := second.dispatch(request{Method: "session.hello", Params: params}); err == nil ||
+		!strings.HasPrefix(err.Error(), "EGONE:") {
+		t.Fatalf("fresh attach replaced an established session: %v", err)
 	}
 }
 

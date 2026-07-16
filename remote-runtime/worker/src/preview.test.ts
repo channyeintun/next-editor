@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { previewResponseHeaders, previewScriptMarkup } from "./preview";
+import {
+  previewResponseHeaders,
+  previewScriptMarkup,
+  previewWebSocketInit,
+} from "./preview";
 
 describe("preview ingress", () => {
   it("sets embedder headers and strips sandbox cookies", () => {
@@ -10,7 +14,21 @@ describe("preview ingress", () => {
   });
 
   it("renders attributes and prevents script-tag breakout", () => {
-    expect(previewScriptMarkup({ src: "x='</script><p>'", options: { type: "module", defer: true } }))
-      .toBe(`<script type="module" defer>x='<\\/script><p>'</script>`);
+    expect(previewScriptMarkup({
+      prelude: "setup('</SCRIPT><p>')",
+      src: "x='</script><p>'",
+      options: { type: "module", defer: true },
+    })).toBe(`<script>setup('<\\/script><p>')</script><script type="module" defer>x='<\\/script><p>'</script>`);
+  });
+
+  it("preserves the WebSocket handle while decorating an HMR upgrade", () => {
+    const webSocket = {} as WebSocket;
+    const headers = new Headers();
+    expect(previewWebSocketInit({ webSocket }, headers)).toEqual({
+      status: 101,
+      headers,
+      webSocket,
+    });
+    expect(previewWebSocketInit({ webSocket: null }, headers)).toBeUndefined();
   });
 });

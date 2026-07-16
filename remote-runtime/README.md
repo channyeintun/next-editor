@@ -4,6 +4,9 @@ This directory is an isolated implementation of the remote runtime described in
 `../docs/remote-runtime-design.md`. It is intentionally not wired into the editor or the existing
 `infra/` Worker yet.
 
+The implementation audit, resolved findings, and remaining environment validation gates are in
+[`../docs/remote-runtime-review.md`](../docs/remote-runtime-review.md).
+
 ## Components
 
 - `src/rcp`: the TypeScript RCP codec, channel multiplexer, limits, and error mapping.

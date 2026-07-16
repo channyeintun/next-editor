@@ -5,6 +5,10 @@ This package enforces the RCP v1 limits in both codecs and the agent: 1 MiB cont
 and 64 path components. Channel credit is replenished only after bytes are consumed. The Go frame
 parser includes a native fuzz target (`FuzzParseBinaryFrame`).
 
+An interrupted RCP session is resumable for 60 seconds. If no valid resume arrives, the agent
+rotates the token, terminates retained processes and watchers, and exits so the control plane can
+finalize usage instead of extending the session to the general idle-timeout maximum.
+
 Container egress is intentionally enabled in v1 so `go get`, module downloads, and application HTTP
 requests work. Isolation comes from one Cloudflare Container per session, a non-root image user, no
 secrets inside the image, jailed filesystem RPCs, signed session WebSockets, runtime allowlisting,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RCP_LIMITS } from "../rcp/types";
 import { RcpConnection } from "./connection";
 
 class MockWebSocket extends EventTarget {
@@ -62,6 +63,23 @@ describe("RCP connection", () => {
       typeof item === "string" && JSON.parse(item).m === "session.hello"
     );
     expect(JSON.parse(hello as string).p.resumeToken).toBe("resume-1");
+    connection.close();
+  });
+
+  it("rejects oversized outbound control frames before registering a request", async () => {
+    MockWebSocket.instances = [];
+    const connection = new RcpConnection({
+      wsUrl: "ws://agent.test/ws",
+      WebSocketImpl: MockWebSocket as unknown as typeof WebSocket,
+    });
+    await connection.open();
+    expect(() => connection.beginRequest("proc.spawn", {
+      cmd: "tool",
+      args: [],
+      env: { HUGE: "x".repeat(RCP_LIMITS.maxControlFrameBytes) },
+      output: true,
+    })).toThrow("ELIMIT:");
+    await expect(connection.request("session.ping", {})).resolves.toEqual({});
     connection.close();
   });
 });

@@ -1,7 +1,11 @@
 import type { WebContainer } from "@webcontainer/api";
 import { RcpConnection, type ConnectionOptions } from "./connection";
 import { treeToZip, zipToTree } from "./mountZip";
-import { listenForPreviewMessages } from "./previewMessages";
+import {
+  createPreviewErrorForwarder,
+  listenForPreviewMessages,
+  type PreviewMessage,
+} from "./previewMessages";
 import { RemoteFs } from "./RemoteFs";
 import { RemoteProcess } from "./RemoteProcess";
 import type {
@@ -19,8 +23,33 @@ export function renderPreviewUrl(template: string, sessionId: string, port: numb
   return template.replaceAll("{{sessionId}}", sessionId).replaceAll("{{port}}", String(port));
 }
 
-export class RemoteContainer {
-  readonly fs: WebContainer["fs"];
+export function matchesPreviewOrigin(
+  template: string,
+  sessionId: string,
+  port: number,
+  origin: string,
+): boolean {
+  try {
+    return new URL(renderPreviewUrl(template, sessionId, port)).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
+export function matchesPreviewMessageSource(
+  template: string,
+  sessionId: string,
+  message: Pick<PreviewMessage, "port" | "previewId">,
+  origin: string,
+): boolean {
+  return (!sessionId || message.previewId === sessionId)
+    && matchesPreviewOrigin(template, sessionId, message.port, origin);
+}
+
+export class RemoteContainer implements Pick<WebContainer,
+  "fs" | "mount" | "spawn" | "export" | "on" | "setPreviewScript" | "teardown" | "path" | "workdir"
+> {
+  readonly fs: RemoteFs;
   readonly on: WebContainer["on"];
   readonly path = "/";
   readonly workdir: string;
@@ -32,8 +61,9 @@ export class RemoteContainer {
     private readonly connection: RcpConnection,
     private readonly previewUrlTemplate: string,
     private readonly control?: { endpoint: string; sessionId: string; token?: string },
+    private readonly forwardPreviewErrors?: boolean | "exceptions-only",
   ) {
-    this.fs = new RemoteFs(connection) as unknown as WebContainer["fs"];
+    this.fs = new RemoteFs(connection);
     this.on = ((event: EventName, listener: Listener) => {
       let listeners = this.listeners.get(event);
       if (!listeners) { listeners = new Set(); this.listeners.set(event, listeners); }
@@ -48,7 +78,7 @@ export class RemoteContainer {
     });
     connection.on("fatal", ({ message }) => this.emit("error", { message }));
     this.removePreviewListener = listenForPreviewMessages(
-      (origin) => this.isPreviewOrigin(origin),
+      (origin, message) => this.isPreviewOrigin(origin, message),
       (message) => this.emit("preview-message", message),
     );
   }
@@ -75,10 +105,24 @@ export class RemoteContainer {
       sessionId: string; wsUrl: string; previewUrlTemplate: string; token?: string;
     };
     const connection = new RcpConnection({ wsUrl: provisioned.wsUrl, token: provisioned.token });
-    await connection.open();
-    return new RemoteContainer(connection, provisioned.previewUrlTemplate, {
-      endpoint, sessionId: provisioned.sessionId, token: provisioned.token,
-    });
+    try {
+      await connection.open();
+      const container = new RemoteContainer(connection, provisioned.previewUrlTemplate, {
+        endpoint, sessionId: provisioned.sessionId, token: provisioned.token,
+      }, options.forwardPreviewErrors);
+      if (options.forwardPreviewErrors && typeof window !== "undefined") {
+        await container.setPreviewScript("");
+      }
+      return container;
+    } catch (error) {
+      connection.close();
+      void fetch(`${endpoint}/sessions/${provisioned.sessionId}`, {
+        method: "DELETE",
+        keepalive: true,
+        headers: provisioned.token ? { Authorization: `Bearer ${provisioned.token}` } : {},
+      }).catch(() => {});
+      throw error;
+    }
   }
 
   static async attach(target: {
@@ -88,8 +132,13 @@ export class RemoteContainer {
     WebSocketImpl?: ConnectionOptions["WebSocketImpl"];
   }): Promise<RemoteContainer> {
     const connection = new RcpConnection(target);
-    await connection.open();
-    return new RemoteContainer(connection, target.previewUrlTemplate);
+    try {
+      await connection.open();
+      return new RemoteContainer(connection, target.previewUrlTemplate);
+    } catch (error) {
+      connection.close();
+      throw error;
+    }
   }
 
   async mount(
@@ -134,10 +183,18 @@ export class RemoteContainer {
 
   async setPreviewScript(src: string, options: PreviewScriptOptions = {}): Promise<void> {
     if (!this.control) { console.warn("setPreviewScript is unavailable in direct attach mode"); return; }
+    const editorOrigin = typeof window !== "undefined" ? window.location.origin : undefined;
+    const prelude = this.forwardPreviewErrors && editorOrigin
+      ? createPreviewErrorForwarder({
+          targetOrigin: editorOrigin,
+          previewId: this.control.sessionId,
+          mode: this.forwardPreviewErrors,
+        })
+      : undefined;
     const response = await fetch(`${this.control.endpoint}/sessions/${this.control.sessionId}/preview-script`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", ...(this.control.token ? { Authorization: `Bearer ${this.control.token}` } : {}) },
-      body: JSON.stringify({ src, options }),
+      body: JSON.stringify({ src, options, prelude }),
     });
     if (!response.ok) throw new Error(`Failed to set preview script (${response.status})`);
   }
@@ -160,8 +217,13 @@ export class RemoteContainer {
     return renderPreviewUrl(this.previewUrlTemplate, this.control?.sessionId ?? "", port);
   }
 
-  private isPreviewOrigin(origin: string): boolean {
-    try { return new URL(this.previewUrl(8600)).origin === origin; } catch { return false; }
+  private isPreviewOrigin(origin: string, message: PreviewMessage): boolean {
+    return matchesPreviewMessageSource(
+      this.previewUrlTemplate,
+      this.control?.sessionId ?? "",
+      message,
+      origin,
+    );
   }
 
   private emit(event: EventName, ...args: unknown[]): void {

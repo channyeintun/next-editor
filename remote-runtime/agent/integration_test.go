@@ -180,6 +180,29 @@ func TestAgentProcessAndPTY(t *testing.T) {
 	}
 }
 
+func TestAgentSendsSpawnResponseBeforeProcessFrames(t *testing.T) {
+	client, closeClient := newTestClient(t)
+	defer closeClient()
+	id := client.sendRequest("proc.spawn", map[string]any{
+		"cmd": "sh", "args": []string{"-c", "printf fast-output"},
+		"env": map[string]string{}, "output": true,
+	})
+	kind, data, err := client.conn.ReadMessage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kind != websocket.TextMessage {
+		t.Fatalf("received process data before spawn response: message type %d", kind)
+	}
+	var frame struct {
+		Type string `json:"t"`
+		ID   uint64 `json:"id"`
+	}
+	if err := json.Unmarshal(data, &frame); err != nil || frame.Type != "ok" || frame.ID != id {
+		t.Fatalf("first frame was not the spawn response: %s (%v)", data, err)
+	}
+}
+
 func TestAgentResumeFlushesBufferedProcessOutput(t *testing.T) {
 	a := newAgent(t.TempDir(), 8600)
 	mux := http.NewServeMux()
@@ -200,6 +223,30 @@ func TestAgentResumeFlushesBufferedProcessOutput(t *testing.T) {
 	defer second.conn.Close()
 	if got := second.collectChannel(spawned.Out); !strings.Contains(got, "resumed-output") {
 		t.Fatalf("missing buffered output: %q", got)
+	}
+}
+
+func TestAgentExpiresAnUnresumedSession(t *testing.T) {
+	a := newAgent(t.TempDir(), 8600)
+	a.resumeGrace = 20 * time.Millisecond
+	expired := make(chan struct{}, 1)
+	a.onResumeExpired = func() { expired <- struct{}{} }
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", a.serveWS)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	client := dialTestClient(t, server.URL, "")
+	oldToken := a.resumeToken
+	if err := client.conn.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-expired:
+	case <-time.After(time.Second):
+		t.Fatal("resume window did not expire")
+	}
+	if a.resumeToken == oldToken {
+		t.Fatal("resume token was not rotated on expiry")
 	}
 }
 

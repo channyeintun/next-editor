@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -37,32 +38,35 @@ func (s *session) readFile(req request) (any, error) {
 	if info.Size() > maxFileBytes {
 		return nil, fail("ELIMIT", "file exceeds 64 MiB")
 	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, mapFsError(err)
+	}
 	channel := s.allocateChannel()
-	go func() {
-		file, openErr := os.Open(path)
-		if openErr != nil {
-			s.writeText(event("fatal", map[string]string{"message": openErr.Error()}))
-			return
-		}
-		defer file.Close()
-		buffer := make([]byte, maxBinaryPayload)
-		for {
-			n, readErr := file.Read(buffer)
-			if n > 0 {
-				if s.writeBinary(channel, buffer[:n], false) != nil {
-					return
+	return deferredResponse{
+		result: map[string]any{"ch": channel},
+		after: func() {
+			go func() {
+				defer file.Close()
+				buffer := make([]byte, maxBinaryPayload)
+				for {
+					n, readErr := file.Read(buffer)
+					if n > 0 {
+						if s.writeBinary(channel, buffer[:n], false) != nil {
+							return
+						}
+					}
+					if readErr == io.EOF {
+						_ = s.writeBinary(channel, nil, true)
+						return
+					}
+					if readErr != nil {
+						return
+					}
 				}
-			}
-			if readErr == io.EOF {
-				_ = s.writeBinary(channel, nil, true)
-				return
-			}
-			if readErr != nil {
-				return
-			}
-		}
-	}()
-	return map[string]any{"ch": channel}, nil
+			}()
+		},
+	}, nil
 }
 
 func (s *session) mkdir(req request) (any, error) {
@@ -125,7 +129,7 @@ func (s *session) remove(req request) (any, error) {
 	if err := decodeParams(req.Params, &p); err != nil {
 		return nil, err
 	}
-	path, err := s.agent.root.resolve(p.Path, p.Force)
+	path, err := s.agent.root.resolveEntry(p.Path, p.Force)
 	if err != nil {
 		if p.Force {
 			return map[string]any{}, nil
@@ -148,11 +152,11 @@ func (s *session) rename(req request) (any, error) {
 	if err := decodeParams(req.Params, &p); err != nil {
 		return nil, err
 	}
-	from, err := s.agent.root.resolve(p.From, false)
+	from, err := s.agent.root.resolveEntry(p.From, false)
 	if err != nil {
 		return nil, err
 	}
-	to, err := s.agent.root.resolve(p.To, true)
+	to, err := s.agent.root.resolveEntry(p.To, true)
 	if err != nil {
 		return nil, err
 	}
@@ -201,11 +205,12 @@ func (s *session) watch(req request) (any, error) {
 		return nil, err
 	}
 	s.agent.mu.Lock()
-	if len(s.agent.watches) >= maxWatches {
+	old := s.agent.watches[p.WatchID]
+	if old == nil && len(s.agent.watches) >= maxWatches {
 		s.agent.mu.Unlock()
 		return nil, fail("ELIMIT", "watch limit reached")
 	}
-	if old := s.agent.watches[p.WatchID]; old != nil {
+	if old != nil {
 		old()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -260,6 +265,22 @@ func (s *session) unwatch(req request) (any, error) {
 	return map[string]any{}, nil
 }
 
+// activeProcessCountLocked counts only processes that have not reported an
+// exit. Exited entries remain in the map briefly so reconnecting clients can
+// still receive their exit event.
+func (a *agent) activeProcessCountLocked() int {
+	activeProcesses := 0
+	for _, process := range a.processes {
+		process.mu.Lock()
+		active := process.exitCode == nil
+		process.mu.Unlock()
+		if active {
+			activeProcesses++
+		}
+	}
+	return activeProcesses
+}
+
 func (s *session) spawn(req request) (any, error) {
 	var p struct {
 		Cmd      string            `json:"cmd"`
@@ -273,7 +294,7 @@ func (s *session) spawn(req request) (any, error) {
 		return nil, err
 	}
 	s.agent.mu.Lock()
-	if len(s.agent.processes) >= maxProcesses {
+	if s.agent.activeProcessCountLocked() >= maxProcesses {
 		s.agent.mu.Unlock()
 		return nil, fail("ELIMIT", "process limit reached")
 	}
@@ -337,8 +358,10 @@ func (s *session) spawn(req request) (any, error) {
 	s.agent.mu.Lock()
 	s.agent.processes[pid] = proc
 	s.agent.mu.Unlock()
-	go s.streamProcess(proc, output, p.Output)
-	return map[string]any{"pid": pid, "outCh": outCh, "inCh": inCh}, nil
+	return deferredResponse{
+		result: map[string]any{"pid": pid, "outCh": outCh, "inCh": inCh},
+		after:  func() { go s.streamProcess(proc, output, p.Output) },
+	}, nil
 }
 
 func (s *session) streamProcess(proc *runningProcess, output io.ReadCloser, enabled bool) {
@@ -372,8 +395,12 @@ func (s *session) streamProcess(proc *runningProcess, output io.ReadCloser, enab
 func (process *runningProcess) deliver(data []byte) {
 	process.mu.Lock()
 	defer process.mu.Unlock()
-	if process.session != nil && process.session.writeBinary(process.outChannel, data, false) == nil {
-		return
+	if process.session != nil {
+		written, err := process.session.writeBinaryProgress(process.outChannel, data, false)
+		if err == nil {
+			return
+		}
+		data = data[written:]
 	}
 	process.session = nil
 	process.buffered = append(process.buffered, data...)
@@ -466,9 +493,9 @@ func (s *session) kill(req request) (any, error) {
 	_ = syscall.Kill(-proc.cmd.Process.Pid, syscall.SIGTERM)
 	go func() {
 		time.Sleep(2 * time.Second)
-		s.agent.mu.Lock()
-		_, alive := s.agent.processes[p.PID]
-		s.agent.mu.Unlock()
+		proc.mu.Lock()
+		alive := proc.exitCode == nil
+		proc.mu.Unlock()
 		if alive {
 			_ = syscall.Kill(-proc.cmd.Process.Pid, syscall.SIGKILL)
 		}
@@ -490,6 +517,7 @@ func (s *session) export(req request) (any, error) {
 	}
 	var buffer bytes.Buffer
 	zw := zip.NewWriter(&buffer)
+	var exportedBytes int64
 	err = filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -525,6 +553,13 @@ func (s *session) export(req request) (any, error) {
 			}
 			return e
 		}
+		if info.Size() > maxFileBytes {
+			return fail("ELIMIT", "exported file exceeds 64 MiB")
+		}
+		if info.Size() > int64(maxMountBytes)-exportedBytes {
+			return fail("ELIMIT", "export exceeds 256 MiB")
+		}
+		exportedBytes += info.Size()
 		writer, e := zw.CreateHeader(header)
 		if e != nil {
 			return e
@@ -533,20 +568,32 @@ func (s *session) export(req request) (any, error) {
 		if e != nil {
 			return e
 		}
-		defer file.Close()
-		_, e = io.Copy(writer, file)
-		return e
+		_, copyErr := io.Copy(writer, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
 	})
 	closeErr := zw.Close()
 	if err != nil {
+		var protocolError *rcpError
+		if errors.As(err, &protocolError) {
+			return nil, err
+		}
 		return nil, mapFsError(err)
 	}
 	if closeErr != nil {
 		return nil, fail("EPROTO", closeErr.Error())
 	}
+	if buffer.Len() > maxMountBytes {
+		return nil, fail("ELIMIT", "export archive exceeds 256 MiB")
+	}
 	channel := s.allocateChannel()
-	go s.writeBinary(channel, buffer.Bytes(), true)
-	return map[string]any{"ch": channel}, nil
+	return deferredResponse{
+		result: map[string]any{"ch": channel},
+		after:  func() { go func() { _ = s.writeBinary(channel, buffer.Bytes(), true) }() },
+	}, nil
 }
 
 func matchesExportPath(name string, includes, excludes []string) bool {

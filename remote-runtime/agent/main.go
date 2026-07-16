@@ -13,7 +13,11 @@ var version = "dev"
 
 func main() {
 	port := flag.Int("port", 8600, "HTTP listen port")
-	workspace := flag.String("workspace", "/workspace/project", "workspace directory")
+	defaultWorkspace := os.Getenv("REMOTE_RUNTIME_WORKSPACE")
+	if defaultWorkspace == "" {
+		defaultWorkspace = "/workspace/project"
+	}
+	workspace := flag.String("workspace", defaultWorkspace, "workspace directory")
 	flag.Parse()
 
 	root, err := filepath.Abs(*workspace)
@@ -25,6 +29,10 @@ func main() {
 	}
 
 	agent := newAgent(root, *port)
+	agent.onResumeExpired = func() {
+		log.Printf("remote runtime resume window expired; stopping container")
+		os.Exit(0)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

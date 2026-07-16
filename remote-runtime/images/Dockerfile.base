@@ -18,4 +18,4 @@ USER runtime
 WORKDIR /workspace/project
 EXPOSE 8600
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/runtime-agent"]
-CMD ["--port", "8600", "--workspace", "/workspace/project"]
+CMD ["--port", "8600"]

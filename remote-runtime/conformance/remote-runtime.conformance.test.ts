@@ -44,6 +44,11 @@ describe.skipIf(!agentUrl && !endpoint)("RemoteContainer conformance", () => {
     await container.fs.rename("hello.txt", "renamed.txt");
     await expect(container.fs.readFile("hello.txt")).rejects.toThrow(/^ENOENT:/);
     await container.fs.rm("created");
+    await container.fs.mkdir("nested/child", { recursive: true });
+    await container.fs.writeFile("nested/child/value.txt", "value");
+    await container.fs.rm("nested", { recursive: true, force: true });
+    await expect(container.fs.readFile("nested/child/value.txt")).rejects.toThrow(/^ENOENT:/);
+    await expect(container.fs.rm("missing", { force: true })).resolves.toBeUndefined();
   });
 
   it("spawns pipe and PTY processes with exit, resize, and kill semantics", async () => {
@@ -58,6 +63,31 @@ describe.skipIf(!agentUrl && !endpoint)("RemoteContainer conformance", () => {
     const long = await container.spawn("sh", ["-c", "sleep 100 & wait"]);
     long.kill();
     expect([137, 143]).toContain(await long.exit);
+  });
+
+  it("bridges stdin and applies cwd, env, and dynamic PTY resize", async () => {
+    await container.fs.mkdir("cwd", { recursive: true });
+    const configured = await container.spawn("sh", ["-c", "printf '%s:%s' \"$RCP_VALUE\" \"$PWD\""], {
+      cwd: "cwd",
+      env: { RCP_VALUE: 42 },
+    });
+    expect(await collect(configured.output)).toMatch(/42:.*\/cwd$/);
+    expect(await configured.exit).toBe(0);
+
+    const terminal = await container.spawn("sh", [], { terminal: { cols: 80, rows: 24 } });
+    terminal.resize({ cols: 101, rows: 42 });
+    const writer = terminal.input.getWriter();
+    await writer.write("stty size\nexit\n");
+    writer.releaseLock();
+    expect(await collect(terminal.output)).toContain("42 101");
+    expect(await terminal.exit).toBe(0);
+
+    const piped = await container.spawn("cat");
+    const input = piped.input.getWriter();
+    await input.write("stdin round-trip");
+    await input.close();
+    expect(await collect(piped.output)).toContain("stdin round-trip");
+    expect(await piped.exit).toBe(0);
   });
 
   it("emits recursive watch events", async () => {
@@ -92,8 +122,14 @@ func main() { _ = http.ListenAndServe(":18080", http.HandlerFunc(func(w http.Res
     });
     const server = await container.spawn("go", ["run", "server.go"]);
     await expect(ready).resolves.toContain("18080");
+    const closed = new Promise<void>((resolve) => {
+      const off = container.on("port", (port, type) => {
+        if (port === 18080 && type === "close") { off(); resolve(); }
+      });
+    });
     server.kill();
     await server.exit;
+    await expect(closed).resolves.toBeUndefined();
   });
 
   it.runIf(process.env.REMOTE_RUNTIME_SOAK === "1")("preserves ordered output through a 30-minute reconnect soak", async () => {

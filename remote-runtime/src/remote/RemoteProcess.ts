@@ -1,6 +1,7 @@
+import type { WebContainerProcess } from "@webcontainer/api";
 import { RcpConnection } from "./connection";
 
-export class RemoteProcess {
+export class RemoteProcess implements WebContainerProcess {
   readonly exit: Promise<number>;
   readonly input: WritableStream<string>;
   readonly output: ReadableStream<string>;
