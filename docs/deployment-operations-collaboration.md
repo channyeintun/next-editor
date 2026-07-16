@@ -9,8 +9,8 @@ available after live ends.
 
 ## Required production resources
 
-- A dedicated Upstash Redis database for collaboration. Do not share the optional lesson-cache
-  database or its command budget.
+- An Upstash Redis database reserved for collaboration and Realtime. Public lesson and playlist
+  caching uses Cloudflare Workers KV, not Redis.
 - Upstash Realtime enabled against that database.
 - QStash token plus current and next receiver signing keys.
 - The existing Cloudflare Worker, D1 database, and private R2 bucket.
@@ -44,9 +44,9 @@ wrangler d1 migrations apply next-editor-tube --remote --config infra/wrangler.t
 ```
 
 Deploy the Worker only after the migration succeeds. A missing collaboration Redis configuration
-fails rooms closed with `503`; it never falls back to the optional cache database. QStash may be
-omitted in local development, where threshold compaction runs inline, but production should
-configure it so maintenance stays outside the edit acknowledgement path.
+fails rooms closed with `503`; it never falls back to Workers KV or D1 for document storage.
+QStash may be omitted in local development, where threshold compaction runs inline, but production
+should configure it so maintenance stays outside the edit acknowledgement path.
 
 ## Fixed safety limits
 
@@ -140,6 +140,6 @@ failures. Correlate by opaque room ID only; never add document content or invita
 
 Disable new room creation at the application/release layer before changing providers. Existing
 accepted rooms require their Redis history and R2 assets until they are closed, exported if
-needed, and retained for seven days. Do not point the collaboration credentials at the gallery
-cache during rollback. A future Durable Object adapter must use the same protocol and document
+needed, and retained for seven days. Do not reuse the collaboration credentials for application
+caching during rollback. A future Durable Object adapter must use the same protocol and document
 schema or provide an explicit migration; silently creating an empty replacement room is data loss.

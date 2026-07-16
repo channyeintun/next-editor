@@ -6,12 +6,8 @@ GOOGLE_CLIENT_SECRET=
 # Random 32+ byte secret, e.g. `openssl rand -hex 32`.
 SESSION_SECRET=
 
-# Optional fail-open gallery cache.
-UPSTASH_REDIS_REST_URL=
-UPSTASH_REDIS_REST_TOKEN=
-
-# Required when exercising live collaboration. Production should use a
-# dedicated database; local development may explicitly reuse the cache values.
+# Required when exercising live collaboration. Redis is reserved for the
+# collaboration/Realtime data plane; the gallery cache uses local Workers KV.
 COLLAB_REDIS_REST_URL=
 COLLAB_REDIS_REST_TOKEN=
 

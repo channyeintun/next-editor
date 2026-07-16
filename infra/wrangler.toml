@@ -1,10 +1,9 @@
 name = "next-editor-tube"
 main = "./worker/index.ts"
 compatibility_date = "2026-07-05"
-# Required by @upstash/redis/cloudflare's "uncrypto" dependency, which falls
-# back to requiring the real "node:crypto" module at runtime on Workers
-# (workerd only polyfills it under this flag) — without it, any request that
-# touches the cache throws "Dynamic require of node:crypto is not supported".
+# Required by the collaboration data plane's @upstash/redis/cloudflare
+# dependency, whose "uncrypto" fallback requires the real "node:crypto"
+# module at runtime on Workers.
 compatibility_flags = ["nodejs_compat"]
 
 # The browser-facing origin, used to build the exact Google OAuth redirect_uri
@@ -18,16 +17,8 @@ PUBLIC_URL = "https://nexteditor.dev"
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
 #   wrangler secret put GOOGLE_CLIENT_SECRET --config infra/wrangler.toml
 #   wrangler secret put SESSION_SECRET       --config infra/wrangler.toml
-# Optional Upstash Redis cache layer (infra/worker/cache.ts). Both values are
-# Worker secrets, never plaintext vars — the URL is project-identifying and
-# the token is a bearer credential for it, so neither belongs in a file
-# that's committed to the repo:
-#   wrangler secret put UPSTASH_REDIS_REST_URL   --config infra/wrangler.toml
-#   wrangler secret put UPSTASH_REDIS_REST_TOKEN --config infra/wrangler.toml
-# The app must work identically when these are unset.
-# Live collaboration is fail-closed and uses separate secret names. Production
-# should point them at a dedicated Redis database; local development may choose
-# to reuse one database by setting both pairs to the same values:
+# Live collaboration is fail-closed. Upstash Redis is reserved for this data
+# plane; public lesson/playlist caching uses the CACHE Workers KV binding:
 #   wrangler secret put COLLAB_REDIS_REST_URL   --config infra/wrangler.toml
 #   wrangler secret put COLLAB_REDIS_REST_TOKEN --config infra/wrangler.toml
 # QStash is optional for local development. Production should configure all
@@ -108,6 +99,12 @@ migrations_dir = "./db/migrations"
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "next-editor-tube-media"
+
+# Fail-open cache for public lesson and playlist reads. With no account-specific
+# ID checked in, Wrangler creates a persistent local namespace for development
+# and automatically provisions/attaches one on the first deployment.
+[[kv_namespaces]]
+binding = "CACHE"
 
 # Workers Logs + automatic tracing (traces are open beta): queryable console.*
 # output plus auto-spans for handler lifecycle, D1/R2 binding calls, and

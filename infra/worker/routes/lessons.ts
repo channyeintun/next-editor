@@ -257,9 +257,9 @@ lessonsRoute.post("/:id/publish", async (c) => {
   if (!row) {
     return c.json({ error: "not found" }, 404);
   }
-  // Not just a staleness optimization: without this, an unpublished lesson
-  // (or one whose slug-cache entry predates this publish) could keep serving
-  // a stale cached response — published or not — for up to SLUG_CACHE_TTL_SECONDS.
+  // Keep the KV entry aligned with the authoritative publish state. Workers KV
+  // is eventually consistent, so another edge can briefly retain its cached
+  // value even after this delete succeeds.
   await invalidateCache(getCache(c.env), lessonSlugKey(row.slug));
   return c.json(lessonRowToOwnedLesson(row));
 });
@@ -274,8 +274,8 @@ lessonsRoute.post("/:id/unpublish", async (c) => {
   if (!row) {
     return c.json({ error: "not found" }, 404);
   }
-  // See the publish route above — must bust the cache immediately so the
-  // now-unpublished lesson stops being served from a stale cache entry.
+  // See the publish route above. Delete the shared entry now; KV's 30-second
+  // regional read cache bounds the normal cross-edge propagation window.
   await invalidateCache(getCache(c.env), lessonSlugKey(row.slug));
   return c.json(lessonRowToOwnedLesson(row));
 });

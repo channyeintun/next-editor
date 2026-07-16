@@ -57,7 +57,7 @@ when an external realtime provider is not supplying that function.
 
 This is a self-hosted room service in the sense used by the feature plan: Cloudflare manages the
 runtime and storage, but the application owns the collaboration protocol and implementation. No
-Upstash service is required by this data plane. The existing optional Upstash cache may continue
+Upstash service is required by this data plane. The Cloudflare Workers KV cache may continue
 serving unrelated gallery reads.
 
 ## Production topology

@@ -321,8 +321,8 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
   },
   {
     n: "17",
-    title: "Upstash Redis",
-    detail: "read-through cache; app degrades gracefully if unset.",
+    title: "Workers KV",
+    detail: "eventually consistent read-through cache; KV errors fall through to D1.",
   },
 ];
 
@@ -359,11 +359,11 @@ export default function ArchitecturePage() {
               </div>
               <div>
                 <b>rev</b>
-                <span>A</span>
+                <span>B</span>
               </div>
               <div>
                 <b>date</b>
-                <span>2026-07-12</span>
+                <span>2026-07-16</span>
               </div>
             </div>
           </div>
@@ -374,8 +374,8 @@ export default function ArchitecturePage() {
               <desc>
                 User's browser runs the client app and connects over HTTPS to a Cloudflare Worker
                 edge, which talks to Google OAuth externally and reads/writes Cloudflare D1, R2 and
-                an optional external Redis cache. The client also sends analytics events, masked
-                session replay and error reports to PostHog Cloud (US).
+                Workers KV. The client also sends analytics events, masked session replay and error
+                reports to PostHog Cloud (US).
               </desc>
 
               <defs>
@@ -600,7 +600,7 @@ export default function ArchitecturePage() {
               <rect
                 x={40}
                 y={846}
-                width={860}
+                width={1240}
                 height={168}
                 rx={6}
                 fill="var(--paper-strong)"
@@ -624,25 +624,25 @@ export default function ArchitecturePage() {
               <Chip
                 x={64}
                 y={912}
-                width={398}
+                width={380}
                 title="D1 (SQLite)"
                 lines={["users, sessions, lessons,", "playlists, playlist_lessons"]}
                 tag={15}
               />
               <Chip
-                x={480}
+                x={460}
                 y={912}
-                width={384}
+                width={380}
                 title="R2 (object storage)"
                 lines={[".ne files, audio/video,", "thumbnails · served /media/:key"]}
                 tag={16}
               />
-
-              <ExternalBox
-                x={948}
-                y={878}
-                title="Upstash Redis"
-                lines={["optional cache layer", "lesson/playlist reads, ttl 1–5 min"]}
+              <Chip
+                x={856}
+                y={912}
+                width={400}
+                title="Workers KV (cache)"
+                lines={["lesson/playlist JSON reads,", "ttl 1–5 min · fail-open"]}
                 tag={17}
               />
             </svg>

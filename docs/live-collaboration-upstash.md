@@ -9,9 +9,9 @@ Companion documents:
 - [Cloudflare-native Deployment](./live-collaboration-cloudflare.md) evaluates a room service built
   with Cloudflare Durable Objects.
 
-This document evaluates whether the existing Upstash relationship should be extended from the
-optional Redis cache into the live-collaboration data plane. It covers Upstash Redis, Realtime,
-and QStash. It does not change the core decisions in the feature plan: Yjs remains the merge
+This document evaluates Upstash Redis, Realtime, and QStash for the live-collaboration data plane.
+Upstash is reserved for that purpose; unrelated lesson and playlist caching uses Cloudflare
+Workers KV. This does not change the core decisions in the feature plan: Yjs remains the merge
 engine, awareness remains logically ephemeral, and SCR3 remains a single-writer recording and
 replay format owned by the room host's browser.
 
@@ -95,21 +95,20 @@ The MVP implementation is complete. Realtime must still pass the deployed transp
 document before the fallback WebSocket option is discarded; this is a production-validation gate,
 not an additional editor implementation phase.
 
-## Existing Redis integration is not collaboration infrastructure
+## The Workers KV cache is not collaboration infrastructure
 
-The current integration in [`infra/worker/cache.ts`](../infra/worker/cache.ts) is an optional,
-fail-open cache in front of selected D1 reads:
+The integration in [`infra/worker/cache.ts`](../infra/worker/cache.ts) is a fail-open Cloudflare
+Workers KV cache in front of selected D1 reads:
 
-- Missing credentials disable the cache.
-- Redis errors fall back to D1.
+- A missing binding disables the cache.
+- KV errors fall back to D1.
 - Cached keys are disposable and expire.
 - Cache availability must never affect application correctness.
 
 Collaboration persistence has the opposite contract. Once a room accepts a durable CRDT update,
 the service must retain it or surface a connection failure. It cannot silently bypass storage.
 
-If Upstash Redis is selected, create a separate collaboration database and use separate Worker
-secrets, for example:
+Use a Redis database reserved for collaboration and configure it through dedicated Worker secrets:
 
 ```text
 COLLAB_REDIS_REST_URL
@@ -119,10 +118,10 @@ QSTASH_CURRENT_SIGNING_KEY
 QSTASH_NEXT_SIGNING_KEY
 ```
 
-A separate database provides independent retention, budgets, throughput, incident handling, and
-metrics. It also prevents high-frequency room traffic from competing with the gallery cache. The
-Redis and QStash credentials are server-only and must never be included in the browser bundle,
-invitation URLs, or any future room token.
+This single-purpose Redis database provides collaboration-specific retention, budgets, throughput,
+incident handling, and metrics. Gallery traffic never consumes its command allowance because that
+cache is a Workers KV binding. Redis and QStash credentials are server-only and must never be
+included in the browser bundle, invitation URLs, or any future room token.
 
 ## Option A: Upstash-centric room provider
 
@@ -354,11 +353,10 @@ Upstash positions both free plans for prototypes and hobby projects, which match
 development phase of this feature.
 
 Realtime does not add a separate collaboration quota: its connections, keepalives, history reads,
-and event emissions consume Redis commands. Therefore, the Redis allowance must cover both the
-existing Redis workload and all Realtime activity—or, as recommended here, the complete workload
-of a dedicated collaboration database. The $0 estimate is appropriate for development and
-prototypes, not an assumption about production cost; usage limits and pricing should be checked
-again before launch.
+and event emissions consume Redis commands. Therefore, the Redis allowance must cover the complete
+Realtime and collaboration persistence workload. The $0 estimate is appropriate for development
+and prototypes, not an assumption about production cost; usage limits and pricing should be
+checked again before launch.
 
 ### What consumes the Redis allowance
 
@@ -373,7 +371,8 @@ Realtime is billed through the Redis commands it performs:
 At ten emitted events per second, document/control traffic alone produces about 36,000 events and
 at least 72,000 Redis commands per hour. Running that load for one hour every day produces about
 2.16 million commands per month before connection, heartbeat, snapshot, role-check, and awareness
-operations. This is why collaboration should not share the existing cache database or its budget.
+operations. This is why the Redis database and its allowance are reserved for collaboration rather
+than unrelated application workloads.
 
 Upstash's published Realtime guidance says the HTTP/SSE design is not a one-for-one socket
 replacement and recommends a socket provider for extremely high-frequency traffic above roughly

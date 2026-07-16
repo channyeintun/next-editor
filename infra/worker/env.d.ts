@@ -7,13 +7,11 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string;
   SESSION_SECRET: string;
   PUBLIC_URL: string;
-  // Optional Upstash Redis REST cache layer (infra/worker/cache.ts). Absent
-  // in local/self-hosted setups — the app must work identically without it.
-  UPSTASH_REDIS_REST_URL?: string;
-  UPSTASH_REDIS_REST_TOKEN?: string;
-  // Required by live collaboration. These may point at the same database
-  // during local development, but production should use a dedicated Upstash
-  // Redis database with an independent budget and failure boundary.
+  // Cloudflare Workers KV cache (infra/worker/cache.ts). Optional in the type
+  // so self-hosted/test environments can omit it and fall through to D1.
+  CACHE?: KVNamespace;
+  // Required by live collaboration. Upstash Redis is reserved for this data
+  // plane and is never reused by the gallery cache.
   COLLAB_REDIS_REST_URL?: string;
   COLLAB_REDIS_REST_TOKEN?: string;
   // Optional in local development. When configured together, QStash handles

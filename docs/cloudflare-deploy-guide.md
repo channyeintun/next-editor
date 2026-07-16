@@ -106,30 +106,32 @@ Without a `[[routes]]` entry in `wrangler.toml`, this deploys to the free
 `https://<worker-name>.<your-subdomain>.workers.dev` URL. Smoke test there
 first (see above) before touching any domain/DNS.
 
-### Optional: Upstash Redis cache
+### Cloudflare Workers KV cache
 
-The lessons list/detail endpoints read through an optional cache (see
-[cloudflare-architecture.md](./cloudflare-architecture.md#caching--optional-upstash-redis-layer)).
-The app runs fine without it — skip this if you don't want the dependency yet.
+The public lesson and playlist endpoints read through the `CACHE` Workers KV
+binding (see
+[cloudflare-architecture.md](./cloudflare-architecture.md#caching--cloudflare-workers-kv)).
+No cache credentials or additional secrets are required.
 
-1. Create a free Redis database at https://console.upstash.com (Regional or
-   Global — Global is closer to Workers' edge locations).
-2. Set **both** the REST URL and token as secrets — same "pipe from a file,
-   then delete it" caution as step 4 above. Neither belongs in `wrangler.toml`
-   as a plaintext var (unlike `PUBLIC_URL`): the URL is project-identifying
-   and the token is a bearer credential for it, so both are secrets, not
-   vars committed to the repo.
-   ```sh
-   npx wrangler secret put UPSTASH_REDIS_REST_URL   < /path/to/tmpfile
-   npx wrangler secret put UPSTASH_REDIS_REST_TOKEN < /path/to/tmpfile
-   ```
-3. Redeploy (`npx wrangler deploy`). No D1/R2/schema changes needed — the
-   cache layer is purely additive.
+`infra/wrangler.toml` intentionally declares the binding without an
+account-specific namespace ID. The checked-in Wrangler version supports
+[automatic resource provisioning](https://developers.cloudflare.com/workers/wrangler/configuration/#automatic-provisioning):
+
+- `wrangler dev` creates and persists a local KV namespace.
+- The first `wrangler deploy` creates and attaches the production namespace.
+- An interactive deploy may write the generated ID back to `wrangler.toml`;
+  committing that public ID is optional because later deploys can inherit the
+  attached binding.
+
+After deploying and smoke-testing this migration, remove the obsolete
+`UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` Worker secrets if they
+exist. Keep `COLLAB_REDIS_REST_*`: those credentials now serve only the live
+collaboration/Realtime data plane.
 
 ### Required when enabling live collaboration: Upstash Redis data plane
 
-Live collaboration is fail-closed and does not reuse the optional cache
-configuration implicitly. Create a dedicated production Redis database, then
+Live collaboration is fail-closed and does not reuse the `CACHE` KV binding.
+Create a production Redis database reserved for collaboration/Realtime, then
 set its REST URL and token with the same secret-handling precautions:
 
 ```sh
@@ -137,9 +139,8 @@ npx wrangler secret put COLLAB_REDIS_REST_URL   < /path/to/tmpfile
 npx wrangler secret put COLLAB_REDIS_REST_TOKEN < /path/to/tmpfile
 ```
 
-Local development may explicitly set the collaboration and cache variables to
-the same free database, but production should keep their budgets, retention,
-and failure modes separate. Apply D1 migrations before deploying so
+The gallery cache does not use these credentials; it is isolated in Workers
+KV. Apply D1 migrations before deploying so
 `collaboration_rooms` and `collaboration_members` exist. The Worker returns
 `503 collaboration unavailable` from collaboration data-plane routes when the
 dedicated credentials are absent; unrelated editor and gallery routes continue

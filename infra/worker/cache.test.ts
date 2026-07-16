@@ -1,31 +1,46 @@
 import { describe, expect, it, vi } from "vitest";
-import { cached, invalidateCache } from "./cache";
-import type { Redis } from "@upstash/redis/cloudflare";
+import { cached, getCache, invalidateCache } from "./cache";
 
-// A minimal in-memory fake satisfying only the three Redis methods cached()
-// and invalidateCache() actually call — cast to Redis since the real client
-// isn't constructible without live Upstash credentials.
-function createFakeRedis(initial: Record<string, unknown> = {}) {
-  const store = new Map<string, unknown>(Object.entries(initial));
+// A minimal in-memory fake satisfying only the three KV methods cached() and
+// invalidateCache() call. Values are stored as strings, matching Workers KV.
+function createFakeKv(initial: Record<string, unknown> = {}) {
+  const store = new Map<string, string>();
+  for (const [key, value] of Object.entries(initial)) {
+    const serialized = JSON.stringify(value);
+    if (serialized !== undefined) store.set(key, serialized);
+  }
+
   return {
-    get: vi.fn<(key: string) => Promise<unknown>>(async (key) =>
-      store.has(key) ? store.get(key) : null,
-    ),
-    set: vi.fn<(key: string, value: unknown) => Promise<string>>(async (key, value) => {
-      store.set(key, value);
-      return "OK";
+    get: vi.fn(async (key: string, options?: { type?: string }) => {
+      const value = store.get(key);
+      if (value === undefined) return null;
+      return options?.type === "json" ? JSON.parse(value) : value;
     }),
-    del: vi.fn<(key: string) => Promise<number>>(async (key) => {
-      const existed = store.has(key);
+    put: vi.fn(async (key: string, value: string) => {
+      store.set(key, value);
+    }),
+    delete: vi.fn(async (key: string) => {
       store.delete(key);
-      return existed ? 1 : 0;
     }),
     store,
   };
 }
 
+describe("getCache", () => {
+  it("returns the Workers KV binding", () => {
+    const fake = createFakeKv();
+    const env = { CACHE: fake as unknown as KVNamespace } as Parameters<typeof getCache>[0];
+
+    expect(getCache(env)).toBe(fake);
+  });
+
+  it("returns null when the binding is unavailable", () => {
+    expect(getCache({} as Parameters<typeof getCache>[0])).toBeNull();
+  });
+});
+
 describe("cached", () => {
-  it("returns the loader's value directly when cache is null (Upstash not configured)", async () => {
+  it("returns the loader's value directly when the KV binding is unavailable", async () => {
     const loader = vi.fn<() => Promise<string>>(async () => "fresh-value");
 
     const result = await cached(null, "some-key", 60, loader);
@@ -35,44 +50,47 @@ describe("cached", () => {
   });
 
   it("on a cache hit, returns the cached value without calling the loader", async () => {
-    const fake = createFakeRedis({ "hit-key": "cached-value" });
+    const fake = createFakeKv({ "hit-key": "cached-value" });
     const loader = vi.fn<() => Promise<string>>(async () => "fresh-value");
 
-    const result = await cached(fake as unknown as Redis, "hit-key", 60, loader);
+    const result = await cached(fake as unknown as KVNamespace, "hit-key", 60, loader);
 
     expect(result).toBe("cached-value");
     expect(loader).not.toHaveBeenCalled();
-    expect(fake.set).not.toHaveBeenCalled();
+    expect(fake.get).toHaveBeenCalledWith("hit-key", { type: "json", cacheTtl: 30 });
+    expect(fake.put).not.toHaveBeenCalled();
   });
 
   it("on a cache miss, calls the loader and stores the result with the given TTL", async () => {
-    const fake = createFakeRedis();
+    const fake = createFakeKv();
     const loader = vi.fn<() => Promise<string>>(async () => "fresh-value");
 
-    const result = await cached(fake as unknown as Redis, "miss-key", 60, loader);
+    const result = await cached(fake as unknown as KVNamespace, "miss-key", 60, loader);
 
     expect(result).toBe("fresh-value");
     expect(loader).toHaveBeenCalledTimes(1);
-    expect(fake.set).toHaveBeenCalledWith("miss-key", "fresh-value", { ex: 60 });
+    expect(fake.put).toHaveBeenCalledWith("miss-key", JSON.stringify("fresh-value"), {
+      expirationTtl: 60,
+    });
   });
 
   it("falls back to the loader when the cache GET throws", async () => {
-    const fake = createFakeRedis();
-    fake.get.mockRejectedValueOnce(new Error("upstash unreachable"));
+    const fake = createFakeKv();
+    fake.get.mockRejectedValueOnce(new Error("KV unavailable"));
     const loader = vi.fn<() => Promise<string>>(async () => "fresh-value");
 
-    const result = await cached(fake as unknown as Redis, "some-key", 60, loader);
+    const result = await cached(fake as unknown as KVNamespace, "some-key", 60, loader);
 
     expect(result).toBe("fresh-value");
     expect(loader).toHaveBeenCalledTimes(1);
   });
 
-  it("still returns the loader's value when the cache SET throws", async () => {
-    const fake = createFakeRedis();
-    fake.set.mockRejectedValueOnce(new Error("upstash unreachable"));
+  it("still returns the loader's value when the cache PUT throws", async () => {
+    const fake = createFakeKv();
+    fake.put.mockRejectedValueOnce(new Error("KV unavailable"));
     const loader = vi.fn<() => Promise<string>>(async () => "fresh-value");
 
-    const result = await cached(fake as unknown as Redis, "some-key", 60, loader);
+    const result = await cached(fake as unknown as KVNamespace, "some-key", 60, loader);
 
     expect(result).toBe("fresh-value");
   });
@@ -84,18 +102,20 @@ describe("invalidateCache", () => {
   });
 
   it("deletes the given key", async () => {
-    const fake = createFakeRedis({ "some-key": "value" });
+    const fake = createFakeKv({ "some-key": "value" });
 
-    await invalidateCache(fake as unknown as Redis, "some-key");
+    await invalidateCache(fake as unknown as KVNamespace, "some-key");
 
-    expect(fake.del).toHaveBeenCalledWith("some-key");
+    expect(fake.delete).toHaveBeenCalledWith("some-key");
     expect(fake.store.has("some-key")).toBe(false);
   });
 
-  it("does not throw when the cache DEL throws", async () => {
-    const fake = createFakeRedis();
-    fake.del.mockRejectedValueOnce(new Error("upstash unreachable"));
+  it("does not throw when the cache delete throws", async () => {
+    const fake = createFakeKv();
+    fake.delete.mockRejectedValueOnce(new Error("KV unavailable"));
 
-    await expect(invalidateCache(fake as unknown as Redis, "some-key")).resolves.toBeUndefined();
+    await expect(
+      invalidateCache(fake as unknown as KVNamespace, "some-key"),
+    ).resolves.toBeUndefined();
   });
 });

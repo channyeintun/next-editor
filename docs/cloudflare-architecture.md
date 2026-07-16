@@ -205,31 +205,41 @@ The introduction lesson therefore **never touches D1** and keeps being served as
 plain edge-cached JSON + static assets — exactly the "frequent access" carve-out
 requested.
 
-## Caching — optional Upstash Redis layer
+## Caching — Cloudflare Workers KV
 
-The "Short TTL" cache in the table above is `infra/worker/cache.ts`: an
-optional cache-aside layer in front of the two highest-traffic D1 reads,
-`GET /api/lessons` (list, 60s TTL) and `GET /api/lessons/:slug` (300s TTL).
-Search (`/api/search`) is deliberately **not** cached — unbounded query
-cardinality would burn through Upstash's free-tier command budget for little
-benefit.
+The "Short TTL" cache in the table above is `infra/worker/cache.ts`: a
+cache-aside Workers KV layer in front of the highest-traffic public D1 reads.
+Lesson lists use a 60s key TTL, lesson details use 300s, and public playlist
+details use 60s. Search (`/api/search`) is deliberately **not** cached because
+its unbounded query cardinality has low reuse and would create unnecessary KV
+reads and writes.
 
-- **Optional by design.** `getCache(env)` returns `null` when
-  `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` aren't set, and every
-  Redis call in `cached()`/`invalidateCache()` is wrapped so a cache outage or
-  missing config falls back to hitting D1 directly — Upstash can never take
-  the app down.
-- **Invalidation.** `PATCH /api/lessons/:id`, `/publish`, `/unpublish`, and
-  `DELETE /api/lessons/:id` all `DEL` the affected lesson's slug-cache entry
-  immediately (critical for unpublish — otherwise a cached response could
-  keep serving an unpublished lesson for up to the 300s TTL). The paginated
-  list relies on its 60s TTL rather than per-page invalidation.
-- **Free tier fit** (256 MB storage / 10 GB bandwidth / 500K commands per
-  month): every key carries a TTL, a cache hit costs 1 command and a miss 2
-  (GET + SET), and search is excluded — comfortably inside the free tier for
-  hobby-scale traffic.
+- **Cloudflare binding, fail-open behavior.** `infra/wrangler.toml` declares
+  the `CACHE` KV binding. Wrangler persists it locally and can automatically
+  provision the production namespace on first deploy. `getCache(env)` still
+  returns `null` when a non-Wrangler/self-hosted environment omits the binding,
+  and every operation in `cached()`/`invalidateCache()` is wrapped so KV errors
+  fall back to D1.
+- **Encoding and expiry.** Values are JSON-serialized and written with
+  `expirationTtl`. Reads use KV's JSON mode and a 30s regional `cacheTtl`, the
+  current platform minimum, to keep cross-edge staleness shorter than the
+  stored entry TTL.
+- **Invalidation and consistency.** Lesson and playlist mutations delete the
+  affected slug key. Workers KV is eventually consistent: a delete is visible
+  immediately where it was issued, while another location can briefly retain
+  its cached value. The 30s read-cache setting bounds the normal regional cache
+  window; failed deletes fall back to the key's 60s or 300s expiration. The
+  paginated lesson list relies on its 60s expiration rather than per-page
+  invalidation.
+- **Quota behavior.** KV reads, writes, and deletes each consume their own
+  operation quotas. Every cache miss can cause one write, so production should
+  monitor the `CACHE` namespace—especially the Free plan's much smaller write
+  allowance. Quota errors remain fail-open and therefore increase D1 traffic
+  instead of failing requests.
 
-See [upstash-cache-plan.md](../upstash-cache-plan.md) for the integration plan.
+See Cloudflare's documentation for [KV consistency](https://developers.cloudflare.com/kv/concepts/how-kv-works/),
+[KV pricing](https://developers.cloudflare.com/kv/platform/pricing/), and
+[automatic Wrangler provisioning](https://developers.cloudflare.com/workers/wrangler/configuration/#automatic-provisioning).
 
 ## Auth — Google OAuth, first-party session
 
