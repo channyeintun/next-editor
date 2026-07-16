@@ -42,6 +42,7 @@ custom_domain = true
 [alias]
 hono = "hono"
 "hono/cookie" = "hono/cookie"
+"@upstash/qstash" = "@upstash/qstash"
 "@upstash/redis/cloudflare" = "@upstash/redis/cloudflare"
 "@upstash/realtime" = "@upstash/realtime"
 uncrypto = "uncrypto"

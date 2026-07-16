@@ -1,9 +1,22 @@
+import { Client, Receiver, type PublishRequest } from "@upstash/qstash";
 import { z } from "zod";
 import { collaborationIdSchema } from "../../../src/collaboration/protocol";
 import type { Env } from "../env";
 
-const QSTASH_PUBLISH_ORIGIN = "https://qstash.upstash.io";
 const CLOCK_TOLERANCE_SECONDS = 5;
+const QSTASH_DELIVERY_RETRIES = 3;
+const QSTASH_DELIVERY_TIMEOUT = "30s" as const;
+const QSTASH_ENVIRONMENT_KEYS = [
+  "QSTASH_TOKEN",
+  "QSTASH_CURRENT_SIGNING_KEY",
+  "QSTASH_NEXT_SIGNING_KEY",
+] as const;
+
+type QStashDelay = NonNullable<PublishRequest["delay"]>;
+export type CollaborationQStashEnvironmentKey = (typeof QSTASH_ENVIRONMENT_KEYS)[number];
+
+// Seven days is both the room-retention period and QStash Free's maximum delay.
+export const COLLABORATION_CLEANUP_DELAY = "7d" as const satisfies QStashDelay;
 
 export const collaborationMaintenanceJobSchema = z.discriminatedUnion("kind", [
   z
@@ -24,87 +37,24 @@ export const collaborationMaintenanceJobSchema = z.discriminatedUnion("kind", [
 
 export type CollaborationMaintenanceJob = z.infer<typeof collaborationMaintenanceJobSchema>;
 
-interface QStashClaims {
-  iss: string;
-  sub: string;
-  exp: number;
-  nbf: number;
-  iat?: number;
-  body: string;
-}
-
-function base64UrlDecode(value: string): Uint8Array<ArrayBuffer> {
-  const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-  const binary = atob(padded);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-function base64UrlEncode(bytes: ArrayBuffer): string {
-  const binary = String.fromCharCode(...new Uint8Array(bytes));
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-
-function secureStringEqual(left: string, right: string): boolean {
-  const maxLength = Math.max(left.length, right.length);
-  let difference = left.length ^ right.length;
-  for (let index = 0; index < maxLength; index += 1) {
-    difference |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
-  }
-  return difference === 0;
-}
-
-async function verifyWithKey(
-  signature: string,
-  body: string,
-  url: string,
-  key: string,
-  nowSeconds: number,
-): Promise<boolean> {
-  try {
-    const parts = signature.split(".");
-    if (parts.length !== 3) return false;
-    const [encodedHeader, encodedPayload, encodedSignature] = parts;
-    const header = JSON.parse(
-      new TextDecoder().decode(base64UrlDecode(encodedHeader)),
-    ) as { alg?: unknown; typ?: unknown };
-    if (header.alg !== "HS256" || (header.typ !== undefined && header.typ !== "JWT")) return false;
-
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(key),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["verify"],
-    );
-    const validSignature = await crypto.subtle.verify(
-      "HMAC",
-      cryptoKey,
-      base64UrlDecode(encodedSignature),
-      new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`),
-    );
-    if (!validSignature) return false;
-
-    const claims = JSON.parse(
-      new TextDecoder().decode(base64UrlDecode(encodedPayload)),
-    ) as Partial<QStashClaims>;
-    if (
-      claims.iss !== "Upstash" ||
-      claims.sub !== url ||
-      typeof claims.exp !== "number" ||
-      typeof claims.nbf !== "number" ||
-      typeof claims.body !== "string" ||
-      nowSeconds > claims.exp + CLOCK_TOLERANCE_SECONDS ||
-      nowSeconds < claims.nbf - CLOCK_TOLERANCE_SECONDS ||
-      (typeof claims.iat === "number" && nowSeconds < claims.iat - CLOCK_TOLERANCE_SECONDS)
-    ) {
-      return false;
+export type CollaborationMaintenancePublishResult =
+  | {
+      queued: false;
+      missing: CollaborationQStashEnvironmentKey[];
     }
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
-    return secureStringEqual(claims.body, base64UrlEncode(digest));
-  } catch {
-    return false;
-  }
+  | {
+      queued: true;
+      messageId: string;
+      deduplicated: boolean;
+    };
+
+export function missingCollaborationQStashConfiguration(
+  env: Env,
+): CollaborationQStashEnvironmentKey[] {
+  return QSTASH_ENVIRONMENT_KEYS.filter((key) => {
+    const value = env[key];
+    return typeof value !== "string" || value.trim().length === 0;
+  });
 }
 
 export async function verifyQStashSignature(input: {
@@ -113,25 +63,25 @@ export async function verifyQStashSignature(input: {
   url: string;
   currentSigningKey: string;
   nextSigningKey: string;
-  nowSeconds?: number;
+  upstashRegion?: string;
 }): Promise<boolean> {
-  const nowSeconds = input.nowSeconds ?? Math.floor(Date.now() / 1000);
-  return (
-    (await verifyWithKey(
-      input.signature,
-      input.body,
-      input.url,
-      input.currentSigningKey,
-      nowSeconds,
-    )) ||
-    (await verifyWithKey(
-      input.signature,
-      input.body,
-      input.url,
-      input.nextSigningKey,
-      nowSeconds,
-    ))
-  );
+  const receiver = new Receiver({
+    currentSigningKey: input.currentSigningKey,
+    nextSigningKey: input.nextSigningKey,
+    devMode: false,
+  });
+
+  try {
+    return await receiver.verify({
+      signature: input.signature,
+      body: input.body,
+      url: input.url,
+      clockTolerance: CLOCK_TOLERANCE_SECONDS,
+      ...(input.upstashRegion ? { upstashRegion: input.upstashRegion } : {}),
+    });
+  } catch {
+    return false;
+  }
 }
 
 function maintenanceDestination(env: Env): string {
@@ -147,28 +97,40 @@ function deduplicationId(job: CollaborationMaintenanceJob): string {
 export async function publishCollaborationMaintenanceJob(
   env: Env,
   job: CollaborationMaintenanceJob,
-  options: { delay?: string } = {},
-): Promise<boolean> {
-  if (!env.QSTASH_TOKEN) return false;
+  options: { delay?: QStashDelay } = {},
+): Promise<CollaborationMaintenancePublishResult> {
+  const missing = missingCollaborationQStashConfiguration(env);
+  if (missing.length > 0) return { queued: false, missing };
+
+  // The configuration check above narrows these values at runtime. Keep the
+  // explicit guard so an incomplete deployment can never enqueue messages to
+  // a receiver that cannot authenticate them.
+  const token = env.QSTASH_TOKEN;
+  if (!token) return { queued: false, missing: ["QSTASH_TOKEN"] };
+
   const parsed = collaborationMaintenanceJobSchema.parse(job);
-  const destination = maintenanceDestination(env);
-  const headers = new Headers({
-    Authorization: `Bearer ${env.QSTASH_TOKEN}`,
-    "Content-Type": "application/json",
-    "Upstash-Deduplication-Id": deduplicationId(parsed),
-    "Upstash-Retries": "3",
-    "Upstash-Timeout": "30s",
-    "Upstash-Redact-Fields": "body",
+  const client = new Client({
+    token,
+    devMode: false,
+    enableTelemetry: false,
+    retry: { retries: 3 },
   });
-  if (options.delay) headers.set("Upstash-Delay", options.delay);
-  const response = await fetch(
-    `${QSTASH_PUBLISH_ORIGIN}/v2/publish/${destination}`,
-    { method: "POST", headers, body: JSON.stringify(parsed) },
-  );
-  if (!response.ok) {
-    throw new Error(`QStash rejected collaboration maintenance job (${response.status})`);
-  }
-  return true;
+  const result = await client.publishJSON({
+    url: maintenanceDestination(env),
+    body: parsed,
+    deduplicationId: deduplicationId(parsed),
+    retries: QSTASH_DELIVERY_RETRIES,
+    timeout: QSTASH_DELIVERY_TIMEOUT,
+    label: ["collaboration-maintenance", parsed.kind],
+    redact: { body: true },
+    ...(options.delay === undefined ? {} : { delay: options.delay }),
+  });
+
+  return {
+    queued: true,
+    messageId: result.messageId,
+    deduplicated: result.deduplicated ?? false,
+  };
 }
 
 export function collaborationMaintenanceDestination(env: Env): string {

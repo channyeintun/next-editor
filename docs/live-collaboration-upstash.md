@@ -78,9 +78,10 @@ The first Option A foundation is implemented:
 - [`awarenessStore.ts`](../infra/worker/collaboration/awarenessStore.ts), the provider, and editor UI
   implement TTL presence, separate awareness/control streams, participant state, relative remote
   cursors/selections, active-file presence, and follow-host behavior.
-- [`qstash.ts`](../infra/worker/collaboration/qstash.ts) publishes compaction and delayed cleanup
-  jobs; the maintenance route verifies raw-body JWT signatures against both current and next
-  signing keys. Local development falls back to in-request compaction when QStash is absent.
+- [`qstash.ts`](../infra/worker/collaboration/qstash.ts) uses the official `@upstash/qstash` SDK to
+  publish JSON compaction and delayed-cleanup jobs and to verify the unmodified request body, exact
+  destination URL, and both current and next signing keys with `Receiver`. Local development falls
+  back to in-request compaction when QStash is absent.
 - [`0006_collaboration_hardening.sql`](../infra/db/migrations/0006_collaboration_hardening.sql),
   rate limits, document budgets, audit events, seven-day retention, and owner export provide the
   initial hardening and recovery boundary.
@@ -325,7 +326,9 @@ Do not use QStash for:
 - Ordering every edit through a FIFO queue.
 
 A compaction request should contain `roomId` and `expectedGeneration`, use a stable deduplication
-ID for publication retries, and be verified with the QStash signing keys. The handler should:
+ID for publication retries, and be verified with the QStash signing keys. A closed-room cleanup
+uses a seven-day delay, which matches room retention and QStash Free's maximum supported delay.
+The handler should:
 
 1. Acquire an expiring per-room Redis lock.
 2. Load snapshot generation `G` and choose an immutable stream cutoff `C`.
@@ -334,8 +337,8 @@ ID for publication retries, and be verified with the QStash signing keys. The ha
 5. Trim only updates included through `C`, never concurrently appended updates.
 6. Release the lock.
 
-The handler remains idempotent even though QStash offers a ten-minute publication deduplication
-window. A delivery may be retried after the endpoint performed work but its response was lost.
+The handler remains idempotent in addition to using QStash publication deduplication. A delivery
+may still be retried after the endpoint performed work but its response was lost.
 
 ## Cost and throughput considerations
 
@@ -417,7 +420,8 @@ Redis persistence, QStash background work, or any editor integration decision.
 - Do not log source updates, snapshots, cursor positions, or QStash request bodies.
 - Define document, update-log, snapshot, awareness, and asset retention separately.
 - Rate-limit both HTTP writes and SSE subscriptions.
-- Validate QStash signatures against both current and next signing keys.
+- Verify QStash signatures with the official SDK `Receiver`, using the raw request body, exact
+  destination URL, and both current and next signing keys.
 - Treat Redis unavailability as a room connection failure, not as a cache miss.
 - Provide an owner export/recovery path independent of the current compacted snapshot.
 
@@ -431,7 +435,8 @@ The selected option adds:
 - D1 migrations for rooms, memberships, invitations, and role versions.
 - A browser provider actor that coordinates SSE, bootstrap, POST writes, offline updates, and
   `collaborationMachine` lifecycle.
-- QStash-signed compaction and cleanup routes.
+- QStash compaction and seven-day cleanup publication through the official SDK `Client`, plus
+  signed delivery verification through its `Receiver`.
 - Separate document, awareness, and control limits plus structured Worker log events. Dashboard
   and alert setup is described in
   [Collaboration Deployment Operations](./deployment-operations-collaboration.md).
@@ -453,6 +458,9 @@ workspace projection, playback isolation, and SCR3 recording code should not imp
 - [Realtime Redis command pricing](https://upstash.com/docs/realtime/overall/pricing)
 - [Upstash Realtime design guidance](https://upstash.com/blog/about-upstash-realtime)
 - [QStash getting started](https://upstash.com/docs/qstash/overall/getstarted)
+- [QStash TypeScript SDK](https://upstash.com/docs/qstash/sdks/ts/gettingstarted)
+- [QStash JSON publishing](https://upstash.com/docs/qstash/sdks/ts/examples/publish)
+- [QStash delay limits](https://upstash.com/docs/qstash/features/delay)
 - [QStash retry behavior](https://upstash.com/docs/qstash/features/retry)
 - [QStash deduplication](https://upstash.com/docs/qstash/features/deduplication)
 - [QStash receiver signature verification](https://upstash.com/docs/qstash/sdks/ts/examples/receiver)

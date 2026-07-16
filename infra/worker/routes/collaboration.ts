@@ -77,6 +77,7 @@ import {
   enforceCollaborationUpdateRateLimit,
 } from "../collaboration/rateLimits";
 import {
+  COLLABORATION_CLEANUP_DELAY,
   collaborationMaintenanceDestination,
   collaborationMaintenanceJobSchema,
   publishCollaborationMaintenanceJob,
@@ -358,21 +359,50 @@ function scheduleCompaction(
 ): void {
   c.executionCtx.waitUntil(
     (async () => {
-      const queued = await publishCollaborationMaintenanceJob(c.env, {
-        kind: "compact-room",
-        roomId,
-        expectedGeneration,
-      });
-      if (!queued) {
-        await compactCollaborationDocument(getCollaborationRedis(c.env), roomId, expectedGeneration);
+      try {
+        const result = await publishCollaborationMaintenanceJob(c.env, {
+          kind: "compact-room",
+          roomId,
+          expectedGeneration,
+        });
+        if (result.queued) {
+          console.log("collaboration_qstash_queued", {
+            kind: "compact-room",
+            roomId,
+            messageId: result.messageId,
+            deduplicated: result.deduplicated,
+          });
+          return;
+        }
+        console.warn("collaboration_qstash_disabled", {
+          kind: "compact-room",
+          roomId,
+          missing: result.missing,
+          fallback: "inline-compaction",
+        });
+      } catch (error) {
+        console.error("collaboration_qstash_publish_failed", {
+          kind: "compact-room",
+          roomId,
+          fallback: "inline-compaction",
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
-    })().catch((error) => {
-      console.error("Failed to schedule collaboration compaction", {
-        roomId,
-        expectedGeneration,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }),
+
+      try {
+        await compactCollaborationDocument(
+          getCollaborationRedis(c.env),
+          roomId,
+          expectedGeneration,
+        );
+      } catch (error) {
+        console.error("collaboration_inline_compaction_failed", {
+          roomId,
+          expectedGeneration,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })(),
   );
 }
 
@@ -382,16 +412,35 @@ function scheduleClosedRoomCleanup(
   closedAt: number,
 ): void {
   c.executionCtx.waitUntil(
-    publishCollaborationMaintenanceJob(
-      c.env,
-      { kind: "cleanup-room", roomId, closedAt },
-      { delay: "8d" },
-    ).catch((error) => {
-      console.error("Failed to schedule collaboration cleanup", {
+    (async () => {
+      const result = await publishCollaborationMaintenanceJob(
+        c.env,
+        { kind: "cleanup-room", roomId, closedAt },
+        { delay: COLLABORATION_CLEANUP_DELAY },
+      );
+      if (!result.queued) {
+        console.error("collaboration_qstash_disabled", {
+          kind: "cleanup-room",
+          roomId,
+          missing: result.missing,
+          consequence: "cleanup-not-scheduled",
+        });
+        return;
+      }
+      console.log("collaboration_qstash_queued", {
+        kind: "cleanup-room",
         roomId,
+        messageId: result.messageId,
+        deduplicated: result.deduplicated,
+        delay: COLLABORATION_CLEANUP_DELAY,
+      });
+    })().catch((error) => {
+      console.error("collaboration_qstash_publish_failed", {
+        kind: "cleanup-room",
+        roomId,
+        consequence: "cleanup-not-scheduled",
         error: error instanceof Error ? error.message : String(error),
       });
-      return false;
     }),
   );
 }
@@ -407,6 +456,7 @@ collaborationRoute.post("/jobs/maintenance", async (c) => {
   const raw = await readBoundedText(c, MAX_MAINTENANCE_REQUEST_BYTES);
   if (!raw.ok) return c.json({ error: "invalid maintenance job" }, raw.status);
   const signature = c.req.header("upstash-signature");
+  const upstashRegion = c.req.header("upstash-region");
   if (
     !signature ||
     !(await verifyQStashSignature({
@@ -415,6 +465,7 @@ collaborationRoute.post("/jobs/maintenance", async (c) => {
       url: collaborationMaintenanceDestination(c.env),
       currentSigningKey: c.env.QSTASH_CURRENT_SIGNING_KEY,
       nextSigningKey: c.env.QSTASH_NEXT_SIGNING_KEY,
+      ...(upstashRegion ? { upstashRegion } : {}),
     }))
   ) {
     return c.json({ error: "invalid maintenance signature" }, 401);

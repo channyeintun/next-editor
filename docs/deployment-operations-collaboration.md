@@ -42,6 +42,8 @@ uses `env.CACHE`, while all Redis credentials are reserved for this
 collaboration/Realtime data plane.
 
 `PUBLIC_URL` must be the canonical HTTPS origin because QStash signs the exact maintenance
+destination URL. Publishing uses the official `@upstash/qstash` `Client.publishJSON` API, and the
+maintenance endpoint uses the SDK `Receiver` against the unmodified request body and exact
 destination URL. Apply all D1 migrations through
 [`0007_collaboration_assets.sql`](../infra/db/migrations/0007_collaboration_assets.sql) before
 deploying code that exposes asset routes:
@@ -53,7 +55,14 @@ wrangler d1 migrations apply next-editor-tube --remote --config infra/wrangler.t
 Deploy the Worker only after the migration succeeds. A missing collaboration Redis configuration
 fails rooms closed with `503`; it never falls back to Workers KV or D1 for document storage.
 QStash may be omitted in local development, where threshold compaction runs inline, but production
-should configure it so maintenance stays outside the edit acknowledgement path.
+should configure all three QStash secrets so maintenance stays outside the edit acknowledgement
+path. An incomplete QStash configuration never publishes a job that its receiver cannot verify:
+compaction falls back inline, while closed-room cleanup emits a
+`collaboration_qstash_disabled` error because delayed cleanup cannot be reproduced inline.
+
+Room cleanup is published with a seven-day delay, matching both the retention boundary and the
+maximum delay currently available on QStash Free. QStash is background maintenance only: awareness
+POSTs, cursor updates, document updates, and immediate role changes do not use it.
 
 ## Fixed safety limits
 
@@ -93,8 +102,11 @@ Use two signed-in browser profiles and one separate viewer invitation:
 7. Confirm only the owner/host can start recording. End recording, then end live; only then should
    the existing upload modal be available for the local finished recording.
 8. Enter playback and verify its workspace writes do not publish collaboration updates.
-9. End live only after pending updates flush. Export the owner recovery JSON before retention
-   expires.
+9. After a compaction threshold is reached, confirm a `collaboration_qstash_queued` log and a
+   labeled `collaboration-maintenance` message in QStash. Close a test room and confirm its cleanup
+   message carries a seven-day delay.
+10. End live only after pending updates flush. Export the owner recovery JSON before retention
+    expires.
 
 ## Transport spike and release gate
 
@@ -115,8 +127,10 @@ workspace projection, permissions, recording, or asset contracts.
 
 ## Logs, dashboards, and alerts
 
-The Worker emits structured `collaboration_update` and `collaboration_maintenance` records without
-source text, snapshots, cursor payloads, credentials, or SCR3 bytes. Build dashboards for:
+The Worker emits structured `collaboration_update`, `collaboration_qstash_queued`,
+`collaboration_qstash_disabled`, `collaboration_qstash_publish_failed`, and
+`collaboration_maintenance` records without source text, snapshots, cursor payloads, credentials,
+or SCR3 bytes. Build dashboards for:
 
 - Update count, accepted bytes, duplicates, `429`, `403`, and `413` responses.
 - Bootstrap/realtime `5xx` rates and connection-rate rejections.
@@ -134,8 +148,12 @@ failures. Correlate by opaque room ID only; never add document content or invita
   changes. Do not acknowledge writes that were not persisted.
 - Realtime interruption: bootstrap snapshot plus update tail closes the subscription race; repeated
   Yjs events are idempotent.
-- QStash unavailable: editing remains available. Compaction/cleanup jobs retry; operators can
-  republish the same idempotent room/generation or room/closed-at job.
+- QStash delivery unavailable after publication: editing remains available and QStash retries the
+  idempotent job. Operators can republish the same room/generation or room/closed-at job.
+- QStash missing or unavailable while publishing: compaction falls back inline. A cleanup job is
+  not scheduled, so alert on `collaboration_qstash_disabled` and
+  `collaboration_qstash_publish_failed`, restore the configuration/service, and republish the same
+  room/closed-at job before its retention deadline.
 - R2 asset unavailable: text editing continues and the UI shows a recoverable placeholder. Retry
   hydration after R2 recovers.
 - Owner browser/recorder loss: use existing browser-local recording recovery. Collaboration

@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../env";
-import { publishCollaborationMaintenanceJob, verifyQStashSignature } from "./qstash";
+import {
+  COLLABORATION_CLEANUP_DELAY,
+  publishCollaborationMaintenanceJob,
+  verifyQStashSignature,
+} from "./qstash";
 
 function encode(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
@@ -47,14 +51,18 @@ async function sign(input: {
   return `${header}.${payload}.${encode(new Uint8Array(signature))}`;
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("QStash collaboration job verification", () => {
   const current = "current-signing-key";
   const next = "next-signing-key";
   const body = '{"kind":"compact-room"}';
   const url = "https://nexteditor.dev/api/collaboration/jobs/maintenance";
-  const now = 1_800_000_000;
 
-  it("accepts current and next signing keys", async () => {
+  it("accepts signatures made with either configured signing key", async () => {
+    const now = Math.floor(Date.now() / 1_000);
     for (const key of [current, next]) {
       const signature = await sign({ key, body, url, now });
       await expect(
@@ -64,13 +72,13 @@ describe("QStash collaboration job verification", () => {
           url,
           currentSigningKey: current,
           nextSigningKey: next,
-          nowSeconds: now,
         }),
       ).resolves.toBe(true);
     }
   });
 
   it("binds a signed job to its exact raw body and destination", async () => {
+    const now = Math.floor(Date.now() / 1_000);
     const signature = await sign({ key: current, body, url, now });
     await expect(
       verifyQStashSignature({
@@ -79,7 +87,6 @@ describe("QStash collaboration job verification", () => {
         url,
         currentSigningKey: current,
         nextSigningKey: next,
-        nowSeconds: now,
       }),
     ).resolves.toBe(false);
     await expect(
@@ -89,12 +96,12 @@ describe("QStash collaboration job verification", () => {
         url: `${url}/other`,
         currentSigningKey: current,
         nextSigningKey: next,
-        nowSeconds: now,
       }),
     ).resolves.toBe(false);
   });
 
   it("rejects expired deliveries", async () => {
+    const now = Math.floor(Date.now() / 1_000);
     const signature = await sign({ key: current, body, url, now, expiresAt: now - 10 });
     await expect(
       verifyQStashSignature({
@@ -103,39 +110,71 @@ describe("QStash collaboration job verification", () => {
         url,
         currentSigningKey: current,
         nextSigningKey: next,
-        nowSeconds: now,
       }),
     ).resolves.toBe(false);
   });
 
-  it("publishes only bounded maintenance metadata with a stable deduplication ID", async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-      new Response('{"messageId":"msg_1"}', { status: 200 }),
-    );
+  it("does not enqueue jobs unless publishing and receiver credentials are complete", async () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const roomId = "10000000-0000-4000-8000-000000000001";
+
     await expect(
       publishCollaborationMaintenanceJob(
         {
           PUBLIC_URL: "https://nexteditor.dev",
           QSTASH_TOKEN: "qstash-token",
         } as Env,
-        { kind: "compact-room", roomId, expectedGeneration: 4 },
+        {
+          kind: "compact-room",
+          roomId: "10000000-0000-4000-8000-000000000001",
+          expectedGeneration: 4,
+        },
       ),
-    ).resolves.toBe(true);
+    ).resolves.toEqual({
+      queued: false,
+      missing: ["QSTASH_CURRENT_SIGNING_KEY", "QSTASH_NEXT_SIGNING_KEY"],
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
-    const [requestUrl, request] = fetchMock.mock.calls[0];
+  it("publishes redacted JSON through the SDK with free-tier-compatible cleanup delay", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response('{"messageId":"msg_1"}', { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const roomId = "10000000-0000-4000-8000-000000000001";
+    const closedAt = 1_800_000_000_000;
+
+    await expect(
+      publishCollaborationMaintenanceJob(
+        {
+          PUBLIC_URL: "https://nexteditor.dev",
+          QSTASH_TOKEN: "qstash-token",
+          QSTASH_CURRENT_SIGNING_KEY: current,
+          QSTASH_NEXT_SIGNING_KEY: next,
+        } as Env,
+        { kind: "cleanup-room", roomId, closedAt },
+        { delay: COLLABORATION_CLEANUP_DELAY },
+      ),
+    ).resolves.toEqual({ queued: true, messageId: "msg_1", deduplicated: false });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const call = fetchMock.mock.calls[0];
+    if (!call) throw new Error("QStash SDK did not publish the maintenance job");
+    const [requestUrl, request] = call;
     expect(requestUrl).toBe(
       "https://qstash.upstash.io/v2/publish/https://nexteditor.dev/api/collaboration/jobs/maintenance",
     );
     const headers = new Headers(request?.headers);
     expect(headers.get("Authorization")).toBe("Bearer qstash-token");
-    expect(headers.get("Upstash-Deduplication-Id")).toBe(
-      `collab-compact-${roomId}-4`,
-    );
-    expect(request?.body).toBe(
-      JSON.stringify({ kind: "compact-room", roomId, expectedGeneration: 4 }),
-    );
-    vi.unstubAllGlobals();
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expect(headers.get("Upstash-Deduplication-Id")).toBe(`collab-cleanup-${roomId}-${closedAt}`);
+    expect(headers.get("Upstash-Delay")).toBe("7d");
+    expect(headers.get("Upstash-Retries")).toBe("3");
+    expect(headers.get("Upstash-Timeout")).toBe("30s");
+    expect(headers.get("Upstash-Redact-Fields")).toBe("body");
+    expect(headers.get("Upstash-Label")).toBe("collaboration-maintenance,cleanup-room");
+    expect(request?.body).toBe(JSON.stringify({ kind: "cleanup-room", roomId, closedAt }));
   });
 });

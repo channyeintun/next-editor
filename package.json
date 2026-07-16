@@ -29,6 +29,7 @@
     "@posthog/react": "^1.10.3",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-virtual": "^3.14.6",
+    "@upstash/qstash": "^2.11.2",
     "@upstash/realtime": "^1.0.4",
     "@upstash/redis": "^1.38.0",
     "@webcontainer/api": "^1.6.4",
