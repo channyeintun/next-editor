@@ -126,7 +126,7 @@ describe("runAgentLoop", () => {
 
   it("streams a plain text turn into message_start + content and ends done", async () => {
     const { deltas, ...options } = baseOptions();
-    const { callModel } = fakeCallModel([messageItem("m1", "Hello there")]);
+    const { callModel, calls } = fakeCallModel([messageItem("m1", "Hello there")]);
 
     await runAgentLoop({ ...options, prompt: "hi", callModel, onDelta: (d) => deltas.push(d) });
 
