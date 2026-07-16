@@ -1,6 +1,6 @@
 # Live Collaboration — Cloudflare-native Deployment
 
-Status: proposed concrete implementation of the provider-neutral plan
+Status: proposed Cloudflare-native provider option; not selected
 
 Companion documents:
 
@@ -10,23 +10,26 @@ Companion documents:
   QStash as an alternative provider stack.
 
 This document maps the abstract room service and persistence layer in the feature plan onto the
-Cloudflare services already used by the application. The central decision is one SQLite-backed
-Durable Object per collaboration room.
+Cloudflare services already used by the application. The option evaluated here uses one
+SQLite-backed Durable Object per collaboration room.
 
 Pricing and product behavior in this document were checked on 2026-07-16. Cloudflare pricing and
 limits must be verified again before production rollout.
 
-## Decision
+## Decision within this option
 
-Use a SQLite-backed `CollaborationRoom` Durable Object as both the live room coordinator and the
-owner of the room's durable CRDT state.
+If a Cloudflare-native WebSocket room service is selected, use a SQLite-backed
+`CollaborationRoom` Durable Object as both the live room coordinator and the owner of the room's
+recoverable CRDT state. Durable Objects are not an inherent collaboration requirement and have no
+role in SCR3 recording; they are the Cloudflare-native way to supply a stateful room coordinator
+when an external realtime provider is not supplying that function.
 
 - The existing Hono Worker remains the same-origin HTTP API and WebSocket gateway.
 - D1 remains the globally queryable control plane for rooms, memberships, invitations, and roles.
 - One Durable Object identified by `roomId` owns the room's WebSockets, update log, snapshots,
   awareness roster, effective host, and protocol state.
 - The Durable Object's private SQLite database stores document updates and compacted snapshots.
-- R2 stores binary project assets, large snapshots, room exports, and finalized recordings.
+- R2 stores binary project assets, large snapshots, and optional project exports.
 - Durable Object Alarms perform room-local compaction and cleanup.
 - Cloudflare Queues are optional for work that should run outside the room object.
 
@@ -63,8 +66,8 @@ between the browser and the room Durable Object. The gateway is not called once 
 
 ## Cloudflare service map
 
-| Service                        | Collaboration responsibility                                                    | Required for MVP |
-| ------------------------------ | ------------------------------------------------------------------------------- | ---------------- |
+| Service                        | Collaboration responsibility                                                    | Status in this option |
+| ------------------------------ | ------------------------------------------------------------------------------- | --------------------- |
 | Workers Static Assets          | Serve the existing SPA under the same cross-origin-isolated origin              | Existing         |
 | Hono Worker                    | Room CRUD, session authentication, invitations, tokens, WebSocket upgrade       | Existing         |
 | D1                             | Rooms, members, roles, invite records, retention state, searchable audit metadata | Existing         |
@@ -72,7 +75,7 @@ between the browser and the room Durable Object. The gateway is not called once 
 | Durable Object SQLite storage  | CRDT updates, snapshots, protocol version, stream sequence, durable room state  | New              |
 | Durable Object WebSocket API   | Binary document frames plus awareness and control frames                        | New              |
 | Durable Object Alarms          | Snapshot compaction, tombstone/update cleanup, idle-room maintenance            | New              |
-| R2                             | Content-addressed assets, oversized snapshots, exports, SCR3 objects            | Existing         |
+| R2                             | Content-addressed assets, oversized snapshots, and project exports              | Existing         |
 | Cloudflare Queues              | Heavy export, asset reconciliation, or cross-room maintenance                   | Optional         |
 | Workers Logs and tracing       | Connection and operational metadata, excluding editor content                   | Existing         |
 
@@ -87,7 +90,20 @@ Calls:
 - Workflows are unnecessary for room-local compaction that an Alarm can perform.
 - Audio and video remain outside the feature and continue to use an external calling provider.
 
-## Why one Durable Object per room
+## Recording boundary
+
+The room owner's browser records SCR3 through the existing `editorMachine` and local IndexedDB
+persistence. No recording bytes pass through the room Durable Object, its SQLite database, the
+collaboration R2 namespace, or a Queue while the session is live.
+
+After the owner ends the live session, an explicit action may send the finished browser-local
+recording through the existing
+[lesson upload and publish flow](./cloudflare-architecture.md#upload--publish-sequence) for
+`/learn`. That separate lesson workflow may store uploaded files in R2 and lesson metadata in D1,
+but those objects belong to the lesson namespace and lifecycle—not to the collaboration room or
+its Durable Object.
+
+## Why one Durable Object per room in this option
 
 Durable Objects are designed as a single coordination point for multiple clients. Each named room
 object is single-threaded, owns private durable storage, accepts WebSockets, and scales
@@ -102,6 +118,10 @@ That matches the feature plan's requirements:
 - Role downgrade can affect existing socket sessions immediately.
 - Initial sync can use a server-maintained Yjs document and state vector rather than a full log.
 - Reconnect can safely combine the durable server state with the client's offline Yjs changes.
+
+These are live synchronization duties only. Recording is intentionally absent from the list. If
+Upstash Realtime or another provider supplies fan-out and recoverable room history, this Durable
+Object is unnecessary.
 
 The Durable Object is a coordination boundary, not the merge algorithm. Yjs remains necessary for
 offline edits, concurrent edits created before the room observed them, deterministic convergence,
@@ -326,12 +346,14 @@ Reuse the existing private R2 binding with namespaced, non-guessable keys:
 collaboration/rooms/{roomId}/assets/{sha256}
 collaboration/rooms/{roomId}/snapshots/{generation}.yjs
 collaboration/rooms/{roomId}/exports/{exportId}.zip
-collaboration/rooms/{roomId}/recordings/{recordingId}.scr3
 ```
 
 The CRDT stores asset IDs and metadata, never arbitrary asset bytes. Upload completes before the
 CRDT reference is published. Downloads continue through authenticated/same-origin Worker routes
 where room privacy requires it.
+
+Do not create a collaboration-room recording key. A recording reaches R2 only after the live
+session through the existing lesson upload flow and uses that subsystem's object namespace.
 
 Use R2 Standard storage for active room assets and snapshots. Infrequent Access introduces
 retrieval charges and a minimum storage duration and is unlikely to help small, frequently opened
@@ -367,7 +389,7 @@ to separate objects.
 | D1 unavailable during a new join              | Reject/defer the join; existing authenticated room sockets may continue                 |
 | R2 asset missing                              | Show a recoverable placeholder; do not block unrelated text edits                       |
 | Compaction alarm retries                      | Resume idempotently from generation and cutoff metadata                                 |
-| Recorder disconnects                          | Finalize or abort its single-writer SCR3 recording; do not elect a second appender       |
+| Owner recorder disconnects                    | Browser-local recording recovery applies; the room object never receives or finalizes SCR3 |
 
 SQLite-backed Durable Objects include point-in-time recovery for approximately the prior 30 days,
 but that platform capability is not a substitute for owner exports, retention policies, or tested
@@ -383,7 +405,8 @@ snapshot recovery.
 - Rate-limit awareness independently from document updates.
 - Treat display names, active files, selections, and follow-state values as untrusted.
 - Never log source payloads, snapshots, cursor positions, room tokens, or WebSocket attachments.
-- Define D1, Durable Object SQLite, R2, audit, and recording retention separately.
+- Define D1, Durable Object SQLite, R2, and audit retention separately; lesson recording retention
+  belongs to the lesson subsystem.
 - Provide room deletion that removes D1 metadata, calls `deleteAll()` on the room object, and
   deletes the room's R2 objects.
 - Add budget and quota alerts before enabling public room creation.
@@ -461,8 +484,8 @@ operations. Beyond that:
 - Class B reads/metadata operations: $0.36 per million.
 - Internet egress: free.
 
-Avoid writing each CRDT update as a separate R2 object. R2 is economical for compacted snapshots,
-assets, exports, and recordings rather than tiny high-frequency events.
+Avoid writing each CRDT update as a separate R2 object. In this option, collaboration R2 usage is
+for compacted snapshots, assets, and project exports rather than tiny high-frequency events.
 
 ### Optional Queues
 

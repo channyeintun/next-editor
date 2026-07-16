@@ -17,9 +17,10 @@ recording model, but the collaboration protocol must be a separate data plane.
 - Use an ephemeral awareness channel for participants, cursors, selections, and follow-host
   state.
 - Keep `workspaceStore` as the local UI projection of the shared document while connected.
-- Keep `editorMachine` responsible for recording and playback orchestration.
-- Keep SCR3 as a single-writer recording, replay, and spectator-broadcast format. A designated
-  recorder converts the converged room state into one ordered SCR3 stream.
+- Keep `editorMachine` responsible for browser-local recording and playback orchestration.
+- Keep SCR3 as a single-writer recording and replay format. For the MVP, the room owner's browser
+  converts the converged room state into one ordered SCR3 stream and retains it locally until the
+  live session ends.
 - Continue using an external service for audio and video calls. Call state is outside this
   feature except for an optional room link.
 
@@ -35,7 +36,8 @@ resolving concurrent edits.
 - Support owner, editor, and viewer permissions.
 - Allow participants to follow a designated host's active file and preview state.
 - Preserve the existing standalone editor when no collaboration room is configured.
-- Record the resulting collaborative session through the existing recording pipeline.
+- Record the resulting collaborative session in the room owner's browser through the existing
+  recording pipeline.
 
 ## Non-goals
 
@@ -85,8 +87,9 @@ flowchart LR
     Doc --> Adapter[Workspace projection adapter]
     Adapter --> Store[(workspaceStore)]
     Store --> Container[Local WebContainer mirror]
-    Store --> Recorder[Designated recorder's editorMachine]
-    Recorder --> SCR3[SCR3 recording or spectator stream]
+    Store --> Recorder[Room owner's editorMachine]
+    Recorder --> SCR3[Browser-local SCR3 recording]
+    SCR3 -.->|explicit owner upload after live ends| Learn[Existing lesson upload flow]
 ```
 
 Each client owns a CRDT document and receives the same durable room updates. The room service
@@ -105,7 +108,7 @@ explicit host-follow signals are shared.
 | Participant name, cursor, selection, active file | Awareness state                                     | Ephemeral with a TTL   |
 | Room membership and role                         | Collaboration service                               | Server ACL/session     |
 | Preview/runtime output                           | Each client; host is authoritative for follow mode  | Not durable by default |
-| Recording timeline and capture state             | Designated recorder's `editorMachine`               | SCR3                   |
+| Recording timeline and capture state             | Room owner's `editorMachine`                        | Browser-local SCR3     |
 | Playback workspace                               | `editorMachine` projection while playback is active | Loaded SCR3            |
 
 Outside a room, the current ownership rules remain unchanged. Inside a room, the CRDT document
@@ -234,7 +237,7 @@ path-based project on every inserted character would create unnecessary store no
 WebContainer writes, and recording events.
 
 Remote changes to inactive files must update the store and WebContainer mirror. They must also be
-visible to the designated recorder; relying only on Monaco's active model would omit those edits
+visible to the room owner's recorder; relying only on Monaco's active model would omit those edits
 from the recording.
 
 ### Runtime and follow-host behavior
@@ -265,21 +268,30 @@ workspace instances.
 
 ## Recording and SCR3
 
-One explicitly designated client records a room. Its `workspaceStore` projection gives the
-existing `editorMachine` a converged project snapshot and ordered workspace events. The host also
-owns preview/runtime capture so the recording has one coherent timeline. Intermediate replay
-state reflects the order in which that recorder observed concurrent updates; the final project
-still converges with the room.
+The room owner's browser is the sole recorder for the MVP. Its `workspaceStore` projection gives
+the existing `editorMachine` a converged project snapshot and ordered workspace events. The owner
+also captures preview/runtime events so the recording has one coherent timeline. Intermediate
+replay state reflects the order in which that browser observed concurrent updates; the final
+project still converges with the room.
+
+Recording is not part of the collaboration data plane. SCR3 bytes stay in the owner's browser and
+use the existing local recording persistence, including IndexedDB recovery. The room provider,
+Redis, Durable Object storage, and collaboration R2 namespaces must never receive or finalize the
+recording while the session is live.
+
+After the owner ends the live session, the browser finalizes the local recording and may open the
+existing lesson upload flow. Only an explicit owner action uploads the lesson files and creates a
+draft for `/learn`; until that succeeds, the server has no copy of the recording. See the existing
+[upload and publish sequence](./cloudflare-architecture.md#upload--publish-sequence).
 
 For the first release:
 
 - Do not change the SCR3 container or decoder.
 - Record the resulting workspace state, not raw CRDT updates.
 - Do not promise per-author attribution in replay.
-- Continue sending the recorder's append-only SCR3 stream to spectators if live viewing is
-  enabled.
-- If the designated recorder disconnects, finalize or abort that recording. The MVP must not
-  attempt a seamless handoff, and two clients must never append to the same stream.
+- Do not stream SCR3 through the collaboration provider or upload it before the live session ends.
+- Do not hand recording between clients. If the owner disconnects, local recovery or finalization
+  remains the owner's browser responsibility.
 
 A future optional collaboration track could store participant attribution or normalized CRDT
 transactions. It must be backward-compatible and is not required for shared editing.
@@ -324,7 +336,8 @@ contrast requirements.
 ### Phase 4: host and recording integration
 
 - Add host assignment and follow-host behavior.
-- Capture remote and inactive-file changes through the designated recorder.
+- Capture remote and inactive-file changes through the room owner's recorder.
+- Keep SCR3 browser-local and invoke the existing `/learn` upload flow only after live ends.
 - Enforce playback isolation and validate existing SCR3 progressive playback unchanged.
 
 ### Phase 5: hardening
@@ -343,8 +356,10 @@ contrast requirements.
 - Remote cursors, selections, participant departure, and active-file presence update without
   persisting stale awareness.
 - Remote changes update the local workspace and WebContainer without store/CRDT feedback loops.
-- A host can record a session containing local edits, remote edits, and inactive-file changes;
-  the resulting SCR3 file decodes and replays with the existing reader.
+- The room owner can record local edits, remote edits, and inactive-file changes; the resulting
+  browser-local SCR3 file decodes and replays with the existing reader.
+- No SCR3 bytes enter the collaboration provider, and lesson upload is available only after the
+  live session ends through an explicit owner action.
 - Playback-origin workspace writes are never transmitted into the live room.
 - Leaving or switching rooms releases the provider, observers, timers, and awareness state.
 - Standalone editing, recording, saved-file playback, and one-producer live streaming continue to
@@ -362,6 +377,8 @@ contrast requirements.
   following, playback isolation, and teardown.
 - Add recorder integration tests proving remote inactive-file changes become workspace events and
   that the existing streaming decoder accepts the result.
+- Verify collaboration transports receive no SCR3 payload and the post-session recording can be
+  resumed from IndexedDB and passed to the existing lesson upload flow.
 - Keep codec regression fixtures for finalized, partial-prefix, and live SCR3 streams. CRDT
   transport changes must not alter their decoded output.
 
@@ -387,14 +404,15 @@ contrast requirements.
 | Tree conflicts     | Stable node IDs with deterministic display-name suffixes | Exact suffix UX and tombstone retention           |
 | Undo               | Per-user, origin-scoped text undo                        | Whether tree undo is included in MVP              |
 | Assets             | Content-addressed external blobs                         | Storage provider, quotas, and offline behavior    |
-| Runtime            | Local per client; designated host for recording          | Host election and handoff policy                  |
+| Runtime            | Local per client; explicit host for follow mode           | Host selection policy                             |
+| Recording          | Owner browser; local SCR3 until post-session upload        | Local crash and recovery UX                       |
 | Playback           | Mutually exclusive with live projection                  | Whether to add a second workspace instance        |
 | Replay attribution | Not included in initial SCR3 output                      | Optional collaboration track and privacy controls |
 
 Implementation should not begin until the shared tree schema, playback isolation rule, role
-enforcement boundary, and recorder-host handoff behavior are captured as contract tests. Those
-four choices affect every adapter and are expensive to change after rooms contain persistent
-documents.
+enforcement boundary, and browser-local recording/upload boundary are captured as contract tests.
+Those four choices affect every adapter and are expensive to change after rooms contain
+persistent documents.
 
 ## References
 
