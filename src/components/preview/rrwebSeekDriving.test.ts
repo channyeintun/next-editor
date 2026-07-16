@@ -28,10 +28,22 @@ function rowIndices(doc: Document | null | undefined): string[] {
   );
 }
 
+function createReplayer(events: eventWithTime[], root: HTMLElement): Replayer {
+  return new Replayer(events, {
+    root,
+    liveMode: false,
+    mouseTail: false,
+    showWarning: false,
+    useVirtualDom: false,
+    speed: 1,
+    UNSAFE_replayCanvas: true,
+  });
+}
+
 // Characterizes how repeated pause(offset) (the per-tick driving model) applies
-// removes both forward and backward across multiple recorded frames.
+// removes across multiple recorded frames and across a fresh second playback.
 describe("rrweb seek driving (per-tick pause)", () => {
-  it("applies removes forward and backward across multiple frames", async () => {
+  it("applies removes forward and backward, then starts the second playback cleanly", async () => {
     document.body.innerHTML = `
       <div id="timeline">
         <div class="row" data-index="0">post 0</div>
@@ -82,15 +94,7 @@ describe("rrweb seek driving (per-tick pause)", () => {
     document.body.appendChild(container);
     containers.push(container);
 
-    activeReplayer = new Replayer(events as unknown as eventWithTime[], {
-      root: container,
-      liveMode: false,
-      mouseTail: false,
-      showWarning: false,
-      useVirtualDom: false,
-      speed: 1,
-      UNSAFE_replayCanvas: true,
-    });
+    activeReplayer = createReplayer(events as unknown as eventWithTime[], container);
     await sleep(0);
 
     const replayedDoc = () => container.querySelector("iframe")?.contentDocument;
@@ -109,5 +113,18 @@ describe("rrweb seek driving (per-tick pause)", () => {
     activeReplayer.pause(offsetAfterB);
     await sleep(0);
     expect(rowIndices(replayedDoc()).sort()).toEqual(["1", "2", "3"]);
+
+    // rrweb's pause(0) does not rebuild a used Replayer's initial snapshot. The
+    // production wrapper therefore replaces it when playback returns to start.
+    activeReplayer.destroy();
+    activeReplayer = undefined;
+    container.replaceChildren();
+    activeReplayer = createReplayer(events as unknown as eventWithTime[], container);
+    await sleep(5);
+    expect(rowIndices(replayedDoc()).sort()).toEqual(["0", "1"]);
+
+    activeReplayer.pause(10_000_000);
+    await sleep(0);
+    expect(rowIndices(replayedDoc()).sort()).toEqual(["2", "3", "4", "5"]);
   });
 });

@@ -128,8 +128,8 @@ function FileSidebarToggleButton() {
   );
 }
 
-function PreviewHeaderButton() {
-  const { isOpen, openPreview, closePreview } = usePreviewPanel();
+export function PreviewHeaderButton() {
+  const { isOpen, togglePreview } = usePreviewPanel();
 
   return (
     <button
@@ -138,14 +138,7 @@ function PreviewHeaderButton() {
       aria-label={isOpen ? "Close preview" : "Open preview"}
       aria-pressed={isOpen}
       title={isOpen ? "Close preview" : "Open preview"}
-      onClick={() => {
-        if (isOpen) {
-          closePreview();
-          return;
-        }
-
-        openPreview();
-      }}
+      onClick={togglePreview}
       className={`${HEADER_ICON_BUTTON_CLASS} ${HEADER_ICON_BUTTON_NEUTRAL_CLASS}`}
     >
       {isOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}

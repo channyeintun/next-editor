@@ -56,7 +56,11 @@ function Preview() {
       size={controller.size}
       mode={controller.panelMode}
       dockWidth={controller.dockWidth}
-      dockExpanded={dockSlide.isExpanded}
+      // The transition hook intentionally lags expansion by one animation frame.
+      // Honor the controlled open state immediately so runtime startup cannot
+      // leave the first click mounted at width 0. The retained transition state
+      // still keeps the panel expanded while a close animation begins.
+      dockExpanded={controller.isOpen || dockSlide.isExpanded}
       dockAnimating={dockSlide.isAnimating}
       onClose={controller.handleClose}
       onFloat={controller.handleFloat}

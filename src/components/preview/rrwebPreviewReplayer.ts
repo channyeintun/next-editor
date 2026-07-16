@@ -24,14 +24,26 @@ export function computeRrwebOffsetMs(currentTime: number, baseTime: number): num
 // own timer never autoplays. DOM, scroll, input and pointer all live in one rrweb
 // event stream, so they stay coupled (unlike the legacy two-applier model).
 export class RrwebPreviewReplayer {
-  private readonly replayer: Replayer;
+  private replayer: Replayer;
+  private readonly root: HTMLElement;
+  private readonly events: eventWithTime[];
   private readonly baseTime: number;
+  private lastOffsetMs = 0;
   private destroyed = false;
 
   constructor({ root, events, baseTime }: RrwebPreviewReplayerOptions) {
+    this.root = root;
+    this.events = events;
     this.baseTime = baseTime;
-    this.replayer = new Replayer(events, {
-      root,
+    this.replayer = this.createReplayer();
+    // Render the initial snapshot immediately so the panel is never blank before
+    // the first tick arrives.
+    this.seekToRecordingTime(baseTime);
+  }
+
+  private createReplayer(): Replayer {
+    const replayer = new Replayer(this.events, {
+      root: this.root,
       liveMode: false,
       mouseTail: false,
       showWarning: false,
@@ -42,10 +54,19 @@ export class RrwebPreviewReplayer {
       useVirtualDom: false,
       insertStyleRules: ["::selection { background-color: #b4d5fe; }"],
     });
-    this.makeResponsive();
-    // Render the initial snapshot immediately so the panel is never blank before
-    // the first tick arrives.
-    this.seekToRecordingTime(baseTime);
+    this.makeResponsive(replayer);
+    return replayer;
+  }
+
+  private restartReplayer(): void {
+    try {
+      this.replayer.destroy();
+    } catch {
+      // A teardown race must not prevent a clean replacement.
+    }
+
+    this.root.replaceChildren();
+    this.replayer = this.createReplayer();
   }
 
   seekToRecordingTime(currentTime: number): void {
@@ -53,8 +74,19 @@ export class RrwebPreviewReplayer {
       return;
     }
 
+    const offsetMs = computeRrwebOffsetMs(currentTime, this.baseTime);
+
     try {
-      this.replayer.pause(computeRrwebOffsetMs(currentTime, this.baseTime));
+      // rrweb cannot reliably seek a used Replayer to offset zero: pause(0)
+      // cancels its zero-delay snapshot cast after clearing the mirror, leaving
+      // the DOM from the previous pass mounted. Start/restart from a fresh mirror
+      // and iframe so the second playback receives the same baseline as the first.
+      if (offsetMs === 0 && this.lastOffsetMs > 0) {
+        this.restartReplayer();
+      }
+
+      this.replayer.pause(offsetMs);
+      this.lastOffsetMs = offsetMs;
     } catch {
       // A single failed cast must not break the timeline; the next tick retries.
     }
@@ -64,8 +96,8 @@ export class RrwebPreviewReplayer {
   // fixed pixel size, so it tracks the recorded float/unfloat panel size. Content
   // fidelity comes from replaying the recorded DOM (exact rows/translateY), not
   // from re-running the page at a specific width.
-  private makeResponsive(): void {
-    const { wrapper, iframe } = this.replayer;
+  private makeResponsive(replayer: Replayer): void {
+    const { wrapper, iframe } = replayer;
 
     if (wrapper) {
       wrapper.style.width = "100%";
