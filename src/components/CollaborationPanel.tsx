@@ -98,6 +98,7 @@ export default function CollaborationPanel() {
   return (
     <div className="relative">
       <button
+        data-tour="collaboration"
         type="button"
         aria-expanded={isOpen}
         aria-haspopup="dialog"

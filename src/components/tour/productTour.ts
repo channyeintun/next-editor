@@ -46,6 +46,14 @@ const TOUR_STEPS: ProductTourStep[] = [
     },
   },
   {
+    element: '[data-tour="collaboration"]',
+    popover: {
+      title: "Live collaboration",
+      description:
+        "Start a live room, invite editors or viewers, and work together in the Monaco editor and workspace.",
+    },
+  },
+  {
     element: '[data-tour="settings"]',
     popover: {
       title: "Settings",
