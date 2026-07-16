@@ -297,6 +297,23 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     void runSaveAction();
   });
 
+  const onCollaborationUndoShortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (!collaboration?.provider || !collaboration.canWrite || usesPlaybackModel) return;
+    const editor = editorRef.current;
+    const editorNode = editor?.getDomNode();
+    if (!editorNode?.contains(editorNode.ownerDocument.activeElement)) return;
+    if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+
+    const key = event.key.toLowerCase();
+    const isUndo = key === "z" && !event.shiftKey;
+    const isRedo = key === "y" || (key === "z" && event.shiftKey);
+    if (!isUndo && !isRedo) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (isRedo) collaboration.redo();
+    else collaboration.undo();
+  });
+
   const focusEditorIfNeeded = useEffectEvent((editor: StandaloneEditor | null) => {
     if (!editor) {
       return;
@@ -313,6 +330,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
   useEffect(() => {
     const handleWindowKeyDown = (event: KeyboardEvent) => {
+      onCollaborationUndoShortcut(event);
       onSaveShortcut(event);
     };
 

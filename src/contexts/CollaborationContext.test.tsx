@@ -1,19 +1,24 @@
 import { act, render, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as Y from "yjs";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import type { WorkspaceActions } from "./WorkspaceContext";
 
 const mocks = vi.hoisted(() => ({
+  closeRoom: vi.fn(),
   createRoom: vi.fn(),
   getRoom: vi.fn(),
+  publishUpdate: vi.fn(),
+  uploadAsset: vi.fn(),
 }));
 
 vi.mock("@next-editor/infra", () => ({
   claimCollaborationInvitation: vi.fn(),
-  closeCollaborationRoom: vi.fn(),
+  closeCollaborationRoom: mocks.closeRoom,
   createCollaborationInvitation: vi.fn(),
   createCollaborationRoom: mocks.createRoom,
+  downloadCollaborationAsset: vi.fn(),
   exportCollaborationRoom: vi.fn(),
   getCollaborationBootstrap: vi.fn(),
   getCollaborationRoom: mocks.getRoom,
@@ -21,10 +26,11 @@ vi.mock("@next-editor/infra", () => ({
   listCollaborationInvitations: vi.fn(async () => []),
   listCollaborationMembers: vi.fn(async () => ({ members: [], roleVersion: 1 })),
   publishCollaborationAwareness: vi.fn(),
-  publishCollaborationUpdate: vi.fn(),
+  publishCollaborationUpdate: mocks.publishUpdate,
   removeCollaborationMember: vi.fn(),
   revokeCollaborationInvitation: vi.fn(),
   updateCollaborationMemberRole: vi.fn(),
+  uploadCollaborationAsset: mocks.uploadAsset,
   useAuth: () => ({
     user: { id: "10000000-0000-4000-8000-000000000001" },
     isSignedIn: true,
@@ -33,6 +39,7 @@ vi.mock("@next-editor/infra", () => ({
 }));
 
 const project = createStarterHtmlCssWorkspace();
+let currentProject = project;
 const baseActions: WorkspaceActions = {
   setActiveFilePath: vi.fn(),
   setPreviewFilePath: vi.fn(),
@@ -49,11 +56,12 @@ const baseActions: WorkspaceActions = {
   deleteFolder: vi.fn(),
   updateFileContent: vi.fn(),
   updateActiveFileContent: vi.fn(),
+  hydrateAssetContents: vi.fn(),
   saveProject: vi.fn(async () => {}),
   loadProject: vi.fn(),
   reconcileExternalProject: vi.fn(),
   updateLessonType: vi.fn(),
-  getProject: () => project,
+  getProject: () => currentProject,
   getWorkspaceRevision: () => 0,
   getActiveFilePath: () => project.entryFilePath,
   getCollapsedFolders: () => [],
@@ -73,6 +81,8 @@ vi.mock("../hooks/useNextEditorContext", () => ({
 
 import { CollaborationProvider, useCollaboration } from "./CollaborationContext";
 import type { CollaborationRoomSession } from "../collaboration/protocol";
+import { applyEncodedYjsSnapshot, applyEncodedYjsUpdate } from "../collaboration/yjsUpdates";
+import { projectCollaborationDocument } from "../collaboration/projectDocument";
 
 const roomSession: CollaborationRoomSession = {
   room: {
@@ -92,6 +102,11 @@ const roomSession: CollaborationRoomSession = {
 };
 
 describe("CollaborationProvider", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentProject = project;
+  });
+
   it("seeds the current workspace and moves the editor into the created room URL", async () => {
     mocks.createRoom.mockResolvedValue(roomSession);
     mocks.getRoom.mockRejectedValue({ response: { status: 404 } });
@@ -120,6 +135,57 @@ describe("CollaborationProvider", () => {
       documentSchemaVersion: 1,
     });
     await waitFor(() => expect(search).toContain(`room=${roomSession.room.id}`));
+    view.unmount();
+  });
+
+  it("uploads binary files before publishing descriptor-only room updates", async () => {
+    currentProject = structuredClone(project);
+    currentProject.files["logo.png"] = {
+      path: "logo.png",
+      name: "logo.png",
+      language: "plaintext",
+      content: "aGVsbG8=",
+      encoding: "base64",
+    };
+    const asset = {
+      id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      mimeType: "image/png",
+      size: 5,
+    };
+    mocks.createRoom.mockResolvedValue(roomSession);
+    mocks.uploadAsset.mockResolvedValue(asset);
+    mocks.publishUpdate.mockResolvedValue({ accepted: true });
+    mocks.getRoom.mockRejectedValue({ response: { status: 404 } });
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+
+    const view = render(
+      <MemoryRouter initialEntries={["/code"]}>
+        <CollaborationProvider>
+          <Probe />
+        </CollaborationProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await collaboration!.createRoom();
+    });
+
+    expect(mocks.uploadAsset).toHaveBeenCalledWith(roomSession.room.id, "aGVsbG8=", "image/png");
+    expect(mocks.publishUpdate).toHaveBeenCalledTimes(1);
+    const doc = new Y.Doc();
+    applyEncodedYjsSnapshot(doc, mocks.createRoom.mock.calls[0][0].snapshot);
+    expect(projectCollaborationDocument(doc).project.files["logo.png"]).toBeUndefined();
+    applyEncodedYjsUpdate(doc, mocks.publishUpdate.mock.calls[0][1].update);
+    const projection = projectCollaborationDocument(doc);
+    expect(projection.project.files["logo.png"]).toMatchObject({
+      encoding: "base64",
+      content: "",
+    });
+    expect(Array.from(projection.assetsByNodeId.values())).toContainEqual(asset);
+    doc.destroy();
     view.unmount();
   });
 });

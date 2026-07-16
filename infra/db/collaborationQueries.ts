@@ -1,7 +1,12 @@
 import type {
+  CollaborationAssetDescriptor,
   CollaborationInviteRole,
   CollaborationRole,
   CollaborationRoomStatus,
+} from "../../src/collaboration/protocol";
+import {
+  MAX_COLLABORATION_ROOM_ASSET_BYTES,
+  MAX_COLLABORATION_ROOM_ASSETS,
 } from "../../src/collaboration/protocol";
 
 export interface CollaborationRoomRow {
@@ -24,6 +29,22 @@ export class CollaborationRoomQuotaError extends Error {
     super("active collaboration room quota exceeded");
     this.name = "CollaborationRoomQuotaError";
   }
+}
+
+export class CollaborationAssetQuotaError extends Error {
+  constructor() {
+    super("collaboration asset quota exceeded");
+    this.name = "CollaborationAssetQuotaError";
+  }
+}
+
+export interface CollaborationAssetRow {
+  room_id: string;
+  asset_id: string;
+  size: number;
+  mime_type: string;
+  uploaded_by: string | null;
+  created_at: number;
 }
 
 const MAX_ACTIVE_ROOMS_PER_OWNER = 5;
@@ -158,8 +179,95 @@ export type CollaborationAuditAction =
   | "member.removed"
   | "room.closed"
   | "room.exported"
+  | "asset.uploaded"
   | "room.compacted"
   | "room.purged";
+
+export async function getCollaborationAsset(
+  db: D1Database,
+  roomId: string,
+  assetId: string,
+): Promise<CollaborationAssetRow | null> {
+  const row = await db
+    .prepare("SELECT * FROM collaboration_assets WHERE room_id = ? AND asset_id = ?")
+    .bind(roomId, assetId)
+    .first<CollaborationAssetRow>();
+  return row ?? null;
+}
+
+export async function registerCollaborationAsset(
+  db: D1Database,
+  input: {
+    roomId: string;
+    uploadedBy: string;
+    asset: CollaborationAssetDescriptor;
+  },
+): Promise<{ row: CollaborationAssetRow; created: boolean }> {
+  const existing = await getCollaborationAsset(db, input.roomId, input.asset.id);
+  if (existing) {
+    if (existing.size !== input.asset.size) {
+      throw new Error("collaboration asset metadata does not match its digest");
+    }
+    return { row: existing, created: false };
+  }
+
+  const now = Date.now();
+  const row = await db
+    .prepare(
+      `INSERT INTO collaboration_assets
+         (room_id, asset_id, size, mime_type, uploaded_by, created_at)
+       SELECT ?, ?, ?, ?, ?, ?
+       WHERE
+         (SELECT COUNT(*) FROM collaboration_assets WHERE room_id = ?) < ?
+         AND
+         (SELECT COALESCE(SUM(size), 0) FROM collaboration_assets WHERE room_id = ?) + ? <= ?
+       ON CONFLICT (room_id, asset_id) DO NOTHING
+       RETURNING *`,
+    )
+    .bind(
+      input.roomId,
+      input.asset.id,
+      input.asset.size,
+      input.asset.mimeType,
+      input.uploadedBy,
+      now,
+      input.roomId,
+      MAX_COLLABORATION_ROOM_ASSETS,
+      input.roomId,
+      input.asset.size,
+      MAX_COLLABORATION_ROOM_ASSET_BYTES,
+    )
+    .first<CollaborationAssetRow>();
+  if (row) return { row, created: true };
+
+  const raced = await getCollaborationAsset(db, input.roomId, input.asset.id);
+  if (raced && raced.size === input.asset.size) {
+    return { row: raced, created: false };
+  }
+  throw new CollaborationAssetQuotaError();
+}
+
+export async function deleteCollaborationAssetRegistration(
+  db: D1Database,
+  roomId: string,
+  assetId: string,
+): Promise<void> {
+  await db
+    .prepare("DELETE FROM collaboration_assets WHERE room_id = ? AND asset_id = ?")
+    .bind(roomId, assetId)
+    .run();
+}
+
+export async function deleteCollaborationRoomAssetRegistrations(
+  db: D1Database,
+  roomId: string,
+): Promise<number> {
+  const result = await db
+    .prepare("DELETE FROM collaboration_assets WHERE room_id = ?")
+    .bind(roomId)
+    .run();
+  return result.meta.changes;
+}
 
 export async function recordCollaborationAuditEvent(
   db: D1Database,

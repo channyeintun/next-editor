@@ -1,6 +1,6 @@
 # Live Collaboration — Upstash Deployment Evaluation
 
-Status: selected for the initial implementation spike; implementation in progress
+Status: selected and implemented for the MVP; deployed transport validation pending
 
 Companion documents:
 
@@ -75,11 +75,25 @@ The first Option A foundation is implemented:
   URLs, projects text transactions incrementally into the workspace/WebContainer, routes tree and
   text commands through Yjs, pauses projection during playback, and makes viewer Monaco models
   read-only.
+- [`awarenessStore.ts`](../infra/worker/collaboration/awarenessStore.ts), the provider, and editor UI
+  implement TTL presence, separate awareness/control streams, participant state, relative remote
+  cursors/selections, active-file presence, and follow-host behavior.
+- [`qstash.ts`](../infra/worker/collaboration/qstash.ts) publishes compaction and delayed cleanup
+  jobs; the maintenance route verifies raw-body JWT signatures against both current and next
+  signing keys. Local development falls back to in-request compaction when QStash is absent.
+- [`0006_collaboration_hardening.sql`](../infra/db/migrations/0006_collaboration_hardening.sql),
+  rate limits, document budgets, audit events, seven-day retention, and owner export provide the
+  initial hardening and recovery boundary.
+- [`0007_collaboration_assets.sql`](../infra/db/migrations/0007_collaboration_assets.sql) and the
+  private R2 asset routes implement SHA-256-addressed uploads, membership-checked downloads,
+  5 MB per-asset and 25 MB per-room limits, retryable hydration, and cleanup with room expiry.
+- Host-only recording controls keep SCR3 in the owner browser and expose the existing lesson
+  upload modal only after the live provider has ended. Local-origin Yjs undo excludes remote and
+  playback transactions.
 
-The data plane is now connected to the editor, but the room management UI is not yet complete.
-Awareness/cursors, QStash scheduling, binary collaboration assets, recording host guards, and room
-lifecycle controls remain subsequent work. Realtime must still pass the transport spike in this
-document before the fallback WebSocket option is discarded.
+The MVP implementation is complete. Realtime must still pass the deployed transport spike in this
+document before the fallback WebSocket option is discarded; this is a production-validation gate,
+not an additional editor implementation phase.
 
 ## Existing Redis integration is not collaboration infrastructure
 
@@ -107,8 +121,8 @@ QSTASH_NEXT_SIGNING_KEY
 
 A separate database provides independent retention, budgets, throughput, incident handling, and
 metrics. It also prevents high-frequency room traffic from competing with the gallery cache. The
-Redis and QStash credentials are server-only and must never be included in the browser bundle or
-room token.
+Redis and QStash credentials are server-only and must never be included in the browser bundle,
+invitation URLs, or any future room token.
 
 ## Option A: Upstash-centric room provider
 
@@ -198,8 +212,10 @@ Suggested Redis key families:
 collab:{roomId}:document                 Redis Stream of durable document events
 collab:{roomId}:snapshot                 Latest compacted Yjs snapshot
 collab:{roomId}:snapshot-meta            Schema version, generation, and stream cutoff
-collab:{roomId}:presence:{sessionId}     Short-lived presence key
-collab:{roomId}:role-version             Revocation/version guard for room tokens
+collab:{roomId}:presence:{actorId}:{sessionId}  Short-lived presence key
+collab:{roomId}:presence-sessions        Expiring participant roster
+collab:{roomId}:accepted-bytes           Document quota counter
+collab:{roomId}:update:{updateId}        Expiring idempotency key
 collab:{roomId}:compaction-lock          Expiring single-compactor lock
 ```
 
@@ -214,8 +230,9 @@ a busy room.
 
 An Upstash-centric provider should use this sequence:
 
-1. The browser exchanges its first-party session for a short-lived, room-scoped token containing
-   the user ID, tab/session ID, effective role, role version, protocol version, and schema version.
+1. The browser uses its first-party `HttpOnly` session cookie on same-origin SSE and HTTP requests.
+   The Worker resolves the canonical user and current D1 room membership; no bearer token is put
+   in the EventSource URL.
 2. The provider opens the room's SSE subscription and buffers live document events.
 3. The provider fetches an authenticated bootstrap response containing the latest snapshot,
    snapshot stream cutoff, and updates after that cutoff.
@@ -249,7 +266,7 @@ updateBase64
 
 The server must:
 
-- Verify the room token and current role version.
+- Verify the first-party session, current D1 membership, room state, and effective role.
 - Reject viewer writes.
 - Rate-limit by room, user, and session.
 - Validate encoded and decoded size limits.
@@ -257,10 +274,10 @@ The server must:
 - Persist before acknowledging the browser.
 - Treat repeated or reordered Yjs updates as normal rather than exceptional.
 
-A signed role embedded in a stateless token is not sufficient for immediate role downgrades. The
-update endpoint must also consult an authoritative role version or a short-lived Redis membership
-cache. The control event disables honest clients immediately; the server-side version check stops
-a modified client from continuing to write with an older token.
+The implemented update and subscription endpoints consult the authoritative D1 membership on
+every request. A control event disables honest clients immediately; the next server request also
+rejects a modified client after a downgrade or removal. If a future provider introduces signed
+room tokens, it must still check an authoritative role version or short-lived membership cache.
 
 ## Awareness and presence
 
@@ -405,9 +422,9 @@ Redis persistence, QStash background work, or any editor integration decision.
 - Treat Redis unavailability as a room connection failure, not as a cache miss.
 - Provide an owner export/recovery path independent of the current compacted snapshot.
 
-## Implementation impact if selected
+## Implemented deployment components
 
-The option would add:
+The selected option adds:
 
 - A dedicated collaboration Redis factory with strict failure semantics.
 - Realtime event schemas and a same-origin SSE route in the Hono Worker.
@@ -416,7 +433,8 @@ The option would add:
 - A browser provider actor that coordinates SSE, bootstrap, POST writes, offline updates, and
   `collaborationMachine` lifecycle.
 - QStash-signed compaction and cleanup routes.
-- Separate document, awareness, and control quotas and dashboards.
+- Separate document, awareness, and control limits plus structured Worker log events. Dashboard
+  and alert setup is described in [Live Collaboration Operations](./live-collaboration-operations.md).
 
 These are deployment-specific adapter concerns. The shared document schema, Monaco bindings,
 workspace projection, playback isolation, and SCR3 recording code should not import Upstash SDKs.

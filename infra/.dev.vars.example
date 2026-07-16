@@ -14,3 +14,9 @@ UPSTASH_REDIS_REST_TOKEN=
 # dedicated database; local development may explicitly reuse the cache values.
 COLLAB_REDIS_REST_URL=
 COLLAB_REDIS_REST_TOKEN=
+
+# Optional locally; configure all three in production for signed background
+# compaction and delayed room/R2 cleanup.
+QSTASH_TOKEN=
+QSTASH_CURRENT_SIGNING_KEY=
+QSTASH_NEXT_SIGNING_KEY=

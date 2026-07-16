@@ -15,6 +15,7 @@ import {
   closeCollaborationRoom,
   createCollaborationInvitation,
   createCollaborationRoom,
+  downloadCollaborationAsset,
   exportCollaborationRoom,
   getCollaborationBootstrap,
   getCollaborationRoom,
@@ -26,6 +27,7 @@ import {
   removeCollaborationMember,
   revokeCollaborationInvitation,
   updateCollaborationMemberRole,
+  uploadCollaborationAsset,
   useAuth,
 } from "@next-editor/infra";
 import type {
@@ -45,7 +47,10 @@ import {
   seedCollaborationProject,
   type CollaborationProjectProjection,
 } from "../collaboration/projectDocument";
-import { createCollaborationRoomSnapshot } from "../collaboration/yjsUpdates";
+import {
+  createCollaborationDocumentUpdate,
+  createCollaborationRoomSnapshot,
+} from "../collaboration/yjsUpdates";
 import {
   UpstashRoomProvider,
   type CollaborationRoomApi,
@@ -63,6 +68,8 @@ import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useWorkspaceActions, useWorkspaceActiveFilePath } from "../hooks/useWorkspace";
 import { createCollaborationCursor } from "../collaboration/relativePosition";
 import { liveRoomEndBlockReason } from "../collaboration/recordingPolicy";
+import { getWorkspaceFileMimeType } from "../types/workspace";
+import { createCollaborationUndoManager } from "../collaboration/undo";
 
 export type CollaborationParticipant = Extract<CollaborationAwarenessEvent, { kind: "state" }>;
 
@@ -93,6 +100,9 @@ interface CollaborationContextValue {
   removeMember: (userId: string) => Promise<void>;
   setFollowingHost: (following: boolean) => void;
   updateCursor: (path: string, anchorOffset: number, headOffset: number) => void;
+  retryAssets: () => void;
+  undo: () => void;
+  redo: () => void;
   clearError: () => void;
 }
 
@@ -128,6 +138,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<UpstashRoomProvider | null>(null);
   const providerRef = useRef<UpstashRoomProvider | null>(null);
   const projectionRef = useRef<CollaborationProjectProjection | null>(null);
+  const assetContentsRef = useRef(new Map<string, string>());
+  const assetFetchesRef = useRef(new Set<string>());
+  const undoManagerRef = useRef<Y.UndoManager | null>(null);
   const [runtimeVersion, setRuntimeVersion] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
   const [members, setMembers] = useState<CollaborationMember[]>([]);
@@ -144,6 +157,50 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   activeFilePathRef.current = activeFilePath;
   const followingHostRef = useRef(isFollowingHost);
   followingHostRef.current = isFollowingHost;
+
+  const hydrateProjectionAssets = useCallback(
+    (projection: CollaborationProjectProjection, targetRoomId: string) => {
+      const hydrated: Record<string, string> = {};
+      for (const [nodeId, asset] of projection.assetsByNodeId) {
+        const path = projection.pathByNodeId.get(nodeId);
+        if (!path) continue;
+        const cached = assetContentsRef.current.get(asset.id);
+        if (cached !== undefined) {
+          hydrated[path] = cached;
+          continue;
+        }
+        if (assetFetchesRef.current.has(asset.id)) continue;
+        assetFetchesRef.current.add(asset.id);
+        void downloadCollaborationAsset(targetRoomId, asset.id)
+          .then((content) => {
+            assetContentsRef.current.set(asset.id, content);
+            const currentProjection = projectionRef.current;
+            const matchingPaths: Record<string, string> = {};
+            if (currentProjection) {
+              for (const [currentNodeId, currentAsset] of currentProjection.assetsByNodeId) {
+                const currentPath = currentProjection.pathByNodeId.get(currentNodeId);
+                if (currentPath && currentAsset.id === asset.id) {
+                  matchingPaths[currentPath] = content;
+                }
+              }
+            }
+            if (Object.keys(matchingPaths).length > 0) {
+              baseActionsRef.current.hydrateAssetContents(matchingPaths);
+            }
+          })
+          .catch((error: unknown) => {
+            setLocalError(
+              messageFromError(error, `The shared asset ${path} could not be downloaded.`),
+            );
+          })
+          .finally(() => assetFetchesRef.current.delete(asset.id));
+      }
+      if (Object.keys(hydrated).length > 0) {
+        baseActionsRef.current.hydrateAssetContents(hydrated);
+      }
+    },
+    [],
+  );
 
   const applyAwarenessEvent = useCallback((event: CollaborationAwarenessEvent) => {
     const key = `${event.actorId}:${event.sessionId}`;
@@ -207,6 +264,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       providerRef.current?.stop();
       providerRef.current = null;
       projectionRef.current = null;
+      assetContentsRef.current.clear();
+      assetFetchesRef.current.clear();
       setProvider(null);
       return;
     }
@@ -217,12 +276,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       onDocumentChange: (doc, transaction) => {
         if (playbackRef.current) return;
         try {
-          projectionRef.current = projectCollaborationTransaction(
+          const projection = projectCollaborationTransaction(
             doc,
             transaction,
             projectionRef.current,
             baseActionsRef.current,
+            assetContentsRef.current,
           );
+          projectionRef.current = projection;
+          hydrateProjectionAssets(projection, roomId);
         } catch (error) {
           setLocalError(messageFromError(error, "The shared workspace could not be projected."));
         }
@@ -242,6 +304,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     providerRef.current?.stop();
     providerRef.current = nextProvider;
     projectionRef.current = null;
+    assetContentsRef.current.clear();
+    assetFetchesRef.current.clear();
     awarenessCursorRef.current = null;
     awarenessRevisionRef.current = 0;
     setMembers([]);
@@ -260,17 +324,36 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       nextProvider.stop();
       if (providerRef.current === nextProvider) providerRef.current = null;
     };
-  }, [applyAwarenessEvent, inviteToken, refreshRoomDataFor, roomId]);
+  }, [applyAwarenessEvent, hydrateProjectionAssets, inviteToken, refreshRoomDataFor, roomId]);
+
+  useEffect(() => {
+    if (!provider) {
+      undoManagerRef.current = null;
+      return;
+    }
+    const manager = createCollaborationUndoManager(provider.doc);
+    undoManagerRef.current = manager;
+    return () => {
+      if (undoManagerRef.current === manager) undoManagerRef.current = null;
+      manager.destroy();
+    };
+  }, [provider]);
 
   useEffect(() => {
     if (usesPlaybackModel || !provider) return;
     try {
-      projectionRef.current = reprojectCollaborationWorkspace(provider.doc, baseActionsRef.current);
+      const projection = reprojectCollaborationWorkspace(
+        provider.doc,
+        baseActionsRef.current,
+        assetContentsRef.current,
+      );
+      projectionRef.current = projection;
+      if (roomId) hydrateProjectionAssets(projection, roomId);
     } catch {
       // The initial snapshot may not have arrived yet; its transaction callback
       // performs this projection after synchronization.
     }
-  }, [provider, usesPlaybackModel]);
+  }, [hydrateProjectionAssets, provider, roomId, usesPlaybackModel]);
 
   // runtimeVersion intentionally makes actor snapshots reactive without
   // putting high-frequency Yjs document content in React state.
@@ -317,8 +400,30 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     return {
       ...baseActions,
       createNewEditor: () => reportWriteError(new Error("Leave the room before replacing the project.")),
-      createFile: (path, content = "", encoding) =>
-        run(() => controller.createFile(path, content, encoding)),
+      createFile: (path, content = "", encoding) => {
+        if (encoding !== "base64") {
+          run(() => controller.createFile(path, content, encoding));
+          return;
+        }
+        const currentProvider = providerRef.current;
+        const currentSession = currentProvider?.session;
+        if (!currentProvider || !currentSession || !canWriteRef.current) {
+          reportWriteError(new Error("The collaboration room is not ready for asset uploads."));
+          return;
+        }
+        void uploadCollaborationAsset(
+          currentSession.room.id,
+          content,
+          getWorkspaceFileMimeType(path),
+        )
+          .then((asset) => {
+            if (providerRef.current !== currentProvider || !canWriteRef.current) return;
+            assetContentsRef.current.set(asset.id, content);
+            controller.createAssetFile(path, asset);
+            setLocalError(null);
+          })
+          .catch(reportWriteError);
+      },
       createFolder: (path) => run(() => controller.createFolder(path)),
       renameFile: (currentPath, nextPath) =>
         run(() => controller.renameFile(currentPath, nextPath)),
@@ -355,13 +460,46 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
   const createRoom = useCallback(async () => {
     if (!isSignedIn) throw new Error("Sign in before starting a collaboration room.");
+    const project = baseActionsRef.current.getProject();
     const doc = new Y.Doc();
-    seedCollaborationProject(doc, baseActionsRef.current.getProject());
-    const created = await createCollaborationRoom(
-      createCollaborationRoomSnapshot(doc, crypto.randomUUID()),
-    );
-    updateRoomParam(created.room.id);
-    return created;
+    seedCollaborationProject(doc, project, { skipBinaryAssets: true });
+    const seededState = Y.encodeStateVector(doc);
+    const clientId = crypto.randomUUID();
+    let created: CollaborationRoomSession;
+    try {
+      created = await createCollaborationRoom(createCollaborationRoomSnapshot(doc, clientId));
+    } catch (error) {
+      doc.destroy();
+      throw error;
+    }
+    try {
+      const binaryFiles = Object.values(project.files)
+        .filter((file) => file.encoding === "base64")
+        .sort((left, right) => left.path.localeCompare(right.path));
+      if (binaryFiles.length > 0) {
+        const controller = new CollaborationProjectController(doc, { canWrite: () => true });
+        for (const file of binaryFiles) {
+          const asset = await uploadCollaborationAsset(
+            created.room.id,
+            file.content,
+            getWorkspaceFileMimeType(file.path),
+          );
+          controller.createAssetFile(file.path, asset);
+        }
+        controller.setEntryFile(project.entryFilePath);
+        await publishCollaborationUpdate(
+          created.room.id,
+          createCollaborationDocumentUpdate(Y.encodeStateAsUpdate(doc, seededState), clientId),
+        );
+      }
+      updateRoomParam(created.room.id);
+      return created;
+    } catch (error) {
+      await closeCollaborationRoom(created.room.id).catch(() => {});
+      throw error;
+    } finally {
+      doc.destroy();
+    }
   }, [isSignedIn, updateRoomParam]);
 
   const leaveRoom = useCallback(() => {
@@ -376,6 +514,26 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const retry = useCallback(async () => {
     setLocalError(null);
     await providerRef.current?.retryNow();
+  }, []);
+
+  const retryAssets = useCallback(() => {
+    const current = providerRef.current;
+    const projection = projectionRef.current;
+    const targetRoomId = current?.session?.room.id;
+    if (!projection || !targetRoomId) return;
+    setLocalError(null);
+    hydrateProjectionAssets(projection, targetRoomId);
+  }, [hydrateProjectionAssets]);
+
+  const undo = useCallback(() => {
+    if (!canWriteRef.current) return;
+    undoManagerRef.current?.stopCapturing();
+    undoManagerRef.current?.undo();
+  }, []);
+
+  const redo = useCallback(() => {
+    if (!canWriteRef.current) return;
+    undoManagerRef.current?.redo();
   }, []);
 
   const closeRoom = useCallback(async () => {
@@ -620,6 +778,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       removeMember,
       setFollowingHost: setIsFollowingHost,
       updateCursor,
+      retryAssets,
+      undo,
+      redo,
       clearError: () => setLocalError(null),
     }),
     [
@@ -639,14 +800,17 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       participants,
       provider,
       refreshRoomData,
+      redo,
       removeMember,
       revokeInvitation,
       retry,
+      retryAssets,
       role,
       session,
       updateCursor,
       updateMemberRole,
       updateRoomParam,
+      undo,
       user,
     ],
   );

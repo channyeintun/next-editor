@@ -16,6 +16,28 @@ SQLite-backed Durable Object per collaboration room.
 Pricing and product behavior in this document were checked on 2026-07-16. Cloudflare pricing and
 limits must be verified again before production rollout.
 
+## Relationship to the implemented Upstash option
+
+The selected MVP still uses the application's existing Cloudflare platform around Upstash:
+
+| Cloudflare service | Implemented collaboration responsibility |
+| ------------------ | ----------------------------------------- |
+| Workers + Hono     | Same-origin room, membership, update, awareness, asset, export, and signed maintenance endpoints |
+| Workers Static Assets | Serve the editor on the same origin so its first-party session authenticates SSE and HTTP safely |
+| D1                 | Rooms, members, invitations, roles, asset metadata, retention state, and audit events |
+| R2                 | Private SHA-256-addressed binary project assets; never live SCR3 recordings |
+| Workers Logs       | Structured update and maintenance telemetry for dashboards and alerts |
+
+Durable Objects, Durable Object SQLite, Alarms, and Cloudflare Queues are **not** used by the
+implemented Upstash provider. Redis/Realtime already supply fan-out and recoverable room history,
+while QStash supplies compaction and delayed cleanup. Adding a Durable Object as well would create
+two stateful room coordinators.
+
+The Durable Object design below remains the provider fallback if the deployed Upstash transport
+fails its latency, throughput, reconnect, or cost gates. The browser-local recording decision does
+not affect that choice: the host keeps SCR3 locally under either provider and uses the existing
+post-recording upload modal only after live ends.
+
 ## Decision within this option
 
 If a Cloudflare-native WebSocket room service is selected, use a SQLite-backed

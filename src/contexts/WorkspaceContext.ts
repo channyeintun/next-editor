@@ -22,6 +22,7 @@ export interface WorkspaceActions {
   deleteFolder: (path: string) => void;
   updateFileContent: (path: string, content: string) => void;
   updateActiveFileContent: (content: string) => void;
+  hydrateAssetContents: (contents: Record<string, string>) => void;
   saveProject: () => Promise<void>;
   loadProject: (
     project: WorkspaceProject,

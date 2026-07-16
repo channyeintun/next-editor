@@ -9,6 +9,7 @@ import {
   canPublishCollaborationUpdate,
   claimCollaborationInvitationInputSchema,
   collaborationAwarenessInputSchema,
+  collaborationAssetIdSchema,
   collaborationCreateRoomInputSchema,
   collaborationDocumentUpdateEventSchema,
   collaborationDocumentUpdateInputSchema,
@@ -23,7 +24,10 @@ import {
 import {
   createProvisioningCollaborationRoom,
   claimCollaborationInvitation,
+  deleteCollaborationAssetRegistration,
+  deleteCollaborationRoomAssetRegistrations,
   createCollaborationInvitation,
+  getCollaborationAsset,
   getCollaborationRoomAccess,
   getCollaborationRoomById,
   getCollaborationInvitationByHash,
@@ -33,6 +37,7 @@ import {
   removeCollaborationMember,
   markCollaborationRoomPurged,
   recordCollaborationAuditEvent,
+  registerCollaborationAsset,
   revokeCollaborationInvitation,
   setCollaborationRoomStatus,
   updateCollaborationMemberRole,
@@ -40,6 +45,7 @@ import {
   type CollaborationRoomAccess,
   type CollaborationRoomRow,
   CollaborationRoomQuotaError,
+  CollaborationAssetQuotaError,
 } from "../../db/collaborationQueries";
 import { getCurrentUser } from "../auth/session";
 import {
@@ -76,6 +82,12 @@ import {
   publishCollaborationMaintenanceJob,
   verifyQStashSignature,
 } from "../collaboration/qstash";
+import {
+  collaborationAssetKey,
+  deleteCollaborationRoomAssets,
+  exactArrayBuffer,
+  readCollaborationAsset,
+} from "../collaboration/assetStore";
 import type { Env } from "../env";
 
 const MAX_UPDATE_REQUEST_BYTES = MAX_ENCODED_YJS_UPDATE_LENGTH + 2 * 1024;
@@ -458,6 +470,8 @@ collaborationRoute.post("/jobs/maintenance", async (c) => {
     return c.body(null, 204);
   }
   const deletedKeys = await deleteCollaborationDocument(redis, room.id);
+  const deletedAssets = await deleteCollaborationRoomAssets(c.env.BUCKET, room.id);
+  const deletedAssetRecords = await deleteCollaborationRoomAssetRegistrations(c.env.DB, room.id);
   const marked = await markCollaborationRoomPurged(c.env.DB, room.id, job.data.closedAt);
   if (marked) {
     scheduleAuditEvent(c, {
@@ -470,9 +484,11 @@ collaborationRoute.post("/jobs/maintenance", async (c) => {
     kind: job.data.kind,
     roomId: room.id,
     deletedKeys,
+    deletedAssets,
+    deletedAssetRecords,
     marked,
   });
-  return c.json({ purged: marked, deletedKeys });
+  return c.json({ purged: marked, deletedKeys, deletedAssets, deletedAssetRecords });
 });
 
 collaborationRoute.get("/rooms", async (c) => {
@@ -576,6 +592,110 @@ collaborationRoute.get("/rooms/:roomId/bootstrap", async (c) => {
     });
     return c.json({ error: "failed to synchronize collaboration room" }, 503);
   }
+});
+
+collaborationRoute.put("/rooms/:roomId/assets/:assetId", async (c) => {
+  const user = await getCurrentUser(c);
+  if (!user) return c.json({ error: "not signed in" }, 401);
+  const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
+  const assetId = collaborationAssetIdSchema.safeParse(c.req.param("assetId"));
+  if (!roomId.success || !assetId.success) return c.json({ error: "invalid asset id" }, 400);
+
+  const access = await getCollaborationRoomAccess(c.env.DB, roomId.data, user.id);
+  if (!access) return c.json({ error: "not found" }, 404);
+  if (access.status !== "active") return c.json({ error: "room is not active" }, 409);
+  if (!canPublishCollaborationUpdate(access.member_role)) {
+    return c.json({ error: "room is read-only" }, 403);
+  }
+
+  const body = await readCollaborationAsset(c.req.raw);
+  if (!body.ok) return c.json({ error: body.error }, body.status);
+  if (body.descriptor.id !== assetId.data) {
+    return c.json({ error: "asset digest does not match its URL" }, 400);
+  }
+
+  let registration: Awaited<ReturnType<typeof registerCollaborationAsset>>;
+  try {
+    registration = await registerCollaborationAsset(c.env.DB, {
+      roomId: access.id,
+      uploadedBy: user.id,
+      asset: body.descriptor,
+    });
+  } catch (error) {
+    if (error instanceof CollaborationAssetQuotaError) {
+      return c.json({ error: "collaboration room asset quota exceeded" }, 413);
+    }
+    throw error;
+  }
+
+  try {
+    await c.env.BUCKET.put(
+      collaborationAssetKey(access.id, assetId.data),
+      exactArrayBuffer(body.bytes),
+      {
+        httpMetadata: { contentType: registration.row.mime_type },
+        customMetadata: { roomId: access.id, sha256: assetId.data },
+      },
+    );
+  } catch (error) {
+    if (registration.created) {
+      await deleteCollaborationAssetRegistration(c.env.DB, access.id, assetId.data).catch(() => {});
+    }
+    console.error("Failed to store collaboration asset", {
+      roomId: access.id,
+      assetId: assetId.data,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.json({ error: "failed to store collaboration asset" }, 503);
+  }
+
+  if (registration.created) {
+    scheduleAuditEvent(c, {
+      roomId: access.id,
+      actorUserId: user.id,
+      action: "asset.uploaded",
+    });
+  }
+  return c.json(
+    {
+      id: registration.row.asset_id,
+      mimeType: registration.row.mime_type,
+      size: registration.row.size,
+    },
+    registration.created ? 201 : 200,
+  );
+});
+
+collaborationRoute.get("/rooms/:roomId/assets/:assetId", async (c) => {
+  const user = await getCurrentUser(c);
+  if (!user) return c.json({ error: "not signed in" }, 401);
+  const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
+  const assetId = collaborationAssetIdSchema.safeParse(c.req.param("assetId"));
+  if (!roomId.success || !assetId.success) return c.json({ error: "invalid asset id" }, 400);
+
+  const access = await getCollaborationRoomAccess(c.env.DB, roomId.data, user.id);
+  if (
+    !access ||
+    access.purged_at !== null ||
+    (access.status !== "active" && access.status !== "closed")
+  ) {
+    return c.json({ error: "not found" }, 404);
+  }
+  const asset = await getCollaborationAsset(c.env.DB, access.id, assetId.data);
+  if (!asset) return c.json({ error: "not found" }, 404);
+  const object = await c.env.BUCKET.get(collaborationAssetKey(access.id, assetId.data));
+  if (!object) return c.json({ error: "asset is unavailable" }, 404);
+
+  const headers = new Headers({
+    "Cache-Control": "private, no-store",
+    "Content-Disposition": `attachment; filename="${asset.asset_id}"`,
+    "Content-Security-Policy": "sandbox; default-src 'none'",
+    "Content-Type": "application/octet-stream",
+    "Content-Length": String(asset.size),
+    "X-Content-Type-Options": "nosniff",
+  });
+  headers.set("ETag", object.httpEtag);
+  return new Response(object.body, { headers });
 });
 
 collaborationRoute.get("/rooms/:roomId/export", async (c) => {

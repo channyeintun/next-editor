@@ -1,15 +1,35 @@
 # Live Collaboration Feature Plan
 
-Status: implementation in progress
+Status: MVP implementation complete; deployment and multi-browser load validation pending
 
 Deployment evaluations:
 
 - [Cloudflare-native Deployment](./live-collaboration-cloudflare.md)
 - [Upstash Deployment Evaluation](./live-collaboration-upstash.md)
 
-Deployment status: Upstash Realtime plus a dedicated Redis data plane is selected for the initial
-implementation spike. The Cloudflare-native room service remains the fallback until that spike
-passes the required latency, throughput, reconnect, and cost checks.
+Deployment status: Upstash Realtime plus a dedicated Redis data plane is implemented for the MVP.
+The Cloudflare-native room service remains the documented fallback until the deployed Upstash
+transport passes the required latency, throughput, reconnect, and cost checks.
+
+## Implemented MVP
+
+The repository now contains the complete provider, control-plane, and editor integration:
+
+- Yjs text/tree/metadata documents with deterministic collision and recovery rules.
+- Same-origin authenticated HTTP writes and Upstash Realtime SSE subscriptions, backed by a
+  dedicated Redis snapshot/update data plane.
+- D1 rooms, invitations, owner/editor/viewer ACLs, role revocation, audit events, and room quotas.
+- Awareness TTLs, participants, relative remote cursors/selections, active-file state, and
+  follow-host UI.
+- Offline update retention, reconnect/bootstrap race handling, compaction, seven-day closed-room
+  retention, QStash-signed cleanup, and owner recovery export.
+- Content-addressed binary project assets in private R2. Yjs stores only digest/MIME/size
+  descriptors; clients hydrate bytes into the local workspace and can retry missing assets.
+- Local-origin text undo/redo, playback isolation, and host-only browser recording. SCR3 remains
+  local and the existing `UploadLessonModal` flow appears only after live ends.
+
+Production enablement still requires applying migrations, configuring secrets, and running the
+deployed transport spike in [Live Collaboration Operations](./live-collaboration-operations.md).
 
 ## Decision
 
@@ -38,7 +58,8 @@ resolving concurrent edits.
 - Converge text and file-tree changes after concurrent edits, disconnects, and reconnects.
 - Show participant identity, connection status, active file, cursor, and selection in real time.
 - Support owner, editor, and viewer permissions.
-- Allow participants to follow a designated host's active file and preview state.
+- Allow participants to follow the designated host's active file. Preview/runtime process state
+  remains local in the MVP.
 - Preserve the existing standalone editor when no collaboration room is configured.
 - Record the resulting collaborative session in the room host's browser through the existing
   recording pipeline.
@@ -48,8 +69,8 @@ resolving concurrent edits.
 - Audio or video transport, recording, or conferencing.
 - Using SCR3 segments to merge concurrent editor operations.
 - Running one shared WebContainer process across browsers.
-- Real-time collaborative editing of arbitrary binary assets in the first release.
-- Author-attributed replay, shared undo, comments, and annotations in the first release.
+- Editing binary bytes inside the CRDT; binary files are immutable content-addressed assets.
+- Author-attributed replay, cross-user/shared undo, comments, and annotations in the first release.
 - Making playback and live authoring write to the same workspace simultaneously.
 - Handing an in-progress recording from one room host to another.
 
@@ -83,8 +104,8 @@ capture the converged result in its expected order.
 flowchart LR
     UI[Monaco and project UI] <-->|local commands and projection| Doc[(Shared CRDT document)]
     Doc <-->|durable updates| Provider[Room provider]
-    Provider <-->|authenticated WebSocket| Room[Collaboration room service]
-    Room <--> Persist[(Update log and snapshots)]
+    Provider <-->|authenticated SSE and HTTP| Room[Hono collaboration routes]
+    Room <--> Persist[(Upstash Redis update log and snapshots)]
 
     Awareness[Presence and awareness] <-->|ephemeral messages| Provider
     UI <--> Awareness
@@ -113,6 +134,7 @@ explicit host-follow signals are shared.
 | Active file, panels, collapsed folders           | Local client                                        | Existing local state   |
 | Participant name, cursor, selection, active file | Awareness state                                     | Ephemeral with a TTL   |
 | Room membership and role                         | Collaboration service                               | Server ACL/session     |
+| Binary project asset bytes                       | Private R2 object keyed by room and SHA-256         | Seven-day room retention |
 | Preview/runtime output                           | Each client; host is authoritative for follow mode  | Not durable by default |
 | Recording timeline and capture state             | Room host's `editorMachine`                         | Browser-local SCR3     |
 | Playback workspace                               | `editorMachine` projection while playback is active | Loaded SCR3            |
@@ -134,7 +156,7 @@ metadata without replacing the text object or losing cursor anchors.
 project
   schemaVersion
   metadata
-  nodes: nodeId -> { kind, name, parentId, orderKey, deleted }
+  nodes: nodeId -> { kind, name, parentId, orderKey, deleted, encoding, asset descriptor? }
   texts: fileNodeId -> collaborative text
 ```
 
@@ -160,7 +182,7 @@ create duplicate stable IDs.
 
 ## Transport and room protocol
 
-Use one authenticated secure WebSocket per room with three logical message classes:
+The provider-neutral protocol has three logical message classes:
 
 1. **Document:** binary CRDT sync and update messages. These are durable and replayable.
 2. **Awareness:** participant, cursor, selection, active-file, and follow-host messages. These are
@@ -168,9 +190,16 @@ Use one authenticated secure WebSocket per room with three logical message class
 3. **Control:** protocol/schema versions, effective role, host assignment, room closure, and
    recoverable errors.
 
-The initial handshake must include `protocolVersion`, `documentSchemaVersion`, room ID, and a
-short-lived room token. Initial sync should use document state vectors/diffs rather than sending
-the full update log. The service should periodically compact the update log into a snapshot.
+The selected Upstash adapter maps downstream messages onto one same-origin Realtime SSE
+subscription and maps upstream document/awareness writes onto bounded HTTP endpoints. The
+browser's first-party `HttpOnly` session cookie authenticates those requests, and the Worker
+checks current D1 room membership and status for every subscription and write. It deliberately
+does not place bearer credentials in the EventSource URL, where tokens can leak through logs and
+history. A future WebSocket adapter may exchange the session for a short-lived room token.
+
+Bootstrap includes `protocolVersion`, `documentSchemaVersion`, a compacted snapshot, its stream
+cutoff, and a paginated update tail. Live events are buffered while bootstrap runs, closing the
+snapshot/subscription race. QStash periodically compacts the log into a new snapshot.
 
 Reconnect uses capped exponential backoff with jitter. Local CRDT updates may continue while
 offline and merge after reconnection. Awareness is cleared on disconnect and republished only
@@ -335,6 +364,8 @@ contrast requirements.
 
 ### Phase 1: room foundation
 
+Status: implemented.
+
 - Define the document schema, protocol versions, and ownership contract.
 - Add the authenticated room service, persistence, compaction, and roles.
 - Add `collaborationMachine`, provider lifecycle, reconnect behavior, and connection UI.
@@ -342,17 +373,23 @@ contrast requirements.
 
 ### Phase 2: text and presence
 
+Status: implemented, including local-origin text undo/redo.
+
 - Bind Monaco models to collaborative text.
 - Project remote edits into `workspaceStore` and the local WebContainer.
 - Add participants, cursors, selections, active-file presence, and local-origin undo.
 
 ### Phase 3: project tree and assets
 
+Status: implemented with private R2 assets and recoverable client hydration.
+
 - Move file/folder commands to stable-ID CRDT transactions.
 - Add deterministic collision handling and tombstone cleanup.
 - Add content-addressed asset upload/download and missing-asset recovery.
 
 ### Phase 4: host and recording integration
+
+Status: implemented. Recording remains host-only and browser-local.
 
 - Add host assignment and follow-host behavior.
 - Capture remote and inactive-file changes through the room host's recorder.
@@ -361,6 +398,8 @@ contrast requirements.
 - Enforce playback isolation and validate existing SCR3 progressive playback unchanged.
 
 ### Phase 5: hardening
+
+Status: implementation complete; deployed load/latency validation remains a release gate.
 
 - Add rate limits, quotas, audit events, operational dashboards, and load tests.
 - Test long-lived rooms, large projects, reconnect storms, role changes, and recorder loss.
@@ -405,7 +444,8 @@ contrast requirements.
 
 ## Security, privacy, and operations
 
-- Issue short-lived, room-scoped tokens; authorize every connection and durable update server-side.
+- Use the same-origin `HttpOnly` session and authorize every connection and durable update against
+  current D1 membership. If a WebSocket provider is introduced, issue short-lived room tokens.
 - Apply room size, update size, awareness frequency, document size, and asset quotas.
 - Validate protocol/schema versions and reject unsupported clients before accepting updates.
 - Treat awareness fields as untrusted input, cap their size, and render names as plain text.
@@ -430,10 +470,10 @@ contrast requirements.
 | Playback           | Mutually exclusive with live projection                  | Whether to add a second workspace instance        |
 | Replay attribution | Not included in initial SCR3 output                      | Optional collaboration track and privacy controls |
 
-Implementation should not begin until the shared tree schema, playback isolation rule, role
-enforcement boundary, and browser-local recording/upload boundary are captured as contract tests.
-Those four choices affect every adapter and are expensive to change after rooms contain
-persistent documents.
+The shared tree schema, playback isolation rule, role-enforcement boundary, and browser-local
+recording/upload boundary are implemented and covered by focused contract tests. Schema or
+provider changes must preserve those contracts before rooms containing persistent documents are
+migrated.
 
 ## References
 

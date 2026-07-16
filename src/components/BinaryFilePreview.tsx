@@ -1,4 +1,5 @@
-import { Download, FileBox } from "lucide-react";
+import { Download, FileBox, RefreshCw } from "lucide-react";
+import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import {
   approximateBase64ByteLength,
   getWorkspaceFileMimeType,
@@ -32,15 +33,21 @@ function formatByteSize(byteLength: number): string {
  * Monaco editor, since its base64 content is not meaningfully editable as text.
  */
 const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
+  const collaboration = useOptionalCollaboration();
   const mimeType = getWorkspaceFileMimeType(file.path);
   const mediaKind = getWorkspaceMediaKind(file.path);
+  const isAwaitingSharedAsset = Boolean(collaboration?.provider && !file.content);
   const dataUrl = `data:${mimeType};base64,${file.content}`;
   const byteSize = formatByteSize(approximateBase64ByteLength(file.content));
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 overflow-auto bg-[#11141c] p-8 text-slate-300">
       <div className="flex max-h-[60%] max-w-full items-center justify-center">
-        {mediaKind === "image" ? (
+        {isAwaitingSharedAsset ? (
+          <div className="flex size-28 items-center justify-center rounded-2xl border border-amber-700/50 bg-amber-950/20">
+            <FileBox size={44} className="text-amber-500" />
+          </div>
+        ) : mediaKind === "image" ? (
           <img
             src={dataUrl}
             alt={file.name}
@@ -60,7 +67,9 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
       <div className="flex flex-col items-center gap-1 text-center">
         <p className="text-sm font-medium text-slate-100">{file.name}</p>
         <p className="text-xs text-slate-500">
-          {mimeType} · {byteSize}
+          {isAwaitingSharedAsset
+            ? "Shared asset unavailable or still loading"
+            : `${mimeType} · ${byteSize}`}
         </p>
         <p className="max-w-sm text-xs text-slate-500">
           Binary asset stored in this workspace. Reference it from your code with
@@ -70,14 +79,25 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
         </p>
       </div>
 
-      <a
-        href={dataUrl}
-        download={file.name}
-        className="inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800"
-      >
-        <Download size={14} />
-        Download
-      </a>
+      {isAwaitingSharedAsset ? (
+        <button
+          type="button"
+          onClick={collaboration?.retryAssets}
+          className="inline-flex items-center gap-2 rounded-md border border-amber-700/60 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-950/40"
+        >
+          <RefreshCw size={14} />
+          Retry asset
+        </button>
+      ) : (
+        <a
+          href={dataUrl}
+          download={file.name}
+          className="inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800"
+        >
+          <Download size={14} />
+          Download
+        </a>
+      )}
     </div>
   );
 };

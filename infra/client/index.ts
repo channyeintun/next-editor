@@ -21,6 +21,7 @@ export {
   claimCollaborationInvitation,
   closeCollaborationRoom,
   createCollaborationInvitation,
+  downloadCollaborationAsset,
   exportCollaborationRoom,
   getCollaborationBootstrap,
   getCollaborationRoom,
@@ -33,6 +34,7 @@ export {
   removeCollaborationMember,
   revokeCollaborationInvitation,
   updateCollaborationMemberRole,
+  uploadCollaborationAsset,
 } from "./collaboration/collaborationApi";
 export {
   CollaborationRealtimeProvider,

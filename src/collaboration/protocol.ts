@@ -10,18 +10,35 @@ export const MAX_YJS_UPDATE_BYTES = 64 * 1024;
 export const MAX_ENCODED_YJS_UPDATE_LENGTH = 4 * Math.ceil(MAX_YJS_UPDATE_BYTES / 3);
 export const MAX_YJS_SNAPSHOT_BYTES = 4 * 1024 * 1024;
 export const MAX_ENCODED_YJS_SNAPSHOT_LENGTH = 4 * Math.ceil(MAX_YJS_SNAPSHOT_BYTES / 3);
+export const MAX_COLLABORATION_ASSET_BYTES = 5 * 1024 * 1024;
+export const MAX_COLLABORATION_ROOM_ASSET_BYTES = 25 * 1024 * 1024;
+export const MAX_COLLABORATION_ROOM_ASSETS = 100;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 export const collaborationIdSchema = z.string().regex(UUID_PATTERN, "expected a UUID");
 export const collaborationRoleSchema = z.enum(["owner", "editor", "viewer"]);
 export const collaborationInviteRoleSchema = z.enum(["editor", "viewer"]);
 export const collaborationRoomStatusSchema = z.enum(["provisioning", "active", "closed", "failed"]);
+export const collaborationAssetIdSchema = z
+  .string()
+  .regex(SHA256_PATTERN, "expected a SHA-256 digest");
 
 export type CollaborationRole = z.infer<typeof collaborationRoleSchema>;
 export type CollaborationInviteRole = z.infer<typeof collaborationInviteRoleSchema>;
 export type CollaborationRoomStatus = z.infer<typeof collaborationRoomStatusSchema>;
+
+export const collaborationAssetDescriptorSchema = z
+  .object({
+    id: collaborationAssetIdSchema,
+    mimeType: z.string().min(1).max(120),
+    size: z.number().int().positive().max(MAX_COLLABORATION_ASSET_BYTES),
+  })
+  .strict();
+
+export type CollaborationAssetDescriptor = z.infer<typeof collaborationAssetDescriptorSchema>;
 
 export interface CollaborationRoomDescriptor {
   id: string;

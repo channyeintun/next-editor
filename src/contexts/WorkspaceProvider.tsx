@@ -111,6 +111,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     workspaceStoreRef.current.trigger.createFolder({ path });
   };
 
+  const hydrateAssetContents = (contents: Record<string, string>) => {
+    workspaceStoreRef.current.trigger.hydrateAssetContents({ contents });
+  };
+
   const renameFile = (currentPath: string, nextPath: string) => {
     workspaceStoreRef.current.trigger.renameFile({
       currentPath,
@@ -354,6 +358,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     deleteFile,
     updateFileContent,
     updateActiveFileContent,
+    hydrateAssetContents,
     saveProject,
     loadProject,
     reconcileExternalProject,

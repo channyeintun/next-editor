@@ -140,6 +140,45 @@ describe("collaboration project document", () => {
     expect(projectCollaborationDocument(doc).project.files["examples/renamed.ts"]).toBeUndefined();
   });
 
+  it("keeps binary bytes outside Yjs and projects content-addressed asset descriptors", () => {
+    const project = createStarterHtmlCssWorkspace();
+    project.files["logo.png"] = {
+      path: "logo.png",
+      name: "logo.png",
+      language: "plaintext",
+      content: "aGVsbG8=",
+      encoding: "base64",
+    };
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, project, {
+      idFactory: idFactory(),
+      skipBinaryAssets: true,
+    });
+    const controller = new CollaborationProjectController(doc, {
+      canWrite: () => true,
+      idFactory: () => "f0000000-0000-4000-8000-000000000001",
+    });
+    const asset = {
+      id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      mimeType: "image/png",
+      size: 5,
+    } as const;
+    controller.createAssetFile("logo.png", asset);
+
+    const unloaded = projectCollaborationDocument(doc);
+    const assetNodeId = unloaded.nodeIdByPath.get("logo.png");
+    expect(assetNodeId).toBeTruthy();
+    expect(unloaded.project.files["logo.png"].content).toBe("");
+    expect(unloaded.assetsByNodeId.get(assetNodeId!)).toEqual(asset);
+    expect(getCollaborationTexts(doc).get(assetNodeId!)).toBeUndefined();
+    expect(unloaded.issues).not.toContainEqual({ nodeId: assetNodeId, kind: "missing-text" });
+
+    const hydrated = projectCollaborationDocument(doc, {
+      assetContentById: new Map([[asset.id, "aGVsbG8="]]),
+    });
+    expect(hydrated.project.files["logo.png"].content).toBe("aGVsbG8=");
+  });
+
   it("converges concurrent tree commands with deterministic collision paths", () => {
     const project = createStarterHtmlCssWorkspace();
     const seed = new Y.Doc();

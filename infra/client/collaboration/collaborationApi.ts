@@ -1,4 +1,5 @@
 import type {
+  CollaborationAssetDescriptor,
   CollaborationAwarenessEvent,
   CollaborationAwarenessInput,
   CollaborationBootstrapResponse,
@@ -11,7 +12,37 @@ import type {
   CollaborationUpdateAccepted,
   CreatedCollaborationInvitation,
 } from "../../../src/collaboration/protocol";
+import {
+  MAX_COLLABORATION_ASSET_BYTES,
+  collaborationAssetDescriptorSchema,
+} from "../../../src/collaboration/protocol";
 import { apiClient } from "../apiClient";
+
+const BASE64_CHUNK_BYTES = 0x8000;
+
+function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function decodeBase64Asset(content: string): Uint8Array {
+  const binary = atob(content);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function encodeBase64Asset(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += BASE64_CHUNK_BYTES) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + BASE64_CHUNK_BYTES));
+  }
+  return btoa(binary);
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", exactArrayBuffer(bytes));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 export async function createCollaborationRoom(
   initialSnapshot: CollaborationCreateRoomInput,
@@ -163,4 +194,35 @@ export async function publishCollaborationUpdate(
     update,
   );
   return response.data;
+}
+
+export async function uploadCollaborationAsset(
+  roomId: string,
+  content: string,
+  mimeType: string,
+): Promise<CollaborationAssetDescriptor> {
+  const bytes = decodeBase64Asset(content);
+  if (bytes.byteLength === 0) throw new Error("A collaboration asset cannot be empty.");
+  if (bytes.byteLength > MAX_COLLABORATION_ASSET_BYTES) {
+    throw new Error("A collaboration asset cannot exceed 5 MB.");
+  }
+  const id = await sha256Hex(bytes);
+  const response = await apiClient.put<CollaborationAssetDescriptor>(
+    `/collaboration/rooms/${encodeURIComponent(roomId)}/assets/${id}`,
+    exactArrayBuffer(bytes),
+    { headers: { "Content-Type": mimeType || "application/octet-stream" } },
+  );
+  return collaborationAssetDescriptorSchema.parse(response.data);
+}
+
+export async function downloadCollaborationAsset(roomId: string, assetId: string): Promise<string> {
+  const response = await apiClient.get<ArrayBuffer>(
+    `/collaboration/rooms/${encodeURIComponent(roomId)}/assets/${encodeURIComponent(assetId)}`,
+    { responseType: "arraybuffer" },
+  );
+  const bytes = new Uint8Array(response.data);
+  if ((await sha256Hex(bytes)) !== assetId) {
+    throw new Error("The downloaded collaboration asset failed its integrity check.");
+  }
+  return encodeBase64Asset(bytes);
 }

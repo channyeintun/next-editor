@@ -1,6 +1,8 @@
 import * as Y from "yjs";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+  collaborationAssetDescriptorSchema,
+  type CollaborationAssetDescriptor,
   type CollaborationRole,
 } from "./protocol";
 import {
@@ -41,17 +43,19 @@ interface CollaborationNodeSnapshot {
   orderKey: string;
   deleted: boolean;
   encoding: WorkspaceFileEncoding;
+  asset: CollaborationAssetDescriptor | null;
 }
 
 export interface CollaborationProjectionIssue {
   nodeId: string;
-  kind: "invalid-parent" | "parent-cycle" | "name-collision" | "missing-text";
+  kind: "invalid-parent" | "parent-cycle" | "name-collision" | "missing-text" | "missing-asset";
 }
 
 export interface CollaborationProjectProjection {
   project: WorkspaceProject;
   nodeIdByPath: ReadonlyMap<string, string>;
   pathByNodeId: ReadonlyMap<string, string>;
+  assetsByNodeId: ReadonlyMap<string, CollaborationAssetDescriptor>;
   issues: readonly CollaborationProjectionIssue[];
 }
 
@@ -122,12 +126,16 @@ function createNodeMap(node: CollaborationNodeSnapshot): Y.Map<unknown> {
   map.set("orderKey", node.orderKey);
   map.set("deleted", node.deleted);
   map.set("encoding", node.encoding);
+  map.set("assetId", node.asset?.id ?? null);
+  map.set("assetMimeType", node.asset?.mimeType ?? null);
+  map.set("assetSize", node.asset?.size ?? null);
   return map;
 }
 
 export interface SeedCollaborationProjectOptions {
   idFactory?: () => string;
   origin?: CollaborationTransactionOrigin;
+  skipBinaryAssets?: boolean;
 }
 
 /**
@@ -151,7 +159,7 @@ export function seedCollaborationProject(
   const unsupportedAsset = Object.values(project.files).find(
     (file) => (file.encoding ?? "utf-8") !== "utf-8",
   );
-  if (unsupportedAsset) {
+  if (unsupportedAsset && !options.skipBinaryAssets) {
     throw new CollaborationProjectError(
       `Binary asset ${unsupportedAsset.path} must be uploaded before a collaboration room is created`,
     );
@@ -180,6 +188,7 @@ export function seedCollaborationProject(
           orderKey: orderedKey(order++),
           deleted: false,
           encoding: "utf-8",
+          asset: null,
         }),
       );
     }
@@ -188,6 +197,7 @@ export function seedCollaborationProject(
       left.path.localeCompare(right.path),
     );
     for (const file of files) {
+      if ((file.encoding ?? "utf-8") !== "utf-8") continue;
       const normalizedPath = parseWorkspacePath(file.path);
       const { parentPath, name } = splitPath(normalizedPath);
       const id = idFactory();
@@ -202,6 +212,7 @@ export function seedCollaborationProject(
           orderKey: orderedKey(order++),
           deleted: false,
           encoding: "utf-8",
+          asset: null,
         }),
       );
       const text = new Y.Text();
@@ -223,6 +234,11 @@ function readNode(id: string, value: Y.Map<unknown>): CollaborationNodeSnapshot 
   if (kind !== "file" && kind !== "folder") return null;
   const parentId = value.get("parentId");
   const encoding = value.get("encoding");
+  const assetResult = collaborationAssetDescriptorSchema.safeParse({
+    id: value.get("assetId"),
+    mimeType: value.get("assetMimeType"),
+    size: value.get("assetSize"),
+  });
   return {
     id,
     kind,
@@ -231,6 +247,7 @@ function readNode(id: string, value: Y.Map<unknown>): CollaborationNodeSnapshot 
     orderKey: readString(value, "orderKey", id),
     deleted: value.get("deleted") === true,
     encoding: encoding === "base64" ? "base64" : "utf-8",
+    asset: assetResult.success ? assetResult.data : null,
   };
 }
 
@@ -366,7 +383,14 @@ function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
   );
 }
 
-export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectProjection {
+export interface ProjectCollaborationDocumentOptions {
+  assetContentById?: ReadonlyMap<string, string>;
+}
+
+export function projectCollaborationDocument(
+  doc: Y.Doc,
+  options: ProjectCollaborationDocumentOptions = {},
+): CollaborationProjectProjection {
   const root = projectRoot(doc);
   if (root.get("schemaVersion") !== COLLABORATION_DOCUMENT_SCHEMA_VERSION) {
     throw new CollaborationProjectError("Unsupported collaboration document schema version");
@@ -401,6 +425,7 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
   const folders: string[] = [];
   const nodeIdByPath = new Map<string, string>();
   const pathByNodeId = new Map<string, string>();
+  const assetsByNodeId = new Map<string, CollaborationAssetDescriptor>();
   const recoveryChildren = children.get(RECOVERY_PARENT) ?? [];
   let recoveryPath = COLLABORATION_RECOVERY_FOLDER_NAME;
   const rootNames = new Set(
@@ -426,14 +451,24 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
       }
 
       const text = texts.get(node.id);
-      if (!(text instanceof Y.Text)) {
+      if (node.encoding === "base64") {
+        if (node.asset) assetsByNodeId.set(node.id, node.asset);
+        else issues.push({ nodeId: node.id, kind: "missing-asset" });
+      } else if (!(text instanceof Y.Text)) {
         issues.push({ nodeId: node.id, kind: "missing-text" });
       }
       files[path] = {
         path,
         name,
         language: inferLanguageFromPath(path),
-        content: text instanceof Y.Text ? text.toString() : "",
+        content:
+          node.encoding === "base64"
+            ? node.asset
+              ? (options.assetContentById?.get(node.asset.id) ?? "")
+              : ""
+            : text instanceof Y.Text
+              ? text.toString()
+              : "",
         ...(node.encoding === "base64" ? { encoding: node.encoding } : {}),
       };
     }
@@ -470,6 +505,7 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
     },
     nodeIdByPath,
     pathByNodeId,
+    assetsByNodeId,
     issues,
   };
 }
@@ -579,6 +615,16 @@ export class CollaborationProjectController {
     this.createNode("file", path, content, encoding);
   }
 
+  createAssetFile(path: string, asset: CollaborationAssetDescriptor): void {
+    this.createNode(
+      "file",
+      path,
+      "",
+      "base64",
+      collaborationAssetDescriptorSchema.parse(asset),
+    );
+  }
+
   createFolder(path: string): void {
     this.createNode("folder", path, "", "utf-8");
   }
@@ -588,9 +634,10 @@ export class CollaborationProjectController {
     path: string,
     content: string,
     encoding: WorkspaceFileEncoding,
+    asset: CollaborationAssetDescriptor | null = null,
   ): void {
     this.assertWritable();
-    if (encoding !== "utf-8") {
+    if (encoding !== "utf-8" && !asset) {
       throw new CollaborationProjectError("Binary collaboration assets must be uploaded first");
     }
     const normalized = parseWorkspacePath(path);
@@ -612,9 +659,10 @@ export class CollaborationProjectController {
           orderKey: `${Date.now().toString(36)}:${id}`,
           deleted: false,
           encoding,
+          asset,
         }),
       );
-      if (kind === "file") {
+      if (kind === "file" && encoding === "utf-8") {
         const text = new Y.Text();
         if (content) text.insert(0, content);
         getCollaborationTexts(this.doc).set(id, text);
