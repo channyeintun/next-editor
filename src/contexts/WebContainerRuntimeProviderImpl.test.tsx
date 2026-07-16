@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProviderImpl";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
-import { useWorkspaceActions } from "../hooks/useWorkspace";
-import type { WorkspaceActions } from "./WorkspaceContext";
+import { useWorkspaceActions, useWorkspaceDirtyState } from "../hooks/useWorkspace";
+import type { WorkspaceActions, WorkspaceDirtyState } from "./WorkspaceContext";
 import type { WebContainerRuntimeActions } from "./WebContainerRuntimeContext";
 
 vi.mock("./webContainerRuntimeSupport", async (importOriginal) => {
@@ -71,7 +71,29 @@ function createFakeFs(initialFiles: Record<string, string>) {
   });
 
   return {
-    fs: { readdir, readFile } as unknown as WebContainer["fs"],
+    fs: {
+      readdir,
+      readFile,
+      mkdir: vi.fn<() => Promise<void>>(async () => {}),
+      writeFile: vi.fn<(path: string, content: string | Uint8Array) => Promise<void>>(
+        async (path, content) => {
+          files.set(
+            path,
+            typeof content === "string" ? content : new TextDecoder().decode(content),
+          );
+        },
+      ),
+      rm: vi.fn<(path: string, options?: { recursive?: boolean }) => Promise<void>>(
+        async (path, options) => {
+          files.delete(path);
+          if (options?.recursive) {
+            for (const filePath of files.keys()) {
+              if (filePath.startsWith(`${path}/`)) files.delete(filePath);
+            }
+          }
+        },
+      ),
+    } as unknown as WebContainer["fs"],
     addFile: (path: string, content: string) => {
       files.set(path, content);
     },
@@ -109,14 +131,16 @@ function createFakeInstance(fakeFs: ReturnType<typeof createFakeFs>) {
 interface Harness {
   runtime: WebContainerRuntimeActions | null;
   workspace: WorkspaceActions | null;
+  dirty: WorkspaceDirtyState | null;
 }
 
 function renderProviders() {
-  const captured: Harness = { runtime: null, workspace: null };
+  const captured: Harness = { runtime: null, workspace: null, dirty: null };
 
   function Capture() {
     captured.runtime = useWebContainerRuntimeActions();
     captured.workspace = useWorkspaceActions();
+    captured.dirty = useWorkspaceDirtyState();
     return null;
   }
 
@@ -128,11 +152,15 @@ function renderProviders() {
     ),
   );
 
-  if (!captured.runtime || !captured.workspace) {
+  if (!captured.runtime || !captured.workspace || !captured.dirty) {
     throw new Error("Expected providers to render");
   }
 
-  return captured as { runtime: WebContainerRuntimeActions; workspace: WorkspaceActions };
+  return captured as {
+    runtime: WebContainerRuntimeActions;
+    workspace: WorkspaceActions;
+    dirty: WorkspaceDirtyState;
+  };
 }
 
 describe("WebContainerRuntimeProviderImpl reverse sync", () => {
@@ -277,5 +305,46 @@ describe("WebContainerRuntimeProviderImpl reverse sync", () => {
 
     const project = workspace.getProject();
     expect(project.files["server/data.json"]).toBeDefined();
+  });
+
+  it("requeues a stale reverse read and preserves a newer editor edit and saved baseline", async () => {
+    const fakeFs = createFakeFs({});
+    const { instance } = createFakeInstance(fakeFs);
+    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const harness = renderProviders();
+    const initialProject = harness.workspace.getProject();
+    const entryPath = initialProject.entryFilePath;
+    const initialContent = initialProject.files[entryPath].content;
+    fakeFs.addFile(entryPath, initialContent);
+
+    let releaseStaleRead: ((content: string) => void) | null = null;
+    vi.mocked(instance.fs.readFile).mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          releaseStaleRead = resolve;
+        }),
+    );
+
+    await act(async () => {
+      await harness.runtime.startRuntime();
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    expect(instance.fs.readFile).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      harness.workspace.updateFileContent(entryPath, "newer editor content");
+    });
+
+    await act(async () => {
+      releaseStaleRead?.("stale runtime content");
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(harness.workspace.getProject().files[entryPath].content).toBe("newer editor content");
+    expect(harness.dirty.hasUnsavedChanges).toBe(true);
+    expect(harness.dirty.modifiedFilePaths).toEqual([entryPath]);
   });
 });

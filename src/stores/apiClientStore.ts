@@ -1,5 +1,6 @@
 import { createStore } from "@xstate/store-react";
 import type { ApiClientRecordedResult, ApiClientRequestTab } from "../types/slides";
+import { MAX_API_CLIENT_RETAINED_BODY_BYTES, truncateUtf8 } from "../utils/apiClientBridge";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "QUERY";
 
@@ -27,6 +28,29 @@ export interface ApiClientError {
 export type ApiClientResult =
   | { ok: true; response: ApiClientResponse }
   | { ok: false; error: ApiClientError };
+
+/** Bound copies that outlive the visible response (history and SCR3 events). */
+export function toRetainedApiClientResult(result: ApiClientResult): ApiClientResult {
+  if (!result.ok) {
+    return result;
+  }
+
+  const fullBody = truncateUtf8(result.response.body, Number.MAX_SAFE_INTEGER);
+  const body = truncateUtf8(result.response.body, MAX_API_CLIENT_RETAINED_BODY_BYTES);
+  if (!body.truncated) {
+    return result;
+  }
+
+  return {
+    ok: true,
+    response: {
+      ...result.response,
+      body: body.value,
+      bodyBytes: result.response.bodyBytes ?? fullBody.byteLength,
+      truncated: true,
+    },
+  };
+}
 
 export interface ApiClientHistoryEntry {
   id: string;
@@ -137,27 +161,18 @@ export function createApiClientStore() {
       }),
 
       receiveResult: (context, event: { id: string; result: ApiClientResult }) => {
-        if (context.pendingRequest && context.pendingRequest.id !== event.id) {
+        if (!context.pendingRequest || context.pendingRequest.id !== event.id) {
           return context;
         }
 
-        const request =
-          context.pendingRequest?.id === event.id
-            ? context.pendingRequest
-            : {
-                id: event.id,
-                method: context.method,
-                path: context.path,
-                headers: context.headers,
-                body: context.body,
-              };
+        const request = context.pendingRequest;
         const entry: ApiClientHistoryEntry = {
           id: event.id,
           method: request.method,
           path: request.path,
           headers: request.headers.map((header) => ({ ...header })),
           body: request.body,
-          result: event.result,
+          result: toRetainedApiClientResult(event.result),
           timestamp: Date.now(),
         };
         const history = [entry, ...context.history].slice(0, MAX_HISTORY);
@@ -183,6 +198,9 @@ export function createApiClientStore() {
         body: event.entry.body,
         result: event.entry.result,
       }),
+
+      clearHistory: (context) =>
+        context.history.length === 0 ? context : { ...context, history: [] },
 
       // Replay-only: replace the whole visible request/response/history at once.
       // Playback re-applies state at many timeline points, so this must be a plain

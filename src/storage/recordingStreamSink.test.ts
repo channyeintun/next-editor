@@ -7,6 +7,7 @@ import {
   createStreamingRecordingWriter,
   decodeRecordingStream,
   encodeRecordingToStream,
+  RECORDING_EVENT_SEGMENTS,
   SEGMENT_KIND,
   type RecordingStreamMeta,
 } from "./streamingRecordingCodec";
@@ -130,6 +131,20 @@ function concatChunks(chunks: Uint8Array[]): Uint8Array {
 }
 
 describe("RecordingStreamBridge", () => {
+  it("uses one canonical event-track contract for live and one-shot streams", () => {
+    expect(RECORDING_EVENT_SEGMENTS.map(({ key }) => key)).toEqual([
+      "slideEvents",
+      "previewEvents",
+      "previewInitialDocuments",
+      "previewPatchBatches",
+      "workspaceEvents",
+      "runtimeEvents",
+      "cursorEvents",
+      "whiteboardEvents",
+      "chatEvents",
+    ]);
+  });
+
   it("matches one-shot SCR3 semantics for every event track and final metadata", async () => {
     const recording = makeRecording();
     const chunks: Uint8Array[] = [];

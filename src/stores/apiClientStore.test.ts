@@ -8,7 +8,9 @@ import {
   selectPath,
   selectResult,
   selectSending,
+  toRetainedApiClientResult,
 } from "./apiClientStore";
+import { MAX_API_CLIENT_RETAINED_BODY_BYTES } from "../utils/apiClientBridge";
 
 function ctx(store: ReturnType<typeof createApiClientStore>) {
   return store.getSnapshot().context;
@@ -174,6 +176,13 @@ describe("apiClientStore", () => {
     const store = createApiClientStore();
 
     for (let i = 0; i < 30; i++) {
+      store.trigger.markSending({
+        id: `req-${i}`,
+        method: "GET",
+        path: `/request-${i}`,
+        headers: [],
+        body: "",
+      });
       store.trigger.receiveResult({
         id: `req-${i}`,
         result: {
@@ -208,6 +217,13 @@ describe("apiClientStore", () => {
       },
     };
 
+    store.trigger.markSending({
+      id: "req-h",
+      method: "POST",
+      path: "/api/data",
+      headers: [],
+      body: "",
+    });
     store.trigger.receiveResult({ id: "req-h", result });
 
     store.trigger.setMethod({ method: "GET" });
@@ -230,5 +246,58 @@ describe("apiClientStore", () => {
     expect(selectMethod(ctx(store))).toBe("GET");
     expect(selectPath(ctx(store))).toBe("/");
     expect(selectHistory(ctx(store))).toEqual([]);
+  });
+
+  it("clears history without cancelling the in-flight immutable request", () => {
+    const store = createApiClientStore();
+    store.trigger.markSending({
+      id: "pending",
+      method: "POST",
+      path: "/pending",
+      headers: [],
+      body: "sent",
+    });
+
+    store.trigger.clearHistory();
+    expect(selectSending(ctx(store))).toBe(true);
+
+    store.trigger.receiveResult({
+      id: "pending",
+      result: { ok: false, error: { error: "failed", durationMs: 1 } },
+    });
+    expect(selectHistory(ctx(store))[0]).toMatchObject({
+      method: "POST",
+      path: "/pending",
+      body: "sent",
+    });
+  });
+
+  it("keeps the visible response but independently bounds durable history", () => {
+    const store = createApiClientStore();
+    const body = "x".repeat(MAX_API_CLIENT_RETAINED_BODY_BYTES + 100);
+    const result = {
+      ok: true as const,
+      response: {
+        status: 200,
+        statusText: "OK",
+        headers: [] as [string, string][],
+        body,
+        durationMs: 1,
+      },
+    };
+    store.trigger.markSending({
+      id: "large",
+      method: "GET",
+      path: "/large",
+      headers: [],
+      body: "",
+    });
+    store.trigger.receiveResult({ id: "large", result });
+
+    expect(selectResult(ctx(store))).toEqual(result);
+    const retained = selectHistory(ctx(store))[0].result;
+    expect(retained.ok && retained.response.body).toHaveLength(MAX_API_CLIENT_RETAINED_BODY_BYTES);
+    expect(retained.ok && retained.response.truncated).toBe(true);
+    expect(toRetainedApiClientResult(result)).toEqual(retained);
   });
 });

@@ -414,8 +414,9 @@ function loadStoredWorkspaceSnapshot(): StoredWorkspaceSnapshot | null {
 
     const parsed = JSON.parse(stored) as StoredWorkspaceSnapshot;
     const project = normalizeProject(parsed.project);
-    const activeFilePath = project.files[parsed.activeFilePath]
-      ? parsed.activeFilePath
+    const requestedActiveFilePath = normalizeWorkspacePath(parsed.activeFilePath ?? "");
+    const activeFilePath = project.files[requestedActiveFilePath]
+      ? requestedActiveFilePath
       : project.entryFilePath;
 
     // Sidebar width is deliberately not restored from storage; it resets to the
@@ -672,9 +673,19 @@ function createUninitializedWorkspaceState(): WorkspaceState {
 }
 
 function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): WorkspaceState {
-  const savedSnapshot = cloneWorkspaceSnapshot(initialSnapshot);
-  const project = initialSnapshot.project;
-  const activeFilePath = initialSnapshot.activeFilePath;
+  // The store is also constructed directly by collaboration/agent/test
+  // adapters, so enforce the same canonical project boundary here instead of
+  // relying solely on the localStorage and WorkspaceProvider callers.
+  const project = normalizeProject(initialSnapshot.project);
+  const requestedActiveFilePath = normalizeWorkspacePath(initialSnapshot.activeFilePath);
+  const activeFilePath = project.files[requestedActiveFilePath]
+    ? requestedActiveFilePath
+    : project.entryFilePath;
+  const savedSnapshot = cloneWorkspaceSnapshot({
+    ...initialSnapshot,
+    project,
+    activeFilePath,
+  });
   const collapsedFolders = normalizeCollapsedFolders(project.folders, []);
   const sidebarScrollTop = 0;
   const sidebarWidth = normalizeSidebarWidth(initialSnapshot.sidebarWidth);

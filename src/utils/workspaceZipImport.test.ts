@@ -179,8 +179,19 @@ describe("importWorkspaceProjectFromZip", () => {
   });
 
   it("rejects paths that escape the workspace root", async () => {
-    const file = createZipFile("traversal.zip", [
-      { path: "../outside.ts", content: "export const escaped = true" },
+    const paths = ["../outside.ts", "nested/../../outside.ts", "nested\\..\\..\\outside.ts"];
+
+    for (const path of paths) {
+      const file = createZipFile("traversal.zip", [
+        { path, content: "export const escaped = true" },
+      ]);
+      await expect(importWorkspaceProjectFromZip(file)).rejects.toThrow(/unsafe path/i);
+    }
+  });
+
+  it("rejects record-special path segments", async () => {
+    const file = createZipFile("reserved.zip", [
+      { path: "src/__proto__/secret.ts", content: "secret" },
     ]);
 
     await expect(importWorkspaceProjectFromZip(file)).rejects.toThrow(/unsafe path/i);

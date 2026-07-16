@@ -26,13 +26,11 @@ import { SlidesProvider } from "../contexts/SlidesContext";
 import { WhiteboardProvider } from "../contexts/WhiteboardContext";
 import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
-import {
-  CollaborationProvider,
-  useOptionalCollaboration,
-} from "../contexts/CollaborationContext";
+import { CollaborationProvider, useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useUrlQuery } from "../hooks/useUrlQuery";
+import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
 import CameraOverlay from "./CameraOverlay";
 import CaptionsOverlay from "./CaptionsOverlay";
 import CursorComponent from "./Cursor.tsx";
@@ -241,7 +239,7 @@ export function EditorLayout({
 
   return (
     <div
-      className={`ph-no-capture ${fill ? "h-full" : "h-dvh"} flex flex-col text-white overflow-hidden`}
+      className={`${POSTHOG_SENSITIVE_ROOT_CLASS} ${fill ? "h-full" : "h-dvh"} flex flex-col text-white overflow-hidden`}
       data-cursor-replay-target="app"
     >
       <div className="flex-1 relative overflow-hidden" data-cursor-replay-target="editor-surface">

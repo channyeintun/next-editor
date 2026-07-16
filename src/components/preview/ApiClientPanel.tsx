@@ -237,7 +237,7 @@ export default function ApiClientPanel({
             </span>
             <button
               type="button"
-              onClick={() => store.trigger.reset()}
+              onClick={() => store.trigger.clearHistory()}
               className="text-slate-600 transition-colors hover:text-slate-400"
               title="Clear history"
             >

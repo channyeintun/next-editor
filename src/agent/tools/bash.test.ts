@@ -24,8 +24,18 @@ vi.mock("../../contexts/webContainerRuntimeSupport", () => support);
 
 const { makeBashTool } = await import("./bash");
 
-function makeFile(path: string, content: string): WorkspaceFile {
-  return { path, name: path.split("/").pop() ?? path, language: "plaintext", content };
+function makeFile(
+  path: string,
+  content: string,
+  encoding?: WorkspaceFile["encoding"],
+): WorkspaceFile {
+  return {
+    path,
+    name: path.split("/").pop() ?? path,
+    language: "plaintext",
+    content,
+    ...(encoding ? { encoding } : {}),
+  };
 }
 
 function makeProject(files: WorkspaceFile[]): WorkspaceProject {
@@ -138,6 +148,34 @@ describe("bash tool", () => {
     expect(context.dirtyState.addedFilePaths).toEqual(["renamed.txt"]);
   });
 
+  it("reconciles binary files and falls back when the entry file is deleted", async () => {
+    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    const store = makeStore([
+      makeFile("index.html", "entry"),
+      makeFile("fallback.html", "fallback"),
+    ]);
+    const instance = makeFakeInstance(createFakeProcess(["generated binary"], 0));
+    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+    support.readWorkspaceProject.mockResolvedValue(
+      makeProject([
+        makeFile("fallback.html", "fallback"),
+        makeFile("public/image.png", "AQID", "base64"),
+      ]),
+    );
+
+    await run(makeCtx(store))({ command: "rm index.html && generate-image" });
+
+    const context = store.getSnapshot().context;
+    if (!context.isInitialized) throw new Error("Expected initialized workspace");
+    expect(context.project.files["index.html"]).toBeUndefined();
+    expect(context.project.entryFilePath).toBe("fallback.html");
+    expect(context.activeFilePath).toBe("fallback.html");
+    expect(context.project.files["public/image.png"]).toMatchObject({
+      content: "AQID",
+      encoding: "base64",
+    });
+  });
+
   it("preserves a concurrent editor edit while folding unrelated command changes", async () => {
     support.isWebContainerRuntimeSupported.mockReturnValue(true);
     const store = makeStore([makeFile("index.html", "before")]);
@@ -214,6 +252,37 @@ describe("bash tool", () => {
     expect(result).toContain("output truncated (80000 omitted characters)");
     expect(result).toContain("000:");
     expect(result).toContain("099:");
+  });
+
+  it("reports timeout independently from bounded noisy output", async () => {
+    vi.useFakeTimers();
+    try {
+      support.isWebContainerRuntimeSupported.mockReturnValue(true);
+      const store = makeStore([makeFile("index.html", "")]);
+      let resolveExit: ((exitCode: number) => void) | null = null;
+      const process = createFakeProcess(["x".repeat(50_000)], 0);
+      Object.defineProperty(process, "exit", {
+        value: new Promise<number>((resolve) => {
+          resolveExit = resolve;
+        }),
+      });
+      const kill = vi.fn(() => resolveExit?.(143));
+      Object.defineProperty(process, "kill", { value: kill });
+      const instance = makeFakeInstance(process);
+      support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+      support.readWorkspaceProject.mockResolvedValue(makeProject([makeFile("index.html", "")]));
+
+      const command = run(makeCtx(store))({ command: "noisy-and-stuck", timeout: 10 });
+      await vi.advanceTimersByTimeAsync(10);
+      const result = await command;
+
+      expect(kill).toHaveBeenCalledTimes(1);
+      expect(result).toContain("Command timed out after 10ms");
+      expect(result).toContain("output truncated (30000 omitted characters)");
+      expect(result.length).toBeLessThan(20_300);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("surfaces a non-zero exit code", async () => {

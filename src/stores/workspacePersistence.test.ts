@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createWorkspaceStore,
+  normalizeProject,
   toPersistedSnapshot,
   type StoredWorkspaceSnapshot,
 } from "./workspaceStore";
 import {
   collectBinaryAssetPaths,
   persistWorkspaceAssets,
+  resetWorkspaceAssetStoreForTests,
   WorkspaceAssetPersistenceError,
 } from "../storage/workspaceAssetStore";
 import {
@@ -167,6 +169,34 @@ describe("workspace dirty state", () => {
     expect(context.dirtyState.projectMetadataChanged).toBe(true);
   });
 
+  it("tracks encoding-only changes and returns to clean after a structural round trip", () => {
+    const original = makeProject([
+      makeFile("index.html", "same bytes"),
+      makeFile("asset.bin", "QUJD", "base64"),
+    ]);
+    const store = createWorkspaceStore({ activeFilePath: "index.html", project: original });
+    const encodingChanged = makeProject([
+      makeFile("index.html", "same bytes"),
+      makeFile("asset.bin", "QUJD"),
+    ]);
+
+    store.trigger.reconcileExternalProject({ project: encodingChanged });
+    let context = store.getSnapshot().context;
+    if (!context.isInitialized) throw new Error("Expected initialized");
+    expect(context.dirtyState.modifiedFilePaths).toEqual(["asset.bin"]);
+    expect(context.dirtyState.hasUnsavedChanges).toBe(true);
+
+    store.trigger.reconcileExternalProject({ project: original });
+    context = store.getSnapshot().context;
+    if (!context.isInitialized) throw new Error("Expected initialized");
+    expect(context.dirtyState).toMatchObject({
+      dirtyFilePaths: [],
+      projectMetadataChanged: false,
+      folderStructureChanged: false,
+      hasUnsavedChanges: false,
+    });
+  });
+
   it("atomically reconciles runtime changes without replacing the saved baseline", () => {
     const original = makeProject([
       makeFile("index.html", "original"),
@@ -184,7 +214,7 @@ describe("workspace dirty state", () => {
     if (!context.isInitialized) throw new Error("Expected initialized");
     expect(Object.keys(context.project.files).sort()).toEqual(["index.html", "new.txt"]);
     expect(context.project.files["index.html"].content).toBe("runtime edit");
-    expect(context.savedSnapshot.project).toBe(original);
+    expect(context.savedSnapshot.project).toEqual(normalizeProject(original));
     expect(context.activeFilePath).toBe("index.html");
     expect(context.dirtyState.modifiedFilePaths).toEqual(["index.html"]);
     expect(context.dirtyState.addedFilePaths).toEqual(["new.txt"]);
@@ -211,6 +241,7 @@ describe("workspace dirty state", () => {
 
 describe("persistWorkspaceAssets", () => {
   afterEach(() => {
+    resetWorkspaceAssetStoreForTests();
     vi.unstubAllGlobals();
   });
 
@@ -221,5 +252,61 @@ describe("persistWorkspaceAssets", () => {
     await expect(
       persistWorkspaceAssets(project, { generation: "unavailable-storage" }),
     ).rejects.toBeInstanceOf(WorkspaceAssetPersistenceError);
+  });
+
+  it("rejects an IndexedDB open failure", async () => {
+    const failure = new Error("open failed");
+    const factory = {
+      open: vi.fn(() => {
+        const request: Partial<IDBOpenDBRequest> = { error: failure as DOMException };
+        queueMicrotask(() => request.onerror?.(new Event("error")));
+        return request as IDBOpenDBRequest;
+      }),
+    } as unknown as IDBFactory;
+    vi.stubGlobal("indexedDB", factory);
+
+    await expect(
+      persistWorkspaceAssets(makeProject([makeFile("asset.bin", "QUJD", "base64")]), {
+        generation: "open-failure",
+      }),
+    ).rejects.toMatchObject({ name: "WorkspaceAssetPersistenceError", cause: failure });
+  });
+
+  it("rejects a quota/transaction abort", async () => {
+    const quotaError = new DOMException("quota exhausted", "QuotaExceededError");
+    const transaction = {
+      error: null as DOMException | null,
+      objectStore: vi.fn(() => ({
+        put: vi.fn(() => {
+          queueMicrotask(() => {
+            transaction.error = quotaError;
+            transaction.onabort?.(new Event("abort"));
+          });
+        }),
+      })),
+      oncomplete: null as ((event: Event) => void) | null,
+      onerror: null as ((event: Event) => void) | null,
+      onabort: null as ((event: Event) => void) | null,
+    };
+    const database = {
+      objectStoreNames: { contains: () => true },
+      transaction: vi.fn(() => transaction as unknown as IDBTransaction),
+      close: vi.fn(),
+      onversionchange: null,
+    } as unknown as IDBDatabase;
+    const factory = {
+      open: vi.fn(() => {
+        const request: Partial<IDBOpenDBRequest> = { result: database };
+        queueMicrotask(() => request.onsuccess?.(new Event("success")));
+        return request as IDBOpenDBRequest;
+      }),
+    } as unknown as IDBFactory;
+    vi.stubGlobal("indexedDB", factory);
+
+    await expect(
+      persistWorkspaceAssets(makeProject([makeFile("asset.bin", "QUJD", "base64")]), {
+        generation: "quota-failure",
+      }),
+    ).rejects.toMatchObject({ name: "WorkspaceAssetPersistenceError", cause: quotaError });
   });
 });

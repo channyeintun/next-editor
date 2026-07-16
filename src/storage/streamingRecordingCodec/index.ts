@@ -12,12 +12,13 @@
 export {
   STREAM_MAGIC,
   SEGMENT_KIND,
+  RECORDING_EVENT_SEGMENTS,
   isStreamingRecording,
   readRecordTimestamp,
   audioMimeFromFilename,
   audioExtensionFromMime,
 } from "./format";
-export type { SegmentKind, RecordingStreamMeta } from "./format";
+export type { RecordingEventSegmentKey, SegmentKind, RecordingStreamMeta } from "./format";
 
 export {
   createRecordingStreamMeta,

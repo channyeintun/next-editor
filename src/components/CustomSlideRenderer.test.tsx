@@ -109,6 +109,25 @@ describe("CustomSlideRenderer", () => {
 
     expect(container.querySelector("style")).toBeNull();
     expect(container.querySelector('[data-testid="host-sentinel"]')).not.toBeNull();
+    expect(container.querySelector("iframe")?.getAttribute("sandbox")).toBe("");
     expect(container.querySelector("iframe")?.srcdoc).not.toContain("body{display:none}");
+  });
+
+  it("removes external stylesheets and blocks CSS imports inside the isolated frame", () => {
+    const slides = [
+      htmlSlide(
+        "a",
+        '<link rel="stylesheet" href="https://attacker.invalid/slide.css"><style>@import url("https://attacker.invalid/import.css");</style><p>Slide</p>',
+      ),
+    ];
+    const { container } = render(
+      <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
+    );
+    const srcDoc = container.querySelector("iframe")?.srcdoc ?? "";
+
+    expect(srcDoc).not.toContain("<link");
+    expect(srcDoc).not.toContain("attacker.invalid");
+    expect(srcDoc).toContain("style-src 'unsafe-inline'");
+    expect(srcDoc).not.toMatch(/style-src[^;]*https:/);
   });
 });

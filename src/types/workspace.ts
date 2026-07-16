@@ -251,6 +251,14 @@ export function parseWorkspacePath(
 
   const input = path;
   const normalizedSeparators = input.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+
+  // Repeated separators inside a path are canonicalized, but a trailing
+  // separator would otherwise turn an empty terminal filename into its parent
+  // directory (for example, "src/App.tsx/" -> "src/App.tsx"). Keep the empty
+  // workspace root as the sole exception for callers that explicitly allow it.
+  if (normalizedSeparators.length > 0 && normalizedSeparators.endsWith("/")) {
+    throw new WorkspacePathError("Workspace path has an empty terminal name", input);
+  }
   const segments: string[] = [];
 
   for (const segment of normalizedSeparators.split("/")) {

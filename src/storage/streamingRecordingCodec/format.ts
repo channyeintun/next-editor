@@ -89,6 +89,25 @@ export const SEGMENT_KIND = {
 
 export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
 
+/**
+ * Canonical mapping between Recording/RecordingSession event arrays and SCR3
+ * segment kinds. Both the one-shot exporter and live bridge iterate this table,
+ * so adding a track cannot silently update only one encoding path.
+ */
+export const RECORDING_EVENT_SEGMENTS = [
+  { kind: SEGMENT_KIND.slide, key: "slideEvents" },
+  { kind: SEGMENT_KIND.preview, key: "previewEvents" },
+  { kind: SEGMENT_KIND.previewDoc, key: "previewInitialDocuments" },
+  { kind: SEGMENT_KIND.previewPatch, key: "previewPatchBatches" },
+  { kind: SEGMENT_KIND.workspace, key: "workspaceEvents" },
+  { kind: SEGMENT_KIND.runtime, key: "runtimeEvents" },
+  { kind: SEGMENT_KIND.cursor, key: "cursorEvents" },
+  { kind: SEGMENT_KIND.whiteboard, key: "whiteboardEvents" },
+  { kind: SEGMENT_KIND.chat, key: "chatEvents" },
+] as const;
+
+export type RecordingEventSegmentKey = (typeof RECORDING_EVENT_SEGMENTS)[number]["key"];
+
 export interface RecordingStreamMeta {
   version: 4;
   id: string;

@@ -107,6 +107,14 @@ export function collectBinaryAssetPaths(project: WorkspaceProject): string[] {
 // Serialize writes so overlapping save generations cannot interleave transactions.
 let persistQueue: Promise<void> = Promise.resolve();
 
+/** Reset cached IDB state between isolated unit-test factories. */
+export function resetWorkspaceAssetStoreForTests(): void {
+  const pendingDatabase = databasePromise;
+  databasePromise = null;
+  persistQueue = Promise.resolve();
+  void pendingDatabase?.then((database) => database.close()).catch(() => undefined);
+}
+
 export interface PersistWorkspaceAssetsOptions {
   generation: string;
   /** Previous durable generation used to carry assets that are still hydrating. */

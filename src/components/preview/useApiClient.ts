@@ -6,7 +6,12 @@ import {
   normalizeApiClientResultPayload,
 } from "../../utils/apiClientBridge";
 import type { ApiClientRecordedRequest, ApiClientRecordedResult } from "../../types/slides";
-import { buildHeaderRecord, recordedResultToStoreResult } from "../../stores/apiClientStore";
+import {
+  buildHeaderRecord,
+  recordedResultToStoreResult,
+  storeResultToRecorded,
+  toRetainedApiClientResult,
+} from "../../stores/apiClientStore";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -103,11 +108,9 @@ export function useApiClient({
           }
         : { ok: false, error: payload.error, durationMs: payload.durationMs };
 
-      store.trigger.receiveResult({
-        id: payload.id,
-        result: recordedResultToStoreResult(recordedResult),
-      });
-      onResponseReceived?.(recordedResult);
+      const storeResult = recordedResultToStoreResult(recordedResult);
+      store.trigger.receiveResult({ id: payload.id, result: storeResult });
+      onResponseReceived?.(storeResultToRecorded(toRetainedApiClientResult(storeResult)));
     },
     [clearPending, onResponseReceived, store],
   );

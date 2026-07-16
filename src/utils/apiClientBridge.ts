@@ -2,6 +2,8 @@ export const API_CLIENT_REQUEST_MESSAGE_TYPE = "API_CLIENT_REQUEST";
 export const API_CLIENT_CANCEL_MESSAGE_TYPE = "API_CLIENT_CANCEL";
 export const API_CLIENT_RESPONSE_MESSAGE_TYPE = "API_CLIENT_RESPONSE";
 export const MAX_API_CLIENT_RESPONSE_BYTES = 1024 * 1024;
+/** Lower durable cap for each response copied into history or a recording. */
+export const MAX_API_CLIENT_RETAINED_BODY_BYTES = 256 * 1024;
 
 export interface ApiClientRequestPayload {
   id: string;
@@ -39,6 +41,39 @@ const MAX_API_CLIENT_HEADER_VALUE_LENGTH = 4 * 1024;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
+}
+
+export interface TruncatedUtf8String {
+  value: string;
+  byteLength: number;
+  truncated: boolean;
+}
+
+/** Truncate without splitting a surrogate pair and account in UTF-8 bytes, not JS code units. */
+export function truncateUtf8(value: string, maxBytes: number): TruncatedUtf8String {
+  const limit = Math.max(0, Math.trunc(maxBytes));
+  let byteLength = 0;
+  let end = 0;
+
+  for (let index = 0; index < value.length; ) {
+    const codePoint = value.codePointAt(index) ?? 0;
+    const codeUnits = codePoint > 0xffff ? 2 : 1;
+    const nextBytes = codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+
+    if (byteLength + nextBytes > limit) {
+      break;
+    }
+
+    byteLength += nextBytes;
+    index += codeUnits;
+    end = index;
+  }
+
+  return {
+    value: end === value.length ? value : value.slice(0, end),
+    byteLength,
+    truncated: end < value.length,
+  };
 }
 
 /** Validate and independently bound messages supplied by the preview frame. */
@@ -87,20 +122,20 @@ export function normalizeApiClientResultPayload(value: unknown): ApiClientResult
     }
   }
 
-  const body = value.body.slice(0, MAX_API_CLIENT_RESPONSE_BYTES);
+  const body = truncateUtf8(value.body, MAX_API_CLIENT_RESPONSE_BYTES);
   return {
     id: value.id,
     ok: true,
     status: Math.trunc(value.status),
     statusText: value.statusText.slice(0, 1024),
     headers,
-    body,
+    body: body.value,
     durationMs,
-    truncated: value.truncated === true || body.length < value.body.length,
+    truncated: value.truncated === true || body.truncated,
     bodyBytes:
       typeof value.bodyBytes === "number" && Number.isFinite(value.bodyBytes)
         ? Math.max(0, Math.min(MAX_API_CLIENT_RESPONSE_BYTES, Math.trunc(value.bodyBytes)))
-        : body.length,
+        : body.byteLength,
   };
 }
 

@@ -10,6 +10,7 @@ import {
   clearResumeIntent,
   type ResumeIntent,
 } from "@next-editor/infra";
+import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
 
 // Composition root for /code: this is the one place that wires infra's
 // upload modal into the editor (renderPostRecordingModal), plus a second,
@@ -103,18 +104,20 @@ export default function CodeRoute() {
         )}
       />
       {resumedRecording ? (
-        <UploadLessonModal
-          recording={resumedRecording}
-          onClose={() => setResumedRecording(null)}
-          initialTitle={resumedDraft?.title}
-          initialDescription={resumedDraft?.description}
-          initialTags={resumedDraft?.tags}
-        />
+        <div className={POSTHOG_SENSITIVE_ROOT_CLASS}>
+          <UploadLessonModal
+            recording={resumedRecording}
+            onClose={() => setResumedRecording(null)}
+            initialTitle={resumedDraft?.title}
+            initialDescription={resumedDraft?.description}
+            initialTags={resumedDraft?.tags}
+          />
+        </div>
       ) : null}
       {resumeError ? (
         <div
           role="alert"
-          className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-rose-500/30 bg-[#1b151a] p-3 text-xs text-rose-100 shadow-xl"
+          className={`${POSTHOG_SENSITIVE_ROOT_CLASS} fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-rose-500/30 bg-[#1b151a] p-3 text-xs text-rose-100 shadow-xl`}
         >
           <p>Pending upload recovery failed: {resumeError}</p>
           <button

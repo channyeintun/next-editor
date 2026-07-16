@@ -27,7 +27,9 @@ describe("workspace path canonicalization", () => {
     expect(() => parseWorkspacePath("../../outside.ts")).toThrow(WorkspacePathError);
     expect(() => parseWorkspacePath("src/\u0000secret.ts")).toThrow(WorkspacePathError);
     expect(() => parseWorkspacePath("src/__proto__/value.ts")).toThrow(WorkspacePathError);
+    expect(() => parseWorkspacePath("src/App.tsx/")).toThrow(/empty terminal name/i);
     expect(normalizeWorkspacePath("../outside.ts")).toBe("");
+    expect(normalizeWorkspacePath("src/App.tsx/")).toBe("");
   });
 
   it("rebuilds canonical file metadata", () => {

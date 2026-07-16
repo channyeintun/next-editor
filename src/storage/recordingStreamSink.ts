@@ -4,10 +4,12 @@ import { DELTA_CONFIG } from "../core/src/utils/deltaTypes";
 import { isKeyframe } from "../core/src/utils/deltaTypes";
 import {
   SEGMENT_KIND,
+  RECORDING_EVENT_SEGMENTS,
   createRecordingStreamMeta,
   createStreamingRecordingWriter,
   readRecordTimestamp,
   type RecordingStreamMeta,
+  type RecordingEventSegmentKey,
   type StreamingRecordingWriter,
 } from "./streamingRecordingCodec";
 
@@ -17,18 +19,9 @@ import {
  */
 const EVENT_FLUSH_THRESHOLD = 32;
 
-interface StreamedCounts {
+type StreamedCounts = {
   frames: number;
-  slide: number;
-  preview: number;
-  previewDoc: number;
-  previewPatch: number;
-  workspace: number;
-  runtime: number;
-  cursor: number;
-  whiteboard: number;
-  chat: number;
-}
+} & Record<RecordingEventSegmentKey, number>;
 
 interface RecordingStreamBridgeStartOptions {
   audioType?: string;
@@ -58,18 +51,10 @@ interface PendingStreamSegment {
  */
 export class RecordingStreamBridge {
   private readonly writer: StreamingRecordingWriter = createStreamingRecordingWriter();
-  private readonly counts: StreamedCounts = {
+  private readonly counts = {
     frames: 0,
-    slide: 0,
-    preview: 0,
-    previewDoc: 0,
-    previewPatch: 0,
-    workspace: 0,
-    runtime: 0,
-    cursor: 0,
-    whiteboard: 0,
-    chat: 0,
-  };
+    ...Object.fromEntries(RECORDING_EVENT_SEGMENTS.map(({ key }) => [key, 0])),
+  } as StreamedCounts;
   /** Timeline starts for SCR3 cluster indices known to the live bridge. */
   private readonly clusterStarts: number[] = [];
   /** Serializes encoding and sink writes, providing one-write-at-a-time backpressure. */
@@ -187,35 +172,9 @@ export class RecordingStreamBridge {
   ): PendingStreamSegment[] {
     return [
       ...this.collectFrameSegments(session.frames, final),
-      ...this.collectEventSegments(SEGMENT_KIND.slide, session.slideEvents, "slide", final),
-      ...this.collectEventSegments(SEGMENT_KIND.preview, session.previewEvents, "preview", final),
-      ...this.collectEventSegments(
-        SEGMENT_KIND.previewDoc,
-        session.previewInitialDocuments,
-        "previewDoc",
-        final,
+      ...RECORDING_EVENT_SEGMENTS.flatMap(({ kind, key }) =>
+        this.collectEventSegments(kind, session[key], key, final),
       ),
-      ...this.collectEventSegments(
-        SEGMENT_KIND.previewPatch,
-        session.previewPatchBatches,
-        "previewPatch",
-        final,
-      ),
-      ...this.collectEventSegments(
-        SEGMENT_KIND.workspace,
-        session.workspaceEvents,
-        "workspace",
-        final,
-      ),
-      ...this.collectEventSegments(SEGMENT_KIND.runtime, session.runtimeEvents, "runtime", final),
-      ...this.collectEventSegments(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", final),
-      ...this.collectEventSegments(
-        SEGMENT_KIND.whiteboard,
-        session.whiteboardEvents,
-        "whiteboard",
-        final,
-      ),
-      ...this.collectEventSegments(SEGMENT_KIND.chat, session.chatEvents, "chat", final),
     ];
   }
 
@@ -323,7 +282,7 @@ export class RecordingStreamBridge {
   private collectEventSegments(
     kind: (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND],
     records: ReadonlyArray<unknown>,
-    key: keyof StreamedCounts,
+    key: RecordingEventSegmentKey,
     final: boolean,
   ): PendingStreamSegment[] {
     const pending = records.length - this.counts[key];

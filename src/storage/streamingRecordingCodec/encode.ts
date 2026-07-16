@@ -16,6 +16,7 @@ import {
   FLAG_HAS_CAMERA,
   readLastRecordTimestamp,
   readRecordTimestamp,
+  RECORDING_EVENT_SEGMENTS,
   SEGMENT_KIND,
   type RecordingStreamMeta,
   type SegmentIndexEntry,
@@ -359,15 +360,9 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     }
   };
 
-  queueClusteredEventSegments(SEGMENT_KIND.slide, normalized.slideEvents, 1);
-  queueClusteredEventSegments(SEGMENT_KIND.preview, normalized.previewEvents, 1);
-  queueClusteredEventSegments(SEGMENT_KIND.previewDoc, normalized.previewInitialDocuments, 1);
-  queueClusteredEventSegments(SEGMENT_KIND.previewPatch, normalized.previewPatchBatches, 1);
-  queueClusteredEventSegments(SEGMENT_KIND.workspace, normalized.workspaceEvents, 1);
-  queueClusteredEventSegments(SEGMENT_KIND.runtime, normalized.runtimeEvents, 1);
-  queueClusteredEventSegments(SEGMENT_KIND.cursor, normalized.cursorEvents, 1);
-  queueClusteredEventSegments(SEGMENT_KIND.whiteboard, normalized.whiteboardEvents, 1);
-  queueClusteredEventSegments(SEGMENT_KIND.chat, normalized.chatEvents, 1);
+  for (const { kind, key } of RECORDING_EVENT_SEGMENTS) {
+    queueClusteredEventSegments(kind, normalized[key], 1);
+  }
 
   pendingSegments
     .sort(

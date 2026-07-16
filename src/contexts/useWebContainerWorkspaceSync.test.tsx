@@ -60,6 +60,14 @@ describe("useWebContainerWorkspaceSync", () => {
       project,
     });
 
+    // The shared WebContainer mutex starts the mount on its next microtask.
+    // Let that queued callback capture its resolver before reset wins the
+    // in-flight operation; otherwise the test attempts to resolve `null` and
+    // waits forever on a mount that it never released.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
     hook.resetWorkspaceSync();
 
     await act(async () => {

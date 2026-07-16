@@ -7,7 +7,7 @@ import posthog from "posthog-js";
 import { PostHogProvider } from "@posthog/react";
 import {
   POSTHOG_SENSITIVE_SURFACE_SELECTOR,
-  shouldSendPostHogEvent,
+  sanitizePostHogEvent,
 } from "./utils/posthogExceptionFilter";
 
 posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN, {
@@ -17,12 +17,12 @@ posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN, {
   // Uncaught errors/rejections anywhere in the app — the route error boundary
   // only sees render-path failures.
   capture_exceptions: true,
-  before_send: (event) => (shouldSendPostHogEvent(event) ? event : null),
+  before_send: (event) => sanitizePostHogEvent(event),
   session_recording: {
     // Workspace source, filenames, previews, runtime/agent/API output, slides,
     // recordings, and drawings must not land in third-party replays. The editor
     // root blocks the complete surface; the narrow selectors cover legacy embeds.
-    // (docs/observability-integration-plan.md §9, decision 1).
+    // See docs/observability-privacy.md for the data-classification contract.
     maskAllInputs: true,
     blockSelector: POSTHOG_SENSITIVE_SURFACE_SELECTOR,
   },

@@ -1,9 +1,10 @@
 import { StrictMode } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "../core/src";
 
 const recovery = vi.hoisted(() => ({
+  auth: { isSignedIn: true, isLoading: false },
   clearIntent: vi.fn<() => Promise<void>>(),
   loadIntent: vi.fn<() => Promise<{ recordingId: string; draft?: { title?: string } } | null>>(),
   loadRecording: vi.fn<(id: string) => Promise<Recording | null>>(),
@@ -20,7 +21,7 @@ vi.mock("@next-editor/infra", () => ({
   UploadLessonModal: recovery.uploadModal,
   clearResumeIntent: recovery.clearIntent,
   loadResumeIntent: recovery.loadIntent,
-  useAuth: () => ({ isSignedIn: true, isLoading: false }),
+  useAuth: () => recovery.auth,
 }));
 
 vi.mock("../storage/RecordingStorage", () => ({
@@ -46,6 +47,8 @@ const recording: Recording = {
 describe("CodeRoute upload recovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    recovery.auth.isSignedIn = true;
+    recovery.auth.isLoading = false;
     recovery.loadIntent.mockResolvedValue({
       recordingId: recording.id,
       draft: { title: "Recovered title" },
@@ -81,5 +84,76 @@ describe("CodeRoute upload recovery", () => {
     await waitFor(() => expect(recovery.uploadModal).toHaveBeenCalled());
     expect(recovery.loadRecording).toHaveBeenCalledTimes(2);
     expect(recovery.clearIntent).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains the intent when loading the recovery pointer fails", async () => {
+    recovery.loadIntent.mockRejectedValueOnce(new Error("resume store unavailable"));
+
+    render(<CodeRoute />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("resume store unavailable");
+    expect(recovery.loadRecording).not.toHaveBeenCalled();
+    expect(recovery.clearIntent).not.toHaveBeenCalled();
+  });
+
+  it("consumes a terminal missing-recording intent", async () => {
+    recovery.loadRecording.mockResolvedValueOnce(null);
+
+    render(<CodeRoute />);
+
+    await waitFor(() => expect(recovery.clearIntent).toHaveBeenCalledTimes(1));
+    expect(recovery.uploadModal).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("consumes the intent when sign-in was cancelled", async () => {
+    recovery.auth.isSignedIn = false;
+
+    render(<CodeRoute />);
+
+    await waitFor(() => expect(recovery.clearIntent).toHaveBeenCalledTimes(1));
+    expect(recovery.loadRecording).not.toHaveBeenCalled();
+    expect(recovery.uploadModal).not.toHaveBeenCalled();
+  });
+
+  it("does nothing after unmount while the intent load is pending", async () => {
+    let resolveIntent: ((intent: { recordingId: string }) => void) | null = null;
+    recovery.loadIntent.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveIntent = resolve;
+        }),
+    );
+    const view = render(<CodeRoute />);
+
+    view.unmount();
+    await act(async () => {
+      resolveIntent?.({ recordingId: recording.id });
+      await Promise.resolve();
+    });
+
+    expect(recovery.loadRecording).not.toHaveBeenCalled();
+    expect(recovery.clearIntent).not.toHaveBeenCalled();
+  });
+
+  it("does not hand off or clear after unmount during recording load", async () => {
+    let resolveRecording: ((value: Recording | null) => void) | null = null;
+    recovery.loadRecording.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRecording = resolve;
+        }),
+    );
+    const view = render(<CodeRoute />);
+    await waitFor(() => expect(recovery.loadRecording).toHaveBeenCalledTimes(1));
+
+    view.unmount();
+    await act(async () => {
+      resolveRecording?.(recording);
+      await Promise.resolve();
+    });
+
+    expect(recovery.uploadModal).not.toHaveBeenCalled();
+    expect(recovery.clearIntent).not.toHaveBeenCalled();
   });
 });
