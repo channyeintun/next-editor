@@ -4,6 +4,7 @@
 environment validation remain pending.
 **Companion docs:** [remote-runtime-implementation-plan.md](./remote-runtime-implementation-plan.md) ·
 [remote-runtime-review.md](./remote-runtime-review.md) ·
+[remote-runtime-alternatives.md](./remote-runtime-alternatives.md) (provider alternatives) ·
 [remote-runtime-cloudflare-setup.md](./remote-runtime-cloudflare-setup.md) (manual dashboard setup)
 **Audience:** implementing agents/engineers. This document is self-contained: it embeds the
 exact `@webcontainer/api@1.6.4` surface to replicate (Appendix A) and the exact call sites in
@@ -30,6 +31,10 @@ via wrangler; the remote runtime extends that same deploy. There is deliberately
 backend-portability abstraction, no self-hosted broker, no second infrastructure to operate.
 Local development uses `wrangler dev`, which runs the container locally (Docker is required on
 dev machines only as wrangler's container build/run dependency).
+
+This is the implementation decision, not a claim that no managed alternative exists. The
+[provider alternatives](./remote-runtime-alternatives.md) document records Upstash Box as a
+developer-preview option that must pass the same runtime conformance suite before reconsideration.
 
 Because the API is compatible, the editor keeps both runtimes:
 

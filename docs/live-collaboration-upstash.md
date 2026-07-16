@@ -52,11 +52,15 @@ The first Option A foundation is implemented:
 - [`collaboration.ts`](../infra/worker/routes/collaboration.ts) adds authenticated room creation,
   room lookup, owner/editor update publication, viewer write rejection, and membership-checked
   Realtime SSE subscriptions.
-- [`realtime.ts`](../infra/worker/collaboration/realtime.ts) creates a dedicated, fail-closed Redis
-  client and typed Realtime schema. It deliberately applies no stream trimming before snapshot
-  compaction exists.
+- [`realtime.ts`](../infra/worker/collaboration/realtime.ts) creates the official Cloudflare Redis
+  client with fail-closed HTTPS credentials, explicit read-your-writes and JSON decoding, and a
+  typed Realtime schema with bounded SSE rotation.
+- [`realtime.test.ts`](../infra/worker/collaboration/realtime.test.ts) locks down the Redis client
+  options, invalid-configuration behavior, Realtime history, duration, and event schema.
 - [`CollaborationRealtimeProvider.tsx`](../infra/client/collaboration/CollaborationRealtimeProvider.tsx)
-  configures the same-origin, cookie-authenticated Realtime endpoint for later provider actors.
+  exposes the official React client wrapper for compatible UI consumers. The active room provider
+  uses a direct same-origin `EventSource` so it can control per-channel acknowledgement cursors and
+  the snapshot/live-event race without exposing Redis credentials.
 - [`projectDocument.ts`](../src/collaboration/projectDocument.ts) defines the versioned Yjs project
   tree, stable file IDs, deterministic sibling collision names, orphan/cycle recovery, and a
   path-based workspace projection.
@@ -123,6 +127,27 @@ This single-purpose Redis database provides collaboration-specific retention, bu
 incident handling, and metrics. Gallery traffic never consumes its command allowance because that
 cache is a Workers KV binding. Redis and QStash credentials are server-only and must never be
 included in the browser bundle, invitation URLs, or any future room token.
+
+## Redis and Realtime SDK alignment
+
+The Worker uses the connectionless `@upstash/redis/cloudflare` SDK with the REST URL and token from
+Worker secrets. The client explicitly keeps read-your-writes enabled because accepting an update
+performs dependent commands, keeps automatic deserialization enabled because Realtime envelopes
+are structured objects, and disables anonymous SDK telemetry. Blank credentials and non-HTTPS
+Redis URLs fail closed before a room can accept data.
+
+`createCollaborationRealtime` follows the official Realtime server pattern: it constructs a typed
+`Realtime` instance over that Redis client, rotates SSE connections after 300 seconds, retains
+history for reconnect catch-up, and passes the instance to `handle`. The handler middleware parses
+every requested channel, checks exact D1 room membership, limits channels per connection, and
+rejects inactive rooms before subscribing.
+
+Document, awareness, and control writes deliberately use the Redis SDK's `XADD` and `PUBLISH`
+commands instead of the convenience `Realtime.emit` method. They preserve Realtime's documented
+event envelope while adding collaboration requirements that the convenience call does not own:
+durable update IDs before acknowledgement, HTTP retry deduplication, byte quotas, compaction
+cutoffs, and separate awareness/control trim and expiry policies. Realtime remains the typed SSE
+delivery layer; Redis remains the system of record.
 
 ## Option A: Upstash-centric room provider
 
@@ -447,6 +472,7 @@ workspace projection, playback isolation, and SCR3 recording code should not imp
 ## References
 
 - [Upstash Redis getting started](https://upstash.com/docs/redis/overall/getstarted)
+- [Connect with the Upstash Redis SDK](https://upstash.com/docs/redis/howto/connect-with-upstash-redis)
 - [Upstash Redis pricing](https://upstash.com/pricing/redis)
 - [Upstash Realtime quickstart](https://upstash.com/docs/realtime/overall/quickstart)
 - [Realtime client-side usage](https://upstash.com/docs/realtime/features/client-side)

@@ -12,16 +12,39 @@ export class CollaborationConfigurationError extends Error {
   }
 }
 
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // Collaboration is fail-closed. Unlike the optional gallery cache, an
 // accepted document update cannot silently fall back to a different store.
 export function getCollaborationRedis(env: Env): Redis {
-  if (!env.COLLAB_REDIS_REST_URL || !env.COLLAB_REDIS_REST_TOKEN) {
+  const url = env.COLLAB_REDIS_REST_URL;
+  const token = env.COLLAB_REDIS_REST_TOKEN;
+  if (
+    typeof url !== "string" ||
+    url.trim().length === 0 ||
+    !isHttpsUrl(url) ||
+    typeof token !== "string" ||
+    token.trim().length === 0
+  ) {
     throw new CollaborationConfigurationError();
   }
 
   return new Redis({
-    url: env.COLLAB_REDIS_REST_URL,
-    token: env.COLLAB_REDIS_REST_TOKEN,
+    url,
+    token,
+    // Document acceptance performs dependent REST commands. Preserve the
+    // SDK's consistency token so later commands observe earlier writes.
+    readYourWrites: true,
+    // Realtime stream entries contain structured event envelopes.
+    automaticDeserialization: true,
+    // Collaboration does not need anonymous SDK environment telemetry.
+    enableTelemetry: false,
   });
 }
 

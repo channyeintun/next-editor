@@ -54,6 +54,11 @@ wrangler d1 migrations apply next-editor-tube --remote --config infra/wrangler.t
 
 Deploy the Worker only after the migration succeeds. A missing collaboration Redis configuration
 fails rooms closed with `503`; it never falls back to Workers KV or D1 for document storage.
+The Redis URL must be the HTTPS REST URL from the Upstash database details page. The Worker uses
+the official Cloudflare Redis SDK with read-your-writes and structured response decoding enabled;
+neither Redis credential is sent to the browser. Realtime runs over the same dedicated Redis
+database and authorizes every requested room channel through the application session and D1
+membership before opening SSE.
 QStash may be omitted in local development, where threshold compaction runs inline, but production
 should configure all three QStash secrets so maintenance stays outside the edit acknowledgement
 path. An incomplete QStash configuration never publishes a job that its receiver cannot verify:
@@ -105,7 +110,10 @@ Use two signed-in browser profiles and one separate viewer invitation:
 9. After a compaction threshold is reached, confirm a `collaboration_qstash_queued` log and a
    labeled `collaboration-maintenance` message in QStash. Close a test room and confirm its cleanup
    message carries a seven-day delay.
-10. End live only after pending updates flush. Export the owner recovery JSON before retention
+10. Confirm Redis metrics show stream/TTL activity and the Realtime dashboard shows the three
+    room-scoped document, awareness, and control channels. Verify no Redis URL or token appears in
+    browser requests, responses, or built assets.
+11. End live only after pending updates flush. Export the owner recovery JSON before retention
     expires.
 
 ## Transport spike and release gate

@@ -6,6 +6,8 @@ This directory is an isolated implementation of the remote runtime described in
 
 The implementation audit, resolved findings, and remaining environment validation gates are in
 [`../docs/remote-runtime-review.md`](../docs/remote-runtime-review.md).
+The non-selected Upstash Box provider option is evaluated separately in
+[`../docs/remote-runtime-alternatives.md`](../docs/remote-runtime-alternatives.md).
 
 ## Components
 
