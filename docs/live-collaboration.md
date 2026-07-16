@@ -7,6 +7,10 @@ Deployment evaluations:
 - [Cloudflare-native Deployment](./live-collaboration-cloudflare.md)
 - [Upstash Deployment Evaluation](./live-collaboration-upstash.md)
 
+Deployment status: Upstash Realtime plus a dedicated Redis data plane is selected for the initial
+implementation spike. The Cloudflare-native room service remains the fallback until that spike
+passes the required latency, throughput, reconnect, and cost checks.
+
 ## Decision
 
 Real-time collaboration is feasible with the current editor, state machines, and streaming
@@ -421,8 +425,8 @@ contrast requirements.
 | Tree conflicts     | Stable node IDs with deterministic display-name suffixes | Exact suffix UX and tombstone retention           |
 | Undo               | Per-user, origin-scoped text undo                        | Whether tree undo is included in MVP              |
 | Assets             | Content-addressed external blobs                         | Storage provider, quotas, and offline behavior    |
-| Runtime            | Local per client; explicit host for follow mode           | Host selection outside recorded sessions          |
-| Recording          | Host browser; owner remains host while recording          | Local crash and recovery UX                       |
+| Runtime            | Local per client; explicit host for follow mode          | Host selection outside recorded sessions          |
+| Recording          | Host browser; owner remains host while recording         | Local crash and recovery UX                       |
 | Playback           | Mutually exclusive with live projection                  | Whether to add a second workspace instance        |
 | Replay attribution | Not included in initial SCR3 output                      | Optional collaboration track and privacy controls |
 

@@ -11,4 +11,9 @@ export interface Env {
   // in local/self-hosted setups — the app must work identically without it.
   UPSTASH_REDIS_REST_URL?: string;
   UPSTASH_REDIS_REST_TOKEN?: string;
+  // Required by live collaboration. These may point at the same database
+  // during local development, but production should use a dedicated Upstash
+  // Redis database with an independent budget and failure boundary.
+  COLLAB_REDIS_REST_URL?: string;
+  COLLAB_REDIS_REST_TOKEN?: string;
 }

@@ -16,6 +16,15 @@ export {
 export type { OwnedLesson } from "../db/types";
 export { useAuthorProfile } from "./authors/useAuthorProfile";
 export type { AuthorProfile } from "./authors/authorsApi";
+export {
+  createCollaborationRoom,
+  getCollaborationRoom,
+  publishCollaborationUpdate,
+} from "./collaboration/collaborationApi";
+export {
+  CollaborationRealtimeProvider,
+  useCollaborationRealtime,
+} from "./collaboration/CollaborationRealtimeProvider";
 export type { AuthorSummary } from "../db/types";
 export { useSearch } from "./search/useSearch";
 export type { SearchResults } from "./search/searchApi";

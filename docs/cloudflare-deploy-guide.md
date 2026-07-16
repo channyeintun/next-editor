@@ -2,11 +2,8 @@
 
 A practical runbook for deploying/redeploying the Cloudflare Worker that
 serves the whole app (SPA + `/api/*` + `/media/*`) — see
-[cloudflare-architecture.md](./cloudflare-architecture.md) for the _why_,
-[cloudflare-plan.md](./cloudflare-plan.md) for the original build plan, and
-[progress.md](./progress.md) for the blow-by-blow of what actually happened
-(including bugs hit and fixed along the way). This doc is the
-"how do I ship a change / set this up from scratch" reference.
+[cloudflare-architecture.md](./cloudflare-architecture.md) for the _why_. This
+doc is the "how do I ship a change / set this up from scratch" reference.
 
 ## Prerequisites
 
@@ -77,7 +74,8 @@ Verify:
 ```sh
 npx wrangler d1 execute next-editor-tube --remote \
   --command "SELECT name FROM sqlite_master WHERE type='table';"
-# expect: users, sessions, lessons (plus D1's own d1_migrations, sqlite_sequence, _cf_KV)
+# expect: users, sessions, lessons, playlists, playlist_lessons,
+# collaboration_rooms, collaboration_members (plus D1's internal tables)
 ```
 
 ### 4. Set production secrets
@@ -127,6 +125,25 @@ The app runs fine without it — skip this if you don't want the dependency yet.
    ```
 3. Redeploy (`npx wrangler deploy`). No D1/R2/schema changes needed — the
    cache layer is purely additive.
+
+### Required when enabling live collaboration: Upstash Redis data plane
+
+Live collaboration is fail-closed and does not reuse the optional cache
+configuration implicitly. Create a dedicated production Redis database, then
+set its REST URL and token with the same secret-handling precautions:
+
+```sh
+npx wrangler secret put COLLAB_REDIS_REST_URL   < /path/to/tmpfile
+npx wrangler secret put COLLAB_REDIS_REST_TOKEN < /path/to/tmpfile
+```
+
+Local development may explicitly set the collaboration and cache variables to
+the same free database, but production should keep their budgets, retention,
+and failure modes separate. Apply D1 migrations before deploying so
+`collaboration_rooms` and `collaboration_members` exist. The Worker returns
+`503 collaboration unavailable` from collaboration data-plane routes when the
+dedicated credentials are absent; unrelated editor and gallery routes continue
+to operate.
 
 ## Custom domain cutover
 

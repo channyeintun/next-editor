@@ -25,6 +25,11 @@ PUBLIC_URL = "https://nexteditor.dev"
 #   wrangler secret put UPSTASH_REDIS_REST_URL   --config infra/wrangler.toml
 #   wrangler secret put UPSTASH_REDIS_REST_TOKEN --config infra/wrangler.toml
 # The app must work identically when these are unset.
+# Live collaboration is fail-closed and uses separate secret names. Production
+# should point them at a dedicated Redis database; local development may choose
+# to reuse one database by setting both pairs to the same values:
+#   wrangler secret put COLLAB_REDIS_REST_URL   --config infra/wrangler.toml
+#   wrangler secret put COLLAB_REDIS_REST_TOKEN --config infra/wrangler.toml
 
 # Custom Domain: routes all paths of nexteditor.dev to this Worker. Requires
 # the zone to already be on Cloudflare (nameservers pointed here) — done by
@@ -42,6 +47,7 @@ custom_domain = true
 hono = "hono"
 "hono/cookie" = "hono/cookie"
 "@upstash/redis/cloudflare" = "@upstash/redis/cloudflare"
+"@upstash/realtime" = "@upstash/realtime"
 uncrypto = "uncrypto"
 
 # The SPA build output (bun run build, from the repo root). Static Assets are

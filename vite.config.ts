@@ -179,6 +179,8 @@ export default ({ mode }: { mode: string }) => {
         "/api/lessons": "http://localhost:8787",
         "/api/auth": "http://localhost:8787",
         "/api/uploads": "http://localhost:8787",
+        // Authenticated Upstash Realtime SSE plus room/update APIs.
+        "/api/collaboration": "http://localhost:8787",
         // Slide-image R2 ingestion (Worker-only — R2 lives behind wrangler).
         // Without `dev:worker` running this proxy 500s and the import falls
         // back to /api/proxy hrefs client-side (src/googleSlides/storeImageHrefs.ts).

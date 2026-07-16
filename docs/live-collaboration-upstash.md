@@ -1,6 +1,6 @@
 # Live Collaboration — Upstash Deployment Evaluation
 
-Status: proposed provider option; not selected
+Status: selected for the initial implementation spike; implementation in progress
 
 Companion documents:
 
@@ -22,11 +22,11 @@ again before production capacity is purchased.
 
 Upstash can support a small-room collaboration MVP, but the three services have different roles:
 
-| Service          | Appropriate collaboration role                                                                 | Recommendation                              |
-| ---------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| Upstash Redis    | CRDT update streams, compacted snapshots, presence TTLs, idempotency keys, and rate-limit state | Strong fit, using a dedicated database      |
-| Upstash Realtime | Redis Streams and Pub/Sub exposed to browsers through Server-Sent Events                       | Conditional transport candidate             |
-| QStash           | Snapshot compaction, cleanup, exports, invitations, and recovery jobs                           | Background work only                        |
+| Service          | Appropriate collaboration role                                                                  | Recommendation                           |
+| ---------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Upstash Redis    | CRDT update streams, compacted snapshots, presence TTLs, idempotency keys, and rate-limit state | Strong fit, using a dedicated database   |
+| Upstash Realtime | Redis Streams and Pub/Sub exposed to browsers through Server-Sent Events                        | Selected for the initial transport spike |
+| QStash           | Snapshot compaction, cleanup, exports, invitations, and recovery jobs                           | Background work only                     |
 
 Realtime should not be adopted merely because Redis is already present. Its SSE downstream and
 HTTP upstream model must first pass a realistic multi-client performance and cost spike. If it
@@ -40,6 +40,28 @@ CRDT convergence.
 Option A does not require Durable Objects: Realtime and Redis supply the live transport and room
 history, while the Worker enforces authorization. Browser-local recording does not affect that
 choice and is not a reason to add a Durable Object.
+
+## Implementation status
+
+The first Option A foundation is implemented:
+
+- [`protocol.ts`](../src/collaboration/protocol.ts) defines versioned, size-bounded Yjs update
+  envelopes, exact room-channel parsing, and owner/editor/viewer write policy.
+- [`0004_collaboration_rooms.sql`](../infra/db/migrations/0004_collaboration_rooms.sql) adds the D1
+  room and membership control plane.
+- [`collaboration.ts`](../infra/worker/routes/collaboration.ts) adds authenticated room creation,
+  room lookup, owner/editor update publication, viewer write rejection, and membership-checked
+  Realtime SSE subscriptions.
+- [`realtime.ts`](../infra/worker/collaboration/realtime.ts) creates a dedicated, fail-closed Redis
+  client and typed Realtime schema. It deliberately applies no stream trimming before snapshot
+  compaction exists.
+- [`CollaborationRealtimeProvider.tsx`](../infra/client/collaboration/CollaborationRealtimeProvider.tsx)
+  configures the same-origin, cookie-authenticated Realtime endpoint for later provider actors.
+
+This slice is infrastructure, not a usable room UI. Monaco/Yjs projection, invitations and member
+management, awareness, offline update buffering, snapshots and compaction, QStash jobs, recording
+host guards, and room lifecycle UI remain subsequent work. Realtime must still pass the transport
+spike in this document before the fallback WebSocket option is discarded.
 
 ## Existing Redis integration is not collaboration infrastructure
 
@@ -128,17 +150,17 @@ compatible with both.
 
 ## Service and data ownership
 
-| Data                                      | System of record                       | Notes                                                    |
-| ----------------------------------------- | -------------------------------------- | -------------------------------------------------------- |
-| Room identity, owner, members, and roles  | D1                                     | Globally queryable control plane                         |
-| Current CRDT snapshot                     | Dedicated Redis, optionally copied R2  | Binary value or encoded snapshot                         |
-| CRDT updates after the snapshot           | Redis Stream                           | Durable and replayable                                   |
-| Participant awareness                     | Client state plus short-lived Redis TTL | Realtime events alone do not provide presence semantics  |
-| Host/follow and role-change control events | Realtime channel plus authoritative D1 | Events notify; D1 decides                                |
-| Binary project assets                     | R2                                     | CRDT stores only an asset reference                       |
-| Optional project export                   | R2                                     | Separate from the host's SCR3 recording                   |
-| SCR3 recording                            | Room host's browser                    | Local until the post-session upload modal is confirmed    |
-| Compaction and cleanup jobs                | QStash delivery state                  | Destination handlers remain idempotent                    |
+| Data                                       | System of record                        | Notes                                                   |
+| ------------------------------------------ | --------------------------------------- | ------------------------------------------------------- |
+| Room identity, owner, members, and roles   | D1                                      | Globally queryable control plane                        |
+| Current CRDT snapshot                      | Dedicated Redis, optionally copied R2   | Binary value or encoded snapshot                        |
+| CRDT updates after the snapshot            | Redis Stream                            | Durable and replayable                                  |
+| Participant awareness                      | Client state plus short-lived Redis TTL | Realtime events alone do not provide presence semantics |
+| Host/follow and role-change control events | Realtime channel plus authoritative D1  | Events notify; D1 decides                               |
+| Binary project assets                      | R2                                      | CRDT stores only an asset reference                     |
+| Optional project export                    | R2                                      | Separate from the host's SCR3 recording                 |
+| SCR3 recording                             | Room host's browser                     | Local until the post-session upload modal is confirmed  |
+| Compaction and cleanup jobs                | QStash delivery state                   | Destination handlers remain idempotent                  |
 
 ## Recording boundary
 
@@ -288,10 +310,10 @@ window. A delivery may be retried after the endpoint performed work but its resp
 The proposed Upstash path can currently be developed and prototyped at no service cost while its
 combined traffic stays within these published free-tier allowances:
 
-| Service       | Plan | Price | Published allowance                                                   |
-| ------------- | ---- | ----- | --------------------------------------------------------------------- |
+| Service       | Plan | Price | Published allowance                                                  |
+| ------------- | ---- | ----- | -------------------------------------------------------------------- |
 | Upstash Redis | Free | $0    | 256 MB data, 10 GB monthly bandwidth, and 500,000 commands per month |
-| QStash        | Free | $0    | 1,000 messages per day                                                |
+| QStash        | Free | $0    | 1,000 messages per day                                               |
 
 Upstash positions both free plans for prototypes and hobby projects, which matches the expected
 development phase of this feature.
