@@ -265,6 +265,28 @@ window. A delivery may be retried after the endpoint performed work but its resp
 
 ## Cost and throughput considerations
 
+### Development cost: currently $0 within the free-tier limits
+
+The proposed Upstash path can currently be developed and prototyped at no service cost while its
+combined traffic stays within these published free-tier allowances:
+
+| Service       | Plan | Price | Published allowance                                                   |
+| ------------- | ---- | ----- | --------------------------------------------------------------------- |
+| Upstash Redis | Free | $0    | 256 MB data, 10 GB monthly bandwidth, and 500,000 commands per month |
+| QStash        | Free | $0    | 1,000 messages per day                                                |
+
+Upstash positions both free plans for prototypes and hobby projects, which matches the expected
+development phase of this feature.
+
+Realtime does not add a separate collaboration quota: its connections, keepalives, history reads,
+and event emissions consume Redis commands. Therefore, the Redis allowance must cover both the
+existing Redis workload and all Realtime activity—or, as recommended here, the complete workload
+of a dedicated collaboration database. The $0 estimate is appropriate for development and
+prototypes, not an assumption about production cost; usage limits and pricing should be checked
+again before launch.
+
+### What consumes the Redis allowance
+
 Realtime is billed through the Redis commands it performs:
 
 - Initial client connection: `SUBSCRIBE` and `XRANGE`.
