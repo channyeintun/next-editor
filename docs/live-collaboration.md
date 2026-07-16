@@ -2,6 +2,11 @@
 
 Status: proposed
 
+Deployment evaluations:
+
+- [Cloudflare-native Deployment](./live-collaboration-cloudflare.md)
+- [Upstash Deployment Evaluation](./live-collaboration-upstash.md)
+
 ## Decision
 
 Real-time collaboration is feasible with the current editor, state machines, and streaming
@@ -393,6 +398,8 @@ documents.
 
 ## References
 
+- [Cloudflare-native collaboration deployment](./live-collaboration-cloudflare.md)
+- [Upstash collaboration deployment evaluation](./live-collaboration-upstash.md)
 - [Yjs documentation](https://docs.yjs.dev/)
 - [Yjs awareness and presence](https://docs.yjs.dev/getting-started/adding-awareness)
 - [State Machines Documentation](./state-machines.md)
