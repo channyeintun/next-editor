@@ -477,3 +477,227 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
 export function canWriteCollaborationDocument(role: CollaborationRole): boolean {
   return role === "owner" || role === "editor";
 }
+
+export interface CollaborationProjectControllerOptions {
+  canWrite: () => boolean;
+  idFactory?: () => string;
+}
+
+const COLLABORATION_TEXT_INSERT_CHUNK_CHARS = 12 * 1024;
+
+function sharedTextReplacement(text: Y.Text, nextContent: string) {
+  const current = text.toString();
+  if (current === nextContent) return null;
+  let prefixLength = 0;
+  const commonLength = Math.min(current.length, nextContent.length);
+  while (prefixLength < commonLength && current[prefixLength] === nextContent[prefixLength]) {
+    prefixLength += 1;
+  }
+  let suffixLength = 0;
+  while (
+    suffixLength < commonLength - prefixLength &&
+    current[current.length - 1 - suffixLength] === nextContent[nextContent.length - 1 - suffixLength]
+  ) {
+    suffixLength += 1;
+  }
+  const deleteLength = current.length - prefixLength - suffixLength;
+  const insertion = nextContent.slice(prefixLength, nextContent.length - suffixLength);
+  return { prefixLength, deleteLength, insertion };
+}
+
+export class CollaborationProjectController {
+  private readonly doc: Y.Doc;
+  private readonly canWriteDocument: () => boolean;
+  private readonly idFactory: () => string;
+
+  constructor(doc: Y.Doc, options: CollaborationProjectControllerOptions) {
+    this.doc = doc;
+    this.canWriteDocument = options.canWrite;
+    this.idFactory = options.idFactory ?? (() => crypto.randomUUID());
+  }
+
+  private assertWritable(): void {
+    if (!this.canWriteDocument()) {
+      throw new CollaborationProjectError("This collaboration room is read-only");
+    }
+  }
+
+  private nodeAtPath(path: string): { id: string; node: Y.Map<unknown> } {
+    const normalized = parseWorkspacePath(path);
+    const id = projectCollaborationDocument(this.doc).nodeIdByPath.get(normalized);
+    const node = id ? getCollaborationNodes(this.doc).get(id) : undefined;
+    if (!id || !(node instanceof Y.Map)) {
+      throw new CollaborationProjectError(`Collaboration node not found: ${normalized}`);
+    }
+    return { id, node };
+  }
+
+  private parentIdForPath(parentPath: string): string | null {
+    if (!parentPath) return null;
+    const parent = this.nodeAtPath(parentPath);
+    if (parent.node.get("kind") !== "folder" || parent.node.get("deleted") === true) {
+      throw new CollaborationProjectError(`Collaboration folder not found: ${parentPath}`);
+    }
+    return parent.id;
+  }
+
+  replaceFileContent(path: string, content: string): void {
+    this.assertWritable();
+    const { id, node } = this.nodeAtPath(path);
+    if (node.get("kind") !== "file" || node.get("deleted") === true) {
+      throw new CollaborationProjectError(`Collaboration file not found: ${path}`);
+    }
+    const text = getCollaborationTexts(this.doc).get(id);
+    if (!(text instanceof Y.Text)) {
+      throw new CollaborationProjectError(`Collaboration text not found: ${path}`);
+    }
+    const replacement = sharedTextReplacement(text, content);
+    if (!replacement) return;
+    if (replacement.deleteLength > 0) {
+      this.doc.transact(
+        () => text.delete(replacement.prefixLength, replacement.deleteLength),
+        COLLABORATION_ORIGIN.localEditor,
+      );
+    }
+    for (
+      let offset = 0;
+      offset < replacement.insertion.length;
+      offset += COLLABORATION_TEXT_INSERT_CHUNK_CHARS
+    ) {
+      const chunk = replacement.insertion.slice(
+        offset,
+        offset + COLLABORATION_TEXT_INSERT_CHUNK_CHARS,
+      );
+      this.doc.transact(
+        () => text.insert(replacement.prefixLength + offset, chunk),
+        COLLABORATION_ORIGIN.localEditor,
+      );
+    }
+  }
+
+  createFile(path: string, content = "", encoding: WorkspaceFileEncoding = "utf-8"): void {
+    this.createNode("file", path, content, encoding);
+  }
+
+  createFolder(path: string): void {
+    this.createNode("folder", path, "", "utf-8");
+  }
+
+  private createNode(
+    kind: CollaborationNodeKind,
+    path: string,
+    content: string,
+    encoding: WorkspaceFileEncoding,
+  ): void {
+    this.assertWritable();
+    if (encoding !== "utf-8") {
+      throw new CollaborationProjectError("Binary collaboration assets must be uploaded first");
+    }
+    const normalized = parseWorkspacePath(path);
+    const projection = projectCollaborationDocument(this.doc);
+    if (projection.nodeIdByPath.has(normalized)) {
+      throw new CollaborationProjectError(`Collaboration path already exists: ${normalized}`);
+    }
+    const { parentPath, name } = splitPath(normalized);
+    const parentId = this.parentIdForPath(parentPath);
+    const id = this.idFactory();
+    this.doc.transact(() => {
+      getCollaborationNodes(this.doc).set(
+        id,
+        createNodeMap({
+          id,
+          kind,
+          name,
+          parentId,
+          orderKey: `${Date.now().toString(36)}:${id}`,
+          deleted: false,
+          encoding,
+        }),
+      );
+      if (kind === "file") {
+        const text = new Y.Text();
+        if (content) text.insert(0, content);
+        getCollaborationTexts(this.doc).set(id, text);
+      }
+    }, COLLABORATION_ORIGIN.localTreeCommand);
+  }
+
+  renameFile(currentPath: string, nextPath: string): void {
+    this.renameNode("file", currentPath, nextPath);
+  }
+
+  renameFolder(currentPath: string, nextPath: string): void {
+    this.renameNode("folder", currentPath, nextPath);
+  }
+
+  private renameNode(kind: CollaborationNodeKind, currentPath: string, nextPath: string): void {
+    this.assertWritable();
+    const current = this.nodeAtPath(currentPath);
+    if (current.node.get("kind") !== kind || current.node.get("deleted") === true) {
+      throw new CollaborationProjectError(`Collaboration ${kind} not found: ${currentPath}`);
+    }
+    const normalizedNextPath = parseWorkspacePath(nextPath);
+    const { parentPath, name } = splitPath(normalizedNextPath);
+    const normalizedCurrentPath = parseWorkspacePath(currentPath);
+    if (
+      kind === "folder" &&
+      (parentPath === normalizedCurrentPath || parentPath.startsWith(`${normalizedCurrentPath}/`))
+    ) {
+      throw new CollaborationProjectError("A folder cannot be moved inside itself");
+    }
+    const parentId = this.parentIdForPath(parentPath);
+    this.doc.transact(() => {
+      current.node.set("name", name);
+      current.node.set("parentId", parentId);
+    }, COLLABORATION_ORIGIN.localTreeCommand);
+  }
+
+  deleteFile(path: string): void {
+    this.deleteNode("file", path);
+  }
+
+  deleteFolder(path: string): void {
+    this.deleteNode("folder", path);
+  }
+
+  private deleteNode(kind: CollaborationNodeKind, path: string): void {
+    this.assertWritable();
+    const normalized = parseWorkspacePath(path);
+    const target = this.nodeAtPath(normalized);
+    if (target.node.get("kind") !== kind) {
+      throw new CollaborationProjectError(`Collaboration ${kind} not found: ${normalized}`);
+    }
+    const projection = projectCollaborationDocument(this.doc);
+    const ids =
+      kind === "folder"
+        ? Array.from(projection.nodeIdByPath.entries())
+            .filter(
+              ([candidatePath]) =>
+                candidatePath === normalized || candidatePath.startsWith(`${normalized}/`),
+            )
+            .map(([, id]) => id)
+        : [target.id];
+    this.doc.transact(() => {
+      const nodes = getCollaborationNodes(this.doc);
+      for (const id of ids) nodes.get(id)?.set("deleted", true);
+    }, COLLABORATION_ORIGIN.localTreeCommand);
+  }
+
+  setEntryFile(path: string): void {
+    this.assertWritable();
+    const { id, node } = this.nodeAtPath(path);
+    if (node.get("kind") !== "file") {
+      throw new CollaborationProjectError(`Collaboration file not found: ${path}`);
+    }
+    this.doc.transact(() => {
+      getCollaborationMetadata(this.doc).set("entryNodeId", id);
+    }, COLLABORATION_ORIGIN.localTreeCommand);
+  }
+
+  updateLessonType(lessonType: WorkspaceLessonType): void {
+    this.assertWritable();
+    this.doc.transact(() => {
+      getCollaborationMetadata(this.doc).set("lessonType", lessonType);
+    }, COLLABORATION_ORIGIN.localTreeCommand);
+  }
+}

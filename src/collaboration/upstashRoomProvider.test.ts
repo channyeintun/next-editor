@@ -1,0 +1,234 @@
+import { describe, expect, it } from "vitest";
+import * as Y from "yjs";
+import {
+  COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+  COLLABORATION_PROTOCOL_VERSION,
+  collaborationDocumentUpdateEventSchema,
+  collaborationRoomChannel,
+  type CollaborationBootstrapResponse,
+  type CollaborationDocumentUpdateInput,
+  type CollaborationRoomSession,
+} from "./protocol";
+import {
+  applyEncodedYjsSnapshot,
+  createCollaborationDocumentUpdate,
+  encodeYjsDocument,
+} from "./yjsUpdates";
+import {
+  UpstashRoomProvider,
+  type CollaborationEventSource,
+  type CollaborationRoomApi,
+} from "./upstashRoomProvider";
+
+const ROOM_ID = "10000000-0000-4000-8000-000000000001";
+const CLIENT_ID = "20000000-0000-4000-8000-000000000001";
+const ACTOR_ID = "30000000-0000-4000-8000-000000000001";
+
+function roomSession(role: "owner" | "editor" | "viewer" = "editor"): CollaborationRoomSession {
+  return {
+    room: {
+      id: ROOM_ID,
+      ownerId: ACTOR_ID,
+      hostUserId: ACTOR_ID,
+      status: "active",
+      protocolVersion: COLLABORATION_PROTOCOL_VERSION,
+      documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+      roleVersion: 1,
+      maxMembers: 10,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    membership: { role },
+    channel: collaborationRoomChannel(ROOM_ID),
+  };
+}
+
+function bootstrap(doc: Y.Doc): CollaborationBootstrapResponse {
+  return {
+    protocolVersion: COLLABORATION_PROTOCOL_VERSION,
+    documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+    snapshot: { generation: 1, streamCutoff: "0-0", update: encodeYjsDocument(doc) },
+    updates: [],
+    nextCursor: "0-0",
+    hasMore: false,
+  };
+}
+
+class FakeEventSource implements CollaborationEventSource {
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  closed = false;
+
+  open() {
+    this.onopen?.(new Event("open"));
+  }
+
+  message(value: unknown) {
+    this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(value) }));
+  }
+
+  error() {
+    this.onerror?.(new Event("error"));
+  }
+
+  close() {
+    this.closed = true;
+  }
+}
+
+class FakeApi implements CollaborationRoomApi {
+  readonly published: CollaborationDocumentUpdateInput[] = [];
+  session = roomSession();
+  bootstrapResponse: CollaborationBootstrapResponse;
+  bootstrapGate: Promise<void> | null = null;
+
+  constructor(serverDoc: Y.Doc) {
+    this.bootstrapResponse = bootstrap(serverDoc);
+  }
+
+  async getRoom() {
+    return this.session;
+  }
+
+  async getBootstrap() {
+    await this.bootstrapGate;
+    return this.bootstrapResponse;
+  }
+
+  async publishUpdate(_roomId: string, update: CollaborationDocumentUpdateInput) {
+    this.published.push(update);
+    return { accepted: true as const, updateId: update.updateId, streamId: "2-0" };
+  }
+}
+
+async function waitUntil(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error("condition was not reached");
+}
+
+function remoteMessage(update: Uint8Array, streamId = "1-0") {
+  const event = collaborationDocumentUpdateEventSchema.parse({
+    ...createCollaborationDocumentUpdate(
+      update,
+      "40000000-0000-4000-8000-000000000001",
+      "50000000-0000-4000-8000-000000000001",
+    ),
+    roomId: ROOM_ID,
+    actorId: ACTOR_ID,
+    receivedAt: 1,
+  });
+  return {
+    id: streamId,
+    event: "document.update",
+    channel: collaborationRoomChannel(ROOM_ID),
+    data: event,
+  };
+}
+
+describe("UpstashRoomProvider", () => {
+  it("buffers the SSE/bootstrap race and publishes batched local Yjs updates", async () => {
+    const server = new Y.Doc();
+    server.getText("source").insert(0, "start");
+    const api = new FakeApi(server);
+    let releaseBootstrap = () => {};
+    api.bootstrapGate = new Promise<void>((resolve) => {
+      releaseBootstrap = resolve;
+    });
+    const sources: FakeEventSource[] = [];
+    const provider = new UpstashRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      clientId: CLIENT_ID,
+      batchWindowMs: 60_000,
+      eventSourceFactory: () => {
+        const source = new FakeEventSource();
+        sources.push(source);
+        return source;
+      },
+    });
+
+    await provider.start();
+    sources[0].open();
+    const remote = new Y.Doc();
+    applyEncodedYjsSnapshot(remote, encodeYjsDocument(server));
+    remote.getText("source").insert(5, "-remote");
+    sources[0].message(
+      remoteMessage(Y.encodeStateAsUpdate(remote, Y.encodeStateVector(server))),
+    );
+    releaseBootstrap();
+    await waitUntil(() => provider.connectionState === "live");
+    expect(provider.doc.getText("source").toString()).toBe("start-remote");
+
+    provider.doc.getText("source").insert(provider.doc.getText("source").length, "-local");
+    await provider.flushNow();
+    expect(api.published).toHaveLength(1);
+    expect(provider.actor.getSnapshot().context.hasOfflineChanges).toBe(false);
+    provider.stop();
+  });
+
+  it("retains local changes through a disconnect and tears down obsolete sources", async () => {
+    const server = new Y.Doc();
+    server.getText("source").insert(0, "start");
+    const api = new FakeApi(server);
+    const sources: FakeEventSource[] = [];
+    const provider = new UpstashRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      clientId: CLIENT_ID,
+      batchWindowMs: 60_000,
+      random: () => 0,
+      eventSourceFactory: () => {
+        const source = new FakeEventSource();
+        sources.push(source);
+        return source;
+      },
+    });
+
+    await provider.start();
+    sources[0].open();
+    await waitUntil(() => provider.connectionState === "live");
+    sources[0].error();
+    expect(provider.connectionState).toBe("reconnecting");
+    provider.doc.getText("source").insert(5, "-offline");
+    await provider.flushNow();
+    expect(api.published).toHaveLength(0);
+
+    await provider.retryNow();
+    expect(sources[0].closed).toBe(true);
+    sources[1].open();
+    await waitUntil(() => provider.connectionState === "live");
+    await provider.flushNow();
+    expect(api.published).toHaveLength(1);
+    expect(provider.doc.getText("source").toString()).toBe("start-offline");
+
+    provider.stop();
+    const before = provider.doc.getText("source").toString();
+    sources[1].message(remoteMessage(Y.encodeStateAsUpdate(server), "9-0"));
+    expect(provider.doc.getText("source").toString()).toBe(before);
+  });
+
+  it("never publishes document updates for a viewer", async () => {
+    const server = new Y.Doc();
+    server.getText("source").insert(0, "start");
+    const api = new FakeApi(server);
+    api.session = roomSession("viewer");
+    const source = new FakeEventSource();
+    const provider = new UpstashRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      eventSourceFactory: () => source,
+    });
+
+    await provider.start();
+    source.open();
+    await waitUntil(() => provider.connectionState === "live");
+    provider.doc.getText("source").insert(0, "viewer-");
+    await provider.flushNow();
+    expect(api.published).toEqual([]);
+    provider.stop();
+  });
+});

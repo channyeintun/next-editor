@@ -26,6 +26,7 @@ import { SlidesProvider } from "../contexts/SlidesContext";
 import { WhiteboardProvider } from "../contexts/WhiteboardContext";
 import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
+import { CollaborationProvider } from "../contexts/CollaborationContext";
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useUrlQuery } from "../hooks/useUrlQuery";
@@ -298,13 +299,15 @@ export default function Editor(props: EditorProps = {}) {
                 <CaptionStoreProvider>
                   <ApiClientStoreProvider>
                     <NextEditorProvider>
-                      <SlidesProvider>
-                        <WhiteboardProvider>
-                          <PreviewPanelProvider>
-                            <EditorLayout {...props} />
-                          </PreviewPanelProvider>
-                        </WhiteboardProvider>
-                      </SlidesProvider>
+                      <CollaborationProvider>
+                        <SlidesProvider>
+                          <WhiteboardProvider>
+                            <PreviewPanelProvider>
+                              <EditorLayout {...props} />
+                            </PreviewPanelProvider>
+                          </WhiteboardProvider>
+                        </SlidesProvider>
+                      </CollaborationProvider>
                     </NextEditorProvider>
                   </ApiClientStoreProvider>
                 </CaptionStoreProvider>

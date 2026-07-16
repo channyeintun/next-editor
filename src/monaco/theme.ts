@@ -199,9 +199,11 @@ export const EDITOR_OPTIONS = {
   },
 } as const;
 
-export function getEditorOptions(isPlaying: boolean) {
+export function getEditorOptions(isPlaying: boolean, readOnly = false) {
   return {
     ...EDITOR_OPTIONS,
+    readOnly,
+    domReadOnly: readOnly,
     cursorBlinking: isPlaying ? ("solid" as const) : ("smooth" as const),
   };
 }

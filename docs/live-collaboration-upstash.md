@@ -66,11 +66,20 @@ The first Option A foundation is implemented:
 - [`documentStore.ts`](../infra/worker/collaboration/documentStore.ts) persists an initial snapshot,
   deduplicates durable updates, serves paginated snapshot-plus-tail bootstrap data, and compacts an
   immutable stream cutoff without dropping concurrently appended updates.
+- [`upstashRoomProvider.ts`](../src/collaboration/upstashRoomProvider.ts) owns the same-origin SSE
+  connection, snapshot/live-event race buffer, paginated bootstrap, 75 ms Yjs batching, idempotent
+  HTTP outbox, capped reconnects, offline edits, stale-attempt rejection, and complete teardown.
+- [`collaborationMachine.ts`](../src/collaboration/collaborationMachine.ts) is the serializable room
+  lifecycle/control plane; Yjs content and high-frequency editor updates remain in the provider.
+- [`CollaborationContext.tsx`](../src/contexts/CollaborationContext.tsx) activates rooms from invite
+  URLs, projects text transactions incrementally into the workspace/WebContainer, routes tree and
+  text commands through Yjs, pauses projection during playback, and makes viewer Monaco models
+  read-only.
 
-This is still infrastructure, not a usable room UI. Monaco/Yjs bindings, awareness, offline update
-buffering, QStash scheduling, recording host guards, and room lifecycle UI remain subsequent work.
-Realtime must still pass the transport spike in this document before the fallback WebSocket option
-is discarded.
+The data plane is now connected to the editor, but the room management UI is not yet complete.
+Awareness/cursors, QStash scheduling, binary collaboration assets, recording host guards, and room
+lifecycle controls remain subsequent work. Realtime must still pass the transport spike in this
+document before the fallback WebSocket option is discarded.
 
 ## Existing Redis integration is not collaboration infrastructure
 

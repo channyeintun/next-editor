@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import {
   COLLABORATION_ORIGIN,
+  CollaborationProjectController,
   getCollaborationNodes,
   getCollaborationTexts,
   projectCollaborationDocument,
@@ -109,5 +110,62 @@ describe("collaboration project document", () => {
     const secondPaths = Array.from(projectCollaborationDocument(second).pathByNodeId.entries());
     expect(firstPaths).toEqual(secondPaths);
     expect(firstPaths.filter(([, path]) => path.startsWith("same.ts")).length).toBe(2);
+  });
+
+  it("projects file and tree commands and rejects writes for viewers", () => {
+    const project = createStarterHtmlCssWorkspace();
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, project, { idFactory: idFactory() });
+    let commandId = 0;
+    const controller = new CollaborationProjectController(doc, {
+      canWrite: () => true,
+      idFactory: () =>
+        `f0000000-0000-4000-8000-${String(++commandId).padStart(12, "0")}`,
+    });
+
+    controller.createFolder("examples");
+    controller.createFile("examples/demo.ts", "export const demo = 1;");
+    controller.replaceFileContent("examples/demo.ts", "export const demo = 2;");
+    controller.renameFile("examples/demo.ts", "examples/renamed.ts");
+    controller.setEntryFile("examples/renamed.ts");
+    const projection = projectCollaborationDocument(doc).project;
+    expect(projection.files["examples/renamed.ts"].content).toBe("export const demo = 2;");
+    expect(projection.entryFilePath).toBe("examples/renamed.ts");
+
+    const viewer = new CollaborationProjectController(doc, { canWrite: () => false });
+    expect(() => viewer.createFile("blocked.ts")).toThrow("read-only");
+    expect(projectCollaborationDocument(doc).project.files["blocked.ts"]).toBeUndefined();
+
+    controller.deleteFolder("examples");
+    expect(projectCollaborationDocument(doc).project.files["examples/renamed.ts"]).toBeUndefined();
+  });
+
+  it("converges concurrent tree commands with deterministic collision paths", () => {
+    const project = createStarterHtmlCssWorkspace();
+    const seed = new Y.Doc();
+    seedCollaborationProject(seed, project, { idFactory: idFactory() });
+    const snapshot = Y.encodeStateAsUpdate(seed);
+    const left = new Y.Doc();
+    const right = new Y.Doc();
+    Y.applyUpdate(left, snapshot);
+    Y.applyUpdate(right, snapshot);
+    const leftController = new CollaborationProjectController(left, { canWrite: () => true });
+    const rightController = new CollaborationProjectController(right, {
+      canWrite: () => true,
+      idFactory: () => "f0000000-0000-4000-8000-000000000001",
+    });
+    leftController.renameFile(project.entryFilePath, "same.ts");
+    rightController.createFile("same.ts", "other");
+
+    const leftUpdate = Y.encodeStateAsUpdate(left, Y.encodeStateVector(seed));
+    const rightUpdate = Y.encodeStateAsUpdate(right, Y.encodeStateVector(seed));
+    Y.applyUpdate(left, rightUpdate);
+    Y.applyUpdate(right, leftUpdate);
+    expect(projectCollaborationDocument(left).project).toEqual(projectCollaborationDocument(right).project);
+    expect(
+      Object.keys(projectCollaborationDocument(left).project.files).filter((path) =>
+        path.startsWith("same.ts"),
+      ),
+    ).toHaveLength(2);
   });
 });

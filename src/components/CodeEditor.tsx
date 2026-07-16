@@ -12,6 +12,7 @@ import {
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
+import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { selectIsCollapsed, selectIsFullHeight } from "../stores/runtimePanelStore";
 import { lessonRunsInWebContainer } from "../types/workspace";
 import EditorHeader from "./EditorHeader";
@@ -116,6 +117,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const isCollapsed = useSelector(runtimePanelStore, (s) => selectIsCollapsed(s.context));
   const isFullHeight = useSelector(runtimePanelStore, (s) => selectIsFullHeight(s.context));
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
+  const collaboration = useOptionalCollaboration();
   const displayIsCollapsed = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.isCollapsed ?? false)
     : isCollapsed;
@@ -164,7 +166,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
   // Stable options identity so MonacoEditor's updateOptions only runs when
   // playback state actually changes, not on every keystroke re-render.
-  const editorOptions = useMemo(() => getEditorOptions(isPlaying), [isPlaying]);
+  const collaborationReadOnly = Boolean(collaboration?.provider && !collaboration.canWrite);
+  const editorOptions = useMemo(
+    () => getEditorOptions(isPlaying, collaborationReadOnly),
+    [collaborationReadOnly, isPlaying],
+  );
 
   const syncActivePlaybackModel = useEffectEvent((monaco: Monaco) => {
     if (!usesPlaybackModel || isBinaryActiveFile) {
