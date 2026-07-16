@@ -26,6 +26,7 @@ export const cameraRecordingActor = fromCallback<
   let disposed = false;
   let starting = false;
   let stopRequested = false;
+  let failed = false;
   let startedAtMs = 0;
   let startedAtPerfMs = 0;
 
@@ -85,7 +86,7 @@ export const cameraRecordingActor = fromCallback<
 
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunks, { type: mimeType });
-        if (!disposed) {
+        if (!disposed && !failed) {
           sendBack({ type: "CAMERA_STOPPED", blob });
         }
 
@@ -93,7 +94,7 @@ export const cameraRecordingActor = fromCallback<
       };
 
       mediaRecorder.onstart = () => {
-        if (!disposed) {
+        if (!disposed && !stopRequested) {
           startedAtMs = Date.now();
           startedAtPerfMs = performance.now();
           sendBack({
@@ -105,10 +106,25 @@ export const cameraRecordingActor = fromCallback<
         }
       };
 
+      mediaRecorder.onerror = (event: Event) => {
+        if (disposed || stopRequested) return;
+        failed = true;
+        stopRequested = true;
+        const recorderError = (event as Event & { error?: unknown }).error;
+        sendBack({
+          type: "CAMERA_ERROR",
+          error: recorderError instanceof Error ? recorderError.message : "Camera recording error",
+        });
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          mediaRecorder.stop();
+        }
+        cleanupStream();
+      };
+
       mediaRecorder.start(CAMERA_TIMESLICE_MS);
     } catch (error) {
       cleanupStream();
-      if (!disposed) {
+      if (!disposed && !stopRequested) {
         sendBack({
           type: "CAMERA_ERROR",
           error: error instanceof Error ? error.message : "Failed to start camera recording",

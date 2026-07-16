@@ -1,4 +1,9 @@
 import { setup, assign, fromCallback, sendParent, enqueueActions, type ActorRefFrom } from "xstate";
+import {
+  normalizePlaybackSpeed,
+  normalizeTimelineDuration,
+  normalizeTimelineTime,
+} from "./playbackValues";
 
 export interface TimelineContext {
   currentTime: number;
@@ -25,18 +30,34 @@ export const timelineMachine = setup({
   },
   actors: {
     ticker: fromCallback(({ sendBack }) => {
-      let animationFrameId: number;
+      let animationFrameId: number | null = null;
+      let active = true;
       const tick = () => {
+        animationFrameId = null;
+        if (!active) return;
+
         sendBack({ type: "PULSE" });
-        animationFrameId = requestAnimationFrame(tick);
+        // `sendBack` can synchronously make the parent leave `running`, which
+        // disposes this callback actor before it returns. Never schedule from a
+        // callback that was stopped by the pulse it just delivered.
+        if (active) {
+          animationFrameId = requestAnimationFrame(tick);
+        }
       };
       animationFrameId = requestAnimationFrame(tick);
-      return () => cancelAnimationFrame(animationFrameId);
+      return () => {
+        active = false;
+        if (animationFrameId !== null) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+        }
+      };
     }),
   },
   actions: {
     emitTick: sendParent(({ context }) => ({
       type: "TICK",
+      timestamp: performance.now(),
       currentTime: context.currentTime,
     })),
     emitFinished: sendParent({ type: "FINISHED" }),
@@ -44,28 +65,39 @@ export const timelineMachine = setup({
 }).createMachine({
   id: "timeline",
   initial: "stopped",
-  context: ({ input }) => ({
-    currentTime: input.startPosition,
-    duration: input.duration,
-    speed: input.speed,
-    startedAt: 0,
-    accumulatedTime: input.startPosition,
-  }),
+  context: ({ input }) => {
+    const duration = normalizeTimelineDuration(input.duration);
+    const currentTime = normalizeTimelineTime(input.startPosition, duration);
+    return {
+      currentTime,
+      duration,
+      speed: normalizePlaybackSpeed(input.speed),
+      startedAt: 0,
+      accumulatedTime: currentTime,
+    };
+  },
   on: {
     SEEK: {
-      actions: assign(({ context, event }) => ({
-        currentTime: Math.max(0, Math.min(event.time, context.duration)),
-        accumulatedTime: Math.max(0, Math.min(event.time, context.duration)),
-      })),
+      actions: assign(({ context, event }) => {
+        const currentTime = normalizeTimelineTime(
+          event.time,
+          context.duration,
+          context.currentTime,
+        );
+        return { currentTime, accumulatedTime: currentTime };
+      }),
     },
     SET_DURATION: {
       actions: assign(({ context, event }) => ({
-        duration: Math.max(context.currentTime, event.duration),
+        duration: Math.max(
+          context.currentTime,
+          normalizeTimelineDuration(event.duration, context.duration),
+        ),
       })),
     },
     SET_SPEED: {
-      actions: assign(({ event }) => ({
-        speed: event.speed,
+      actions: assign(({ context, event }) => ({
+        speed: normalizePlaybackSpeed(event.speed, context.speed),
       })),
     },
   },
@@ -88,7 +120,11 @@ export const timelineMachine = setup({
             assign(({ context }) => {
               const now = performance.now();
               const elapsed = (now - context.startedAt) * context.speed;
-              const position = Math.min(context.accumulatedTime + elapsed, context.duration);
+              const position = normalizeTimelineTime(
+                context.accumulatedTime + elapsed,
+                context.duration,
+                context.currentTime,
+              );
               return { currentTime: position };
             }),
             { type: "emitTick" },
@@ -103,15 +139,22 @@ export const timelineMachine = setup({
         PAUSE: "paused",
         STOP: "stopped",
         SEEK: {
-          actions: assign(({ context, event }) => ({
-            currentTime: Math.max(0, Math.min(event.time, context.duration)),
-            accumulatedTime: Math.max(0, Math.min(event.time, context.duration)),
-            startedAt: performance.now(),
-          })),
+          actions: assign(({ context, event }) => {
+            const currentTime = normalizeTimelineTime(
+              event.time,
+              context.duration,
+              context.currentTime,
+            );
+            return {
+              currentTime,
+              accumulatedTime: currentTime,
+              startedAt: performance.now(),
+            };
+          }),
         },
         SET_SPEED: {
           actions: assign(({ context, event }) => ({
-            speed: event.speed,
+            speed: normalizePlaybackSpeed(event.speed, context.speed),
             accumulatedTime: context.currentTime,
             startedAt: performance.now(),
           })),

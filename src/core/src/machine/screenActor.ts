@@ -24,14 +24,28 @@ export interface ScreenRecordingInput {
   micTrack?: MediaStreamTrack | null;
   /** Injectable AudioContext constructor so jsdom tests can supply a fake. */
   audioContextCtor?: typeof AudioContext;
+  /** Monotonic origin of the editor recording this local capture accompanies. */
+  sessionStartedAtPerf: number;
 }
 
 export type ScreenRecordingEvent = { type: "START" } | { type: "STOP" };
 
 export type ScreenRecordingEmit =
-  | { type: "SCREEN_STARTED"; mimeType: string; startedAtMs: number; startedAtPerf: number }
-  | { type: "SCREEN_STOPPED"; blob: Blob }
-  | { type: "SCREEN_ERROR"; error: string };
+  | {
+      type: "SCREEN_STARTED";
+      actorId: string;
+      mimeType: string;
+      startedAtMs: number;
+      startedAtPerf: number;
+    }
+  | {
+      type: "SCREEN_STOPPED";
+      actorId: string;
+      blob: Blob;
+      mimeType: string;
+      startOffsetMs: number;
+    }
+  | { type: "SCREEN_ERROR"; actorId: string; error: string };
 
 export interface ScreenCaptureMixResult {
   /** Combined stream: the display video track plus (when any audio source exists) one mixed audio track. */
@@ -100,13 +114,14 @@ export const screenRecordingActor = fromCallback<
   ScreenRecordingEvent,
   ScreenRecordingInput,
   ScreenRecordingEmit
->(({ sendBack, receive, input }) => {
+>(({ sendBack, receive, input, self }) => {
   let mediaRecorder: MediaRecorder | null = null;
   let audioContext: AudioContext | null = null;
   let chunks: Blob[] = [];
   let mimeType = "";
   let disposed = false;
   let started = false;
+  let failed = false;
   let startedAtMs = 0;
   let startedAtPerfMs = 0;
 
@@ -148,8 +163,13 @@ export const screenRecordingActor = fromCallback<
       mimeType = getSupportedVideoMimeType(SCREEN_VIDEO_MIME_TYPES);
       if (!mimeType) {
         if (!disposed) {
-          sendBack({ type: "SCREEN_ERROR", error: "No supported video MIME type found" });
+          sendBack({
+            type: "SCREEN_ERROR",
+            actorId: self.id,
+            error: "No supported video MIME type found",
+          });
         }
+        cleanup();
         return;
       }
 
@@ -173,6 +193,11 @@ export const screenRecordingActor = fromCallback<
       };
 
       mediaRecorder.onstop = () => {
+        if (disposed || failed) {
+          cleanup();
+          return;
+        }
+
         const rawBlob = new Blob(chunks, { type: mimeType });
         // MediaRecorder WebM has no Duration header (Chromium issue 642012), so players can't build a
         // seek bar. Inject the measured wall-clock length before handing the file off. MP4 already
@@ -182,19 +207,35 @@ export const screenRecordingActor = fromCallback<
         const finalize = mimeType.startsWith("video/webm")
           ? fixWebmDuration(rawBlob, durationMs)
           : Promise.resolve(rawBlob);
+        const startOffsetMs =
+          startedAtPerfMs > 0 && Number.isFinite(input.sessionStartedAtPerf)
+            ? Math.max(0, startedAtPerfMs - input.sessionStartedAtPerf)
+            : 0;
+
+        // Duration repair can read a large blob. Release the browser capture
+        // indicator and audio graph before awaiting it; the actor no longer
+        // needs any live media resources after MediaRecorder has stopped.
+        cleanup();
         finalize.then((blob) => {
           if (!disposed) {
-            sendBack({ type: "SCREEN_STOPPED", blob });
+            sendBack({
+              type: "SCREEN_STOPPED",
+              actorId: self.id,
+              blob,
+              mimeType,
+              startOffsetMs,
+            });
           }
         });
       };
 
       mediaRecorder.onstart = () => {
-        if (!disposed) {
+        if (!disposed && !failed) {
           startedAtMs = Date.now();
           startedAtPerfMs = performance.now();
           sendBack({
             type: "SCREEN_STARTED",
+            actorId: self.id,
             mimeType,
             startedAtMs,
             startedAtPerf: startedAtPerfMs,
@@ -202,14 +243,28 @@ export const screenRecordingActor = fromCallback<
         }
       };
 
+      mediaRecorder.onerror = (event: Event) => {
+        if (disposed || failed) return;
+        failed = true;
+        const recorderError = (event as Event & { error?: unknown }).error;
+        sendBack({
+          type: "SCREEN_ERROR",
+          actorId: self.id,
+          error: recorderError instanceof Error ? recorderError.message : "Screen recording error",
+        });
+        cleanup();
+      };
+
       mediaRecorder.start(SCREEN_TIMESLICE_MS);
     } catch (error) {
       if (!disposed) {
         sendBack({
           type: "SCREEN_ERROR",
+          actorId: self.id,
           error: error instanceof Error ? error.message : "Failed to start screen recording",
         });
       }
+      cleanup();
     }
   };
 

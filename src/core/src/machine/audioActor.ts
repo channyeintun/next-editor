@@ -1,5 +1,10 @@
 import { fromCallback } from "xstate";
 import { getSupportedAudioMimeType } from "../utils/audioMimeType";
+import {
+  normalizeNonNegativeTime,
+  normalizePlaybackSpeed,
+  normalizePlaybackVolume,
+} from "./playbackValues";
 
 /**
  * Dead zone for the periodic SYNC safety net. Reseeking an HTMLAudioElement is
@@ -18,7 +23,7 @@ const AUDIO_EXACT_SYNC_EPSILON_MS = 50;
 
 /**
  * MediaRecorder timeslice (ms). Emitting `ondataavailable` on an interval produces
- * live audio chunks (forwarded as `CHUNK`) for incremental persistence / streaming,
+ * live audio chunks (forwarded as `AUDIO_RECORDING_CHUNK`) for incremental persistence / streaming,
  * while the final assembled blob is still emitted on stop exactly as before.
  */
 const AUDIO_TIMESLICE_MS = 1000;
@@ -67,20 +72,25 @@ export type AudioPlaybackEvent =
 
 export type AudioRecordingEmit =
   | {
-      type: "STARTED";
+      type: "AUDIO_RECORDING_STARTED";
       mediaRecorder: MediaRecorder;
       mimeType: string;
       startedAtMs: number;
       startedAtPerf: number;
     }
-  | { type: "CHUNK"; chunk: Blob; startTimeMs: number; endTimeMs: number }
-  | { type: "STOPPED"; blob: Blob }
-  | { type: "ERROR"; error: string };
+  | {
+      type: "AUDIO_RECORDING_CHUNK";
+      chunk: Blob;
+      startTimeMs: number;
+      endTimeMs: number;
+    }
+  | { type: "AUDIO_RECORDING_STOPPED"; blob: Blob }
+  | { type: "AUDIO_RECORDING_ERROR"; error: string };
 
 export type AudioPlaybackEmit =
-  | { type: "READY"; duration: number }
-  | { type: "FINISHED" }
-  | { type: "ERROR"; error: string };
+  | { type: "AUDIO_PLAYBACK_READY"; duration: number }
+  | { type: "AUDIO_PLAYBACK_FINISHED" }
+  | { type: "AUDIO_PLAYBACK_ERROR"; error: string };
 
 // ============================================================================
 // Audio Recording Actor
@@ -100,6 +110,7 @@ export const audioRecordingActor = fromCallback<
   let mimeType = "";
   let disposed = false;
   let starting = false;
+  let stopRequested = false;
   let startedAtMs = 0;
   let startedAtPerfMs = 0;
   let nextChunkStartTimeMs = 0;
@@ -112,7 +123,7 @@ export const audioRecordingActor = fromCallback<
   };
 
   const startRecording = async () => {
-    if (starting || mediaRecorder) {
+    if (starting || stopRequested || mediaRecorder) {
       return;
     }
 
@@ -132,7 +143,7 @@ export const audioRecordingActor = fromCallback<
         },
       });
 
-      if (disposed) {
+      if (disposed || stopRequested) {
         cleanupStream();
         return;
       }
@@ -140,8 +151,11 @@ export const audioRecordingActor = fromCallback<
       mimeType = getSupportedAudioMimeType();
       if (!mimeType) {
         cleanupStream();
-        if (!disposed) {
-          sendBack({ type: "ERROR", error: "No supported audio MIME type found" });
+        if (!disposed && !stopRequested) {
+          sendBack({
+            type: "AUDIO_RECORDING_ERROR",
+            error: "No supported audio MIME type found",
+          });
         }
         return;
       }
@@ -161,7 +175,7 @@ export const audioRecordingActor = fromCallback<
               : nextChunkStartTimeMs;
           chunks.push(event.data);
           sendBack({
-            type: "CHUNK",
+            type: "AUDIO_RECORDING_CHUNK",
             chunk: event.data,
             startTimeMs: nextChunkStartTimeMs,
             endTimeMs,
@@ -173,19 +187,19 @@ export const audioRecordingActor = fromCallback<
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunks, { type: mimeType });
         if (!disposed) {
-          sendBack({ type: "STOPPED", blob });
+          sendBack({ type: "AUDIO_RECORDING_STOPPED", blob });
         }
 
         cleanupStream();
       };
 
       mediaRecorder.onstart = () => {
-        if (!disposed && mediaRecorder) {
+        if (!disposed && !stopRequested && mediaRecorder) {
           startedAtMs = Date.now();
           startedAtPerfMs = performance.now();
           nextChunkStartTimeMs = 0;
           sendBack({
-            type: "STARTED",
+            type: "AUDIO_RECORDING_STARTED",
             mediaRecorder,
             mimeType,
             startedAtMs,
@@ -194,14 +208,23 @@ export const audioRecordingActor = fromCallback<
         }
       };
 
-      // Timeslice so audio data is delivered incrementally as `CHUNK` events; the
+      mediaRecorder.onerror = (event: Event) => {
+        if (disposed || stopRequested) return;
+        const recorderError = (event as Event & { error?: unknown }).error;
+        sendBack({
+          type: "AUDIO_RECORDING_ERROR",
+          error: recorderError instanceof Error ? recorderError.message : "Audio recording error",
+        });
+      };
+
+      // Timeslice so audio data is delivered incrementally as `AUDIO_RECORDING_CHUNK` events; the
       // final blob is still assembled from the same chunks on stop.
       mediaRecorder.start(AUDIO_TIMESLICE_MS);
     } catch (error) {
       cleanupStream();
-      if (!disposed) {
+      if (!disposed && !stopRequested) {
         sendBack({
-          type: "ERROR",
+          type: "AUDIO_RECORDING_ERROR",
           error: error instanceof Error ? error.message : "Failed to start recording",
         });
       }
@@ -211,6 +234,7 @@ export const audioRecordingActor = fromCallback<
   };
 
   const stopRecording = () => {
+    stopRequested = true;
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
       mediaRecorder.stop();
     }
@@ -229,6 +253,7 @@ export const audioRecordingActor = fromCallback<
 
   return () => {
     disposed = true;
+    stopRequested = true;
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
       mediaRecorder.stop();
     }
@@ -258,10 +283,10 @@ export const audioPlaybackActor = fromCallback<
   AudioPlaybackEmit
 >(({ sendBack, receive, input }) => {
   let disposed = false;
-  let startOffsetMs = input.startOffsetMs ?? 0;
+  const startOffsetMs = normalizeNonNegativeTime(input.startOffsetMs ?? 0);
   let requestedPlay = false;
   // Timeline position last reported by the machine, and when it was reported.
-  let lastKnownTimelineMs = input.startPositionMs;
+  let lastKnownTimelineMs = normalizeNonNegativeTime(input.startPositionMs);
   let lastKnownAtPerf = performance.now();
 
   const audio = new Audio();
@@ -276,11 +301,11 @@ export const audioPlaybackActor = fromCallback<
     audio.src = currentObjectUrl;
   }
 
-  audio.volume = input.volume;
-  audio.playbackRate = input.playbackRate;
+  audio.volume = normalizePlaybackVolume(input.volume);
+  audio.playbackRate = normalizePlaybackSpeed(input.playbackRate);
 
   const setKnownTimelineTime = (timeMs: number) => {
-    lastKnownTimelineMs = timeMs;
+    lastKnownTimelineMs = normalizeNonNegativeTime(timeMs, lastKnownTimelineMs);
     lastKnownAtPerf = performance.now();
   };
 
@@ -315,17 +340,17 @@ export const audioPlaybackActor = fromCallback<
     if (disposed) return;
     const durationMs =
       Number.isFinite(audio.duration) && !isNaN(audio.duration) ? audio.duration * 1000 : 0;
-    sendBack({ type: "READY", duration: durationMs });
+    sendBack({ type: "AUDIO_PLAYBACK_READY", duration: durationMs });
   };
 
   audio.onended = () => {
     if (disposed) return;
-    sendBack({ type: "FINISHED" });
+    sendBack({ type: "AUDIO_PLAYBACK_FINISHED" });
   };
 
   audio.onerror = () => {
     if (disposed) return;
-    sendBack({ type: "ERROR", error: "Audio playback error" });
+    sendBack({ type: "AUDIO_PLAYBACK_ERROR", error: "Audio playback error" });
   };
 
   receive((event) => {
@@ -359,13 +384,13 @@ export const audioPlaybackActor = fromCallback<
         }
         break;
       case "SET_VOLUME":
-        audio.volume = event.volume;
+        audio.volume = normalizePlaybackVolume(event.volume, audio.volume);
         break;
       case "SET_PLAYBACK_RATE":
         // Re-anchor with the old rate first so the elapsed-time extrapolation
         // never applies the new rate to the interval before the change.
         setKnownTimelineTime(currentTargetMs());
-        audio.playbackRate = event.rate;
+        audio.playbackRate = normalizePlaybackSpeed(event.rate, audio.playbackRate);
         break;
     }
   });

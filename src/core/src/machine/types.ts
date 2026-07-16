@@ -31,6 +31,7 @@ import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../
 import type { WhiteboardEvent, WhiteboardSceneState } from "../whiteboard";
 import type { ChatCheckpoint, ChatDelta, ChatRecordingEvent } from "../../../types/chat";
 import type { CapturedViewStateRef } from "./editorMachineHelpers";
+import { normalizePlaybackSpeed } from "./playbackValues";
 
 // ============================================================================
 // Machine Status Types
@@ -41,6 +42,7 @@ import type { CapturedViewStateRef } from "./editorMachineHelpers";
  */
 export type EditorMachineStatus =
   | "idle"
+  | "startingRecording"
   | "recording"
   | "loading"
   | "playback"
@@ -213,6 +215,8 @@ export interface CameraState {
  * and is never retained on context. See the publish-safety guardrails in docs/video-plan.md.
  */
 export interface ScreenState {
+  /** Unique XState child id for this capture; late events use it to retire only their origin. */
+  actorId: string | null;
   /** Whether a screen recording is active (its actor has been spawned and started). */
   isRecording: boolean;
   /** Detected MIME type of the screen recording container. */
@@ -266,6 +270,8 @@ export interface EditorMachineContext {
   camera: CameraState;
   /** Local screen-recording state (opt-in; blob never persisted to context). */
   screen: ScreenState;
+  /** Per-machine sequence used to allocate collision-free screen-recorder child ids. */
+  screenRecorderGeneration: number;
   /**
    * Display capture stream acquired at record-button click time (transient-activation
    * constraint), carried on the START_RECORDING event. Owned by the screen actor once spawned;
@@ -465,32 +471,38 @@ export type TickEvent = {
 /** Playback reached the end */
 export type FinishedEvent = { type: "FINISHED" };
 
-/** Audio actor stopped event */
-export type AudioActorStoppedEvent = {
-  type: "STOPPED";
+/** Microphone recording actor stopped event */
+export type AudioRecordingStoppedEvent = {
+  type: "AUDIO_RECORDING_STOPPED";
   blob: Blob;
 };
 
 /** Audio playback actor loaded metadata */
 export type AudioPlaybackReadyEvent = {
-  type: "READY";
+  type: "AUDIO_PLAYBACK_READY";
   duration: number;
 };
 
-/** Audio actor started event */
-export type AudioActorStartedEvent = {
-  type: "STARTED";
+/** Microphone recording actor started event */
+export type AudioRecordingStartedEvent = {
+  type: "AUDIO_RECORDING_STARTED";
   mediaRecorder: MediaRecorder;
   mimeType: string;
   startedAtMs: number;
   startedAtPerf: number;
 };
 
-/** Audio actor error event */
-export type AudioActorErrorEvent = {
-  type: "ERROR";
+/** Microphone recording actor error event */
+export type AudioRecordingErrorEvent = {
+  type: "AUDIO_RECORDING_ERROR";
   error: string;
 };
+
+/** Selected-file/lesson audio playback reached the end of its media. */
+export type AudioPlaybackFinishedEvent = { type: "AUDIO_PLAYBACK_FINISHED" };
+
+/** Selected-file/lesson audio playback failed. */
+export type AudioPlaybackErrorEvent = { type: "AUDIO_PLAYBACK_ERROR"; error: string };
 
 /** User interaction during playback */
 export type UserInteractionEvent = { type: "USER_INTERACTION" };
@@ -556,8 +568,8 @@ export type ChatEventOccurred = {
 };
 
 /** Audio chunk received */
-export type AudioChunkEvent = {
-  type: "CHUNK";
+export type AudioRecordingChunkEvent = {
+  type: "AUDIO_RECORDING_CHUNK";
   chunk: Blob;
   startTimeMs: number;
   endTimeMs: number;
@@ -588,16 +600,23 @@ export type CameraActorErrorEvent = { type: "CAMERA_ERROR"; error: string };
 /** Screen actor started event */
 export type ScreenActorStartedEvent = {
   type: "SCREEN_STARTED";
+  actorId: string;
   mimeType: string;
   startedAtMs: number;
   startedAtPerf: number;
 };
 
 /** Screen actor stopped event (blob exits via onScreenRecordingReady, never persisted). */
-export type ScreenActorStoppedEvent = { type: "SCREEN_STOPPED"; blob: Blob };
+export type ScreenActorStoppedEvent = {
+  type: "SCREEN_STOPPED";
+  actorId: string;
+  blob: Blob;
+  mimeType: string;
+  startOffsetMs: number;
+};
 
 /** Screen actor error event */
-export type ScreenActorErrorEvent = { type: "SCREEN_ERROR"; error: string };
+export type ScreenActorErrorEvent = { type: "SCREEN_ERROR"; actorId: string; error: string };
 
 /** Add or replace a caption track on the loaded recording */
 export type AddCaptionTrackEvent = {
@@ -641,7 +660,7 @@ export type EditorMachineEvent =
   | RuntimeEventOccurred
   | WhiteboardEventOccurred
   | ChatEventOccurred
-  | AudioChunkEvent
+  | AudioRecordingChunkEvent
   | CameraActorStartedEvent
   | CameraChunkEvent
   | CameraActorStoppedEvent
@@ -652,9 +671,11 @@ export type EditorMachineEvent =
   | AddCaptionTrackEvent
   | RemoveCaptionTrackEvent
   | AudioPlaybackReadyEvent
-  | AudioActorStoppedEvent
-  | AudioActorStartedEvent
-  | AudioActorErrorEvent
+  | AudioPlaybackFinishedEvent
+  | AudioPlaybackErrorEvent
+  | AudioRecordingStoppedEvent
+  | AudioRecordingStartedEvent
+  | AudioRecordingErrorEvent
   | StartEvent
   | StopEventSignal;
 
@@ -722,7 +743,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   timeline: {
     currentTime: 0,
     duration: 0,
-    speed: input.defaultPlaybackSpeed ?? 1,
+    speed: normalizePlaybackSpeed(input.defaultPlaybackSpeed ?? 1),
     volume: 1,
     startedAt: 0,
     pausedDuration: 0,
@@ -752,10 +773,12 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     startOffsetMs: 0,
   },
   screen: {
+    actorId: null,
     isRecording: false,
     mimeType: "",
     startOffsetMs: 0,
   },
+  screenRecorderGeneration: 0,
   screenStream: null,
   editorRefs: {
     editor: input.editorRef.current,

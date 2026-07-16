@@ -49,6 +49,8 @@ import {
   captureAudioChunk,
   storeCameraStarted,
   handleCameraError,
+  clearCameraRecording,
+  handleAudioRecordingError,
   setScreenStream,
   storeScreenStarted,
   notifyScreenRecordingReady,
@@ -91,6 +93,7 @@ import {
   applyWhiteboardEventsAtTime,
   applyChatEventsAtTime,
 } from "./replayActions";
+import { normalizeTimelineDuration, normalizeTimelineTime } from "./playbackValues";
 
 // ============================================================================
 // Editor State Machine
@@ -113,7 +116,7 @@ export const editorMachine = setup({
       { recording: Recording; duration: number },
       { recording: Recording }
     >(async ({ input }) => {
-      let duration = input.recording.duration;
+      let duration = normalizeTimelineDuration(input.recording.duration);
 
       const playbackAudioState = getPlaybackAudioState(input.recording);
       if (playbackAudioState?.finalized && input.recording.audioSource !== "external") {
@@ -122,7 +125,7 @@ export const editorMachine = setup({
             const exactDuration = await calculateDurationFromFileReader(input.recording.audioBlob);
             // Use audio duration as the source of truth if it exists
             // This prevents trailing silence from wall-clock overhead
-            duration = exactDuration * 1000;
+            duration = normalizeTimelineDuration(exactDuration * 1000, duration);
           }
         } catch (err) {
           console.error("Failed to calculate exact audio duration:", err);
@@ -154,6 +157,11 @@ export const editorMachine = setup({
       (context.pendingPlaybackEditorSync ||
         context.currentFrame !== null ||
         context.lastAppliedFrameIndex >= 0),
+    isCurrentScreenRecorderEvent: ({ context, event }) =>
+      (event.type === "SCREEN_STARTED" ||
+        event.type === "SCREEN_STOPPED" ||
+        event.type === "SCREEN_ERROR") &&
+      context.screen.actorId === event.actorId,
   },
   actions: {
     // Recording (capture-side) actions — bodies live in captureActions.ts, wrapped
@@ -185,6 +193,8 @@ export const editorMachine = setup({
     captureAudioChunk: assign(captureAudioChunk),
     storeCameraStarted: assign(storeCameraStarted),
     handleCameraError: assign(handleCameraError),
+    clearCameraRecording: assign(clearCameraRecording),
+    handleAudioRecordingError: assign(handleAudioRecordingError),
     setScreenStream: assign(setScreenStream),
     storeScreenStarted: assign(storeScreenStarted),
     notifyScreenRecordingReady,
@@ -265,17 +275,40 @@ export const editorMachine = setup({
     },
     // Screen recording is independent of the session's finalize join: its blob never enters the
     // `Recording`, so these are handled at the machine root and fire in any state. SCREEN_STOPPED
-    // may land after the machine has already moved on to `loading`/`playback` — that's fine, the
-    // root handler saves the blob and clears context whenever it arrives.
+    // may land after the machine has already moved on to `loading`/`playback` or begun another
+    // capture. Every completion is delivered, but only the current actor may clear screen context.
     SCREEN_STARTED: {
+      guard: "isCurrentScreenRecorderEvent",
       actions: "storeScreenStarted",
     },
-    SCREEN_STOPPED: {
-      actions: ["notifyScreenRecordingReady", stopChild("screenRecorder"), "clearScreenRecording"],
-    },
-    SCREEN_ERROR: {
-      actions: ["handleScreenError", stopChild("screenRecorder")],
-    },
+    SCREEN_STOPPED: [
+      {
+        guard: "isCurrentScreenRecorderEvent",
+        actions: [
+          "notifyScreenRecordingReady",
+          stopChild(({ event }) => (event.type === "SCREEN_STOPPED" ? event.actorId : "")),
+          "clearScreenRecording",
+        ],
+      },
+      {
+        actions: [
+          "notifyScreenRecordingReady",
+          stopChild(({ event }) => (event.type === "SCREEN_STOPPED" ? event.actorId : "")),
+        ],
+      },
+    ],
+    SCREEN_ERROR: [
+      {
+        guard: "isCurrentScreenRecorderEvent",
+        actions: [
+          "handleScreenError",
+          stopChild(({ event }) => (event.type === "SCREEN_ERROR" ? event.actorId : "")),
+        ],
+      },
+      {
+        actions: stopChild(({ event }) => (event.type === "SCREEN_ERROR" ? event.actorId : "")),
+      },
+    ],
   },
   states: {
     idle: {
@@ -320,7 +353,7 @@ export const editorMachine = setup({
       entry: [
         enqueueActions(({ context, enqueue }) => {
           // Spawn, not invoke: must survive into recording/stoppingRecording — its
-          // STOPPED event arrives after leaving this state.
+          // AUDIO_RECORDING_STOPPED event arrives after leaving this state.
           enqueue.spawnChild("audioRecording", {
             id: "audioRecorder",
             input: {
@@ -347,7 +380,7 @@ export const editorMachine = setup({
         }),
       ],
       on: {
-        STARTED: {
+        AUDIO_RECORDING_STARTED: {
           target: "recording",
           actions: [
             "storeAudioStarted",
@@ -357,7 +390,7 @@ export const editorMachine = setup({
             "notifyFrame",
           ],
         },
-        ERROR: {
+        AUDIO_RECORDING_ERROR: {
           target: "idle",
           actions: [
             stopChild("audioRecorder"),
@@ -367,7 +400,7 @@ export const editorMachine = setup({
             "releaseScreenStream",
             assign({
               error: ({ event }) =>
-                event.type === "ERROR" ? event.error : "Failed to start audio",
+                event.type === "AUDIO_RECORDING_ERROR" ? event.error : "Failed to start audio",
             }),
             "notifyError",
           ],
@@ -425,12 +458,19 @@ export const editorMachine = setup({
           // *clone* of the live microphone track so narration is muxed into a standalone video. The
           // clone is essential: the actor stops its tracks on teardown, and stopping the original
           // would kill the session's own mic recorder. Absent in external-audio mode (no mic recorder).
+          const actorId = context.screen.actorId;
+          if (!actorId || !context.session) return;
+
           const micTrack = context.audio.mediaRecorder?.stream.getAudioTracks()[0]?.clone() ?? null;
           enqueue.spawnChild("screenRecording", {
-            id: "screenRecorder",
-            input: { stream: context.screenStream, micTrack },
+            id: actorId,
+            input: {
+              stream: context.screenStream,
+              micTrack,
+              sessionStartedAtPerf: context.session.startedAtPerf,
+            },
           });
-          enqueue.sendTo("screenRecorder", { type: "START" });
+          enqueue.sendTo(actorId, { type: "START" });
           enqueue.assign({
             screen: {
               ...context.screen,
@@ -449,8 +489,8 @@ export const editorMachine = setup({
         // SCREEN_STOPPED handler then saves the blob (which can land after we've reached playback).
         // Skipped when the user already ended the share early (isRecording cleared on SCREEN_STOPPED).
         enqueueActions(({ context, enqueue }) => {
-          if (context.screen.isRecording) {
-            enqueue.sendTo("screenRecorder", { type: "STOP" });
+          if (context.screen.isRecording && context.screen.actorId) {
+            enqueue.sendTo(context.screen.actorId, { type: "STOP" });
           }
         }),
       ],
@@ -458,25 +498,25 @@ export const editorMachine = setup({
         CAPTURE_FRAME: {
           actions: ["captureFrame", "notifyFrame"],
         },
-        CHUNK: {
+        AUDIO_RECORDING_CHUNK: {
           actions: "captureAudioChunk",
         },
         CAMERA_STARTED: {
           actions: "storeCameraStarted",
         },
         CAMERA_STOPPED: {
-          actions: "storeCameraBlob",
+          actions: ["storeCameraBlob", stopChild("cameraRecorder")],
         },
         CAMERA_ERROR: {
-          actions: "handleCameraError",
+          actions: ["handleCameraError", stopChild("cameraRecorder")],
         },
-        READY: {
+        AUDIO_PLAYBACK_READY: {
           actions: "storeExternalAudioDuration",
         },
-        STOPPED: {
+        AUDIO_RECORDING_STOPPED: {
           actions: "storeAudioBlob",
         },
-        FINISHED: [
+        AUDIO_PLAYBACK_FINISHED: [
           {
             target: "stoppingRecording",
             guard: "isCameraRecording",
@@ -488,17 +528,27 @@ export const editorMachine = setup({
             actions: ["finalizeRecording", "notifyRecordingStop"],
           },
         ],
-        ERROR: {
+        AUDIO_PLAYBACK_ERROR: {
           target: "idle",
           guard: "isExternalAudioRecording",
           actions: [
+            stopChild("cameraRecorder"),
+            "clearCameraRecording",
             assign({
               error: ({ event }) =>
-                event.type === "ERROR" ? event.error : "Failed to play external audio",
-              audio: ({ context }) => ({
-                ...context.audio,
+                event.type === "AUDIO_PLAYBACK_ERROR"
+                  ? event.error
+                  : "Failed to play external audio",
+              audio: () => ({
+                url: null,
+                blob: null,
+                element: null,
                 isRecording: false,
+                mediaRecorder: null,
+                chunks: [],
+                mimeType: "",
                 source: null,
+                startOffsetMs: 0,
                 externalDurationMs: null,
               }),
               session: null,
@@ -506,6 +556,11 @@ export const editorMachine = setup({
             }),
             "notifyError",
           ],
+        },
+        AUDIO_RECORDING_ERROR: {
+          target: "stoppingRecording",
+          guard: "isMicrophoneAudioRecording",
+          actions: ["handleAudioRecordingError", "notifyError"],
         },
         SLIDE_EVENT: {
           actions: ["captureSlideEvent", "captureFrame", "notifyFrame"],
@@ -567,10 +622,10 @@ export const editorMachine = setup({
       ],
       exit: [stopChild("audioRecorder"), stopChild("cameraRecorder")],
       on: {
-        CHUNK: {
+        AUDIO_RECORDING_CHUNK: {
           actions: "captureAudioChunk",
         },
-        STOPPED: [
+        AUDIO_RECORDING_STOPPED: [
           {
             guard: "isCameraRecording",
             actions: "storeAudioBlob",
@@ -584,14 +639,34 @@ export const editorMachine = setup({
           {
             target: "loading",
             guard: ({ context }) => !context.audio.isRecording,
-            actions: ["storeCameraBlob", "finalizeRecording", "notifyRecordingStop"],
+            actions: [
+              "storeCameraBlob",
+              stopChild("cameraRecorder"),
+              "finalizeRecording",
+              "notifyRecordingStop",
+            ],
           },
           {
-            actions: "storeCameraBlob",
+            actions: ["storeCameraBlob", stopChild("cameraRecorder")],
           },
         ],
-        CAMERA_ERROR: {
-          actions: "handleCameraError",
+        CAMERA_ERROR: [
+          {
+            target: "loading",
+            guard: ({ context }) => !context.audio.isRecording,
+            actions: [
+              "handleCameraError",
+              stopChild("cameraRecorder"),
+              "finalizeRecording",
+              "notifyRecordingStop",
+            ],
+          },
+          {
+            actions: ["handleCameraError", stopChild("cameraRecorder")],
+          },
+        ],
+        AUDIO_RECORDING_ERROR: {
+          actions: ["handleAudioRecordingError", "notifyError"],
         },
       },
       after: {
@@ -670,7 +745,7 @@ export const editorMachine = setup({
 
               enqueue.sendTo("timelineActor", {
                 type: "SET_DURATION",
-                duration: Math.max(context.timeline.currentTime, event.recording.duration),
+                duration: context.timeline.duration,
               });
 
               syncPlaybackAudio(context, enqueue, {
@@ -690,21 +765,25 @@ export const editorMachine = setup({
                 return {
                   timeline: {
                     ...context.timeline,
-                    currentTime: event.currentTime,
+                    currentTime: normalizeTimelineTime(
+                      event.currentTime,
+                      context.timeline.duration,
+                      context.timeline.currentTime,
+                    ),
                   },
                 };
               }
               return {};
             }),
             ...APPLY_REPLAY_STATE_ACTIONS,
-            enqueueActions(({ context, event, enqueue }) => {
+            enqueueActions(({ context, enqueue }) => {
               // Sync audio to timeline every 250ms or on seek
               const lastSync = context.lastSyncTime || 0;
               const now = performance.now();
               if (hasSpawnedPlaybackAudio(context) && now - lastSync > 250) {
                 enqueue.sendTo("audioPlayer", {
                   type: "SYNC",
-                  timeMs: event.currentTime,
+                  timeMs: context.timeline.currentTime,
                 });
                 enqueue.assign({ lastSyncTime: now });
               }
@@ -722,8 +801,12 @@ export const editorMachine = setup({
             enqueueActions(({ context, event, enqueue }) => {
               const time =
                 event.type === "SEEK"
-                  ? Math.max(0, Math.min(event.time, context.timeline.duration))
-                  : 0;
+                  ? normalizeTimelineTime(
+                      event.time,
+                      context.timeline.duration,
+                      context.timeline.currentTime,
+                    )
+                  : context.timeline.currentTime;
               enqueue.sendTo("timelineActor", { type: "SEEK", time });
               if (hasSpawnedPlaybackAudio(context)) {
                 enqueue.sendTo("audioPlayer", {
@@ -737,8 +820,8 @@ export const editorMachine = setup({
         SET_SPEED: {
           actions: [
             "setPlaybackSpeed",
-            enqueueActions(({ context, event, enqueue }) => {
-              const speed = event.type === "SET_SPEED" ? event.speed : 1;
+            enqueueActions(({ context, enqueue }) => {
+              const speed = context.timeline.speed;
               enqueue.sendTo("timelineActor", { type: "SET_SPEED", speed });
               if (hasSpawnedPlaybackAudio(context)) {
                 enqueue.sendTo("audioPlayer", {
@@ -752,11 +835,11 @@ export const editorMachine = setup({
         SET_VOLUME: {
           actions: [
             "setVolume",
-            enqueueActions(({ context, event, enqueue }) => {
+            enqueueActions(({ context, enqueue }) => {
               if (hasSpawnedPlaybackAudio(context)) {
                 enqueue.sendTo("audioPlayer", {
                   type: "SET_VOLUME",
-                  volume: event.type === "SET_VOLUME" ? event.volume : 1,
+                  volume: context.timeline.volume,
                 });
               }
             }),
@@ -882,8 +965,12 @@ export const editorMachine = setup({
                 enqueueActions(({ context, event, enqueue }) => {
                   const time =
                     event.type === "SEEK"
-                      ? Math.max(0, Math.min(event.time, context.timeline.duration))
-                      : 0;
+                      ? normalizeTimelineTime(
+                          event.time,
+                          context.timeline.duration,
+                          context.timeline.currentTime,
+                        )
+                      : context.timeline.currentTime;
                   enqueue.sendTo("timelineActor", { type: "SEEK", time });
                   if (hasSpawnedPlaybackAudio(context)) {
                     enqueue.sendTo("audioPlayer", {

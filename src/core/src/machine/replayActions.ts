@@ -21,6 +21,12 @@ import {
   resolveReplayTime,
 } from "./replayState";
 import { applyFrameState, getLoadedRecordingPayload } from "./editorMachineHelpers";
+import {
+  normalizePlaybackSpeed,
+  normalizePlaybackVolume,
+  normalizeTimelineDuration,
+  normalizeTimelineTime,
+} from "./playbackValues";
 
 // ============================================================================
 // Playback-replay action bodies
@@ -39,9 +45,10 @@ const resolveBoundedReplayTime = (
   context: EditorMachineContext,
   event: EditorMachineEvent,
 ): number =>
-  Math.max(
-    0,
-    Math.min(resolveReplayTime(event, context.timeline.currentTime), context.timeline.duration),
+  normalizeTimelineTime(
+    resolveReplayTime(event, context.timeline.currentTime),
+    context.timeline.duration,
+    context.timeline.currentTime,
   );
 
 export const setRecording = ({
@@ -55,7 +62,7 @@ export const setRecording = ({
   if (!loaded) return {};
 
   const recording = normalizeRecordingData(loaded.recording);
-  const { duration } = loaded;
+  const duration = normalizeTimelineDuration(loaded.duration);
 
   const initialWorkspaceEvent = recording.workspaceEvents?.[0];
   const initialRuntimeEvent = recording.runtimeEvents?.[0];
@@ -148,11 +155,12 @@ export const extendRecording = ({
   // growing frame array on each progressive-decode interval — O(n²) over a
   // long download — for no behavioral difference.
   const recording = event.recording;
+  const duration = normalizeTimelineDuration(recording.duration, context.timeline.duration);
   return {
     recording,
     timeline: {
       ...context.timeline,
-      duration: Math.max(context.timeline.currentTime, recording.duration),
+      duration: Math.max(context.timeline.currentTime, duration),
     },
   };
 };
@@ -167,9 +175,13 @@ export const applyFrameAtTime = ({
   const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } = context;
   const currentTime =
     event.type === "TICK"
-      ? event.currentTime
+      ? normalizeTimelineTime(
+          event.currentTime,
+          context.timeline.duration,
+          context.timeline.currentTime,
+        )
       : event.type === "SEEK"
-        ? Math.max(0, Math.min(event.time, context.timeline.duration))
+        ? normalizeTimelineTime(event.time, context.timeline.duration, context.timeline.currentTime)
         : context.timeline.currentTime;
 
   if (!recording || !editorRefs.editor || context.pendingPlaybackEditorSync) {
@@ -292,7 +304,11 @@ export const seekToTime = ({
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
   if (event.type !== "SEEK") return {};
-  const clampedTime = Math.max(0, Math.min(event.time, context.timeline.duration));
+  const clampedTime = normalizeTimelineTime(
+    event.time,
+    context.timeline.duration,
+    context.timeline.currentTime,
+  );
   return {
     timeline: {
       ...context.timeline,
@@ -326,7 +342,7 @@ export const setPlaybackSpeed = ({
   return {
     timeline: {
       ...context.timeline,
-      speed: event.speed,
+      speed: normalizePlaybackSpeed(event.speed, context.timeline.speed),
     },
   };
 };
@@ -342,7 +358,7 @@ export const setVolume = ({
   return {
     timeline: {
       ...context.timeline,
-      volume: Math.max(0, Math.min(1, event.volume)),
+      volume: normalizePlaybackVolume(event.volume, context.timeline.volume),
     },
   };
 };
@@ -608,7 +624,9 @@ export const notifySeek = ({
   event: EditorMachineEvent;
 }): void => {
   if (event.type === "SEEK") {
-    context.onSeek?.(Math.max(0, Math.min(event.time, context.timeline.duration)));
+    context.onSeek?.(
+      normalizeTimelineTime(event.time, context.timeline.duration, context.timeline.currentTime),
+    );
   }
 };
 

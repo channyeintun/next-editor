@@ -33,6 +33,9 @@ import {
   MOUSE_FRAME_INTERVAL_MS,
   type CapturedViewStateRef,
 } from "./editorMachineHelpers";
+import { normalizeNonNegativeTime } from "./playbackValues";
+
+const SCREEN_RECORDER_ID_PREFIX = "screenRecorder-";
 
 // ============================================================================
 // Recording-capture action bodies
@@ -144,11 +147,12 @@ export const storeExternalAudioDuration = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
-  if (event.type !== "READY" || context.audio.source !== "external") {
+  if (event.type !== "AUDIO_PLAYBACK_READY" || context.audio.source !== "external") {
     return {};
   }
 
-  const externalDurationMs = Number.isFinite(event.duration) ? event.duration : null;
+  const externalDurationMs =
+    Number.isFinite(event.duration) && event.duration >= 0 ? event.duration : null;
 
   if (context.session && externalDurationMs !== null && context.session.audioFragments.length > 0) {
     // In-place update of a constant-size element (index 0 always exists here), not a
@@ -205,9 +209,11 @@ export const initRecordingSession = ({
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
   const startedAt =
-    event.type === "STARTED" && Number.isFinite(event.startedAtMs) ? event.startedAtMs : Date.now();
+    event.type === "AUDIO_RECORDING_STARTED" && Number.isFinite(event.startedAtMs)
+      ? event.startedAtMs
+      : Date.now();
   const startedAtPerf =
-    event.type === "STARTED" && Number.isFinite(event.startedAtPerf)
+    event.type === "AUDIO_RECORDING_STARTED" && Number.isFinite(event.startedAtPerf)
       ? event.startedAtPerf
       : performance.now();
   const slideEvents: SlideEvent[] = [];
@@ -666,7 +672,7 @@ export const finalizeRecording = ({
 
   // Base duration from session timing
   const duration =
-    event.type === "FINISHED" &&
+    event.type === "AUDIO_PLAYBACK_FINISHED" &&
     context.audio.source === "external" &&
     typeof context.audio.externalDurationMs === "number" &&
     Number.isFinite(context.audio.externalDurationMs)
@@ -790,7 +796,7 @@ export const storeAudioBlob = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
-  if (event.type !== "STOPPED") return {};
+  if (event.type !== "AUDIO_RECORDING_STOPPED") return {};
   return {
     audio: {
       url: null,
@@ -814,7 +820,7 @@ export const storeAudioStarted = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
-  if (event.type !== "STARTED") return {};
+  if (event.type !== "AUDIO_RECORDING_STARTED") return {};
   return {
     audio: {
       ...context.audio,
@@ -845,7 +851,8 @@ export const storeCameraBlob = ({
 };
 
 // Append a live microphone timeslice fragment to the session's append-only audio stream so
-// an optional live recording sink can forward it. The finalized blob (STOPPED) is unchanged.
+// an optional live recording sink can forward it. The finalized AUDIO_RECORDING_STOPPED blob is
+// unchanged.
 export const captureAudioChunk = ({
   context,
   event,
@@ -853,7 +860,7 @@ export const captureAudioChunk = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
-  if (event.type !== "CHUNK" || !context.session) return {};
+  if (event.type !== "AUDIO_RECORDING_CHUNK" || !context.session) return {};
   const fragment: RecordingSessionMediaFragment = {
     trackId: AUDIO_TRACK_ID,
     startTimeMs: context.audio.startOffsetMs + event.startTimeMs,
@@ -893,7 +900,6 @@ export const storeCameraStarted = ({
 };
 
 export const handleCameraError = ({
-  context,
   event,
 }: {
   context: EditorMachineContext;
@@ -903,13 +909,33 @@ export const handleCameraError = ({
   console.warn("Camera recording disabled:", event.error);
   return {
     camera: {
-      ...context.camera,
+      blob: null,
       isRecording: false,
       mimeType: "",
       source: null,
       startOffsetMs: 0,
     },
   };
+};
+
+export const clearCameraRecording = (): Partial<EditorMachineContext> => ({
+  camera: {
+    blob: null,
+    isRecording: false,
+    mimeType: "",
+    source: null,
+    startOffsetMs: 0,
+  },
+});
+
+export const handleAudioRecordingError = ({
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "AUDIO_RECORDING_ERROR") return {};
+  return { error: event.error };
 };
 
 // ============================================================================
@@ -923,13 +949,34 @@ export const handleCameraError = ({
 // ============================================================================
 
 export const setScreenStream = ({
+  context,
   event,
 }: {
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
   if (event.type !== "START_RECORDING") return {};
-  return { screenStream: event.screenStream ?? null };
+  const screenStream = event.screenStream ?? null;
+  const screenRecorderGeneration = screenStream
+    ? context.screenRecorderGeneration + 1
+    : context.screenRecorderGeneration;
+  return {
+    screenStream,
+    screenRecorderGeneration,
+    screen: screenStream
+      ? {
+          actorId: `${SCREEN_RECORDER_ID_PREFIX}${screenRecorderGeneration}`,
+          isRecording: false,
+          mimeType: "",
+          startOffsetMs: 0,
+        }
+      : {
+          actorId: null,
+          isRecording: false,
+          mimeType: "",
+          startOffsetMs: 0,
+        },
+  };
 };
 
 export const storeScreenStarted = ({
@@ -965,14 +1012,15 @@ export const notifyScreenRecordingReady = ({
   if (event.type !== "SCREEN_STOPPED") return;
   context.onScreenRecordingReady?.({
     blob: event.blob,
-    mimeType: context.screen.mimeType || event.blob.type,
-    startOffsetMs: context.screen.startOffsetMs,
+    mimeType: event.mimeType || event.blob.type,
+    startOffsetMs: normalizeNonNegativeTime(event.startOffsetMs),
   });
 };
 
-/** Reset screen slices after the blob has exited. Tracks are stopped by the actor's teardown (via stopChild). */
+/** Reset screen slices after the blob has exited. The actor releases tracks before emitting it. */
 export const clearScreenRecording = (): Partial<EditorMachineContext> => ({
   screen: {
+    actorId: null,
     isRecording: false,
     mimeType: "",
     startOffsetMs: 0,
@@ -990,6 +1038,7 @@ export const handleScreenError = ({
   console.warn("Screen recording disabled:", event.error);
   return {
     screen: {
+      actorId: null,
       isRecording: false,
       mimeType: "",
       startOffsetMs: 0,
@@ -1000,7 +1049,8 @@ export const handleScreenError = ({
 
 /**
  * Stop and drop a pre-acquired display stream that never reached the actor. Used only on the
- * arming-gap abort paths (mic ERROR / early STOP_RECORDING before the screen actor spawns) —
+ * arming-gap abort paths (mic AUDIO_RECORDING_ERROR / early STOP_RECORDING before the screen actor
+ * spawns) —
  * once the actor owns the stream, its own teardown handles track cleanup instead.
  */
 export const releaseScreenStream = ({
@@ -1010,5 +1060,13 @@ export const releaseScreenStream = ({
 }): Partial<EditorMachineContext> => {
   if (!context.screenStream) return {};
   context.screenStream.getTracks().forEach((track) => track.stop());
-  return { screenStream: null };
+  return {
+    screenStream: null,
+    screen: {
+      actorId: null,
+      isRecording: false,
+      mimeType: "",
+      startOffsetMs: 0,
+    },
+  };
 };

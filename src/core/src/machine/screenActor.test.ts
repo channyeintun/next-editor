@@ -93,6 +93,7 @@ class FakeMediaRecorder {
   ondataavailable: ((event: { data: Blob }) => void) | null = null;
   onstop: (() => void) | null = null;
   onstart: (() => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
 
   constructor(_stream: unknown, options?: { mimeType?: string }) {
     this.mimeType = options?.mimeType ?? "";
@@ -234,6 +235,7 @@ describe("screenRecordingActor", () => {
         stream: new FakeMediaStream([video]) as unknown as MediaStream,
         micTrack: (mic as unknown as MediaStreamTrack) ?? null,
         audioContextCtor: FakeAudioContextCtor,
+        sessionStartedAtPerf: 0,
       },
     }).start();
     actors.push(actor);
@@ -265,5 +267,19 @@ describe("screenRecordingActor", () => {
 
     video.dispatch("ended");
     expect(FakeMediaRecorder.instances[0]?.state).toBe("inactive");
+    expect(video.stopped).toBe(true);
+  });
+
+  it("releases owned media when MediaRecorder reports a runtime error", () => {
+    const video = new FakeTrack("video");
+    const mic = new FakeTrack("audio");
+    const actor = spawn(video, mic);
+
+    actor.send({ type: "START" });
+    FakeMediaRecorder.instances[0]?.onerror?.(new Event("error"));
+
+    expect(video.stopped).toBe(true);
+    expect(mic.stopped).toBe(true);
+    expect(FakeAudioContext.instances[0]?.state).toBe("closed");
   });
 });

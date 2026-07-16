@@ -71,15 +71,16 @@ stateDiagram-v2
     idle --> recording : START_RECORDING [no audio bootstrap needed]
     idle --> loading : LOAD_RECORDING
 
-    startingRecording --> recording : STARTED
+    startingRecording --> recording : AUDIO_RECORDING_STARTED
+    startingRecording --> idle : AUDIO_RECORDING_ERROR
     startingRecording --> idle : STOP_RECORDING
 
     recording --> stoppingRecording : STOP_RECORDING [isMicrophoneAudioRecording]
     recording --> stoppingRecording : STOP_RECORDING [isCameraRecording]
     recording --> loading : STOP_RECORDING [isExternalAudioRecording, or no async drain]
-    recording --> idle : ERROR [isExternalAudioRecording]
+    recording --> idle : AUDIO_PLAYBACK_ERROR [isExternalAudioRecording]
 
-    stoppingRecording --> loading : STOPPED / CAMERA_STOPPED / FINISHED (drain complete)
+    stoppingRecording --> loading : AUDIO_RECORDING_STOPPED / CAMERA_STOPPED (drain complete)
 
     loading --> playback.ready : onDone
     loading --> idle : onError
@@ -114,7 +115,7 @@ Used only when `enableAudioRecording` is set and no external audio blob was supp
 i.e. the microphone bootstrap path.
 
 - Spawns `audioRecording` and sends it `START`.
-- Waits for `STARTED` to move to `recording`.
+- Waits for `AUDIO_RECORDING_STARTED` to move to `recording`.
 - `STOP_RECORDING` aborts straight back to `idle`.
 
 ### `recording`
@@ -127,7 +128,7 @@ What happens here:
 - an invoked `mouseTracking` actor drives `CAPTURE_FRAME` for cursor movement
 - camera capture spawns conditionally on entry if `enableCameraRecording`
 - `CAPTURE_FRAME`, `SLIDE_EVENT`, `PREVIEW_EVENT`, `PREVIEW_INITIAL_DOCUMENT`, `PREVIEW_PATCH_BATCH`, `WORKSPACE_EVENT`, and `RUNTIME_EVENT` are all captured into the session
-- audio chunks (`CHUNK`) and camera chunks/lifecycle events are folded into session/audio/camera state for live SCR3 streaming
+- audio chunks (`AUDIO_RECORDING_CHUNK`) and camera lifecycle events are folded into session/audio/camera state for live SCR3 streaming
 - `STOP_RECORDING` branches on `isMicrophoneAudioRecording` / `isCameraRecording` / `isExternalAudioRecording` to decide whether a drain (`stoppingRecording`) is needed before finalizing
 
 ### `stoppingRecording`
@@ -136,7 +137,7 @@ This is a drain state, not a second recording mode.
 
 - microphone capture may still emit a final post-stop chunk
 - camera capture may stop before or after audio
-- the machine finalizes once the required blobs arrive (`STOPPED` / `CAMERA_STOPPED`) or `FINISHED` fires
+- the machine finalizes once the required blobs arrive (`AUDIO_RECORDING_STOPPED` / `CAMERA_STOPPED`), with a two-second timeout as a defensive fallback
 
 This ordering matters because the live stream sink must preserve append-only SCR3 ordering even while the media recorders are draining.
 
@@ -183,31 +184,39 @@ Owns clock progression and emits `TICK` updates.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> idle
-    idle --> running : START
-    running --> idle : PAUSE
-    idle --> idle : SEEK
+    [*] --> stopped
+    stopped --> running : START
+    running --> paused : PAUSE
+    paused --> paused : SEEK
     running --> running : SEEK
     running --> running : SET_SPEED
-    running --> idle : FINISHED
+    paused --> running : START
+    running --> stopped : FINISHED
 ```
 
 ### Audio recording actor (`audioRecordingActor`)
 
-- Starts microphone capture, emits `STARTED`, `CHUNK`, `STOPPED`, `ERROR`.
+- Starts microphone capture and emits `AUDIO_RECORDING_STARTED`, `AUDIO_RECORDING_CHUNK`, `AUDIO_RECORDING_STOPPED`, and `AUDIO_RECORDING_ERROR`.
 - Produces timesliced chunks during recording so the live SCR3 bridge can stream them before finalization.
 
 ### Camera recording actor (`cameraRecordingActor`)
 
 - Starts optional video-only capture.
-- Emits `CAMERA_STARTED`, `CAMERA_CHUNK` while recording, `CAMERA_STOPPED` on finalize, `CAMERA_ERROR` on failure.
+- Emits `CAMERA_STARTED`, `CAMERA_STOPPED` on finalize, and `CAMERA_ERROR` on setup or runtime failure.
 - Tracks a warmup delay so the parent machine can persist `cameraStartOffsetMs`.
 
 ### Audio playback actor (`audioPlaybackActor`)
 
 - Manages synchronized `HTMLAudioElement` playback in blob or stream mode.
+- Emits role-specific `AUDIO_PLAYBACK_READY`, `AUDIO_PLAYBACK_FINISHED`, and `AUDIO_PLAYBACK_ERROR` events so media completion cannot be mistaken for timeline completion.
 - Accepts progressive audio updates by reattaching a growing blob snapshot when later prefixes extend the audio track (`syncPlaybackAudio` helper, `appendPolicy: "playing-or-finalized" | "always"`).
 - Is spawned lazily (`playbackAudioSpawned` context flag) in progressive-load scenarios when audio first becomes usable for the current prefix, not just on `LOAD_RECORDING`.
+
+### Screen recording actor (`screenRecordingActor`)
+
+- Records a pre-acquired display stream and optionally mixes tab audio with a cloned microphone track.
+- Uses a unique child id per capture; every `SCREEN_*` event carries that id so late WebM-repair completions cannot stop or clear a newer capture.
+- Releases display tracks and the audio graph before asynchronous WebM duration repair, then delivers the blob through `onScreenRecordingReady` without storing it in the lesson recording.
 
 ### Mouse tracking actor (`mouseTrackingActor`)
 
@@ -265,20 +274,41 @@ type EditorMachineEvent =
   | { type: "ADD_CAPTION_TRACK"; track: CaptionTrack }
   | { type: "REMOVE_CAPTION_TRACK"; trackId: string }
   | {
-      type: "STARTED";
+      type: "AUDIO_RECORDING_STARTED";
       mediaRecorder: MediaRecorder;
       mimeType: string;
       startedAtMs: number;
       startedAtPerf: number;
     }
-  | { type: "STOPPED"; blob: Blob }
-  | { type: "CHUNK"; chunk: Blob; startTimeMs: number; endTimeMs: number }
-  | { type: "READY"; duration: number }
-  | { type: "ERROR"; error: string }
+  | { type: "AUDIO_RECORDING_STOPPED"; blob: Blob }
+  | {
+      type: "AUDIO_RECORDING_CHUNK";
+      chunk: Blob;
+      startTimeMs: number;
+      endTimeMs: number;
+    }
+  | { type: "AUDIO_RECORDING_ERROR"; error: string }
+  | { type: "AUDIO_PLAYBACK_READY"; duration: number }
+  | { type: "AUDIO_PLAYBACK_FINISHED" }
+  | { type: "AUDIO_PLAYBACK_ERROR"; error: string }
   | { type: "CAMERA_STARTED"; mimeType: string; startedAtMs: number; startedAtPerf: number }
-  | { type: "CAMERA_CHUNK"; chunk: Blob; startTimeMs: number; endTimeMs: number }
   | { type: "CAMERA_STOPPED"; blob: Blob }
-  | { type: "CAMERA_ERROR"; error: string };
+  | { type: "CAMERA_ERROR"; error: string }
+  | {
+      type: "SCREEN_STARTED";
+      actorId: string;
+      mimeType: string;
+      startedAtMs: number;
+      startedAtPerf: number;
+    }
+  | {
+      type: "SCREEN_STOPPED";
+      actorId: string;
+      blob: Blob;
+      mimeType: string;
+      startOffsetMs: number;
+    }
+  | { type: "SCREEN_ERROR"; actorId: string; error: string };
 ```
 
 ## Guards
@@ -340,7 +370,7 @@ Action bodies are split by concern: capture-side actions live in `captureActions
 | `capturePreviewPatchBatch`      | Append a `PreviewDomPatchBatch` (rrweb incremental events) to the session                    |
 | `captureWorkspaceEvent`         | Append a timed workspace event                                                               |
 | `captureRuntimeEvent`           | Append a timed runtime event                                                                 |
-| `captureAudioChunk`             | Fold an audio `CHUNK` into the session's `audioFragments`                                    |
+| `captureAudioChunk`             | Fold an `AUDIO_RECORDING_CHUNK` into the session's `audioFragments`                          |
 | `setCameraRecordingEnabled`     | Set `enableCameraRecording` from the `START_RECORDING` event                                 |
 | `prepareExternalAudioRecording` | Set up audio state for the external-audio-blob recording path                                |
 | `startExternalAudioPlayback`    | Start driving the external audio blob as the recording's audio track                         |
