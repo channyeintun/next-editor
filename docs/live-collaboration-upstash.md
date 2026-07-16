@@ -13,7 +13,7 @@ This document evaluates whether the existing Upstash relationship should be exte
 optional Redis cache into the live-collaboration data plane. It covers Upstash Redis, Realtime,
 and QStash. It does not change the core decisions in the feature plan: Yjs remains the merge
 engine, awareness remains logically ephemeral, and SCR3 remains a single-writer recording and
-replay format owned by the room owner's browser.
+replay format owned by the room host's browser.
 
 Pricing and product behavior in this document were checked on 2026-07-16. They must be verified
 again before production capacity is purchased.
@@ -136,19 +136,21 @@ compatible with both.
 | Participant awareness                     | Client state plus short-lived Redis TTL | Realtime events alone do not provide presence semantics  |
 | Host/follow and role-change control events | Realtime channel plus authoritative D1 | Events notify; D1 decides                                |
 | Binary project assets                     | R2                                     | CRDT stores only an asset reference                       |
-| Optional project export                   | R2                                     | Separate from the owner's SCR3 recording                  |
-| SCR3 recording                            | Room owner's browser                   | Local until explicit post-session `/learn` upload         |
+| Optional project export                   | R2                                     | Separate from the host's SCR3 recording                   |
+| SCR3 recording                            | Room host's browser                    | Local until the post-session upload modal is confirmed    |
 | Compaction and cleanup jobs                | QStash delivery state                  | Destination handlers remain idempotent                    |
 
 ## Recording boundary
 
-The room owner's `editorMachine` records the converged workspace locally and persists recovery
-state in the browser. Redis, Realtime, and QStash carry no SCR3 bytes and do not finalize a
-recording.
+Only the room host may record. For the MVP, the owner remains host throughout a recorded session.
+That host's `editorMachine` records the converged workspace locally and persists recovery state in
+the browser. Redis, Realtime, and QStash carry no SCR3 bytes and do not finalize a recording.
 
-Only after the live session ends may the owner explicitly pass the finished recording to the
-existing [`/learn` upload and publish flow](./cloudflare-architecture.md#upload--publish-sequence).
-Any R2 object created by that flow belongs to lesson storage, not the collaboration namespace.
+Only after live ends does the application present the existing post-recording upload-modal
+experience. If the host confirms that modal, the lesson files are uploaded and may later appear
+under `/learn`; `/learn` is not an Upstash or collaboration upload path. Any R2 object created by
+the existing [upload and publish sequence](./cloudflare-architecture.md#upload--publish-sequence)
+belongs to lesson storage, not the collaboration namespace.
 
 Suggested Redis key families:
 

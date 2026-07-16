@@ -92,16 +92,18 @@ Calls:
 
 ## Recording boundary
 
-The room owner's browser records SCR3 through the existing `editorMachine` and local IndexedDB
+Only the room host may record. For the MVP, the room owner remains host throughout a recorded
+session. That host browser records SCR3 through the existing `editorMachine` and local IndexedDB
 persistence. No recording bytes pass through the room Durable Object, its SQLite database, the
 collaboration R2 namespace, or a Queue while the session is live.
 
-After the owner ends the live session, an explicit action may send the finished browser-local
-recording through the existing
-[lesson upload and publish flow](./cloudflare-architecture.md#upload--publish-sequence) for
-`/learn`. That separate lesson workflow may store uploaded files in R2 and lesson metadata in D1,
-but those objects belong to the lesson namespace and lifecycle—not to the collaboration room or
-its Durable Object.
+After the host ends the live session, the application presents the same post-recording modal used
+today: `renderPostRecordingModal` composes `UploadLessonModal` around the finished local recording.
+An explicit action in that modal may upload the files, create a lesson draft, and later publish it
+to `/learn`. This is not a collaboration-specific `/learn` upload path. The existing lesson flow
+may store uploaded files in R2 and lesson metadata in D1, but those objects belong to the lesson
+namespace and lifecycle—not to the collaboration room or its Durable Object. See the existing
+[upload and publish sequence](./cloudflare-architecture.md#upload--publish-sequence).
 
 ## Why one Durable Object per room in this option
 
@@ -352,8 +354,8 @@ The CRDT stores asset IDs and metadata, never arbitrary asset bytes. Upload comp
 CRDT reference is published. Downloads continue through authenticated/same-origin Worker routes
 where room privacy requires it.
 
-Do not create a collaboration-room recording key. A recording reaches R2 only after the live
-session through the existing lesson upload flow and uses that subsystem's object namespace.
+Do not create a collaboration-room recording key. A recording reaches R2 only after live ends and
+the host confirms upload in the post-recording modal; it uses the lesson subsystem's namespace.
 
 Use R2 Standard storage for active room assets and snapshots. Infrequent Access introduces
 retrieval charges and a minimum storage duration and is unlikely to help small, frequently opened
@@ -389,7 +391,8 @@ to separate objects.
 | D1 unavailable during a new join              | Reject/defer the join; existing authenticated room sockets may continue                 |
 | R2 asset missing                              | Show a recoverable placeholder; do not block unrelated text edits                       |
 | Compaction alarm retries                      | Resume idempotently from generation and cutoff metadata                                 |
-| Owner recorder disconnects                    | Browser-local recording recovery applies; the room object never receives or finalizes SCR3 |
+| Host recorder disconnects                     | Browser-local recording recovery applies; the room object never receives or finalizes SCR3 |
+| Host transfer requested during recording      | Reject it until the current host stops and finalizes the browser-local recording              |
 
 SQLite-backed Durable Objects include point-in-time recovery for approximately the prior 30 days,
 but that platform capability is not a substitute for owner exports, retention policies, or tested

@@ -18,9 +18,9 @@ recording model, but the collaboration protocol must be a separate data plane.
   state.
 - Keep `workspaceStore` as the local UI projection of the shared document while connected.
 - Keep `editorMachine` responsible for browser-local recording and playback orchestration.
-- Keep SCR3 as a single-writer recording and replay format. For the MVP, the room owner's browser
-  converts the converged room state into one ordered SCR3 stream and retains it locally until the
-  live session ends.
+- Keep SCR3 as a single-writer recording and replay format. Only the room host may record. For the
+  MVP, the room owner remains host throughout a recorded session, and that browser converts the
+  converged room state into one ordered SCR3 stream and retains it locally until live ends.
 - Continue using an external service for audio and video calls. Call state is outside this
   feature except for an optional room link.
 
@@ -36,7 +36,7 @@ resolving concurrent edits.
 - Support owner, editor, and viewer permissions.
 - Allow participants to follow a designated host's active file and preview state.
 - Preserve the existing standalone editor when no collaboration room is configured.
-- Record the resulting collaborative session in the room owner's browser through the existing
+- Record the resulting collaborative session in the room host's browser through the existing
   recording pipeline.
 
 ## Non-goals
@@ -47,6 +47,7 @@ resolving concurrent edits.
 - Real-time collaborative editing of arbitrary binary assets in the first release.
 - Author-attributed replay, shared undo, comments, and annotations in the first release.
 - Making playback and live authoring write to the same workspace simultaneously.
+- Handing an in-progress recording from one room host to another.
 
 ## Why the current model needs a collaboration plane
 
@@ -87,9 +88,10 @@ flowchart LR
     Doc --> Adapter[Workspace projection adapter]
     Adapter --> Store[(workspaceStore)]
     Store --> Container[Local WebContainer mirror]
-    Store --> Recorder[Room owner's editorMachine]
+    Store --> Recorder[Room host's editorMachine]
     Recorder --> SCR3[Browser-local SCR3 recording]
-    SCR3 -.->|explicit owner upload after live ends| Learn[Existing lesson upload flow]
+    SCR3 -.->|after live ends| Modal[Post-recording upload modal]
+    Modal -.->|owner uploads and publishes| Learn[Lesson appears in /learn]
 ```
 
 Each client owns a CRDT document and receives the same durable room updates. The room service
@@ -108,7 +110,7 @@ explicit host-follow signals are shared.
 | Participant name, cursor, selection, active file | Awareness state                                     | Ephemeral with a TTL   |
 | Room membership and role                         | Collaboration service                               | Server ACL/session     |
 | Preview/runtime output                           | Each client; host is authoritative for follow mode  | Not durable by default |
-| Recording timeline and capture state             | Room owner's `editorMachine`                        | Browser-local SCR3     |
+| Recording timeline and capture state             | Room host's `editorMachine`                         | Browser-local SCR3     |
 | Playback workspace                               | `editorMachine` projection while playback is active | Loaded SCR3            |
 
 Outside a room, the current ownership rules remain unchanged. Inside a room, the CRDT document
@@ -237,7 +239,7 @@ path-based project on every inserted character would create unnecessary store no
 WebContainer writes, and recording events.
 
 Remote changes to inactive files must update the store and WebContainer mirror. They must also be
-visible to the room owner's recorder; relying only on Monaco's active model would omit those edits
+visible to the room host's recorder; relying only on Monaco's active model would omit those edits
 from the recording.
 
 ### Runtime and follow-host behavior
@@ -250,6 +252,8 @@ Every participant runs the project in a separate local WebContainer. For the fir
   project data.
 - Runtime logs, terminal input, and process state are not merged.
 - The designated host is authoritative for runtime events captured into the recording.
+- Only the effective host sees enabled recording controls. For a recorded MVP session, the owner
+  remains host until recording has stopped and the local SCR3 has been finalized.
 
 Remote collaborators can change code that another client's preview executes. Joining an editable
 room is therefore a code-execution trust decision. Auto-run should remain paused during initial
@@ -268,20 +272,30 @@ workspace instances.
 
 ## Recording and SCR3
 
-The room owner's browser is the sole recorder for the MVP. Its `workspaceStore` projection gives
-the existing `editorMachine` a converged project snapshot and ordered workspace events. The owner
+The room host's browser is the sole recorder for the MVP. Its `workspaceStore` projection gives
+the existing `editorMachine` a converged project snapshot and ordered workspace events. The host
 also captures preview/runtime events so the recording has one coherent timeline. Intermediate
 replay state reflects the order in which that browser observed concurrent updates; the final
 project still converges with the room.
 
-Recording is not part of the collaboration data plane. SCR3 bytes stay in the owner's browser and
+The application must allow only the current host to start or continue recording. In the MVP, the
+room owner remains the host for the duration of a recorded session, which makes the recorder and
+the eventual uploader the same browser. A host transfer requires stopping and finalizing the
+current recording first; recording state and SCR3 bytes are never handed to the next host.
+
+Recording is not part of the collaboration data plane. SCR3 bytes stay in the host's browser and
 use the existing local recording persistence, including IndexedDB recovery. The room provider,
 Redis, Durable Object storage, and collaboration R2 namespaces must never receive or finalize the
 recording while the session is live.
 
-After the owner ends the live session, the browser finalizes the local recording and may open the
-existing lesson upload flow. Only an explicit owner action uploads the lesson files and creates a
-draft for `/learn`; until that succeeds, the server has no copy of the recording. See the existing
+After the host ends the live session, the browser finalizes the local recording and presents the
+same post-recording upload-modal experience used by standalone recording. The implementation
+should reuse or adapt the current `renderPostRecordingModal` → `UploadLessonModal` composition;
+it is not a collaboration-specific `/learn` transport. Only an explicit action in that modal
+uploads the lesson files and creates a draft, and the lesson appears under `/learn` after publish.
+Until upload succeeds, the server has no copy of the recording. See
+[CodeRoute.tsx](../src/components/CodeRoute.tsx),
+[UploadLessonModal.tsx](../infra/client/upload/UploadLessonModal.tsx), and the existing
 [upload and publish sequence](./cloudflare-architecture.md#upload--publish-sequence).
 
 For the first release:
@@ -290,8 +304,8 @@ For the first release:
 - Record the resulting workspace state, not raw CRDT updates.
 - Do not promise per-author attribution in replay.
 - Do not stream SCR3 through the collaboration provider or upload it before the live session ends.
-- Do not hand recording between clients. If the owner disconnects, local recovery or finalization
-  remains the owner's browser responsibility.
+- Do not hand recording between clients. If the host disconnects, local recovery or finalization
+  remains that host browser's responsibility.
 
 A future optional collaboration track could store participant attribution or normalized CRDT
 transactions. It must be backward-compatible and is not required for shared editing.
@@ -301,6 +315,7 @@ transactions. It must be backward-compatible and is not required for shared edit
 The collaboration UI should provide:
 
 - Share/invite control with the current room role.
+- Recording controls enabled only for the current room host.
 - Connection states for connecting, syncing, reconnecting, offline changes, and failure.
 - Participant list with stable colors and host/role indicators.
 - Remote cursor and selection decorations only for the file currently visible locally.
@@ -336,8 +351,9 @@ contrast requirements.
 ### Phase 4: host and recording integration
 
 - Add host assignment and follow-host behavior.
-- Capture remote and inactive-file changes through the room owner's recorder.
-- Keep SCR3 browser-local and invoke the existing `/learn` upload flow only after live ends.
+- Capture remote and inactive-file changes through the room host's recorder.
+- Guard recording controls by effective host and prohibit host transfer while recording is active.
+- Keep SCR3 browser-local and present the existing post-recording upload modal after live ends.
 - Enforce playback isolation and validate existing SCR3 progressive playback unchanged.
 
 ### Phase 5: hardening
@@ -356,10 +372,10 @@ contrast requirements.
 - Remote cursors, selections, participant departure, and active-file presence update without
   persisting stale awareness.
 - Remote changes update the local workspace and WebContainer without store/CRDT feedback loops.
-- The room owner can record local edits, remote edits, and inactive-file changes; the resulting
+- Only the room host can record local edits, remote edits, and inactive-file changes; the resulting
   browser-local SCR3 file decodes and replays with the existing reader.
 - No SCR3 bytes enter the collaboration provider, and lesson upload is available only after the
-  live session ends through an explicit owner action.
+  live session ends through an explicit action in the post-recording modal.
 - Playback-origin workspace writes are never transmitted into the live room.
 - Leaving or switching rooms releases the provider, observers, timers, and awareness state.
 - Standalone editing, recording, saved-file playback, and one-producer live streaming continue to
@@ -378,7 +394,8 @@ contrast requirements.
 - Add recorder integration tests proving remote inactive-file changes become workspace events and
   that the existing streaming decoder accepts the result.
 - Verify collaboration transports receive no SCR3 payload and the post-session recording can be
-  resumed from IndexedDB and passed to the existing lesson upload flow.
+  resumed from IndexedDB and passed to the existing `UploadLessonModal` flow.
+- Test that non-host recording controls are disabled and host transfer is rejected while recording.
 - Keep codec regression fixtures for finalized, partial-prefix, and live SCR3 streams. CRDT
   transport changes must not alter their decoded output.
 
@@ -404,8 +421,8 @@ contrast requirements.
 | Tree conflicts     | Stable node IDs with deterministic display-name suffixes | Exact suffix UX and tombstone retention           |
 | Undo               | Per-user, origin-scoped text undo                        | Whether tree undo is included in MVP              |
 | Assets             | Content-addressed external blobs                         | Storage provider, quotas, and offline behavior    |
-| Runtime            | Local per client; explicit host for follow mode           | Host selection policy                             |
-| Recording          | Owner browser; local SCR3 until post-session upload        | Local crash and recovery UX                       |
+| Runtime            | Local per client; explicit host for follow mode           | Host selection outside recorded sessions          |
+| Recording          | Host browser; owner remains host while recording          | Local crash and recovery UX                       |
 | Playback           | Mutually exclusive with live projection                  | Whether to add a second workspace instance        |
 | Replay attribution | Not included in initial SCR3 output                      | Optional collaboration track and privacy controls |
 
