@@ -33,7 +33,7 @@ interface QStashClaims {
   body: string;
 }
 
-function base64UrlDecode(value: string): Uint8Array {
+function base64UrlDecode(value: string): Uint8Array<ArrayBuffer> {
   const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
   const binary = atob(padded);

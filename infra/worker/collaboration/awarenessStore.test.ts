@@ -38,7 +38,7 @@ class MemoryRedis {
     return next;
   }
 
-  async expire() {
+  async expire(_key: string, _seconds: number) {
     return 1;
   }
 
