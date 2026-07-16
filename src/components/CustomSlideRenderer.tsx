@@ -1,8 +1,7 @@
-import { useEffect, useRef } from "react";
 import { marked } from "marked";
 import type { Slide } from "../types/slides";
 import { getSlideBackgroundImage } from "../config/slideBackgrounds";
-import { sanitizeSlideContent } from "../utils/sanitizeSlideContent";
+import { createSandboxedSlideDocument } from "../utils/sandboxedSlideDocument";
 import GoogleSvgSlide from "./GoogleSvgSlide";
 
 interface CustomSlideRendererProps {
@@ -12,26 +11,31 @@ interface CustomSlideRendererProps {
 }
 
 function RawHtmlSlide({ content }: { content: string }) {
-  const contentRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const container = contentRef.current;
-    if (!container) {
-      return;
-    }
-
-    container.innerHTML = sanitizeSlideContent(content, "text/html");
-  }, [content]);
-
-  return <div ref={contentRef} className="size-full" />;
+  return (
+    <iframe
+      title="HTML slide"
+      sandbox=""
+      referrerPolicy="no-referrer"
+      srcDoc={createSandboxedSlideDocument(content, "text/html")}
+      className="size-full border-0"
+    />
+  );
 }
 
 function MarkdownSlide({ content }: { content: string }) {
-  const html = sanitizeSlideContent(marked(content, { async: false }), "text/html");
+  const html = marked(content, { async: false });
 
   return (
-    // eslint-disable-next-line react/no-danger -- output is sanitized before insertion.
-    <div className="slide-markdown size-full p-12" dangerouslySetInnerHTML={{ __html: html }} />
+    <iframe
+      title="Markdown slide"
+      sandbox=""
+      referrerPolicy="no-referrer"
+      srcDoc={createSandboxedSlideDocument(
+        `<main class="slide-markdown" style="box-sizing:border-box;width:100%;height:100%;padding:3rem;color:white">${html}</main>`,
+        "text/html",
+      )}
+      className="size-full border-0"
+    />
   );
 }
 

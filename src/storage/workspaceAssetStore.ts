@@ -7,12 +7,38 @@ import { requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
  * file metadata with these bytes stripped out; the actual bytes live here, where
  * there is no ~5 MB quota and binary can be stored natively as ArrayBuffers.
  *
- * Assets are keyed by their workspace path.
+ * Assets are keyed by save generation + workspace path. Keeping generations
+ * separate lets localStorage publish a new metadata manifest only after every
+ * corresponding asset has committed, without overwriting the previous save.
  */
 
 const ASSET_DATABASE_NAME = "next-editor-workspace-assets-db";
 const ASSET_DATABASE_VERSION = 1;
 const ASSET_STORE = "assets";
+const GENERATED_ASSET_KEY_PREFIX = "generation:";
+
+export class WorkspaceAssetPersistenceError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "WorkspaceAssetPersistenceError";
+  }
+}
+
+export function createWorkspaceAssetGeneration(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getGeneratedAssetKey(generation: string, path: string): string {
+  return `${GENERATED_ASSET_KEY_PREFIX}${encodeURIComponent(generation)}:${path}`;
+}
+
+function isGeneratedAssetKeyForGeneration(key: string, generation: string): boolean {
+  return key.startsWith(`${GENERATED_ASSET_KEY_PREFIX}${encodeURIComponent(generation)}:`);
+}
 
 function getIndexedDB(): IDBFactory | null {
   if (typeof indexedDB === "undefined") {
@@ -52,6 +78,7 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
     };
 
     request.onblocked = () => {
+      databasePromise = null;
       reject(new Error("Workspace asset database upgrade is blocked"));
     };
   });
@@ -77,66 +104,150 @@ export function collectBinaryAssetPaths(project: WorkspaceProject): string[] {
     .map((file) => file.path);
 }
 
-// Serialize writes so overlapping saves can't race on the prune/put cycle.
+// Serialize writes so overlapping save generations cannot interleave transactions.
 let persistQueue: Promise<void> = Promise.resolve();
 
-/**
- * Persist the project's binary asset bytes, pruning any stored assets that no
- * longer exist. Assets whose in-memory content is still empty (e.g. not yet
- * hydrated from a previous session) are kept but not overwritten, so a save
- * before hydration completes never wipes their bytes.
- */
-export function persistWorkspaceAssets(project: WorkspaceProject): Promise<void> {
-  const run = async () => {
-    try {
-      await persistWorkspaceAssetsInternal(project);
-    } catch (err) {
-      console.error("Failed to persist workspace assets:", err);
-    }
-  };
-  persistQueue = persistQueue.then(run, run);
-  return persistQueue;
+export interface PersistWorkspaceAssetsOptions {
+  generation: string;
+  /** Previous durable generation used to carry assets that are still hydrating. */
+  sourceGeneration?: string;
+  /** Empty-content paths known to be hydration placeholders rather than empty files. */
+  sourceAssetPaths?: ReadonlySet<string>;
 }
 
-async function persistWorkspaceAssetsInternal(project: WorkspaceProject): Promise<void> {
-  const databaseResult = getDatabase();
+/**
+ * Persist one complete binary-asset generation. The returned promise rejects on
+ * unavailable storage or transaction failure so callers cannot mark the project
+ * saved until the bytes are actually durable.
+ */
+export function persistWorkspaceAssets(
+  project: WorkspaceProject,
+  options: PersistWorkspaceAssetsOptions,
+): Promise<void> {
+  const run = async () => {
+    try {
+      await persistWorkspaceAssetsInternal(project, options);
+    } catch (error) {
+      if (error instanceof WorkspaceAssetPersistenceError) {
+        throw error;
+      }
+      throw new WorkspaceAssetPersistenceError("Failed to persist workspace assets", {
+        cause: error,
+      });
+    }
+  };
+  const result = persistQueue.then(run, run);
+  persistQueue = result.catch(() => undefined);
+  return result;
+}
 
-  if (!databaseResult) {
+async function persistWorkspaceAssetsInternal(
+  project: WorkspaceProject,
+  { generation, sourceGeneration, sourceAssetPaths }: PersistWorkspaceAssetsOptions,
+): Promise<void> {
+  const binaryFiles = Object.values(project.files).filter((file) => file.encoding === "base64");
+
+  if (binaryFiles.length === 0) {
     return;
   }
 
-  const keepPaths = new Set<string>();
-  const entries: Array<[string, ArrayBuffer]> = [];
+  const databaseResult = getDatabase();
 
-  for (const file of Object.values(project.files)) {
-    if (file.encoding !== "base64") {
-      continue;
-    }
-
-    keepPaths.add(file.path);
-
-    if (file.content) {
-      entries.push([file.path, toArrayBuffer(base64ToBytes(file.content))]);
-    }
+  if (!databaseResult) {
+    throw new WorkspaceAssetPersistenceError(
+      "This browser does not provide IndexedDB for binary workspace assets",
+    );
   }
 
   const database = await databaseResult;
-  const transaction = database.transaction(ASSET_STORE, "readwrite");
-  const store = transaction.objectStore(ASSET_STORE);
+  const shouldCopyFromSource = (file: (typeof binaryFiles)[number]) =>
+    file.content === "" && sourceAssetPaths?.has(file.path) === true;
+  const inMemoryEntries = binaryFiles
+    .filter((file) => !shouldCopyFromSource(file))
+    .map((file) => [file.path, toArrayBuffer(base64ToBytes(file.content))] as const);
+  const filesToCopy = binaryFiles.filter(shouldCopyFromSource);
+  let copiedEntries: ReadonlyArray<readonly [string, ArrayBuffer]> = [];
 
-  const existingKeys = await requestToPromise(store.getAllKeys());
+  if (filesToCopy.length > 0) {
+    const readTransaction = database.transaction(ASSET_STORE, "readonly");
+    const readComplete = transactionToPromise(readTransaction);
+    const readStore = readTransaction.objectStore(ASSET_STORE);
+    const pendingCopies = filesToCopy.map((file) => {
+      const sourceKey = sourceGeneration
+        ? getGeneratedAssetKey(sourceGeneration, file.path)
+        : file.path;
+      return [file.path, requestToPromise(readStore.get(sourceKey))] as const;
+    });
 
-  for (const key of existingKeys) {
-    if (typeof key === "string" && !keepPaths.has(key)) {
-      store.delete(key);
+    const [entries] = await Promise.all([
+      Promise.all(
+        pendingCopies.map(async ([path, pendingValue]) => {
+          const value = await pendingValue;
+          if (value instanceof ArrayBuffer) {
+            return [path, value] as const;
+          }
+          if (value instanceof Uint8Array) {
+            return [path, toArrayBuffer(value)] as const;
+          }
+          throw new WorkspaceAssetPersistenceError(
+            `Binary workspace asset "${path}" is not available to save`,
+          );
+        }),
+      ),
+      readComplete,
+    ]);
+    copiedEntries = entries;
+  }
+
+  const writeTransaction = database.transaction(ASSET_STORE, "readwrite");
+  const writeComplete = transactionToPromise(writeTransaction);
+  const writeStore = writeTransaction.objectStore(ASSET_STORE);
+
+  for (const [path, buffer] of [...inMemoryEntries, ...copiedEntries]) {
+    writeStore.put(buffer, getGeneratedAssetKey(generation, path));
+  }
+
+  await writeComplete;
+}
+
+/** Best-effort cleanup after a new metadata manifest has been published. */
+export function pruneWorkspaceAssetGenerations(currentGeneration: string): Promise<void> {
+  const run = async () => {
+    const databaseResult = getDatabase();
+    if (!databaseResult) return;
+
+    const database = await databaseResult;
+    const readTransaction = database.transaction(ASSET_STORE, "readonly");
+    const readComplete = transactionToPromise(readTransaction);
+    const [keys] = await Promise.all([
+      requestToPromise(readTransaction.objectStore(ASSET_STORE).getAllKeys()),
+      readComplete,
+    ]);
+    const keysToDelete = keys.filter(
+      (key) =>
+        typeof key === "string" &&
+        (key.startsWith(GENERATED_ASSET_KEY_PREFIX)
+          ? !isGeneratedAssetKeyForGeneration(key, currentGeneration)
+          : true),
+    );
+
+    if (keysToDelete.length === 0) {
+      return;
     }
-  }
 
-  for (const [path, buffer] of entries) {
-    store.put(buffer, path);
-  }
+    const writeTransaction = database.transaction(ASSET_STORE, "readwrite");
+    const writeComplete = transactionToPromise(writeTransaction);
+    const writeStore = writeTransaction.objectStore(ASSET_STORE);
+    for (const key of keysToDelete) {
+      writeStore.delete(key);
+    }
 
-  await transactionToPromise(transaction);
+    await writeComplete;
+  };
+
+  const result = persistQueue.then(run, run);
+  persistQueue = result.catch(() => undefined);
+  return result;
 }
 
 /**
@@ -145,40 +256,58 @@ async function persistWorkspaceAssetsInternal(project: WorkspaceProject): Promis
  */
 export async function loadWorkspaceAssetContents(
   project: WorkspaceProject,
+  generation?: string,
 ): Promise<Record<string, string>> {
-  const databaseResult = getDatabase();
-
-  if (!databaseResult) {
-    return {};
-  }
-
   const paths = collectBinaryAssetPaths(project);
 
   if (paths.length === 0) {
     return {};
   }
 
+  const databaseResult = getDatabase();
+
+  if (!databaseResult) {
+    throw new WorkspaceAssetPersistenceError(
+      "This browser cannot load the saved binary workspace assets because IndexedDB is unavailable",
+    );
+  }
+
   const database = await databaseResult;
   const transaction = database.transaction(ASSET_STORE, "readonly");
+  const transactionComplete = transactionToPromise(transaction);
   const store = transaction.objectStore(ASSET_STORE);
 
   // Issue all reads before awaiting so the transaction stays active.
-  const pendingReads = paths.map((path) => [path, store.get(path)] as const);
-  const contents: Record<string, string> = {};
-
-  await Promise.all(
-    pendingReads.map(async ([path, request]) => {
-      const value = await requestToPromise(request);
-
-      if (value instanceof ArrayBuffer) {
-        contents[path] = bytesToBase64(new Uint8Array(value));
-      } else if (value instanceof Uint8Array) {
-        contents[path] = bytesToBase64(value);
-      }
-    }),
+  const pendingReads = paths.map(
+    (path) =>
+      [path, store.get(generation ? getGeneratedAssetKey(generation, path) : path)] as const,
   );
+  const contents: Record<string, string> = {};
+  const foundPaths = new Set<string>();
 
-  await transactionToPromise(transaction);
+  await Promise.all([
+    Promise.all(
+      pendingReads.map(async ([path, request]) => {
+        const value = await requestToPromise(request);
+
+        if (value instanceof ArrayBuffer) {
+          contents[path] = bytesToBase64(new Uint8Array(value));
+          foundPaths.add(path);
+        } else if (value instanceof Uint8Array) {
+          contents[path] = bytesToBase64(value);
+          foundPaths.add(path);
+        }
+      }),
+    ),
+    transactionComplete,
+  ]);
+
+  if (foundPaths.size !== paths.length) {
+    const missingPaths = paths.filter((path) => !foundPaths.has(path));
+    throw new WorkspaceAssetPersistenceError(
+      `Saved binary workspace assets are missing: ${missingPaths.join(", ")}`,
+    );
+  }
 
   return contents;
 }

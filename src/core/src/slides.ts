@@ -179,6 +179,8 @@ export interface ApiClientRecordedResponse {
   headers: [string, string][];
   body: string;
   durationMs: number;
+  truncated?: boolean;
+  bodyBytes?: number;
 }
 
 export interface ApiClientRecordedError {

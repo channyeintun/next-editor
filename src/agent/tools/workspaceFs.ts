@@ -2,6 +2,7 @@ import {
   getParentWorkspacePath,
   normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
+  parseWorkspacePath,
   type WorkspaceFile,
   type WorkspaceFileEncoding,
   type WorkspaceProject,
@@ -78,7 +79,7 @@ export function writeFile(
   content: string,
   encoding?: WorkspaceFileEncoding,
 ): WriteFileResult {
-  const normalizedPath = normalizeWorkspacePath(path);
+  const normalizedPath = parseWorkspacePath(path);
   const existingFile = readFile(store, normalizedPath);
 
   if (existingFile) {
@@ -87,6 +88,14 @@ export function writeFile(
   }
 
   store.trigger.createFile({ path: normalizedPath, content, encoding });
+  const createdFile = readFile(store, normalizedPath);
+  if (
+    !createdFile ||
+    createdFile.content !== content ||
+    (createdFile.encoding ?? "utf-8") !== (encoding ?? "utf-8")
+  ) {
+    throw new Error(`Cannot create "${normalizedPath}" because it conflicts with another path`);
+  }
   return { created: true };
 }
 

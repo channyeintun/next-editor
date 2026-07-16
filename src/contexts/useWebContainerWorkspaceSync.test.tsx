@@ -45,12 +45,12 @@ function renderWorkspaceSyncHook(options?: Parameters<typeof useWebContainerWork
 describe("useWebContainerWorkspaceSync", () => {
   it("does not mark a project mounted when reset wins the mount race", async () => {
     const hook = renderWorkspaceSyncHook();
-    let finishMount: (() => void) | null = null;
+    const deferredMount: { resolve: (() => void) | null } = { resolve: null };
     const instance = {
       mount: vi.fn<() => Promise<void>>(
         () =>
           new Promise<void>((resolve) => {
-            finishMount = resolve;
+            deferredMount.resolve = resolve;
           }),
       ),
     } as unknown as WebContainer;
@@ -63,7 +63,7 @@ describe("useWebContainerWorkspaceSync", () => {
     hook.resetWorkspaceSync();
 
     await act(async () => {
-      finishMount?.();
+      deferredMount.resolve?.();
       await mountPromise;
     });
 
@@ -153,5 +153,83 @@ describe("useWebContainerWorkspaceSync", () => {
 
     expect(hook.hasMountedProjectRef.current).toBe(true);
     expect(hook.isFsWatchActive()).toBe(false);
+  });
+
+  it("serializes reverse filesystem reads behind forward writes", async () => {
+    const deferredWrite: { resolve: (() => void) | null } = { resolve: null };
+    const instance = {
+      mount: vi.fn<() => Promise<void>>(async () => {}),
+      fs: {
+        watch: vi.fn<() => { close: () => void }>(() => ({ close: vi.fn<() => void>() })),
+        mkdir: vi.fn<() => Promise<void>>(async () => {}),
+        rm: vi.fn<() => Promise<void>>(async () => {}),
+        writeFile: vi.fn<() => Promise<void>>(
+          () =>
+            new Promise<void>((resolve) => {
+              deferredWrite.resolve = resolve;
+            }),
+        ),
+      },
+    } as unknown as WebContainer;
+    const hook = renderWorkspaceSyncHook();
+
+    await act(async () => {
+      await hook.ensureProjectMounted({ instance, project });
+    });
+
+    const nextProject: WorkspaceProject = {
+      ...project,
+      files: {
+        "index.html": {
+          ...project.files["index.html"],
+          content: "<main>newer editor content</main>",
+        },
+      },
+    };
+    const forwardSync = hook.queueProjectSync({ instance, project: nextProject });
+    const readTask = vi.fn<() => Promise<string>>(async () => "runtime snapshot");
+    const reverseRead = hook.runSerializedRuntimeTask({ instance, task: readTask });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(readTask).not.toHaveBeenCalled();
+
+    await act(async () => {
+      deferredWrite.resolve?.();
+      await forwardSync;
+      await expect(reverseRead).resolves.toBe("runtime snapshot");
+    });
+    expect(readTask).toHaveBeenCalledTimes(1);
+  });
+
+  it("invalidates an in-flight serialized read when the workspace resets", async () => {
+    const deferredRead: { resolve: ((value: string) => void) | null } = { resolve: null };
+    const instance = {
+      mount: vi.fn<() => Promise<void>>(async () => {}),
+      fs: {},
+    } as unknown as WebContainer;
+    const hook = renderWorkspaceSyncHook();
+
+    await act(async () => {
+      await hook.ensureProjectMounted({ instance, project });
+    });
+
+    const reverseRead = hook.runSerializedRuntimeTask({
+      instance,
+      task: () =>
+        new Promise<string>((resolve) => {
+          deferredRead.resolve = resolve;
+        }),
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    hook.resetWorkspaceSync();
+    await act(async () => {
+      deferredRead.resolve?.("stale snapshot");
+      await expect(reverseRead).resolves.toBeUndefined();
+    });
   });
 });

@@ -10,7 +10,13 @@ import {
   toPersistedSnapshot,
   type StoredWorkspaceSnapshot,
 } from "../stores/workspaceStore";
-import { loadWorkspaceAssetContents, persistWorkspaceAssets } from "../storage/workspaceAssetStore";
+import {
+  collectBinaryAssetPaths,
+  createWorkspaceAssetGeneration,
+  loadWorkspaceAssetContents,
+  persistWorkspaceAssets,
+  pruneWorkspaceAssetGenerations,
+} from "../storage/workspaceAssetStore";
 import {
   normalizeWorkspacePath,
   type WorkspaceFileEncoding,
@@ -29,6 +35,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     createInitialWorkspaceSnapshot(),
   );
   const workspaceStoreRef = useRef(createWorkspaceStore(initialSnapshotRef.current));
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // The synchronous localStorage bootstrap loads binary assets with empty
   // content; hydrate their bytes from IndexedDB and let the store re-sync them
@@ -42,7 +49,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       return;
     }
 
-    void loadWorkspaceAssetContents(context.project)
+    void loadWorkspaceAssetContents(context.project, context.savedSnapshot.assetGeneration)
       .then((contents) => {
         if (cancelled || Object.keys(contents).length === 0) {
           return;
@@ -51,6 +58,14 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         store.trigger.hydrateAssetContents({ contents });
       })
       .catch((error) => {
+        if (!cancelled) {
+          workspaceStoreRef.current.trigger.saveFailed({
+            message:
+              error instanceof Error
+                ? error.message
+                : "The saved binary workspace assets could not be loaded",
+          });
+        }
         console.warn("Failed to load workspace assets:", error);
       });
 
@@ -137,38 +152,99 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     });
   };
 
-  const saveProject = () => {
+  const saveProject = (): Promise<void> => {
     if (typeof window === "undefined") {
-      return;
+      return Promise.resolve();
     }
 
-    try {
-      const context = workspaceStoreRef.current.getSnapshot().context;
-      if (!context.isInitialized) {
-        return;
+    const context = workspaceStoreRef.current.getSnapshot().context;
+    if (!context.isInitialized) {
+      return Promise.resolve();
+    }
+
+    const { activeFilePath, dirtyState, project, savedSnapshot } = context;
+    const hasBinaryAssets = collectBinaryAssetPaths(project).length > 0;
+    const assetGeneration = hasBinaryAssets ? createWorkspaceAssetGeneration() : undefined;
+    const intentionallyChangedPaths = new Set([
+      ...dirtyState.addedFilePaths,
+      ...dirtyState.modifiedFilePaths,
+    ]);
+    const sourceAssetPaths = new Set(
+      savedSnapshot.project.id === project.id
+        ? Object.values(project.files)
+            .filter(
+              (file) =>
+                file.encoding === "base64" &&
+                file.content === "" &&
+                !intentionallyChangedPaths.has(file.path),
+            )
+            .map((file) => file.path)
+        : [],
+    );
+    // Capture an immutable store snapshot at invocation. If the user keeps editing
+    // while this save is in flight, markSaved compares those newer edits against
+    // this exact durable generation and correctly leaves them dirty.
+    const storedSnapshot = {
+      activeFilePath,
+      project,
+      assetGeneration,
+    } satisfies StoredWorkspaceSnapshot;
+
+    const run = async () => {
+      workspaceStoreRef.current.trigger.beginSave();
+
+      try {
+        if (assetGeneration) {
+          const latestContext = workspaceStoreRef.current.getSnapshot().context;
+          const sourceSnapshot =
+            latestContext.isInitialized && latestContext.savedSnapshot.project.id === project.id
+              ? latestContext.savedSnapshot
+              : undefined;
+          await persistWorkspaceAssets(project, {
+            generation: assetGeneration,
+            sourceGeneration: sourceSnapshot?.assetGeneration,
+            sourceAssetPaths,
+          });
+        }
+
+        // Publish metadata only after its referenced asset generation commits.
+        window.localStorage.setItem(
+          WORKSPACE_STORAGE_KEY,
+          JSON.stringify(toPersistedSnapshot(storedSnapshot)),
+        );
+        workspaceStoreRef.current.trigger.markSaved({
+          snapshot: cloneWorkspaceSnapshot(storedSnapshot),
+        });
+
+        if (
+          assetGeneration &&
+          Object.values(project.files).some(
+            (file) => file.encoding === "base64" && file.content === "",
+          )
+        ) {
+          void loadWorkspaceAssetContents(project, assetGeneration)
+            .then((contents) => {
+              workspaceStoreRef.current.trigger.hydrateAssetContents({ contents });
+            })
+            .catch((error) => {
+              console.warn("Failed to hydrate the saved workspace assets:", error);
+            });
+        }
+
+        // Old generations are no longer reachable after the metadata commit.
+        void pruneWorkspaceAssetGenerations(assetGeneration ?? "").catch((error) => {
+          console.warn("Failed to prune old workspace assets:", error);
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "The workspace could not be saved";
+        workspaceStoreRef.current.trigger.saveFailed({ message });
+        console.warn("Failed to save workspace snapshot:", error);
       }
-      const { activeFilePath, project } = context;
-      // sidebarWidth is intentionally omitted so it is not persisted across reloads.
-      const storedSnapshot = {
-        activeFilePath,
-        project,
-      } satisfies StoredWorkspaceSnapshot;
+    };
 
-      // localStorage holds only the lightweight metadata (binary bytes stripped);
-      // the heavy asset bytes are persisted to IndexedDB best-effort.
-      window.localStorage.setItem(
-        WORKSPACE_STORAGE_KEY,
-        JSON.stringify(toPersistedSnapshot(storedSnapshot)),
-      );
-      void persistWorkspaceAssets(project).catch((error) => {
-        console.warn("Failed to persist workspace assets:", error);
-      });
-      workspaceStoreRef.current.trigger.markSaved({
-        snapshot: cloneWorkspaceSnapshot(storedSnapshot),
-      });
-    } catch (error) {
-      console.warn("Failed to save workspace snapshot:", error);
-    }
+    const result = saveQueueRef.current.then(run, run);
+    saveQueueRef.current = result.catch(() => undefined);
+    return result;
   };
 
   const loadProject = (
@@ -208,6 +284,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     workspaceStoreRef.current.trigger.updateLessonType({ lessonType });
   };
 
+  const reconcileExternalProject = (project: WorkspaceProject) => {
+    workspaceStoreRef.current.trigger.reconcileExternalProject({
+      project: normalizeProject(project),
+    });
+  };
+
   const getProject = () => {
     const context = workspaceStoreRef.current.getSnapshot().context;
     return context.isInitialized
@@ -220,6 +302,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
           folders: [],
           files: {},
         };
+  };
+
+  const getWorkspaceRevision = () => {
+    return workspaceStoreRef.current.getSnapshot().context.syncVersion;
   };
 
   const getActiveFilePath = () => {
@@ -270,8 +356,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     updateActiveFileContent,
     saveProject,
     loadProject,
+    reconcileExternalProject,
     updateLessonType,
     getProject,
+    getWorkspaceRevision,
     getActiveFilePath,
     getCollapsedFolders,
     getSidebarScrollTop,

@@ -236,7 +236,7 @@ export function EditorLayout({
 
   return (
     <div
-      className={`${fill ? "h-full" : "h-dvh"} flex flex-col text-white overflow-hidden`}
+      className={`ph-no-capture ${fill ? "h-full" : "h-dvh"} flex flex-col text-white overflow-hidden`}
       data-cursor-replay-target="app"
     >
       <div className="flex-1 relative overflow-hidden" data-cursor-replay-target="editor-surface">

@@ -58,8 +58,13 @@ export interface StreamingRecordingWriter {
     records: ReadonlyArray<unknown>,
     options?: SegmentAppendOptions,
   ): void;
+  appendFinalMetadata(meta: RecordingStreamMeta): void;
+  /** Finalize and materialize a one-shot stream. Invalid after bytes have been drained. */
   finalize(): Uint8Array;
+  /** Append the footer without copying historical bytes (for a draining live writer). */
+  finalizeStream(): void;
   drainPending(): Uint8Array;
+  retainedByteLength(): number;
   isFinalized(): boolean;
 }
 
@@ -67,7 +72,8 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   const chunks: Uint8Array[] = [];
   const index: SegmentIndexEntry[] = [];
   let length = 0;
-  let drainedChunkCount = 0;
+  let pendingLength = 0;
+  let hasDrained = false;
   let headerWritten = false;
   let finalized = false;
   let frameCount = 0;
@@ -85,6 +91,7 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   const pushChunk = (bytes: Uint8Array): void => {
     chunks.push(bytes);
     length += bytes.length;
+    pendingLength += bytes.length;
   };
 
   const ensureWritable = (): void => {
@@ -182,16 +189,38 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
         isInit: options?.isInit,
       });
     },
+    appendFinalMetadata(meta) {
+      ensureWritable();
+      appendSegment(SEGMENT_KIND.finalMeta, encodeRecords([meta]), {
+        startTimeMs: meta.duration,
+        endTimeMs: meta.duration,
+        clusterIndex: Math.max(0, (meta.clusters?.length ?? 1) - 1),
+      });
+    },
     finalize() {
       ensureWritable();
+      if (hasDrained) {
+        throw new Error("Cannot materialize an SCR3 stream after bytes have been drained");
+      }
       pushChunk(buildFooterChunk(index));
       finalized = true;
       return concatChunks(chunks, length);
     },
+    finalizeStream() {
+      ensureWritable();
+      pushChunk(buildFooterChunk(index));
+      finalized = true;
+    },
     drainPending() {
-      const pending = chunks.slice(drainedChunkCount);
-      drainedChunkCount = chunks.length;
-      return concatChunks(pending);
+      if (chunks.length === 0) return new Uint8Array(0);
+      const pending = concatChunks(chunks, pendingLength);
+      chunks.length = 0;
+      pendingLength = 0;
+      hasDrained = true;
+      return pending;
+    },
+    retainedByteLength() {
+      return pendingLength;
     },
     isFinalized() {
       return finalized;
@@ -199,10 +228,11 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   };
 }
 
-export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
-  const normalized = normalizeRecordingData(recording);
-  const tracks = deriveRecordingTracks(normalized);
-  const clusters = deriveRecordingClusters(normalized);
+function buildRecordingStreamMeta(
+  normalized: Recording,
+  tracks = deriveRecordingTracks(normalized),
+  clusters = deriveRecordingClusters(normalized),
+): RecordingStreamMeta {
   // Audio is never embedded in the stream — its bytes live in a sibling file/blob referenced
   // by `audioFile`/`audioUrl` (or attached in memory as `audioBlob`). The stream carries only
   // the reference and metadata in its header, keeping the `.ne` small.
@@ -222,9 +252,7 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
   );
   const audioTrack = tracks.find((track) => track.kind === "audio");
   const cameraTrack = tracks.find((track) => track.kind === "camera");
-  const writer = createStreamingRecordingWriter();
-
-  writer.writeHeader({
+  return {
     version: normalized.version,
     id: normalized.id,
     name: normalized.name,
@@ -252,7 +280,21 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     slides: normalized.slides,
     workspaceSnapshot: normalized.workspaceSnapshot,
     runtimeSnapshot: normalized.runtimeSnapshot,
-  });
+  };
+}
+
+/** Build the authoritative metadata shared by one-shot and finalized live streams. */
+export function createRecordingStreamMeta(recording: Recording): RecordingStreamMeta {
+  return buildRecordingStreamMeta(normalizeRecordingData(recording));
+}
+
+export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
+  const normalized = normalizeRecordingData(recording);
+  const tracks = deriveRecordingTracks(normalized);
+  const clusters = deriveRecordingClusters(normalized);
+  const writer = createStreamingRecordingWriter();
+
+  writer.writeHeader(buildRecordingStreamMeta(normalized, tracks, clusters));
 
   const pendingSegments: Array<{
     clusterIndex: number;

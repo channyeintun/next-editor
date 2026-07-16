@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from "react";
 import type { IFSWatcher, WebContainer } from "@webcontainer/api";
 import {
   createWorkspaceTree,
+  runSerializedWebContainerTask,
   shouldIgnoreRuntimeImportPath,
   syncWorkspaceProject,
 } from "./webContainerRuntimeSupport";
@@ -26,6 +27,11 @@ interface EnsureProjectMountedOptions {
 interface QueueProjectSyncOptions {
   instance: WebContainer;
   project: WorkspaceProject;
+}
+
+interface SerializedRuntimeTaskOptions<T> {
+  instance: WebContainer;
+  task: () => Promise<T>;
 }
 
 interface WorkspaceSyncOptions {
@@ -143,7 +149,9 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     const generation = syncGenerationRef.current;
 
     onMountStart?.();
-    await instance.mount(createWorkspaceTree(project));
+    await runSerializedWebContainerTask(instance, () =>
+      instance.mount(createWorkspaceTree(project)),
+    );
 
     if (syncGenerationRef.current !== generation) {
       return;
@@ -181,11 +189,13 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
           continue;
         }
 
-        await syncWorkspaceProject(
-          instance,
-          lastSyncedProjectRef.current,
-          nextProject,
-          recordForwardSyncWrite,
+        await runSerializedWebContainerTask(instance, () =>
+          syncWorkspaceProject(
+            instance,
+            lastSyncedProjectRef.current,
+            nextProject,
+            recordForwardSyncWrite,
+          ),
         );
 
         if (syncGenerationRef.current !== generation) {
@@ -199,6 +209,40 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     syncQueueRef.current = syncQueueRef.current.then(runQueuedSync, runQueuedSync);
 
     return syncQueueRef.current;
+  };
+
+  /**
+   * Run a runtime filesystem read on the same queue as forward writes. Resetting
+   * the workspace invalidates both queued and in-flight results.
+   */
+  const runSerializedRuntimeTask = <T>({
+    instance,
+    task,
+  }: SerializedRuntimeTaskOptions<T>): Promise<T | undefined> => {
+    const generation = syncGenerationRef.current;
+
+    const run = async (): Promise<T | undefined> => {
+      if (
+        syncGenerationRef.current !== generation ||
+        mountedInstanceRef.current !== instance ||
+        !hasMountedProjectRef.current
+      ) {
+        return undefined;
+      }
+
+      const result = await runSerializedWebContainerTask(instance, task);
+
+      return syncGenerationRef.current === generation && mountedInstanceRef.current === instance
+        ? result
+        : undefined;
+    };
+
+    const result = syncQueueRef.current.then(run, run);
+    syncQueueRef.current = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   };
 
   const resetWorkspaceSync = () => {
@@ -217,6 +261,7 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     ensureProjectMounted,
     isFsWatchActive,
     queueProjectSync,
+    runSerializedRuntimeTask,
     resetWorkspaceSync,
   };
 }

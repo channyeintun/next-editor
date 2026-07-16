@@ -6,12 +6,16 @@ import type {
   WorkspaceSidebarState,
 } from "../contexts/WorkspaceContext";
 import {
+  areWorkspaceProjectsEqual,
   collectWorkspaceFolders,
   DEFAULT_WORKSPACE_ENTRY_PATH,
   getWorkspaceBaseName,
+  getParentWorkspacePath,
   inferLanguageFromPath,
   normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
+  parseWorkspacePath,
+  WorkspacePathError,
   type WorkspaceFile,
   type WorkspaceFileEncoding,
   type WorkspaceLessonType,
@@ -29,6 +33,8 @@ export interface StoredWorkspaceSnapshot {
   activeFilePath: string;
   project: WorkspaceProject;
   sidebarWidth?: number;
+  /** Generation key for binary assets stored alongside this metadata in IndexedDB. */
+  assetGeneration?: string;
 }
 
 export type WorkspaceState =
@@ -42,6 +48,8 @@ export type WorkspaceState =
       previewVersion: number;
       saveVersion: number;
       syncVersion: number;
+      isSaving: boolean;
+      saveError: string | null;
     }
   | {
       isInitialized: true;
@@ -56,6 +64,8 @@ export type WorkspaceState =
       previewVersion: number;
       saveVersion: number;
       syncVersion: number;
+      isSaving: boolean;
+      saveError: string | null;
       editorState: WorkspaceEditorState;
       sidebarState: WorkspaceSidebarState;
       lessonType: WorkspaceLessonType;
@@ -73,6 +83,7 @@ export function cloneWorkspaceSnapshot(snapshot: StoredWorkspaceSnapshot): Store
     activeFilePath: snapshot.activeFilePath,
     project: snapshot.project,
     sidebarWidth: snapshot.sidebarWidth,
+    assetGeneration: snapshot.assetGeneration,
   };
 }
 
@@ -105,33 +116,79 @@ export function toPersistedSnapshot(snapshot: StoredWorkspaceSnapshot): StoredWo
   };
 }
 
-function getDirtyFilePaths(
-  currentProject: WorkspaceProject,
-  savedProject: WorkspaceProject,
-): string[] {
-  return Object.values(currentProject.files)
-    .filter((file) => {
-      const savedFile = savedProject.files[file.path];
+function areWorkspaceFilesEqual(left: WorkspaceFile, right: WorkspaceFile): boolean {
+  return (
+    left.path === right.path &&
+    left.name === right.name &&
+    left.language === right.language &&
+    left.content === right.content &&
+    (left.encoding ?? "utf-8") === (right.encoding ?? "utf-8")
+  );
+}
 
-      if (!savedFile) {
-        return true;
-      }
+function hasFilePathConflict(
+  project: WorkspaceProject,
+  path: string,
+  ignoredPath?: string,
+): boolean {
+  if (project.folders.includes(path)) {
+    return true;
+  }
 
-      return savedFile.content !== file.content;
-    })
-    .map((file) => file.path)
-    .sort((left, right) => left.localeCompare(right));
+  return Object.keys(project.files).some(
+    (existingPath) =>
+      existingPath !== ignoredPath &&
+      (existingPath === path ||
+        existingPath.startsWith(`${path}/`) ||
+        path.startsWith(`${existingPath}/`)),
+  );
+}
+
+function hasFolderPathConflict(project: WorkspaceProject, path: string): boolean {
+  return Object.keys(project.files).some(
+    (existingPath) => existingPath === path || path.startsWith(`${existingPath}/`),
+  );
 }
 
 function createDirtyState(
   currentProject: WorkspaceProject,
   savedProject: WorkspaceProject,
 ): WorkspaceDirtyState {
-  const dirtyFilePaths = getDirtyFilePaths(currentProject, savedProject);
+  const currentPaths = new Set(Object.keys(currentProject.files));
+  const savedPaths = new Set(Object.keys(savedProject.files));
+  const addedFilePaths = Array.from(currentPaths)
+    .filter((path) => !savedPaths.has(path))
+    .sort((left, right) => left.localeCompare(right));
+  const deletedFilePaths = Array.from(savedPaths)
+    .filter((path) => !currentPaths.has(path))
+    .sort((left, right) => left.localeCompare(right));
+  const modifiedFilePaths = Array.from(currentPaths)
+    .filter((path) => {
+      const savedFile = savedProject.files[path];
+      return savedFile ? !areWorkspaceFilesEqual(currentProject.files[path], savedFile) : false;
+    })
+    .sort((left, right) => left.localeCompare(right));
+  const dirtyFilePaths = Array.from(
+    new Set([...addedFilePaths, ...modifiedFilePaths, ...deletedFilePaths]),
+  ).sort((left, right) => left.localeCompare(right));
+  const folderStructureChanged =
+    currentProject.folders.length !== savedProject.folders.length ||
+    currentProject.folders.some((folder, index) => folder !== savedProject.folders[index]);
+  const projectMetadataChanged =
+    currentProject.id !== savedProject.id ||
+    currentProject.name !== savedProject.name ||
+    currentProject.lessonType !== savedProject.lessonType ||
+    currentProject.entryFilePath !== savedProject.entryFilePath;
 
   return {
     dirtyFilePaths,
-    hasUnsavedChanges: dirtyFilePaths.length > 0,
+    addedFilePaths,
+    modifiedFilePaths,
+    deletedFilePaths,
+    projectMetadataChanged,
+    folderStructureChanged,
+    hasUnsavedChanges:
+      dirtyFilePaths.length > 0 || projectMetadataChanged || folderStructureChanged,
   };
 }
 
@@ -215,20 +272,130 @@ function inferWorkspaceLessonType(
   return project.files["package.json"] || project.files["vite.config.js"] ? "react" : "html-css";
 }
 
+export class WorkspaceProjectValidationError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "WorkspaceProjectValidationError";
+  }
+}
+
+function canonicalizeProjectFiles(
+  sourceFiles: Record<string, WorkspaceFile>,
+): Record<string, WorkspaceFile> {
+  const files = new Map<string, WorkspaceFile>();
+
+  for (const [recordPath, file] of Object.entries(sourceFiles)) {
+    try {
+      const canonicalRecordPath = parseWorkspacePath(recordPath);
+      const canonicalFilePath = parseWorkspacePath(file?.path || recordPath);
+
+      if (canonicalRecordPath !== canonicalFilePath) {
+        throw new WorkspaceProjectValidationError(
+          `Workspace file key "${recordPath}" does not match its path "${file?.path ?? ""}"`,
+        );
+      }
+
+      if (files.has(canonicalRecordPath)) {
+        throw new WorkspaceProjectValidationError(
+          `Multiple workspace files resolve to "${canonicalRecordPath}"`,
+        );
+      }
+
+      if (!file || typeof file.content !== "string") {
+        throw new WorkspaceProjectValidationError(
+          `Workspace file "${canonicalRecordPath}" has invalid content`,
+        );
+      }
+
+      if (file.encoding !== undefined && file.encoding !== "utf-8" && file.encoding !== "base64") {
+        throw new WorkspaceProjectValidationError(
+          `Workspace file "${canonicalRecordPath}" has an unsupported encoding`,
+        );
+      }
+
+      files.set(
+        canonicalRecordPath,
+        createWorkspaceFile(canonicalRecordPath, file.content, file.encoding),
+      );
+    } catch (error) {
+      if (error instanceof WorkspaceProjectValidationError) {
+        throw error;
+      }
+      if (error instanceof WorkspacePathError) {
+        throw new WorkspaceProjectValidationError(error.message, { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  for (const path of files.keys()) {
+    let parentPath = getParentWorkspacePath(path);
+
+    while (parentPath) {
+      if (files.has(parentPath)) {
+        throw new WorkspaceProjectValidationError(
+          `Workspace path "${parentPath}" cannot be both a file and a directory`,
+        );
+      }
+      parentPath = getParentWorkspacePath(parentPath);
+    }
+  }
+
+  return Object.fromEntries(files);
+}
+
 export function normalizeProject(project: WorkspaceProject): WorkspaceProject {
   const fallbackProject = createStarterHtmlCssWorkspace();
-  const files = Object.keys(project.files).length > 0 ? project.files : fallbackProject.files;
-  const defaultFile = getDefaultFile({ ...project, files });
-  const lessonType = inferWorkspaceLessonType({ ...project, files });
+  const suppliedFiles =
+    project?.files && typeof project.files === "object"
+      ? project.files
+      : ({} as Record<string, WorkspaceFile>);
+  const sourceFiles = Object.keys(suppliedFiles).length > 0 ? suppliedFiles : fallbackProject.files;
+  const files = canonicalizeProjectFiles(sourceFiles);
+  const explicitFolders = new Set<string>();
+
+  for (const folderPath of Array.isArray(project?.folders) ? project.folders : []) {
+    try {
+      const canonicalFolderPath = parseWorkspacePath(folderPath);
+      let currentFolderPath = canonicalFolderPath;
+
+      while (currentFolderPath) {
+        if (files[currentFolderPath]) {
+          throw new WorkspaceProjectValidationError(
+            `Workspace path "${currentFolderPath}" cannot be both a file and a directory`,
+          );
+        }
+        currentFolderPath = getParentWorkspacePath(currentFolderPath);
+      }
+      explicitFolders.add(canonicalFolderPath);
+    } catch (error) {
+      if (error instanceof WorkspaceProjectValidationError) {
+        throw error;
+      }
+      if (error instanceof WorkspacePathError) {
+        throw new WorkspaceProjectValidationError(error.message, { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  const fallbackShape = { ...fallbackProject, ...project, files };
+  const defaultFile = getDefaultFile(fallbackShape);
+  const lessonType = inferWorkspaceLessonType(fallbackShape);
+  const requestedEntryPath = normalizeWorkspacePath(project?.entryFilePath ?? "");
+  const entryFilePath = files[requestedEntryPath] ? requestedEntryPath : defaultFile.path;
 
   return {
+    ...fallbackProject,
     ...project,
+    id: typeof project?.id === "string" && project.id.trim() ? project.id : fallbackProject.id,
+    name:
+      typeof project?.name === "string" && project.name.trim()
+        ? project.name
+        : fallbackProject.name,
     lessonType,
-    entryFilePath: files[project.entryFilePath] ? project.entryFilePath : defaultFile.path,
-    folders: collectWorkspaceFolders(
-      Object.keys(files),
-      project.folders ?? fallbackProject.folders,
-    ),
+    entryFilePath,
+    folders: collectWorkspaceFolders(Object.keys(files), Array.from(explicitFolders)),
     files,
   };
 }
@@ -256,6 +423,8 @@ function loadStoredWorkspaceSnapshot(): StoredWorkspaceSnapshot | null {
     return {
       activeFilePath,
       project,
+      assetGeneration:
+        typeof parsed.assetGeneration === "string" ? parsed.assetGeneration : undefined,
     };
   } catch (error) {
     console.warn("Failed to load workspace snapshot:", error);
@@ -421,7 +590,12 @@ function areSidebarStatesEqual(left: WorkspaceSidebarState, right: WorkspaceSide
 function areDirtyStatesEqual(left: WorkspaceDirtyState, right: WorkspaceDirtyState): boolean {
   return (
     left.hasUnsavedChanges === right.hasUnsavedChanges &&
-    areStringArraysEqual(left.dirtyFilePaths, right.dirtyFilePaths)
+    left.projectMetadataChanged === right.projectMetadataChanged &&
+    left.folderStructureChanged === right.folderStructureChanged &&
+    areStringArraysEqual(left.dirtyFilePaths, right.dirtyFilePaths) &&
+    areStringArraysEqual(left.addedFilePaths, right.addedFilePaths) &&
+    areStringArraysEqual(left.modifiedFilePaths, right.modifiedFilePaths) &&
+    areStringArraysEqual(left.deletedFilePaths, right.deletedFilePaths)
   );
 }
 
@@ -492,6 +666,8 @@ function createUninitializedWorkspaceState(): WorkspaceState {
     previewVersion: 0,
     saveVersion: 0,
     syncVersion: 0,
+    isSaving: false,
+    saveError: null,
   };
 }
 
@@ -517,6 +693,8 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
     previewVersion: 0,
     saveVersion: 0,
     syncVersion: 0,
+    isSaving: false,
+    saveError: null,
     editorState: createEditorState(project, activeFilePath, 0),
     sidebarState: createSidebarState(
       project,
@@ -646,11 +824,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         }
         const normalizedPath = normalizeWorkspacePath(event.path);
 
-        if (
-          !normalizedPath ||
-          context.project.files[normalizedPath] ||
-          context.project.folders.includes(normalizedPath)
-        ) {
+        if (!normalizedPath || hasFilePathConflict(context.project, normalizedPath)) {
           return context;
         }
 
@@ -682,7 +856,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
 
         if (
           !normalizedPath ||
-          context.project.files[normalizedPath] ||
+          hasFolderPathConflict(context.project, normalizedPath) ||
           context.project.folders.includes(normalizedPath)
         ) {
           return context;
@@ -721,8 +895,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           !existingFile ||
           !normalizedNextPath ||
           normalizedCurrentPath === normalizedNextPath ||
-          context.project.files[normalizedNextPath] ||
-          context.project.folders.includes(normalizedNextPath)
+          hasFilePathConflict(context.project, normalizedNextPath, normalizedCurrentPath)
         ) {
           return context;
         }
@@ -777,7 +950,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           !normalizedNextPath ||
           normalizedCurrentPath === normalizedNextPath ||
           !context.project.folders.includes(normalizedCurrentPath) ||
-          context.project.files[normalizedNextPath] ||
+          hasFolderPathConflict(context.project, normalizedNextPath) ||
           context.project.folders.includes(normalizedNextPath) ||
           isPathWithinFolder(normalizedNextPath, normalizedCurrentPath)
         ) {
@@ -1034,8 +1207,56 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             previewVersion: baseContext.previewVersion + 1,
             saveVersion: baseContext.saveVersion + 1,
             syncVersion: baseContext.syncVersion + 1,
+            isSaving: false,
+            saveError: null,
           }),
         );
+      },
+      reconcileExternalProject: (context, event: { project: WorkspaceProject }) => {
+        if (!context.isInitialized) {
+          return context;
+        }
+
+        const project = normalizeProject(event.project);
+
+        if (areWorkspaceProjectsEqual(context.project, project)) {
+          return context;
+        }
+
+        const activeFilePath = project.files[context.activeFilePath]
+          ? context.activeFilePath
+          : project.entryFilePath;
+
+        return withDirtyState(
+          withRefreshedWorkspaceSlices({
+            ...context,
+            project,
+            activeFilePath,
+            projectVersion: context.projectVersion + 1,
+            previewVersion: context.previewVersion + 1,
+            syncVersion: context.syncVersion + 1,
+          }),
+        );
+      },
+      beginSave: (context) => {
+        if (!context.isInitialized || (context.isSaving && context.saveError === null)) {
+          return context;
+        }
+        return {
+          ...context,
+          isSaving: true,
+          saveError: null,
+        };
+      },
+      saveFailed: (context, event: { message: string }) => {
+        if (!context.isInitialized) {
+          return context;
+        }
+        return {
+          ...context,
+          isSaving: false,
+          saveError: event.message,
+        };
       },
       markSaved: (
         context,
@@ -1050,6 +1271,8 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           ...context,
           savedSnapshot: event.snapshot,
           saveVersion: context.saveVersion + 1,
+          isSaving: false,
+          saveError: null,
         });
       },
       hydrateAssetContents: (
@@ -1136,6 +1359,11 @@ const emptySidebarState: WorkspaceSidebarState = {
 
 const emptyDirtyState: WorkspaceDirtyState = {
   dirtyFilePaths: [],
+  addedFilePaths: [],
+  modifiedFilePaths: [],
+  deletedFilePaths: [],
+  projectMetadataChanged: false,
+  folderStructureChanged: false,
   hasUnsavedChanges: false,
 };
 
@@ -1178,3 +1406,8 @@ export const selectWorkspaceDirtyState = (context: WorkspaceState): WorkspaceDir
 export const selectWorkspaceSaveVersion = (context: WorkspaceState): number => context.saveVersion;
 
 export const selectWorkspaceSyncVersion = (context: WorkspaceState): number => context.syncVersion;
+
+export const selectWorkspaceIsSaving = (context: WorkspaceState): boolean => context.isSaving;
+
+export const selectWorkspaceSaveError = (context: WorkspaceState): string | null =>
+  context.saveError;

@@ -15,6 +15,8 @@ export interface ApiClientResponse {
   headers: [string, string][];
   body: string;
   durationMs: number;
+  truncated?: boolean;
+  bodyBytes?: number;
 }
 
 export interface ApiClientError {
@@ -37,6 +39,14 @@ export interface ApiClientHistoryEntry {
   timestamp: number;
 }
 
+interface PendingApiClientRequest {
+  id: string;
+  method: HttpMethod;
+  path: string;
+  headers: ApiClientHeader[];
+  body: string;
+}
+
 export interface ApiClientStoreContext {
   method: HttpMethod;
   path: string;
@@ -44,6 +54,7 @@ export interface ApiClientStoreContext {
   body: string;
   requestTab: ApiClientRequestTab;
   sending: boolean;
+  pendingRequest: PendingApiClientRequest | null;
   result: ApiClientResult | null;
   history: ApiClientHistoryEntry[];
 }
@@ -58,6 +69,7 @@ function initialContext(): ApiClientStoreContext {
     body: "",
     requestTab: "headers",
     sending: false,
+    pendingRequest: null,
     result: null,
     history: [],
   };
@@ -105,21 +117,63 @@ export function createApiClientStore() {
         headers: context.headers.filter((_, i) => i !== event.index),
       }),
 
-      markSending: (context) => ({ ...context, sending: true, result: null }),
+      markSending: (
+        context,
+        event: {
+          id: string;
+          method: HttpMethod;
+          path: string;
+          headers: ApiClientHeader[];
+          body: string;
+        },
+      ) => ({
+        ...context,
+        sending: true,
+        result: null,
+        pendingRequest: {
+          ...event,
+          headers: event.headers.map((header) => ({ ...header })),
+        },
+      }),
 
       receiveResult: (context, event: { id: string; result: ApiClientResult }) => {
+        if (context.pendingRequest && context.pendingRequest.id !== event.id) {
+          return context;
+        }
+
+        const request =
+          context.pendingRequest?.id === event.id
+            ? context.pendingRequest
+            : {
+                id: event.id,
+                method: context.method,
+                path: context.path,
+                headers: context.headers,
+                body: context.body,
+              };
         const entry: ApiClientHistoryEntry = {
           id: event.id,
-          method: context.method,
-          path: context.path,
-          headers: context.headers,
-          body: context.body,
+          method: request.method,
+          path: request.path,
+          headers: request.headers.map((header) => ({ ...header })),
+          body: request.body,
           result: event.result,
           timestamp: Date.now(),
         };
         const history = [entry, ...context.history].slice(0, MAX_HISTORY);
-        return { ...context, sending: false, result: event.result, history };
+        return {
+          ...context,
+          sending: false,
+          pendingRequest: null,
+          result: event.result,
+          history,
+        };
       },
+
+      cancelPending: (context) =>
+        context.sending || context.pendingRequest
+          ? { ...context, sending: false, pendingRequest: null }
+          : context,
 
       selectFromHistory: (context, event: { entry: ApiClientHistoryEntry }) => ({
         ...context,
@@ -151,6 +205,7 @@ export function createApiClientStore() {
         body: event.body,
         headers: event.headers,
         sending: event.sending,
+        pendingRequest: null,
         result: event.result,
         history: event.history,
       }),
@@ -201,6 +256,8 @@ export function recordedResultToStoreResult(recorded: ApiClientRecordedResult): 
           headers: recorded.headers,
           body: recorded.body,
           durationMs: recorded.durationMs,
+          truncated: recorded.truncated,
+          bodyBytes: recorded.bodyBytes,
         },
       }
     : { ok: false, error: { error: recorded.error, durationMs: recorded.durationMs } };
@@ -217,6 +274,8 @@ export function storeResultToRecorded(result: ApiClientResult): ApiClientRecorde
         headers: result.response.headers,
         body: result.response.body,
         durationMs: result.response.durationMs,
+        truncated: result.response.truncated,
+        bodyBytes: result.response.bodyBytes,
       }
     : { ok: false, error: result.error.error, durationMs: result.error.durationMs };
 }

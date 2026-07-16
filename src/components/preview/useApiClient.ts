@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
 import {
+  API_CLIENT_CANCEL_MESSAGE_TYPE,
   API_CLIENT_REQUEST_MESSAGE_TYPE,
-  type ApiClientResultPayload,
+  normalizeApiClientResultPayload,
 } from "../../utils/apiClientBridge";
 import type { ApiClientRecordedRequest, ApiClientRecordedResult } from "../../types/slides";
 import { buildHeaderRecord, recordedResultToStoreResult } from "../../stores/apiClientStore";
@@ -37,10 +38,22 @@ export function useApiClient({
   const store = useApiClientStoreInstance();
 
   const pendingIdRef = useRef<string | null>(null);
+  const pendingTargetRef = useRef<{ target: Window; origin: string } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearPending = useCallback(() => {
+  const clearPending = useCallback((cancel = false) => {
+    if (cancel && pendingIdRef.current && pendingTargetRef.current) {
+      pendingTargetRef.current.target.postMessage(
+        {
+          type: API_CLIENT_CANCEL_MESSAGE_TYPE,
+          payload: { id: pendingIdRef.current },
+        },
+        pendingTargetRef.current.origin,
+      );
+    }
+
     pendingIdRef.current = null;
+    pendingTargetRef.current = null;
     if (timeoutRef.current !== null) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -48,11 +61,27 @@ export function useApiClient({
   }, []);
 
   useEffect(() => {
-    return () => clearPending();
-  }, [clearPending]);
+    return () => {
+      clearPending(true);
+      store.trigger.cancelPending();
+    };
+  }, [clearPending, runtimePreviewUrl, store]);
 
   const handleResponse = useCallback(
-    (payload: ApiClientResultPayload) => {
+    (untrustedPayload: unknown) => {
+      if (
+        !untrustedPayload ||
+        typeof untrustedPayload !== "object" ||
+        (untrustedPayload as { id?: unknown }).id !== pendingIdRef.current
+      ) {
+        return;
+      }
+
+      const payload = normalizeApiClientResultPayload(untrustedPayload);
+      if (!payload) {
+        return;
+      }
+
       if (payload.id !== pendingIdRef.current) {
         return;
       }
@@ -69,6 +98,8 @@ export function useApiClient({
             headers: payload.headers,
             body: payload.body,
             durationMs: payload.durationMs,
+            truncated: payload.truncated,
+            bodyBytes: payload.bodyBytes,
           }
         : { ok: false, error: payload.error, durationMs: payload.durationMs };
 
@@ -95,7 +126,13 @@ export function useApiClient({
     const requestBody = method === "GET" ? undefined : body || undefined;
 
     pendingIdRef.current = id;
-    store.trigger.markSending();
+    store.trigger.markSending({
+      id,
+      method,
+      path,
+      headers: headers.map((header) => ({ ...header })),
+      body: requestBody ?? "",
+    });
     onRequestSent?.({ method, path, headers: headerRecord, body: requestBody });
 
     let origin: string;
@@ -104,6 +141,7 @@ export function useApiClient({
     } catch {
       origin = "*";
     }
+    pendingTargetRef.current = { target: iframe.contentWindow, origin };
 
     iframe.contentWindow.postMessage(
       {
@@ -118,7 +156,7 @@ export function useApiClient({
         return;
       }
 
-      clearPending();
+      clearPending(true);
       store.trigger.receiveResult({
         id,
         result: {

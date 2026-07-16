@@ -44,7 +44,9 @@ export function useRecordingStreamSink(
         // Session cleared (recording finalized): flush the tail, footer, and close.
         const finishing = bridge;
         bridge = null;
-        void finishing.finish();
+        void finishing.finish(snapshot.context.recording ?? undefined).catch((error) => {
+          console.error("Live recording stream failed:", error);
+        });
       }
     });
 

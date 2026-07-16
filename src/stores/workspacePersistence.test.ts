@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createWorkspaceStore,
   toPersistedSnapshot,
   type StoredWorkspaceSnapshot,
 } from "./workspaceStore";
-import { collectBinaryAssetPaths } from "../storage/workspaceAssetStore";
+import {
+  collectBinaryAssetPaths,
+  persistWorkspaceAssets,
+  WorkspaceAssetPersistenceError,
+} from "../storage/workspaceAssetStore";
 import {
   collectWorkspaceFolders,
   type WorkspaceFile,
@@ -111,5 +115,111 @@ describe("hydrateAssetContents", () => {
     if (!context.isInitialized) throw new Error("Expected initialized");
     expect(context.project.files["public/logo.png"].content).toBe("QUJD");
     expect(context.syncVersion).toBe(0);
+  });
+});
+
+describe("workspace dirty state", () => {
+  it("tracks deleted files and returns to clean after an exact revert", () => {
+    const store = createWorkspaceStore({
+      activeFilePath: "index.html",
+      project: makeProject([
+        makeFile("index.html", "<html></html>"),
+        makeFile("notes.txt", "keep me"),
+      ]),
+    });
+
+    store.trigger.deleteFile({ path: "notes.txt" });
+    let context = store.getSnapshot().context;
+    if (!context.isInitialized) throw new Error("Expected initialized");
+    expect(context.dirtyState.deletedFilePaths).toEqual(["notes.txt"]);
+    expect(context.dirtyState.hasUnsavedChanges).toBe(true);
+
+    store.trigger.createFile({ path: "notes.txt", content: "keep me" });
+    context = store.getSnapshot().context;
+    if (!context.isInitialized) throw new Error("Expected initialized");
+    expect(context.dirtyState).toMatchObject({
+      addedFilePaths: [],
+      modifiedFilePaths: [],
+      deletedFilePaths: [],
+      hasUnsavedChanges: false,
+    });
+  });
+
+  it("tracks renames, empty folders, lesson type, and entry path", () => {
+    const store = createWorkspaceStore({
+      activeFilePath: "index.html",
+      project: makeProject([
+        makeFile("index.html", "<html></html>"),
+        makeFile("other.html", "other"),
+      ]),
+    });
+
+    store.trigger.renameFile({ currentPath: "other.html", nextPath: "renamed.html" });
+    store.trigger.createFolder({ path: "empty" });
+    store.trigger.updateLessonType({ lessonType: "react" });
+    store.trigger.setPreviewFilePath({ path: "renamed.html" });
+
+    const context = store.getSnapshot().context;
+    if (!context.isInitialized) throw new Error("Expected initialized");
+    expect(context.dirtyState.addedFilePaths).toEqual(["renamed.html"]);
+    expect(context.dirtyState.deletedFilePaths).toEqual(["other.html"]);
+    expect(context.dirtyState.folderStructureChanged).toBe(true);
+    expect(context.dirtyState.projectMetadataChanged).toBe(true);
+  });
+
+  it("atomically reconciles runtime changes without replacing the saved baseline", () => {
+    const original = makeProject([
+      makeFile("index.html", "original"),
+      makeFile("old.txt", "remove"),
+    ]);
+    const store = createWorkspaceStore({ activeFilePath: "old.txt", project: original });
+    const runtimeProject = makeProject([
+      makeFile("index.html", "runtime edit"),
+      makeFile("new.txt", "created"),
+    ]);
+
+    store.trigger.reconcileExternalProject({ project: runtimeProject });
+
+    const context = store.getSnapshot().context;
+    if (!context.isInitialized) throw new Error("Expected initialized");
+    expect(Object.keys(context.project.files).sort()).toEqual(["index.html", "new.txt"]);
+    expect(context.project.files["index.html"].content).toBe("runtime edit");
+    expect(context.savedSnapshot.project).toBe(original);
+    expect(context.activeFilePath).toBe("index.html");
+    expect(context.dirtyState.modifiedFilePaths).toEqual(["index.html"]);
+    expect(context.dirtyState.addedFilePaths).toEqual(["new.txt"]);
+    expect(context.dirtyState.deletedFilePaths).toEqual(["old.txt"]);
+    expect(context.dirtyState.hasUnsavedChanges).toBe(true);
+  });
+
+  it("rejects new file and folder paths that cross an existing file boundary", () => {
+    const store = createWorkspaceStore({
+      activeFilePath: "index.html",
+      project: makeProject([makeFile("index.html", "root"), makeFile("src", "file")]),
+    });
+
+    store.trigger.createFile({ path: "src/App.tsx", content: "nested" });
+    store.trigger.createFolder({ path: "src/components" });
+
+    const context = store.getSnapshot().context;
+    if (!context.isInitialized) throw new Error("Expected initialized");
+    expect(context.project.files["src/App.tsx"]).toBeUndefined();
+    expect(context.project.folders).not.toContain("src/components");
+    expect(context.dirtyState.hasUnsavedChanges).toBe(false);
+  });
+});
+
+describe("persistWorkspaceAssets", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects when binary assets cannot be persisted", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    const project = makeProject([makeFile("public/logo.png", "QUJD", "base64")]);
+
+    await expect(
+      persistWorkspaceAssets(project, { generation: "unavailable-storage" }),
+    ).rejects.toBeInstanceOf(WorkspaceAssetPersistenceError);
   });
 });

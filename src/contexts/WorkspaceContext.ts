@@ -22,7 +22,7 @@ export interface WorkspaceActions {
   deleteFolder: (path: string) => void;
   updateFileContent: (path: string, content: string) => void;
   updateActiveFileContent: (content: string) => void;
-  saveProject: () => void;
+  saveProject: () => Promise<void>;
   loadProject: (
     project: WorkspaceProject,
     activeFilePath?: string,
@@ -30,8 +30,10 @@ export interface WorkspaceActions {
     sidebarScrollTop?: number,
     sidebarWidth?: number,
   ) => void;
+  reconcileExternalProject: (project: WorkspaceProject) => void;
   updateLessonType: (lessonType: WorkspaceLessonType) => void;
   getProject: () => WorkspaceProject;
+  getWorkspaceRevision: () => number;
   getActiveFilePath: () => string;
   getCollapsedFolders: () => string[];
   getSidebarScrollTop: () => number;
@@ -58,7 +60,17 @@ export interface WorkspaceSidebarState {
 
 export interface WorkspaceDirtyState {
   dirtyFilePaths: string[];
+  addedFilePaths: string[];
+  modifiedFilePaths: string[];
+  deletedFilePaths: string[];
+  projectMetadataChanged: boolean;
+  folderStructureChanged: boolean;
   hasUnsavedChanges: boolean;
+}
+
+export interface WorkspaceSaveStatus {
+  isSaving: boolean;
+  errorMessage: string | null;
 }
 
 export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(null);

@@ -408,6 +408,14 @@ function SuccessfulResponseView({
           {formatDuration(response.durationMs)}
         </span>
         <span className="text-[11px] text-slate-600">{formatSize(response.body)}</span>
+        {response.truncated ? (
+          <span
+            className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300"
+            title="The response exceeded the API client display limit"
+          >
+            Truncated
+          </span>
+        ) : null}
         {response.headers.length > 0 ? (
           <button
             type="button"

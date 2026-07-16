@@ -325,12 +325,18 @@ function FileSidebarPanel() {
         joinWorkspacePath(parentPath, file.name),
         isPathTaken,
       );
+
+      if (!targetPath) {
+        skippedNames.push(file.name);
+        continue;
+      }
+
       createFile(targetPath, uploaded.content, uploaded.encoding);
       firstCreatedPath = firstCreatedPath ?? targetPath;
     }
 
     if (firstCreatedPath) {
-      saveProject();
+      void saveProject();
       handleWorkspaceEvent();
     }
 
@@ -412,6 +418,10 @@ function FileSidebarPanel() {
 
     const nextPath = joinWorkspacePath(editState.parentPath, normalizedName);
 
+    if (!nextPath) {
+      return;
+    }
+
     if (editState.mode === "create") {
       if (editState.kind === "file") {
         createFile(nextPath, getDefaultFileContent(nextPath));
@@ -455,7 +465,7 @@ function FileSidebarPanel() {
 
   const handleOpenFileInPreview = (path: string) => {
     setPreviewFilePath(path);
-    saveProject();
+    void saveProject();
     setContextMenu(null);
   };
 

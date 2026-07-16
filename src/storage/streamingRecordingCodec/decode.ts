@@ -131,6 +131,30 @@ interface DecodedStreamState {
   clusterSummaries: RecordingClusterMeta[];
 }
 
+function mergeFinalMetadata(
+  current: RecordingStreamMeta,
+  payload: Uint8Array,
+): RecordingStreamMeta {
+  const records = decodeRecords<RecordingStreamMeta>(payload);
+  const candidate = records[records.length - 1];
+
+  if (
+    !candidate ||
+    candidate.version !== 4 ||
+    typeof candidate.id !== "string" ||
+    typeof candidate.name !== "string" ||
+    typeof candidate.createdAt !== "number" ||
+    !Number.isFinite(candidate.createdAt) ||
+    typeof candidate.duration !== "number" ||
+    !Number.isFinite(candidate.duration) ||
+    candidate.duration < 0
+  ) {
+    throw new Error("Invalid SCR3 stream: malformed final metadata");
+  }
+
+  return { ...current, ...candidate };
+}
+
 /**
  * Builds a {@link Recording} from accumulated stream state. The single source of
  * truth for both `decodeSegments` (whole buffer) and the incremental reader, so a
@@ -208,7 +232,9 @@ function assembleRecording(state: DecodedStreamState): Recording {
 }
 
 function decodeSegments(bytes: Uint8Array): Recording {
-  const { meta, headerEnd } = parseHeader(bytes);
+  const parsedHeader = parseHeader(bytes);
+  let meta = parsedHeader.meta;
+  const { headerEnd } = parsedHeader;
   const footerStart = findFooterStart(bytes, headerEnd);
   const segmentsEnd = footerStart ?? bytes.length;
   const streamFinalized = footerStart !== null;
@@ -279,6 +305,9 @@ function decodeSegments(bytes: Uint8Array): Recording {
         break;
       case SEGMENT_KIND.chat:
         chatEvents.push(...decodeRecords<ChatRecordingEvent>(segment.payload));
+        break;
+      case SEGMENT_KIND.finalMeta:
+        meta = mergeFinalMetadata(meta, segment.payload);
         break;
     }
     const decodedRecordCount =
@@ -519,6 +548,13 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         const records = decodeRecords<ChatRecordingEvent>(payload);
         pendingRecordCount = records.length;
         commit = () => chatEvents.push(...records);
+        break;
+      }
+      case SEGMENT_KIND.finalMeta: {
+        const finalMeta = mergeFinalMetadata(meta, payload);
+        commit = () => {
+          meta = finalMeta;
+        };
         break;
       }
       default:

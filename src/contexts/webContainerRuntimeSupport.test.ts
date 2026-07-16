@@ -5,6 +5,7 @@ import {
   createWorkspaceTree,
   isMobileBrowser,
   isWebContainerRuntimeSupported,
+  parseCommand,
 } from "./webContainerRuntimeSupport";
 
 function nodeProject(htmlContent: string): WorkspaceProject {
@@ -149,5 +150,50 @@ describe("createWorkspaceTree", () => {
     expect(html).toBe(original);
     expect(html).not.toContain("data-next-editor-rrweb-record");
     expect(html).not.toContain("data-next-editor-runtime-snapshot");
+  });
+
+  it("rejects unsafe and structurally conflicting paths", () => {
+    const conflict = nodeProject("root");
+    conflict.files.src = {
+      path: "src",
+      name: "src",
+      language: "plaintext",
+      content: "file",
+    };
+    conflict.files["src/App.tsx"] = {
+      path: "src/App.tsx",
+      name: "App.tsx",
+      language: "typescript",
+      content: "nested",
+    };
+
+    expect(() => createWorkspaceTree(conflict)).toThrow(/conflict/i);
+
+    const reserved = nodeProject("root");
+    reserved.files["__proto__/secret.txt"] = {
+      path: "__proto__/secret.txt",
+      name: "secret.txt",
+      language: "plaintext",
+      content: "secret",
+    };
+    expect(() => createWorkspaceTree(reserved)).toThrow(/reserved/i);
+
+    const mismatched = nodeProject("root");
+    mismatched.files["alias.txt"] = {
+      path: "actual.txt",
+      name: "actual.txt",
+      language: "plaintext",
+      content: "mismatch",
+    };
+    expect(() => createWorkspaceTree(mismatched)).toThrow(/does not match/i);
+  });
+});
+
+describe("parseCommand", () => {
+  it("delegates free-form runner commands to the sandbox shell", () => {
+    const command = 'GREETING="hello world" printf "%s\\n" "$GREETING" | tee "out file.txt"';
+
+    expect(parseCommand(command)).toEqual({ command: "sh", args: ["-lc", command] });
+    expect(parseCommand("  \t\n ")).toBeNull();
   });
 });

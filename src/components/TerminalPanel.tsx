@@ -716,7 +716,7 @@ function TerminalPanel() {
                   className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:cursor-default disabled:opacity-70"
                 />
                 <span className="mt-2 block text-xs text-slate-500">
-                  Command to run when booting the project
+                  Shell command to run when booting the project
                 </span>
               </label>
               <label className="block">
@@ -728,7 +728,7 @@ function TerminalPanel() {
                   className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:cursor-default disabled:opacity-70"
                 />
                 <span className="mt-2 block text-xs text-slate-500">
-                  Command to run inside the workspace
+                  Shell command to run inside the workspace
                 </span>
               </label>
             </div>

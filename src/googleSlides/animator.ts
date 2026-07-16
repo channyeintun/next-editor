@@ -134,9 +134,13 @@ export class DeckStepAnimator {
     const styles = sampleStyles(this.timeline, t);
     for (const [id, style] of styles) {
       const el = this.resolve(id);
-      if (!el || !(el instanceof HTMLElement || el instanceof SVGElement)) continue;
-      if (style.opacity !== undefined) el.style.opacity = String(style.opacity);
-      el.style.transform = style.transform ?? "";
+      // Animated nodes can live in a sandboxed iframe. Cross-realm DOM nodes do
+      // not pass the parent window's HTMLElement/SVGElement instanceof checks,
+      // but both supported element types expose a CSSStyleDeclaration.
+      if (!el || !("style" in el)) continue;
+      const elementStyle = (el as HTMLElement | SVGElement).style;
+      if (style.opacity !== undefined) elementStyle.opacity = String(style.opacity);
+      elementStyle.transform = style.transform ?? "";
     }
   }
 

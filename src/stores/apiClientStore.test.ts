@@ -71,7 +71,13 @@ describe("apiClientStore", () => {
   it("markSending / receiveResult lifecycle", () => {
     const store = createApiClientStore();
     store.trigger.setPath({ path: "/api/time" });
-    store.trigger.markSending();
+    store.trigger.markSending({
+      id: "req-1",
+      method: "GET",
+      path: "/api/time",
+      headers: [],
+      body: "",
+    });
 
     expect(selectSending(ctx(store))).toBe(true);
     expect(selectResult(ctx(store))).toBeNull();
@@ -94,6 +100,74 @@ describe("apiClientStore", () => {
     expect(selectHistory(ctx(store))).toHaveLength(1);
     expect(selectHistory(ctx(store))[0].method).toBe("GET");
     expect(selectHistory(ctx(store))[0].path).toBe("/api/time");
+  });
+
+  it("associates a deferred response with the immutable request that was sent", () => {
+    const store = createApiClientStore();
+    store.trigger.setMethod({ method: "POST" });
+    store.trigger.setPath({ path: "/sent" });
+    store.trigger.setBody({ body: "sent body" });
+    store.trigger.addHeader();
+    store.trigger.updateHeader({ index: 0, key: "X-Sent", value: "yes" });
+    store.trigger.markSending({
+      id: "deferred",
+      method: "POST",
+      path: "/sent",
+      body: "sent body",
+      headers: [{ key: "X-Sent", value: "yes", enabled: true }],
+    });
+
+    store.trigger.setMethod({ method: "DELETE" });
+    store.trigger.setPath({ path: "/next" });
+    store.trigger.setBody({ body: "next body" });
+    store.trigger.updateHeader({ index: 0, key: "X-Next", value: "later" });
+
+    store.trigger.receiveResult({
+      id: "deferred",
+      result: {
+        ok: true,
+        response: {
+          status: 200,
+          statusText: "OK",
+          headers: [],
+          body: "response",
+          durationMs: 5,
+        },
+      },
+    });
+
+    expect(selectHistory(ctx(store))[0]).toMatchObject({
+      id: "deferred",
+      method: "POST",
+      path: "/sent",
+      body: "sent body",
+      headers: [{ key: "X-Sent", value: "yes", enabled: true }],
+    });
+    expect(selectMethod(ctx(store))).toBe("DELETE");
+    expect(selectPath(ctx(store))).toBe("/next");
+    expect(selectBody(ctx(store))).toBe("next body");
+  });
+
+  it("ignores a late result for an older request", () => {
+    const store = createApiClientStore();
+    store.trigger.markSending({
+      id: "current",
+      method: "GET",
+      path: "/current",
+      headers: [],
+      body: "",
+    });
+
+    store.trigger.receiveResult({
+      id: "stale",
+      result: {
+        ok: false,
+        error: { error: "late", durationMs: 100 },
+      },
+    });
+
+    expect(selectSending(ctx(store))).toBe(true);
+    expect(selectHistory(ctx(store)).map((entry) => entry.id)).not.toContain("stale");
   });
 
   it("caps history at 25 entries", () => {

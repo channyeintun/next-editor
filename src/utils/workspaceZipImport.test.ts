@@ -178,6 +178,30 @@ describe("importWorkspaceProjectFromZip", () => {
     );
   });
 
+  it("rejects paths that escape the workspace root", async () => {
+    const file = createZipFile("traversal.zip", [
+      { path: "../outside.ts", content: "export const escaped = true" },
+    ]);
+
+    await expect(importWorkspaceProjectFromZip(file)).rejects.toThrow(/unsafe path/i);
+  });
+
+  it("rejects canonical duplicates and file-directory conflicts", async () => {
+    const duplicate = createZipFile("duplicate.zip", [
+      { path: "index.html", content: "first" },
+      { path: "src/../index.html", content: "second" },
+    ]);
+    await expect(importWorkspaceProjectFromZip(duplicate)).rejects.toThrow(/same workspace path/i);
+
+    const conflict = createZipFile("conflict.zip", [
+      { path: "src", content: "file" },
+      { path: "src/App.tsx", content: "nested" },
+    ]);
+    await expect(importWorkspaceProjectFromZip(conflict)).rejects.toThrow(
+      /both a file and a directory/i,
+    );
+  });
+
   it("rejects a file that is not a valid zip", async () => {
     const file = new File([new Uint8Array([1, 2, 3, 4])], "broken.zip", {
       type: "application/zip",

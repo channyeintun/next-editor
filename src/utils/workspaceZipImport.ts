@@ -6,6 +6,8 @@ import {
   inferLanguageFromPath,
   isBinaryWorkspacePath,
   normalizeWorkspacePath,
+  parseWorkspacePath,
+  WorkspacePathError,
   type WorkspaceFile,
   type WorkspaceLessonType,
   type WorkspaceProject,
@@ -254,15 +256,27 @@ export async function importWorkspaceProjectFromZip(file: File): Promise<Workspa
 
   // Collect importable entries (skip directories and ignored artifacts) before
   // detecting a common wrapper folder so the strip decision sees only real files.
-  const entries = Object.entries(archive).filter(([name]) => {
+  const entries: Array<{ path: string; bytes: Uint8Array }> = [];
+
+  for (const [name, bytes] of Object.entries(archive)) {
     if (name.endsWith("/")) {
-      return false;
+      continue;
     }
 
-    const normalizedPath = normalizeWorkspacePath(name);
+    let normalizedPath: string;
+    try {
+      normalizedPath = parseWorkspacePath(name);
+    } catch (error) {
+      if (error instanceof WorkspacePathError) {
+        throw new WorkspaceZipImportError(`The zip contains an unsafe path: "${name}".`);
+      }
+      throw error;
+    }
 
-    return Boolean(normalizedPath) && !shouldIgnoreImportPath(normalizedPath);
-  });
+    if (!shouldIgnoreImportPath(normalizedPath)) {
+      entries.push({ path: normalizedPath, bytes });
+    }
+  }
 
   if (entries.length === 0) {
     throw new WorkspaceZipImportError(
@@ -270,18 +284,18 @@ export async function importWorkspaceProjectFromZip(file: File): Promise<Workspa
     );
   }
 
-  const stripRootFolder = createRootFolderStripper(
-    entries.map(([name]) => normalizeWorkspacePath(name)),
-  );
+  const stripRootFolder = createRootFolderStripper(entries.map((entry) => entry.path));
 
-  const files: Record<string, WorkspaceFile> = {};
+  const files = new Map<string, WorkspaceFile>();
   let totalBytes = 0;
 
-  for (const [name, bytes] of entries) {
-    const workspacePath = stripRootFolder(normalizeWorkspacePath(name));
+  for (const { path, bytes } of entries) {
+    const workspacePath = parseWorkspacePath(stripRootFolder(path));
 
-    if (!workspacePath) {
-      continue;
+    if (files.has(workspacePath)) {
+      throw new WorkspaceZipImportError(
+        `Multiple zip entries resolve to the same workspace path: "${workspacePath}".`,
+      );
     }
 
     totalBytes += bytes.byteLength;
@@ -295,20 +309,37 @@ export async function importWorkspaceProjectFromZip(file: File): Promise<Workspa
     }
 
     if (isBinaryWorkspacePath(workspacePath)) {
-      files[workspacePath] = createWorkspaceFile(workspacePath, bytesToBase64(bytes), "base64");
+      files.set(workspacePath, createWorkspaceFile(workspacePath, bytesToBase64(bytes), "base64"));
     } else {
-      files[workspacePath] = createWorkspaceFile(workspacePath, strFromU8(bytes), undefined);
+      files.set(workspacePath, createWorkspaceFile(workspacePath, strFromU8(bytes), undefined));
     }
   }
+
+  for (const path of files.keys()) {
+    const segments = path.split("/");
+    segments.pop();
+
+    while (segments.length > 0) {
+      const parentPath = segments.join("/");
+      if (files.has(parentPath)) {
+        throw new WorkspaceZipImportError(
+          `The zip uses "${parentPath}" as both a file and a directory.`,
+        );
+      }
+      segments.pop();
+    }
+  }
+
+  const fileRecord = Object.fromEntries(files);
 
   const name = deriveProjectNameFromFileName(file.name);
 
   return {
     id: toProjectId(name),
     name,
-    lessonType: detectImportedLessonType(files),
-    entryFilePath: pickEntryFilePath(files),
-    folders: collectWorkspaceFolders(Object.keys(files)),
-    files,
+    lessonType: detectImportedLessonType(fileRecord),
+    entryFilePath: pickEntryFilePath(fileRecord),
+    folders: collectWorkspaceFolders(Object.keys(fileRecord)),
+    files: fileRecord,
   };
 }

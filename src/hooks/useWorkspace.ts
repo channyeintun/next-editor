@@ -1,10 +1,11 @@
-import { useContext } from "react";
+import { useContext, useMemo } from "react";
 import { useSelector } from "@xstate/store-react";
 import {
   WorkspaceActionsContext,
   type WorkspaceActions,
   type WorkspaceDirtyState,
   type WorkspaceEditorState,
+  type WorkspaceSaveStatus,
   type WorkspaceSidebarState,
 } from "../contexts/WorkspaceContext";
 import {
@@ -20,6 +21,8 @@ import {
   selectWorkspaceProjectName,
   selectWorkspaceProjectId,
   selectWorkspaceSaveVersion,
+  selectWorkspaceIsSaving,
+  selectWorkspaceSaveError,
   selectWorkspaceSidebarCollapsed,
   selectWorkspaceSidebarState,
   selectWorkspaceSidebarWidth,
@@ -103,6 +106,13 @@ export const useWorkspaceDirtyState = (): WorkspaceDirtyState => {
 
 export const useWorkspaceSaveVersion = (): number => {
   return useWorkspaceSelector("useWorkspaceSaveVersion", selectWorkspaceSaveVersion);
+};
+
+export const useWorkspaceSaveStatus = (): WorkspaceSaveStatus => {
+  const isSaving = useWorkspaceSelector("useWorkspaceSaveStatus", selectWorkspaceIsSaving);
+  const errorMessage = useWorkspaceSelector("useWorkspaceSaveStatus", selectWorkspaceSaveError);
+
+  return useMemo(() => ({ isSaving, errorMessage }), [errorMessage, isSaving]);
 };
 
 export const useWorkspaceSyncVersion = (): number => {

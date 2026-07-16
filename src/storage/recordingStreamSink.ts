@@ -1,9 +1,10 @@
-import type { RecordingStreamSink } from "../core/src/types";
+import type { Recording, RecordingStreamSink } from "../core/src/types";
 import type { RecordingSession } from "../core/src/machine/types";
 import { DELTA_CONFIG } from "../core/src/utils/deltaTypes";
 import { isKeyframe } from "../core/src/utils/deltaTypes";
 import {
   SEGMENT_KIND,
+  createRecordingStreamMeta,
   createStreamingRecordingWriter,
   readRecordTimestamp,
   type RecordingStreamMeta,
@@ -25,6 +26,8 @@ interface StreamedCounts {
   workspace: number;
   runtime: number;
   cursor: number;
+  whiteboard: number;
+  chat: number;
 }
 
 interface RecordingStreamBridgeStartOptions {
@@ -64,13 +67,19 @@ export class RecordingStreamBridge {
     workspace: 0,
     runtime: 0,
     cursor: 0,
+    whiteboard: 0,
+    chat: 0,
   };
   /** Timeline starts for SCR3 cluster indices known to the live bridge. */
   private readonly clusterStarts: number[] = [];
-  /** Serializes segment appends so async media reads cannot reorder the SCR3 stream. */
+  /** Serializes encoding and sink writes, providing one-write-at-a-time backpressure. */
   private appendQueue: Promise<void> = Promise.resolve();
-  /** Serializes sink writes so the consumer receives bytes in stream order. */
-  private writeChain: Promise<void> = Promise.resolve();
+  private pumpRequested = false;
+  private finishing = false;
+  private finishPromise: Promise<void> | null = null;
+  private closePromise: Promise<void> | null = null;
+  private failure: unknown = null;
+  private provisionalMeta: RecordingStreamMeta | null = null;
   private started = false;
   private aborted = false;
   private lastSession: RecordingSession | null = null;
@@ -100,31 +109,68 @@ export class RecordingStreamBridge {
       cameraSource: options.cameraSource,
       cameraStartOffsetMs: options.cameraStartOffsetMs,
     };
+    this.provisionalMeta = meta;
+    this.lastSession = session;
     this.writer.writeHeader(meta);
     this.started = true;
-    this.flush();
+    this.appendQueue = this.appendQueue
+      .then(() => this.flush())
+      .catch((error) => this.handleFailure(error));
   }
 
   /** Appends records captured since the previous sync and forwards the new bytes. */
   sync(session: RecordingSession): void {
     if (!this.started) return;
     this.lastSession = session;
-    this.enqueueSegments(this.collectSessionSegments(session, false));
+    this.requestPump();
   }
 
   /** Flushes any buffered tail, finalizes the stream (footer), and closes the sink. */
-  async finish(): Promise<void> {
+  finish(recording?: Recording): Promise<void> {
+    if (!this.finishPromise) {
+      this.finishPromise = this.finishInternal(recording).catch(async (error) => {
+        await this.handleFailure(error);
+        throw error;
+      });
+    }
+    return this.finishPromise;
+  }
+
+  private async finishInternal(recording?: Recording): Promise<void> {
+    this.finishing = true;
+
     if (!this.started) {
       await this.closeSink();
       return;
     }
-    if (this.lastSession) {
-      this.enqueueSegments(this.collectSessionSegments(this.lastSession, true));
-    }
-    // All media must be appended before the footer so the finalized stream is complete.
+
     await this.appendQueue;
-    this.writer.finalize();
-    this.flush();
+
+    if (this.failure) {
+      await this.closeSink();
+      throw this.failure;
+    }
+
+    if (this.lastSession) {
+      await this.writeSegments(this.collectSessionSegments(this.lastSession, true));
+    }
+
+    const finalMeta = recording
+      ? createRecordingStreamMeta(recording)
+      : this.provisionalMeta && this.lastSession
+        ? {
+            ...this.provisionalMeta,
+            duration: Math.max(performance.now() - this.lastSession.startedAtPerf, 1),
+          }
+        : null;
+
+    if (finalMeta) {
+      this.writer.appendFinalMetadata(finalMeta);
+      await this.flush();
+    }
+
+    this.writer.finalizeStream();
+    await this.flush();
     await this.closeSink();
   }
 
@@ -132,7 +178,7 @@ export class RecordingStreamBridge {
   abort(): void {
     if (this.aborted) return;
     this.aborted = true;
-    void this.appendQueue.then(() => this.closeSink());
+    void this.appendQueue.then(() => this.closeSink()).catch((error) => this.handleFailure(error));
   }
 
   private collectSessionSegments(
@@ -163,10 +209,35 @@ export class RecordingStreamBridge {
       ),
       ...this.collectEventSegments(SEGMENT_KIND.runtime, session.runtimeEvents, "runtime", final),
       ...this.collectEventSegments(SEGMENT_KIND.cursor, session.cursorEvents, "cursor", final),
+      ...this.collectEventSegments(
+        SEGMENT_KIND.whiteboard,
+        session.whiteboardEvents,
+        "whiteboard",
+        final,
+      ),
+      ...this.collectEventSegments(SEGMENT_KIND.chat, session.chatEvents, "chat", final),
     ];
   }
 
-  private enqueueSegments(segments: PendingStreamSegment[]): void {
+  private requestPump(): void {
+    if (this.pumpRequested || this.finishing || this.aborted) return;
+    this.pumpRequested = true;
+
+    this.appendQueue = this.appendQueue
+      .then(async () => {
+        while (this.pumpRequested && !this.finishing && !this.aborted) {
+          this.pumpRequested = false;
+          const session = this.lastSession;
+
+          if (session) {
+            await this.writeSegments(this.collectSessionSegments(session, false));
+          }
+        }
+      })
+      .catch((error) => this.handleFailure(error));
+  }
+
+  private async writeSegments(segments: PendingStreamSegment[]): Promise<void> {
     if (segments.length === 0 || this.aborted) return;
     const orderedSegments = [...segments].sort(
       (left, right) =>
@@ -175,14 +246,12 @@ export class RecordingStreamBridge {
         left.priority - right.priority,
     );
 
-    this.appendQueue = this.appendQueue.then(async () => {
-      for (const segment of orderedSegments) {
-        if (this.aborted) break;
-        await segment.write();
-        if (this.aborted) break;
-        this.flush();
-      }
-    });
+    for (const segment of orderedSegments) {
+      if (this.aborted) break;
+      await segment.write();
+      if (this.aborted) break;
+      await this.flush();
+    }
   }
 
   private collectFrameSegments(
@@ -292,14 +361,35 @@ export class RecordingStreamBridge {
     return segments;
   }
 
-  private flush(): void {
+  private async flush(): Promise<void> {
     const bytes = this.writer.drainPending();
     if (bytes.length === 0) return;
-    this.writeChain = this.writeChain.then(() => this.sink.write(bytes));
+    await this.sink.write(bytes);
   }
 
   private async closeSink(): Promise<void> {
-    await this.writeChain;
-    await this.sink.close();
+    if (!this.closePromise) {
+      this.closePromise = Promise.resolve().then(() => this.sink.close());
+    }
+    await this.closePromise;
+  }
+
+  private async handleFailure(error: unknown): Promise<void> {
+    if (!this.failure) {
+      this.failure = error;
+      this.aborted = true;
+
+      try {
+        await this.sink.onError?.(error);
+      } catch {
+        // The original write/encode failure remains authoritative.
+      }
+    }
+
+    try {
+      await this.closeSink();
+    } catch {
+      // Closing is best-effort after the stream has already failed.
+    }
   }
 }

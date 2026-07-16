@@ -42,14 +42,7 @@ interface WebContainerRuntimeProviderProps {
 export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderProps> = ({
   children,
 }) => {
-  const {
-    getActiveFilePath,
-    getCollapsedFolders,
-    getProject,
-    getSidebarScrollTop,
-    getSidebarWidth,
-    loadProject,
-  } = useWorkspaceActions();
+  const { getProject, getWorkspaceRevision, reconcileExternalProject } = useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
   const projectId = useWorkspaceProjectId();
   const projectName = useWorkspaceProjectName();
@@ -59,6 +52,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const hasAutoStartedRef = useRef(false);
   const loadedProjectIdRef = useRef<string | null>(null);
   const reverseSyncTimeoutRef = useRef<number | null>(null);
+  const reverseSyncRequestRef = useRef(0);
   const lessonTypeRef = useRef(lessonType);
   const runnerConfigRef = useRef<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
   const [environmentVariables, setEnvironmentVariables] = useState<EnvironmentVariables>(
@@ -70,17 +64,20 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     ensureProjectMounted,
     isFsWatchActive,
     queueProjectSync,
+    runSerializedRuntimeTask,
     resetWorkspaceSync,
   } = useWebContainerWorkspaceSync({
     // A container process changed a file our own sync didn't write — pull the
     // container filesystem back into the workspace.
-    onExternalFileChange: (instance) => requestReverseSync(instance),
+    onExternalFileChange: (instance) => requestReverseSync(instance, getRuntimeGeneration()),
   });
 
-  const requestReverseSync = (instance: WebContainer, generation?: number) => {
+  const requestReverseSync = (instance: WebContainer, generation: number) => {
     if (typeof window === "undefined") {
       return;
     }
+
+    const requestId = ++reverseSyncRequestRef.current;
 
     if (reverseSyncTimeoutRef.current !== null) {
       window.clearTimeout(reverseSyncTimeoutRef.current);
@@ -94,29 +91,45 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
           return;
         }
 
-        if (generation !== undefined && !isRuntimeGenerationActive(generation)) {
+        if (!isRuntimeGenerationActive(generation)) {
           return;
         }
 
-        const currentProject = getProject();
-        const nextProject = await readWorkspaceProject(instance, currentProject);
+        await runSerializedRuntimeTask({
+          instance,
+          task: async () => {
+            if (
+              requestId !== reverseSyncRequestRef.current ||
+              !isRuntimeGenerationActive(generation)
+            ) {
+              return;
+            }
 
-        if (
-          (generation !== undefined && !isRuntimeGenerationActive(generation)) ||
-          areWorkspaceProjectsEqual(currentProject, nextProject)
-        ) {
-          return;
-        }
+            const workspaceRevision = getWorkspaceRevision();
+            const currentProject = getProject();
+            const nextProject = await readWorkspaceProject(instance, currentProject);
 
-        loadProject(
-          nextProject,
-          getActiveFilePath(),
-          getCollapsedFolders(),
-          getSidebarScrollTop(),
-          getSidebarWidth(),
-        );
+            if (
+              requestId !== reverseSyncRequestRef.current ||
+              !isRuntimeGenerationActive(generation)
+            ) {
+              return;
+            }
+
+            // An editor/store mutation landed while the recursive read was in
+            // flight. Let its forward sync finish, then read a converged tree.
+            if (workspaceRevision !== getWorkspaceRevision()) {
+              requestReverseSync(instance, generation);
+              return;
+            }
+
+            if (!areWorkspaceProjectsEqual(currentProject, nextProject)) {
+              reconcileExternalProject(nextProject);
+            }
+          },
+        });
       })().catch((error) => {
-        if (generation === undefined || isRuntimeGenerationActive(generation)) {
+        if (isRuntimeGenerationActive(generation)) {
           setErrorMessage(getRuntimeErrorMessage(error));
         }
       });
@@ -170,7 +183,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
         return;
       }
 
-      requestReverseSync(instance);
+      requestReverseSync(instance, getRuntimeGeneration());
     },
     onServerReady: () => {
       if (!lessonRunsInWebContainer(lessonTypeRef.current)) {
@@ -183,7 +196,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
         return;
       }
 
-      requestReverseSync(instance);
+      requestReverseSync(instance, getRuntimeGeneration());
     },
   });
 
@@ -202,6 +215,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   const resetRuntime = () => {
     hasRunInitCommandRef.current = false;
+    reverseSyncRequestRef.current += 1;
     if (typeof window !== "undefined" && reverseSyncTimeoutRef.current !== null) {
       window.clearTimeout(reverseSyncTimeoutRef.current);
       reverseSyncTimeoutRef.current = null;

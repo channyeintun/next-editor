@@ -11,8 +11,8 @@ import {
   getWorkspaceBaseName,
   inferLanguageFromPath,
   isBinaryWorkspacePath,
-  normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
+  parseWorkspacePath,
   type WorkspaceFile,
   type WorkspaceProject,
 } from "../types/workspace";
@@ -56,6 +56,28 @@ const sharedWebContainerState: {
   instance: null,
   bootPromise: null,
 };
+
+const webContainerTaskQueues = new WeakMap<WebContainer, Promise<void>>();
+
+/**
+ * Serialize filesystem transactions across the runtime UI, reverse sync, and
+ * agent tools that share one WebContainer instance.
+ */
+export function runSerializedWebContainerTask<T>(
+  instance: WebContainer,
+  task: () => Promise<T>,
+): Promise<T> {
+  const queue = webContainerTaskQueues.get(instance) ?? Promise.resolve();
+  const result = queue.then(task, task);
+  webContainerTaskQueues.set(
+    instance,
+    result.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return result;
+}
 
 const ESCAPE_CHARACTER = String.fromCharCode(27);
 const BELL_CHARACTER = String.fromCharCode(7);
@@ -195,12 +217,36 @@ function getNormalizedProjectFiles(project: WorkspaceProject | null): Map<string
     return new Map();
   }
 
-  return new Map(
-    Object.entries(project.files).map(([path, file]) => [
-      normalizeWorkspacePath(path || file.path),
-      file,
-    ]),
-  );
+  const files = new Map<string, WorkspaceFile>();
+
+  for (const [path, file] of Object.entries(project.files)) {
+    const normalizedPath = parseWorkspacePath(path);
+    const normalizedFilePath = parseWorkspacePath(file.path);
+
+    if (normalizedPath !== normalizedFilePath) {
+      throw new Error(`Workspace file key "${path}" does not match its path "${file.path}"`);
+    }
+
+    if (files.has(normalizedPath)) {
+      throw new Error(`Multiple workspace files resolve to "${normalizedPath}"`);
+    }
+
+    files.set(normalizedPath, file);
+  }
+
+  for (const path of files.keys()) {
+    const segments = path.split("/");
+    segments.pop();
+    while (segments.length > 0) {
+      const parentPath = segments.join("/");
+      if (files.has(parentPath)) {
+        throw new Error(`Workspace path "${parentPath}" conflicts with a nested file`);
+      }
+      segments.pop();
+    }
+  }
+
+  return files;
 }
 
 function stripRuntimeSnapshotScript(content: string): string {
@@ -228,12 +274,12 @@ async function readRuntimeDirectory(
   const orderedEntries = [...entries].sort((left, right) => left.name.localeCompare(right.name));
 
   for (const entry of orderedEntries) {
-    const nextWorkspacePath = normalizeWorkspacePath(
+    const nextWorkspacePath = parseWorkspacePath(
       workspacePath ? `${workspacePath}/${entry.name}` : entry.name,
     );
     const nextRuntimePath = runtimePath === "." ? entry.name : `${runtimePath}/${entry.name}`;
 
-    if (!nextWorkspacePath || shouldIgnoreRuntimeImportPath(nextWorkspacePath)) {
+    if (shouldIgnoreRuntimeImportPath(nextWorkspacePath)) {
       continue;
     }
 
@@ -290,10 +336,11 @@ export async function readWorkspaceProject(
 }
 
 export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
-  const tree: FileSystemTree = {};
+  const createDirectory = (): FileSystemTree => Object.create(null) as FileSystemTree;
+  const tree = createDirectory();
 
   const ensureTreeDirectory = (directoryPath: string) => {
-    const normalizedDirectoryPath = normalizeWorkspaceFolderPath(directoryPath);
+    const normalizedDirectoryPath = directoryPath ? parseWorkspacePath(directoryPath) : "";
 
     if (!normalizedDirectoryPath) {
       return;
@@ -304,8 +351,12 @@ export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
     for (const segment of normalizedDirectoryPath.split("/")) {
       const existingEntry = currentDirectory[segment];
 
-      if (!existingEntry || !("directory" in existingEntry)) {
-        currentDirectory[segment] = { directory: {} };
+      if (existingEntry && !("directory" in existingEntry)) {
+        throw new Error(`Workspace path "${normalizedDirectoryPath}" conflicts with a file`);
+      }
+
+      if (!existingEntry) {
+        currentDirectory[segment] = { directory: createDirectory() };
       }
 
       const nextEntry = currentDirectory[segment];
@@ -322,12 +373,7 @@ export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
     ensureTreeDirectory(folderPath);
   }
 
-  for (const file of Object.values(project.files)) {
-    const normalizedPath = normalizeWorkspacePath(file.path);
-    if (!normalizedPath) {
-      continue;
-    }
-
+  for (const [normalizedPath, file] of getNormalizedProjectFiles(project)) {
     const segments = normalizedPath.split("/");
     const fileName = segments.pop();
 
@@ -345,6 +391,10 @@ export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
       }
 
       currentDirectory = nextEntry.directory;
+    }
+
+    if (currentDirectory[fileName]) {
+      throw new Error(`Workspace path "${normalizedPath}" conflicts with another entry`);
     }
 
     currentDirectory[fileName] = {
@@ -401,20 +451,16 @@ export async function syncWorkspaceProject(
   const previousFiles = getNormalizedProjectFiles(previousProject);
   const nextFiles = getNormalizedProjectFiles(nextProject);
   const previousFolders = new Set(
-    (previousProject?.folders ?? [])
-      .map((folderPath) => normalizeWorkspaceFolderPath(folderPath))
-      .filter(Boolean),
+    (previousProject?.folders ?? []).map((folderPath) => parseWorkspacePath(folderPath)),
   );
   const nextFolders = new Set(
-    nextProject.folders
-      .map((folderPath) => normalizeWorkspaceFolderPath(folderPath))
-      .filter(Boolean),
+    nextProject.folders.map((folderPath) => parseWorkspacePath(folderPath)),
   );
 
   for (const folderPath of nextProject.folders) {
-    const normalizedFolderPath = normalizeWorkspaceFolderPath(folderPath);
+    const normalizedFolderPath = parseWorkspacePath(folderPath);
 
-    if (!normalizedFolderPath || previousFolders.has(normalizedFolderPath)) {
+    if (previousFolders.has(normalizedFolderPath)) {
       continue;
     }
 
@@ -464,14 +510,16 @@ export async function syncWorkspaceProject(
 }
 
 export function parseCommand(commandLine: string): { command: string; args: string[] } | null {
-  const parts = commandLine.trim().split(/\s+/).filter(Boolean);
+  const command = commandLine.trim();
 
-  if (parts.length === 0) {
+  if (!command) {
     return null;
   }
 
-  const [command, ...args] = parts;
-  return { command, args };
+  // Runner settings intentionally accept shell command lines. Delegating their
+  // grammar to the sandbox shell preserves quotes, escaped/empty arguments,
+  // environment assignments, pipes, and redirects without a divergent parser.
+  return { command: "sh", args: ["-lc", command] };
 }
 
 export function formatCommandError(commandLine: string): string {
@@ -611,6 +659,7 @@ export function teardownSharedWebContainer(instance: WebContainer | null): void 
   }
 
   instance.teardown();
+  webContainerTaskQueues.delete(instance);
   sharedWebContainerState.instance = null;
   sharedWebContainerState.bootPromise = null;
 }

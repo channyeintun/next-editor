@@ -81,8 +81,10 @@ export const SEGMENT_KIND = {
   cursor: 7,
   whiteboard: 8,
   chat: 9,
+  /** Authoritative metadata written immediately before the footer by live streams. */
+  finalMeta: 10,
   // Media is never stored inline in the stream — audio as a sibling file referenced by
-  // `audioFile`/`audioUrl`, camera as a sibling video. 10+ are free for future segment kinds.
+  // `audioFile`/`audioUrl`, camera as a sibling video. 11+ are free for future segment kinds.
 } as const;
 
 export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
@@ -183,9 +185,7 @@ export function decodeRecords<T>(payload: Uint8Array): T[] {
   if (payload.byteLength > MAX_COMPRESSED_SEGMENT_BYTES) {
     throw new Error("Invalid SCR3 stream: segment exceeds the compressed size limit");
   }
-  const decoded = msgpackDecode(
-    boundedUnzlib(payload, MAX_INFLATED_SEGMENT_BYTES, "segment"),
-  );
+  const decoded = msgpackDecode(boundedUnzlib(payload, MAX_INFLATED_SEGMENT_BYTES, "segment"));
   if (!Array.isArray(decoded)) return [];
   if (decoded.length > MAX_DECODED_RECORDS) {
     throw new Error("Invalid SCR3 stream: segment contains too many records");
@@ -355,7 +355,7 @@ export function readSegmentHeader(view: DataView, offset: number): SegmentHeader
 }
 
 export function isKnownSegmentKind(kind: number): boolean {
-  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.chat;
+  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.finalMeta;
 }
 
 // ----------------------------------------------------------------------------

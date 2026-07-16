@@ -246,7 +246,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     try {
       await saveWorkspace();
     } finally {
-      saveProject();
+      await saveProject();
     }
   });
 

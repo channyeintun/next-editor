@@ -35,6 +35,7 @@ import {
   useWorkspaceDirtyState,
   useWorkspaceFileCount,
   useWorkspaceLessonType,
+  useWorkspaceSaveStatus,
   useWorkspaceSidebarCollapsed,
 } from "../hooks/useWorkspace";
 import { lessonRunsInWebContainer, type WorkspaceLessonType } from "../types/workspace";
@@ -183,7 +184,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
   const { environmentVariables, runnerConfig, status } = useWebContainerRuntimeMetadata();
   const { exportAsFile, importFromFile, loadRecording } = useNextEditorActions();
   const { currentRecording } = useNextEditorMetadata();
-  const { getProject, loadProject, saveProject } = useWorkspaceActions();
+  const { getProject, reconcileExternalProject, saveProject } = useWorkspaceActions();
   const fileCount = useWorkspaceFileCount();
   const lessonType = useWorkspaceLessonType();
   const { hasUnsavedChanges } = useWorkspaceDirtyState();
@@ -302,8 +303,8 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       return;
     }
 
-    loadProject(importedProject);
-    saveProject();
+    reconcileExternalProject(importedProject);
+    await saveProject();
     updateRunnerConfig({ enabled: true });
     posthog?.capture("project_zip_imported");
     // Imported projects ship their own dependencies, so tear the runtime down to
@@ -333,8 +334,8 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
     // Same framework as before, so its dependencies are already installed — just
     // swap the files in (the running dev server picks them up) and keep it running.
-    loadProject(starterProject);
-    saveProject();
+    reconcileExternalProject(starterProject);
+    await saveProject();
     updateRunnerConfig({ enabled: true });
   };
 
@@ -368,8 +369,8 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     // pull it in before replacing the workspace.
     const starterProject = await createStarterWorkspaceForLessonType(nextOption.value);
 
-    loadProject(starterProject);
-    saveProject();
+    reconcileExternalProject(starterProject);
+    await saveProject();
     updateRunnerConfig({ enabled: true });
     posthog?.capture("lesson_type_selected", { lesson_type: nextLessonType });
     // Each framework ships different dependencies, so tear the runtime down to
@@ -673,6 +674,8 @@ interface EditorHeaderProps {
 }
 
 function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
+  const { isSaving, errorMessage } = useWorkspaceSaveStatus();
+
   return (
     <div className="bg-[#11141c] px-4 py-1.5 flex items-center justify-between">
       <div className="flex items-center gap-2 min-w-0">
@@ -680,6 +683,19 @@ function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
         {breadcrumb ?? (
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
         )}
+        {isSaving ? (
+          <span className="text-[10px] text-slate-500" role="status">
+            Saving…
+          </span>
+        ) : errorMessage ? (
+          <span
+            className="max-w-64 truncate text-[10px] text-rose-400"
+            role="alert"
+            title={errorMessage}
+          >
+            Workspace storage error: {errorMessage}
+          </span>
+        ) : null}
       </div>
       <div className="flex items-center gap-2">
         <WorkspaceSettingsButton showImportExport={showImportExport} />

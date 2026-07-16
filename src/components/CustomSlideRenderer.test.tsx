@@ -22,12 +22,14 @@ function googleSlide(id: string): Slide {
 }
 
 describe("CustomSlideRenderer", () => {
-  it("renders html slide content", () => {
+  it("renders HTML slide content in a script-disabled iframe", () => {
     const slides = [htmlSlide("a", "<h1>Hello</h1>")];
     const { container } = render(
       <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
     );
-    expect(container.querySelector("h1")?.textContent).toBe("Hello");
+    const iframe = container.querySelector("iframe");
+    expect(iframe?.getAttribute("sandbox")).toBe("");
+    expect(iframe?.srcdoc).toContain("<h1>Hello</h1>");
   });
 
   it("removes executable HTML from untrusted slide content", () => {
@@ -40,9 +42,10 @@ describe("CustomSlideRenderer", () => {
     const { container } = render(
       <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
     );
-    expect(container.querySelector("script")).toBeNull();
-    expect(container.querySelector("h1")?.getAttribute("onclick")).toBeNull();
-    expect(container.querySelector("a")?.getAttribute("href")).toBeNull();
+    const srcDoc = container.querySelector("iframe")?.srcdoc ?? "";
+    expect(srcDoc).not.toContain("<script>");
+    expect(srcDoc).not.toContain("onclick=");
+    expect(srcDoc).not.toContain("javascript:");
   });
 
   it("sanitizes raw HTML embedded in markdown", () => {
@@ -50,7 +53,9 @@ describe("CustomSlideRenderer", () => {
     const { container } = render(
       <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
     );
-    expect(container.querySelector("img")?.getAttribute("onerror")).toBeNull();
+    const srcDoc = container.querySelector("iframe")?.srcdoc ?? "";
+    expect(srcDoc).toContain("<h1>Title</h1>");
+    expect(srcDoc).not.toContain("onerror=");
   });
 
   it("renders markdown slide content as HTML", () => {
@@ -58,8 +63,9 @@ describe("CustomSlideRenderer", () => {
     const { container } = render(
       <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
     );
-    expect(container.querySelector("h1")?.textContent).toBe("Title");
-    expect(container.querySelector("p")?.textContent).toBe("Body text");
+    const srcDoc = container.querySelector("iframe")?.srcdoc ?? "";
+    expect(srcDoc).toContain("<h1>Title</h1>");
+    expect(srcDoc).toContain("<p>Body text</p>");
   });
 
   it("renders google-svg slide content", () => {
@@ -67,7 +73,7 @@ describe("CustomSlideRenderer", () => {
     const { container } = render(
       <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
     );
-    expect(container.querySelector("svg")).not.toBeNull();
+    expect(container.querySelector("iframe")?.srcdoc).toContain("<svg");
   });
 
   it("shows a placeholder when the current index has no slide", () => {
@@ -77,20 +83,32 @@ describe("CustomSlideRenderer", () => {
     expect(container.textContent).toContain("No slides to display");
   });
 
-  it("updates the step in place without remounting the SVG", () => {
+  it("updates the step in place without remounting the isolated document", () => {
     const slides = [googleSlide("a")];
     const { container, rerender } = render(
       <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
     );
-    const svgBefore = container.querySelector("svg");
+    const iframeBefore = container.querySelector("iframe");
 
     rerender(
       <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={1} />,
     );
-    const svgAfter = container.querySelector("svg");
+    const iframeAfter = container.querySelector("iframe");
 
-    // Same slide, only the step advanced: the SVG element must not have
-    // been torn down and recreated (that would reset the step animator).
-    expect(svgAfter).toBe(svgBefore);
+    expect(iframeAfter).toBe(iframeBefore);
+  });
+
+  it("keeps slide CSS out of the host document", () => {
+    const slides = [htmlSlide("a", "<style>body{display:none}</style><p>Slide</p>")];
+    const { container } = render(
+      <div data-testid="host-sentinel">
+        Host
+        <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />
+      </div>,
+    );
+
+    expect(container.querySelector("style")).toBeNull();
+    expect(container.querySelector('[data-testid="host-sentinel"]')).not.toBeNull();
+    expect(container.querySelector("iframe")?.srcdoc).not.toContain("body{display:none}");
   });
 });

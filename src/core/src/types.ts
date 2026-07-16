@@ -257,6 +257,8 @@ export interface Recording {
 export interface RecordingStreamSink {
   write(bytes: Uint8Array): void | Promise<void>;
   close(): void | Promise<void>;
+  /** Called once when encoding or delivery fails before the sink is closed. */
+  onError?(error: unknown): void | Promise<void>;
 }
 
 /**

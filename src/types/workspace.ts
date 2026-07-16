@@ -211,12 +211,98 @@ export function toWorkspaceDeltaSnapshot(
 export const DEFAULT_WORKSPACE_ENTRY_PATH = "index.html";
 export const DEFAULT_WORKSPACE_APP_PATH = "src/App.tsx";
 
+const RESERVED_WORKSPACE_PATH_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);
+
+function containsWorkspacePathControlCharacter(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || codePoint === 0x7f;
+  });
+}
+
+export class WorkspacePathError extends Error {
+  readonly input: string;
+
+  constructor(message: string, input: string) {
+    super(message);
+    this.name = "WorkspacePathError";
+    this.input = input;
+  }
+}
+
+interface ParseWorkspacePathOptions {
+  allowEmpty?: boolean;
+}
+
+/**
+ * Parse a user/import/runtime supplied path into one canonical workspace-relative path.
+ *
+ * Leading separators are treated as workspace-root-relative for backwards compatibility.
+ * Dot segments are resolved, while traversal above the workspace root, control characters,
+ * and names that are unsafe as JavaScript record keys are rejected.
+ */
+export function parseWorkspacePath(
+  path: string,
+  { allowEmpty = false }: ParseWorkspacePathOptions = {},
+): string {
+  if (typeof path !== "string") {
+    throw new WorkspacePathError("Workspace path must be a string", String(path));
+  }
+
+  const input = path;
+  const normalizedSeparators = input.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+  const segments: string[] = [];
+
+  for (const segment of normalizedSeparators.split("/")) {
+    if (!segment || segment === ".") {
+      continue;
+    }
+
+    if (segment === "..") {
+      if (segments.length === 0) {
+        throw new WorkspacePathError("Workspace path escapes the project root", input);
+      }
+      segments.pop();
+      continue;
+    }
+
+    if (containsWorkspacePathControlCharacter(segment)) {
+      throw new WorkspacePathError("Workspace path contains a control character", input);
+    }
+
+    if (RESERVED_WORKSPACE_PATH_SEGMENTS.has(segment)) {
+      throw new WorkspacePathError(`Workspace path uses the reserved name "${segment}"`, input);
+    }
+
+    segments.push(segment);
+  }
+
+  const normalizedPath = segments.join("/");
+
+  if (!normalizedPath && !allowEmpty) {
+    throw new WorkspacePathError("Workspace path cannot be empty", input);
+  }
+
+  return normalizedPath;
+}
+
+export function tryParseWorkspacePath(
+  path: string,
+  options: ParseWorkspacePathOptions = {},
+): string | null {
+  try {
+    return parseWorkspacePath(path, options);
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeWorkspacePath(path: string): string {
-  return path.replace(/^\/+/, "").replace(/\\/g, "/").replace(/\/+/g, "/").trim();
+  return tryParseWorkspacePath(path, { allowEmpty: true }) ?? "";
 }
 
 export function normalizeWorkspaceFolderPath(path: string): string {
-  return normalizeWorkspacePath(path).replace(/\/+$/, "");
+  return normalizeWorkspacePath(path);
 }
 
 export function getWorkspaceBaseName(path: string): string {
@@ -235,6 +321,10 @@ export function getParentWorkspacePath(path: string): string {
 export function joinWorkspacePath(parentPath: string, name: string): string {
   const normalizedParentPath = normalizeWorkspaceFolderPath(parentPath);
   const normalizedName = normalizeWorkspacePath(name);
+
+  if (!normalizedName) {
+    return "";
+  }
 
   if (!normalizedParentPath) {
     return normalizedName;

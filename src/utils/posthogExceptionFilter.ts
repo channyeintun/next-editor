@@ -1,6 +1,9 @@
 const WEBCONTAINER_PREVIEW_ORIGIN_PATTERN =
   /(?:https?:\/\/|blob:https?:\/\/)[^\s/]*(?:webcontainer-api\.io|webcontainer\.io)(?=[:/\s]|$)/i;
 
+/** Blocks the complete editor subtree; the narrower selectors cover legacy embeds. */
+export const POSTHOG_SENSITIVE_SURFACE_SELECTOR = ".ph-no-capture, .monaco-editor, .excalidraw";
+
 type PostHogEvent = {
   event?: string;
   properties?: Record<string, unknown>;

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { shouldSendPostHogEvent } from "./posthogExceptionFilter";
+import {
+  POSTHOG_SENSITIVE_SURFACE_SELECTOR,
+  shouldSendPostHogEvent,
+} from "./posthogExceptionFilter";
 
 describe("shouldSendPostHogEvent", () => {
+  it("blocks the complete sensitive editor surface from session replay", () => {
+    expect(POSTHOG_SENSITIVE_SURFACE_SELECTOR).toContain(".ph-no-capture");
+  });
+
   it("allows an empty event through the PostHog pipeline", () => {
     expect(shouldSendPostHogEvent(null)).toBe(true);
   });
