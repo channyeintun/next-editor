@@ -29,7 +29,8 @@ The repository now contains the complete provider, control-plane, and editor int
   local and the existing `UploadLessonModal` flow appears only after live ends.
 
 Production enablement still requires applying migrations, configuring secrets, and running the
-deployed transport spike in [Live Collaboration Operations](./live-collaboration-operations.md).
+deployed transport spike in
+[Collaboration Deployment Operations](./deployment-operations-collaboration.md).
 
 ## Decision
 

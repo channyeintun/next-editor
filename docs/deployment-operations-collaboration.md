@@ -1,4 +1,4 @@
-# Live Collaboration Operations
+# Collaboration Deployment Operations
 
 Status: implementation complete; deployment validation checklist
 

@@ -434,7 +434,8 @@ The selected option adds:
   `collaborationMachine` lifecycle.
 - QStash-signed compaction and cleanup routes.
 - Separate document, awareness, and control limits plus structured Worker log events. Dashboard
-  and alert setup is described in [Live Collaboration Operations](./live-collaboration-operations.md).
+  and alert setup is described in
+  [Collaboration Deployment Operations](./deployment-operations-collaboration.md).
 
 These are deployment-specific adapter concerns. The shared document schema, Monaco bindings,
 workspace projection, playback isolation, and SCR3 recording code should not import Upstash SDKs.
