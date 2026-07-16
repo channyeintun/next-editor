@@ -416,7 +416,7 @@ export interface UseNextEditorReturn {
 
   // Monaco Editor Integration
   syncEditorRef: (editor: monaco.editor.IStandaloneCodeEditor | null) => void;
-  handleEditorChange: () => void;
+  handleEditorChange: (selection?: EditorSelection) => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
   handlePreviewInitialDocument: (document: PreviewInitialDocument) => void;

@@ -13,9 +13,14 @@ import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRun
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
+import type { EditorSelection } from "../core/src/types";
+import type { UpstashRoomProvider } from "../collaboration/upstashRoomProvider";
 import { selectIsCollapsed, selectIsFullHeight } from "../stores/runtimePanelStore";
 import { lessonRunsInWebContainer } from "../types/workspace";
-import { projectCollaborationDocument } from "../collaboration/projectDocument";
+import {
+  canWriteCollaborationDocument,
+  projectCollaborationDocument,
+} from "../collaboration/projectDocument";
 import {
   collaborationParticipantColorIndex,
   resolveCollaborationCursor,
@@ -142,8 +147,15 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const monacoRef = useRef<Monaco | null>(null);
   const viewStatesRef = useRef(new Map<string, monaco.editor.ICodeEditorViewState | null>());
   const isApplyingExternalModelValueRef = useRef(false);
+  const pendingExternalModelCaptureRef = useRef(false);
   const remoteDecorationIdsRef = useRef<string[]>([]);
   const remoteCursorLabelManagerRef = useRef<CollaborationCursorLabelManager | null>(null);
+  const recordedRemoteCursorSignaturesRef = useRef(new Map<string, string>());
+  const remoteCursorRecordingScopeRef = useRef<{
+    provider: UpstashRoomProvider | null;
+    path: string;
+    isRecording: boolean;
+  }>({ provider: null, path: "", isRecording: false });
 
   // Only subscribe to the flags we actually need for rendering decisions
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
@@ -231,6 +243,16 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const onEditorChange = useEffectEvent(() => {
     if (usesPlaybackModel || isApplyingExternalModelValueRef.current) return;
     handleEditorChange();
+  });
+
+  const recordExternalModelChange = useEffectEvent(() => {
+    if (usesPlaybackModel || !isRecording || !collaboration?.provider) return;
+    handleEditorChange();
+  });
+
+  const recordRemoteSelection = useEffectEvent((selection: EditorSelection) => {
+    if (usesPlaybackModel || !isRecording || !collaboration?.provider) return;
+    handleEditorChange(selection);
   });
 
   const publishCollaborationCursor = useEffectEvent((editor: StandaloneEditor | null) => {
@@ -433,6 +455,12 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     setActiveTheme(theme);
   }, [theme]);
 
+  useLayoutEffect(() => {
+    if (!pendingExternalModelCaptureRef.current) return;
+    pendingExternalModelCaptureRef.current = false;
+    recordExternalModelChange();
+  }, [activeFile.content, activeFile.path]);
+
   useEffect(() => {
     monacoRef.current = monaco;
     syncActivePlaybackModel(monaco);
@@ -534,6 +562,99 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   }, [activeFile.path, collaboration?.doc, collaboration?.participants, collaboration?.provider]);
 
   useEffect(() => {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    const provider = collaboration?.provider ?? null;
+    const collaborationDoc = collaboration?.doc ?? null;
+    const participants = collaboration?.participants ?? [];
+    const scope = remoteCursorRecordingScopeRef.current;
+    const scopeChanged =
+      scope.provider !== provider ||
+      scope.path !== activeFile.path ||
+      scope.isRecording !== isRecording;
+    const currentSignatures = new Map<string, string>();
+    const changedSelections: Array<{
+      key: string;
+      occurredAt: number;
+      selection: EditorSelection;
+    }> = [];
+
+    if (editor && model && provider && collaborationDoc && !usesPlaybackModel) {
+      let activeFileNodeId: string | undefined;
+      try {
+        activeFileNodeId = projectCollaborationDocument(collaborationDoc).nodeIdByPath.get(
+          activeFile.path,
+        );
+      } catch {
+        activeFileNodeId = undefined;
+      }
+
+      for (const participant of participants) {
+        if (
+          participant.sessionId === provider.awarenessSessionId ||
+          !participant.cursor ||
+          participant.cursor.fileNodeId !== activeFileNodeId ||
+          !canWriteCollaborationDocument(participant.role)
+        ) {
+          continue;
+        }
+        const cursor = resolveCollaborationCursor(collaborationDoc, participant.cursor);
+        if (!cursor) continue;
+        const key = `${participant.actorId}:${participant.sessionId}`;
+        const signature = `${cursor.anchorOffset}:${cursor.headOffset}`;
+        currentSignatures.set(key, signature);
+        if (
+          !scopeChanged &&
+          isRecording &&
+          recordedRemoteCursorSignaturesRef.current.get(key) !== signature
+        ) {
+          const anchor = model.getPositionAt(cursor.anchorOffset);
+          const head = model.getPositionAt(cursor.headOffset);
+          const startsBeforeHead = cursor.anchorOffset <= cursor.headOffset;
+          const start = startsBeforeHead ? anchor : head;
+          const end = startsBeforeHead ? head : anchor;
+          changedSelections.push({
+            key,
+            occurredAt: participant.occurredAt,
+            selection: {
+              startLineNumber: start.lineNumber,
+              startColumn: start.column,
+              endLineNumber: end.lineNumber,
+              endColumn: end.column,
+              selectionStartLineNumber: anchor.lineNumber,
+              selectionStartColumn: anchor.column,
+              positionLineNumber: head.lineNumber,
+              positionColumn: head.column,
+            },
+          });
+        }
+      }
+    }
+
+    recordedRemoteCursorSignaturesRef.current = currentSignatures;
+    remoteCursorRecordingScopeRef.current = {
+      provider,
+      path: activeFile.path,
+      isRecording,
+    };
+
+    if (!isRecording || scopeChanged || changedSelections.length === 0) return;
+    changedSelections.sort(
+      (left, right) => right.occurredAt - left.occurredAt || left.key.localeCompare(right.key),
+    );
+    recordRemoteSelection(changedSelections[0].selection);
+  }, [
+    activeFile.content,
+    activeFile.path,
+    collaboration?.doc,
+    collaboration?.participants,
+    collaboration?.provider,
+    editorRef,
+    isRecording,
+    usesPlaybackModel,
+  ]);
+
+  useEffect(() => {
     if (isPlaying) {
       focusEditorIfNeeded(editorRef.current);
     }
@@ -576,7 +697,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         // syncWorkspaceModel can synchronously emit Monaco events while React
         // is rendering. Check the ref before entering a useEffectEvent wrapper,
         // which React intentionally rejects during render (error #440).
-        if (isApplyingExternalModelValueRef.current) return;
+        if (isApplyingExternalModelValueRef.current) {
+          pendingExternalModelCaptureRef.current = true;
+          return;
+        }
         syncEditorContentToWorkspace(editor);
         onEditorChange();
       }),

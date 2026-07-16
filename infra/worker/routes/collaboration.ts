@@ -566,7 +566,9 @@ collaborationRoute.get("/rooms/:roomId", async (c) => {
   const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
   if (!access) return c.json({ error: "not found" }, 404);
 
-  return c.json(roomResponse(access, access.member_role));
+  return c.json(roomResponse(access, access.member_role), 200, {
+    "Cache-Control": "private, no-store",
+  });
 });
 
 collaborationRoute.get("/rooms/:roomId/bootstrap", async (c) => {

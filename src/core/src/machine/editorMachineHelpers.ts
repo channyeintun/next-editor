@@ -375,6 +375,7 @@ export const createFrame = (
   getPreviewState?: EditorMachineInput["getPreviewState"],
   previousContent?: CapturedContentRef,
   previousViewState?: CapturedViewStateRef,
+  selectionOverride?: EditorSelection,
 ): {
   frame: EditorFrame;
   contentVersionId: number;
@@ -390,8 +391,18 @@ export const createFrame = (
     previousContent.modelUri === modelUri
       ? previousContent.value
       : editor.getValue();
-  const position = normalizeEditorPosition(editor.getPosition());
-  const selection = normalizeEditorSelection(editor.getSelection(), undefined, position);
+  const editorPosition = normalizeEditorPosition(editor.getPosition());
+  const selection = normalizeEditorSelection(
+    selectionOverride ?? editor.getSelection(),
+    undefined,
+    editorPosition,
+  );
+  const position = selectionOverride
+    ? normalizeEditorPosition({
+        lineNumber: selection.positionLineNumber,
+        column: selection.positionColumn,
+      })
+    : editorPosition;
   const scrollTop = editor.getScrollTop();
   const scrollLeft = editor.getScrollLeft();
 
@@ -407,6 +418,31 @@ export const createFrame = (
   const viewState = canReuseViewState
     ? previousViewState.value
     : normalizeEditorViewState(editor.saveViewState(), selection, position);
+
+  // normalizeEditorFrame treats Monaco's primary cursorState as authoritative.
+  // Replace that primary cursor in the cloned view state so a collaborative
+  // selection survives frame normalization without moving the host's editor.
+  if (selectionOverride && viewState) {
+    const mutableViewState = viewState as unknown as {
+      cursorState?: Array<Record<string, unknown>>;
+    };
+    const cursorState = mutableViewState.cursorState;
+    const primaryCursorState = cursorState?.[0];
+    if (primaryCursorState) {
+      cursorState[0] = {
+        ...primaryCursorState,
+        inSelectionMode:
+          selection.selectionStartLineNumber !== selection.positionLineNumber ||
+          selection.selectionStartColumn !== selection.positionColumn,
+        selectionStart: {
+          lineNumber: selection.selectionStartLineNumber,
+          column: selection.selectionStartColumn,
+        },
+        position,
+        selection,
+      };
+    }
+  }
 
   const slideState = getSlideState?.();
   const previewState = getPreviewState?.();

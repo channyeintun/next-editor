@@ -153,6 +153,7 @@ export class UpstashRoomProvider {
   private outbox: PendingUpdate[] = [];
   private seenStreamIds = new Set<string>();
   private isRefreshingControl = false;
+  private pendingControlRoleVersion = 0;
 
   constructor(options: UpstashRoomProviderOptions) {
     this.roomId = options.roomId;
@@ -311,6 +312,9 @@ export class UpstashRoomProvider {
         return;
       }
       this.roomSession = roomSession;
+      if (roomSession.room.roleVersion >= this.pendingControlRoleVersion) {
+        this.pendingControlRoleVersion = 0;
+      }
       this.openSource(attemptId, roomSession.channel);
     } catch (error) {
       if (this.isStopped || attemptId !== this.attemptId) return;
@@ -439,35 +443,45 @@ export class UpstashRoomProvider {
   }
 
   private async refreshRoomFromControl(event: CollaborationControlEvent): Promise<void> {
-    if (
-      this.isStopped ||
-      this.isRefreshingControl ||
-      (this.roomSession?.room.roleVersion ?? 0) >= event.roleVersion
-    ) {
-      return;
-    }
+    if (this.isStopped || (this.roomSession?.room.roleVersion ?? 0) >= event.roleVersion) return;
+    this.pendingControlRoleVersion = Math.max(this.pendingControlRoleVersion, event.roleVersion);
+    if (this.isRefreshingControl) return;
     this.isRefreshingControl = true;
     try {
-      const previousCanWrite = this.canWrite;
-      const roomSession = await this.api.getRoom(this.roomId);
-      if (this.isStopped) return;
-      if (roomSession.room.status !== "active") {
-        this.fatal("The host ended this live collaboration room");
-        return;
-      }
-      this.roomSession = roomSession;
-      this.actor.send({
-        type: "ROLE_CHANGED",
-        role: roomSession.membership.role,
-        roleVersion: roomSession.room.roleVersion,
-      });
-      if (previousCanWrite && !this.canWrite && this.hasPendingUpdates) {
-        this.pendingUpdates = [];
-        this.outbox = [];
-        const message =
-          "Your role changed before local edits were accepted. Copy any local work before rejoining.";
-        this.onRejectedLocalChanges?.(message);
-        this.fatal(message);
+      while (
+        !this.isStopped &&
+        (this.roomSession?.room.roleVersion ?? 0) < this.pendingControlRoleVersion
+      ) {
+        const requestedRoleVersion = this.pendingControlRoleVersion;
+        const previousRoleVersion = this.roomSession?.room.roleVersion ?? 0;
+        const previousCanWrite = this.canWrite;
+        const roomSession = await this.api.getRoom(this.roomId);
+        if (this.isStopped) return;
+        if (roomSession.room.status !== "active") {
+          this.fatal("The host ended this live collaboration room");
+          return;
+        }
+        this.roomSession = roomSession;
+        this.actor.send({
+          type: "ROLE_CHANGED",
+          role: roomSession.membership.role,
+          roleVersion: roomSession.room.roleVersion,
+        });
+        if (previousCanWrite && !this.canWrite && this.hasPendingUpdates) {
+          this.pendingUpdates = [];
+          this.outbox = [];
+          const message =
+            "Your role changed before local edits were accepted. Copy any local work before rejoining.";
+          this.onRejectedLocalChanges?.(message);
+          this.fatal(message);
+          return;
+        }
+        if (
+          roomSession.room.roleVersion < requestedRoleVersion &&
+          roomSession.room.roleVersion <= previousRoleVersion
+        ) {
+          throw new Error("Room permissions response did not include the latest role change");
+        }
       }
     } catch (error) {
       if (this.isStopped) return;
@@ -480,6 +494,9 @@ export class UpstashRoomProvider {
         );
       }
     } finally {
+      if ((this.roomSession?.room.roleVersion ?? 0) >= this.pendingControlRoleVersion) {
+        this.pendingControlRoleVersion = 0;
+      }
       this.isRefreshingControl = false;
     }
   }

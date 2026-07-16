@@ -57,6 +57,7 @@ export async function createCollaborationRoom(
 export async function getCollaborationRoom(roomId: string): Promise<CollaborationRoomSession> {
   const response = await apiClient.get<CollaborationRoomSession>(
     `/collaboration/rooms/${encodeURIComponent(roomId)}`,
+    { headers: { "Cache-Control": "no-cache" } },
   );
   return response.data;
 }

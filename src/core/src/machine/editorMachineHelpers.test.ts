@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type * as monaco from "monaco-editor";
-import type { MouseCursorPosition } from "../types";
+import type { EditorSelection, MouseCursorPosition } from "../types";
+import { normalizeEditorFrame } from "../utils/editorState";
 import { createFrame } from "./editorMachineHelpers";
 
 interface FakeEditorState {
@@ -8,19 +9,24 @@ interface FakeEditorState {
   versionId: number;
   value: string;
   scrollTop: number;
+  position?: monaco.IPosition | null;
+  selection?: monaco.ISelection | null;
+  viewState?: monaco.editor.ICodeEditorViewState | null;
 }
 
 const makeEditor = (state: FakeEditorState) => {
   const getValue = vi.fn<() => string>(() => state.value);
-  const saveViewState = vi.fn<() => null>(() => null);
+  const saveViewState = vi.fn<() => monaco.editor.ICodeEditorViewState | null>(
+    () => state.viewState ?? null,
+  );
   const editor = {
     getModel: () => ({
       getVersionId: () => state.versionId,
       uri: { toString: () => state.uri },
     }),
     getValue,
-    getPosition: () => null,
-    getSelection: () => null,
+    getPosition: () => state.position ?? null,
+    getSelection: () => state.selection ?? null,
     getScrollTop: () => state.scrollTop,
     getScrollLeft: () => 0,
     saveViewState,
@@ -105,5 +111,78 @@ describe("createFrame capture gating", () => {
     expect(fake.saveViewState).toHaveBeenCalledTimes(2);
     expect(second.frame.state.content).toBe(first.frame.state.content);
     expect(fake.getValue).toHaveBeenCalledTimes(1);
+  });
+
+  it("captures a remote selection without changing the local editor cursor", () => {
+    const localSelection: EditorSelection = {
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: 1,
+      endColumn: 1,
+      selectionStartLineNumber: 1,
+      selectionStartColumn: 1,
+      positionLineNumber: 1,
+      positionColumn: 1,
+    };
+    const remoteSelection: EditorSelection = {
+      startLineNumber: 2,
+      startColumn: 3,
+      endLineNumber: 4,
+      endColumn: 6,
+      selectionStartLineNumber: 4,
+      selectionStartColumn: 6,
+      positionLineNumber: 2,
+      positionColumn: 3,
+    };
+    const fake = makeEditor({
+      uri: "file:///a.ts",
+      versionId: 6,
+      value: "one\ntwo\nthree\nfour",
+      scrollTop: 0,
+      position: { lineNumber: 1, column: 1 },
+      selection: localSelection,
+      viewState: {
+        cursorState: [
+          {
+            inSelectionMode: false,
+            selectionStart: { lineNumber: 1, column: 1 },
+            position: { lineNumber: 1, column: 1 },
+          },
+        ],
+        viewState: {
+          scrollTop: 0,
+          scrollTopWithoutViewZones: 0,
+          scrollLeft: 0,
+          firstPosition: { lineNumber: 1, column: 1 },
+          firstPositionDeltaTop: 0,
+        },
+        contributionsState: {},
+      },
+    });
+
+    const captured = createFrame(
+      fake.editor,
+      25,
+      mouse,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      remoteSelection,
+    );
+    const normalized = normalizeEditorFrame(captured.frame);
+
+    expect(normalized.state.selection).toEqual(remoteSelection);
+    expect(normalized.state.position).toEqual({ lineNumber: 2, column: 3 });
+    expect(
+      (normalized.state.viewState as unknown as { cursorState: unknown[] }).cursorState[0],
+    ).toMatchObject({
+      inSelectionMode: true,
+      selectionStart: { lineNumber: 4, column: 6 },
+      position: { lineNumber: 2, column: 3 },
+      selection: remoteSelection,
+    });
+    expect(fake.state.position).toEqual({ lineNumber: 1, column: 1 });
+    expect(fake.state.selection).toEqual(localSelection);
   });
 });

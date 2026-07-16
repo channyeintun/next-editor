@@ -9,6 +9,7 @@ import type {
   UseNextEditorReturn,
   EditorState,
   EditorFrame,
+  EditorSelection,
   Recording,
 } from "./types";
 import type {
@@ -178,8 +179,8 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   };
 
   // Event Handlers for UI
-  const handleEditorChange = () => {
-    actorRef.send({ type: "CAPTURE_FRAME" });
+  const handleEditorChange = (selection?: EditorSelection) => {
+    actorRef.send({ type: "CAPTURE_FRAME", selection });
   };
 
   const handleSlideEvent = (event: SlideEvent) => {

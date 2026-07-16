@@ -311,6 +311,73 @@ describe("UpstashRoomProvider", () => {
     provider.stop();
   });
 
+  it("applies the latest role while an earlier permission refresh is still pending", async () => {
+    const server = new Y.Doc();
+    const api = new FakeApi(server);
+    const source = new FakeEventSource();
+    const sessionAt = (
+      role: "owner" | "editor" | "viewer",
+      roleVersion: number,
+    ): CollaborationRoomSession => {
+      const session = roomSession(role);
+      return { ...session, room: { ...session.room, roleVersion } };
+    };
+    let getRoomCalls = 0;
+    let resolveFirstRefresh!: (session: CollaborationRoomSession) => void;
+    api.getRoom = async () => {
+      getRoomCalls += 1;
+      if (getRoomCalls === 1) return sessionAt("viewer", 1);
+      if (getRoomCalls === 2) {
+        return new Promise<CollaborationRoomSession>((resolve) => {
+          resolveFirstRefresh = resolve;
+        });
+      }
+      return sessionAt("editor", 3);
+    };
+    const provider = new UpstashRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      eventSourceFactory: () => source,
+    });
+
+    await provider.start();
+    source.open();
+    await waitUntil(() => provider.connectionState === "live");
+    expect(provider.canWrite).toBe(false);
+    let writableNotifications = 0;
+    const subscription = provider.subscribe(() => {
+      if (provider.canWrite) writableNotifications += 1;
+    });
+
+    const sendRoleChange = (id: string, roleVersion: number) => {
+      source.message({
+        id,
+        event: "control.room",
+        channel: collaborationControlChannel(ROOM_ID),
+        data: {
+          kind: "membership-changed",
+          roomId: ROOM_ID,
+          roleVersion,
+          targetUserId: ACTOR_ID,
+          occurredAt: Date.now(),
+        },
+      });
+    };
+    sendRoleChange("2-0", 2);
+    await waitUntil(() => getRoomCalls === 2);
+    sendRoleChange("3-0", 3);
+    resolveFirstRefresh(sessionAt("viewer", 2));
+
+    await waitUntil(() => provider.canWrite);
+    expect(provider.session?.membership.role).toBe("editor");
+    expect(provider.session?.room.roleVersion).toBe(3);
+    expect(getRoomCalls).toBe(3);
+    expect(writableNotifications).toBeGreaterThan(0);
+
+    subscription.unsubscribe();
+    provider.stop();
+  });
+
   it("fails closed when the host ends the room", async () => {
     const server = new Y.Doc();
     const api = new FakeApi(server);

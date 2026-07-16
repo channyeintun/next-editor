@@ -400,6 +400,12 @@ export type CaptureFrameEvent = {
   type: "CAPTURE_FRAME";
   isMouseMovement?: boolean;
   mousePosition?: MouseCursorPosition;
+  /**
+   * Records another collaborator's caret/selection without moving the local
+   * Monaco editor. The recording still captures the local editor's current
+   * content and viewport.
+   */
+  selection?: EditorSelection;
 };
 
 /** Load a recording for playback */

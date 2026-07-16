@@ -453,6 +453,7 @@ export const captureFrame = ({
     context.getPreviewState,
     previousContent,
     context.session.lastCapturedViewStateRef,
+    event.type === "CAPTURE_FRAME" ? event.selection : undefined,
   );
 
   const { state: encoder, emitted } = pushFrame(context.session.encoder, frame);
