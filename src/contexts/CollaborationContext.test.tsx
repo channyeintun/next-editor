@@ -12,10 +12,18 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@next-editor/infra", () => ({
   claimCollaborationInvitation: vi.fn(),
   closeCollaborationRoom: vi.fn(),
+  createCollaborationInvitation: vi.fn(),
   createCollaborationRoom: mocks.createRoom,
   getCollaborationBootstrap: vi.fn(),
   getCollaborationRoom: mocks.getRoom,
+  listCollaborationAwareness: vi.fn(async () => []),
+  listCollaborationInvitations: vi.fn(async () => []),
+  listCollaborationMembers: vi.fn(async () => ({ members: [], roleVersion: 1 })),
+  publishCollaborationAwareness: vi.fn(),
   publishCollaborationUpdate: vi.fn(),
+  removeCollaborationMember: vi.fn(),
+  revokeCollaborationInvitation: vi.fn(),
+  updateCollaborationMemberRole: vi.fn(),
   useAuth: () => ({
     user: { id: "10000000-0000-4000-8000-000000000001" },
     isSignedIn: true,
@@ -54,9 +62,12 @@ const baseActions: WorkspaceActions = {
   listFiles: () => Object.values(project.files),
 };
 
-vi.mock("../hooks/useWorkspace", () => ({ useWorkspaceActions: () => baseActions }));
+vi.mock("../hooks/useWorkspace", () => ({
+  useWorkspaceActions: () => baseActions,
+  useWorkspaceActiveFilePath: () => project.entryFilePath,
+}));
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorMetadata: () => ({ usesPlaybackModel: false }),
+  useNextEditorMetadata: () => ({ usesPlaybackModel: false, isRecording: false }),
 }));
 
 import { CollaborationProvider, useCollaboration } from "./CollaborationContext";

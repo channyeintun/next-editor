@@ -41,6 +41,7 @@ import {
 import { lessonRunsInWebContainer, type WorkspaceLessonType } from "../types/workspace";
 import { createStarterWorkspaceForLessonType } from "../starters";
 import SlidesButton from "./SlidesButton";
+import CollaborationPanel from "./CollaborationPanel";
 import { startTour } from "./tour/productTour";
 
 const LESSON_TYPE_OPTIONS: Array<{
@@ -691,6 +692,7 @@ function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
         ) : null}
       </div>
       <div className="flex items-center gap-2">
+        <CollaborationPanel />
         <WorkspaceSettingsButton showImportExport={showImportExport} />
         <div className="h-4 w-px bg-slate-700 mx-1" />
         <div className="flex items-center gap-2">

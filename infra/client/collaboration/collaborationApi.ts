@@ -1,4 +1,6 @@
 import type {
+  CollaborationAwarenessEvent,
+  CollaborationAwarenessInput,
   CollaborationBootstrapResponse,
   CollaborationCreateRoomInput,
   CollaborationDocumentUpdateInput,
@@ -52,6 +54,27 @@ export async function listCollaborationMembers(
   const response = await apiClient.get<{ members: CollaborationMember[]; roleVersion: number }>(
     `/collaboration/rooms/${encodeURIComponent(roomId)}/members`,
   );
+  return response.data;
+}
+
+export async function listCollaborationAwareness(
+  roomId: string,
+): Promise<CollaborationAwarenessEvent[]> {
+  const response = await apiClient.get<{ participants: CollaborationAwarenessEvent[] }>(
+    `/collaboration/rooms/${encodeURIComponent(roomId)}/awareness`,
+  );
+  return response.data.participants;
+}
+
+export async function publishCollaborationAwareness(
+  roomId: string,
+  awareness: CollaborationAwarenessInput,
+): Promise<{ accepted: true; streamId: string; event: CollaborationAwarenessEvent }> {
+  const response = await apiClient.post<{
+    accepted: true;
+    streamId: string;
+    event: CollaborationAwarenessEvent;
+  }>(`/collaboration/rooms/${encodeURIComponent(roomId)}/awareness`, awareness);
   return response.data;
 }
 

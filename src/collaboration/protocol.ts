@@ -143,6 +143,89 @@ export type CollaborationDocumentUpdateEvent = z.infer<
   typeof collaborationDocumentUpdateEventSchema
 >;
 
+const encodedRelativePositionSchema = z
+  .string()
+  .min(4)
+  .max(2048)
+  .regex(BASE64_PATTERN, "invalid relative position");
+
+export const collaborationCursorSchema = z
+  .object({
+    fileNodeId: collaborationIdSchema,
+    anchor: encodedRelativePositionSchema,
+    head: encodedRelativePositionSchema,
+  })
+  .strict();
+
+export type CollaborationCursor = z.infer<typeof collaborationCursorSchema>;
+
+const collaborationAwarenessStateFields = {
+  sessionId: collaborationIdSchema,
+  revision: z.number().int().nonnegative(),
+  activeFileNodeId: collaborationIdSchema.nullable(),
+  cursor: collaborationCursorSchema.nullable(),
+  followingHost: z.boolean(),
+} as const;
+
+export const collaborationAwarenessInputSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("state"),
+      ...collaborationAwarenessStateFields,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("leave"),
+      sessionId: collaborationIdSchema,
+      revision: z.number().int().nonnegative(),
+    })
+    .strict(),
+]);
+
+export const collaborationAwarenessEventSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("state"),
+      ...collaborationAwarenessStateFields,
+      roomId: collaborationIdSchema,
+      actorId: collaborationIdSchema,
+      role: collaborationRoleSchema,
+      username: z.string().min(1).max(64),
+      name: z.string().max(120).nullable(),
+      avatarUrl: z.string().max(2048).nullable(),
+      isHost: z.boolean(),
+      occurredAt: z.number().int().nonnegative(),
+      expiresAt: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("leave"),
+      sessionId: collaborationIdSchema,
+      revision: z.number().int().nonnegative(),
+      roomId: collaborationIdSchema,
+      actorId: collaborationIdSchema,
+      occurredAt: z.number().int().nonnegative(),
+    })
+    .strict(),
+]);
+
+export type CollaborationAwarenessInput = z.infer<typeof collaborationAwarenessInputSchema>;
+export type CollaborationAwarenessEvent = z.infer<typeof collaborationAwarenessEventSchema>;
+
+export const collaborationControlEventSchema = z
+  .object({
+    kind: z.enum(["membership-changed", "room-closed"]),
+    roomId: collaborationIdSchema,
+    roleVersion: z.number().int().positive(),
+    targetUserId: collaborationIdSchema.nullable(),
+    occurredAt: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type CollaborationControlEvent = z.infer<typeof collaborationControlEventSchema>;
+
 export interface CollaborationUpdateAccepted {
   accepted: true;
   updateId: string;
@@ -168,20 +251,54 @@ export const collaborationRealtimeSchema = {
   document: {
     update: collaborationDocumentUpdateEventSchema,
   },
+  awareness: {
+    state: collaborationAwarenessEventSchema,
+  },
+  control: {
+    room: collaborationControlEventSchema,
+  },
 } as const;
 
 export type CollaborationRealtimeEvents = typeof collaborationRealtimeSchema;
 
 const ROOM_CHANNEL_PREFIX = "collab:room:";
+const AWARENESS_CHANNEL_SUFFIX = ":awareness";
+const CONTROL_CHANNEL_SUFFIX = ":control";
 
 export function collaborationRoomChannel(roomId: string): string {
   return `${ROOM_CHANNEL_PREFIX}${collaborationIdSchema.parse(roomId)}`;
 }
 
+export function collaborationAwarenessChannel(roomId: string): string {
+  return `${collaborationRoomChannel(roomId)}${AWARENESS_CHANNEL_SUFFIX}`;
+}
+
+export function collaborationControlChannel(roomId: string): string {
+  return `${collaborationRoomChannel(roomId)}${CONTROL_CHANNEL_SUFFIX}`;
+}
+
+export type CollaborationChannelKind = "document" | "awareness" | "control";
+
+export function parseCollaborationChannel(
+  channel: string,
+): { roomId: string; kind: CollaborationChannelKind } | null {
+  let kind: CollaborationChannelKind = "document";
+  let roomChannel = channel;
+  if (channel.endsWith(AWARENESS_CHANNEL_SUFFIX)) {
+    kind = "awareness";
+    roomChannel = channel.slice(0, -AWARENESS_CHANNEL_SUFFIX.length);
+  } else if (channel.endsWith(CONTROL_CHANNEL_SUFFIX)) {
+    kind = "control";
+    roomChannel = channel.slice(0, -CONTROL_CHANNEL_SUFFIX.length);
+  }
+  if (!roomChannel.startsWith(ROOM_CHANNEL_PREFIX)) return null;
+  const result = collaborationIdSchema.safeParse(roomChannel.slice(ROOM_CHANNEL_PREFIX.length));
+  return result.success ? { roomId: result.data, kind } : null;
+}
+
 export function roomIdFromCollaborationChannel(channel: string): string | null {
-  if (!channel.startsWith(ROOM_CHANNEL_PREFIX)) return null;
-  const result = collaborationIdSchema.safeParse(channel.slice(ROOM_CHANNEL_PREFIX.length));
-  return result.success ? result.data : null;
+  const parsed = parseCollaborationChannel(channel);
+  return parsed?.kind === "document" ? parsed.roomId : null;
 }
 
 export function canPublishCollaborationUpdate(role: CollaborationRole): boolean {

@@ -37,6 +37,8 @@ import { useCaptionStore, useCaptionStoreTrigger } from "../hooks/useCaptionStor
 import { usePlaybackSettings, usePlaybackSettingsTrigger } from "../hooks/usePlaybackSettings";
 import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
+import { useOptionalCollaboration } from "../contexts/CollaborationContext";
+import { canRecordInLiveRoom } from "../collaboration/recordingPolicy";
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -200,6 +202,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   const { isRecording, isPlaying, currentRecording, hasEnded, recordingStartTime } =
     useNextEditorMetadata();
+  const collaboration = useOptionalCollaboration();
+  const effectiveRecordMode = canRecordInLiveRoom(
+    recordMode,
+    Boolean(collaboration?.provider),
+    collaboration?.isHost ?? false,
+  );
 
   const { playbackSpeed, volume, duration: actualDuration } = useNextEditorPlayback();
 
@@ -242,6 +250,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({
       if (interval) clearInterval(interval);
     };
   }, [isRecording, recordingStartTime]);
+
+  useEffect(() => {
+    if (isRecording && collaboration?.provider && !collaboration.isHost) {
+      stopRecording();
+      onStopRecording?.();
+    }
+  }, [collaboration?.isHost, collaboration?.provider, isRecording, onStopRecording, stopRecording]);
 
   const handlePlayPause = () => {
     // Aggressive Safari Wake: Resume context directly in the click handler
@@ -362,6 +377,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
       return;
     }
 
+    if (!effectiveRecordMode) return;
+
     // External audio with no file picked yet: open the picker and bail — no capture, no session.
     // Kept above the gDM await so we never open the surface picker just to prompt for an audio file.
     if (recordingAudioSource === "external" && !selectedAudioFile) {
@@ -395,7 +412,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   const duration = currentRecording?.duration || 0;
   const progressDuration = actualDuration > 0 ? actualDuration * 1000 : duration;
-  const showAudioSourceControls = recordMode && !isRecording && !currentRecording && !isPlaying;
+  const showAudioSourceControls =
+    effectiveRecordMode && !isRecording && !currentRecording && !isPlaying;
   // Camera may be an in-memory blob (just recorded / IndexedDB-restored) or an external video URL
   // (imported file or hosted sibling). Either means the recording has camera to show/hide.
   const hasCameraRecording =
@@ -414,7 +432,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const recordIconSize = large ? 44 : 14;
   const recordPlusSize = large ? 30 : 10;
 
-  if (!recordMode && !currentRecording && !isRecording) {
+  if (!effectiveRecordMode && !currentRecording && !isRecording) {
     return null;
   }
 
@@ -432,7 +450,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         onChange={handleCaptionFileChange}
       />
       <div className={`flex items-center w-full ${rowSizing}`}>
-        {recordMode && (
+        {effectiveRecordMode && (
           <button
             data-tour="record"
             onClick={handleRecordButtonClick}
@@ -700,7 +718,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               {showSettings && (
                 <div className="absolute bottom-full right-0 z-46 mb-2 min-w-50 rounded-lg border border-slate-700 bg-[#151821] p-4 shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
                   <div className="text-slate-100">
-                    {(!recordMode || playlistMode) && (
+                    {(!effectiveRecordMode || playlistMode) && (
                       <div className="mb-3 border-b border-slate-700 pb-3">
                         {playlistMode && (
                           <Switch
@@ -713,7 +731,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                             label="Continue to Next"
                           />
                         )}
-                        {!recordMode && (
+                        {!effectiveRecordMode && (
                           <Switch
                             checked={autoplay}
                             onChange={(checked) =>

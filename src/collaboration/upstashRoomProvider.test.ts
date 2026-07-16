@@ -3,6 +3,8 @@ import * as Y from "yjs";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
+  collaborationAwarenessChannel,
+  collaborationControlChannel,
   collaborationDocumentUpdateEventSchema,
   collaborationRoomChannel,
   type CollaborationBootstrapResponse,
@@ -229,6 +231,113 @@ describe("UpstashRoomProvider", () => {
     provider.doc.getText("source").insert(0, "viewer-");
     await provider.flushNow();
     expect(api.published).toEqual([]);
+    provider.stop();
+  });
+
+  it("subscribes to awareness and control channels and applies role changes", async () => {
+    const server = new Y.Doc();
+    const api = new FakeApi(server);
+    const sources: FakeEventSource[] = [];
+    const urls: string[] = [];
+    const awarenessEvents: unknown[] = [];
+    const controlEvents: unknown[] = [];
+    const provider = new UpstashRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      onAwarenessEvent: (event) => awarenessEvents.push(event),
+      onControlEvent: (event) => controlEvents.push(event),
+      eventSourceFactory: (url) => {
+        urls.push(url);
+        const source = new FakeEventSource();
+        sources.push(source);
+        return source;
+      },
+    });
+
+    await provider.start();
+    const channels = new URL(urls[0]).searchParams.getAll("channel");
+    expect(channels).toEqual([
+      collaborationRoomChannel(ROOM_ID),
+      collaborationAwarenessChannel(ROOM_ID),
+      collaborationControlChannel(ROOM_ID),
+    ]);
+    sources[0].open();
+    await waitUntil(() => provider.connectionState === "live");
+
+    const now = Date.now();
+    sources[0].message({
+      id: "2-0",
+      event: "awareness.state",
+      channel: collaborationAwarenessChannel(ROOM_ID),
+      data: {
+        kind: "state",
+        roomId: ROOM_ID,
+        actorId: ACTOR_ID,
+        sessionId: "60000000-0000-4000-8000-000000000001",
+        revision: 1,
+        role: "owner",
+        username: "host",
+        name: null,
+        avatarUrl: null,
+        isHost: true,
+        activeFileNodeId: null,
+        cursor: null,
+        followingHost: false,
+        occurredAt: now,
+        expiresAt: now + 45_000,
+      },
+    });
+    expect(awarenessEvents).toHaveLength(1);
+
+    api.session = {
+      ...roomSession("viewer"),
+      room: { ...roomSession("viewer").room, roleVersion: 2 },
+    };
+    sources[0].message({
+      id: "3-0",
+      event: "control.room",
+      channel: collaborationControlChannel(ROOM_ID),
+      data: {
+        kind: "membership-changed",
+        roomId: ROOM_ID,
+        roleVersion: 2,
+        targetUserId: ACTOR_ID,
+        occurredAt: now,
+      },
+    });
+    await waitUntil(() => provider.session?.membership.role === "viewer");
+    expect(provider.canWrite).toBe(false);
+    expect(controlEvents).toHaveLength(1);
+    provider.stop();
+  });
+
+  it("fails closed when the host ends the room", async () => {
+    const server = new Y.Doc();
+    const api = new FakeApi(server);
+    const source = new FakeEventSource();
+    const provider = new UpstashRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      eventSourceFactory: () => source,
+    });
+
+    await provider.start();
+    source.open();
+    await waitUntil(() => provider.connectionState === "live");
+    source.message({
+      id: "4-0",
+      event: "control.room",
+      channel: collaborationControlChannel(ROOM_ID),
+      data: {
+        kind: "room-closed",
+        roomId: ROOM_ID,
+        roleVersion: 2,
+        targetUserId: null,
+        occurredAt: Date.now(),
+      },
+    });
+    expect(provider.connectionState).toBe("failed");
+    expect(provider.actor.getSnapshot().context.error).toContain("host ended");
     provider.stop();
   });
 });

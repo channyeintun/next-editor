@@ -15,6 +15,11 @@ import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { selectIsCollapsed, selectIsFullHeight } from "../stores/runtimePanelStore";
 import { lessonRunsInWebContainer } from "../types/workspace";
+import { projectCollaborationDocument } from "../collaboration/projectDocument";
+import {
+  collaborationParticipantColorIndex,
+  resolveCollaborationCursor,
+} from "../collaboration/relativePosition";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import BinaryFilePreview from "./BinaryFilePreview";
@@ -90,6 +95,10 @@ function WorkspaceEventRecorder({
 
 type StandaloneEditor = monaco.editor.IStandaloneCodeEditor;
 
+function displayParticipantName(participant: { name: string | null; username: string }): string {
+  return participant.name?.trim() || participant.username;
+}
+
 /**
  * CodeEditor Component - Monaco Editor wrapper with recording and replay capabilities
  */
@@ -129,6 +138,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const monacoRef = useRef<Monaco | null>(null);
   const viewStatesRef = useRef(new Map<string, monaco.editor.ICodeEditorViewState | null>());
   const isApplyingExternalModelValueRef = useRef(false);
+  const remoteDecorationIdsRef = useRef<string[]>([]);
 
   // Only subscribe to the flags we actually need for rendering decisions
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
@@ -216,6 +226,26 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const onEditorChange = useEffectEvent(() => {
     if (usesPlaybackModel || isApplyingExternalModelValueRef.current) return;
     handleEditorChange();
+  });
+
+  const publishCollaborationCursor = useEffectEvent((editor: StandaloneEditor | null) => {
+    if (!collaboration?.provider || usesPlaybackModel || !editor) return;
+    const model = editor.getModel();
+    const selection = editor.getSelection();
+    if (!model || !selection) return;
+    const modelPath = workspacePathFromMonacoModelUri(model.uri);
+    if (!modelPath) return;
+    collaboration.updateCursor(
+      modelPath,
+      model.getOffsetAt({
+        lineNumber: selection.selectionStartLineNumber,
+        column: selection.selectionStartColumn,
+      }),
+      model.getOffsetAt({
+        lineNumber: selection.positionLineNumber,
+        column: selection.positionColumn,
+      }),
+    );
   });
 
   const syncEditorContentToWorkspace = useEffectEvent((editor: StandaloneEditor | null) => {
@@ -395,6 +425,79 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   }, [editorModelPath, editorRef, syncEditorRef]);
 
   useEffect(() => {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (!editor || !model || !collaboration?.provider || !collaboration.doc) {
+      if (editor && remoteDecorationIdsRef.current.length > 0) {
+        remoteDecorationIdsRef.current = editor.deltaDecorations(
+          remoteDecorationIdsRef.current,
+          [],
+        );
+      }
+      return;
+    }
+    let activeFileNodeId: string | undefined;
+    try {
+      activeFileNodeId = projectCollaborationDocument(collaboration.doc).nodeIdByPath.get(
+        activeFile.path,
+      );
+    } catch {
+      return;
+    }
+    const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+    for (const participant of collaboration.participants) {
+      if (
+        participant.sessionId === collaboration.provider.awarenessSessionId ||
+        !participant.cursor ||
+        participant.cursor.fileNodeId !== activeFileNodeId
+      ) {
+        continue;
+      }
+      const cursor = resolveCollaborationCursor(collaboration.doc, participant.cursor);
+      if (!cursor) continue;
+      const anchor = model.getPositionAt(cursor.anchorOffset);
+      const head = model.getPositionAt(cursor.headOffset);
+      const startsBeforeHead = cursor.anchorOffset <= cursor.headOffset;
+      const start = startsBeforeHead ? anchor : head;
+      const end = startsBeforeHead ? head : anchor;
+      const color = collaborationParticipantColorIndex(participant);
+      if (cursor.anchorOffset !== cursor.headOffset) {
+        decorations.push({
+          range: new monaco.Range(
+            start.lineNumber,
+            start.column,
+            end.lineNumber,
+            end.column,
+          ),
+          options: {
+            className: `collaboration-selection collaboration-color-${color}`,
+            hoverMessage: { value: displayParticipantName(participant) },
+          },
+        });
+      }
+      decorations.push({
+        range: new monaco.Range(head.lineNumber, head.column, head.lineNumber, head.column),
+        options: {
+          beforeContentClassName: `collaboration-cursor collaboration-color-${color}`,
+          hoverMessage: { value: displayParticipantName(participant) },
+        },
+      });
+    }
+    remoteDecorationIdsRef.current = editor.deltaDecorations(
+      remoteDecorationIdsRef.current,
+      decorations,
+    );
+    return () => {
+      if (editorRef.current === editor) {
+        remoteDecorationIdsRef.current = editor.deltaDecorations(
+          remoteDecorationIdsRef.current,
+          [],
+        );
+      }
+    };
+  }, [activeFile.path, collaboration?.doc, collaboration?.participants, collaboration?.provider]);
+
+  useEffect(() => {
     if (isPlaying) {
       focusEditorIfNeeded(editorRef.current);
     }
@@ -431,6 +534,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
         disposePlaybackModelsIfIdle(editor.getModel()?.uri ?? null);
         syncEditorRef(editor);
+        publishCollaborationCursor(editor);
       }),
       editor.onDidChangeModelContent(() => {
         syncEditorContentToWorkspace(editor);
@@ -438,9 +542,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       }),
       editor.onDidChangeCursorPosition(() => {
         onEditorChange();
+        publishCollaborationCursor(editor);
       }),
       editor.onDidChangeCursorSelection(() => {
         onEditorChange();
+        publishCollaborationCursor(editor);
       }),
       editor.onDidScrollChange(() => {
         onEditorChange();

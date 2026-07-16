@@ -4,9 +4,15 @@ import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
   MAX_YJS_UPDATE_BYTES,
+  collaborationAwarenessChannel,
+  collaborationAwarenessEventSchema,
+  collaborationControlChannel,
+  collaborationControlEventSchema,
   collaborationDocumentUpdateEventSchema,
   collaborationRoomChannel,
+  type CollaborationAwarenessEvent,
   type CollaborationBootstrapResponse,
+  type CollaborationControlEvent,
   type CollaborationDocumentUpdateInput,
   type CollaborationRoomSession,
   type CollaborationUpdateAccepted,
@@ -59,6 +65,8 @@ export interface UpstashRoomProviderOptions {
   maxReconnectAttempts?: number;
   random?: () => number;
   onDocumentChange?: (doc: Y.Doc, transaction: Y.Transaction) => void;
+  onAwarenessEvent?: (event: CollaborationAwarenessEvent) => void;
+  onControlEvent?: (event: CollaborationControlEvent) => void;
   onRejectedLocalChanges?: (message: string) => void;
 }
 
@@ -124,6 +132,8 @@ export class UpstashRoomProvider {
   private readonly maxReconnectAttempts: number;
   private readonly random: () => number;
   private readonly onDocumentChange?: UpstashRoomProviderOptions["onDocumentChange"];
+  private readonly onAwarenessEvent?: UpstashRoomProviderOptions["onAwarenessEvent"];
+  private readonly onControlEvent?: UpstashRoomProviderOptions["onControlEvent"];
   private readonly onRejectedLocalChanges?: UpstashRoomProviderOptions["onRejectedLocalChanges"];
 
   private sessionId = crypto.randomUUID();
@@ -137,11 +147,12 @@ export class UpstashRoomProvider {
   private isStarted = false;
   private isStopped = false;
   private isPublishing = false;
-  private lastAcknowledgedStreamId: string | null = null;
+  private readonly lastAcknowledgedStreamIds = new Map<string, string>();
   private bufferedMessages: RealtimeUserMessage[] = [];
   private pendingUpdates: Uint8Array[] = [];
   private outbox: PendingUpdate[] = [];
   private seenStreamIds = new Set<string>();
+  private isRefreshingControl = false;
 
   constructor(options: UpstashRoomProviderOptions) {
     this.roomId = options.roomId;
@@ -154,6 +165,8 @@ export class UpstashRoomProvider {
       options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     this.random = options.random ?? Math.random;
     this.onDocumentChange = options.onDocumentChange;
+    this.onAwarenessEvent = options.onAwarenessEvent;
+    this.onControlEvent = options.onControlEvent;
     this.onRejectedLocalChanges = options.onRejectedLocalChanges;
     this.actor = createActor(collaborationMachine);
   }
@@ -164,6 +177,10 @@ export class UpstashRoomProvider {
 
   get session(): CollaborationRoomSession | null {
     return this.roomSession;
+  }
+
+  get awarenessSessionId(): string {
+    return this.sessionId;
   }
 
   get canWrite(): boolean {
@@ -312,11 +329,19 @@ export class UpstashRoomProvider {
     this.closeSource();
     this.bufferedMessages = [];
     const url = new URL("/api/collaboration/realtime", window.location.origin);
-    url.searchParams.append("channel", channel);
-    url.searchParams.set(
-      `last_ack_${channel}`,
-      this.lastAcknowledgedStreamId ?? String(Date.now()),
-    );
+    const channels = [
+      channel,
+      collaborationAwarenessChannel(this.roomId),
+      collaborationControlChannel(this.roomId),
+    ];
+    for (const currentChannel of channels) {
+      url.searchParams.append("channel", currentChannel);
+      const defaultCursor = currentChannel === channel ? String(Date.now()) : "0-0";
+      url.searchParams.set(
+        `last_ack_${currentChannel}`,
+        this.lastAcknowledgedStreamIds.get(currentChannel) ?? defaultCursor,
+      );
+    }
     const source = this.eventSourceFactory(url.toString());
     this.source = source;
     source.onopen = () => {
@@ -352,8 +377,11 @@ export class UpstashRoomProvider {
     }
 
     const message = parseRealtimeUserMessage(value);
-    if (!message || message.channel !== collaborationRoomChannel(this.roomId)) return;
-    if (this.isSynchronizing || this.connectionState === "syncing") {
+    if (!message || !this.isRoomChannel(message.channel)) return;
+    if (
+      message.channel === collaborationRoomChannel(this.roomId) &&
+      (this.isSynchronizing || this.connectionState === "syncing")
+    ) {
       this.bufferedMessages.push(message);
       return;
     }
@@ -361,24 +389,98 @@ export class UpstashRoomProvider {
   }
 
   private applyRealtimeMessage(message: RealtimeUserMessage): void {
-    if (message.event !== "document.update" || this.seenStreamIds.has(message.id)) return;
-    const event = collaborationDocumentUpdateEventSchema.safeParse(message.data);
-    if (!event.success || event.data.roomId !== this.roomId) return;
-    applyEncodedYjsUpdate(this.doc, event.data.update, COLLABORATION_ORIGIN.remoteProvider);
-    this.markStreamIdSeen(message.id);
+    const seenKey = `${message.channel}|${message.id}`;
+    if (this.seenStreamIds.has(seenKey)) return;
+    if (message.event === "document.update") {
+      const event = collaborationDocumentUpdateEventSchema.safeParse(message.data);
+      if (!event.success || event.data.roomId !== this.roomId) return;
+      applyEncodedYjsUpdate(this.doc, event.data.update, COLLABORATION_ORIGIN.remoteProvider);
+    } else if (message.event === "awareness.state") {
+      const event = collaborationAwarenessEventSchema.safeParse(message.data);
+      if (!event.success || event.data.roomId !== this.roomId) return;
+      this.onAwarenessEvent?.(event.data);
+    } else if (message.event === "control.room") {
+      const event = collaborationControlEventSchema.safeParse(message.data);
+      if (!event.success || event.data.roomId !== this.roomId) return;
+      this.onControlEvent?.(event.data);
+      if (event.data.kind === "room-closed") {
+        this.markStreamIdSeen(message.channel, message.id);
+        this.fatal("The host ended this live collaboration room");
+        return;
+      }
+      void this.refreshRoomFromControl(event.data);
+    } else {
+      return;
+    }
+    this.markStreamIdSeen(message.channel, message.id);
   }
 
-  private markStreamIdSeen(streamId: string): void {
-    this.seenStreamIds.add(streamId);
+  private isRoomChannel(channel: string): boolean {
+    return (
+      channel === collaborationRoomChannel(this.roomId) ||
+      channel === collaborationAwarenessChannel(this.roomId) ||
+      channel === collaborationControlChannel(this.roomId)
+    );
+  }
+
+  private markStreamIdSeen(channel: string, streamId: string): void {
+    this.seenStreamIds.add(`${channel}|${streamId}`);
+    const lastAcknowledgedStreamId = this.lastAcknowledgedStreamIds.get(channel);
     if (
-      !this.lastAcknowledgedStreamId ||
-      compareStreamIds(streamId, this.lastAcknowledgedStreamId) > 0
+      !lastAcknowledgedStreamId ||
+      compareStreamIds(streamId, lastAcknowledgedStreamId) > 0
     ) {
-      this.lastAcknowledgedStreamId = streamId;
+      this.lastAcknowledgedStreamIds.set(channel, streamId);
     }
     if (this.seenStreamIds.size > MAX_SEEN_STREAM_IDS) {
       const oldest = this.seenStreamIds.values().next().value;
       if (oldest) this.seenStreamIds.delete(oldest);
+    }
+  }
+
+  private async refreshRoomFromControl(event: CollaborationControlEvent): Promise<void> {
+    if (
+      this.isStopped ||
+      this.isRefreshingControl ||
+      (this.roomSession?.room.roleVersion ?? 0) >= event.roleVersion
+    ) {
+      return;
+    }
+    this.isRefreshingControl = true;
+    try {
+      const previousCanWrite = this.canWrite;
+      const roomSession = await this.api.getRoom(this.roomId);
+      if (this.isStopped) return;
+      if (roomSession.room.status !== "active") {
+        this.fatal("The host ended this live collaboration room");
+        return;
+      }
+      this.roomSession = roomSession;
+      this.actor.send({
+        type: "ROLE_CHANGED",
+        role: roomSession.membership.role,
+        roleVersion: roomSession.room.roleVersion,
+      });
+      if (previousCanWrite && !this.canWrite && this.hasPendingUpdates) {
+        this.pendingUpdates = [];
+        this.outbox = [];
+        const message =
+          "Your role changed before local edits were accepted. Copy any local work before rejoining.";
+        this.onRejectedLocalChanges?.(message);
+        this.fatal(message);
+      }
+    } catch (error) {
+      if (this.isStopped) return;
+      if (isFatalRequestError(error)) {
+        this.fatal(errorMessage(error, "You no longer have access to this collaboration room"));
+      } else {
+        this.handleTransportFailure(
+          errorMessage(error, "Room permissions could not be refreshed"),
+          this.attemptId,
+        );
+      }
+    } finally {
+      this.isRefreshingControl = false;
     }
   }
 
@@ -405,13 +507,14 @@ export class UpstashRoomProvider {
           );
         }
         for (const update of bootstrap.updates) {
-          if (!this.seenStreamIds.has(update.streamId)) {
+          const documentChannel = collaborationRoomChannel(this.roomId);
+          if (!this.seenStreamIds.has(`${documentChannel}|${update.streamId}`)) {
             applyEncodedYjsUpdate(
               this.doc,
               update.event.update,
               COLLABORATION_ORIGIN.remoteProvider,
             );
-            this.markStreamIdSeen(update.streamId);
+            this.markStreamIdSeen(documentChannel, update.streamId);
           }
         }
         if (!bootstrap.hasMore) break;

@@ -26,7 +26,10 @@ import { SlidesProvider } from "../contexts/SlidesContext";
 import { WhiteboardProvider } from "../contexts/WhiteboardContext";
 import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
-import { CollaborationProvider } from "../contexts/CollaborationContext";
+import {
+  CollaborationProvider,
+  useOptionalCollaboration,
+} from "../contexts/CollaborationContext";
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useUrlQuery } from "../hooks/useUrlQuery";
@@ -104,6 +107,7 @@ export function EditorLayout({
     isRecording,
     currentRecording,
   );
+  const collaboration = useOptionalCollaboration();
 
   // Props win; otherwise fall back to URL params so the /code route keeps working.
   // Read params through the router (not `window.location.search`) so we share one
@@ -278,7 +282,7 @@ export function EditorLayout({
 
       {!urlLoading && !urlError && !dropError ? <FloatingPlayButton /> : null}
 
-      {postRecordingTarget && renderPostRecordingModal
+      {postRecordingTarget && !collaboration?.provider && renderPostRecordingModal
         ? renderPostRecordingModal({
             recording: postRecordingTarget,
             onClose: clearPostRecordingTarget,

@@ -5,9 +5,12 @@ import {
   COLLABORATION_PROTOCOL_VERSION,
   MAX_ENCODED_YJS_UPDATE_LENGTH,
   canPublishCollaborationUpdate,
+  collaborationAwarenessChannel,
+  collaborationControlChannel,
   collaborationDocumentUpdateInputSchema,
   collaborationCreateRoomInputSchema,
   collaborationRoomChannel,
+  parseCollaborationChannel,
   roomIdFromCollaborationChannel,
 } from "./protocol";
 import {
@@ -91,6 +94,14 @@ describe("collaboration protocol", () => {
     expect(channel).toBe(`collab:room:${ROOM_ID}`);
     expect(roomIdFromCollaborationChannel(channel)).toBe(ROOM_ID);
     expect(roomIdFromCollaborationChannel(`${channel}:awareness`)).toBeNull();
+    expect(parseCollaborationChannel(collaborationAwarenessChannel(ROOM_ID))).toEqual({
+      roomId: ROOM_ID,
+      kind: "awareness",
+    });
+    expect(parseCollaborationChannel(collaborationControlChannel(ROOM_ID))).toEqual({
+      roomId: ROOM_ID,
+      kind: "control",
+    });
     expect(roomIdFromCollaborationChannel("default")).toBeNull();
     expect(canPublishCollaborationUpdate("owner")).toBe(true);
     expect(canPublishCollaborationUpdate("editor")).toBe(true);

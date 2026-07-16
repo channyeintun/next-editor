@@ -61,6 +61,35 @@
   pointer-events: none;
 }
 
+.monaco-editor .collaboration-selection {
+  border-radius: 2px;
+}
+
+.monaco-editor .collaboration-cursor {
+  display: inline-block;
+  height: 1.2em;
+  margin-left: -1px;
+  border-left: 2px solid var(--collaboration-color);
+  vertical-align: text-bottom;
+}
+
+.monaco-editor .collaboration-selection.collaboration-color-0 { background: rgb(56 189 248 / 28%); }
+.monaco-editor .collaboration-selection.collaboration-color-1 { background: rgb(52 211 153 / 28%); }
+.monaco-editor .collaboration-selection.collaboration-color-2 { background: rgb(251 191 36 / 28%); }
+.monaco-editor .collaboration-selection.collaboration-color-3 { background: rgb(232 121 249 / 28%); }
+.monaco-editor .collaboration-selection.collaboration-color-4 { background: rgb(34 211 238 / 28%); }
+.monaco-editor .collaboration-selection.collaboration-color-5 { background: rgb(251 146 60 / 28%); }
+.monaco-editor .collaboration-selection.collaboration-color-6 { background: rgb(167 139 250 / 28%); }
+.monaco-editor .collaboration-selection.collaboration-color-7 { background: rgb(163 230 53 / 28%); }
+.monaco-editor .collaboration-color-0 { --collaboration-color: #38bdf8; }
+.monaco-editor .collaboration-color-1 { --collaboration-color: #34d399; }
+.monaco-editor .collaboration-color-2 { --collaboration-color: #fbbf24; }
+.monaco-editor .collaboration-color-3 { --collaboration-color: #e879f9; }
+.monaco-editor .collaboration-color-4 { --collaboration-color: #22d3ee; }
+.monaco-editor .collaboration-color-5 { --collaboration-color: #fb923c; }
+.monaco-editor .collaboration-color-6 { --collaboration-color: #a78bfa; }
+.monaco-editor .collaboration-color-7 { --collaboration-color: #a3e635; }
+
 @keyframes nb-cursor-blink {
   0% {
     opacity: 1;
