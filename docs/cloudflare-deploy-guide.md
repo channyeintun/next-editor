@@ -11,6 +11,11 @@ doc is the "how do I ship a change / set this up from scratch" reference.
   `infra/` picks it up)
 - Authenticated: `npx wrangler login` (opens a browser) or a
   `CLOUDFLARE_API_TOKEN` env var
+- A CI API token must include the permissions already needed by this deployment
+  plus account-level **Workers KV Storage: Edit** so the first deploy can
+  provision and attach the `CACHE` namespace. Cloudflare's **Edit Cloudflare
+  Workers** token template includes Workers KV write access; verify custom
+  least-privilege tokens explicitly.
 - `bun` installed (package manager for this repo)
 
 ## Regular deploy (the common case)
@@ -94,7 +99,49 @@ Use a **different** `SESSION_SECRET` than local dev's `infra/.dev.vars` —
 it's what signs the OAuth handshake cookie, no reason to share it across
 environments.
 
-### 5. First deploy (no custom domain yet)
+### 5. Prepare the Workers KV cache
+
+The public lesson and playlist endpoints read through the `CACHE` Workers KV
+binding (see
+[cloudflare-architecture.md](./cloudflare-architecture.md#caching--cloudflare-workers-kv)).
+No cache credentials, `.dev.vars` entries, or data migration are required. The
+cache starts empty and warms from D1.
+
+`infra/wrangler.toml` intentionally declares the binding without an
+account-specific namespace ID:
+
+```toml
+[[kv_namespaces]]
+binding = "CACHE"
+```
+
+The checked-in Wrangler version supports
+[automatic resource provisioning](https://developers.cloudflare.com/workers/wrangler/configuration/#automatic-provisioning):
+
+- `wrangler dev` creates and persists a local KV namespace.
+- The first `wrangler deploy` creates and attaches the production namespace.
+- An interactive deploy may write the generated public ID back to
+  `wrangler.toml`. Committing it is optional because later deploys can inherit
+  the attached binding.
+
+If automatic provisioning is disabled or unavailable, create a namespace
+manually, then add the returned ID to the existing binding block:
+
+```sh
+npx wrangler kv namespace create next-editor-tube-cache
+```
+
+```toml
+[[kv_namespaces]]
+binding = "CACHE"
+id = "<returned-namespace-id>"
+```
+
+See Cloudflare's
+[API token permission reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)
+for the **Workers KV Storage: Edit** scope.
+
+### 6. First deploy (no custom domain yet)
 
 ```sh
 bun run build
@@ -106,27 +153,27 @@ Without a `[[routes]]` entry in `wrangler.toml`, this deploys to the free
 `https://<worker-name>.<your-subdomain>.workers.dev` URL. Smoke test there
 first (see above) before touching any domain/DNS.
 
-### Cloudflare Workers KV cache
+Verify that provisioning succeeded:
 
-The public lesson and playlist endpoints read through the `CACHE` Workers KV
-binding (see
-[cloudflare-architecture.md](./cloudflare-architecture.md#caching--cloudflare-workers-kv)).
-No cache credentials or additional secrets are required.
+```sh
+npx wrangler kv namespace list
+```
 
-`infra/wrangler.toml` intentionally declares the binding without an
-account-specific namespace ID. The checked-in Wrangler version supports
-[automatic resource provisioning](https://developers.cloudflare.com/workers/wrangler/configuration/#automatic-provisioning):
+Also confirm **Workers & Pages → next-editor-tube → Settings → Bindings** shows
+`CACHE` as a KV namespace, then run the regular lesson API smoke test twice.
+The first request may be a cold miss; cache failures are fail-open and still
+return the D1-backed response.
 
-- `wrangler dev` creates and persists a local KV namespace.
-- The first `wrangler deploy` creates and attaches the production namespace.
-- An interactive deploy may write the generated ID back to `wrangler.toml`;
-  committing that public ID is optional because later deploys can inherit the
-  attached binding.
+After smoke-testing, remove the obsolete Redis-cache Worker secrets if they
+exist:
 
-After deploying and smoke-testing this migration, remove the obsolete
-`UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` Worker secrets if they
-exist. Keep `COLLAB_REDIS_REST_*`: those credentials now serve only the live
-collaboration/Realtime data plane.
+```sh
+npx wrangler secret delete UPSTASH_REDIS_REST_URL
+npx wrangler secret delete UPSTASH_REDIS_REST_TOKEN
+```
+
+Do **not** delete `COLLAB_REDIS_REST_URL` or `COLLAB_REDIS_REST_TOKEN`; those
+credentials serve only the live collaboration/Realtime data plane.
 
 ### Required when enabling live collaboration: Upstash Redis data plane
 

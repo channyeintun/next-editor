@@ -20,12 +20,13 @@ limits must be verified again before production rollout.
 
 The selected MVP still uses the application's existing Cloudflare platform around Upstash:
 
-| Cloudflare service | Implemented collaboration responsibility |
-| ------------------ | ----------------------------------------- |
+| Cloudflare service | Current platform responsibility |
+| ------------------ | ------------------------------- |
 | Workers + Hono     | Same-origin room, membership, update, awareness, asset, export, and signed maintenance endpoints |
 | Workers Static Assets | Serve the editor on the same origin so its first-party session authenticates SSE and HTTP safely |
 | D1                 | Rooms, members, invitations, roles, asset metadata, retention state, and audit events |
 | R2                 | Private SHA-256-addressed binary project assets; never live SCR3 recordings |
+| Workers KV         | Disposable public lesson/playlist cache; separate from collaboration state and credentials |
 | Workers Logs       | Structured update and maintenance telemetry for dashboards and alerts |
 
 Durable Objects, Durable Object SQLite, Alarms, and Cloudflare Queues are **not** used by the
@@ -57,8 +58,8 @@ when an external realtime provider is not supplying that function.
 
 This is a self-hosted room service in the sense used by the feature plan: Cloudflare manages the
 runtime and storage, but the application owns the collaboration protocol and implementation. No
-Upstash service is required by this data plane. The Cloudflare Workers KV cache may continue
-serving unrelated gallery reads.
+Upstash service is required by this data plane. The Cloudflare Workers KV `CACHE` binding
+continues serving unrelated public lesson and playlist reads.
 
 ## Production topology
 
@@ -101,8 +102,8 @@ between the browser and the room Durable Object. The gateway is not called once 
 | Cloudflare Queues              | Heavy export, asset reconciliation, or cross-room maintenance                   | Optional         |
 | Workers Logs and tracing       | Connection and operational metadata, excluding editor content                   | Existing         |
 
-The collaboration feature does not require Cloudflare KV, Pub/Sub, Containers, Workflows, or
-Calls:
+The collaboration data plane does not use the Workers KV `CACHE` binding, Pub/Sub, Containers,
+Workflows, or Calls:
 
 - KV's consistency and access pattern are unnecessary when a room already has strongly ordered,
   private Durable Object storage.

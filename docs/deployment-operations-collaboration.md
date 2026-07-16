@@ -14,6 +14,8 @@ available after live ends.
 - Upstash Realtime enabled against that database.
 - QStash token plus current and next receiver signing keys.
 - The existing Cloudflare Worker, D1 database, and private R2 bucket.
+- The separate `CACHE` Workers KV binding for public lesson/playlist reads, provisioned through the
+  [main Cloudflare deployment runbook](./cloudflare-deploy-guide.md#5-prepare-the-workers-kv-cache).
 - Workers Logs enabled as configured in [`wrangler.toml`](../infra/wrangler.toml).
 
 The current Upstash free plans make development cost $0 within their published limits: Redis has
@@ -33,6 +35,11 @@ QSTASH_TOKEN
 QSTASH_CURRENT_SIGNING_KEY
 QSTASH_NEXT_SIGNING_KEY
 ```
+
+Do not restore or reuse the obsolete `UPSTASH_REDIS_REST_URL` and
+`UPSTASH_REDIS_REST_TOKEN` cache secrets. The gallery cache has no secret: it
+uses `env.CACHE`, while all Redis credentials are reserved for this
+collaboration/Realtime data plane.
 
 `PUBLIC_URL` must be the canonical HTTPS origin because QStash signs the exact maintenance
 destination URL. Apply all D1 migrations through

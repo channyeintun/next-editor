@@ -6,7 +6,12 @@
   <h1>Interactive Code Recording & Replay</h1>
 </div>
 
-Next Editor is a browser-based lesson editor and replay engine for real coding projects. It combines a Monaco editor, a multi-file workspace with local asset upload, WebContainer-backed runtime playback for framework and Node lessons, static preview for HTML/CSS lessons, rrweb-driven preview capture and replay, an in-preview HTTP API client for exercising runtime endpoints, synchronized slides, time-synced subtitles (captions), optional instructor camera capture, and streamed `.ne` recordings that can begin playback before the full file has downloaded.
+Next Editor is a browser-based collaborative lesson editor and replay engine for real coding
+projects. It combines Monaco, a multi-file workspace, Yjs live rooms, WebContainer-backed runtime
+playback, rrweb preview capture, an in-preview HTTP API client, synchronized slides, captions,
+optional instructor camera capture, and streamed `.ne` recordings that can begin playback before
+the full file has downloaded. The same Cloudflare deployment also hosts the authenticated `/learn`
+catalog, publishing workflow, playlists, and private collaboration assets.
 
 ## Overview
 
@@ -22,6 +27,10 @@ Next Editor is a browser-based lesson editor and replay engine for real coding p
 - Playback restores the recorded project state and replays it from a single timeline.
 - Import and export use the SCR3 `.ne` container.
 - Progressive loading lets `/code?url=...` start playing a recording from a partial download.
+- Authenticated collaboration rooms support owner/editor/viewer roles, offline Yjs edits, remote
+  cursors, follow-host state, private binary assets, and host-only browser recording.
+- Published lessons, authors, search, and playlists run through a same-origin Cloudflare Worker;
+  public lesson/playlist JSON uses Workers KV while Upstash Redis remains collaboration-only.
 
 ## Current Capabilities
 
@@ -38,6 +47,9 @@ Next Editor is a browser-based lesson editor and replay engine for real coding p
 - Portable `.ne` export and import.
 - Optional instructor camera recording with synced playback overlay.
 - Built-in reveal.js slide support.
+- Live Yjs collaboration with invitations, role enforcement, awareness, reconnect/bootstrap
+  recovery, and content-addressed R2 assets.
+- Authenticated lesson publishing, public author pages, search, and ordered playlists.
 
 ## Browser Support
 
@@ -54,6 +66,8 @@ Next Editor is a browser-based lesson editor and replay engine for real coding p
 - Audio: pitch-preserving variable-speed playback via `@soundtouchjs/audio-worklet`
 - Styling: Tailwind CSS 4, Motion
 - Recording/storage: SCR3 stream container, msgpack, fflate (zlib + zip)
+- Cloud platform: Cloudflare Workers + Hono, D1, R2, Workers KV, and Static Assets
+- Collaboration data plane: Yjs, Upstash Realtime + Redis, and QStash maintenance jobs
 - Quality checks: vite-plus, Oxlint, TypeScript native preview (`tsgo`)
 
 ## Project Structure
@@ -63,7 +77,10 @@ Next Editor is a browser-based lesson editor and replay engine for real coding p
 - `src/contexts`: editor, workspace, slides, runtime, and provider wiring.
 - `src/storage`: SCR3 codec, IndexedDB persistence, import/export helpers, and worker-backed decoding.
 - `src/hooks`: URL loading, live stream forwarding, workspace/runtime hooks, and app adapters.
+- `src/collaboration`: Yjs project schema, provider protocol, room lifecycle, and workspace adapter.
 - `public`: static assets, wasm artifacts, fonts, and sample recordings.
+- `infra`: Hono Worker, D1 migrations, Cloudflare bindings, and browser auth/upload adapters.
+- `tube`: `/learn` catalog, lesson detail, authors, search, and playlists.
 
 ## Local Development
 
@@ -88,6 +105,8 @@ Routes:
 
 - Landing page: `http://localhost:5173/`
 - Editor: `http://localhost:5173/code`
+- Lesson catalog: `http://localhost:5173/learn`
+- System architecture: `http://localhost:5173/architecture`
 - Streamed sample recording: `http://localhost:5173/code?url=/introduction.ne`
 
 ### Validation Commands
@@ -138,6 +157,12 @@ Recordings use the SCR3 `.ne` container as raw binary end-to-end — the exporte
 - [docs/data-structures.md](docs/data-structures.md) for the recording model and core types.
 - [docs/state-machines.md](docs/state-machines.md) for the XState architecture.
 - [docs/streaming-playback.md](docs/streaming-playback.md) for partial-download and live-stream playback.
+- [docs/cloudflare-architecture.md](docs/cloudflare-architecture.md) for the deployed platform and
+  KV/Redis responsibility split.
+- [docs/cloudflare-deploy-guide.md](docs/cloudflare-deploy-guide.md) for Cloudflare provisioning,
+  secrets, migrations, and deployment.
+- [docs/live-collaboration.md](docs/live-collaboration.md) for the implemented Yjs collaboration
+  architecture and release gates.
 
 ## License
 

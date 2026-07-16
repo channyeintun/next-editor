@@ -296,7 +296,7 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
   {
     n: "11",
     title: "Hono API routes",
-    detail: "lessons, playlists, authors, search, auth, uploads.",
+    detail: "content, auth, uploads, guarded proxies, and collaboration HTTP/SSE routes.",
   },
   {
     n: "12",
@@ -313,16 +313,26 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
     title: "Google OAuth 2.0",
     detail: "sign-in; edge issues its own session cookie afterward.",
   },
-  { n: "15", title: "D1", detail: "SQLite at the edge; relational data for accounts and content." },
+  {
+    n: "15",
+    title: "D1",
+    detail: "relational identity/content plus the collaboration room and access control plane.",
+  },
   {
     n: "16",
     title: "R2",
-    detail: "object storage for editor state and recorded media, up to 200MB/upload.",
+    detail: "lesson media, slide images, and private content-addressed collaboration assets.",
   },
   {
     n: "17",
     title: "Workers KV",
-    detail: "eventually consistent read-through cache; KV errors fall through to D1.",
+    detail: "public lesson/playlist JSON cache; eventually consistent and fail-open to D1.",
+  },
+  {
+    n: "18",
+    title: "Upstash Realtime + Redis",
+    detail:
+      "collaboration-only SSE transport, recoverable Yjs history, snapshots, awareness, and rate state; fail-closed.",
   },
 ];
 
@@ -344,8 +354,8 @@ export default function ArchitecturePage() {
             <div>
               <h1>next-editor — system architecture</h1>
               <p className="sub">
-                Browser-based code editor with live preview, session recording and a whiteboard,
-                running on Cloudflare's edge.
+                Collaborative browser code editor with live preview, session recording and a
+                whiteboard, running on Cloudflare's edge.
               </p>
             </div>
             <div className="meta">
@@ -359,7 +369,7 @@ export default function ArchitecturePage() {
               </div>
               <div>
                 <b>rev</b>
-                <span>B</span>
+                <span>C</span>
               </div>
               <div>
                 <b>date</b>
@@ -370,12 +380,16 @@ export default function ArchitecturePage() {
 
           <div className="diagram-wrap">
             <svg viewBox="0 0 1320 1038" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
-              <title>Layered architecture: browser client, Cloudflare edge, storage</title>
+              <title>
+                Layered architecture: browser client, Cloudflare edge, storage, and external
+                services
+              </title>
               <desc>
                 User's browser runs the client app and connects over HTTPS to a Cloudflare Worker
-                edge, which talks to Google OAuth externally and reads/writes Cloudflare D1, R2 and
-                Workers KV. The client also sends analytics events, masked session replay and error
-                reports to PostHog Cloud (US).
+                edge, which uses Cloudflare D1, R2, and Workers KV. Google provides identity;
+                Upstash Realtime and Redis provide the collaboration-only data plane. The client
+                also sends analytics events, masked session replay and error reports to PostHog
+                Cloud (US).
               </desc>
 
               <defs>
@@ -426,7 +440,7 @@ export default function ArchitecturePage() {
                 </marker>
               </defs>
 
-              <rect x={0} y={0} width={1320} height={950} fill="url(#arch-grid)" />
+              <rect x={0} y={0} width={1320} height={1038} fill="url(#arch-grid)" />
 
               <rect
                 x={580}
@@ -518,7 +532,7 @@ export default function ArchitecturePage() {
                 fontSize={11}
                 fill="var(--ink-faint)"
               >
-                https · /api (hono)
+                https · /api + SSE
               </text>
 
               <rect
@@ -550,7 +564,7 @@ export default function ArchitecturePage() {
                 y={684}
                 width={256}
                 title="Hono API routes"
-                lines={["lessons, playlists,", "authors, search, uploads"]}
+                lines={["content, auth, uploads,", "collaboration + proxies"]}
                 tag={11}
               />
               <Chip
@@ -578,6 +592,24 @@ export default function ArchitecturePage() {
                 tag={14}
               />
 
+              <ExternalBox
+                x={948}
+                y={770}
+                title="Upstash Realtime + Redis"
+                lines={["collaboration transport + state", "SSE, Yjs history, presence"]}
+                tag={18}
+              />
+
+              <line
+                x1={900}
+                y1={786}
+                x2={900}
+                y2={822}
+                stroke="var(--dashline)"
+                strokeWidth={1.4}
+                strokeDasharray="4 4"
+              />
+
               <line
                 x1={470}
                 y1={786}
@@ -600,7 +632,7 @@ export default function ArchitecturePage() {
               <rect
                 x={40}
                 y={846}
-                width={1240}
+                width={860}
                 height={168}
                 rx={6}
                 fill="var(--paper-strong)"
@@ -618,31 +650,31 @@ export default function ArchitecturePage() {
                 STORAGE
               </text>
               <text x={64} y={893} fontSize={12} fill="var(--ink-soft)">
-                cloudflare-managed data
+                cloudflare-managed data bindings
               </text>
 
               <Chip
                 x={64}
                 y={912}
-                width={380}
+                width={256}
                 title="D1 (SQLite)"
-                lines={["users, sessions, lessons,", "playlists, playlist_lessons"]}
+                lines={["identity, content, rooms,", "memberships + audit"]}
                 tag={15}
               />
               <Chip
-                x={460}
+                x={336}
                 y={912}
-                width={380}
+                width={256}
                 title="R2 (object storage)"
-                lines={[".ne files, audio/video,", "thumbnails · served /media/:key"]}
+                lines={["lesson/slide media +", "private room assets"]}
                 tag={16}
               />
               <Chip
-                x={856}
+                x={608}
                 y={912}
-                width={400}
+                width={256}
                 title="Workers KV (cache)"
-                lines={["lesson/playlist JSON reads,", "ttl 1–5 min · fail-open"]}
+                lines={["public lesson/playlist", "JSON · ttl · fail-open"]}
                 tag={17}
               />
             </svg>
@@ -653,13 +685,13 @@ export default function ArchitecturePage() {
               <span className="swatch solid" /> cloudflare-owned binding
             </div>
             <div className="legend-item">
-              <span className="swatch dash" /> external / optional service
+              <span className="swatch dash" /> external service
             </div>
             <div className="legend-item">
               <span className="swatch arrow" /> data flow
             </div>
             <div className="legend-item">
-              <span className="swatch arrow dashed" /> external / optional call
+              <span className="swatch arrow dashed" /> external call
             </div>
             <div className="legend-item">
               <span className="tagdot">#</span> see note
@@ -729,6 +761,25 @@ export default function ArchitecturePage() {
                     <code>typescript</code>{" "}
                     <span className="note-inline">
                       xstate pinned to 5.32.2 (tsgo regression in later patch)
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td>collaboration</td>
+                  <td>
+                    <code>yjs</code>
+                    <code>upstash realtime + redis</code>{" "}
+                    <span className="note-inline">
+                      — authenticated SSE/HTTP with a fail-closed room data plane
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td>public cache</td>
+                  <td>
+                    <code>workers kv</code>{" "}
+                    <span className="note-inline">
+                      — fail-open lesson and playlist JSON cache in front of D1
                     </span>
                   </td>
                 </tr>

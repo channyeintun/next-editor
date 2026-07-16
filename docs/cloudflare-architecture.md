@@ -1,11 +1,11 @@
-# Tube on Cloudflare — Architecture
+# Next Editor on Cloudflare — Architecture
 
-> Status: **design, not yet implemented.** Companion to [cloudflare-plan.md](./cloudflare-plan.md),
-> which covers the build order and the exact code touch-points.
+> Status: **implemented.** Last reviewed 2026-07-16. Use
+> [cloudflare-deploy-guide.md](./cloudflare-deploy-guide.md) for deployment and
+> [live-collaboration.md](./live-collaboration.md) for the collaboration protocol.
 
-This describes how "Tube" (the `/learn` gallery) grows from a static, build-time
-catalog into a live platform where a signed-in user can record a lesson, upload
-it, and publish it — without dragging Cloudflare/D1/R2/OAuth logic into `src/`.
+This describes the current same-origin Cloudflare platform behind the editor,
+the `/learn` catalog, lesson publishing, playlists, and live collaboration.
 
 ## Decisions locked in
 
@@ -15,6 +15,8 @@ it, and publish it — without dragging Cloudflare/D1/R2/OAuth logic into `src/`
 | Lesson lifecycle      | **Draft → Publish.** Uploaded lessons start as private drafts; only `published` rows appear in the public gallery.                                    |
 | Who can create        | **Any Google account.** Sign in with Google → you can record, upload, and publish.                                                                    |
 | Existing JSON catalog | **Kept as-is.** The curated seed (e.g. `introduction`) stays static and D1-free — frequent-access, edge-cached. D1 only holds user-generated lessons. |
+| Public read cache     | **Cloudflare Workers KV.** Public lesson/playlist JSON uses the fail-open `CACHE` binding; search remains uncached.                                   |
+| Live collaboration    | **Upstash-only Redis purpose.** Realtime transport and recoverable Yjs state use the dedicated collaboration Redis credentials, never the KV cache.   |
 
 ## Why same-origin is not negotiable here
 
@@ -39,118 +41,61 @@ Serving the SPA, the API, and R2 bytes from **one Cloudflare origin** makes all
 of that disappear: subresources are same-origin, so COEP is satisfied for free,
 and the session cookie is a plain first-party `HttpOnly` cookie.
 
-## Component boundaries — the whole point
+## Component boundaries
 
-Three layers, deliberately decoupled. The rule: **`src/` never imports
-Cloudflare, D1, R2, OAuth, or the upload modal.** Dependencies point _inward_
-toward `src/`, never outward.
+Cloudflare server bindings stay in `infra/worker`; browser composition can
+consume the exported `@next-editor/infra` client package at route boundaries.
+The editor and recording core do not directly access D1, R2, KV, Worker
+secrets, or Upstash credentials.
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  infra/  (@next-editor/infra)  ← NEW. All Cloudflare/D1/R2/OAuth here  │
-│                                                                        │
-│   worker/     Hono app: /api/*, /media/*, OAuth, D1 & R2 access        │
-│   db/         D1 schema + migrations + typed queries                   │
-│   client/     Browser pieces mounted by the host at composition roots: │
-│                 • <UploadLessonModal>  (the post-recording modal)      │
-│                 • <AuthMenu> / useAuth  (Google sign-in UI + state)    │
-│                 • apiClient             (fetch wrapper for /api)        │
-│   wrangler.toml                                                         │
-└──────────────────────────────────────────────────────────────────────┘
-          │ imports (allowed: infra → app, mirrors how tube imports @app)
-          ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│  src/  (the editor)   Gains exactly TWO tiny, generic seams:           │
-│    1. EditorProps.renderPostRecordingModal?  (render-prop, opt-in)     │
-│    2. buildRecordingFiles(recording)  extracted from exportAsFile      │
-│       → { ne: Blob, audio?, camera? }  (pure, reused by download+upload)│
-│  Knows nothing about R2/D1/OAuth. If the prop is absent, behaves as today.│
-└──────────────────────────────────────────────────────────────────────┘
-          ▲ imports @app (already does today)
-          │
-┌──────────────────────────────────────────────────────────────────────┐
-│  tube/  (@next-editor/tube)   The /learn gallery.                      │
-│    Catalog fetch swaps from "static shards only" to                    │
-│    "static seed shards → then D1 pages" (the swap point the code       │
-│    comments already anticipate). No R2/OAuth logic leaks in here.      │
-└──────────────────────────────────────────────────────────────────────┘
+infra/
+  worker/  Hono API, OAuth, D1/R2/KV bindings, collaboration gateway
+  db/      D1 migrations and typed content/collaboration queries
+  client/  auth, upload, playlist, and lesson-management browser adapters
+
+src/       editor/runtime/recorder, Yjs project model, room provider and UI
+tube/      /learn gallery, lesson detail, authors, playlists and search
 ```
 
-`infra/` importing from `@app` is the same pattern `tube/` already uses
-(`import Editor from "@app/components/Editor"` in `tube/src/components/LessonDetail.tsx`),
-resolved by the `@app` alias in `vite.config.ts`.
+`CodeRoute` and the lesson detail route are composition roots: they connect the
+generic editor seams to `UploadLessonModal`, authentication, and collaboration
+without exposing server bindings or credentials to browser code.
 
 ## Runtime topology (production)
 
-```
-                         ┌───────────────────────────────────────────┐
-   Browser  ───────────► │  Cloudflare Worker  (Hono)                │
-   (one origin,          │                                           │
-    cross-origin         │  /                 → Static Assets (dist) │──► SPA shell
-    isolated)            │  /assets/*, /logo… → Static Assets        │
-                         │  /lessons/*.json   → Static Assets (SEED) │──► curated catalog
-                         │  /learn, /code …   → SPA fallback (index) │
-                         │                                           │
-                         │  /api/auth/google/*→ OAuth (Google)  ─────┼──► accounts.google.com
-                         │  /api/lessons*     → D1 query        ─────┼──► D1 (lessons, users)
-                         │  /api/uploads/sign → presign R2 PUT       │
-                         │  /media/*          → R2 get         ─────┼──► R2 (lesson bytes)
-                         │  /api/proxy        → cross-origin .ne proxy│
-                         └───────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    Browser[Browser SPA: editor, learn, Yjs] <-->|same-origin HTTPS and SSE| Worker[Cloudflare Worker: Hono]
+    Worker -->|built SPA and seed catalog| Assets[Static Assets]
+    Worker -->|users, content, room control plane| D1[(D1)]
+    Worker -->|lesson media and private room assets| R2[(R2)]
+    Worker -->|fail-open public JSON cache| KV[(Workers KV: CACHE)]
+    Worker <-->|OAuth| Google[Google]
+    Worker <-->|Realtime streams and recoverable room state| Upstash[Upstash Realtime + Redis]
+    QStash[QStash] -->|signed maintenance jobs| Worker
 ```
 
 Everything is one hostname, so COEP `require-corp` is satisfied and the session
 cookie is first-party. Cloudflare's CDN caches static assets and (with cache
-headers) `/media/*` at the edge.
+headers) `/media/*` at the edge. Workers KV serves only disposable public
+lesson/playlist cache entries. Upstash Redis is fail-closed and reserved for
+the collaboration/Realtime data plane.
 
 ## Data model — D1
 
-```sql
--- users: one row per Google identity
-CREATE TABLE users (
-  id          TEXT PRIMARY KEY,          -- internal uuid
-  google_sub  TEXT UNIQUE NOT NULL,      -- Google "sub" claim (stable id)
-  email       TEXT UNIQUE NOT NULL,
-  name        TEXT,
-  avatar_url  TEXT,
-  created_at  INTEGER NOT NULL           -- epoch ms
-);
+The migrations in [`infra/db/migrations`](../infra/db/migrations) are the
+authoritative schema. D1 currently holds:
 
--- sessions: server-side session store keyed by an opaque cookie token
-CREATE TABLE sessions (
-  id          TEXT PRIMARY KEY,          -- random 256-bit token (the cookie value)
-  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at  INTEGER NOT NULL,
-  expires_at  INTEGER NOT NULL
-);
+| Area                        | Tables and responsibility                                            |
+| --------------------------- | -------------------------------------------------------------------- |
+| Identity                    | `users` (including public usernames) and revocable `sessions`        |
+| Published content           | `lessons`, `playlists`, and ordered `playlist_lessons` membership    |
+| Collaboration control plane | rooms, members, invitations/claims, audit events, and asset metadata |
 
--- lessons: user-generated only. The seed (introduction) is NOT in D1.
-CREATE TABLE lessons (
-  id            TEXT PRIMARY KEY,        -- uuid; also the R2 folder + slug base
-  slug          TEXT UNIQUE NOT NULL,    -- url-safe; "<kebab-title>-<short-id>"
-  owner_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  title         TEXT NOT NULL,
-  description   TEXT,
-  thumbnail     TEXT,                    -- same-origin path, e.g. /media/lessons/<id>/thumbnail.png
-  ne            TEXT NOT NULL,           -- same-origin path, e.g. /media/lessons/<id>/<id>.ne
-  duration      TEXT,                    -- "4:12" (display string, matches Lesson type)
-  tags          TEXT,                    -- JSON array string
-  author        TEXT,                    -- denormalized display name (from users.name)
-  author_url    TEXT,
-  status        TEXT NOT NULL DEFAULT 'draft',  -- 'draft' | 'published'
-  published_at  INTEGER,                 -- set on publish; NULL while draft
-  created_at    INTEGER NOT NULL,
-  updated_at    INTEGER NOT NULL
-);
-
-CREATE INDEX idx_lessons_published ON lessons(status, published_at DESC);
-CREATE INDEX idx_lessons_owner     ON lessons(owner_id, updated_at DESC);
-```
-
-The public gallery reads only `WHERE status='published'`. A user's drafts are
-reachable via `/api/lessons/mine` (auth-scoped to `owner_id`). The JSON the API
-returns per lesson is shaped to match tube's existing `Lesson` interface
-(`tube/src/types.ts`) exactly, so the gallery components need no changes.
+The public gallery reads only published lessons; owner-scoped routes expose
+drafts. D1 does **not** store the live Yjs update log or presence state—those
+belong to the dedicated collaboration Redis data plane.
 
 ## Storage model — R2
 
@@ -171,6 +116,8 @@ next-editor-tube-media/
     <sha256-of-source-url>    # Google Slides deck images copied at import time
                               # (POST /api/slide-images); keyed by source URL so
                               # the same image is stored once across all decks
+  collaboration/
+    rooms/<room-id>/assets/<sha256>  # private, membership-checked room assets
 ```
 
 Bytes are served **through the Worker** at `/media/lessons/<id>/<file>` from the
@@ -236,10 +183,20 @@ reads and writes.
   monitor the `CACHE` namespace—especially the Free plan's much smaller write
   allowance. Quota errors remain fail-open and therefore increase D1 traffic
   instead of failing requests.
+- **Deployment requirements.** No cache secret or `.dev.vars` value is needed.
+  A CI deploy token must have account-level **Workers KV Storage: Edit** in
+  addition to its existing Worker permissions. The ID-less binding is
+  auto-provisioned on first deploy; operators can instead create a namespace
+  manually and add its public ID to `wrangler.toml`.
+- **Migration boundary.** Existing Redis cache entries are disposable and are
+  not copied. After the KV-backed release is smoke-tested, remove only the old
+  `UPSTASH_REDIS_REST_*` Worker secrets. Keep `COLLAB_REDIS_REST_*`, which are
+  required by live collaboration.
 
 See Cloudflare's documentation for [KV consistency](https://developers.cloudflare.com/kv/concepts/how-kv-works/),
 [KV pricing](https://developers.cloudflare.com/kv/platform/pricing/), and
-[automatic Wrangler provisioning](https://developers.cloudflare.com/workers/wrangler/configuration/#automatic-provisioning).
+[automatic Wrangler provisioning](https://developers.cloudflare.com/workers/wrangler/configuration/#automatic-provisioning),
+plus the [API token permission reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/).
 
 ## Auth — Google OAuth, first-party session
 
@@ -270,28 +227,24 @@ expire (`expires_at`) and can be revoked by deleting the row.
 open modal and in-memory state. Mitigation: the finished recording is already
 persisted to IndexedDB by the recorder, so before redirecting the modal stores a
 small "resume intent" (recording id + `returnTo`); on return, the host reopens
-the upload modal against the persisted recording. See the plan for the exact
-sequencing.
+the upload modal against the persisted recording.
 
 ## API surface (Hono routes)
 
-| Method & path                   | Auth   | Purpose                                                                              |
-| ------------------------------- | ------ | ------------------------------------------------------------------------------------ |
-| `GET /api/auth/google/login`    | —      | Begin OAuth (PKCE), redirect to Google                                               |
-| `GET /api/auth/google/callback` | —      | Exchange code, upsert user, set session cookie                                       |
-| `GET /api/auth/me`              | cookie | Current user or 401                                                                  |
-| `POST /api/auth/logout`         | cookie | End session                                                                          |
-| `GET /api/lessons?page=`        | —      | Published lessons, paginated (D1)                                                    |
-| `GET /api/lessons/:slug`        | —      | One published lesson (D1)                                                            |
-| `GET /api/lessons/mine`         | cookie | Caller's lessons incl. drafts                                                        |
-| `POST /api/uploads/sign`        | cookie | Presigned R2 PUT URLs for a new lesson's files                                       |
-| `POST /api/lessons`             | cookie | Create **draft** row after upload completes                                          |
-| `PATCH /api/lessons/:id`        | owner  | Edit metadata                                                                        |
-| `POST /api/lessons/:id/publish` | owner  | `status='published'`, set `published_at`                                             |
-| `DELETE /api/lessons/:id`       | owner  | Delete row + R2 objects                                                              |
-| `GET /media/*`                  | —      | Stream R2 object (Range, immutable cache)                                            |
-| `POST /api/slide-images`        | cookie | Copy Google Slides deck images into R2 at import time (`slide-images/<hash>` keys)   |
-| `GET /api/proxy?url=`           | —      | Same-origin proxy for cross-origin `.ne` loads (path already used by `useUrlLoader`) |
+| Method & path                                                      | Auth             | Current responsibility                                                        |
+| ------------------------------------------------------------------ | ---------------- | ----------------------------------------------------------------------------- |
+| `GET /api/auth/google/login`, `/callback`                          | —                | OAuth PKCE handshake and first-party session creation                         |
+| `GET /api/auth/me`, `PATCH /username`, `POST /logout`              | cookie           | Session and profile lifecycle                                                 |
+| `GET /api/lessons`, `GET /api/lessons/:slug`                       | —                | Published lesson reads through Workers KV, then D1                            |
+| `/api/lessons/mine`, create/update/publish/unpublish/delete routes | owner            | Draft and published lesson lifecycle                                          |
+| `PUT /api/uploads/:id/media/:filename`                             | owner/sign-in    | Validate and stream a lesson object through the Worker to R2                  |
+| `/api/playlists/*`                                                 | mixed            | Public playlist detail plus owner CRUD, membership, and ordering              |
+| `/api/authors/:username`, `/api/search`                            | —                | Public author/catalog discovery; search is intentionally uncached             |
+| `/api/collaboration/rooms/*`, `/invitations/*`, `/realtime`        | member/role      | D1 room control plane, private R2 assets, Redis persistence, and Realtime SSE |
+| `POST /api/collaboration/jobs/maintenance`                         | QStash signature | Idempotent compaction and retained-room cleanup                               |
+| `GET /media/*`                                                     | —                | Stream R2 objects with Range and immutable-cache support                      |
+| `POST /api/slide-images`                                           | cookie           | Ingest Google Slides images into content-addressed R2 keys                    |
+| `GET /api/proxy?url=`, `POST /api/openrouter/responses`            | route-specific   | Guarded same-origin external-service proxies                                  |
 
 ## Upload & publish sequence
 
@@ -305,37 +258,41 @@ infra <UploadLessonModal>
    │       1. user fills title / description / tags / thumbnail
    │       2. build files: buildRecordingFiles(recording)  ← src helper (pure)
    │            → { ne: Blob, audio?: {name,blob}, camera?: {name,blob} }
-   │       3. POST /api/uploads/sign  → { lessonId, put: {ne, audio, thumb, …} }
-   │       4. PUT each blob directly to R2 (presigned URLs, off the Worker CPU)
-   │       5. POST /api/lessons {id, title, ne path, …}  → D1 draft row
-   │       6. success: show "Draft saved" + [Publish] + link to /learn/:slug
+   │       3. PUT each blob to /api/uploads/:id/media/:filename
+   │            Worker validates owner/type/size and streams the body to R2
+   │       4. POST /api/lessons {id, title, ne path, …}  → D1 draft row
+   │       5. success: show "Draft saved" + [Publish] + link to /learn/:slug
    │            Publish → POST /api/lessons/:id/publish
    ▼
 gallery shows it (once published) alongside the static seed
 ```
 
-`.ne` files are tiny; audio/camera can be tens of MB. Presigned **direct-to-R2**
-PUTs keep large bodies off the Worker (Workers have request-size and CPU limits,
-and the free tier bills CPU). A Worker-proxied `env.BUCKET.put()` is the simpler
-fallback for small, `.ne`-only lessons.
+`.ne` files are small; audio/camera can be tens of MB. The implemented route
+streams each request body into `env.BUCKET.put()` without buffering the whole
+file in Worker memory. Lesson media has a 200 MB application limit; thumbnails
+use their smaller shared client/server constraint.
 
 ## Security notes
 
-- Client secret and R2 signing keys live only as **Worker secrets**, never shipped to the browser.
+- Google, collaboration Redis, and QStash credentials live only as **Worker secrets**, never in the browser bundle.
 - Session cookie is `HttpOnly; Secure; SameSite=Lax`; tokens are opaque and DB-validated; PKCE + `state` guard the OAuth handshake.
 - Ownership is enforced server-side on every mutating route (`owner_id === session.user_id`); "any Google account can create" does **not** mean any account can edit another's lesson.
-- Upload signing validates content-type/size and scopes each presigned URL to one `lessons/<id>/…` key, so a token can't overwrite arbitrary objects.
+- The upload route validates authentication, existing-lesson ownership, exact content length, filename/extension, and size before writing under `lessons/<id>/…`.
 - Draft lessons are never returned by the public gallery query; only `/api/lessons/mine` (owner-scoped) exposes them.
+- Collaboration routes re-check room membership and roles server-side; browser clients never receive Redis or QStash credentials.
 
 ## Cost / free-tier fit
 
-Workers (100k req/day), D1 (5 GB + generous daily rows), and R2 (10 GB storage,
-**zero egress fees**) free tiers comfortably cover a small tube. Keeping the seed
-static means the highest-traffic lesson (`introduction`) costs no D1 reads at
-all. R2's no-egress pricing is the key reason media streaming is cheap here.
+Keeping the curated seed static means the highest-traffic lesson
+(`introduction`) costs no D1 or KV operations. Workers KV's Free plan currently
+allows 100,000 key reads and 1,000 key writes per day; a hot key with a short
+expiration can consume the write allowance faster than the read allowance, so
+production must monitor the `CACHE` namespace. Quota or KV availability errors
+fall through to D1 rather than failing public requests. Check the linked
+Cloudflare pricing pages again before changing traffic or TTL assumptions.
 
 ## What explicitly does **not** change
 
 - The `.ne` / SCR3 format, the codec, the recorder machine, playback, sibling media resolution.
 - The static seed catalog and `public/lessons/introduction/*` assets.
-- The editor's behavior when `renderPostRecordingModal` is not supplied (i.e. the `/code` route stays byte-for-byte as today).
+- Standalone editor behavior when no collaboration room is selected; Redis is never a fallback cache for ordinary editor or catalog requests.

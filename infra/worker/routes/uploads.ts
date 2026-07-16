@@ -4,10 +4,10 @@ import { getLessonById } from "../../db/queries";
 import { getCurrentUser } from "../auth/session";
 import { MAX_THUMBNAIL_BYTES } from "../../client/upload/thumbnailConstraints";
 
-// Mounted at /api/uploads in worker/index.ts. No presigned URLs (no R2
-// signing keys are configured — see docs/cloudflare-plan.md's open question
-// on this); the client PUTs bytes straight through this Worker route, which
-// streams them into R2 without buffering the whole file in memory.
+// Mounted at /api/uploads in worker/index.ts. The client PUTs bytes through
+// this same-origin authenticated Worker route, which streams them into R2
+// without buffering the whole file in memory; no R2 signing keys or presigned
+// upload URLs are exposed to the browser.
 export const uploadsRoute = new Hono<{ Bindings: Env }>();
 
 const THUMBNAIL_FILENAME_RE = /\.(?:png|jpe?g)$/i;

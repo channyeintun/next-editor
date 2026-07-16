@@ -11,6 +11,10 @@ Deployment status: Upstash Realtime plus a dedicated Redis data plane is impleme
 The Cloudflare-native room service remains the documented fallback until the deployed Upstash
 transport passes the required latency, throughput, reconnect, and cost checks.
 
+This Redis data plane is collaboration-only. Public lesson and playlist caching now uses the
+Cloudflare Workers KV `CACHE` binding and never shares collaboration credentials, command budget,
+retention, or failure semantics.
+
 ## Implemented MVP
 
 The repository now contains the complete provider, control-plane, and editor integration:
@@ -30,7 +34,9 @@ The repository now contains the complete provider, control-plane, and editor int
 
 Production enablement still requires applying migrations, configuring secrets, and running the
 deployed transport spike in
-[Collaboration Deployment Operations](./deployment-operations-collaboration.md).
+[Collaboration Deployment Operations](./deployment-operations-collaboration.md). The Workers KV
+cache is provisioned independently by the main
+[Cloudflare deployment runbook](./cloudflare-deploy-guide.md#5-prepare-the-workers-kv-cache).
 
 ## Decision
 
@@ -99,7 +105,7 @@ Changing those invariants would make recording recovery and progressive playback
 more complex. A CRDT can resolve concurrent changes first, after which the existing recorder can
 capture the converged result in its expected order.
 
-## Proposed architecture
+## Implemented architecture
 
 ```mermaid
 flowchart LR
