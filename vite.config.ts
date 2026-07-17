@@ -26,7 +26,11 @@ function stagedChecks(stagedFileNames: readonly string[]): string[] {
 
   return [
     ...(files.length > 0 ? [`vp fmt --threads=1 ${files.join(" ")}`] : []),
-    ...(lintableFiles.length > 0 ? [`oxlint --fix --threads=1 ${lintableFiles.join(" ")}`] : []),
+    ...(lintableFiles.length > 0
+      ? [
+          `oxlint --fix --threads=1 --deny-warnings --react-plugin --vitest-plugin -A react-hooks/exhaustive-deps ${lintableFiles.join(" ")}`,
+        ]
+      : []),
   ];
 }
 
