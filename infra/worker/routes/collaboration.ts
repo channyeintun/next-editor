@@ -110,6 +110,7 @@ import {
   notifyCollaborationRoomControl,
 } from "../collaboration/roomDurableObject";
 import { CollaborationRoomSqliteQuotaError } from "../collaboration/roomSqliteDocumentStore";
+import { collaborationRoomLocationHint } from "../collaboration/roomLocation";
 
 const MAX_UPDATE_REQUEST_BYTES = MAX_ENCODED_YJS_UPDATE_LENGTH + 2 * 1024;
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
@@ -674,6 +675,7 @@ collaborationRoute.post("/rooms", async (c) => {
         c.env,
         room.id,
         parsed.data.snapshot,
+        collaborationRoomLocationHint(c.req.raw),
       );
       if (!initialized) throw new Error("collaboration room SQLite binding unavailable");
     } else {

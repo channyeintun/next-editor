@@ -58,6 +58,7 @@ import {
   type RoomSqliteStorage,
   type StoredAppendRoomSqliteUpdateResult,
 } from "./roomSqliteDocumentStore";
+import type { CollaborationRoomLocationHint } from "./roomLocation";
 import { COLLABORATION_AWARENESS_TTL_MS } from "./awarenessStore";
 import { CollaborationRateLimitError } from "./rateLimits";
 import { getCollaborationRedis } from "./realtime";
@@ -170,9 +171,16 @@ export function hasCollaborationRoomBinding(
   return Boolean(env.COLLABORATION_ROOMS);
 }
 
-function roomStub(env: Env, roomId: string): DurableObjectStub | null {
+function roomStub(
+  env: Env,
+  roomId: string,
+  locationHint?: CollaborationRoomLocationHint,
+): DurableObjectStub | null {
   if (!hasCollaborationRoomBinding(env)) return null;
-  return env.COLLABORATION_ROOMS.getByName(collaborationIdSchema.parse(roomId));
+  return env.COLLABORATION_ROOMS.getByName(
+    collaborationIdSchema.parse(roomId),
+    locationHint ? { locationHint } : undefined,
+  );
 }
 
 export async function forwardCollaborationWebSocket(
@@ -236,8 +244,11 @@ export async function initializeCollaborationRoomSqliteDocument(
   env: Env,
   roomId: string,
   snapshot: string,
+  locationHint?: CollaborationRoomLocationHint,
 ): Promise<boolean> {
-  const stub = roomStub(env, roomId);
+  // Location hints affect only first placement. Passing the creator's region
+  // here keeps the room near its host; Cloudflare ignores it for an existing ID.
+  const stub = roomStub(env, roomId, locationHint);
   if (!stub) return false;
   const response = await stub.fetch(`${ROOM_ORIGIN}/sqlite/initialize`, {
     method: "POST",
