@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import { loadDmpCodec } from "./storage/dmpCodec/dmpCodec";
@@ -37,10 +37,17 @@ installPerformanceMetricsReporter((metrics) => {
 // paths require, so it's ready before the user starts recording.
 void loadDmpCodec();
 
-createRoot(document.getElementById("root")!).render(
+const root = document.getElementById("root")!;
+const app = (
   <PostHogProvider client={posthog}>
     <StrictMode>
       <App />
     </StrictMode>
-  </PostHogProvider>,
+  </PostHogProvider>
 );
+
+if (root.dataset.ssr === "landing") {
+  hydrateRoot(root, app);
+} else {
+  createRoot(root).render(app);
+}

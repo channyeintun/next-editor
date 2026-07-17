@@ -15,8 +15,18 @@ import { Link } from "react-router";
 import Navbar from "./Navbar";
 import { useState, useEffect, useRef } from "react";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
-import { useGitHubStars } from "../hooks/useGitHubStars";
-import { usePostHog } from "@posthog/react";
+
+export type LandingAnalyticsEvent =
+  | "start_creating_clicked"
+  | "watch_lessons_clicked"
+  | "github_star_clicked";
+
+export interface LandingPageProps {
+  /** Browser-only analytics callback. Omitted by the server renderer. */
+  onAnalyticsEvent?: (event: LandingAnalyticsEvent, properties?: Record<string, string>) => void;
+  /** Browser-fetched, non-critical repository metadata. */
+  starCount?: number | null;
+}
 
 const FRAMEWORKS = [
   "React",
@@ -139,18 +149,18 @@ const DEFAULT_IFRAME_SCALE = 0.4513888888888889;
 const DEMO_URL = "/code?url=/lessons/introduction/introduction.ne";
 const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true&largeControls=true`;
 
-const LandingPage = () => {
-  const posthog = usePostHog();
+const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   // The demo iframe boots a SECOND full copy of the editor (Monaco + recording
   // decode + rrweb replay + audio). On mobile that runs alongside this page and
   // its replay buffers grow until iOS Safari reloads then kills the tab. Render a
-  // static tap-to-open card there instead, so the landing page stays light.
-  const [isMobile] = useState(() => isMobileBrowser());
+  // static tap-to-open card there instead, so the landing page stays light. The
+  // server and first client render use a lightweight placeholder; only a
+  // confirmed desktop browser is allowed to start the iframe after hydration.
+  const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [frameworkIndex, setFrameworkIndex] = useState(0);
-  const starCount = useGitHubStars();
 
   // Reveal each section once it scrolls into view (replaces motion's whileInView).
   const featuresSection = useInView();
@@ -159,6 +169,10 @@ const LandingPage = () => {
   const architectureSection = useInView();
   const licenseSection = useInView();
   const starSection = useInView();
+
+  useEffect(() => {
+    setIsMobile(isMobileBrowser());
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -282,7 +296,7 @@ const LandingPage = () => {
                     <Link
                       to="/code"
                       onClick={() =>
-                        posthog?.capture("start_creating_clicked", { location: "hero" })
+                        onAnalyticsEvent?.("start_creating_clicked", { location: "hero" })
                       }
                       className="px-10 py-4 rounded-full bg-slate-950 text-white text-lg font-semibold hover:scale-105 active:scale-95 transition-all shadow-xl"
                     >
@@ -291,7 +305,7 @@ const LandingPage = () => {
                     <Link
                       to="/learn"
                       onClick={() =>
-                        posthog?.capture("watch_lessons_clicked", { location: "hero" })
+                        onAnalyticsEvent?.("watch_lessons_clicked", { location: "hero" })
                       }
                       className="px-10 py-4 rounded-full border-2 border-slate-950 text-slate-950 text-lg font-semibold hover:bg-slate-950 hover:text-white hover:scale-105 active:scale-95 transition-all"
                     >
@@ -320,7 +334,7 @@ const LandingPage = () => {
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
-                        {!isMobile && (
+                        {isMobile === false && (
                           <button
                             type="button"
                             onClick={toggleFullscreen}
@@ -352,13 +366,15 @@ const LandingPage = () => {
                     <div
                       ref={containerRef}
                       className={`relative w-full overflow-hidden bg-[#11141c] ${
-                        isMobile ? "" : "aspect-1440/900"
+                        isMobile === true ? "" : "aspect-1440/900"
                       }`}
                     >
-                      {isMobile ? (
+                      {isMobile !== false ? (
                         <a
                           href={DEMO_URL}
-                          className="group flex flex-col items-center justify-center gap-5 px-8 py-14 text-center"
+                          className={`group flex flex-col items-center justify-center gap-5 px-8 py-14 text-center ${
+                            isMobile === null ? "h-full" : ""
+                          }`}
                           aria-label="Open the interactive demo"
                         >
                           <span className="flex size-16 items-center justify-center rounded-full bg-pinata-purple shadow-[0_10px_35px_-5px_rgba(109,87,255,0.6)] ring-1 ring-white/20 transition-transform group-active:scale-95">
@@ -633,7 +649,7 @@ const LandingPage = () => {
             href="https://github.com/channyeintun/next-editor"
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => posthog?.capture("github_star_clicked")}
+            onClick={() => onAnalyticsEvent?.("github_star_clicked")}
             className="inline-flex items-center gap-3 px-10 py-4 rounded-full bg-white text-slate-950 text-lg font-semibold hover:scale-105 active:scale-95 transition-all shadow-xl"
           >
             <svg className="size-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">

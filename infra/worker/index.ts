@@ -13,6 +13,7 @@ import { proxyRoute } from "./routes/proxy";
 import { slideImagesRoute } from "./routes/slideImages";
 import { openrouterRoute } from "./routes/openrouter";
 import { collaborationRoute } from "./routes/collaboration";
+import { renderLandingResponse } from "./ssr/landing";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -74,6 +75,11 @@ app.route("/api/collaboration", collaborationRoute);
 // (singular) is gone: every persisted document that referenced it was
 // migrated to /media/slide-images/<hash> hrefs on 2026-07-11.
 app.route("/api/slide-images", slideImagesRoute);
+
+// Render the public landing page at the edge so crawlers and answer engines
+// receive its semantic content in the initial HTML. The hydrated browser app
+// takes over after load; editor and lesson routes keep their existing CSR path.
+app.get("/", async (c) => renderLandingResponse(await c.env.ASSETS.fetch(c.req.raw)));
 
 // Workers Static Assets already tried to match the request against dist/ and
 // missed before this Worker ran (exact-match static files — JS chunks, the

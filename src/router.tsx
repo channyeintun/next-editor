@@ -2,6 +2,7 @@ import { useEffect, type ComponentType } from "react";
 import { createBrowserRouter, isRouteErrorResponse, useRouteError } from "react-router";
 import { usePostHog } from "@posthog/react";
 import LoadingSpinner from "./components/LoadingSpinner";
+import LandingPageRoute from "./components/LandingPageRoute";
 
 const DYNAMIC_IMPORT_RECOVERY_PARAM = "__route_reload";
 const DYNAMIC_IMPORT_ERROR_PATTERN =
@@ -162,8 +163,9 @@ function RouteHydrateFallback() {
 export const router = createBrowserRouter([
   {
     path: "/",
-    lazy: lazyRoute(() => import("./components/LandingPage"), "/"),
-    HydrateFallback: RouteHydrateFallback,
+    // The landing route is eager so its first client render exactly matches the
+    // HTML emitted by the edge renderer. Application-heavy routes remain lazy.
+    Component: LandingPageRoute,
     ErrorBoundary: RouteErrorBoundary,
   },
   {
