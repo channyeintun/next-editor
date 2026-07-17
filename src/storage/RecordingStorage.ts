@@ -16,6 +16,10 @@ import {
 } from "./streamingRecordingCodec/format";
 import { createStreamingRecordingReader } from "./streamingRecordingCodec";
 import { createImportedCameraObjectUrl } from "./cameraVideoUrl";
+import {
+  hydrateDecodedRecordingWorkspaceAssets,
+  persistDecodedWorkspaceAssets,
+} from "./recordingWorkspaceAssets";
 
 interface StorageStats {
   count: number;
@@ -240,7 +244,12 @@ export class RecordingStorage {
         for (;;) {
           const { value, done } = await streamReader.read();
           if (done) break;
-          if (value && value.byteLength > 0) recordingReader.push(value);
+          if (value && value.byteLength > 0) {
+            recordingReader.push(value);
+            await persistDecodedWorkspaceAssets(
+              recordingReader.readDelta()?.newWorkspaceAssets,
+            );
+          }
         }
       } finally {
         streamReader.releaseLock();
@@ -249,7 +258,7 @@ export class RecordingStorage {
       if (!recording?.streamFinalized) {
         throw new Error(`Stored OPFS recording ${entry.metadata.id} is incomplete`);
       }
-      decoded = recording;
+      decoded = await hydrateDecodedRecordingWorkspaceAssets(recording);
     } else {
       throw new Error(`Recording ${entry.metadata.id} has no stored payload`);
     }

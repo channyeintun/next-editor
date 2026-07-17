@@ -36,7 +36,8 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 
 - Monaco-powered editing across a real workspace.
 - Starter templates for React, Vue, Solid, Svelte, HTMX + Express, and HTML/CSS.
-- Local asset upload into the workspace, with a binary file preview and IndexedDB-backed asset storage.
+- Local asset upload into the workspace, with content-addressed descriptors, object-URL previews,
+  and IndexedDB-backed Blob storage.
 - Runtime-backed preview for framework and package-based Node lessons.
 - Static preview mode for HTML/CSS lessons.
 - rrweb-based capture and replay of the runtime preview (DOM, scroll, input, and pointer in one event stream).
@@ -128,12 +129,13 @@ vp preview
 
 Next Editor records a timeline of delta-compressed editor frames plus timed side-channel events for slides, preview state, rrweb preview snapshots, API client requests/responses, workspace mutations, runtime events, cursor samples, audio, and optional camera video.
 
-Recordings use the SCR3 `.ne` container as raw binary end-to-end — the exporter writes raw SCR3 bytes and the loader reads them directly, with no base64 wrapping. SCR3 is append-only and prefix-decodable, which enables progressive playback from an incomplete download and live forwarding through `recordingStreamSink`. Caption tracks ride along in the SCR3 metadata, either inlined as parsed cues or referenced by `captionFiles` so a hosted `.ne` can load sibling `.vtt`/`.srt` files.
+Recordings use the SCR3 `.ne` container as raw binary end-to-end — the exporter writes raw SCR3 bytes and the loader reads them directly, with no base64 wrapping. Content-addressed workspace assets ride in dedicated raw segments while project snapshots retain only descriptors; progressive readers persist those bytes and release the handoff buffer. SCR3 is append-only and prefix-decodable, which enables progressive playback from an incomplete download and live forwarding through `recordingStreamSink`. Caption tracks ride along in the SCR3 metadata, either inlined as parsed cues or referenced by `captionFiles` so a hosted `.ne` can load sibling `.vtt`/`.srt` files.
 
 ## Streaming And Camera Notes
 
 - `useUrlLoader` progressively decodes larger SCR3 prefixes and updates playback in place through `extendRecording`.
-- Finalized SCR3 recordings are written in time-cluster order, so frames, events, audio, and camera fragments all arrive as useful timeline prefixes.
+- Finalized SCR3 recordings carry workspace assets once, followed by time-clustered frame and
+  event segments; audio and camera remain streamable sibling media files.
 - The audio playback actor can reattach a growing contiguous blob snapshot as more audio fragments arrive during progressive playback.
 - Camera capture is optional. Playback uses `cameraStartOffsetMs` to align the overlay video with the main timeline.
 

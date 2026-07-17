@@ -17,6 +17,7 @@ import {
   FLAG_HAS_AUDIO,
   FLAG_HAS_CAMERA,
   LEGACY_STREAM_FORMAT_VERSION,
+  PREVIOUS_STREAM_FORMAT_VERSION,
   STREAM_FORMAT_VERSION,
 } from "./streamingRecordingCodec/format";
 import {
@@ -100,15 +101,17 @@ describe("recordingCodec", () => {
     expect(decoded.frames).toEqual(recording.frames);
   });
 
-  it("writes SCR format v3 and remains compatible with v2 recordings", async () => {
+  it("writes SCR format v4 and remains compatible with v2/v3 recordings", async () => {
     const recording = createRecording();
     const encoded = await encodeRecordingToStream(recording);
     const view = new DataView(encoded.buffer, encoded.byteOffset, encoded.byteLength);
     expect(view.getUint16(4, true)).toBe(STREAM_FORMAT_VERSION);
 
-    const legacy = encoded.slice();
-    new DataView(legacy.buffer).setUint16(4, LEGACY_STREAM_FORMAT_VERSION, true);
-    expect(decodeRecordingStream(legacy).frames).toEqual(recording.frames);
+    for (const version of [PREVIOUS_STREAM_FORMAT_VERSION, LEGACY_STREAM_FORMAT_VERSION]) {
+      const legacy = encoded.slice();
+      new DataView(legacy.buffer).setUint16(4, version, true);
+      expect(decodeRecordingStream(legacy).frames).toEqual(recording.frames);
+    }
   });
 
   it("requires SCR format v3 for exact Monaco edit records", async () => {

@@ -61,6 +61,7 @@ interface Recording {
   previewInitialDocuments?: PreviewInitialDocument[];
   previewPatchBatches?: PreviewDomPatchBatch[];
   workspaceEvents?: WorkspaceRecordingEvent[];
+  workspaceAssets?: WorkspaceRecordingAsset[]; // transient decode/encode handoff only
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];
   captions?: CaptionTrack[]; // parsed subtitle tracks carried inline
@@ -95,6 +96,9 @@ Notable current fields:
 - `audioFile`/`audioUrl` and `cameraFile`/`cameraUrl` describe audio/camera stored as sibling files rather than inline blobs; `audioStartOffsetMs`/`cameraStartOffsetMs` compensate for recorder warmup so playback stays aligned.
 - `captions` carries parsed subtitle tracks inline; `captionFiles` instead names sibling `.vtt`/`.srt` files that a hosted recording loads at play time.
 - `streamFinalized` distinguishes a complete decoded stream from a still-growing progressive-download/live prefix.
+- Workspace projects store `{ kind: "asset", assetId, mimeType, size }` descriptors rather than
+  base64. `workspaceAssets` exists only while raw SCR3 asset segments are handed to IndexedDB; it
+  is stripped before the recording enters playback state.
 - API client request/response data is not a top-level recording field — it travels inside `previewEvents` (see [Preview Replay Data](#preview-replay-data) and [API Client Data](#api-client-data)).
 
 ## Frame Data
@@ -118,7 +122,7 @@ classDiagram
     }
 ```
 
-`Recording.frames` is an array of delta-compressed `DeltaFrame` entries (`src/core/src/utils/deltaTypes.ts`), not raw `EditorFrame`s. Playback reconstructs the full `EditorFrame` from the nearest earlier keyframe plus subsequent deltas via `reconstructFrameAtIndex` (`src/core/src/utils/frameDelta.ts`). SCR3 format v3 stores bounded, versioned Monaco edit batches for ordinary local changes, with base/result integrity hashes; bulk replacement, imported or remote state, preview HTML, and other non-local changes retain the verified DMP delta. Existing SCR3 v2 recordings remain readable.
+`Recording.frames` is an array of delta-compressed `DeltaFrame` entries (`src/core/src/utils/deltaTypes.ts`), not raw `EditorFrame`s. Playback reconstructs the full `EditorFrame` from the nearest earlier keyframe plus subsequent deltas via `reconstructFrameAtIndex` (`src/core/src/utils/frameDelta.ts`). SCR3 format v3 introduced bounded, versioned Monaco edit batches for ordinary local changes, with base/result integrity hashes; format v4 adds raw workspace-asset segments. Bulk replacement, imported or remote state, preview HTML, and other non-local changes retain the verified DMP delta. Existing SCR3 v2 and v3 recordings remain readable.
 
 ## Cursor Data
 
@@ -326,7 +330,8 @@ At the container level, SCR3 metadata includes:
 - `audioFile` / `audioUrl` and `cameraFile` / `cameraUrl` when audio/camera is stored as a sibling file instead of inline
 - `captions` (inline parsed tracks) and/or `captionFiles` (sibling `.vtt`/`.srt` references)
 
-Segments then carry append-only, time-clustered payloads for frames, events, audio, and camera data:
+Segments carry raw content-addressed workspace assets once plus append-only, time-clustered frame
+and event payloads. Audio and camera bytes remain sibling media files:
 
 ```
 ┌─────────────────────────────────────────┐
@@ -336,11 +341,11 @@ Segments then carry append-only, time-clustered payloads for frames, events, aud
 ├─────────────────────────────────────────┤
 │ Deflated msgpack metadata                 │
 ├─────────────────────────────────────────┤
+│ Raw workspace asset segments (optional)   │
+├─────────────────────────────────────────┤
 │ Frame and event segments                  │
 ├─────────────────────────────────────────┤
-│ Audio chunk segment (optional)            │
-├─────────────────────────────────────────┤
-│ Camera chunk segment (optional, last)     │
+│ Final metadata segment (live streams)     │
 ├─────────────────────────────────────────┤
 │ Footer segment index                      │
 └─────────────────────────────────────────┘

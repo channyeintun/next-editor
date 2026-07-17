@@ -1,10 +1,15 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording, RecordingStreamSink } from "../core/src/types";
 import type { RecordingSession } from "../core/src/machine/types";
 import type { WorkspaceProject } from "../types/workspace";
 import { RecordingStreamBridge } from "./recordingStreamSink";
 import {
+  registerWorkspaceAsset,
+  resetWorkspaceAssetStoreForTests,
+} from "./workspaceAssetStore";
+import {
   createStreamingRecordingWriter,
+  createStreamingRecordingReader,
   decodeRecordingStream,
   encodeRecordingToStream,
   RECORDING_EVENT_SEGMENTS,
@@ -130,6 +135,8 @@ function concatChunks(chunks: Uint8Array[]): Uint8Array {
   return bytes;
 }
 
+afterEach(() => resetWorkspaceAssetStoreForTests());
+
 describe("RecordingStreamBridge", () => {
   it("uses one canonical event-track contract for live and one-shot streams", () => {
     expect(RECORDING_EVENT_SEGMENTS.map(({ key }) => key)).toEqual([
@@ -202,6 +209,37 @@ describe("RecordingStreamBridge", () => {
     expect(sink.close).toHaveBeenCalledTimes(1);
   });
 
+  it("streams each descriptor-backed workspace asset exactly once", async () => {
+    const assetBytes = new Uint8Array([1, 2, 3, 4]);
+    const descriptor = await registerWorkspaceAsset(assetBytes, { mimeType: "image/png" });
+    const recording = makeRecording();
+    const assetProject = structuredClone(project);
+    assetProject.files["logo.png"] = {
+      path: "logo.png",
+      name: "logo.png",
+      language: "binary",
+      content: descriptor,
+      encoding: "asset",
+    };
+    recording.workspaceEvents![0].snapshot.project = assetProject;
+    const chunks: Uint8Array[] = [];
+    const bridge = new RecordingStreamBridge({
+      write: (chunk) => chunks.push(chunk.slice()),
+      close: vi.fn<() => void>(),
+    });
+    const session = makeSession(recording);
+
+    bridge.start(session);
+    bridge.sync(session);
+    await bridge.finish(recording);
+
+    const decoded = decodeRecordingStream(concatChunks(chunks));
+    expect(decoded.workspaceAssets).toEqual([{ descriptor, bytes: assetBytes }]);
+    expect(decoded.workspaceEvents?.[0].snapshot.project.files["logo.png"].content).toEqual(
+      descriptor,
+    );
+  });
+
   it("applies one-write-at-a-time backpressure and closes exactly once", async () => {
     const recording = makeRecording();
     const firstWrite: { release: (() => void) | null } = { release: null };
@@ -260,6 +298,41 @@ describe("RecordingStreamBridge", () => {
 });
 
 describe("createStreamingRecordingWriter", () => {
+  it("carries raw workspace assets outside project snapshots", () => {
+    const meta: RecordingStreamMeta = {
+      version: 4,
+      id: "asset-writer",
+      name: "Asset writer",
+      keyframeInterval: 120,
+      createdAt: 1,
+      duration: 10,
+    };
+    const descriptor = {
+      kind: "asset" as const,
+      assetId: "asset-payload",
+      mimeType: "image/png",
+      size: 4,
+    };
+    const writer = createStreamingRecordingWriter();
+    writer.writeHeader(meta);
+    writer.appendWorkspaceAssetSegment({
+      descriptor,
+      bytes: new Uint8Array([1, 2, 3, 4]),
+    });
+    const encoded = writer.finalize();
+
+    expect(decodeRecordingStream(encoded).workspaceAssets).toEqual([
+      { descriptor, bytes: new Uint8Array([1, 2, 3, 4]) },
+    ]);
+
+    const reader = createStreamingRecordingReader();
+    reader.push(encoded);
+    expect(reader.readDelta()?.newWorkspaceAssets).toEqual([
+      { descriptor, bytes: new Uint8Array([1, 2, 3, 4]) },
+    ]);
+    expect(reader.getRecording()?.workspaceAssets).toBeUndefined();
+  });
+
   it("releases drained chunks and finalizes without materializing stream history", () => {
     const meta: RecordingStreamMeta = {
       version: 4,

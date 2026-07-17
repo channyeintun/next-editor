@@ -9,11 +9,12 @@ import type {
 import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
 import { normalizeDeltaFrame, normalizeRecordingData } from "../../core/src/utils/editorState";
 import type { RuntimeRecordingEvent } from "../../types/runtime";
-import type { WorkspaceRecordingEvent } from "../../types/workspace";
+import type { WorkspaceRecordingAsset, WorkspaceRecordingEvent } from "../../types/workspace";
 import type { WhiteboardEvent } from "../../core/src/whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
 import {
   decodeRecords,
+  decodeWorkspaceAssetPayload,
   findFooterStart,
   hasMagicAt,
   HEADER_PREFIX_SIZE,
@@ -27,6 +28,7 @@ import {
   MAX_COMPRESSED_SEGMENT_BYTES,
   MAX_DECODED_RECORDS,
   MAX_STREAM_BYTES,
+  MAX_WORKSPACE_ASSET_PAYLOAD_BYTES,
   type RecordingStreamMeta,
   type SegmentHeaderFields,
 } from "./format";
@@ -72,6 +74,11 @@ function assertFrameFormatCompatibility(
   }
 }
 
+function assertWorkspaceAssetFormatCompatibility(formatVersion: number): void {
+  if (formatVersion >= 4) return;
+  throw new Error("Invalid SCR3 stream: workspace assets require format version 4");
+}
+
 function* walkSegments(bytes: Uint8Array, start: number, end: number): Generator<DecodedSegment> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let offset = start;
@@ -114,8 +121,8 @@ function* walkSegments(bytes: Uint8Array, start: number, end: number): Generator
 
 /**
  * Decoded-stream accumulators shared by the one-shot decoder and the incremental
- * reader. Record arrays are expected in stream (timeline) order. Media bytes never
- * live in the stream — audio/camera are external files referenced from the header.
+ * reader. Record arrays are expected in stream (timeline) order. Audio/camera are
+ * external files; workspace assets are raw handoff segments stored by asset id.
  */
 interface DecodedStreamState {
   meta: RecordingStreamMeta;
@@ -135,6 +142,7 @@ interface DecodedStreamState {
   previewInitialDocuments: PreviewInitialDocument[];
   previewPatchBatches: PreviewDomPatchBatch[];
   workspaceEvents: WorkspaceRecordingEvent[];
+  workspaceAssets: WorkspaceRecordingAsset[];
   runtimeEvents: RuntimeRecordingEvent[];
   cursorEvents: CursorRecordingEvent[];
   whiteboardEvents: WhiteboardEvent[];
@@ -194,6 +202,7 @@ function assembleRecording(state: DecodedStreamState): Recording {
     previewPatchBatches:
       state.previewPatchBatches.length > 0 ? state.previewPatchBatches : undefined,
     workspaceEvents: state.workspaceEvents.length > 0 ? state.workspaceEvents : undefined,
+    workspaceAssets: state.workspaceAssets.length > 0 ? state.workspaceAssets : undefined,
     runtimeEvents: state.runtimeEvents.length > 0 ? state.runtimeEvents : undefined,
     cursorEvents: state.cursorEvents.length > 0 ? state.cursorEvents : undefined,
     whiteboardEvents: state.whiteboardEvents.length > 0 ? state.whiteboardEvents : undefined,
@@ -256,6 +265,8 @@ function decodeSegments(bytes: Uint8Array): Recording {
   const previewInitialDocuments: PreviewInitialDocument[] = [];
   const previewPatchBatches: PreviewDomPatchBatch[] = [];
   const workspaceEvents: WorkspaceRecordingEvent[] = [];
+  const workspaceAssets: WorkspaceRecordingAsset[] = [];
+  const workspaceAssetIds = new Set<string>();
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const cursorEvents: CursorRecordingEvent[] = [];
   const whiteboardEvents: WhiteboardEvent[] = [];
@@ -308,6 +319,16 @@ function decodeSegments(bytes: Uint8Array): Recording {
           ...hydrateWorkspaceEvents(decodeRecords<WorkspaceRecordingEvent>(segment.payload)),
         );
         break;
+      case SEGMENT_KIND.workspaceAsset: {
+        assertWorkspaceAssetFormatCompatibility(formatVersion);
+        const asset = decodeWorkspaceAssetPayload(segment.payload);
+        if (workspaceAssetIds.has(asset.descriptor.assetId)) {
+          throw new Error("Invalid SCR3 stream: duplicate workspace asset segment");
+        }
+        workspaceAssetIds.add(asset.descriptor.assetId);
+        workspaceAssets.push(asset);
+        break;
+      }
       case SEGMENT_KIND.runtime:
         runtimeEvents.push(...decodeRecords<RuntimeRecordingEvent>(segment.payload));
         break;
@@ -331,6 +352,7 @@ function decodeSegments(bytes: Uint8Array): Recording {
       previewInitialDocuments.length +
       previewPatchBatches.length +
       workspaceEvents.length +
+      workspaceAssetIds.size +
       runtimeEvents.length +
       cursorEvents.length +
       whiteboardEvents.length +
@@ -362,6 +384,7 @@ function decodeSegments(bytes: Uint8Array): Recording {
     previewInitialDocuments,
     previewPatchBatches,
     workspaceEvents,
+    workspaceAssets,
     runtimeEvents,
     cursorEvents,
     whiteboardEvents,
@@ -389,8 +412,8 @@ export function decodeRecordingStream(bytes: Uint8Array): Recording {
 // and construct a complete `Recording` with `getRecording()` only when explicitly
 // needed. Completed compressed input is discarded after each push, the header is
 // parsed once, and segment payloads are inflated once. Frames are normalized once at
-// ingest, and media bytes never live in the stream (audio/camera are external files
-// referenced from the header).
+// ingest. Audio/camera remain external; workspace asset payloads are delivered once
+// and released after `readDelta()` hands them to durable asset storage.
 //
 // Stream bytes are written in timeline (cluster/time) order, so accumulators stay
 // sorted by arrival and need no re-sort. Output matches a one-shot
@@ -438,6 +461,8 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   const previewInitialDocuments: PreviewInitialDocument[] = [];
   const previewPatchBatches: PreviewDomPatchBatch[] = [];
   const workspaceEvents: WorkspaceRecordingEvent[] = [];
+  const workspaceAssets: WorkspaceRecordingAsset[] = [];
+  const workspaceAssetIds = new Set<string>();
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const cursorEvents: CursorRecordingEvent[] = [];
   const whiteboardEvents: WhiteboardEvent[] = [];
@@ -543,8 +568,12 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   const ingestSegment = (header: SegmentHeaderFields, payload: Uint8Array): void => {
     const currentFormatVersion = formatVersion;
     if (!meta || currentFormatVersion === null) return;
-    if (header.byteLength > MAX_COMPRESSED_SEGMENT_BYTES) {
-      throw new Error("Invalid SCR3 stream: segment exceeds the compressed size limit");
+    const maxPayloadBytes =
+      header.kind === SEGMENT_KIND.workspaceAsset
+        ? MAX_WORKSPACE_ASSET_PAYLOAD_BYTES
+        : MAX_COMPRESSED_SEGMENT_BYTES;
+    if (header.byteLength > maxPayloadBytes) {
+      throw new Error("Invalid SCR3 stream: segment exceeds the size limit");
     }
 
     let commit: () => void;
@@ -598,6 +627,19 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         commit = () => workspaceEvents.push(...hydrateWorkspaceEvents(records));
         break;
       }
+      case SEGMENT_KIND.workspaceAsset: {
+        assertWorkspaceAssetFormatCompatibility(currentFormatVersion);
+        const asset = decodeWorkspaceAssetPayload(payload);
+        if (workspaceAssetIds.has(asset.descriptor.assetId)) {
+          throw new Error("Invalid SCR3 stream: duplicate workspace asset segment");
+        }
+        pendingRecordCount = 1;
+        commit = () => {
+          workspaceAssetIds.add(asset.descriptor.assetId);
+          workspaceAssets.push(asset);
+        };
+        break;
+      }
       case SEGMENT_KIND.runtime: {
         const records = decodeRecords<RuntimeRecordingEvent>(payload);
         pendingRecordCount = records.length;
@@ -640,6 +682,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       previewInitialDocuments.length +
       previewPatchBatches.length +
       workspaceEvents.length +
+      workspaceAssetIds.size +
       runtimeEvents.length +
       cursorEvents.length +
       whiteboardEvents.length +
@@ -760,6 +803,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
           deliveredRecordCounts.previewPatchBatches,
         ),
         newWorkspaceEvents: workspaceEvents.slice(deliveredRecordCounts.workspaceEvents),
+        newWorkspaceAssets: workspaceAssets.slice(),
         newRuntimeEvents: runtimeEvents.slice(deliveredRecordCounts.runtimeEvents),
         newCursorEvents: cursorEvents.slice(deliveredRecordCounts.cursorEvents),
         newWhiteboardEvents: whiteboardEvents.slice(deliveredRecordCounts.whiteboardEvents),
@@ -779,6 +823,9 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       deliveredRecordCounts.cursorEvents = cursorEvents.length;
       deliveredRecordCounts.whiteboardEvents = whiteboardEvents.length;
       deliveredRecordCounts.chatEvents = chatEvents.length;
+      // Asset bytes are a handoff queue, not part of the long-lived decoded
+      // recording. Consumers persist them before applying the returned delta.
+      workspaceAssets.length = 0;
       return delta;
     },
     getRecording() {
@@ -800,6 +847,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
           previewInitialDocuments: previewInitialDocuments.slice(),
           previewPatchBatches: previewPatchBatches.slice(),
           workspaceEvents: workspaceEvents.slice(),
+          workspaceAssets: workspaceAssets.slice(),
           runtimeEvents: runtimeEvents.slice(),
           cursorEvents: cursorEvents.slice(),
           whiteboardEvents: whiteboardEvents.slice(),

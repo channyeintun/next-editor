@@ -78,7 +78,7 @@ flowchart LR
 Important current details:
 
 - Frames are delta-compressed during capture, not as a final batch-only step — the recording session keeps an incremental `FrameStreamEncoderState` (`src/core/src/utils/frameStreamEncoder.ts`) rather than compressing after the fact.
-- The current app emits schema version `4` recordings in SCR3 format v3. Ordinary local Monaco changes carry exact edit batches with base/result integrity checks; bulk, imported, remote, preview, and agent changes use the verified DMP fallback. SCR3 format v2 remains readable.
+- The current app emits schema version `4` recordings in SCR3 format v4. Ordinary local Monaco changes carry exact edit batches with base/result integrity checks; bulk, imported, remote, preview, and agent changes use the verified DMP fallback. Raw workspace assets use dedicated v4 segments, while SCR3 formats v2 and v3 remain readable.
 - The public `Recording` facade carries stream-oriented metadata through `tracks`, `clusters`, and `mediaFragments` in addition to the assembled playback blobs.
 - `previewInitialDocuments` and `previewPatchBatches` are first-class parts of the recording. They carry rrweb events verbatim (`PreviewRecordedEvent`): the seed document holds the rrweb Meta + FullSnapshot pair, and each patch batch holds the incremental events for a frame. Replay drives an rrweb `Replayer`, so the preview is restored without requiring a runtime rerun.
 - `cursorEvents` are stored separately from frame deltas for smoother fake-cursor playback.

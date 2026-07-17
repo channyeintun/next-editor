@@ -11,7 +11,11 @@ import type {
 import type { TimelineActorRef } from "./machine/timelineMachine";
 import type { EditorActorRef } from "./useNextEditor";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../types/runtime";
-import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../types/workspace";
+import type {
+  WorkspaceRecordingAsset,
+  WorkspaceRecordingEvent,
+  WorkspaceRecordingSnapshot,
+} from "../../types/workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "./whiteboard";
 import type { ChatCheckpoint, ChatRecordingEvent } from "../../types/chat";
 import type { TextEditEvent } from "../../types/textEdit";
@@ -205,6 +209,8 @@ export interface Recording {
   previewInitialDocuments?: PreviewInitialDocument[];
   previewPatchBatches?: PreviewDomPatchBatch[];
   workspaceEvents?: WorkspaceRecordingEvent[];
+  /** Transient raw assets decoded from SCR3 before they are moved into asset storage. */
+  workspaceAssets?: WorkspaceRecordingAsset[];
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];
   whiteboardEvents?: WhiteboardEvent[];
@@ -267,6 +273,8 @@ export interface RecordingStreamDelta {
   newPreviewInitialDocuments: PreviewInitialDocument[];
   newPreviewPatchBatches: PreviewDomPatchBatch[];
   newWorkspaceEvents: WorkspaceRecordingEvent[];
+  /** Raw asset segments decoded since the previous delivery. */
+  newWorkspaceAssets?: WorkspaceRecordingAsset[];
   newRuntimeEvents: RuntimeRecordingEvent[];
   newCursorEvents: CursorRecordingEvent[];
   newWhiteboardEvents: WhiteboardEvent[];

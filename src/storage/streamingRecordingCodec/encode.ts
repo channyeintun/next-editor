@@ -3,6 +3,8 @@ import type { RecordingClusterMeta } from "../../core/src/types";
 import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
 import { isKeyframe } from "../../core/src/utils/deltaTypes";
 import { normalizeRecordingData } from "../../core/src/utils/editorState";
+import type { WorkspaceRecordingAsset } from "../../types/workspace";
+import { iterateRecordingWorkspaceAssets } from "../recordingWorkspaceAssets";
 import {
   audioMimeFromFilename,
   buildFooterChunk,
@@ -12,6 +14,7 @@ import {
   clampU32,
   concatChunks,
   encodeRecords,
+  encodeWorkspaceAssetPayload,
   FLAG_HAS_AUDIO,
   FLAG_HAS_CAMERA,
   readLastRecordTimestamp,
@@ -38,7 +41,7 @@ import { createWorkspaceEventContentStripper } from "./workspaceEventDedup";
 //
 // `createStreamingRecordingWriter` is the low-level, append-as-you-go writer used
 // while recording live. `encodeRecordingToStream` is the one-shot exporter that
-// orders every frame/event/media segment by cluster and time before writing, so a
+// writes raw workspace assets once, then orders frame/event segments by cluster and time, so a
 // finalized file is laid out for seeking.
 // ============================================================================
 
@@ -57,6 +60,10 @@ export interface StreamingRecordingWriter {
   appendEventSegment(
     kind: SegmentKind,
     records: ReadonlyArray<unknown>,
+    options?: StreamingSegmentAppendOptions,
+  ): void;
+  appendWorkspaceAssetSegment(
+    asset: WorkspaceRecordingAsset,
     options?: StreamingSegmentAppendOptions,
   ): void;
   appendFinalMetadata(meta: RecordingStreamMeta): void;
@@ -80,9 +87,8 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   let frameCount = 0;
   let nextFrameClusterIndex = 0;
   let headerMeta: RecordingStreamMeta | null = null;
-  // Workspace events each embed the full project (every file's content, including
-  // base64 assets); repeated contents are stripped to a marker here and carried
-  // forward on decode — see workspaceEventDedup.ts for the symmetry contract.
+  // Workspace events each embed the project graph. Repeated text is stripped to
+  // a marker; binary bytes live in separate raw workspace-asset segments.
   const stripWorkspaceEvents = createWorkspaceEventContentStripper();
   // rrweb mutation adds re-serialize identical node payloads on content churn
   // (virtualized lists remounting rows); repeats are stripped to a template
@@ -188,6 +194,15 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
         clusterIndex: options?.clusterIndex,
         containsKeyframe: options?.containsKeyframe,
         isInit: options?.isInit,
+      });
+    },
+    appendWorkspaceAssetSegment(asset, options) {
+      ensureWritable();
+      appendSegment(SEGMENT_KIND.workspaceAsset, encodeWorkspaceAssetPayload(asset), {
+        startTimeMs: options?.startTimeMs ?? 0,
+        endTimeMs: options?.endTimeMs ?? options?.startTimeMs ?? 0,
+        firstFrameIndex: -1,
+        clusterIndex: options?.clusterIndex ?? 0,
       });
     },
     appendFinalMetadata(meta) {
@@ -296,6 +311,10 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
   const writer = createStreamingRecordingWriter();
 
   writer.writeHeader(buildRecordingStreamMeta(normalized, tracks, clusters));
+
+  for await (const asset of iterateRecordingWorkspaceAssets(normalized)) {
+    writer.appendWorkspaceAssetSegment(asset);
+  }
 
   const pendingSegments: Array<{
     clusterIndex: number;

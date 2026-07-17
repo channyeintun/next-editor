@@ -1,6 +1,7 @@
 import { expose, transfer } from "comlink";
 import type { Recording } from "../core/src";
 import type { DeltaFrame } from "../core/src/utils/deltaTypes";
+import type { WorkspaceAssetDescriptor } from "../types/workspace";
 import { loadDmpCodec } from "./dmpCodec/dmpCodec";
 import { decompressBinaryToRecordings, encodeRecordingToStream } from "./recordingCodec";
 import {
@@ -13,6 +14,13 @@ import {
 
 const transferUint8Array = (data: Uint8Array): Uint8Array => {
   return transfer(data, [data.buffer as ArrayBuffer]);
+};
+
+const transferRecordings = (recordings: Recording[]): Recording[] => {
+  const buffers = recordings.flatMap((recording) =>
+    (recording.workspaceAssets ?? []).map((asset) => asset.bytes.buffer as ArrayBuffer),
+  );
+  return transfer(recordings, buffers);
 };
 
 interface LiveWriterState {
@@ -41,7 +49,7 @@ function drainLiveWriter(state: LiveWriterState): Uint8Array {
 const api = {
   async decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
     await loadDmpCodec();
-    return decompressBinaryToRecordings(binaryData);
+    return transferRecordings(await decompressBinaryToRecordings(binaryData));
   },
   async encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
     await loadDmpCodec();
@@ -74,6 +82,17 @@ const api = {
   ): Uint8Array {
     const state = liveWriter(streamId, sequence);
     state.writer.appendEventSegment(kind, records, options);
+    return drainLiveWriter(state);
+  },
+  appendLiveWorkspaceAssetSegment(
+    streamId: string,
+    sequence: number,
+    descriptor: WorkspaceAssetDescriptor,
+    bytes: Uint8Array,
+    options?: StreamingSegmentAppendOptions,
+  ): Uint8Array {
+    const state = liveWriter(streamId, sequence);
+    state.writer.appendWorkspaceAssetSegment({ descriptor, bytes }, options);
     return drainLiveWriter(state);
   },
   finishLiveRecordingStream(

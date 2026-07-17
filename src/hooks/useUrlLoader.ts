@@ -6,6 +6,11 @@ import {
   createStreamingRecordingReader,
 } from "../storage/streamingRecordingCodec";
 import { createImportedCameraObjectUrl } from "../storage/cameraVideoUrl";
+import {
+  hydrateDecodedRecordingWorkspaceAssets,
+  persistDecodedWorkspaceAssets,
+  stripRecordingWorkspaceAssets,
+} from "../storage/recordingWorkspaceAssets";
 import type { CaptionTrack, Recording } from "../core/src";
 
 const SAME_ORIGIN_PROXY_PATH = "/api/proxy";
@@ -349,9 +354,13 @@ export const useUrlLoader = () => {
       return resolved;
     };
 
-    const applyStreamed = () => {
+    const applyStreamed = async () => {
       if (!loadedOnce) {
-        const resolved = resolveRecording(streamReader.getRecording());
+        const decoded = streamReader.getRecording();
+        const hydrated = decoded
+          ? await hydrateDecodedRecordingWorkspaceAssets(decoded)
+          : null;
+        const resolved = resolveRecording(hydrated);
         if (!resolved) return;
         loadRecording(resolved);
         loadedOnce = true;
@@ -364,10 +373,16 @@ export const useUrlLoader = () => {
       }
 
       const delta = streamReader.readDelta();
-      if (delta) appendRecordingDelta(delta);
+      if (delta) {
+        await persistDecodedWorkspaceAssets(delta.newWorkspaceAssets);
+        appendRecordingDelta({ ...delta, newWorkspaceAssets: [] });
+      }
 
       if (streamReader.isFinalized() && !appliedFinalSnapshot) {
-        const finalRecording = resolveRecording(streamReader.getRecording());
+        const decoded = streamReader.getRecording();
+        const finalRecording = resolveRecording(
+          decoded ? stripRecordingWorkspaceAssets(decoded) : null,
+        );
         if (finalRecording) {
           extendRecording(finalRecording);
           appliedFinalSnapshot = true;
@@ -389,11 +404,11 @@ export const useUrlLoader = () => {
         const downloaded = streamReader.byteLength();
         if (downloaded - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
           lastDecodeLength = downloaded;
-          applyStreamed();
+          await applyStreamed();
         }
       }
 
-      applyStreamed();
+      await applyStreamed();
     } finally {
       reader.releaseLock();
     }

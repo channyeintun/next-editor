@@ -157,6 +157,9 @@ Current storage rules:
 - Each recording keeps its next segment sequence in a small state record, so appends do not scan
   or count the existing segment range.
 - Exported `.ne` files are raw SCR3 bytes with no base64 wrapping; the runtime loader reads the same raw byte stream.
+- Workspace snapshots carry only content-addressed asset descriptors. SCR3 writes each referenced
+  asset once as a raw segment; progressive readers verify/persist the bytes in workspace asset
+  storage and release them after delta delivery.
 - `src/storage/recordingCodec.worker.ts` (backing `recordingCodecClient.ts`) owns each live SCR3
   writer and keeps per-segment MessagePack/deflate plus whole-file codec work off the main thread.
   Completed segment buffers transfer back in sequence; the bridge permits one encode/write in
@@ -169,7 +172,10 @@ The shipped URL loader supports both same-origin and cross-origin recording URLs
 
 - Same-origin files are fetched directly.
 - Cross-origin URLs try `/api/proxy?url=...` first and fall back to direct fetch if the proxy is missing.
-- When the response body is streamable, the loader feeds raw SCR3 bytes to an incremental `StreamingRecordingReader`, loads the first playable prefix, appends later `readDelta()` deliveries, and constructs another complete immutable recording only at finalization.
+- When the response body is streamable, the loader feeds raw SCR3 bytes to an incremental
+  `StreamingRecordingReader`, persists any raw asset handoffs, loads the first playable prefix,
+  appends later `readDelta()` deliveries, and constructs another complete immutable recording only
+  at finalization.
 - After the recording loads, the loader resolves any `captionFiles` the recording declares relative to the `.ne` URL, fetches and parses each one, and adds it via `addCaptionTrack`. Captions are never inferred from sibling filenames — HTTP exposes no directory listing.
 
 ## API Client Transport

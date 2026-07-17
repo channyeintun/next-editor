@@ -9,7 +9,11 @@ import type {
 } from "../../core/src/types";
 import type { Slide } from "../../core/src/slides";
 import type { RuntimeRecordingSnapshot } from "../../types/runtime";
-import type { WorkspaceRecordingSnapshot } from "../../types/workspace";
+import {
+  isWorkspaceAssetDescriptor,
+  type WorkspaceRecordingAsset,
+  type WorkspaceRecordingSnapshot,
+} from "../../types/workspace";
 import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/performanceMetrics";
 
 // ============================================================================
@@ -27,9 +31,10 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 //
 // Three independent "version" numbers exist; do not conflate them:
 //   * STREAM_MAGIC ("SCR3")     — container family marker (the file magic).
-//   * STREAM_FORMAT_VERSION (3) — on-wire record capabilities. Version 3 adds
-//                                 exact Monaco content-edit deltas. Version 2
-//                                 remains readable for existing SCR3 files.
+//   * STREAM_FORMAT_VERSION (4) — on-wire record capabilities. Version 3 added
+//                                 exact Monaco content-edit deltas; version 4 adds
+//                                 raw workspace-asset segments. Versions 2 and 3
+//                                 remain readable for existing SCR3 files.
 //   * meta.version (4)          — the Recording *schema* version carried inside
 //                                 the metadata, unrelated to the byte layout.
 //
@@ -38,7 +43,7 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 //            (meta bytes = deflate(msgpack(RecordingStreamMeta)))
 //   Segment: kind u8 | byteLength u32 | startTimeMs u32 | endTimeMs u32 |
 //            firstFrameIndex i32 | clusterIndex u32 | flags u8 | payload
-//            (payload = deflate(msgpack(records[])); media fragments are raw bytes)
+//            (payload = deflate(msgpack(records[])); workspace assets are raw bytes)
 //   Footer:  segmentCount u32 | index[count] | footerLen u32 | "SCR3"
 //            (index entry = kind u8 | byteOffset u32 | firstTs u32 | firstIdx i32)
 //
@@ -50,11 +55,16 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 
 export const STREAM_MAGIC = "SCR3";
 const STREAM_MAGIC_BYTES = new Uint8Array([0x53, 0x43, 0x52, 0x33]);
-export const STREAM_FORMAT_VERSION = 3;
+export const STREAM_FORMAT_VERSION = 4;
+export const PREVIOUS_STREAM_FORMAT_VERSION = 3;
 export const LEGACY_STREAM_FORMAT_VERSION = 2;
 
 export function isSupportedStreamFormatVersion(version: number): boolean {
-  return version === STREAM_FORMAT_VERSION || version === LEGACY_STREAM_FORMAT_VERSION;
+  return (
+    version === STREAM_FORMAT_VERSION ||
+    version === PREVIOUS_STREAM_FORMAT_VERSION ||
+    version === LEGACY_STREAM_FORMAT_VERSION
+  );
 }
 
 export const FLAG_HAS_AUDIO = 1 << 0;
@@ -74,6 +84,7 @@ export const MAX_COMPRESSED_META_BYTES = 4 * 1024 * 1024;
 export const MAX_INFLATED_META_BYTES = 8 * 1024 * 1024;
 export const MAX_COMPRESSED_SEGMENT_BYTES = 32 * 1024 * 1024;
 export const MAX_INFLATED_SEGMENT_BYTES = 64 * 1024 * 1024;
+export const MAX_WORKSPACE_ASSET_PAYLOAD_BYTES = 50 * 1024 * 1024 + 64 * 1024;
 export const MAX_DECODED_RECORDS = 1_000_000;
 
 export const SEGMENT_KIND = {
@@ -89,8 +100,9 @@ export const SEGMENT_KIND = {
   chat: 9,
   /** Authoritative metadata written immediately before the footer by live streams. */
   finalMeta: 10,
-  // Media is never stored inline in the stream — audio as a sibling file referenced by
-  // `audioFile`/`audioUrl`, camera as a sibling video. 11+ are free for future segment kinds.
+  /** Raw content-addressed workspace asset; project snapshots carry only its descriptor. */
+  workspaceAsset: 11,
+  // Audio/camera are never inline — they remain sibling files. 12+ are free for future kinds.
 } as const;
 
 export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
@@ -197,6 +209,97 @@ export function encodeRecords(records: ReadonlyArray<unknown>): Uint8Array {
   } finally {
     endEncodeSpan();
   }
+}
+
+const WORKSPACE_ASSET_PAYLOAD_PREFIX_SIZE = 8;
+const MAX_ASSET_ID_BYTES = 1_024;
+const MAX_ASSET_MIME_BYTES = 4_096;
+const textEncoder = new TextEncoder();
+const fatalTextDecoder = new TextDecoder("utf-8", { fatal: true });
+
+/** Encode one raw asset without base64 or deflate copies inside MessagePack. */
+export function encodeWorkspaceAssetPayload(asset: WorkspaceRecordingAsset): Uint8Array {
+  const { descriptor, bytes } = asset;
+  if (
+    !isWorkspaceAssetDescriptor(descriptor) ||
+    !(bytes instanceof Uint8Array) ||
+    bytes.byteLength !== descriptor.size
+  ) {
+    throw new Error("Cannot encode an invalid workspace asset payload");
+  }
+
+  const assetId = textEncoder.encode(descriptor.assetId);
+  const mimeType = textEncoder.encode(descriptor.mimeType);
+  if (assetId.byteLength > MAX_ASSET_ID_BYTES || mimeType.byteLength > MAX_ASSET_MIME_BYTES) {
+    throw new Error("Cannot encode workspace asset metadata that exceeds the size limit");
+  }
+
+  const payloadLength =
+    WORKSPACE_ASSET_PAYLOAD_PREFIX_SIZE +
+    assetId.byteLength +
+    mimeType.byteLength +
+    bytes.byteLength;
+  if (payloadLength > MAX_WORKSPACE_ASSET_PAYLOAD_BYTES) {
+    throw new Error("Cannot encode a workspace asset that exceeds the size limit");
+  }
+
+  const payload = new Uint8Array(payloadLength);
+  const view = new DataView(payload.buffer);
+  view.setUint16(0, assetId.byteLength, true);
+  view.setUint16(2, mimeType.byteLength, true);
+  view.setUint32(4, bytes.byteLength, true);
+  let offset = WORKSPACE_ASSET_PAYLOAD_PREFIX_SIZE;
+  payload.set(assetId, offset);
+  offset += assetId.byteLength;
+  payload.set(mimeType, offset);
+  offset += mimeType.byteLength;
+  payload.set(bytes, offset);
+  return payload;
+}
+
+/** Decode and copy one asset before the streaming reader reuses its input buffer. */
+export function decodeWorkspaceAssetPayload(payload: Uint8Array): WorkspaceRecordingAsset {
+  if (
+    payload.byteLength < WORKSPACE_ASSET_PAYLOAD_PREFIX_SIZE ||
+    payload.byteLength > MAX_WORKSPACE_ASSET_PAYLOAD_BYTES
+  ) {
+    throw new Error("Invalid SCR3 stream: workspace asset exceeds the size limit");
+  }
+
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  const assetIdLength = view.getUint16(0, true);
+  const mimeTypeLength = view.getUint16(2, true);
+  const assetSize = view.getUint32(4, true);
+  if (
+    assetIdLength === 0 ||
+    assetIdLength > MAX_ASSET_ID_BYTES ||
+    mimeTypeLength === 0 ||
+    mimeTypeLength > MAX_ASSET_MIME_BYTES
+  ) {
+    throw new Error("Invalid SCR3 stream: malformed workspace asset metadata");
+  }
+
+  const assetIdStart = WORKSPACE_ASSET_PAYLOAD_PREFIX_SIZE;
+  const mimeTypeStart = assetIdStart + assetIdLength;
+  const bytesStart = mimeTypeStart + mimeTypeLength;
+  if (bytesStart + assetSize !== payload.byteLength) {
+    throw new Error("Invalid SCR3 stream: malformed workspace asset length");
+  }
+
+  let assetId: string;
+  let mimeType: string;
+  try {
+    assetId = fatalTextDecoder.decode(payload.subarray(assetIdStart, mimeTypeStart));
+    mimeType = fatalTextDecoder.decode(payload.subarray(mimeTypeStart, bytesStart));
+  } catch {
+    throw new Error("Invalid SCR3 stream: malformed workspace asset text");
+  }
+
+  const descriptor = { kind: "asset" as const, assetId, mimeType, size: assetSize };
+  if (!isWorkspaceAssetDescriptor(descriptor)) {
+    throw new Error("Invalid SCR3 stream: malformed workspace asset descriptor");
+  }
+  return { descriptor, bytes: payload.slice(bytesStart) };
 }
 
 function boundedUnzlib(payload: Uint8Array, maxBytes: number, label: string): Uint8Array {
@@ -388,7 +491,7 @@ export function readSegmentHeader(view: DataView, offset: number): SegmentHeader
 }
 
 export function isKnownSegmentKind(kind: number): boolean {
-  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.finalMeta;
+  return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.workspaceAsset;
 }
 
 // ----------------------------------------------------------------------------

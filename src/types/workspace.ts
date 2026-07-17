@@ -7,6 +7,12 @@ export interface WorkspaceAssetDescriptor {
   size: number;
 }
 
+/** Raw SCR3 payload carried outside workspace project snapshots. */
+export interface WorkspaceRecordingAsset {
+  descriptor: WorkspaceAssetDescriptor;
+  bytes: Uint8Array;
+}
+
 interface WorkspaceFileMetadata {
   path: string;
   name: string;

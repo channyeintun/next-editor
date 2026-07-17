@@ -64,12 +64,13 @@ Both finalized exports and live broadcasts now use the same stream-oriented layo
 
 - **Finalized export / saved file**
   ([`encodeRecordingToStream`](../src/storage/streamingRecordingCodec/encode.ts)) writes `SCR3` in
-  **time-cluster order**: each cluster can contain frame batches, event batches, audio
-  fragments, and camera fragments for that slice of the timeline.
+  **time-cluster order** after any raw workspace-asset segments: each cluster contains frame and
+  event batches for that slice of the timeline. Audio and camera remain sibling media files.
 
 - **Live broadcast** ([`RecordingStreamBridge`](../src/storage/recordingStreamSink.ts)) writes
-  the same segment types as capture progresses, so a prefix is still a clean "everything up to
-  time _T_" slice.
+  each workspace asset once before its first referencing event and writes the same frame/event
+  segment types as capture progresses, so a prefix is still a clean "everything up to time _T_"
+  slice.
 
 Both are valid `SCR3` and both decode with the same incremental reader.
 
@@ -85,6 +86,11 @@ player `loadRecording` (first), `appendRecordingDelta` (later intervals), and `e
 
 ```ts
 import { createStreamingRecordingReader } from "../src/storage/streamingRecordingCodec/decode";
+import {
+  hydrateDecodedRecordingWorkspaceAssets,
+  persistDecodedWorkspaceAssets,
+  stripRecordingWorkspaceAssets,
+} from "../src/storage/recordingWorkspaceAssets";
 
 const reader = createStreamingRecordingReader();
 let loadedOnce = false;
@@ -97,16 +103,21 @@ async function streamPrefixes(response: Response) {
     if (!loadedOnce) {
       const recording = reader.getRecording();
       if (!recording) continue;
-      loadRecording(recording);
+      loadRecording(await hydrateDecodedRecordingWorkspaceAssets(recording));
       reader.readDelta(); // records already included in the initial snapshot
       loadedOnce = true;
     } else {
       const delta = reader.readDelta();
-      if (delta) appendRecordingDelta(delta);
+      if (delta) {
+        await persistDecodedWorkspaceAssets(delta.newWorkspaceAssets);
+        appendRecordingDelta({ ...delta, newWorkspaceAssets: [] });
+      }
     }
   }
   const finalized = reader.getRecording();
-  if (loadedOnce && finalized?.streamFinalized) extendRecording(finalized);
+  if (loadedOnce && finalized?.streamFinalized) {
+    extendRecording(stripRecordingWorkspaceAssets(finalized));
+  }
 }
 ```
 
@@ -176,21 +187,28 @@ replays them with exactly the decode path below.
 
 ```ts
 import { createStreamingRecordingReader } from "../src/storage/streamingRecordingCodec/decode";
+import {
+  hydrateDecodedRecordingWorkspaceAssets,
+  persistDecodedWorkspaceAssets,
+} from "../src/storage/recordingWorkspaceAssets";
 
 const reader = createStreamingRecordingReader();
 let loadedOnce = false;
 
-socket.onmessage = (ev: MessageEvent<ArrayBuffer>) => {
+socket.onmessage = async (ev: MessageEvent<ArrayBuffer>) => {
   reader.push(new Uint8Array(ev.data));
   if (!loadedOnce) {
     const recording = reader.getRecording();
     if (!recording) return;
-    loadRecording(recording);
+    loadRecording(await hydrateDecodedRecordingWorkspaceAssets(recording));
     reader.readDelta();
     loadedOnce = true;
   } else {
     const delta = reader.readDelta();
-    if (delta) appendRecordingDelta(delta); // no re-seek; keeps the viewer's position
+    if (delta) {
+      await persistDecodedWorkspaceAssets(delta.newWorkspaceAssets);
+      appendRecordingDelta({ ...delta, newWorkspaceAssets: [] });
+    }
   }
 };
 ```
@@ -230,6 +248,9 @@ effective duration in your UI.
   `readDelta()` slices only records not yet delivered. Call `getRecording()` for the first playable
   prefix, finalization, or another explicit immutable snapshot request (the shipped loader polls
   deltas at roughly 512 KiB).
+- **Persist asset handoffs before playback.** Raw `workspaceAssets`/`newWorkspaceAssets` are
+  verified and moved to content-addressed asset storage, then stripped so decoded byte buffers do
+  not accumulate in playback state.
 - **Encode live segments in the codec worker.** The bridge coalesces capture notifications and
   permits one ordered worker encode plus sink write in flight. Finalization awaits the worker's
   final metadata/footer response, so no queued segment can land after the sink closes.
@@ -239,8 +260,8 @@ effective duration in your UI.
 - **No re-seek needed.** `extendRecording` preserves position; you do **not** reload + `seekTo`.
 - **Keyframe cadence = seek granularity.** Keyframes every ≤120 frames bound how early the first
   frame is playable and how cheaply a prefix reconstructs.
-- **Final pass.** When the download completes, the last decode includes the footer index and the
-  complete audio.
+- **Final pass.** When the download completes, the last decode includes the footer index and
+  authoritative final metadata; sibling audio/camera resolution remains out of band.
 
 ---
 

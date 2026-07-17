@@ -1,5 +1,6 @@
 import type { Recording, RecordingStreamSink } from "../core/src/types";
 import type { RecordingSession } from "../core/src/machine/types";
+import type { WorkspaceAssetDescriptor } from "../types/workspace";
 import { DELTA_CONFIG } from "../core/src/utils/deltaTypes";
 import { isKeyframe } from "../core/src/utils/deltaTypes";
 import {
@@ -14,6 +15,11 @@ import {
   createLiveRecordingStreamEncoder,
   type LiveRecordingStreamEncoder,
 } from "./recordingCodecClient";
+import {
+  collectRecordingWorkspaceAssetDescriptors,
+  collectWorkspaceEventAssetDescriptors,
+} from "./recordingWorkspaceAssets";
+import { getWorkspaceAssetBytes } from "./workspaceAssetStore";
 
 /**
  * Flush event segments once this many new records have accumulated (or on finish), so
@@ -38,7 +44,7 @@ interface PendingStreamSegment {
   clusterIndex: number;
   startTimeMs: number;
   priority: number;
-  write: () => Promise<Uint8Array>;
+  write: () => Promise<Uint8Array[]>;
 }
 
 /**
@@ -46,10 +52,10 @@ interface PendingStreamSegment {
  * newly-captured records to a live SCR3 writer and forwarding the drained bytes.
  *
  * Frame segments are flushed at keyframe boundaries (range-loadable) and event segments on a
- * small threshold, matching the SCR3 batching policy. Media bytes are never part of the stream —
- * audio and camera live in their own files/blobs, delivered outside this sink. The emitted bytes
- * are the same SCR3 stream the exporter produces, so a remote consumer can replay them with
- * `decodeRecordingStream`.
+ * small threshold, matching the SCR3 batching policy. Audio and camera stay in sibling files;
+ * content-addressed workspace assets are emitted once as raw segments before their first
+ * referencing workspace event. The emitted bytes are the same SCR3 stream the exporter produces,
+ * so a remote consumer can replay them with `decodeRecordingStream`.
  */
 export class RecordingStreamBridge {
   private readonly codec: LiveRecordingStreamEncoder = createLiveRecordingStreamEncoder();
@@ -59,6 +65,7 @@ export class RecordingStreamBridge {
   } as StreamedCounts;
   /** Timeline starts for SCR3 cluster indices known to the live bridge. */
   private readonly clusterStarts: number[] = [];
+  private readonly streamedWorkspaceAssetIds = new Set<string>();
   /** Serializes encoding and sink writes, providing one-write-at-a-time backpressure. */
   private appendQueue: Promise<void> = Promise.resolve();
   private pumpRequested = false;
@@ -141,6 +148,14 @@ export class RecordingStreamBridge {
       await this.writeSegments(this.collectSessionSegments(this.lastSession, true));
     }
 
+    if (recording) {
+      await this.writeMissingWorkspaceAssets(
+        collectRecordingWorkspaceAssetDescriptors(recording),
+        0,
+        0,
+      );
+    }
+
     const finalMeta = recording
       ? createRecordingStreamMeta(recording)
       : this.provisionalMeta && this.lastSession
@@ -207,9 +222,11 @@ export class RecordingStreamBridge {
 
     for (const segment of orderedSegments) {
       if (this.aborted) break;
-      const bytes = await segment.write();
-      if (this.aborted) break;
-      await this.writeBytes(bytes);
+      const chunks = await segment.write();
+      for (const bytes of chunks) {
+        if (this.aborted) break;
+        await this.writeBytes(bytes);
+      }
     }
   }
 
@@ -249,13 +266,14 @@ export class RecordingStreamBridge {
       clusterIndex,
       startTimeMs,
       priority: 0,
-      write: () =>
-        this.codec.appendFrameSegment(frames, {
+      write: async () => [
+        await this.codec.appendFrameSegment(frames, {
           startTimeMs,
           endTimeMs: Math.max(startTimeMs, endTimeMs),
           clusterIndex,
           containsKeyframe: frames.some(isKeyframe),
         }),
+      ],
     };
   }
 
@@ -307,17 +325,63 @@ export class RecordingStreamBridge {
         clusterIndex,
         startTimeMs: firstTimestamp,
         priority: 1,
-        write: () =>
-          this.codec.appendEventSegment(kind, group, {
-            startTimeMs: firstTimestamp,
-            endTimeMs: readRecordTimestamp(group[group.length - 1]),
-            clusterIndex,
-          }),
+        write: async () => {
+          const chunks =
+            kind === SEGMENT_KIND.workspace
+              ? await this.encodeMissingWorkspaceAssets(
+                  collectWorkspaceEventAssetDescriptors(group),
+                  firstTimestamp,
+                  clusterIndex,
+                )
+              : [];
+          chunks.push(
+            await this.codec.appendEventSegment(kind, group, {
+              startTimeMs: firstTimestamp,
+              endTimeMs: readRecordTimestamp(group[group.length - 1]),
+              clusterIndex,
+            }),
+          );
+          return chunks;
+        },
       });
       groupStart = groupEnd;
     }
     this.counts[key] = records.length;
     return segments;
+  }
+
+  private async encodeMissingWorkspaceAssets(
+    descriptors: WorkspaceAssetDescriptor[],
+    startTimeMs: number,
+    clusterIndex: number,
+  ): Promise<Uint8Array[]> {
+    const chunks: Uint8Array[] = [];
+    for (const descriptor of descriptors) {
+      if (this.streamedWorkspaceAssetIds.has(descriptor.assetId)) continue;
+      const bytes = await getWorkspaceAssetBytes(descriptor);
+      chunks.push(
+        await this.codec.appendWorkspaceAssetSegment(
+          { descriptor, bytes },
+          { startTimeMs, endTimeMs: startTimeMs, clusterIndex },
+        ),
+      );
+      this.streamedWorkspaceAssetIds.add(descriptor.assetId);
+    }
+    return chunks;
+  }
+
+  private async writeMissingWorkspaceAssets(
+    descriptors: WorkspaceAssetDescriptor[],
+    startTimeMs: number,
+    clusterIndex: number,
+  ): Promise<void> {
+    for (const chunk of await this.encodeMissingWorkspaceAssets(
+      descriptors,
+      startTimeMs,
+      clusterIndex,
+    )) {
+      await this.writeBytes(chunk);
+    }
   }
 
   private async writeBytes(bytes: Uint8Array): Promise<void> {

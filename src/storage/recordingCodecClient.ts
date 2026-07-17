@@ -1,6 +1,7 @@
 import { transfer, wrap, type Remote } from "comlink";
 import type { Recording } from "../core/src";
 import type { DeltaFrame } from "../core/src/utils/deltaTypes";
+import type { WorkspaceRecordingAsset } from "../types/workspace";
 import { loadDmpCodec } from "./dmpCodec/dmpCodec";
 import {
   decompressBinaryToRecordings as decompressBinaryToRecordingsInProcess,
@@ -16,6 +17,7 @@ import {
   type StreamingSegmentAppendOptions,
 } from "./streamingRecordingCodec";
 import { startPerformanceSpan } from "../utils/performanceMetrics";
+import { hydrateDecodedRecordingWorkspaceAssets } from "./recordingWorkspaceAssets";
 
 interface RecordingCodecWorkerClient {
   api: Remote<RecordingCodecWorkerApi>;
@@ -74,6 +76,10 @@ export interface LiveRecordingStreamEncoder {
     records: unknown[],
     options?: StreamingSegmentAppendOptions,
   ): Promise<Uint8Array>;
+  appendWorkspaceAssetSegment(
+    asset: WorkspaceRecordingAsset,
+    options?: StreamingSegmentAppendOptions,
+  ): Promise<Uint8Array>;
   finalize(finalMeta?: RecordingStreamMeta): Promise<Uint8Array>;
   abort(): Promise<void>;
 }
@@ -102,7 +108,7 @@ class LiveRecordingStreamEncoderClient implements LiveRecordingStreamEncoder {
   }
 
   private enqueueCodecOperation<T>(
-    kind: "event" | "finalize" | "frame" | "header",
+    kind: "asset" | "event" | "finalize" | "frame" | "header",
     operation: () => Promise<T> | T,
   ): Promise<T> {
     const endSpan = startPerformanceSpan("recording.segment_codec_roundtrip", {
@@ -174,6 +180,30 @@ class LiveRecordingStreamEncoderClient implements LiveRecordingStreamEncoder {
     });
   }
 
+  appendWorkspaceAssetSegment(
+    asset: WorkspaceRecordingAsset,
+    options?: StreamingSegmentAppendOptions,
+  ): Promise<Uint8Array> {
+    return this.enqueueCodecOperation("asset", async () => {
+      this.ensureWritable();
+      const sequence = this.nextSequence;
+      const bytes = this.remote
+        ? await this.remote.appendLiveWorkspaceAssetSegment(
+            this.streamId,
+            sequence,
+            asset.descriptor,
+            transferUint8Array(asset.bytes),
+            options,
+          )
+        : (() => {
+            this.localWriter!.appendWorkspaceAssetSegment(asset, options);
+            return this.drainLocal();
+          })();
+      this.nextSequence += 1;
+      return bytes;
+    });
+  }
+
   finalize(finalMeta?: RecordingStreamMeta): Promise<Uint8Array> {
     return this.enqueueCodecOperation("finalize", async () => {
       this.ensureWritable();
@@ -221,18 +251,17 @@ export async function decompressBinaryToRecordings(binaryData: Uint8Array): Prom
   await loadDmpCodec();
   const client = getRecordingCodecWorkerClient();
 
-  if (!client) {
-    return decompressBinaryToRecordingsInProcess(binaryData);
-  }
-
-  return client.api.decompressBinaryToRecordings(transferUint8Array(binaryData));
+  const recordings = client
+    ? await client.api.decompressBinaryToRecordings(transferUint8Array(binaryData))
+    : await decompressBinaryToRecordingsInProcess(binaryData);
+  return Promise.all(recordings.map(hydrateDecodedRecordingWorkspaceAssets));
 }
 
 export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
   await loadDmpCodec();
   const client = getRecordingCodecWorkerClient();
 
-  if (!client) {
+  if (!client || recording.workspaceAssets?.length || typeof indexedDB === "undefined") {
     return encodeRecordingToStreamInProcess(recording);
   }
 
