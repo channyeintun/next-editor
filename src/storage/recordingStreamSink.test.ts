@@ -363,3 +363,69 @@ describe("createStreamingRecordingWriter", () => {
     expect(() => writer.finalize()).toThrow(/already finalized/i);
   });
 });
+
+// Opt in explicitly because this is an acceptance/soak case, not a unit-test
+// workload. It moves 100 MiB through the codec but keeps only one 1 MiB asset
+// segment live at a time, so the assertion measures the reader's retained tail
+// instead of relying on process-wide heap sampling.
+describe.skipIf(process.env.NEXT_EDITOR_LARGE_RECORDING_TESTS !== "1")(
+  "large streaming recording acceptance",
+  () => {
+    it("keeps compressed input capacity bounded across a 100 MiB stream", () => {
+      const meta: RecordingStreamMeta = {
+        version: 4,
+        id: "large-bounded-reader",
+        name: "Large bounded reader",
+        keyframeInterval: 120,
+        createdAt: 1,
+        duration: 10,
+      };
+      const oneMiB = 1024 * 1024;
+      const writer = createStreamingRecordingWriter();
+      const reader = createStreamingRecordingReader();
+      let streamedBytes = 0;
+      let maximumCapacity = 0;
+
+      const pushChunk = (chunk: Uint8Array) => {
+        streamedBytes += chunk.byteLength;
+        const split = Math.floor(chunk.byteLength / 2);
+        reader.push(chunk.subarray(0, split));
+        maximumCapacity = Math.max(maximumCapacity, reader.retainedCapacity());
+        reader.push(chunk.subarray(split));
+        maximumCapacity = Math.max(maximumCapacity, reader.retainedCapacity());
+      };
+
+      writer.writeHeader(meta);
+      pushChunk(writer.drainPending());
+      reader.readDelta();
+
+      const assetBytes = new Uint8Array(oneMiB);
+      for (let index = 0; index < 100; index += 1) {
+        assetBytes.fill(index);
+        writer.appendWorkspaceAssetSegment({
+          descriptor: {
+            kind: "asset",
+            assetId: `large-asset-${index}`,
+            mimeType: "application/octet-stream",
+            size: assetBytes.byteLength,
+          },
+          bytes: assetBytes,
+        });
+        pushChunk(writer.drainPending());
+        const delta = reader.readDelta();
+        expect(delta?.newWorkspaceAssets).toHaveLength(1);
+      }
+
+      writer.appendFinalMetadata(meta);
+      writer.finalizeStream();
+      pushChunk(writer.drainPending());
+      reader.readDelta();
+
+      expect(streamedBytes).toBeGreaterThanOrEqual(100 * oneMiB);
+      expect(reader.byteLength()).toBe(streamedBytes);
+      expect(reader.retainedByteLength()).toBe(0);
+      expect(maximumCapacity).toBeLessThanOrEqual(2 * oneMiB);
+      expect(reader.isFinalized()).toBe(true);
+    });
+  },
+);
