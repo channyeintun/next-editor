@@ -27,14 +27,27 @@ const { makeBashTool } = await import("./bash");
 function makeFile(
   path: string,
   content: string,
-  encoding?: WorkspaceFile["encoding"],
 ): WorkspaceFile {
   return {
     path,
     name: path.split("/").pop() ?? path,
     language: "plaintext",
     content,
-    ...(encoding ? { encoding } : {}),
+  };
+}
+
+function makeAssetFile(path: string): WorkspaceFile {
+  return {
+    path,
+    name: path.split("/").pop() ?? path,
+    language: "binary",
+    content: {
+      kind: "asset",
+      assetId: "asset-image",
+      mimeType: "image/png",
+      size: 3,
+    },
+    encoding: "asset",
   };
 }
 
@@ -159,7 +172,7 @@ describe("bash tool", () => {
     support.readWorkspaceProject.mockResolvedValue(
       makeProject([
         makeFile("fallback.html", "fallback"),
-        makeFile("public/image.png", "AQID", "base64"),
+        makeAssetFile("public/image.png"),
       ]),
     );
 
@@ -171,8 +184,8 @@ describe("bash tool", () => {
     expect(context.project.entryFilePath).toBe("fallback.html");
     expect(context.activeFilePath).toBe("fallback.html");
     expect(context.project.files["public/image.png"]).toMatchObject({
-      content: "AQID",
-      encoding: "base64",
+      content: { assetId: "asset-image", size: 3 },
+      encoding: "asset",
     });
   });
 

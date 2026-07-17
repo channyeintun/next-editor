@@ -1,4 +1,4 @@
-import type { WorkspaceProject } from "../types/workspace";
+import { isWorkspaceTextFile, type WorkspaceProject } from "../types/workspace";
 
 export interface SystemPromptOptions {
   toolNames: string[];
@@ -10,7 +10,7 @@ const SESSION_MEMORY_FILENAMES = ["AGENTS.md", "CLAUDE.md"] as const;
 function buildSessionMemory(project: WorkspaceProject): string | null {
   const files = SESSION_MEMORY_FILENAMES.flatMap((path) => {
     const file = project.files[path];
-    if (!file || file.encoding === "base64") {
+    if (!file || !isWorkspaceTextFile(file)) {
       return [];
     }
 

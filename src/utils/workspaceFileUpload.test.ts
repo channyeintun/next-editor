@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { base64ToBytes, bytesToBase64 } from "../types/workspace";
+import { afterEach, describe, expect, it } from "vitest";
+import { isWorkspaceAssetDescriptor } from "../types/workspace";
+import {
+  getWorkspaceAssetBytes,
+  resetWorkspaceAssetStoreForTests,
+} from "../storage/workspaceAssetStore";
 import { readUploadedWorkspaceFile, shouldReadAsBinary } from "./workspaceFileUpload";
 
 describe("shouldReadAsBinary", () => {
@@ -38,12 +42,16 @@ function createFileStub(name: string, type: string, data: string | Uint8Array): 
 }
 
 describe("readUploadedWorkspaceFile", () => {
-  it("reads binary assets as base64", async () => {
+  afterEach(() => resetWorkspaceAssetStoreForTests());
+
+  it("stores binary assets behind descriptors", async () => {
     const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
     const result = await readUploadedWorkspaceFile(createFileStub("logo.png", "image/png", bytes));
 
-    expect(result.encoding).toBe("base64");
-    expect(base64ToBytes(result.content)).toEqual(bytes);
+    expect(result.encoding).toBe("asset");
+    expect(isWorkspaceAssetDescriptor(result.content)).toBe(true);
+    if (!isWorkspaceAssetDescriptor(result.content)) throw new Error("Expected descriptor");
+    expect(await getWorkspaceAssetBytes(result.content)).toEqual(bytes);
   });
 
   it("reads source files as text", async () => {
@@ -66,7 +74,8 @@ describe("readUploadedWorkspaceFile", () => {
       createFileStub("blob.bin", "application/octet-stream", bytes),
     );
 
-    expect(result.encoding).toBe("base64");
-    expect(result.content).toBe(bytesToBase64(bytes));
+    expect(result.encoding).toBe("asset");
+    if (!isWorkspaceAssetDescriptor(result.content)) throw new Error("Expected descriptor");
+    expect(await getWorkspaceAssetBytes(result.content)).toEqual(bytes);
   });
 });

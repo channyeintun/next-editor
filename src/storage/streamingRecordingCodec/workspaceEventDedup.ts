@@ -4,10 +4,8 @@ import type { WorkspaceFile, WorkspaceRecordingEvent } from "../../types/workspa
 // Workspace-event content dedup (stream-only representation)
 //
 // Every workspace recording event embeds the FULL project — every file's whole
-// content, including base64 binary assets. A lesson with a few hundred-KB image
-// and a handful of file switches therefore serialized that image once per event,
-// dominating the `.ne` size (megabytes of identical bytes; per-segment zlib can't
-// see across segments).
+// text content. Binary files are descriptors and their bytes live in dedicated
+// asset storage, so this pass only needs to carry repeated strings.
 //
 // On encode, a file whose content is byte-identical to the last content written
 // for the same path is stored with `content: ""` and a `contentUnchanged: true`
@@ -26,9 +24,7 @@ import type { WorkspaceFile, WorkspaceRecordingEvent } from "../../types/workspa
 // ============================================================================
 
 /** Stream-only shape: a `WorkspaceFile` whose content was deduped away. */
-interface DedupedWorkspaceFile extends WorkspaceFile {
-  contentUnchanged?: boolean;
-}
+type DedupedWorkspaceFile = WorkspaceFile & { contentUnchanged?: boolean };
 
 type WorkspaceEventRecord = WorkspaceRecordingEvent & {
   snapshot?: WorkspaceRecordingEvent["snapshot"];

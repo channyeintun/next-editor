@@ -9,22 +9,44 @@ import {
 import {
   collectBinaryAssetPaths,
   persistWorkspaceAssets,
+  registerWorkspaceAsset,
   resetWorkspaceAssetStoreForTests,
   WorkspaceAssetPersistenceError,
 } from "../storage/workspaceAssetStore";
 import {
   collectWorkspaceFolders,
+  isWorkspaceAssetFile,
+  type WorkspaceAssetDescriptor,
   type WorkspaceFile,
   type WorkspaceProject,
 } from "../types/workspace";
 
 function makeFile(path: string, content: string, encoding?: "base64"): WorkspaceFile {
-  return {
+  const file = {
     path,
     name: path.split("/").pop() ?? path,
     language: "plaintext",
     content,
-    ...(encoding ? { encoding } : {}),
+  };
+  return encoding ? { ...file, encoding } : file;
+}
+
+function makeAssetFile(
+  path: string,
+  assetId = `asset-${path}`,
+  size = 3,
+): WorkspaceFile {
+  return {
+    path,
+    name: path.split("/").pop() ?? path,
+    language: "binary",
+    content: {
+      kind: "asset",
+      assetId,
+      mimeType: "application/octet-stream",
+      size,
+    },
+    encoding: "asset",
   };
 }
 
@@ -42,12 +64,13 @@ function makeProject(files: WorkspaceFile[]): WorkspaceProject {
 }
 
 describe("toPersistedSnapshot", () => {
-  it("strips binary asset bytes but keeps metadata and text files", () => {
+  it("strips only legacy base64 while keeping descriptors and text", () => {
     const snapshot: StoredWorkspaceSnapshot = {
       activeFilePath: "index.html",
       project: makeProject([
         makeFile("index.html", "<html></html>"),
         makeFile("public/logo.png", "QUJD", "base64"),
+        makeAssetFile("public/current.png"),
       ]),
     };
 
@@ -55,6 +78,9 @@ describe("toPersistedSnapshot", () => {
 
     expect(persisted.project.files["public/logo.png"].content).toBe("");
     expect(persisted.project.files["public/logo.png"].encoding).toBe("base64");
+    expect(persisted.project.files["public/current.png"]).toEqual(
+      snapshot.project.files["public/current.png"],
+    );
     expect(persisted.project.files["index.html"].content).toBe("<html></html>");
   });
 
@@ -69,19 +95,19 @@ describe("toPersistedSnapshot", () => {
 });
 
 describe("collectBinaryAssetPaths", () => {
-  it("lists only base64-encoded files", () => {
+  it("lists descriptor and legacy binary files", () => {
     const project = makeProject([
       makeFile("index.html", "<html></html>"),
       makeFile("public/logo.png", "QUJD", "base64"),
-      makeFile("assets/clip.mp4", "ZmFrZQ==", "base64"),
+      makeAssetFile("assets/clip.mp4"),
     ]);
 
     expect(collectBinaryAssetPaths(project).sort()).toEqual(["assets/clip.mp4", "public/logo.png"]);
   });
 });
 
-describe("hydrateAssetContents", () => {
-  it("fills empty asset bytes without marking the workspace dirty", () => {
+describe("hydrateAssetDescriptors", () => {
+  it("migrates legacy entries without marking the workspace dirty", () => {
     const store = createWorkspaceStore({
       activeFilePath: "index.html",
       project: makeProject([
@@ -93,30 +119,51 @@ describe("hydrateAssetContents", () => {
     const initial = store.getSnapshot().context;
     expect(initial.isInitialized && initial.dirtyState.hasUnsavedChanges).toBe(false);
 
-    store.trigger.hydrateAssetContents({ contents: { "public/logo.png": "SGVsbG8=" } });
+    const descriptor: WorkspaceAssetDescriptor = {
+      kind: "asset",
+      assetId: "asset-logo",
+      mimeType: "image/png",
+      size: 5,
+    };
+    store.trigger.hydrateAssetDescriptors({
+      descriptors: { "public/logo.png": descriptor },
+    });
 
     const context = store.getSnapshot().context;
     if (!context.isInitialized) throw new Error("Expected initialized");
-    expect(context.project.files["public/logo.png"].content).toBe("SGVsbG8=");
+    expect(context.project.files["public/logo.png"].content).toEqual(descriptor);
+    expect(context.project.files["public/logo.png"].encoding).toBe("asset");
     expect(context.dirtyState.hasUnsavedChanges).toBe(false);
     expect(context.syncVersion).toBe(1);
     expect(context.previewVersion).toBe(1);
   });
 
-  it("does not overwrite an asset that already has content", () => {
+  it("does not overwrite an existing descriptor", () => {
     const store = createWorkspaceStore({
       activeFilePath: "index.html",
       project: makeProject([
         makeFile("index.html", "<html></html>"),
-        makeFile("public/logo.png", "QUJD", "base64"),
+        makeAssetFile("public/logo.png", "asset-original"),
       ]),
     });
 
-    store.trigger.hydrateAssetContents({ contents: { "public/logo.png": "ZZZZ" } });
+    store.trigger.hydrateAssetDescriptors({
+      descriptors: {
+        "public/logo.png": {
+          kind: "asset",
+          assetId: "asset-other",
+          mimeType: "image/png",
+          size: 4,
+        },
+      },
+    });
 
     const context = store.getSnapshot().context;
     if (!context.isInitialized) throw new Error("Expected initialized");
-    expect(context.project.files["public/logo.png"].content).toBe("QUJD");
+    expect(isWorkspaceAssetFile(context.project.files["public/logo.png"])).toBe(true);
+    expect(context.project.files["public/logo.png"].content).toMatchObject({
+      assetId: "asset-original",
+    });
     expect(context.syncVersion).toBe(0);
   });
 });
@@ -285,11 +332,11 @@ describe("persistWorkspaceAssets", () => {
 
   it("rejects when binary assets cannot be persisted", async () => {
     vi.stubGlobal("indexedDB", undefined);
-    const project = makeProject([makeFile("public/logo.png", "QUJD", "base64")]);
+    const project = makeProject([makeAssetFile("public/logo.png")]);
 
-    await expect(
-      persistWorkspaceAssets(project, { generation: "unavailable-storage" }),
-    ).rejects.toBeInstanceOf(WorkspaceAssetPersistenceError);
+    await expect(persistWorkspaceAssets(project)).rejects.toBeInstanceOf(
+      WorkspaceAssetPersistenceError,
+    );
   });
 
   it("rejects an IndexedDB open failure", async () => {
@@ -304,13 +351,15 @@ describe("persistWorkspaceAssets", () => {
     vi.stubGlobal("indexedDB", factory);
 
     await expect(
-      persistWorkspaceAssets(makeProject([makeFile("asset.bin", "QUJD", "base64")]), {
-        generation: "open-failure",
-      }),
+      persistWorkspaceAssets(makeProject([makeAssetFile("asset.bin")])),
     ).rejects.toMatchObject({ name: "WorkspaceAssetPersistenceError", cause: failure });
   });
 
   it("rejects a quota/transaction abort", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    const descriptor = await registerWorkspaceAsset(new Uint8Array([65, 66, 67]), {
+      mimeType: "application/octet-stream",
+    });
     const quotaError = new DOMException("quota exhausted", "QuotaExceededError");
     const transaction = {
       error: null as DOMException | null,
@@ -342,9 +391,17 @@ describe("persistWorkspaceAssets", () => {
     vi.stubGlobal("indexedDB", factory);
 
     await expect(
-      persistWorkspaceAssets(makeProject([makeFile("asset.bin", "QUJD", "base64")]), {
-        generation: "quota-failure",
-      }),
+      persistWorkspaceAssets(
+        makeProject([
+          {
+            path: "asset.bin",
+            name: "asset.bin",
+            language: "binary",
+            content: descriptor,
+            encoding: "asset",
+          },
+        ]),
+      ),
     ).rejects.toMatchObject({ name: "WorkspaceAssetPersistenceError", cause: quotaError });
   });
 });

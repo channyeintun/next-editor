@@ -31,7 +31,7 @@ describe("collaboration workspace projection", () => {
     expect(actions.updateFileContent).toHaveBeenCalledWith(project.entryFilePath, "changed");
     expect(actions.reconcileExternalProject).not.toHaveBeenCalled();
 
-    controller.createFile("created.ts", "export {}", "utf-8");
+    controller.createFile("created.ts", "export {}");
     expect(actions.reconcileExternalProject).toHaveBeenCalledTimes(1);
     expect(projection.project.files["created.ts"].content).toBe("export {}");
   });

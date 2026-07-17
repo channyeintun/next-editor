@@ -1,22 +1,70 @@
-export type WorkspaceFileEncoding = "utf-8" | "base64";
+export type WorkspaceFileEncoding = "utf-8" | "asset";
 
-export interface WorkspaceFile {
+export interface WorkspaceAssetDescriptor {
+  kind: "asset";
+  assetId: string;
+  mimeType: string;
+  size: number;
+}
+
+interface WorkspaceFileMetadata {
   path: string;
   name: string;
   language: string;
+}
+
+export interface WorkspaceTextFile extends WorkspaceFileMetadata {
   content: string;
-  /**
-   * How `content` is encoded. Text files use "utf-8" (also the default when the
-   * field is absent). Binary assets — images, video, audio, fonts, … — store
-   * their bytes base64-encoded in `content` so the whole workspace stays
-   * JSON-serializable for localStorage persistence and recordings, and so it
-   * can travel through the same string-based file pipeline as text.
-   */
-  encoding?: WorkspaceFileEncoding;
+  encoding?: "utf-8";
+}
+
+export interface WorkspaceAssetFile extends WorkspaceFileMetadata {
+  content: WorkspaceAssetDescriptor;
+  encoding: "asset";
+}
+
+/** Read-only migration shape for projects saved before asset descriptors. */
+export interface LegacyWorkspaceBinaryFile extends WorkspaceFileMetadata {
+  content: string;
+  encoding: "base64";
+}
+
+export type WorkspaceFile = WorkspaceTextFile | WorkspaceAssetFile | LegacyWorkspaceBinaryFile;
+export type WorkspaceFileContent = string | WorkspaceAssetDescriptor;
+
+export function isWorkspaceAssetDescriptor(value: unknown): value is WorkspaceAssetDescriptor {
+  if (typeof value !== "object" || value === null) return false;
+  const descriptor = value as Partial<WorkspaceAssetDescriptor>;
+  return (
+    descriptor.kind === "asset" &&
+    typeof descriptor.assetId === "string" &&
+    descriptor.assetId.length > 0 &&
+    typeof descriptor.mimeType === "string" &&
+    descriptor.mimeType.length > 0 &&
+    typeof descriptor.size === "number" &&
+    Number.isSafeInteger(descriptor.size) &&
+    descriptor.size >= 0
+  );
+}
+
+export function isWorkspaceAssetFile(file: WorkspaceFile): file is WorkspaceAssetFile {
+  return file.encoding === "asset" && isWorkspaceAssetDescriptor(file.content);
+}
+
+export function isLegacyWorkspaceBinaryFile(
+  file: WorkspaceFile,
+): file is LegacyWorkspaceBinaryFile {
+  return file.encoding === "base64";
+}
+
+export function isWorkspaceTextFile(file: WorkspaceFile): file is WorkspaceTextFile {
+  return file.encoding === undefined || file.encoding === "utf-8";
 }
 
 /** Lightweight file metadata used by tree/sidebar consumers. */
-export type WorkspaceTreeFile = Omit<WorkspaceFile, "content">;
+export interface WorkspaceTreeFile extends WorkspaceFileMetadata {
+  encoding?: WorkspaceFile["encoding"];
+}
 
 export type WorkspaceLessonType =
   | "html-css"
@@ -103,11 +151,20 @@ function areWorkspaceFilesEqual(
     const leftFile = left[path];
     const rightFile = right[path];
 
+    const contentEqual =
+      typeof leftFile.content === "string" && typeof rightFile.content === "string"
+        ? leftFile.content === rightFile.content
+        : isWorkspaceAssetDescriptor(leftFile.content) &&
+          isWorkspaceAssetDescriptor(rightFile.content) &&
+          leftFile.content.assetId === rightFile.content.assetId &&
+          leftFile.content.mimeType === rightFile.content.mimeType &&
+          leftFile.content.size === rightFile.content.size;
+
     return (
       leftFile.path === rightFile.path &&
       leftFile.name === rightFile.name &&
       leftFile.language === rightFile.language &&
-      leftFile.content === rightFile.content &&
+      contentEqual &&
       (leftFile.encoding ?? "utf-8") === (rightFile.encoding ?? "utf-8")
     );
   });

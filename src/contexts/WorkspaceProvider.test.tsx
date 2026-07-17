@@ -6,23 +6,21 @@ import type {
   WorkspaceSaveStatus,
   WorkspaceSyncMutation,
 } from "./WorkspaceContext";
-import type { PersistWorkspaceAssetsOptions } from "../storage/workspaceAssetStore";
 import type { WorkspaceProject } from "../types/workspace";
 
 const assets = vi.hoisted(() => ({
-  nextGeneration: 0,
-  persist:
-    vi.fn<(project: WorkspaceProject, options: PersistWorkspaceAssetsOptions) => Promise<void>>(),
-  prune: vi.fn<() => Promise<void>>(),
+  persist: vi.fn<(project: WorkspaceProject) => Promise<void>>(),
+  prune: vi.fn<(project: WorkspaceProject) => Promise<void>>(),
+  migrate: vi.fn(async () => ({})),
 }));
 
 vi.mock("../storage/workspaceAssetStore", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../storage/workspaceAssetStore")>();
   return {
     ...actual,
-    createWorkspaceAssetGeneration: () => `generation-${++assets.nextGeneration}`,
+    migrateLegacyWorkspaceAssets: assets.migrate,
     persistWorkspaceAssets: assets.persist,
-    pruneWorkspaceAssetGenerations: assets.prune,
+    pruneWorkspaceAssets: assets.prune,
   };
 });
 
@@ -80,9 +78,9 @@ function deferred(): {
 describe("WorkspaceProvider durable asset saves", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    assets.nextGeneration = 0;
     assets.persist.mockReset();
     assets.prune.mockReset();
+    assets.migrate.mockClear();
     assets.prune.mockResolvedValue();
   });
 
@@ -111,7 +109,18 @@ describe("WorkspaceProvider durable asset saves", () => {
     assets.persist.mockRejectedValueOnce(failure);
     const harness = renderWorkspaceProvider();
 
-    act(() => harness.current.actions.createFile("asset.bin", "QUJD", "base64"));
+    act(() =>
+      harness.current.actions.createFile(
+        "asset.bin",
+        {
+          kind: "asset",
+          assetId: "asset-failure",
+          mimeType: "application/octet-stream",
+          size: 3,
+        },
+        "asset",
+      ),
+    );
     expect(harness.current.dirty.hasUnsavedChanges).toBe(true);
 
     await act(async () => {
@@ -120,11 +129,13 @@ describe("WorkspaceProvider durable asset saves", () => {
 
     expect(harness.current.dirty.hasUnsavedChanges).toBe(true);
     expect(harness.current.save).toEqual({ isSaving: false, errorMessage: failure.message });
-    expect(harness.current.actions.getProject().files["asset.bin"].content).toBe("QUJD");
+    expect(harness.current.actions.getProject().files["asset.bin"].content).toMatchObject({
+      assetId: "asset-failure",
+    });
     expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).toBeNull();
   });
 
-  it("serializes overlapping generations and marks only the committed snapshot clean", async () => {
+  it("serializes overlapping saves and marks only the committed snapshot clean", async () => {
     const firstWrite = deferred();
     const secondWrite = deferred();
     assets.persist
@@ -132,7 +143,8 @@ describe("WorkspaceProvider durable asset saves", () => {
       .mockImplementationOnce(() => secondWrite.promise);
     const harness = renderWorkspaceProvider();
 
-    act(() => harness.current.actions.createFile("asset.bin", "QUJD", "base64"));
+    const entryPath = harness.current.actions.getProject().entryFilePath;
+    act(() => harness.current.actions.updateFileContent(entryPath, "first"));
     let firstSave!: Promise<void>;
     act(() => {
       firstSave = harness.current.actions.saveProject();
@@ -141,7 +153,7 @@ describe("WorkspaceProvider durable asset saves", () => {
     expect(harness.current.save.isSaving).toBe(true);
     expect(harness.current.dirty.hasUnsavedChanges).toBe(true);
 
-    act(() => harness.current.actions.updateFileContent("asset.bin", "REVG"));
+    act(() => harness.current.actions.updateFileContent(entryPath, "second"));
     let secondSave!: Promise<void>;
     act(() => {
       secondSave = harness.current.actions.saveProject();
@@ -162,10 +174,10 @@ describe("WorkspaceProvider durable asset saves", () => {
 
     expect(harness.current.dirty.hasUnsavedChanges).toBe(false);
     expect(harness.current.save).toEqual({ isSaving: false, errorMessage: null });
-    expect(assets.persist.mock.calls[0]?.[0].files["asset.bin"].content).toBe("QUJD");
-    expect(assets.persist.mock.calls[1]?.[0].files["asset.bin"].content).toBe("REVG");
+    expect(assets.persist.mock.calls[0]?.[0].files[entryPath].content).toBe("first");
+    expect(assets.persist.mock.calls[1]?.[0].files[entryPath].content).toBe("second");
     const persisted = JSON.parse(window.localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? "null");
-    expect(persisted.assetGeneration).toBe("generation-2");
-    expect(persisted.project.files["asset.bin"].content).toBe("");
+    expect(persisted.assetGeneration).toBeUndefined();
+    expect(persisted.project.files[entryPath].content).toBe("second");
   });
 });

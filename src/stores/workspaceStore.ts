@@ -12,11 +12,17 @@ import {
   getWorkspaceBaseName,
   getParentWorkspacePath,
   inferLanguageFromPath,
+  isLegacyWorkspaceBinaryFile,
+  isWorkspaceAssetDescriptor,
+  isWorkspaceAssetFile,
+  isWorkspaceTextFile,
   normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
   parseWorkspacePath,
   WorkspacePathError,
   type WorkspaceFile,
+  type WorkspaceAssetDescriptor,
+  type WorkspaceFileContent,
   type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
@@ -36,7 +42,7 @@ export interface StoredWorkspaceSnapshot {
   activeFilePath: string;
   project: WorkspaceProject;
   sidebarWidth?: number;
-  /** Generation key for binary assets stored alongside this metadata in IndexedDB. */
+  /** Legacy v1 generation key; removed after descriptor migration. */
   assetGeneration?: string;
 }
 
@@ -95,17 +101,15 @@ export function cloneWorkspaceSnapshot(snapshot: StoredWorkspaceSnapshot): Store
 }
 
 /**
- * Strip binary asset bytes from a snapshot before it goes to localStorage. The
- * heavy bytes are persisted separately in IndexedDB (see workspaceAssetStore),
- * so the localStorage snapshot only carries lightweight file metadata and stays
- * well within the storage quota.
+ * Asset descriptors are already lightweight and JSON-serializable. Only legacy
+ * inline base64 entries are stripped while a v1 snapshot is being migrated.
  */
 export function toPersistedSnapshot(snapshot: StoredWorkspaceSnapshot): StoredWorkspaceSnapshot {
   let strippedAny = false;
   const files: Record<string, WorkspaceFile> = {};
 
   for (const [path, file] of Object.entries(snapshot.project.files)) {
-    if (file.encoding === "base64" && file.content !== "") {
+    if (isLegacyWorkspaceBinaryFile(file) && file.content !== "") {
       files[path] = { ...file, content: "" };
       strippedAny = true;
     } else {
@@ -124,11 +128,19 @@ export function toPersistedSnapshot(snapshot: StoredWorkspaceSnapshot): StoredWo
 }
 
 function areWorkspaceFilesEqual(left: WorkspaceFile, right: WorkspaceFile): boolean {
+  const contentEqual =
+    typeof left.content === "string" && typeof right.content === "string"
+      ? left.content === right.content
+      : isWorkspaceAssetDescriptor(left.content) &&
+        isWorkspaceAssetDescriptor(right.content) &&
+        left.content.assetId === right.content.assetId &&
+        left.content.mimeType === right.content.mimeType &&
+        left.content.size === right.content.size;
   return (
     left.path === right.path &&
     left.name === right.name &&
     left.language === right.language &&
-    left.content === right.content &&
+    contentEqual &&
     (left.encoding ?? "utf-8") === (right.encoding ?? "utf-8")
   );
 }
@@ -249,18 +261,23 @@ function areWorkspaceTopologiesEqual(left: WorkspaceProject, right: WorkspacePro
 
 function createWorkspaceFile(
   path: string,
-  content: string,
-  encoding?: WorkspaceFileEncoding,
+  content: WorkspaceFileContent,
+  encoding?: WorkspaceFileEncoding | "base64",
 ): WorkspaceFile {
   const normalizedPath = normalizeWorkspacePath(path);
 
-  return {
+  const metadata = {
     path: normalizedPath,
     name: getWorkspaceBaseName(normalizedPath),
     language: inferLanguageFromPath(normalizedPath),
-    content,
-    ...(encoding && encoding !== "utf-8" ? { encoding } : {}),
   };
+  if (encoding === "asset" && isWorkspaceAssetDescriptor(content)) {
+    return { ...metadata, content, encoding };
+  }
+  if (encoding === "base64" && typeof content === "string") {
+    return { ...metadata, content, encoding };
+  }
+  return { ...metadata, content: typeof content === "string" ? content : "" };
 }
 
 function isPathWithinFolder(path: string, folderPath: string): boolean {
@@ -339,21 +356,39 @@ function canonicalizeProjectFiles(
         );
       }
 
-      if (!file || typeof file.content !== "string") {
+      if (!file) {
         throw new WorkspaceProjectValidationError(
           `Workspace file "${canonicalRecordPath}" has invalid content`,
         );
       }
 
-      if (file.encoding !== undefined && file.encoding !== "utf-8" && file.encoding !== "base64") {
+      if (
+        file.encoding !== undefined &&
+        file.encoding !== "utf-8" &&
+        file.encoding !== "asset" &&
+        file.encoding !== "base64"
+      ) {
         throw new WorkspaceProjectValidationError(
           `Workspace file "${canonicalRecordPath}" has an unsupported encoding`,
         );
       }
 
+      if (
+        (file.encoding === "asset" && !isWorkspaceAssetDescriptor(file.content)) ||
+        (file.encoding !== "asset" && typeof file.content !== "string")
+      ) {
+        throw new WorkspaceProjectValidationError(
+          `Workspace file "${canonicalRecordPath}" has invalid content`,
+        );
+      }
+
       files.set(
         canonicalRecordPath,
-        createWorkspaceFile(canonicalRecordPath, file.content, file.encoding),
+        createWorkspaceFile(
+          canonicalRecordPath,
+          file.content,
+          file.encoding as WorkspaceFileEncoding | "base64" | undefined,
+        ),
       );
     } catch (error) {
       if (error instanceof WorkspaceProjectValidationError) {
@@ -773,7 +808,9 @@ function withUpdatedFileContent(
   content: string,
 ): InitializedWorkspaceState {
   const existingFile = context.project.files[path];
-  if (!existingFile || existingFile.content === content) return context;
+  if (!existingFile || !isWorkspaceTextFile(existingFile) || existingFile.content === content) {
+    return context;
+  }
 
   const nextFile = { ...existingFile, content };
   const nextContext: InitializedWorkspaceState = {
@@ -971,7 +1008,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         context,
         event: {
           path: string;
-          content: string;
+          content: WorkspaceFileContent;
           encoding?: WorkspaceFileEncoding;
         },
       ) => {
@@ -1287,7 +1324,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         }
         const normalizedPath = normalizeWorkspacePath(event.path);
         const existingFile = context.project.files[normalizedPath];
-        if (!existingFile || existingFile.encoding === "base64") return context;
+        if (!existingFile || !isWorkspaceTextFile(existingFile)) return context;
 
         const content = applyTextEditEvent(existingFile.content, {
           ...event,
@@ -1316,7 +1353,11 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         const normalizedPath = normalizeWorkspacePath(event.path);
         const existingFile = context.project.files[normalizedPath];
 
-        if (!existingFile || existingFile.content === event.content) {
+        if (
+          !existingFile ||
+          !isWorkspaceTextFile(existingFile) ||
+          existingFile.content === event.content
+        ) {
           return context;
         }
 
@@ -1459,40 +1500,34 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           saveError: null,
         });
       },
-      hydrateAssetContents: (
+      hydrateAssetDescriptors: (
         context,
         event: {
-          contents: Record<string, string>;
+          descriptors: Record<string, WorkspaceAssetDescriptor>;
         },
       ) => {
         if (!context.isInitialized) {
           return context;
         }
-        // Fill in binary asset bytes loaded asynchronously from IndexedDB after
-        // the synchronous localStorage bootstrap. Both the live project and the
-        // saved snapshot are updated so this does not register as a dirty edit,
-        // and only files still awaiting content are touched (never clobbering a
-        // user upload/edit that already landed).
+        // Replace legacy v1 base64 placeholders with v2 descriptors after their
+        // bytes have migrated in IndexedDB. Both live and saved snapshots change
+        // together, so startup migration does not become a dirty user edit.
         let changed = false;
         const nextFiles = { ...context.project.files };
         const nextSavedFiles = { ...context.savedSnapshot.project.files };
 
-        for (const [path, content] of Object.entries(event.contents)) {
-          if (!content) {
-            continue;
-          }
-
+        for (const [path, descriptor] of Object.entries(event.descriptors)) {
           const file = nextFiles[path];
 
-          if (file && file.encoding === "base64" && file.content === "") {
-            nextFiles[path] = { ...file, content };
+          if (file && isLegacyWorkspaceBinaryFile(file)) {
+            nextFiles[path] = { ...file, content: descriptor, encoding: "asset" };
             changed = true;
           }
 
           const savedFile = nextSavedFiles[path];
 
-          if (savedFile && savedFile.encoding === "base64" && savedFile.content === "") {
-            nextSavedFiles[path] = { ...savedFile, content };
+          if (savedFile && isLegacyWorkspaceBinaryFile(savedFile)) {
+            nextSavedFiles[path] = { ...savedFile, content: descriptor, encoding: "asset" };
           }
         }
 
@@ -1512,6 +1547,22 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             syncVersion: context.syncVersion + 1,
           }),
         );
+      },
+      notifyAssetAvailable: (context, event: { assetId: string }) => {
+        if (
+          !context.isInitialized ||
+          !Object.values(context.project.files).some(
+            (file) => isWorkspaceAssetFile(file) && file.content.assetId === event.assetId,
+          )
+        ) {
+          return context;
+        }
+        return {
+          ...context,
+          previewVersion: context.previewVersion + 1,
+          syncVersion: context.syncVersion + 1,
+          lastFileSync: null,
+        };
       },
     },
   });

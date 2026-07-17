@@ -69,7 +69,16 @@ import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useWorkspaceActions, useWorkspaceActiveFilePath } from "../hooks/useWorkspace";
 import { createCollaborationCursor } from "../collaboration/relativePosition";
 import { liveRoomEndBlockReason } from "../collaboration/recordingPolicy";
-import { getWorkspaceFileMimeType } from "../types/workspace";
+import {
+  isWorkspaceAssetDescriptor,
+  isWorkspaceAssetFile,
+  isWorkspaceTextFile,
+} from "../types/workspace";
+import {
+  getWorkspaceAssetBlob,
+  getWorkspaceAssetBytes,
+  registerWorkspaceAsset,
+} from "../storage/workspaceAssetStore";
 import { createCollaborationUndoManager } from "../collaboration/undo";
 
 export type CollaborationParticipant = Extract<CollaborationAwarenessEvent, { kind: "state" }>;
@@ -151,7 +160,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<UpstashRoomProvider | null>(null);
   const providerRef = useRef<UpstashRoomProvider | null>(null);
   const projectionRef = useRef<CollaborationProjectProjection | null>(null);
-  const assetContentsRef = useRef(new Map<string, string>());
   const assetFetchesRef = useRef(new Set<string>());
   const undoManagerRef = useRef<Y.UndoManager | null>(null);
   const [runtimeVersion, setRuntimeVersion] = useState(0);
@@ -173,43 +181,33 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
   const hydrateProjectionAssets = useCallback(
     (projection: CollaborationProjectProjection, targetRoomId: string) => {
-      const hydrated: Record<string, string> = {};
       for (const [nodeId, asset] of projection.assetsByNodeId) {
         const path = projection.pathByNodeId.get(nodeId);
         if (!path) continue;
-        const cached = assetContentsRef.current.get(asset.id);
-        if (cached !== undefined) {
-          hydrated[path] = cached;
-          continue;
-        }
         if (assetFetchesRef.current.has(asset.id)) continue;
         assetFetchesRef.current.add(asset.id);
-        void downloadCollaborationAsset(targetRoomId, asset.id)
-          .then((content) => {
-            assetContentsRef.current.set(asset.id, content);
-            const currentProjection = projectionRef.current;
-            const matchingPaths: Record<string, string> = {};
-            if (currentProjection) {
-              for (const [currentNodeId, currentAsset] of currentProjection.assetsByNodeId) {
-                const currentPath = currentProjection.pathByNodeId.get(currentNodeId);
-                if (currentPath && currentAsset.id === asset.id) {
-                  matchingPaths[currentPath] = content;
-                }
-              }
-            }
-            if (Object.keys(matchingPaths).length > 0) {
-              baseActionsRef.current.hydrateAssetContents(matchingPaths);
-            }
-          })
+        const descriptor = {
+          kind: "asset" as const,
+          assetId: asset.id,
+          mimeType: asset.mimeType,
+          size: asset.size,
+        };
+        void getWorkspaceAssetBlob(descriptor)
+          .catch(() =>
+            downloadCollaborationAsset(targetRoomId, asset.id).then((bytes) =>
+              registerWorkspaceAsset(bytes, {
+                mimeType: asset.mimeType,
+                expectedAssetId: asset.id,
+              }),
+            ),
+          )
+          .then(() => baseActionsRef.current.notifyAssetAvailable(asset.id))
           .catch((error: unknown) => {
             setLocalError(
               messageFromError(error, `The shared asset ${path} could not be downloaded.`),
             );
           })
           .finally(() => assetFetchesRef.current.delete(asset.id));
-      }
-      if (Object.keys(hydrated).length > 0) {
-        baseActionsRef.current.hydrateAssetContents(hydrated);
       }
     },
     [],
@@ -279,7 +277,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       if (providerRef.current) stopProviderAfterBestEffortFlush(providerRef.current);
       providerRef.current = null;
       projectionRef.current = null;
-      assetContentsRef.current.clear();
       assetFetchesRef.current.clear();
       setProvider(null);
       return;
@@ -296,7 +293,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
             transaction,
             projectionRef.current,
             baseActionsRef.current,
-            assetContentsRef.current,
           );
           projectionRef.current = projection;
           hydrateProjectionAssets(projection, roomId);
@@ -318,7 +314,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (providerRef.current) stopProviderAfterBestEffortFlush(providerRef.current);
     providerRef.current = nextProvider;
     projectionRef.current = null;
-    assetContentsRef.current.clear();
     assetFetchesRef.current.clear();
     awarenessCursorRef.current = null;
     awarenessRevisionRef.current = 0;
@@ -367,11 +362,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (usesPlaybackModel || !provider) return;
     try {
-      const projection = reprojectCollaborationWorkspace(
-        provider.doc,
-        baseActionsRef.current,
-        assetContentsRef.current,
-      );
+      const projection = reprojectCollaborationWorkspace(provider.doc, baseActionsRef.current);
       projectionRef.current = projection;
       if (roomId) hydrateProjectionAssets(projection, roomId);
     } catch {
@@ -427,8 +418,16 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       createNewEditor: () =>
         reportWriteError(new Error("Leave the room before replacing the project.")),
       createFile: (path, content = "", encoding) => {
-        if (encoding !== "base64") {
-          run(() => controller.createFile(path, content, encoding));
+        if (encoding !== "asset") {
+          if (typeof content !== "string") {
+            reportWriteError(new Error("Text collaboration files require string content."));
+            return;
+          }
+          run(() => controller.createFile(path, content));
+          return;
+        }
+        if (!isWorkspaceAssetDescriptor(content)) {
+          reportWriteError(new Error("Binary collaboration files require an asset descriptor."));
           return;
         }
         const currentProvider = providerRef.current;
@@ -437,14 +436,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           reportWriteError(new Error("The collaboration room is not ready for asset uploads."));
           return;
         }
-        void uploadCollaborationAsset(
-          currentSession.room.id,
-          content,
-          getWorkspaceFileMimeType(path),
-        )
+        void getWorkspaceAssetBytes(content)
+          .then((bytes) => uploadCollaborationAsset(currentSession.room.id, bytes, content.mimeType))
           .then((asset) => {
             if (providerRef.current !== currentProvider || !canWriteRef.current) return;
-            assetContentsRef.current.set(asset.id, content);
             controller.createAssetFile(path, asset);
             setLocalError(null);
           })
@@ -460,9 +455,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       updateFileContent: (path, content) => run(() => controller.replaceFileContent(path, content)),
       applyFileTextEdits: (event) => {
         try {
-          const currentContent = baseActions.getFile(event.path)?.content;
+          const currentFile = baseActions.getFile(event.path);
           const nextContent =
-            currentContent === undefined ? null : applyTextEditEvent(currentContent, event);
+            currentFile && isWorkspaceTextFile(currentFile)
+              ? applyTextEditEvent(currentFile.content, event)
+              : null;
           if (nextContent === null) return null;
           const applied = controller.applyFileTextEdits(event);
           setLocalError(null);
@@ -514,15 +511,16 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     }
     try {
       const binaryFiles = Object.values(project.files)
-        .filter((file) => file.encoding === "base64")
+        .filter(isWorkspaceAssetFile)
         .sort((left, right) => left.path.localeCompare(right.path));
       if (binaryFiles.length > 0) {
         const controller = new CollaborationProjectController(doc, { canWrite: () => true });
         for (const file of binaryFiles) {
+          const bytes = await getWorkspaceAssetBytes(file.content);
           const asset = await uploadCollaborationAsset(
             created.room.id,
-            file.content,
-            getWorkspaceFileMimeType(file.path),
+            bytes,
+            file.content.mimeType,
           );
           controller.createAssetFile(file.path, asset);
         }

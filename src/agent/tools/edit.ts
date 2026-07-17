@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ToolContext } from "../types";
 import { readFile, writeFile } from "./workspaceFs";
 import { applyEdits, EditApplyError } from "./editDiff";
+import { isWorkspaceTextFile } from "../../types/workspace";
 
 const inputSchema = z.object({
   path: z.string().describe("Workspace-relative file path"),
@@ -30,7 +31,7 @@ export function makeEditTool(ctx: ToolContext) {
         return `File not found: ${input.path}`;
       }
 
-      if (file.encoding === "base64") {
+      if (!isWorkspaceTextFile(file)) {
         return `${input.path} is a binary file and cannot be edited.`;
       }
 

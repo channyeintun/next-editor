@@ -21,7 +21,7 @@ import {
 import type { EditorSelection } from "../core/src/types";
 import type { UpstashRoomProvider } from "../collaboration/upstashRoomProvider";
 import { selectIsCollapsed, selectIsFullHeight } from "../stores/runtimePanelStore";
-import { lessonRunsInWebContainer } from "../types/workspace";
+import { isWorkspaceTextFile, lessonRunsInWebContainer } from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
 import {
   canWriteCollaborationDocument,
@@ -206,7 +206,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
   // Binary assets (images, video, …) cannot be edited as text, so the Monaco
   // editor is swapped for a media preview and the editor sync paths are skipped.
-  const isBinaryActiveFile = activeFile.encoding === "base64";
+  const isBinaryActiveFile = !isWorkspaceTextFile(activeFile);
+  const activeTextContent = isWorkspaceTextFile(activeFile) ? activeFile.content : "";
   const selectedLanguage = activeFile.language || language || "html";
   const editorModelPath = usesPlaybackModel
     ? toPlaybackModelPath(activeFile.path)
@@ -217,19 +218,19 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     }
 
     if (usesPlaybackModel) {
-      return syncPlaybackModel(monaco, activeFile.path, activeFile.content, selectedLanguage, {
+      return syncPlaybackModel(monaco, activeFile.path, activeTextContent, selectedLanguage, {
         preserveExistingContent: true,
       });
     }
 
     isApplyingExternalModelValueRef.current = true;
     try {
-      return syncWorkspaceModel(monaco, activeFile.path, activeFile.content, selectedLanguage);
+      return syncWorkspaceModel(monaco, activeFile.path, activeTextContent, selectedLanguage);
     } finally {
       isApplyingExternalModelValueRef.current = false;
     }
   }, [
-    activeFile.content,
+    activeTextContent,
     activeFile.path,
     isBinaryActiveFile,
     selectedLanguage,
@@ -249,7 +250,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       return null;
     }
 
-    return syncPlaybackModel(monaco, activeFile.path, activeFile.content, selectedLanguage, {
+    return syncPlaybackModel(monaco, activeFile.path, activeTextContent, selectedLanguage, {
       preserveExistingContent: true,
     });
   });

@@ -14,9 +14,8 @@ type ProjectionWorkspaceActions = Pick<
 export function reprojectCollaborationWorkspace(
   doc: Y.Doc,
   actions: ProjectionWorkspaceActions,
-  assetContentById?: ReadonlyMap<string, string>,
 ): CollaborationProjectProjection {
-  const projection = projectCollaborationDocument(doc, { assetContentById });
+  const projection = projectCollaborationDocument(doc);
   actions.reconcileExternalProject(projection.project);
   return projection;
 }
@@ -32,9 +31,8 @@ export function projectCollaborationTransaction(
   transaction: Y.Transaction,
   currentProjection: CollaborationProjectProjection | null,
   actions: ProjectionWorkspaceActions,
-  assetContentById?: ReadonlyMap<string, string>,
 ): CollaborationProjectProjection {
-  if (!currentProjection) return reprojectCollaborationWorkspace(doc, actions, assetContentById);
+  if (!currentProjection) return reprojectCollaborationWorkspace(doc, actions);
 
   const texts = getCollaborationTexts(doc);
   const textIdByType = new Map<object, string>();
@@ -45,7 +43,7 @@ export function projectCollaborationTransaction(
     return id ? [id] : [];
   });
   if (changedTypes.length === 0 || changedTextIds.length !== changedTypes.length) {
-    return reprojectCollaborationWorkspace(doc, actions, assetContentById);
+    return reprojectCollaborationWorkspace(doc, actions);
   }
 
   for (const id of new Set(changedTextIds)) {

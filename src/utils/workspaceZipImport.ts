@@ -1,17 +1,22 @@
 import { unzipSync, strFromU8 } from "fflate";
 import {
-  bytesToBase64,
   collectWorkspaceFolders,
   getWorkspaceBaseName,
+  getWorkspaceFileMimeType,
   inferLanguageFromPath,
   isBinaryWorkspacePath,
+  isWorkspaceAssetDescriptor,
+  isWorkspaceTextFile,
   normalizeWorkspacePath,
   parseWorkspacePath,
   WorkspacePathError,
   type WorkspaceFile,
+  type WorkspaceFileContent,
+  type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
+import { registerWorkspaceAsset } from "../storage/workspaceAssetStore";
 
 /**
  * Upper bound on the decoded size of an imported archive. Imported projects are
@@ -99,7 +104,7 @@ export function createRootFolderStripper(filePaths: string[]): (path: string) =>
 function htmlReferences(files: Record<string, WorkspaceFile>, needle: string): boolean {
   return Object.values(files).some(
     (file) =>
-      file.encoding !== "base64" && /\.html?$/i.test(file.path) && file.content.includes(needle),
+      isWorkspaceTextFile(file) && /\.html?$/i.test(file.path) && file.content.includes(needle),
   );
 }
 
@@ -109,7 +114,7 @@ export function detectImportedLessonType(
 ): WorkspaceLessonType {
   const packageJsonFile = files["package.json"];
 
-  if (!packageJsonFile || packageJsonFile.encoding === "base64") {
+  if (!packageJsonFile || !isWorkspaceTextFile(packageJsonFile)) {
     return "html-css";
   }
 
@@ -173,7 +178,7 @@ function pickEntryFilePath(files: Record<string, WorkspaceFile>): string {
     }
   }
 
-  const firstTextFile = Object.values(files).find((file) => file.encoding !== "base64");
+  const firstTextFile = Object.values(files).find(isWorkspaceTextFile);
 
   return firstTextFile?.path ?? Object.values(files)[0]?.path ?? "index.html";
 }
@@ -198,18 +203,19 @@ function toProjectId(name: string): string {
 
 function createWorkspaceFile(
   path: string,
-  content: string,
-  encoding: "base64" | undefined,
+  content: WorkspaceFileContent,
+  encoding: WorkspaceFileEncoding | undefined,
 ): WorkspaceFile {
   const normalizedPath = normalizeWorkspacePath(path);
-
-  return {
+  const metadata = {
     path: normalizedPath,
     name: getWorkspaceBaseName(normalizedPath),
     language: inferLanguageFromPath(normalizedPath),
-    content,
-    ...(encoding ? { encoding } : {}),
   };
+  if (encoding === "asset" && isWorkspaceAssetDescriptor(content)) {
+    return { ...metadata, content, encoding };
+  }
+  return { ...metadata, content: typeof content === "string" ? content : "" };
 }
 
 /**
@@ -309,7 +315,10 @@ export async function importWorkspaceProjectFromZip(file: File): Promise<Workspa
     }
 
     if (isBinaryWorkspacePath(workspacePath)) {
-      files.set(workspacePath, createWorkspaceFile(workspacePath, bytesToBase64(bytes), "base64"));
+      const descriptor = await registerWorkspaceAsset(bytes, {
+        mimeType: getWorkspaceFileMimeType(workspacePath),
+      });
+      files.set(workspacePath, createWorkspaceFile(workspacePath, descriptor, "asset"));
     } else {
       files.set(workspacePath, createWorkspaceFile(workspacePath, strFromU8(bytes), undefined));
     }

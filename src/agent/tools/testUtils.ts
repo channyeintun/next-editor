@@ -8,13 +8,27 @@ import type { ToolContext } from "../types";
 
 /** Shared fixtures for the agent tool unit tests. */
 
-export function makeFile(path: string, content: string, encoding?: "base64"): WorkspaceFile {
+export function makeFile(path: string, content: string): WorkspaceFile {
   return {
     path,
     name: path.split("/").pop() ?? path,
     language: "plaintext",
     content,
-    ...(encoding ? { encoding } : {}),
+  };
+}
+
+export function makeAssetFile(path: string): WorkspaceFile {
+  return {
+    path,
+    name: path.split("/").pop() ?? path,
+    language: "binary",
+    content: {
+      kind: "asset",
+      assetId: `asset-${path}`,
+      mimeType: "application/octet-stream",
+      size: 3,
+    },
+    encoding: "asset",
   };
 }
 

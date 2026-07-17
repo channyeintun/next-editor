@@ -3,8 +3,8 @@ import {
   normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
   parseWorkspacePath,
+  isWorkspaceTextFile,
   type WorkspaceFile,
-  type WorkspaceFileEncoding,
   type WorkspaceProject,
 } from "../../types/workspace";
 import type { WorkspaceStoreInstance } from "../../stores/workspaceStore";
@@ -77,22 +77,25 @@ export function writeFile(
   store: WorkspaceStoreInstance,
   path: string,
   content: string,
-  encoding?: WorkspaceFileEncoding,
 ): WriteFileResult {
   const normalizedPath = parseWorkspacePath(path);
   const existingFile = readFile(store, normalizedPath);
 
   if (existingFile) {
+    if (!isWorkspaceTextFile(existingFile)) {
+      throw new Error(`Cannot overwrite binary file "${normalizedPath}" with text`);
+    }
     store.trigger.updateFileContent({ path: normalizedPath, content });
     return { created: false };
   }
 
-  store.trigger.createFile({ path: normalizedPath, content, encoding });
+  store.trigger.createFile({ path: normalizedPath, content });
   const createdFile = readFile(store, normalizedPath);
   if (
     !createdFile ||
+    !isWorkspaceTextFile(createdFile) ||
     createdFile.content !== content ||
-    (createdFile.encoding ?? "utf-8") !== (encoding ?? "utf-8")
+    (createdFile.encoding ?? "utf-8") !== "utf-8"
   ) {
     throw new Error(`Cannot create "${normalizedPath}" because it conflicts with another path`);
   }

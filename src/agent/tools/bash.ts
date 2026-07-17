@@ -11,7 +11,12 @@ import {
   syncWorkspaceProject,
 } from "../../contexts/webContainerRuntimeSupport";
 import { getProject } from "./workspaceFs";
-import type { WorkspaceFile, WorkspaceProject } from "../../types/workspace";
+import {
+  isWorkspaceAssetFile,
+  isWorkspaceTextFile,
+  type WorkspaceFile,
+  type WorkspaceProject,
+} from "../../types/workspace";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_TIMEOUT_MS = 5 * 60_000;
@@ -39,7 +44,7 @@ let syncedProject: WorkspaceProject | null = null;
 
 async function ensureMounted(instance: WebContainer, project: WorkspaceProject): Promise<void> {
   if (mountedInstance !== instance) {
-    await instance.mount(createWorkspaceTree(project));
+    await instance.mount(await createWorkspaceTree(project));
     mountedInstance = instance;
     syncedProject = project;
     return;
@@ -153,11 +158,17 @@ function areFilesEqual(left: WorkspaceFile | undefined, right: WorkspaceFile | u
     return left === right;
   }
 
+  const contentEqual =
+    isWorkspaceAssetFile(left) && isWorkspaceAssetFile(right)
+      ? left.content.assetId === right.content.assetId
+      : isWorkspaceTextFile(left) &&
+        isWorkspaceTextFile(right) &&
+        left.content === right.content;
   return (
     left.path === right.path &&
     left.name === right.name &&
     left.language === right.language &&
-    left.content === right.content &&
+    contentEqual &&
     (left.encoding ?? "utf-8") === (right.encoding ?? "utf-8")
   );
 }

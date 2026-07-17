@@ -1,7 +1,14 @@
 import { tool } from "@openrouter/agent";
 import { z } from "zod";
 import type { ToolContext, ToolOutputContent } from "../types";
-import { getWorkspaceFileMimeType, isBinaryWorkspacePath } from "../../types/workspace";
+import {
+  bytesToBase64,
+  getWorkspaceFileMimeType,
+  isBinaryWorkspacePath,
+  isLegacyWorkspaceBinaryFile,
+  isWorkspaceAssetFile,
+} from "../../types/workspace";
+import { getWorkspaceAssetBytes } from "../../storage/workspaceAssetStore";
 import { readFile } from "./workspaceFs";
 
 const MAX_LINES = 2000;
@@ -31,18 +38,23 @@ export function makeReadTool(ctx: ToolContext) {
       "Read a workspace file's contents. Text files are returned with line numbers; images are " +
       "returned inline; other binary files return a short note instead of their bytes.",
     inputSchema,
-    execute: (input): string | ToolOutputContent[] => {
+    execute: async (input): Promise<string | ToolOutputContent[]> => {
       const file = readFile(ctx.workspace, input.path);
 
       if (!file) {
         return `File not found: ${input.path}`;
       }
 
-      if (file.encoding === "base64") {
-        const mimeType = getWorkspaceFileMimeType(file.path);
+      if (isWorkspaceAssetFile(file) || isLegacyWorkspaceBinaryFile(file)) {
+        const mimeType = isWorkspaceAssetFile(file)
+          ? file.content.mimeType
+          : getWorkspaceFileMimeType(file.path);
 
         if (EMBEDDABLE_IMAGE_MIME_TYPES.has(mimeType)) {
-          return [{ type: "input_image", imageUrl: `data:${mimeType};base64,${file.content}` }];
+          const content = isWorkspaceAssetFile(file)
+            ? bytesToBase64(await getWorkspaceAssetBytes(file.content))
+            : file.content;
+          return [{ type: "input_image", imageUrl: `data:${mimeType};base64,${content}` }];
         }
 
         return `${input.path} is a binary file (${mimeType}) and cannot be displayed as text.`;

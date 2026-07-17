@@ -1,6 +1,8 @@
 import { createContext } from "react";
 import type {
   WorkspaceFile,
+  WorkspaceAssetDescriptor,
+  WorkspaceFileContent,
   WorkspaceFileEncoding,
   WorkspaceLessonType,
   WorkspaceProject,
@@ -16,7 +18,11 @@ export interface WorkspaceActions {
   setSidebarWidth: (width: number) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   createNewEditor: () => void;
-  createFile: (path: string, content?: string, encoding?: WorkspaceFileEncoding) => void;
+  createFile: (
+    path: string,
+    content?: WorkspaceFileContent,
+    encoding?: WorkspaceFileEncoding,
+  ) => void;
   createFolder: (path: string) => void;
   renameFile: (currentPath: string, nextPath: string) => void;
   renameFolder: (currentPath: string, nextPath: string) => void;
@@ -25,7 +31,8 @@ export interface WorkspaceActions {
   updateFileContent: (path: string, content: string) => void;
   applyFileTextEdits: (event: TextEditEvent) => string | null;
   updateActiveFileContent: (content: string) => void;
-  hydrateAssetContents: (contents: Record<string, string>) => void;
+  hydrateAssetDescriptors: (descriptors: Record<string, WorkspaceAssetDescriptor>) => void;
+  notifyAssetAvailable: (assetId: string) => void;
   saveProject: () => Promise<void>;
   loadProject: (
     project: WorkspaceProject,

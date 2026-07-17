@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeFile, makeStore, makeCtx } from "./testUtils";
+import { makeAssetFile, makeFile, makeStore, makeCtx } from "./testUtils";
 import { getProject } from "./workspaceFs";
 import { makeWriteTool } from "./write";
 
@@ -23,5 +23,16 @@ describe("write tool", () => {
     });
     expect(result).toContain("Updated a.txt");
     expect(getProject(store)?.files["a.txt"]?.content).toBe("new");
+  });
+
+  it("does not overwrite a binary asset with text", () => {
+    const store = makeStore([makeAssetFile("asset.bin")]);
+
+    expect(() =>
+      makeWriteTool(makeCtx(store)).function.execute({
+        path: "asset.bin",
+        content: "new",
+      }),
+    ).toThrow(/binary file/i);
   });
 });

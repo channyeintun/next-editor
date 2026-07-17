@@ -182,8 +182,13 @@ describe("collaboration project document", () => {
       path: "logo.png",
       name: "logo.png",
       language: "plaintext",
-      content: "aGVsbG8=",
-      encoding: "base64",
+      content: {
+        kind: "asset",
+        assetId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        mimeType: "image/png",
+        size: 5,
+      },
+      encoding: "asset",
     };
     const doc = new Y.Doc();
     seedCollaborationProject(doc, project, {
@@ -204,15 +209,15 @@ describe("collaboration project document", () => {
     const unloaded = projectCollaborationDocument(doc);
     const assetNodeId = unloaded.nodeIdByPath.get("logo.png");
     expect(assetNodeId).toBeTruthy();
-    expect(unloaded.project.files["logo.png"].content).toBe("");
+    expect(unloaded.project.files["logo.png"].content).toEqual({
+      kind: "asset",
+      assetId: asset.id,
+      mimeType: asset.mimeType,
+      size: asset.size,
+    });
     expect(unloaded.assetsByNodeId.get(assetNodeId!)).toEqual(asset);
     expect(getCollaborationTexts(doc).get(assetNodeId!)).toBeUndefined();
     expect(unloaded.issues).not.toContainEqual({ nodeId: assetNodeId, kind: "missing-text" });
-
-    const hydrated = projectCollaborationDocument(doc, {
-      assetContentById: new Map([[asset.id, "aGVsbG8="]]),
-    });
-    expect(hydrated.project.files["logo.png"].content).toBe("aGVsbG8=");
   });
 
   it("converges concurrent tree commands with deterministic collision paths", () => {

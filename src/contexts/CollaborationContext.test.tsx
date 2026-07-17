@@ -58,7 +58,8 @@ const baseActions: WorkspaceActions = {
   updateFileContent: vi.fn(),
   applyFileTextEdits: vi.fn(() => "updated"),
   updateActiveFileContent: vi.fn(),
-  hydrateAssetContents: vi.fn(),
+  hydrateAssetDescriptors: vi.fn(),
+  notifyAssetAvailable: vi.fn(),
   saveProject: vi.fn(async () => {}),
   loadProject: vi.fn(),
   reconcileExternalProject: vi.fn(),
@@ -86,6 +87,10 @@ import { CollaborationProvider, useCollaboration } from "./CollaborationContext"
 import type { CollaborationRoomSession } from "../collaboration/protocol";
 import { applyEncodedYjsSnapshot, applyEncodedYjsUpdate } from "../collaboration/yjsUpdates";
 import { projectCollaborationDocument } from "../collaboration/projectDocument";
+import {
+  registerWorkspaceAsset,
+  resetWorkspaceAssetStoreForTests,
+} from "../storage/workspaceAssetStore";
 
 const roomSession: CollaborationRoomSession = {
   room: {
@@ -110,6 +115,7 @@ const roomSession: CollaborationRoomSession = {
 describe("CollaborationProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetWorkspaceAssetStoreForTests();
     currentProject = project;
   });
 
@@ -167,13 +173,15 @@ describe("CollaborationProvider", () => {
   });
 
   it("uploads binary files before publishing descriptor-only room updates", async () => {
+    const bytes = new TextEncoder().encode("hello");
+    const descriptor = await registerWorkspaceAsset(bytes, { mimeType: "image/png" });
     currentProject = structuredClone(project);
     currentProject.files["logo.png"] = {
       path: "logo.png",
       name: "logo.png",
       language: "plaintext",
-      content: "aGVsbG8=",
-      encoding: "base64",
+      content: descriptor,
+      encoding: "asset",
     };
     const asset = {
       id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -201,7 +209,10 @@ describe("CollaborationProvider", () => {
       await collaboration!.createRoom();
     });
 
-    expect(mocks.uploadAsset).toHaveBeenCalledWith(roomSession.room.id, "aGVsbG8=", "image/png");
+    expect(mocks.uploadAsset).toHaveBeenCalledTimes(1);
+    expect(mocks.uploadAsset.mock.calls[0][0]).toBe(roomSession.room.id);
+    expect(mocks.uploadAsset.mock.calls[0][1]).toEqual(bytes);
+    expect(mocks.uploadAsset.mock.calls[0][2]).toBe("image/png");
     expect(mocks.publishUpdate).toHaveBeenCalledTimes(1);
     const doc = new Y.Doc();
     applyEncodedYjsSnapshot(doc, mocks.createRoom.mock.calls[0][0].snapshot);
@@ -209,8 +220,13 @@ describe("CollaborationProvider", () => {
     applyEncodedYjsUpdate(doc, mocks.publishUpdate.mock.calls[0][1].update);
     const projection = projectCollaborationDocument(doc);
     expect(projection.project.files["logo.png"]).toMatchObject({
-      encoding: "base64",
-      content: "",
+      encoding: "asset",
+      content: {
+        kind: "asset",
+        assetId: asset.id,
+        mimeType: asset.mimeType,
+        size: asset.size,
+      },
     });
     expect(Array.from(projection.assetsByNodeId.values())).toContainEqual(asset);
     doc.destroy();

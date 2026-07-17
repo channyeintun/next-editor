@@ -1,11 +1,18 @@
 import { Download, FileBox, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import {
   approximateBase64ByteLength,
   getWorkspaceFileMimeType,
   getWorkspaceMediaKind,
+  isLegacyWorkspaceBinaryFile,
+  isWorkspaceAssetFile,
   type WorkspaceFile,
 } from "../types/workspace";
+import {
+  getWorkspaceAssetBlob,
+  subscribeWorkspaceAssetAvailability,
+} from "../storage/workspaceAssetStore";
 
 interface BinaryFilePreviewProps {
   file: WorkspaceFile;
@@ -29,16 +36,67 @@ function formatByteSize(byteLength: number): string {
 }
 
 /**
- * Renders an uploaded binary asset (image/video/audio/other) in place of the
- * Monaco editor, since its base64 content is not meaningfully editable as text.
+ * Renders an uploaded binary asset in place of Monaco. Descriptor-backed files
+ * use a short-lived object URL; base64 is retained only for legacy migration.
  */
 const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
   const collaboration = useOptionalCollaboration();
-  const mimeType = getWorkspaceFileMimeType(file.path);
+  const descriptor = isWorkspaceAssetFile(file) ? file.content : null;
+  const assetId = descriptor?.assetId;
+  const descriptorMimeType = descriptor?.mimeType;
+  const descriptorSize = descriptor?.size;
+  const mimeType = descriptor?.mimeType ?? getWorkspaceFileMimeType(file.path);
   const mediaKind = getWorkspaceMediaKind(file.path);
-  const isAwaitingSharedAsset = Boolean(collaboration?.provider && !file.content);
-  const dataUrl = `data:${mimeType};base64,${file.content}`;
-  const byteSize = formatByteSize(approximateBase64ByteLength(file.content));
+  const [loadedAsset, setLoadedAsset] = useState<{ assetId: string; url: string } | null>(null);
+  const [unavailableAssetId, setUnavailableAssetId] = useState<string | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
+  const objectUrl = loadedAsset?.assetId === assetId ? loadedAsset.url : null;
+  const assetUnavailable = unavailableAssetId === assetId;
+  const legacyDataUrl = isLegacyWorkspaceBinaryFile(file)
+    ? `data:${mimeType};base64,${file.content}`
+    : null;
+  const mediaUrl = objectUrl ?? legacyDataUrl;
+  const byteSize = formatByteSize(
+    descriptor?.size ??
+      (isLegacyWorkspaceBinaryFile(file) ? approximateBase64ByteLength(file.content) : 0),
+  );
+  const isAwaitingSharedAsset = !mediaUrl && Boolean(collaboration?.provider || assetUnavailable);
+
+  useEffect(() => {
+    if (!assetId || !descriptorMimeType || descriptorSize === undefined) return;
+
+    let disposed = false;
+    let currentUrl: string | null = null;
+    const currentDescriptor = {
+      kind: "asset" as const,
+      assetId,
+      mimeType: descriptorMimeType,
+      size: descriptorSize,
+    };
+    const load = () => {
+      void getWorkspaceAssetBlob(currentDescriptor)
+        .then((blob) => {
+          if (disposed) return;
+          if (currentUrl) URL.revokeObjectURL(currentUrl);
+          const nextUrl = URL.createObjectURL(blob);
+          currentUrl = nextUrl;
+          setLoadedAsset({ assetId, url: nextUrl });
+          setUnavailableAssetId(null);
+        })
+        .catch(() => {
+          if (!disposed) setUnavailableAssetId(assetId);
+        });
+    };
+    load();
+    const unsubscribe = subscribeWorkspaceAssetAvailability((availableAssetId) => {
+      if (availableAssetId === assetId) load();
+    });
+    return () => {
+      disposed = true;
+      unsubscribe();
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+    };
+  }, [assetId, descriptorMimeType, descriptorSize, retryVersion]);
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 overflow-auto bg-[#11141c] p-8 text-slate-300">
@@ -47,16 +105,16 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
           <div className="flex size-28 items-center justify-center rounded-2xl border border-amber-700/50 bg-amber-950/20">
             <FileBox size={44} className="text-amber-500" />
           </div>
-        ) : mediaKind === "image" ? (
+        ) : mediaKind === "image" && mediaUrl ? (
           <img
-            src={dataUrl}
+            src={mediaUrl}
             alt={file.name}
             className="max-h-full max-w-full rounded-lg object-contain shadow-lg"
           />
-        ) : mediaKind === "video" ? (
-          <video src={dataUrl} controls className="max-h-full max-w-full rounded-lg shadow-lg" />
-        ) : mediaKind === "audio" ? (
-          <audio src={dataUrl} controls className="w-80 max-w-full" />
+        ) : mediaKind === "video" && mediaUrl ? (
+          <video src={mediaUrl} controls className="max-h-full max-w-full rounded-lg shadow-lg" />
+        ) : mediaKind === "audio" && mediaUrl ? (
+          <audio src={mediaUrl} controls className="w-80 max-w-full" />
         ) : (
           <div className="flex size-28 items-center justify-center rounded-2xl border border-slate-700 bg-slate-900">
             <FileBox size={44} className="text-slate-500" />
@@ -82,22 +140,25 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
       {isAwaitingSharedAsset ? (
         <button
           type="button"
-          onClick={collaboration?.retryAssets}
+          onClick={() => {
+            setRetryVersion((version) => version + 1);
+            collaboration?.retryAssets();
+          }}
           className="inline-flex items-center gap-2 rounded-md border border-amber-700/60 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-950/40"
         >
           <RefreshCw size={14} />
           Retry asset
         </button>
-      ) : (
+      ) : mediaUrl ? (
         <a
-          href={dataUrl}
+          href={mediaUrl}
           download={file.name}
           className="inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800"
         >
           <Download size={14} />
           Download
         </a>
-      )}
+      ) : null}
     </div>
   );
 };

@@ -207,7 +207,7 @@ export function getFileIcon(file: WorkspaceTreeFile): ReactElement {
   }
 
   // ---- Binary files ----
-  if (file.encoding === "base64") {
+  if (file.encoding === "asset" || file.encoding === "base64") {
     const mediaKind = getWorkspaceMediaKind(file.path);
 
     if (mediaKind === "image") {

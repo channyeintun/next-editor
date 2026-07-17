@@ -6,16 +6,23 @@ import type {
 } from "./WebContainerRuntimeContext";
 import {
   base64ToBytes,
-  bytesToBase64,
   collectWorkspaceFolders,
   getWorkspaceBaseName,
+  getWorkspaceFileMimeType,
   inferLanguageFromPath,
   isBinaryWorkspacePath,
+  isLegacyWorkspaceBinaryFile,
+  isWorkspaceAssetFile,
+  isWorkspaceTextFile,
   normalizeWorkspacePath,
   parseWorkspacePath,
   type WorkspaceFile,
   type WorkspaceProject,
 } from "../types/workspace";
+import {
+  getWorkspaceAssetBytes,
+  registerWorkspaceAsset,
+} from "../storage/workspaceAssetStore";
 import { createRrwebPreviewRecorderScript } from "../components/preview/rrwebPreview";
 import {
   RUNTIME_SNAPSHOT_MESSAGE_TYPE,
@@ -300,13 +307,16 @@ async function readRuntimeDirectory(
 
     if (isBinaryWorkspacePath(nextWorkspacePath)) {
       const bytes = await instance.fs.readFile(nextRuntimePath);
+      const content = await registerWorkspaceAsset(bytes, {
+        mimeType: getWorkspaceFileMimeType(nextWorkspacePath),
+      });
 
       files[nextWorkspacePath] = {
         path: nextWorkspacePath,
         name: getWorkspaceBaseName(nextWorkspacePath),
         language: inferLanguageFromPath(nextWorkspacePath),
-        content: bytesToBase64(bytes),
-        encoding: "base64",
+        content,
+        encoding: "asset",
       };
       continue;
     }
@@ -340,7 +350,26 @@ export async function readWorkspaceProject(
   };
 }
 
-export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
+export async function getWorkspaceRuntimeFileContents(
+  file: WorkspaceFile,
+): Promise<string | Uint8Array> {
+  if (isWorkspaceAssetFile(file)) return getWorkspaceAssetBytes(file.content);
+  if (isLegacyWorkspaceBinaryFile(file)) return base64ToBytes(file.content);
+  return file.content;
+}
+
+function workspaceFileContentsEqual(left: WorkspaceFile, right: WorkspaceFile): boolean {
+  if (isWorkspaceAssetFile(left) && isWorkspaceAssetFile(right)) {
+    return left.content.assetId === right.content.assetId;
+  }
+  return (
+    isWorkspaceTextFile(left) &&
+    isWorkspaceTextFile(right) &&
+    left.content === right.content
+  );
+}
+
+export async function createWorkspaceTree(project: WorkspaceProject): Promise<FileSystemTree> {
   const createDirectory = (): FileSystemTree => Object.create(null) as FileSystemTree;
   const tree = createDirectory();
 
@@ -407,7 +436,7 @@ export function createWorkspaceTree(project: WorkspaceProject): FileSystemTree {
         // The recorder is injected at the preview layer (see
         // createRuntimePreviewScript + setPreviewScript), never written into
         // workspace files, so files are mounted exactly as authored.
-        contents: file.encoding === "base64" ? base64ToBytes(file.content) : file.content,
+        contents: await getWorkspaceRuntimeFileContents(file),
       },
     };
   }
@@ -501,16 +530,13 @@ export async function syncWorkspaceProject(
   for (const [path, file] of nextFiles) {
     const previousFile = previousFiles.get(path);
 
-    if (previousFile && previousFile.content === file.content) {
+    if (previousFile && workspaceFileContentsEqual(previousFile, file)) {
       continue;
     }
 
     await ensureDirectory(instance, getFileDirectory(path), onWrite);
     onWrite?.(path);
-    await instance.fs.writeFile(
-      path,
-      file.encoding === "base64" ? base64ToBytes(file.content) : file.content,
-    );
+    await instance.fs.writeFile(path, await getWorkspaceRuntimeFileContents(file));
   }
 }
 

@@ -1,6 +1,12 @@
-import { zipSync, strToU8, type Zippable } from "fflate";
-import type { WorkspaceProject } from "../types/workspace";
-import { base64ToBytes, normalizeWorkspaceFolderPath } from "../types/workspace";
+import { strToU8, Zip, ZipDeflate, ZipPassThrough } from "fflate";
+import {
+  base64ToBytes,
+  isLegacyWorkspaceBinaryFile,
+  isWorkspaceAssetFile,
+  normalizeWorkspaceFolderPath,
+  type WorkspaceProject,
+} from "../types/workspace";
+import { getWorkspaceAssetBlob } from "../storage/workspaceAssetStore";
 
 function getArchiveFileName(projectName: string): string {
   const normalizedName = projectName
@@ -12,8 +18,46 @@ function getArchiveFileName(projectName: string): string {
   return normalizedName || "next-editor-workspace";
 }
 
+async function streamBlobIntoEntry(blob: Blob, entry: ZipPassThrough): Promise<void> {
+  const reader = blob.stream().getReader();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      entry.push(value);
+    }
+    entry.push(new Uint8Array(0), true);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export async function downloadWorkspaceProjectAsZip(project: WorkspaceProject): Promise<void> {
-  const entries: Zippable = {};
+  const chunks: Uint8Array[] = [];
+  let resolveArchive!: (blob: Blob) => void;
+  let rejectArchive!: (error: Error) => void;
+  const archive = new Promise<Blob>((resolve, reject) => {
+    resolveArchive = resolve;
+    rejectArchive = reject;
+  });
+  const zip = new Zip((error, chunk, final) => {
+    if (error) {
+      rejectArchive(error);
+      return;
+    }
+    chunks.push(chunk);
+    if (final) {
+      resolveArchive(
+        new Blob(
+          chunks.map((value) =>
+            value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
+          ),
+          { type: "application/zip" },
+        ),
+      );
+    }
+  });
 
   // Preserve empty folders with explicit directory entries (trailing slash).
   for (const folderPath of project.folders) {
@@ -23,15 +67,33 @@ export async function downloadWorkspaceProjectAsZip(project: WorkspaceProject): 
       continue;
     }
 
-    entries[`${normalizedPath}/`] = new Uint8Array(0);
+    const entry = new ZipPassThrough(`${normalizedPath}/`);
+    zip.add(entry);
+    entry.push(new Uint8Array(0), true);
   }
 
   for (const file of Object.values(project.files)) {
-    entries[file.path] =
-      file.encoding === "base64" ? base64ToBytes(file.content) : strToU8(file.content);
+    if (isWorkspaceAssetFile(file)) {
+      const entry = new ZipPassThrough(file.path);
+      zip.add(entry);
+      await streamBlobIntoEntry(await getWorkspaceAssetBlob(file.content), entry);
+      continue;
+    }
+
+    if (isLegacyWorkspaceBinaryFile(file)) {
+      const entry = new ZipPassThrough(file.path);
+      zip.add(entry);
+      entry.push(base64ToBytes(file.content), true);
+      continue;
+    }
+
+    const entry = new ZipDeflate(file.path, { level: 6 });
+    zip.add(entry);
+    entry.push(strToU8(file.content), true);
   }
 
-  const blob = new Blob([zipSync(entries)], { type: "application/zip" });
+  zip.end();
+  const blob = await archive;
   const downloadUrl = URL.createObjectURL(blob);
 
   try {

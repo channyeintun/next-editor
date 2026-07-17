@@ -1,6 +1,10 @@
 import { zipSync, strToU8, type Zippable } from "fflate";
-import { describe, expect, it } from "vitest";
-import { base64ToBytes, type WorkspaceFile } from "../types/workspace";
+import { afterEach, describe, expect, it } from "vitest";
+import { isWorkspaceAssetFile, type WorkspaceFile } from "../types/workspace";
+import {
+  getWorkspaceAssetBytes,
+  resetWorkspaceAssetStoreForTests,
+} from "../storage/workspaceAssetStore";
 import {
   createRootFolderStripper,
   deriveProjectNameFromFileName,
@@ -8,6 +12,8 @@ import {
   importWorkspaceProjectFromZip,
   WorkspaceZipImportError,
 } from "./workspaceZipImport";
+
+afterEach(() => resetWorkspaceAssetStoreForTests());
 
 function textFile(path: string, content: string): WorkspaceFile {
   return { path, name: path, language: "plaintext", content };
@@ -153,7 +159,7 @@ describe("importWorkspaceProjectFromZip", () => {
     expect(Object.keys(project.files).sort()).toEqual(["index.html", "styles.css"]);
   });
 
-  it("stores binary assets as base64 and excludes dev artifacts", async () => {
+  it("stores binary assets behind descriptors and excludes dev artifacts", async () => {
     const pngBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
     const file = createZipFile("assets.zip", [
       { path: "index.html", content: "<!doctype html>" },
@@ -166,8 +172,10 @@ describe("importWorkspaceProjectFromZip", () => {
     const project = await importWorkspaceProjectFromZip(file);
 
     expect(Object.keys(project.files).sort()).toEqual(["index.html", "logo.png"]);
-    expect(project.files["logo.png"].encoding).toBe("base64");
-    expect(base64ToBytes(project.files["logo.png"].content)).toEqual(pngBytes);
+    const assetFile = project.files["logo.png"];
+    expect(isWorkspaceAssetFile(assetFile)).toBe(true);
+    if (!isWorkspaceAssetFile(assetFile)) throw new Error("Expected asset file");
+    expect(await getWorkspaceAssetBytes(assetFile.content)).toEqual(pngBytes);
   });
 
   it("rejects a zip without importable files", async () => {

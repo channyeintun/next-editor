@@ -1,20 +1,35 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createWorkspaceStore, type StoredWorkspaceSnapshot } from "../../stores/workspaceStore";
 import {
   collectWorkspaceFolders,
+  type WorkspaceAssetDescriptor,
   type WorkspaceFile,
   type WorkspaceProject,
 } from "../../types/workspace";
+import {
+  registerWorkspaceAsset,
+  resetWorkspaceAssetStoreForTests,
+} from "../../storage/workspaceAssetStore";
 import type { ToolContext } from "../types";
 import { makeReadTool } from "./read";
 
 function makeFile(path: string, content: string, encoding?: "base64"): WorkspaceFile {
-  return {
+  const file = {
     path,
     name: path.split("/").pop() ?? path,
     language: "plaintext",
     content,
-    ...(encoding ? { encoding } : {}),
+  };
+  return encoding ? { ...file, encoding } : file;
+}
+
+function makeAssetFile(path: string, content: WorkspaceAssetDescriptor): WorkspaceFile {
+  return {
+    path,
+    name: path.split("/").pop() ?? path,
+    language: "binary",
+    content,
+    encoding: "asset",
   };
 }
 
@@ -45,6 +60,8 @@ function makeCtx(files: WorkspaceFile[]): ToolContext {
 const read = (files: WorkspaceFile[]) => makeReadTool(makeCtx(files)).function.execute;
 
 describe("read tool", () => {
+  afterEach(() => resetWorkspaceAssetStoreForTests());
+
   it("returns text with 1-based line numbers", async () => {
     const result = await read([makeFile("test.txt", "hello world")])({ path: "test.txt" });
     expect(result).toContain("1\thello world");
@@ -56,12 +73,18 @@ describe("read tool", () => {
   });
 
   it("returns embeddable images as an input_image content block", async () => {
-    const result = await read([makeFile("image.png", "aGVsbG8=", "base64")])({ path: "image.png" });
+    const asset = await registerWorkspaceAsset(new TextEncoder().encode("hello"), {
+      mimeType: "image/png",
+    });
+    const result = await read([makeAssetFile("image.png", asset)])({ path: "image.png" });
     expect(result).toEqual([{ type: "input_image", imageUrl: "data:image/png;base64,aGVsbG8=" }]);
   });
 
   it("returns a note for non-image binary files", async () => {
-    const result = await read([makeFile("data.pdf", "aGVsbG8=", "base64")])({ path: "data.pdf" });
+    const asset = await registerWorkspaceAsset(new TextEncoder().encode("hello"), {
+      mimeType: "application/pdf",
+    });
+    const result = await read([makeAssetFile("data.pdf", asset)])({ path: "data.pdf" });
     expect(result).toContain("binary file");
   });
 });

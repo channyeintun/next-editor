@@ -2,7 +2,7 @@ import { tool } from "@openrouter/agent";
 import { z } from "zod";
 import type { ToolContext } from "../types";
 import { getProject } from "./workspaceFs";
-import { isBinaryWorkspacePath } from "../../types/workspace";
+import { isBinaryWorkspacePath, isWorkspaceTextFile } from "../../types/workspace";
 
 const inputSchema = z.object({
   pattern: z
@@ -99,7 +99,7 @@ export function makeGrepTool(ctx: ToolContext) {
 
         const file = project.files[filePath];
 
-        if (file.encoding === "base64" || isBinaryWorkspacePath(file.path)) {
+        if (!isWorkspaceTextFile(file) || isBinaryWorkspacePath(file.path)) {
           continue;
         }
 

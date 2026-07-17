@@ -2,12 +2,12 @@ import { useLayoutEffect, useRef } from "react";
 import type { IFSWatcher, WebContainer } from "@webcontainer/api";
 import {
   createWorkspaceTree,
+  getWorkspaceRuntimeFileContents,
   runSerializedWebContainerTask,
   shouldIgnoreRuntimeImportPath,
   syncWorkspaceProject,
 } from "./webContainerRuntimeSupport";
 import {
-  base64ToBytes,
   normalizeWorkspacePath,
   type WorkspaceFile,
   type WorkspaceProject,
@@ -191,8 +191,8 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     const endMountSpan = startPerformanceSpan("webcontainer.initial_mount");
     let mountOutcome = "success";
     try {
-      await runSerializedWebContainerTask(instance, () =>
-        instance.mount(createWorkspaceTree(project)),
+      await runSerializedWebContainerTask(instance, async () =>
+        instance.mount(await createWorkspaceTree(project)),
       );
     } catch (error) {
       mountOutcome = "failure";
@@ -248,10 +248,7 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
         await runSerializedWebContainerTask(instance, async () => {
           for (const file of files) {
             recordForwardSyncWrite(file.path);
-            await instance.fs.writeFile(
-              file.path,
-              file.encoding === "base64" ? base64ToBytes(file.content) : file.content,
-            );
+            await instance.fs.writeFile(file.path, await getWorkspaceRuntimeFileContents(file));
             mutationCount += 1;
           }
         });

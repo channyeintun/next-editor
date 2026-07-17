@@ -1,6 +1,6 @@
 import type { EditorMachineContext, EditorMachineEvent } from "./types";
 import type { EditorFrame } from "../types";
-import { areWorkspaceSnapshotsEqual } from "../../../types/workspace";
+import { areWorkspaceSnapshotsEqual, isWorkspaceTextFile } from "../../../types/workspace";
 import {
   reconstructFrameAtIndex,
   applyFrameDelta,
@@ -473,7 +473,7 @@ export const adoptPlaybackWorkspaceAtPause = ({
     return;
   }
 
-  if (currentFile.content === pausedContent) {
+  if (!isWorkspaceTextFile(currentFile) || currentFile.content === pausedContent) {
     context.applyWorkspaceSnapshot(currentSnapshot);
     return;
   }

@@ -8,10 +8,11 @@ import {
 import {
   DEFAULT_WORKSPACE_ENTRY_PATH,
   collectWorkspaceFolders,
+  getWorkspaceFileMimeType,
   inferLanguageFromPath,
+  isWorkspaceTextFile,
   parseWorkspacePath,
   type WorkspaceFile,
-  type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
@@ -35,6 +36,7 @@ export const COLLABORATION_ORIGIN = {
 export type CollaborationTransactionOrigin =
   (typeof COLLABORATION_ORIGIN)[keyof typeof COLLABORATION_ORIGIN];
 export type CollaborationNodeKind = "file" | "folder";
+type CollaborationNodeEncoding = "utf-8" | "base64";
 
 interface CollaborationNodeSnapshot {
   id: string;
@@ -43,7 +45,7 @@ interface CollaborationNodeSnapshot {
   parentId: string | null;
   orderKey: string;
   deleted: boolean;
-  encoding: WorkspaceFileEncoding;
+  encoding: CollaborationNodeEncoding;
   asset: CollaborationAssetDescriptor | null;
 }
 
@@ -158,7 +160,7 @@ export function seedCollaborationProject(
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const pathIds = new Map<string, string>();
   const unsupportedAsset = Object.values(project.files).find(
-    (file) => (file.encoding ?? "utf-8") !== "utf-8",
+    (file) => !isWorkspaceTextFile(file),
   );
   if (unsupportedAsset && !options.skipBinaryAssets) {
     throw new CollaborationProjectError(
@@ -198,7 +200,7 @@ export function seedCollaborationProject(
       left.path.localeCompare(right.path),
     );
     for (const file of files) {
-      if ((file.encoding ?? "utf-8") !== "utf-8") continue;
+      if (!isWorkspaceTextFile(file)) continue;
       const normalizedPath = parseWorkspacePath(file.path);
       const { parentPath, name } = splitPath(normalizedPath);
       const id = idFactory();
@@ -384,14 +386,7 @@ function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
   );
 }
 
-export interface ProjectCollaborationDocumentOptions {
-  assetContentById?: ReadonlyMap<string, string>;
-}
-
-export function projectCollaborationDocument(
-  doc: Y.Doc,
-  options: ProjectCollaborationDocumentOptions = {},
-): CollaborationProjectProjection {
+export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectProjection {
   const root = projectRoot(doc);
   if (root.get("schemaVersion") !== COLLABORATION_DOCUMENT_SCHEMA_VERSION) {
     throw new CollaborationProjectError("Unsupported collaboration document schema version");
@@ -459,20 +454,33 @@ export function projectCollaborationDocument(
       } else if (!(text instanceof Y.Text)) {
         issues.push({ nodeId: node.id, kind: "missing-text" });
       }
-      files[path] = {
-        path,
-        name,
-        language: inferLanguageFromPath(path),
-        content:
-          node.encoding === "base64"
-            ? node.asset
-              ? (options.assetContentById?.get(node.asset.id) ?? "")
-              : ""
-            : text instanceof Y.Text
-              ? text.toString()
-              : "",
-        ...(node.encoding === "base64" ? { encoding: node.encoding } : {}),
-      };
+      files[path] =
+        node.encoding === "base64"
+          ? {
+              path,
+              name,
+              language: inferLanguageFromPath(path),
+              content: node.asset
+                ? {
+                    kind: "asset",
+                    assetId: node.asset.id,
+                    mimeType: node.asset.mimeType,
+                    size: node.asset.size,
+                  }
+                : {
+                    kind: "asset",
+                    assetId: `missing:${node.id}`,
+                    mimeType: getWorkspaceFileMimeType(path),
+                    size: 0,
+                  },
+              encoding: "asset",
+            }
+          : {
+              path,
+              name,
+              language: inferLanguageFromPath(path),
+              content: text instanceof Y.Text ? text.toString() : "",
+            };
     }
   };
 
@@ -637,8 +645,8 @@ export class CollaborationProjectController {
     return true;
   }
 
-  createFile(path: string, content = "", encoding: WorkspaceFileEncoding = "utf-8"): void {
-    this.createNode("file", path, content, encoding);
+  createFile(path: string, content = ""): void {
+    this.createNode("file", path, content, "utf-8");
   }
 
   createAssetFile(path: string, asset: CollaborationAssetDescriptor): void {
@@ -653,7 +661,7 @@ export class CollaborationProjectController {
     kind: CollaborationNodeKind,
     path: string,
     content: string,
-    encoding: WorkspaceFileEncoding,
+    encoding: CollaborationNodeEncoding,
     asset: CollaborationAssetDescriptor | null = null,
   ): void {
     this.assertWritable();

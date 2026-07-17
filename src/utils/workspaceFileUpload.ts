@@ -1,19 +1,20 @@
 import {
-  bytesToBase64,
+  getWorkspaceFileMimeType,
   isBinaryWorkspacePath,
+  type WorkspaceFileContent,
   type WorkspaceFileEncoding,
 } from "../types/workspace";
+import { registerWorkspaceAsset } from "../storage/workspaceAssetStore";
 
 /**
  * Largest local asset we accept into a workspace. Bytes persist to IndexedDB
- * (which has no ~5 MB localStorage quota), so this cap exists only to keep the
- * in-memory base64 copy and the WebContainer filesystem sync practical rather
- * than to fit a storage budget.
+ * (which has no ~5 MB localStorage quota), so this cap bounds browser/runtime
+ * work rather than a base64 or localStorage representation.
  */
 export const MAX_WORKSPACE_ASSET_BYTES = 50 * 1024 * 1024;
 
 export interface UploadedWorkspaceFile {
-  content: string;
+  content: WorkspaceFileContent;
   encoding?: WorkspaceFileEncoding;
 }
 
@@ -49,16 +50,16 @@ export function shouldReadAsBinary(file: { name: string; type: string }): boolea
 
 /**
  * Read a picked/dropped File into a workspace-ready payload, choosing a binary
- * (base64) or text representation based on its extension and MIME type.
+ * asset-descriptor or text representation based on extension and MIME type.
  */
 export async function readUploadedWorkspaceFile(file: File): Promise<UploadedWorkspaceFile> {
   if (shouldReadAsBinary(file)) {
     const buffer = await file.arrayBuffer();
 
-    return {
-      content: bytesToBase64(new Uint8Array(buffer)),
-      encoding: "base64",
-    };
+    const content = await registerWorkspaceAsset(new Uint8Array(buffer), {
+      mimeType: file.type || getWorkspaceFileMimeType(file.name),
+    });
+    return { content, encoding: "asset" };
   }
 
   return { content: await file.text() };

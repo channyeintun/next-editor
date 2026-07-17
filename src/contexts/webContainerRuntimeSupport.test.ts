@@ -147,16 +147,16 @@ describe("isWebContainerRuntimeSupported", () => {
 });
 
 describe("createWorkspaceTree", () => {
-  it("mounts html files verbatim (the recorder is injected at the preview layer)", () => {
+  it("mounts html files verbatim (the recorder is injected at the preview layer)", async () => {
     const original = "<html><head></head><body>Hi</body></html>";
-    const html = getIndexHtml(createWorkspaceTree(nodeProject(original)));
+    const html = getIndexHtml(await createWorkspaceTree(nodeProject(original)));
 
     expect(html).toBe(original);
     expect(html).not.toContain("data-next-editor-rrweb-record");
     expect(html).not.toContain("data-next-editor-runtime-snapshot");
   });
 
-  it("rejects unsafe and structurally conflicting paths", () => {
+  it("rejects unsafe and structurally conflicting paths", async () => {
     const conflict = nodeProject("root");
     conflict.files.src = {
       path: "src",
@@ -171,7 +171,7 @@ describe("createWorkspaceTree", () => {
       content: "nested",
     };
 
-    expect(() => createWorkspaceTree(conflict)).toThrow(/conflict/i);
+    await expect(createWorkspaceTree(conflict)).rejects.toThrow(/conflict/i);
 
     const reserved = nodeProject("root");
     reserved.files["__proto__/secret.txt"] = {
@@ -180,7 +180,7 @@ describe("createWorkspaceTree", () => {
       language: "plaintext",
       content: "secret",
     };
-    expect(() => createWorkspaceTree(reserved)).toThrow(/reserved/i);
+    await expect(createWorkspaceTree(reserved)).rejects.toThrow(/reserved/i);
 
     const mismatched = nodeProject("root");
     mismatched.files["alias.txt"] = {
@@ -189,7 +189,7 @@ describe("createWorkspaceTree", () => {
       language: "plaintext",
       content: "mismatch",
     };
-    expect(() => createWorkspaceTree(mismatched)).toThrow(/does not match/i);
+    await expect(createWorkspaceTree(mismatched)).rejects.toThrow(/does not match/i);
   });
 });
 

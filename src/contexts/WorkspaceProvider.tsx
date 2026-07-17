@@ -15,14 +15,16 @@ import {
   type StoredWorkspaceSnapshot,
 } from "../stores/workspaceStore";
 import {
-  collectBinaryAssetPaths,
-  createWorkspaceAssetGeneration,
-  loadWorkspaceAssetContents,
+  migrateLegacyWorkspaceAssets,
   persistWorkspaceAssets,
-  pruneWorkspaceAssetGenerations,
+  pruneWorkspaceAssets,
 } from "../storage/workspaceAssetStore";
 import {
+  isLegacyWorkspaceBinaryFile,
+  isWorkspaceTextFile,
   normalizeWorkspacePath,
+  type WorkspaceFile,
+  type WorkspaceFileContent,
   type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
@@ -42,9 +44,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   const workspaceStoreRef = useRef(createWorkspaceStore(initialSnapshotRef.current));
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
-  // The synchronous localStorage bootstrap loads binary assets with empty
-  // content; hydrate their bytes from IndexedDB and let the store re-sync them
-  // into the running preview.
+  // Convert v1 generation/path binary entries to content-addressed descriptors.
+  // The bytes remain in IndexedDB and are loaded only by a concrete consumer.
   useEffect(() => {
     let cancelled = false;
     const store = workspaceStoreRef.current;
@@ -54,13 +55,13 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       return;
     }
 
-    void loadWorkspaceAssetContents(context.project, context.savedSnapshot.assetGeneration)
-      .then((contents) => {
-        if (cancelled || Object.keys(contents).length === 0) {
+    void migrateLegacyWorkspaceAssets(context.project, context.savedSnapshot.assetGeneration)
+      .then((descriptors) => {
+        if (cancelled || Object.keys(descriptors).length === 0) {
           return;
         }
 
-        store.trigger.hydrateAssetContents({ contents });
+        store.trigger.hydrateAssetDescriptors({ descriptors });
       })
       .catch((error) => {
         if (!cancelled) {
@@ -108,7 +109,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     );
   };
 
-  const createFile = (path: string, content = "", encoding?: WorkspaceFileEncoding) => {
+  const createFile = (
+    path: string,
+    content: WorkspaceFileContent = "",
+    encoding?: WorkspaceFileEncoding,
+  ) => {
     workspaceStoreRef.current.trigger.createFile({ path, content, encoding });
   };
 
@@ -116,8 +121,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     workspaceStoreRef.current.trigger.createFolder({ path });
   };
 
-  const hydrateAssetContents = (contents: Record<string, string>) => {
-    workspaceStoreRef.current.trigger.hydrateAssetContents({ contents });
+  const hydrateAssetDescriptors: WorkspaceActions["hydrateAssetDescriptors"] = (descriptors) => {
+    workspaceStoreRef.current.trigger.hydrateAssetDescriptors({ descriptors });
+  };
+
+  const notifyAssetAvailable = (assetId: string) => {
+    workspaceStoreRef.current.trigger.notifyAssetAvailable({ assetId });
   };
 
   const renameFile = (currentPath: string, nextPath: string) => {
@@ -155,13 +164,15 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
     const path = normalizeWorkspacePath(event.path);
     const file = context.project.files[path];
-    if (!file || file.encoding === "base64" || !prepareTextEditEvent(event, file.content.length)) {
+    if (!file || !isWorkspaceTextFile(file) || !prepareTextEditEvent(event, file.content.length)) {
       return null;
     }
 
     workspaceStoreRef.current.trigger.applyFileTextEdits({ ...event, path });
     const nextContext = workspaceStoreRef.current.getSnapshot().context;
-    return nextContext.isInitialized ? (nextContext.project.files[path]?.content ?? null) : null;
+    if (!nextContext.isInitialized) return null;
+    const nextFile = nextContext.project.files[path];
+    return nextFile && isWorkspaceTextFile(nextFile) ? nextFile.content : null;
   };
 
   const updateActiveFileContent = (content: string) => {
@@ -186,52 +197,45 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       return Promise.resolve();
     }
 
-    const { activeFilePath, dirtyState, project, savedSnapshot } = context;
-    const hasBinaryAssets = collectBinaryAssetPaths(project).length > 0;
-    const assetGeneration = hasBinaryAssets ? createWorkspaceAssetGeneration() : undefined;
-    const intentionallyChangedPaths = new Set([
-      ...dirtyState.addedFilePaths,
-      ...dirtyState.modifiedFilePaths,
-    ]);
-    const sourceAssetPaths = new Set(
-      savedSnapshot.project.id === project.id
-        ? Object.values(project.files)
-            .filter(
-              (file) =>
-                file.encoding === "base64" &&
-                file.content === "" &&
-                !intentionallyChangedPaths.has(file.path),
-            )
-            .map((file) => file.path)
-        : [],
-    );
-    // Capture an immutable store snapshot at invocation. If the user keeps editing
-    // while this save is in flight, markSaved compares those newer edits against
-    // this exact durable generation and correctly leaves them dirty.
-    const storedSnapshot = {
-      activeFilePath,
-      project,
-      assetGeneration,
-    } satisfies StoredWorkspaceSnapshot;
+    const { activeFilePath, project, savedSnapshot } = context;
 
     const run = async () => {
       workspaceStoreRef.current.trigger.beginSave();
 
       try {
-        if (assetGeneration) {
-          const latestContext = workspaceStoreRef.current.getSnapshot().context;
-          const sourceSnapshot =
-            latestContext.isInitialized && latestContext.savedSnapshot.project.id === project.id
-              ? latestContext.savedSnapshot
-              : undefined;
-          await persistWorkspaceAssets(project, {
-            generation: assetGeneration,
-            sourceGeneration: sourceSnapshot?.assetGeneration,
-            sourceAssetPaths,
+        const migratedDescriptors = await migrateLegacyWorkspaceAssets(
+          project,
+          savedSnapshot.assetGeneration,
+        );
+        const storedProject: WorkspaceProject =
+          Object.keys(migratedDescriptors).length === 0
+            ? project
+            : {
+                ...project,
+                files: Object.fromEntries(
+                  Object.entries(project.files).map(([path, file]): [string, WorkspaceFile] => {
+                    const descriptor = migratedDescriptors[path];
+                    return descriptor && isLegacyWorkspaceBinaryFile(file)
+                      ? [path, { ...file, content: descriptor, encoding: "asset" as const }]
+                      : [path, file];
+                  }),
+                ),
+              };
+        if (Object.keys(migratedDescriptors).length > 0) {
+          workspaceStoreRef.current.trigger.hydrateAssetDescriptors({
+            descriptors: migratedDescriptors,
           });
         }
+        await persistWorkspaceAssets(storedProject);
 
-        // Publish metadata only after its referenced asset generation commits.
+        // Capture the exact durable project generation. Edits arriving while
+        // this save is in flight remain dirty against this snapshot.
+        const storedSnapshot = {
+          activeFilePath,
+          project: storedProject,
+        } satisfies StoredWorkspaceSnapshot;
+
+        // Publish metadata only after every referenced asset is durable.
         window.localStorage.setItem(
           WORKSPACE_STORAGE_KEY,
           JSON.stringify(toPersistedSnapshot(storedSnapshot)),
@@ -240,23 +244,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
           snapshot: cloneWorkspaceSnapshot(storedSnapshot),
         });
 
-        if (
-          assetGeneration &&
-          Object.values(project.files).some(
-            (file) => file.encoding === "base64" && file.content === "",
-          )
-        ) {
-          void loadWorkspaceAssetContents(project, assetGeneration)
-            .then((contents) => {
-              workspaceStoreRef.current.trigger.hydrateAssetContents({ contents });
-            })
-            .catch((error) => {
-              console.warn("Failed to hydrate the saved workspace assets:", error);
-            });
-        }
-
-        // Old generations are no longer reachable after the metadata commit.
-        void pruneWorkspaceAssetGenerations(assetGeneration ?? "").catch((error) => {
+        void pruneWorkspaceAssets(storedProject).catch((error) => {
           console.warn("Failed to prune old workspace assets:", error);
         });
       } catch (error) {
@@ -406,7 +394,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     updateFileContent,
     applyFileTextEdits,
     updateActiveFileContent,
-    hydrateAssetContents,
+    hydrateAssetDescriptors,
+    notifyAssetAvailable,
     saveProject,
     loadProject,
     reconcileExternalProject,
