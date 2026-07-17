@@ -431,6 +431,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       { type: "document.update" }
     >["data"],
   ): Promise<void> {
+    const handlerStartedAt = performance.now();
     if (!canPublishCollaborationUpdate(attachment.role)) {
       this.rejectSocket(
         socket,
@@ -478,29 +479,39 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     };
     try {
       const redis = getCollaborationRedis(this.env);
+      const persistenceStartedAt = performance.now();
       const result = await appendCollaborationUpdate(redis, event, { publish: false });
+      const persistedAt = performance.now();
       sendMessage(socket, {
         type: "document.ack",
         updateId: event.updateId,
         streamId: result.streamId,
         duplicate: result.duplicate,
       });
+      const acknowledgedAt = performance.now();
       this.broadcast({ type: "document.update", streamId: result.streamId, data: event }, socket);
+      const broadcastAt = performance.now();
       if (shouldCompactCollaborationDocument(result.updateCount)) {
         this.scheduleCompaction(attachment.roomId);
       }
       console.log("collaboration_websocket_update", {
         roomId: attachment.roomId,
         actorId: attachment.userId,
+        updateId: event.updateId,
         bytes: Math.floor((event.update.length * 3) / 4),
         duplicate: result.duplicate,
         updateCount: result.updateCount,
+        persistenceMs: persistedAt - persistenceStartedAt,
+        acknowledgeMs: acknowledgedAt - persistedAt,
+        broadcastMs: broadcastAt - acknowledgedAt,
+        totalMs: broadcastAt - handlerStartedAt,
       });
     } catch (error) {
       console.error("collaboration_websocket_update_failed", {
         roomId: attachment.roomId,
         actorId: attachment.userId,
         updateId: event.updateId,
+        totalMs: performance.now() - handlerStartedAt,
         error: error instanceof Error ? error.message : String(error),
       });
       this.rejectSocket(
