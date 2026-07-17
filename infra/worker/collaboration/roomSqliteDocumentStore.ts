@@ -10,6 +10,7 @@ import {
 import {
   applyEncodedYjsSnapshot,
   applyEncodedYjsUpdate,
+  decodeYjsUpdate,
   encodeYjsDocument,
 } from "../../../src/collaboration/yjsUpdates";
 
@@ -185,7 +186,11 @@ export class RoomSqliteDocumentStore {
     now = Date.now(),
   ): StoredAppendRoomSqliteUpdateResult {
     const parsed = collaborationDocumentUpdateEventSchema.parse(event);
-    const acceptedBytes = decodedBase64ByteLength(parsed.update);
+    const decodedUpdate = decodeYjsUpdate(parsed.update);
+    // Reject malformed binary before reserving quota or assigning a durable
+    // sequence. Missing dependencies are valid Yjs updates and still decode.
+    Y.decodeUpdate(decodedUpdate);
+    const acceptedBytes = decodedUpdate.byteLength;
 
     return this.storage.transactionSync(() => {
       const duplicate = this.storage.sql
@@ -370,6 +375,36 @@ export class RoomSqliteDocumentStore {
   exportDocument(now = Date.now()): CollaborationBootstrapResponse {
     this.compact(now);
     return this.bootstrap();
+  }
+
+  createDocument(): Y.Doc {
+    const metadata = this.metadata();
+    const rows = this.storage.sql
+      .exec<UpdateRow>(
+        `SELECT sequence, event_json FROM collaboration_updates
+         WHERE sequence > ? ORDER BY sequence ASC LIMIT ?`,
+        metadata.stream_cutoff,
+        MAX_COMPACTION_UPDATES + 1,
+      )
+      .toArray();
+    if (rows.length > MAX_COMPACTION_UPDATES) {
+      throw new Error("collaboration SQLite document materialization limit exceeded");
+    }
+    const doc = new Y.Doc();
+    try {
+      applyEncodedYjsSnapshot(doc, metadata.snapshot, "sqlite-document-materialization");
+      for (const row of rows) {
+        applyEncodedYjsUpdate(
+          doc,
+          parseEvent(row.event_json).update,
+          "sqlite-document-materialization",
+        );
+      }
+      return doc;
+    } catch (error) {
+      doc.destroy();
+      throw error;
+    }
   }
 
   private metadata(): MetadataRow {

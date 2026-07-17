@@ -56,6 +56,7 @@ export interface CollaborationRoomDescriptor {
   status: CollaborationRoomStatus;
   transport: CollaborationTransport;
   persistenceVersion: CollaborationPersistenceVersion;
+  binaryProtocolVersion: number | null;
   protocolVersion: number;
   documentSchemaVersion: number;
   roleVersion: number;
@@ -321,6 +322,7 @@ export const collaborationWebSocketServerMessageSchema = z.discriminatedUnion("t
       type: z.literal("session.ready"),
       sessionId: collaborationIdSchema,
       attemptId: collaborationIdSchema,
+      binaryProtocolVersion: z.number().int().positive().nullable(),
       participants: z.array(collaborationAwarenessEventSchema).max(50),
     })
     .strict(),

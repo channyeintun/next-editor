@@ -1,8 +1,19 @@
 import { DurableObject } from "cloudflare:workers";
+import * as syncProtocol from "y-protocols/sync";
+import * as Y from "yjs";
 import { z } from "zod";
 import {
+  COLLABORATION_BINARY_PROTOCOL_VERSION,
+  decodeCollaborationBinaryFrame,
+  encodeCollaborationServerUpdate,
+  encodeCollaborationSyncStep2,
+} from "../../../src/collaboration/binaryProtocol";
+import {
+  COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+  COLLABORATION_PROTOCOL_VERSION,
   COLLABORATION_SQLITE_PERSISTENCE_VERSION,
   MAX_ENCODED_YJS_UPDATE_LENGTH,
+  MAX_YJS_UPDATE_BYTES,
   canPublishCollaborationUpdate,
   collaborationAwarenessEventSchema,
   collaborationDocumentUpdateEventSchema,
@@ -17,10 +28,16 @@ import {
   type CollaborationBootstrapResponse,
   type CollaborationControlEvent,
   type CollaborationDocumentUpdateEvent,
+  type CollaborationDocumentUpdateInput,
   type CollaborationRole,
   type CollaborationRoomControlCommand,
   type CollaborationWebSocketServerMessage,
 } from "../../../src/collaboration/protocol";
+import {
+  applyEncodedYjsUpdate,
+  decodeYjsUpdate,
+  encodeYjsUpdate,
+} from "../../../src/collaboration/yjsUpdates";
 import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
 import {
   appendCollaborationUpdate,
@@ -33,6 +50,7 @@ import {
   RoomSqliteDocumentStore,
   type AppendRoomSqliteUpdateResult,
   type RoomSqliteStorage,
+  type StoredAppendRoomSqliteUpdateResult,
 } from "./roomSqliteDocumentStore";
 import { COLLABORATION_AWARENESS_TTL_MS } from "./awarenessStore";
 import { CollaborationRateLimitError } from "./rateLimits";
@@ -43,6 +61,7 @@ import type { Env } from "../env";
 const ROOM_ORIGIN = "https://collaboration-room.internal";
 const SESSION_HEADER = "X-Collaboration-Session";
 const MAX_WEBSOCKET_MESSAGE_LENGTH = MAX_ENCODED_YJS_UPDATE_LENGTH + 16 * 1024;
+const MAX_BINARY_WEBSOCKET_MESSAGE_LENGTH = MAX_YJS_UPDATE_BYTES + 1024;
 const MAX_USER_UPDATES_PER_SECOND = 30;
 const MAX_ROOM_UPDATES_PER_SECOND = 120;
 const MAX_AWARENESS_UPDATES_PER_SECOND = 20;
@@ -62,6 +81,7 @@ const canonicalSocketSessionSchema = z
     sessionId: collaborationIdSchema,
     attemptId: collaborationIdSchema,
     persistenceVersion: collaborationPersistenceVersionSchema,
+    binaryProtocolVersion: z.literal(COLLABORATION_BINARY_PROTOCOL_VERSION).nullable(),
   })
   .strict();
 
@@ -108,6 +128,15 @@ function isOpen(socket: WebSocket): boolean {
 function sendMessage(socket: WebSocket, message: CollaborationWebSocketServerMessage): void {
   if (!isOpen(socket)) return;
   socket.send(JSON.stringify(collaborationWebSocketServerMessageSchema.parse(message)));
+}
+
+function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function sendBinary(socket: WebSocket, bytes: Uint8Array): void {
+  if (!isOpen(socket)) return;
+  socket.send(exactArrayBuffer(bytes));
 }
 
 function controlEvent(
@@ -287,6 +316,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private readonly connectionWindowCounts = new Map<string, number>();
   private sqliteCompactionScheduled = false;
   private readonly sqliteDocument: RoomSqliteDocumentStore;
+  private binaryDocument: Y.Doc | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -314,6 +344,8 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       }
       try {
         this.sqliteDocument.initialize(parsed.data.snapshot);
+        this.binaryDocument?.destroy();
+        this.binaryDocument = null;
         return Response.json({ initialized: true });
       } catch (error) {
         if (error instanceof CollaborationRoomSqliteQuotaError) {
@@ -346,13 +378,9 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
             { status: 429 },
           );
         }
-        const stored = this.sqliteDocument.append(parsed.data);
+        const stored = this.appendSqliteDocument(parsed.data);
         if (stored.event) {
-          this.broadcast({
-            type: "document.update",
-            streamId: stored.streamId,
-            data: stored.event,
-          });
+          this.broadcastDocument(stored.streamId, stored.event);
         }
         if (stored.shouldCompact) this.scheduleSqliteCompaction();
         return Response.json({
@@ -373,6 +401,8 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     }
     if (request.method === "POST" && url.pathname === "/sqlite/purge") {
       for (const socket of this.ctx.getWebSockets()) socket.close(4001, "room purged");
+      this.binaryDocument?.destroy();
+      this.binaryDocument = null;
       await this.ctx.storage.deleteAlarm();
       await this.ctx.storage.deleteAll();
       return Response.json({ purged: true });
@@ -411,7 +441,16 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (message === "ping") return;
-    if (typeof message !== "string" || message.length > MAX_WEBSOCKET_MESSAGE_LENGTH) {
+    const attachment = attachmentFor(socket);
+    if (!attachment) {
+      this.rejectSocket(socket, "invalid-session", "Collaboration session is invalid", true, 1008);
+      return;
+    }
+    if (message instanceof ArrayBuffer) {
+      await this.acceptBinaryMessage(socket, attachment, message);
+      return;
+    }
+    if (message.length > MAX_WEBSOCKET_MESSAGE_LENGTH) {
       this.rejectSocket(socket, "invalid-message", "Invalid collaboration message", true, 1009);
       return;
     }
@@ -427,12 +466,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       this.rejectSocket(socket, "invalid-message", "Invalid collaboration message", true, 1008);
       return;
     }
-    const attachment = attachmentFor(socket);
-    if (!attachment) {
-      this.rejectSocket(socket, "invalid-session", "Collaboration session is invalid", true, 1008);
-      return;
-    }
-
     if (parsed.data.type === "awareness.state") {
       this.acceptAwareness(socket, attachment, parsed.data.data);
       return;
@@ -440,6 +473,68 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     const refreshed = await this.refreshAccess(socket, attachment);
     if (!refreshed) return;
     await this.acceptDocumentUpdate(socket, refreshed, parsed.data.data);
+  }
+
+  private async acceptBinaryMessage(
+    socket: WebSocket,
+    attachment: SocketAttachment,
+    message: ArrayBuffer,
+  ): Promise<void> {
+    if (
+      attachment.binaryProtocolVersion !== COLLABORATION_BINARY_PROTOCOL_VERSION ||
+      attachment.persistenceVersion !== COLLABORATION_SQLITE_PERSISTENCE_VERSION
+    ) {
+      this.rejectSocket(
+        socket,
+        "invalid-message",
+        "Binary collaboration protocol was not negotiated",
+        true,
+        1008,
+      );
+      return;
+    }
+    if (message.byteLength > MAX_BINARY_WEBSOCKET_MESSAGE_LENGTH) {
+      this.rejectSocket(socket, "invalid-message", "Binary message is too large", true, 1009);
+      return;
+    }
+
+    let frame;
+    try {
+      frame = decodeCollaborationBinaryFrame(message);
+    } catch {
+      this.rejectSocket(
+        socket,
+        "invalid-message",
+        "Invalid binary collaboration message",
+        true,
+        1008,
+      );
+      return;
+    }
+    if (frame.kind === "sync") {
+      if (frame.messageType !== syncProtocol.messageYjsSyncStep1) {
+        this.rejectSocket(socket, "invalid-message", "Invalid Yjs sync request", true, 1008);
+        return;
+      }
+      const refreshed = await this.refreshAccess(socket, attachment);
+      if (!refreshed) return;
+      sendBinary(socket, encodeCollaborationSyncStep2(this.getBinaryDocument(), frame.payload));
+      return;
+    }
+    if (frame.kind !== "client-update" || frame.update.byteLength > MAX_YJS_UPDATE_BYTES) {
+      this.rejectSocket(socket, "invalid-message", "Invalid binary document update", true, 1008);
+      return;
+    }
+    const refreshed = await this.refreshAccess(socket, attachment);
+    if (!refreshed) return;
+    const input: CollaborationDocumentUpdateInput = {
+      protocolVersion: COLLABORATION_PROTOCOL_VERSION,
+      documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+      clientId: frame.clientId,
+      updateId: frame.updateId,
+      update: encodeYjsUpdate(frame.update),
+    };
+    await this.acceptDocumentUpdate(socket, refreshed, input);
   }
 
   webSocketClose(socket: WebSocket): void {
@@ -506,6 +601,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       type: "session.ready",
       sessionId: session.sessionId,
       attemptId: session.attemptId,
+      binaryProtocolVersion: session.binaryProtocolVersion,
       participants: this.currentParticipants(),
     });
     return new Response(null, { status: 101, webSocket: client });
@@ -704,7 +800,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     try {
       if (attachment.persistenceVersion === COLLABORATION_SQLITE_PERSISTENCE_VERSION) {
         const persistenceStartedAt = performance.now();
-        const result = this.sqliteDocument.append(event);
+        const result = this.appendSqliteDocument(event);
         const persistedAt = performance.now();
         sendMessage(socket, {
           type: "document.ack",
@@ -714,10 +810,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         });
         const acknowledgedAt = performance.now();
         if (result.event) {
-          this.broadcast(
-            { type: "document.update", streamId: result.streamId, data: result.event },
-            socket,
-          );
+          this.broadcastDocument(result.streamId, result.event, socket);
         }
         const broadcastAt = performance.now();
         if (result.shouldCompact) this.scheduleSqliteCompaction();
@@ -818,6 +911,21 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     );
   }
 
+  private appendSqliteDocument(
+    event: CollaborationDocumentUpdateEvent,
+  ): StoredAppendRoomSqliteUpdateResult {
+    const result = this.sqliteDocument.append(event);
+    if (!result.duplicate && this.binaryDocument) {
+      applyEncodedYjsUpdate(this.binaryDocument, event.update, "sqlite-live-update");
+    }
+    return result;
+  }
+
+  private getBinaryDocument(): Y.Doc {
+    if (!this.binaryDocument) this.binaryDocument = this.sqliteDocument.createDocument();
+    return this.binaryDocument;
+  }
+
   private consumeInternalUpdateQuota(actorId: string): boolean {
     const second = Math.floor(Date.now() / 1_000);
     if (this.internalUpdateWindowSecond !== second) {
@@ -895,6 +1003,40 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     }
     for (const awareness of changedAwareness) {
       this.broadcast({ type: "awareness.state", data: awareness });
+    }
+  }
+
+  private broadcastDocument(
+    streamId: string,
+    event: CollaborationDocumentUpdateEvent,
+    except?: WebSocket,
+  ): void {
+    const json = JSON.stringify(
+      collaborationWebSocketServerMessageSchema.parse({
+        type: "document.update",
+        streamId,
+        data: event,
+      }),
+    );
+    const binary = exactArrayBuffer(
+      encodeCollaborationServerUpdate({
+        streamId,
+        updateId: event.updateId,
+        update: decodeYjsUpdate(event.update),
+      }),
+    );
+    for (const socket of this.ctx.getWebSockets()) {
+      if (socket === except || !isOpen(socket)) continue;
+      try {
+        const attachment = attachmentFor(socket);
+        socket.send(
+          attachment?.binaryProtocolVersion === COLLABORATION_BINARY_PROTOCOL_VERSION
+            ? binary
+            : json,
+        );
+      } catch {
+        socket.close(1011, "broadcast failed");
+      }
     }
   }
 

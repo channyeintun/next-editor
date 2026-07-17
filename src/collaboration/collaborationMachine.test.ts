@@ -21,6 +21,7 @@ function roomSession(role: "owner" | "editor" | "viewer" = "editor"): Collaborat
       status: "active",
       transport: "upstash-realtime",
       persistenceVersion: 1,
+      binaryProtocolVersion: null,
       protocolVersion: COLLABORATION_PROTOCOL_VERSION,
       documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
       roleVersion: 1,

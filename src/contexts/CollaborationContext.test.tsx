@@ -95,6 +95,7 @@ const roomSession: CollaborationRoomSession = {
     status: "active",
     transport: "upstash-realtime",
     persistenceVersion: 1,
+    binaryProtocolVersion: null,
     protocolVersion: 1,
     documentSchemaVersion: 1,
     roleVersion: 1,

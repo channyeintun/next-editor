@@ -1,6 +1,7 @@
 import { handle } from "@upstash/realtime";
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { COLLABORATION_BINARY_PROTOCOL_VERSION } from "../../../src/collaboration/binaryProtocol";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_LEGACY_PERSISTENCE_VERSION,
@@ -138,6 +139,10 @@ function roomResponse(room: CollaborationRoomRow, role: CollaborationRoomAccess[
       status: room.status,
       transport: room.transport,
       persistenceVersion: room.persistence_version,
+      binaryProtocolVersion:
+        room.persistence_version === COLLABORATION_SQLITE_PERSISTENCE_VERSION
+          ? COLLABORATION_BINARY_PROTOCOL_VERSION
+          : null,
       protocolVersion: room.protocol_version,
       documentSchemaVersion: room.document_schema_version,
       roleVersion: room.role_version,
@@ -1276,6 +1281,17 @@ collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
   if (!hasCollaborationRoomBinding(c.env)) {
     return c.json({ error: "collaboration WebSocket unavailable" }, 503);
   }
+  const requestedBinaryProtocol = c.req.query("binaryProtocolVersion");
+  let binaryProtocolVersion: typeof COLLABORATION_BINARY_PROTOCOL_VERSION | null = null;
+  if (requestedBinaryProtocol !== undefined) {
+    if (
+      requestedBinaryProtocol !== String(COLLABORATION_BINARY_PROTOCOL_VERSION) ||
+      access.persistence_version !== COLLABORATION_SQLITE_PERSISTENCE_VERSION
+    ) {
+      return c.json({ error: "unsupported collaboration binary protocol" }, 409);
+    }
+    binaryProtocolVersion = COLLABORATION_BINARY_PROTOCOL_VERSION;
+  }
   if (access.persistence_version === COLLABORATION_LEGACY_PERSISTENCE_VERSION) {
     try {
       await enforceCollaborationConnectionRateLimit(getCollaborationRedis(c.env), user.id);
@@ -1301,6 +1317,7 @@ collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
     role: access.member_role,
     roleVersion: access.role_version,
     persistenceVersion: access.persistence_version,
+    binaryProtocolVersion,
     sessionId: sessionId.data,
     attemptId: attemptId.data,
   });

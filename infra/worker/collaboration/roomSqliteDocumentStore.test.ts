@@ -135,4 +135,29 @@ describe("RoomSqliteDocumentStore", () => {
     restored.destroy();
     source.destroy();
   });
+
+  it("materializes the compacted snapshot plus current update tail", () => {
+    const { store } = createStore();
+    const source = new Y.Doc();
+    source.getText("content").insert(0, "a");
+    store.initialize(encodeYjsDocument(source), 100);
+    let stateVector = Y.encodeStateVector(source);
+    source.getText("content").insert(1, "b");
+    store.append(updateEvent(Y.encodeStateAsUpdate(source, stateVector)), 200);
+    store.compact(300);
+    stateVector = Y.encodeStateVector(source);
+    source.getText("content").insert(2, "c");
+    store.append(
+      updateEvent(
+        Y.encodeStateAsUpdate(source, stateVector),
+        "50000000-0000-4000-8000-000000000005",
+      ),
+      400,
+    );
+
+    const materialized = store.createDocument();
+    expect(materialized.getText("content").toString()).toBe("abc");
+    materialized.destroy();
+    source.destroy();
+  });
 });
