@@ -26,7 +26,6 @@ import type { TextEditEvent } from "../types/textEdit";
 import {
   canWriteCollaborationDocument,
   getCollaborationTexts,
-  projectCollaborationDocument,
 } from "../collaboration/projectDocument";
 import { resolveMonacoAwarenessSelections } from "../collaboration/monacoAwareness";
 import {
@@ -359,9 +358,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
     let text: Y.Text | undefined;
     try {
-      const fileNodeId = projectCollaborationDocument(provider.doc).nodeIdByPath.get(
-        activeFile.path,
-      );
+      const fileNodeId = collaboration.getNodeIdForPath(activeFile.path);
       text = fileNodeId ? getCollaborationTexts(provider.doc).get(fileNodeId) : undefined;
     } catch {
       text = undefined;
@@ -730,9 +727,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     let awarenessText = yMonacoRendersSelections ? yMonacoBinding?.text : undefined;
     if (!awarenessText && collaboration.provider.isBinaryProtocolActive) {
       try {
-        const fileNodeId = projectCollaborationDocument(collaboration.doc).nodeIdByPath.get(
-          activeFile.path,
-        );
+        const fileNodeId = collaboration.getNodeIdForPath(activeFile.path);
         awarenessText = fileNodeId
           ? getCollaborationTexts(collaboration.doc).get(fileNodeId)
           : undefined;
@@ -792,14 +787,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           position: model.getPositionAt(selection.headOffset),
         });
       }
-      let activeFileNodeId: string | undefined;
-      try {
-        activeFileNodeId = projectCollaborationDocument(collaboration.doc).nodeIdByPath.get(
-          activeFile.path,
-        );
-      } catch {
-        activeFileNodeId = undefined;
-      }
+      const activeFileNodeId = collaboration.getNodeIdForPath(activeFile.path) ?? undefined;
       for (const participant of collaboration.participants) {
         const key = `${participant.actorId}:${participant.sessionId}`;
         if (
@@ -867,13 +855,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     }
     remoteAwarenessStyleRef.current?.remove();
     remoteAwarenessStyleRef.current = null;
-    let activeFileNodeId: string | undefined;
-    try {
-      activeFileNodeId = projectCollaborationDocument(collaboration.doc).nodeIdByPath.get(
-        activeFile.path,
-      );
-    } catch {
+    const activeFileNodeId = collaboration.getNodeIdForPath(activeFile.path) ?? undefined;
+    if (!activeFileNodeId) {
       cursorLabelManager.clear();
+      remoteDecorationIdsRef.current = editor.deltaDecorations(
+        remoteDecorationIdsRef.current,
+        [],
+      );
       return;
     }
     const decorations: monaco.editor.IModelDeltaDecoration[] = [];
@@ -939,6 +927,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     collaboration?.canWrite,
     collaboration?.connectionState,
     collaboration?.doc,
+    collaboration?.getNodeIdForPath,
     collaboration?.participants,
     collaboration?.provider,
     collaboration?.provider?.isBinaryProtocolActive,
@@ -1009,9 +998,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           : undefined;
       if (!awarenessText && provider.isBinaryProtocolActive) {
         try {
-          const fileNodeId = projectCollaborationDocument(collaborationDoc).nodeIdByPath.get(
-            activeFile.path,
-          );
+          const fileNodeId = collaboration.getNodeIdForPath(activeFile.path);
           awarenessText = fileNodeId
             ? getCollaborationTexts(collaborationDoc).get(fileNodeId)
             : undefined;
@@ -1030,14 +1017,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           captureSelection(selection.participant, selection.anchorOffset, selection.headOffset);
         }
       }
-      let activeFileNodeId: string | undefined;
-      try {
-        activeFileNodeId = projectCollaborationDocument(collaborationDoc).nodeIdByPath.get(
-          activeFile.path,
-        );
-      } catch {
-        activeFileNodeId = undefined;
-      }
+      const activeFileNodeId = collaboration.getNodeIdForPath(activeFile.path) ?? undefined;
 
       for (const participant of participants) {
         if (
@@ -1070,6 +1050,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     activeFile.content,
     activeFile.path,
     collaboration?.doc,
+    collaboration?.getNodeIdForPath,
     collaboration?.participants,
     collaboration?.provider,
     collaboration?.provider?.isBinaryProtocolActive,

@@ -111,6 +111,8 @@ interface CollaborationContextValue {
   setFollowingHost: (following: boolean) => void;
   updateCursor: (path: string, anchorOffset: number, headOffset: number) => void;
   queueLocalTextEdit: (event: TextEditEvent) => void;
+  getNodeIdForPath: (path: string) => string | null;
+  getPathForNodeId: (nodeId: string) => string | null;
   retryAssets: () => void;
   undo: () => void;
   redo: () => void;
@@ -188,6 +190,29 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       if (pendingLocalTextEditRef.current === pending) pendingLocalTextEditRef.current = null;
     });
   }, []);
+
+  const getCurrentProjection = useCallback((): CollaborationProjectProjection | null => {
+    if (projectionRef.current) return projectionRef.current;
+    const current = providerRef.current;
+    if (!current) return null;
+    try {
+      const projection = projectCollaborationDocument(current.doc);
+      projectionRef.current = projection;
+      return projection;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const getNodeIdForPath = useCallback(
+    (path: string) => getCurrentProjection()?.nodeIdByPath.get(path) ?? null,
+    [getCurrentProjection],
+  );
+
+  const getPathForNodeId = useCallback(
+    (nodeId: string) => getCurrentProjection()?.pathByNodeId.get(nodeId) ?? null,
+    [getCurrentProjection],
+  );
 
   const hydrateProjectionAssets = useCallback(
     (projection: CollaborationProjectProjection, targetRoomId: string) => {
@@ -409,9 +434,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       provider
         ? new CollaborationProjectController(provider.doc, {
             canWrite: () => canWriteRef.current,
+            getProjection: getCurrentProjection,
           })
         : null,
-    [provider],
+    [getCurrentProjection, provider],
   );
 
   const reportWriteError = useCallback((error: unknown) => {
@@ -625,14 +651,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     const current = providerRef.current;
     const currentSession = current?.session;
     if (!current || !currentSession || current.connectionState !== "live") return;
-    let activeFileNodeId: string | null = null;
-    try {
-      activeFileNodeId =
-        projectCollaborationDocument(current.doc).nodeIdByPath.get(activeFilePathRef.current) ??
-        null;
-    } catch {
-      return;
-    }
+    const activeFileNodeId = getNodeIdForPath(activeFilePathRef.current);
     if (awarenessCursorRef.current?.fileNodeId !== activeFileNodeId) {
       awarenessCursorRef.current = null;
     }
@@ -644,7 +663,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       cursor: awarenessCursorRef.current,
       followingHost: followingHostRef.current,
     });
-  }, []);
+  }, [getNodeIdForPath]);
 
   const scheduleAwarenessPublish = useCallback(
     (delay = 75) => {
@@ -738,16 +757,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (!isFollowingHost || !provider) return;
     const host = participants.find((participant) => participant.isHost);
     if (!host?.activeFileNodeId) return;
-    try {
-      const path = projectCollaborationDocument(provider.doc).pathByNodeId.get(
-        host.activeFileNodeId,
-      );
-      if (path && path !== activeFilePathRef.current)
-        baseActionsRef.current.setActiveFilePath(path);
-    } catch {
-      // The host may announce a node just before its document update is applied.
-    }
-  }, [isFollowingHost, participants, provider]);
+    const path = getPathForNodeId(host.activeFileNodeId);
+    if (path && path !== activeFilePathRef.current) baseActionsRef.current.setActiveFilePath(path);
+  }, [getPathForNodeId, isFollowingHost, participants, provider]);
 
   const refreshRoomData = useCallback(async () => {
     const current = providerRef.current?.session;
@@ -814,17 +826,13 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     (path: string, anchorOffset: number, headOffset: number) => {
       const current = providerRef.current;
       if (!current || current.connectionState !== "live") return;
-      try {
-        const fileNodeId = projectCollaborationDocument(current.doc).nodeIdByPath.get(path);
-        awarenessCursorRef.current = fileNodeId
-          ? createCollaborationCursor(current.doc, fileNodeId, anchorOffset, headOffset)
-          : null;
-        scheduleAwarenessPublish();
-      } catch {
-        awarenessCursorRef.current = null;
-      }
+      const fileNodeId = getNodeIdForPath(path);
+      awarenessCursorRef.current = fileNodeId
+        ? createCollaborationCursor(current.doc, fileNodeId, anchorOffset, headOffset)
+        : null;
+      scheduleAwarenessPublish();
     },
-    [scheduleAwarenessPublish],
+    [getNodeIdForPath, scheduleAwarenessPublish],
   );
 
   const value = useMemo<CollaborationContextValue>(
@@ -856,6 +864,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       setFollowingHost: setIsFollowingHost,
       updateCursor,
       queueLocalTextEdit,
+      getNodeIdForPath,
+      getPathForNodeId,
       retryAssets,
       undo,
       redo,
@@ -868,6 +878,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       createInvitation,
       createRoom,
       exportRoom,
+      getNodeIdForPath,
+      getPathForNodeId,
       invitations,
       isFollowingHost,
       leaveRoom,

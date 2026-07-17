@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import {
@@ -147,7 +147,12 @@ describe("collaboration project document", () => {
     const before = project.files[path].content;
     const doc = new Y.Doc();
     seedCollaborationProject(doc, project, { idFactory: idFactory() });
-    const controller = new CollaborationProjectController(doc, { canWrite: () => true });
+    const projection = projectCollaborationDocument(doc);
+    const getProjection = vi.fn(() => projection);
+    const controller = new CollaborationProjectController(doc, {
+      canWrite: () => true,
+      getProjection,
+    });
     const insertion = "<!-- incremental -->\n";
 
     expect(
@@ -174,6 +179,7 @@ describe("collaboration project document", () => {
         changes: [{ offset: 0, deleteLength: 0, text: "!" }],
       }),
     ).toBe(false);
+    expect(getProjection).toHaveBeenCalledTimes(2);
   });
 
   it("keeps binary bytes outside Yjs and projects content-addressed asset descriptors", () => {

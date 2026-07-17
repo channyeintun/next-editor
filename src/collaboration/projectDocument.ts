@@ -532,6 +532,7 @@ export function canWriteCollaborationDocument(role: CollaborationRole): boolean 
 export interface CollaborationProjectControllerOptions {
   canWrite: () => boolean;
   idFactory?: () => string;
+  getProjection?: () => CollaborationProjectProjection | null;
 }
 
 const COLLABORATION_TEXT_INSERT_CHUNK_CHARS = 12 * 1024;
@@ -561,11 +562,13 @@ export class CollaborationProjectController {
   private readonly doc: Y.Doc;
   private readonly canWriteDocument: () => boolean;
   private readonly idFactory: () => string;
+  private readonly getProjection: (() => CollaborationProjectProjection | null) | undefined;
 
   constructor(doc: Y.Doc, options: CollaborationProjectControllerOptions) {
     this.doc = doc;
     this.canWriteDocument = options.canWrite;
     this.idFactory = options.idFactory ?? (() => crypto.randomUUID());
+    this.getProjection = options.getProjection;
   }
 
   private assertWritable(): void {
@@ -574,9 +577,13 @@ export class CollaborationProjectController {
     }
   }
 
+  private project(): CollaborationProjectProjection {
+    return this.getProjection?.() ?? projectCollaborationDocument(this.doc);
+  }
+
   private nodeAtPath(path: string): { id: string; node: Y.Map<unknown> } {
     const normalized = parseWorkspacePath(path);
-    const id = projectCollaborationDocument(this.doc).nodeIdByPath.get(normalized);
+    const id = this.project().nodeIdByPath.get(normalized);
     const node = id ? getCollaborationNodes(this.doc).get(id) : undefined;
     if (!id || !(node instanceof Y.Map)) {
       throw new CollaborationProjectError(`Collaboration node not found: ${normalized}`);
@@ -673,7 +680,7 @@ export class CollaborationProjectController {
       throw new CollaborationProjectError("Binary collaboration assets must be uploaded first");
     }
     const normalized = parseWorkspacePath(path);
-    const projection = projectCollaborationDocument(this.doc);
+    const projection = this.project();
     if (projection.nodeIdByPath.has(normalized)) {
       throw new CollaborationProjectError(`Collaboration path already exists: ${normalized}`);
     }
@@ -747,7 +754,7 @@ export class CollaborationProjectController {
     if (target.node.get("kind") !== kind) {
       throw new CollaborationProjectError(`Collaboration ${kind} not found: ${normalized}`);
     }
-    const projection = projectCollaborationDocument(this.doc);
+    const projection = this.project();
     const ids =
       kind === "folder"
         ? Array.from(projection.nodeIdByPath.entries())
