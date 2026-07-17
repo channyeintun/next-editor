@@ -9,6 +9,9 @@
         "@msgpack/msgpack": "^3.1.3",
         "@openrouter/agent": "^0.7.2",
         "@posthog/react": "^1.10.3",
+        "@rrweb/record": "2.1.0",
+        "@rrweb/replay": "2.1.0",
+        "@rrweb/types": "2.1.0",
         "@tanstack/react-query": "^5.101.2",
         "@tanstack/react-virtual": "^3.14.6",
         "@upstash/qstash": "^2.11.2",
@@ -30,7 +33,6 @@
         "react": "^19.2.7",
         "react-dom": "^19.2.7",
         "react-router": "^8.2.0",
-        "rrweb": "^2.1.0",
         "xstate": "5.32.2",
         "yjs": "^13.6.31",
         "zod": "^4.4.3",
@@ -559,6 +561,10 @@
     "@rollup/rollup-win32-x64-gnu": ["@rollup/rollup-win32-x64-gnu@4.62.2", "", { "os": "win32", "cpu": "x64" }, "sha512-T6xr6ucWSFto+VGajA8YH26LdpHRuP4YLHEKAtCWvJDOlnmWcDZVCI2Jmjr+IFHDlt2zRaTAKE4tfjTaWLgJBg=="],
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.62.2", "", { "os": "win32", "cpu": "x64" }, "sha512-BfzEnDJOt9T8M989/lA37EcJgat01wLRnoi5dQf3QzOH7jzpqTAzdDbVfRljVr5r+jzKqpbHeyOfAaXxAd0PAA=="],
+
+    "@rrweb/record": ["@rrweb/record@2.1.0", "", { "dependencies": { "@rrweb/types": "^2.1.0", "@rrweb/utils": "^2.1.0", "rrweb": "^2.1.0" } }, "sha512-jnbpYQED6QdKn1MuEoqJyILkYhuWDhb3kzA/l1i+Di5sfP7apf3HvrlVIMoyZgATMlk2if65BUUrc5R+vabCjQ=="],
+
+    "@rrweb/replay": ["@rrweb/replay@2.1.0", "", { "dependencies": { "@rrweb/types": "^2.1.0", "rrweb": "^2.1.0" } }, "sha512-a6s3Lzf4iIEL22o6+DHZrbjH/q6OIM9CFh/KzU6pDZ2mOYFP3u3Yd3IL57Oc9usnqFt/kNCvOjUf5JbBrQ9o7A=="],
 
     "@rrweb/types": ["@rrweb/types@2.1.0", "", {}, "sha512-svOHkcuukP6rIjz2umwVsS7uYct+2h0N97+bg+8IJYKIUj5+YjwIvqx5y9NILFKPIu3yk+Mb+KDFfJ8RV+4JlA=="],
 

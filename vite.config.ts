@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { proxyPlugin } from "./tube/vite/proxyPlugin";
 import { openrouterProxyPlugin } from "./tube/vite/openrouterProxyPlugin";
+import { rrwebRecorderBundlePlugin } from "./build/rrwebRecorderBundlePlugin";
 
 const crossOriginHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -46,6 +47,7 @@ export default ({ mode }: { mode: string }) => {
     // exhaust the allocator before analysis begins.
     staged: stagedChecks,
     plugins: [
+      rrwebRecorderBundlePlugin() as unknown as PluginOption,
       // Dev-server equivalent of infra/worker/routes/proxy.ts: lets
       // `bun run dev` resolve the same /api/proxy route the Worker
       // serves in production.

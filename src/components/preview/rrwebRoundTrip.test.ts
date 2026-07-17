@@ -1,4 +1,5 @@
-import { record, Replayer } from "rrweb";
+import { record } from "@rrweb/record";
+import { Replayer } from "@rrweb/replay";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   PreviewDomPatchBatch,

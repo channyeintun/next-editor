@@ -1,5 +1,6 @@
-import { record, Replayer } from "rrweb";
-import type { eventWithTime } from "rrweb";
+import { record } from "@rrweb/record";
+import { Replayer } from "@rrweb/replay";
+import type { eventWithTime } from "@rrweb/types";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type {
   PreviewDomPatchBatch,

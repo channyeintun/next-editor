@@ -16,7 +16,7 @@ import { arePreviewSizesEqual } from "../../utils/equality";
 import { getElementByXPath, type PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
 import { buildRrwebReplayEvents, hasRrwebPreviewEvents } from "./rrwebPreview";
-import { RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
+import { createRrwebPreviewReplayer, type RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
 interface UsePreviewPlaybackRegistrationOptions {
   previewHandle: PreviewAdapterHandle;
@@ -106,25 +106,32 @@ export function usePreviewPlaybackRegistration({
   // ordered stream, driven by `currentTime`. Rebuilt when the recording changes.
   const rrwebReplayerRef = useRef<RrwebPreviewReplayer | null>(null);
   const rrwebReplayRecordingIdRef = useRef<string | null>(null);
+  const rrwebReplayLoadGenerationRef = useRef(0);
+  const rrwebReplayLoadStateRef = useRef<"idle" | "loading" | "ready" | "failed">("idle");
+  const rrwebReplayPendingTimeRef = useRef(0);
   // The element the current Replayer is mounted in. If it changes (React remounted
   // the replay container), the old Replayer's iframe is orphaned and we must rebuild
   // into the new element.
   const rrwebReplayContainerElRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (hasPreviewPatchReplay) {
+    if (hasPreviewPatchReplay && !isLiveRuntimePreviewActive) {
       return;
     }
 
+    rrwebReplayLoadGenerationRef.current += 1;
+    rrwebReplayLoadStateRef.current = "idle";
     rrwebReplayerRef.current?.destroy();
     rrwebReplayerRef.current = null;
     rrwebReplayRecordingIdRef.current = null;
     rrwebReplayContainerElRef.current = null;
-  }, [hasPreviewPatchReplay]);
+  }, [hasPreviewPatchReplay, isLiveRuntimePreviewActive]);
 
   // Tear down the rrweb Replayer when the preview unmounts.
   useEffect(
     () => () => {
+      rrwebReplayLoadGenerationRef.current += 1;
+      rrwebReplayLoadStateRef.current = "idle";
       rrwebReplayerRef.current?.destroy();
       rrwebReplayerRef.current = null;
       rrwebReplayRecordingIdRef.current = null;
@@ -142,11 +149,12 @@ export function usePreviewPlaybackRegistration({
       }
 
       const needsRebuild =
-        !rrwebReplayerRef.current ||
         rrwebReplayRecordingIdRef.current !== input.recordingId ||
         rrwebReplayContainerElRef.current !== container;
 
       if (needsRebuild) {
+        rrwebReplayLoadGenerationRef.current += 1;
+        rrwebReplayLoadStateRef.current = "idle";
         rrwebReplayerRef.current?.destroy();
         rrwebReplayerRef.current = null;
         rrwebReplayRecordingIdRef.current = input.recordingId;
@@ -154,22 +162,40 @@ export function usePreviewPlaybackRegistration({
         // Drop any orphaned wrapper (e.g. from a Replayer whose ref was lost) so a
         // rebuild can never leave two iframes stacked in the container.
         container.replaceChildren();
+      }
 
+      rrwebReplayPendingTimeRef.current = input.currentTime;
+
+      if (!rrwebReplayerRef.current && rrwebReplayLoadStateRef.current === "idle") {
         const events = buildRrwebReplayEvents(input.initialDocuments, input.patchBatches);
         const baseTime = input.initialDocuments[0]?.time ?? 0;
 
         // rrweb needs at least a Meta + FullSnapshot to build the document.
         if (events.length >= 2) {
-          try {
-            rrwebReplayerRef.current = new RrwebPreviewReplayer({
-              root: container,
-              events,
-              baseTime,
+          const loadGeneration = ++rrwebReplayLoadGenerationRef.current;
+          rrwebReplayLoadStateRef.current = "loading";
+          void createRrwebPreviewReplayer({ root: container, events, baseTime })
+            .then((replayer) => {
+              if (
+                rrwebReplayLoadGenerationRef.current !== loadGeneration ||
+                rrwebReplayRecordingIdRef.current !== input.recordingId ||
+                rrwebReplayContainerElRef.current !== container
+              ) {
+                replayer.destroy();
+                return;
+              }
+
+              rrwebReplayLoadStateRef.current = "ready";
+              rrwebReplayerRef.current = replayer;
+              replayer.seekToRecordingTime(rrwebReplayPendingTimeRef.current);
+            })
+            .catch((error: unknown) => {
+              if (rrwebReplayLoadGenerationRef.current !== loadGeneration) {
+                return;
+              }
+              rrwebReplayLoadStateRef.current = "failed";
+              console.warn("Failed to initialize rrweb preview replayer", error);
             });
-          } catch (error) {
-            console.warn("Failed to initialize rrweb preview replayer", error);
-            rrwebReplayerRef.current = null;
-          }
         }
       }
 

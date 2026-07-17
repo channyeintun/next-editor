@@ -1,5 +1,8 @@
-import { Replayer } from "rrweb";
-import type { eventWithTime } from "rrweb";
+import type { Replayer } from "@rrweb/replay";
+import type { eventWithTime } from "@rrweb/types";
+
+type ReplayerConstructor = (typeof import("@rrweb/replay"))["Replayer"];
+type ReplayModuleLoader = () => Promise<{ Replayer: ReplayerConstructor }>;
 
 export interface RrwebPreviewReplayerOptions {
   // Host element the Replayer mounts its wrapper/iframe into.
@@ -25,16 +28,21 @@ export function computeRrwebOffsetMs(currentTime: number, baseTime: number): num
 // event stream, so they stay coupled (unlike the legacy two-applier model).
 export class RrwebPreviewReplayer {
   private replayer: Replayer;
+  private readonly ReplayerConstructor: ReplayerConstructor;
   private readonly root: HTMLElement;
   private readonly events: eventWithTime[];
   private readonly baseTime: number;
   private lastOffsetMs = 0;
   private destroyed = false;
 
-  constructor({ root, events, baseTime }: RrwebPreviewReplayerOptions) {
+  constructor(
+    { root, events, baseTime }: RrwebPreviewReplayerOptions,
+    ReplayerConstructor: ReplayerConstructor,
+  ) {
     this.root = root;
     this.events = events;
     this.baseTime = baseTime;
+    this.ReplayerConstructor = ReplayerConstructor;
     this.replayer = this.createReplayer();
     // Render the initial snapshot immediately so the panel is never blank before
     // the first tick arrives.
@@ -42,7 +50,7 @@ export class RrwebPreviewReplayer {
   }
 
   private createReplayer(): Replayer {
-    const replayer = new Replayer(this.events, {
+    const replayer = new this.ReplayerConstructor(this.events, {
       root: this.root,
       liveMode: false,
       mouseTail: false,
@@ -129,4 +137,14 @@ export class RrwebPreviewReplayer {
       // ignore teardown races
     }
   }
+}
+
+/** Loads the replay implementation only when a recording actually enters rrweb
+ * replay mode. Recording/editing routes never evaluate the replay package. */
+export async function createRrwebPreviewReplayer(
+  options: RrwebPreviewReplayerOptions,
+  loadReplayModule: ReplayModuleLoader = () => import("@rrweb/replay"),
+): Promise<RrwebPreviewReplayer> {
+  const { Replayer } = await loadReplayModule();
+  return new RrwebPreviewReplayer(options, Replayer);
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { computeRrwebOffsetMs, RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
+import { computeRrwebOffsetMs, createRrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
 interface FakeReplayerInstance {
   pause: ReturnType<typeof vi.fn>;
@@ -10,7 +10,7 @@ const fakeRrweb = vi.hoisted(() => ({
   instances: [] as FakeReplayerInstance[],
 }));
 
-vi.mock("rrweb", () => ({
+vi.mock("@rrweb/replay", () => ({
   Replayer: class FakeReplayer {
     readonly wrapper = document.createElement("div");
     readonly iframe = document.createElement("iframe");
@@ -46,10 +46,10 @@ describe("computeRrwebOffsetMs", () => {
 });
 
 describe("RrwebPreviewReplayer", () => {
-  it("uses a fresh rrweb instance when a completed recording starts again", () => {
+  it("uses a fresh rrweb instance when a completed recording starts again", async () => {
     const root = document.createElement("div");
     document.body.append(root);
-    const preview = new RrwebPreviewReplayer({ root, events: [], baseTime: 100 });
+    const preview = await createRrwebPreviewReplayer({ root, events: [], baseTime: 100 });
     const first = fakeRrweb.instances[0];
 
     expect(first).toBeDefined();

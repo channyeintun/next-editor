@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+  loadRrwebRecorderBundle,
+  PINNED_RRWEB_RECORD_VERSION,
+  RRWEB_RECORDER_GZIP_BUDGET_BYTES,
+} from "../../../build/rrwebRecorderBundlePlugin";
 import type {
   PreviewDomPatchBatch,
   PreviewInitialDocument,
@@ -138,16 +143,24 @@ describe("createRrwebPreviewRecorderScript", () => {
   it("inlines the rrweb bundle and the recording wiring", () => {
     const script = createRrwebPreviewRecorderScript({ setupMarker: "__TEST_MARKER__" });
 
-    // The UMD bundle is present (sets window.rrweb).
-    expect(script).toContain("rrweb");
+    // The recorder-only UMD bundle is present (sets window.rrwebRecord).
+    expect(script).toContain("rrwebRecord");
     // The wiring records and forwards events.
-    expect(script).toContain("window.rrweb.record");
+    expect(script).toContain("window.rrwebRecord.record");
     expect(script).toContain("__TEST_MARKER__");
     expect(script).toContain(String(PREVIEW_RRWEB_FORMAT_VERSION));
     // Images must be baked into snapshots as data URLs: project-served image
     // URLs point at the ephemeral WebContainer origin and are dead in replay.
     expect(script).toContain("inlineImages: true");
-    expect(script.length).toBeGreaterThan(100_000);
+    expect(script.length).toBeLessThan(150_000);
+  });
+
+  it("keeps the pinned injected recorder below its gzip budget", () => {
+    const artifact = loadRrwebRecorderBundle();
+
+    expect(artifact.version).toBe(PINNED_RRWEB_RECORD_VERSION);
+    expect(artifact.gzipBytes).toBeLessThanOrEqual(RRWEB_RECORDER_GZIP_BUDGET_BYTES);
+    expect(artifact.rawBytes).toBeLessThan(100_000);
   });
 });
 
@@ -169,8 +182,46 @@ describe("recorder wiring snapshot handshake", () => {
     };
   }
 
+  interface SerializedNode {
+    tagName?: string;
+    attributes?: Record<string, string>;
+    childNodes?: SerializedNode[];
+  }
+
+  function findSerializedElement(
+    node: SerializedNode | undefined,
+    tagName: string,
+  ): SerializedNode | undefined {
+    if (!node) return undefined;
+    if (node.tagName === tagName) return node;
+    for (const child of node.childNodes ?? []) {
+      const match = findSerializedElement(child, tagName);
+      if (match) return match;
+    }
+    return undefined;
+  }
+
   it("answers a host snapshot request with a refresh initial document, never a patch-stream snapshot", async () => {
-    document.body.innerHTML = "<main><p id='status'>ready</p></main>";
+    document.body.innerHTML = `
+      <style>.accent { color: rgb(1, 2, 3); }</style>
+      <main>
+        <p id="status" class="accent">ready</p>
+        <input id="name" value="Ada" />
+        <img id="avatar" src="/avatar.png" />
+      </main>`;
+    const image = document.getElementById("avatar");
+    if (!(image instanceof HTMLImageElement)) throw new Error("missing image fixture");
+    Object.defineProperties(image, {
+      complete: { configurable: true, value: true },
+      naturalHeight: { configurable: true, value: 1 },
+      naturalWidth: { configurable: true, value: 1 },
+    });
+    const getContext = vi
+      .spyOn(HTMLCanvasElement.prototype, "getContext")
+      .mockReturnValue({ drawImage: vi.fn<() => void>() } as unknown as CanvasRenderingContext2D);
+    const toDataUrl = vi
+      .spyOn(HTMLCanvasElement.prototype, "toDataURL")
+      .mockReturnValue("data:image/png;base64,YXZhdGFy");
 
     const messages: PostedMessage[] = [];
     const onMessage = (event: MessageEvent) => {
@@ -200,6 +251,15 @@ describe("recorder wiring snapshot handshake", () => {
       expect(initialDocs).toHaveLength(1);
       expect(initialDocs[0].payload.refresh).toBeUndefined();
       const documentId = initialDocs[0].payload.documentId;
+      const fullSnapshot = initialDocs[0].payload.events?.find((event) => event.type === 2);
+      const serializedRoot = (fullSnapshot?.data as { node?: SerializedNode } | undefined)?.node;
+      expect(findSerializedElement(serializedRoot, "style")?.attributes?._cssText).toContain(
+        ".accent",
+      );
+      expect(findSerializedElement(serializedRoot, "input")?.attributes?.value).toBe("Ada");
+      expect(findSerializedElement(serializedRoot, "img")?.attributes?.rr_dataURL).toBe(
+        "data:image/png;base64,YXZhdGFy",
+      );
 
       // Host asks for the recording-start snapshot.
       window.postMessage({ type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE }, "*");
@@ -219,6 +279,10 @@ describe("recorder wiring snapshot handshake", () => {
       const status = document.getElementById("status");
       if (!status) throw new Error("missing fixture node");
       status.textContent = "mutated";
+      const input = document.getElementById("name");
+      if (!(input instanceof HTMLInputElement)) throw new Error("missing input fixture");
+      input.value = "Grace";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
       await sleep(100);
 
       const patchBatches = messages.filter(
@@ -227,6 +291,14 @@ describe("recorder wiring snapshot handshake", () => {
       expect(patchBatches.length).toBeGreaterThan(0);
       const patchEvents = patchBatches.flatMap((message) => message.payload.events ?? []);
       expect(patchEvents.some((event) => event.type === 2)).toBe(false);
+      expect(
+        patchEvents.some(
+          (event) =>
+            event.type === 3 &&
+            (event.data as { source?: number; text?: string }).source === 5 &&
+            (event.data as { text?: string }).text === "Grace",
+        ),
+      ).toBe(true);
     } finally {
       // Detach the recorder via the stop handle the wiring parks on its setup
       // marker, so its observers don't outlive the test environment.
@@ -235,6 +307,8 @@ describe("recorder wiring snapshot handshake", () => {
       if (typeof marker === "object" && typeof marker.stop === "function") {
         marker.stop();
       }
+      getContext.mockRestore();
+      toDataUrl.mockRestore();
       window.removeEventListener("message", onMessage);
     }
   });

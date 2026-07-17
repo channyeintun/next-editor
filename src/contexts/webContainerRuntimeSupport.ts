@@ -194,9 +194,9 @@ export function createRuntimePreviewScript(): string {
   const consoleBridgeScript = createIframeConsoleBridgeScript(RUNTIME_CONSOLE_BRIDGE_SETUP_MARKER);
 
   // rrweb records the live DOM (+ inner scroll/input/mouse) for replay. The
-  // vendored UMD bundle is inlined; `slimDOMOptions.script` keeps it (and every
-  // other script) out of the snapshots it produces, so the injected recorder
-  // never pollutes a recording.
+  // recorder-only @rrweb/record IIFE is materialized at build time;
+  // `slimDOMOptions.script` keeps it (and every other script) out of the
+  // snapshots it produces, so the injected recorder never pollutes a recording.
   const rrwebRecordScript = createRrwebPreviewRecorderScript({
     setupMarker: RUNTIME_RRWEB_RECORD_SETUP_MARKER,
   });

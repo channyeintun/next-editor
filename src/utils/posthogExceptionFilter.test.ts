@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { record } from "rrweb";
+import { record } from "@rrweb/record";
 import {
   POSTHOG_SENSITIVE_SURFACE_SELECTOR,
   sanitizePostHogEvent,

@@ -1,10 +1,8 @@
-import type { eventWithTime } from "rrweb";
-// The rrweb record-capable UMD bundle, imported as raw text so it can be inlined
-// verbatim into the WebContainer-served page (it must run inside the preview
-// realm, not the host). Sets `window.rrweb` when executed as a classic script.
-// Vendored because rrweb's `exports` field does not expose the UMD subpath; see
-// ./vendor/README.md.
-import rrwebRecorderBundle from "./vendor/rrweb.umd.min.cjs?raw";
+import type { eventWithTime } from "@rrweb/types";
+// A build-time virtual module materializes @rrweb/record's pinned, minified,
+// recorder-only IIFE. It executes in the preview realm and exposes
+// `window.rrwebRecord`; replay code never enters the injected payload.
+import rrwebRecorderBundle from "virtual:rrweb-recorder-bundle";
 import type {
   PreviewDomPatchBatch,
   PreviewInitialDocument,
@@ -122,7 +120,7 @@ export function createRrwebPreviewRecorderScript({
     (function() {
       var marker = ${JSON.stringify(setupMarker)};
       if (window[marker]) return;
-      if (!window.rrweb || typeof window.rrweb.record !== 'function') return;
+      if (!window.rrwebRecord || typeof window.rrwebRecord.record !== 'function') return;
       window[marker] = true;
 
       var initialDocumentMessageType = ${JSON.stringify(RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE)};
@@ -190,7 +188,7 @@ export function createRrwebPreviewRecorderScript({
         checkpointScheduled = false;
         lastCheckpointAt = getMessageTime();
         try {
-          var mirror = window.rrweb.record && window.rrweb.record.mirror;
+          var mirror = window.rrwebRecord.record && window.rrwebRecord.record.mirror;
           if (!mirror) return;
           // Only escalate to a full snapshot when rrweb's mirror has actually
           // drifted from the live DOM (a dropped remove). On well-behaved pages
@@ -203,7 +201,7 @@ export function createRrwebPreviewRecorderScript({
           if (typeof mirror.reset === 'function') mirror.reset();
           // Emits a fresh Meta + FullSnapshot, which flow through emit() (below)
           // into the patch stream; replay rebuilds from it, healing the drift.
-          window.rrweb.takeFullSnapshot();
+          window.rrwebRecord.record.takeFullSnapshot();
         } catch (e) {}
       }
 
@@ -300,7 +298,7 @@ export function createRrwebPreviewRecorderScript({
         try {
           lastCheckpointAt = getMessageTime();
           hostSnapshotRequested = true;
-          window.rrweb.takeFullSnapshot();
+          window.rrwebRecord.record.takeFullSnapshot();
         } catch (e) {}
         hostSnapshotRequested = false;
         pendingRefreshMeta = null;
@@ -308,7 +306,7 @@ export function createRrwebPreviewRecorderScript({
 
       function startRecording() {
         try {
-          var stop = window.rrweb.record({
+          var stop = window.rrwebRecord.record({
             emit: emit,
             recordCanvas: false,
             collectFonts: false,
@@ -354,7 +352,10 @@ export function createRrwebPreviewRecorderScript({
     })();
   `;
 
-  return `${rrwebRecorderBundle}\n${wiring}`;
+  // The published UMD intentionally has no trailing semicolon. Add one before
+  // the wiring IIFE so JavaScript cannot parse the second `(` as a call on the
+  // UMD expression's return value.
+  return `${rrwebRecorderBundle};\n${wiring}`;
 }
 
 // Reassembles the full, time-ordered rrweb event stream the `Replayer` consumes

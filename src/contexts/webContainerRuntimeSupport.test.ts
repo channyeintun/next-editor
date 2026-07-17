@@ -42,7 +42,7 @@ describe("createRuntimePreviewScript", () => {
   it("bundles the rrweb recorder and snapshot wiring into one injectable script", () => {
     const script = createRuntimePreviewScript();
 
-    expect(script).toContain("window.rrweb.record");
+    expect(script).toContain("window.rrwebRecord.record");
     // The vendored UMD bundle is inlined (its IIFE header is present).
     expect(script).toContain("function (g, f)");
     // The snapshot/postMessage wiring keyed on the runtime snapshot message type.
