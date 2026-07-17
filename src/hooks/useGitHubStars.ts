@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
 
 const REPO_API = "https://api.github.com/repos/channyeintun/next-editor";
 
@@ -11,8 +10,18 @@ export function useGitHubStars(): number | null {
   const { data } = useQuery({
     queryKey: ["github-stars"],
     queryFn: async ({ signal }) => {
-      const res = await axios.get<{ stargazers_count: number }>(REPO_API, { signal });
-      return res.data.stargazers_count;
+      const response = await fetch(REPO_API, {
+        signal,
+        headers: { Accept: "application/vnd.github+json" },
+      });
+      if (!response.ok) {
+        throw new Error(`GitHub star request failed with status ${response.status}`);
+      }
+      const body = (await response.json()) as { stargazers_count?: unknown };
+      if (typeof body.stargazers_count !== "number") {
+        throw new Error("GitHub star response did not include a numeric count");
+      }
+      return body.stargazers_count;
     },
   });
   return typeof data === "number" ? data : null;

@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 
-// App data (the lessons manifest today) is build-static, so cache it for the
-// whole session and never auto-refetch. Error retries stay modest.
+// Most application queries invalidate explicitly after mutations. Individual
+// volatile queries (auth/search/playlist membership) override this session cache.
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
