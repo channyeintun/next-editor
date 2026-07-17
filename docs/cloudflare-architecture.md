@@ -1,6 +1,6 @@
 # Next Editor on Cloudflare — Architecture
 
-> Status: **implemented.** Last reviewed 2026-07-16. Use
+> Status: **implemented.** Last reviewed 2026-07-17. Use
 > [cloudflare-deploy-guide.md](./cloudflare-deploy-guide.md) for deployment and
 > [live-collaboration.md](./live-collaboration.md) for the collaboration protocol.
 
@@ -16,7 +16,7 @@ the `/learn` catalog, lesson publishing, playlists, and live collaboration.
 | Who can create        | **Any Google account.** Sign in with Google → you can record, upload, and publish.                                                                    |
 | Existing JSON catalog | **Kept as-is.** The curated seed (e.g. `introduction`) stays static and D1-free — frequent-access, edge-cached. D1 only holds user-generated lessons. |
 | Public read cache     | **Cloudflare Workers KV.** Public lesson/playlist JSON uses the fail-open `CACHE` binding; search remains uncached.                                   |
-| Live collaboration    | **Upstash-only Redis purpose.** Realtime transport and recoverable Yjs state use the dedicated collaboration Redis credentials, never the KV cache.   |
+| Live collaboration    | **Versioned room durability.** New WebSocket rooms use Durable Object SQLite; legacy/Realtime rooms use dedicated Upstash Redis, never the KV cache.  |
 
 ## Why same-origin is not negotiable here
 
@@ -72,15 +72,18 @@ flowchart LR
     Worker -->|lesson media and private room assets| R2[(R2)]
     Worker -->|fail-open public JSON cache| KV[(Workers KV: CACHE)]
     Worker <-->|OAuth| Google[Google]
-    Worker <-->|Realtime streams and recoverable room state| Upstash[Upstash Realtime + Redis]
-    QStash[QStash] -->|signed maintenance jobs| Worker
+    Worker -->|authenticated WebSocket| Room[Room Durable Object]
+    Room -->|new-room log and snapshots| SQL[(Room-local SQLite)]
+    Worker <-->|legacy Realtime and room state| Upstash[Upstash Realtime + Redis]
+    QStash[QStash] -->|legacy compaction and delayed cleanup| Worker
 ```
 
 Everything is one hostname, so COEP `require-corp` is satisfied and the session
 cookie is first-party. Cloudflare's CDN caches static assets and (with cache
 headers) `/media/*` at the edge. Workers KV serves only disposable public
-lesson/playlist cache entries. Upstash Redis is fail-closed and reserved for
-the collaboration/Realtime data plane.
+lesson/playlist cache entries. Durable Object SQLite is fail-closed for new
+WebSocket room history; Upstash Redis is fail-closed and reserved for legacy
+collaboration/Realtime rooms.
 
 ## Data model — D1
 
@@ -94,8 +97,9 @@ authoritative schema. D1 currently holds:
 | Collaboration control plane | rooms, members, invitations/claims, audit events, and asset metadata |
 
 The public gallery reads only published lessons; owner-scoped routes expose
-drafts. D1 does **not** store the live Yjs update log or presence state—those
-belong to the dedicated collaboration Redis data plane.
+drafts. D1 does **not** store the live Yjs update log or presence state. New
+WebSocket logs live in room-local Durable Object SQLite; version-1 logs live in
+the dedicated collaboration Redis data plane.
 
 ## Storage model — R2
 
@@ -231,20 +235,20 @@ the upload modal against the persisted recording.
 
 ## API surface (Hono routes)
 
-| Method & path                                                      | Auth             | Current responsibility                                                        |
-| ------------------------------------------------------------------ | ---------------- | ----------------------------------------------------------------------------- |
-| `GET /api/auth/google/login`, `/callback`                          | —                | OAuth PKCE handshake and first-party session creation                         |
-| `GET /api/auth/me`, `PATCH /username`, `POST /logout`              | cookie           | Session and profile lifecycle                                                 |
-| `GET /api/lessons`, `GET /api/lessons/:slug`                       | —                | Published lesson reads through Workers KV, then D1                            |
-| `/api/lessons/mine`, create/update/publish/unpublish/delete routes | owner            | Draft and published lesson lifecycle                                          |
-| `PUT /api/uploads/:id/media/:filename`                             | owner/sign-in    | Validate and stream a lesson object through the Worker to R2                  |
-| `/api/playlists/*`                                                 | mixed            | Public playlist detail plus owner CRUD, membership, and ordering              |
-| `/api/authors/:username`, `/api/search`                            | —                | Public author/catalog discovery; search is intentionally uncached             |
-| `/api/collaboration/rooms/*`, `/invitations/*`, `/realtime`        | member/role      | D1 room control plane, private R2 assets, Redis persistence, and Realtime SSE |
-| `POST /api/collaboration/jobs/maintenance`                         | QStash signature | Idempotent compaction and retained-room cleanup                               |
-| `GET /media/*`                                                     | —                | Stream R2 objects with Range and immutable-cache support                      |
-| `POST /api/slide-images`                                           | cookie           | Ingest Google Slides images into content-addressed R2 keys                    |
-| `GET /api/proxy?url=`, `POST /api/openrouter/responses`            | route-specific   | Guarded same-origin external-service proxies                                  |
+| Method & path                                                      | Auth             | Current responsibility                                                                    |
+| ------------------------------------------------------------------ | ---------------- | ----------------------------------------------------------------------------------------- |
+| `GET /api/auth/google/login`, `/callback`                          | —                | OAuth PKCE handshake and first-party session creation                                     |
+| `GET /api/auth/me`, `PATCH /username`, `POST /logout`              | cookie           | Session and profile lifecycle                                                             |
+| `GET /api/lessons`, `GET /api/lessons/:slug`                       | —                | Published lesson reads through Workers KV, then D1                                        |
+| `/api/lessons/mine`, create/update/publish/unpublish/delete routes | owner            | Draft and published lesson lifecycle                                                      |
+| `PUT /api/uploads/:id/media/:filename`                             | owner/sign-in    | Validate and stream a lesson object through the Worker to R2                              |
+| `/api/playlists/*`                                                 | mixed            | Public playlist detail plus owner CRUD, membership, and ordering                          |
+| `/api/authors/:username`, `/api/search`                            | —                | Public author/catalog discovery; search is intentionally uncached                         |
+| `/api/collaboration/rooms/*`, `/invitations/*`, `/realtime`        | member/role      | D1 control plane, private R2 assets, versioned SQLite/Redis persistence, and Realtime SSE |
+| `POST /api/collaboration/jobs/maintenance`                         | QStash signature | Legacy compaction and retained-room cleanup                                               |
+| `GET /media/*`                                                     | —                | Stream R2 objects with Range and immutable-cache support                                  |
+| `POST /api/slide-images`                                           | cookie           | Ingest Google Slides images into content-addressed R2 keys                                |
+| `GET /api/proxy?url=`, `POST /api/openrouter/responses`            | route-specific   | Guarded same-origin external-service proxies                                              |
 
 ## Upload & publish sequence
 
@@ -274,7 +278,7 @@ use their smaller shared client/server constraint.
 
 ## Security notes
 
-- Google, collaboration Redis, and QStash credentials live only as **Worker secrets**, never in the browser bundle.
+- Google, legacy collaboration Redis, and QStash credentials live only as **Worker secrets**, never in the browser bundle.
 - Session cookie is `HttpOnly; Secure; SameSite=Lax`; tokens are opaque and DB-validated; PKCE + `state` guard the OAuth handshake.
 - Ownership is enforced server-side on every mutating route (`owner_id === session.user_id`); "any Google account can create" does **not** mean any account can edit another's lesson.
 - The upload route validates authentication, existing-lesson ownership, exact content length, filename/extension, and size before writing under `lessons/<id>/…`.

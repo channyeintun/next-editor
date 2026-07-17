@@ -11,39 +11,43 @@ Companion documents:
 - [Cloudflare-native Deployment](./live-collaboration-cloudflare.md) evaluates a provider that
   stores both live and durable room state in a Durable Object.
 
-This document selects a hybrid between those deployment options. Cloudflare terminates one
-bidirectional WebSocket per browser and uses one hibernating Durable Object per room for live
-coordination. Upstash Redis remains the durable Yjs document store, and QStash continues to run
-compaction and retention jobs. D1 remains the authoritative room and membership control plane.
+This document describes the versioned hybrid. Cloudflare terminates one bidirectional WebSocket
+per browser and uses one hibernating Durable Object per room for live coordination. New WebSocket
+rooms also use that object's private SQLite database as the durable Yjs authority, with alarms for
+compaction. Upstash Redis remains available for persistence-version-1 and Realtime fallback rooms;
+QStash runs delayed cleanup and legacy compaction. D1 remains the authoritative room/membership
+control plane and records each room's immutable transport and persistence version.
 
 Pricing and product behavior were checked on 2026-07-16. They must be verified again before a
 production capacity decision.
 
 ## Decision
 
-Implement the hybrid as an additional room transport rather than replacing the existing Upstash
-Realtime provider:
+Implement the hybrid as versioned room behavior rather than replacing the existing Upstash
+Realtime provider or migrating active history in place:
 
 - New rooms use `cloudflare-websocket` when the binding is available.
 - Existing or explicitly configured rooms may continue using `upstash-realtime`.
+- New WebSocket rooms default to persistence version 2 (Durable Object SQLite); existing and
+  explicitly rolled-back rooms retain version 1 (Redis).
 - Every participant in one room uses the room's selected transport.
 - A client never opens both live transports for the same room.
 - The provider-neutral Yjs document, workspace projection, undo policy, role model, assets,
   host-only recording, and post-session lesson upload flow remain unchanged.
 
-The Durable Object is an ephemeral live coordinator. It does not store SCR3 recordings and does
-not replace Upstash Redis as the durable document store in this option.
+The Durable Object is the live coordinator and the durable document authority for version-2 rooms.
+It does not store SCR3 recordings. Redis remains authoritative only for version-1 rooms.
 
 ## Free-capacity comparison
 
 The products meter different units, so the allowances are not directly interchangeable.
 
-| Product | Current free allowance | Relevant behavior |
-| --- | --- | --- |
-| Cloudflare Workers | 100,000 requests/day | The initial WebSocket upgrade is one request. Frames routed through the Worker do not count as requests. There is no duration charge, and Free has a 10 ms CPU limit per invocation. |
-| Cloudflare Durable Objects | 100,000 request units/day and 13,000 GB-s/day | A connection consumes a request. Incoming WebSocket messages use a 20:1 billing ratio; outgoing messages and protocol pings are free. Hibernation avoids idle duration. |
-| Upstash Realtime | No separate message allowance | Every operation becomes one or more Upstash Redis commands. |
-| Upstash Redis | 500,000 commands/month, 10 GB bandwidth, 256 MB data | Commands used by Realtime and application persistence share this allowance. |
+| Product                    | Current free allowance                               | Relevant behavior                                                                                                                                                                    |
+| -------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cloudflare Workers         | 100,000 requests/day                                 | The initial WebSocket upgrade is one request. Frames routed through the Worker do not count as requests. There is no duration charge, and Free has a 10 ms CPU limit per invocation. |
+| Cloudflare Durable Objects | 100,000 request units/day and 13,000 GB-s/day        | A connection consumes a request. Incoming WebSocket messages use a 20:1 billing ratio; outgoing messages and protocol pings are free. Hibernation avoids idle duration.              |
+| Upstash Realtime           | No separate message allowance                        | Every operation becomes one or more Upstash Redis commands.                                                                                                                          |
+| Upstash Redis              | 500,000 commands/month, 10 GB bandwidth, 256 MB data | Commands used by Realtime and application persistence share this allowance.                                                                                                          |
 
 Cloudflare documents that a Worker WebSocket connection is billed as its initial Upgrade request
 and subsequent frames do not count as Worker requests:
@@ -53,13 +57,13 @@ and subsequent frames do not count as Worker requests:
 
 Upstash documents the following one-channel Realtime command baseline:
 
-| Operation | Redis commands |
-| --- | ---: |
-| Initial connection | 2 |
-| Reconnection every 300 seconds | 3 |
-| Keepalive every 60 seconds | 1 |
-| Emit event | 2 |
-| Emit event with expiry | 3 |
+| Operation                      | Redis commands |
+| ------------------------------ | -------------: |
+| Initial connection             |              2 |
+| Reconnection every 300 seconds |              3 |
+| Keepalive every 60 seconds     |              1 |
+| Emit event                     |              2 |
+| Emit event with expiry         |              3 |
 
 That is approximately 96 commands per connected client-hour after the initial connection, before
 application events. The 500,000-command free database therefore represents approximately 5,200
@@ -71,10 +75,11 @@ Sources:
 - <https://upstash.com/docs/realtime/overall/pricing>
 - <https://upstash.com/pricing/redis>
 
-The application uses document, awareness, and control channels and performs additional commands
-for durable IDs, quotas, rate limits, presence TTLs, stream retention, and recovery. Pipelining
-reduces HTTP round trips but does not turn several Redis commands into one command. Consequently,
-the official one-channel estimate is a lower bound for this application.
+Persistence-version-1 rooms use document, awareness, and control channels and perform additional
+commands for durable IDs, quotas, rate limits, presence TTLs, stream retention, and recovery.
+Pipelining reduces HTTP round trips but does not turn several Redis commands into one command.
+Consequently, the official one-channel estimate is a lower bound for legacy rooms; version-2 rooms
+do not consume this Redis command path.
 
 ### Illustrative connection cost
 
@@ -138,9 +143,11 @@ flowchart LR
     Browser[Browser: Monaco, Yjs, awareness] <-->|one authenticated WebSocket| Worker[Existing Hono Worker]
     Worker -->|validated upgrade and canonical identity| Room[Hibernating room Durable Object]
     Worker <-->|rooms, roles, invitations| D1[(D1)]
-    Room -->|persist accepted document batches| Redis[(Upstash Redis)]
+    Room -->|persistence v2 transaction| SQL[(Room-local SQLite)]
+    Room -.->|persistence v1 only| Redis[(Upstash Redis)]
     Room -->|broadcast document, awareness, control| Browser
-    QStash[QStash] -->|signed compaction and cleanup jobs| Worker
+    Alarm[Durable Object alarm] -->|compact SQLite tail| Room
+    QStash[QStash] -->|legacy compaction and cleanup jobs| Worker
     Worker --> Redis
     Worker --> R2[(R2 assets and exports)]
 ```
@@ -165,10 +172,12 @@ The room object is responsible for:
 - accepting WebSockets with the Hibernation API;
 - storing a small authenticated session attachment on every socket;
 - validating protocol versions, room IDs, message schemas, payload sizes, and effective roles;
-- revalidating D1 membership before every durable document write while keeping cursor movement
-  off the D1 and Redis hot paths;
+- enforcing the canonical role/version attachment on every write and periodically revalidating D1
+  membership while immediate control notifications update connected roles;
 - applying per-session and per-room live-message rate limits;
-- persisting document updates to Upstash Redis before acknowledgement and broadcast;
+- inserting version-2 updates, sequence/quota metadata, and update-ID deduplication in one local
+  SQLite transaction before acknowledgement and broadcast through the output gate;
+- retaining the Redis-before-visible path for persistence-version-1 rooms;
 - broadcasting accepted document events directly to the other connected clients;
 - broadcasting ephemeral awareness without Redis Streams, TTL keys, or Pub/Sub;
 - updating socket roles immediately when the Worker sends a control notification;
@@ -179,9 +188,25 @@ The object must reconstruct its connected participant roster from WebSocket atta
 hibernation. Cursor state is ephemeral; clients periodically resend it and reconnect recovery does
 not depend on retaining a cursor.
 
-### Upstash Redis
+### Durable Object SQLite and alarms
 
-Redis remains responsible for:
+Persistence-version-2 rooms store the compacted Yjs snapshot, append-only update tail, monotonic
+sequence, accepted-byte/update counts, and update-ID deduplication in the room object's private
+SQLite database. The WebSocket handler performs the write transaction synchronously, then sends
+the acknowledgement and fan-out without awaiting any external service. The Durable Object output
+gate prevents those messages from becoming visible if the storage write fails.
+
+At 200 tail updates the object schedules its alarm. The alarm folds the current tail into a new
+Yjs snapshot, advances the cutoff/generation transactionally, deletes incorporated tail rows, and
+prunes expired deduplication entries. New updates after that cutoff remain the reconnect tail.
+
+The room is first initialized synchronously by its creator's edge request. That first access is
+the deliberate placement request; Durable Object placement remains fixed, so production tests must
+compare nearby and intercontinental participants for creators in each primary geography.
+
+### Upstash Redis (persistence version 1)
+
+Redis remains responsible for version-1 rooms:
 
 - the compacted Yjs snapshot;
 - the durable update stream after that snapshot;
@@ -190,34 +215,37 @@ Redis remains responsible for:
 - recovery bootstrap and owner export;
 - seven-day closed-room retention.
 
-For `cloudflare-websocket` rooms, document appends must support durable storage without Redis
-`PUBLISH`. The Durable Object is the only live broadcaster. Realtime rooms retain the existing
-append-and-publish behavior.
+For persistence-version-1 `cloudflare-websocket` rooms, document appends remain durable without
+Redis `PUBLISH`; the Durable Object is the only live broadcaster. Realtime rooms retain the
+existing append-and-publish behavior. Version-2 rooms perform no Redis operation on update,
+bootstrap, export, connection admission, or compaction.
 
 Awareness is not durable document data. WebSocket rooms do not create awareness presence keys,
 rosters, streams, expiries, or Pub/Sub messages in Redis.
 
 ### D1
 
-D1 adds an immutable room transport field:
+D1 stores immutable room transport and persistence fields:
 
 ```text
 upstash-realtime | cloudflare-websocket
+persistence version 1 (Redis) | persistence version 2 (Durable Object SQLite)
 ```
 
-The field is returned in the room descriptor and selected at room creation. Changing the field
-while a room is active is prohibited because it could split participants across two live buses.
+Both fields are returned in the room descriptor and selected at room creation. Existing rooms
+default to persistence version 1; new WebSocket rooms default to version 2. Changing either field
+while a room is active is prohibited because it could split participants or point them at an empty
+history.
 
 ### QStash
 
 QStash remains background-only:
 
-- snapshot compaction;
-- delayed room cleanup;
-- recovery exports and future invitation delivery work.
+- persistence-version-1 snapshot compaction;
+- delayed room cleanup.
 
-QStash is not involved in WebSocket connection setup, awareness, cursor movement, or live Yjs
-fan-out.
+QStash is not involved in WebSocket connection setup, awareness, cursor movement, live Yjs
+fan-out, or version-2 compaction.
 
 ## Protocol
 
@@ -236,8 +264,8 @@ Server-to-client messages:
 
 ```text
 session.ready    canonical room session and current participants
-document.update  durable event plus Redis stream ID
-document.ack     accepted client update ID plus Redis stream ID
+document.update  durable event plus persistence-specific monotonic stream ID
+document.ack     accepted client update ID plus monotonic stream ID
 awareness.state  canonical participant event
 control.room     role/membership/closure event
 pong             heartbeat response
@@ -254,10 +282,12 @@ protection.
 1. The browser opens the same-origin room WebSocket with its `HttpOnly` session cookie.
 2. The Worker resolves the user and current D1 membership.
 3. The Worker rejects inactive rooms and rooms assigned to another transport.
-4. The Worker forwards the upgrade to `idFromName(roomId)` with canonical user, role, profile,
-   protocol, and role-version headers. Browser-provided equivalents are discarded.
+4. The Worker forwards the upgrade to the named room object with canonical user, role, profile,
+   protocol, role version, and persistence version. Browser-provided equivalents are discarded.
 5. The room object serializes the canonical identity in the WebSocket attachment.
-6. Every document update checks the attachment's current role.
+6. Every document update checks the attachment's current role/version; version-2 sessions cache a
+   successful D1 revalidation for five seconds so D1 is not on every-edit latency, while control
+   notifications update attachments immediately.
 7. A role mutation updates D1 and then notifies the room object. The room object updates all target
    sockets before broadcasting the control event.
 8. Removed members are sent a fatal control message and disconnected.
@@ -289,9 +319,14 @@ browser preview execution, slide preview state, terminals, audio, or video.
 7. Roll out by room, never by individual participant.
 8. Compare Redis commands, Worker upgrades, Durable Object request units/duration, reconnects,
    update acknowledgement latency, and bootstrap latency before making it the only default.
+9. Add D1 persistence version 2 for new WebSocket rooms, initialize their SQLite log before
+   activation, and retain version 1 for every existing room.
+10. Compare same-region and intercontinental remote-apply p50/p95/p99, Durable Object CPU/storage
+    operations, reconnect bytes, and duplicate rate before retiring either rollback path.
 
 Free-tier exhaustion must fail closed for document writes. The client retains unsent Yjs updates
-and reconnects; it must never report an update as accepted before Redis persistence succeeds.
+and reconnects; it must never report an update as accepted before the selected SQLite or Redis
+transaction succeeds.
 
 ## Expected savings
 
@@ -299,10 +334,11 @@ For WebSocket rooms, the hybrid removes:
 
 - Realtime `SUBSCRIBE`, periodic reconnect, history catch-up, and keepalive commands;
 - Redis `PUBLISH` for document fan-out;
+- Redis document append, quota, deduplication, bootstrap, export, and compaction commands for
+  persistence-version-2 rooms;
 - Redis awareness rate-limit, presence, roster, stream, expiry, and publication commands;
 - browser HTTP requests for every document and awareness update;
 - duplicated event delivery through simultaneous SSE and WebSocket transports.
 
-Redis commands remain for durable document persistence, bootstrap, compaction, cleanup, and
-exports. This is intentional: the first hybrid iteration changes the live transport and ephemeral
-state boundary without weakening durable acknowledgement semantics.
+Redis commands remain only for persistence-version-1 and Realtime rooms. QStash remains necessary
+for delayed cleanup and legacy compaction; version-2 compaction is room-local and alarm-driven.

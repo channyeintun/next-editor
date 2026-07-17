@@ -9,11 +9,12 @@ Deployment evaluations:
 - [Cloudflare WebSocket + Upstash Hybrid](./live-collaboration-hybrid-cloudflare-upstash.md)
 
 Deployment status: the selected default for new rooms is a hibernating Cloudflare Durable Object
-WebSocket coordinator with Upstash Redis durability and QStash maintenance. The original Upstash
-Realtime SSE/HTTP provider remains implemented as an immutable per-room fallback. Existing rooms
-default to that provider through the D1 migration, and no room opens both transports.
+WebSocket coordinator with a room-local SQLite update log and alarm compaction. The original
+Upstash Redis durability and Realtime SSE/HTTP provider remain implemented as persistence-version-1
+fallbacks. Existing rooms retain version 1 through the D1 migration, and no room changes its
+stored transport or persistence version in place.
 
-This Redis data plane is collaboration-only. Public lesson and playlist caching now uses the
+The legacy Redis data plane is collaboration-only. Public lesson and playlist caching uses the
 Cloudflare Workers KV `CACHE` binding and never shares collaboration credentials, command budget,
 retention, or failure semantics.
 
@@ -22,15 +23,15 @@ retention, or failure semantics.
 The repository now contains the complete provider, control-plane, and editor integration:
 
 - Yjs text/tree/metadata documents with deterministic collision and recovery rules.
-- Per-room transport selection between an authenticated Cloudflare WebSocket and the retained
-  Upstash Realtime SSE/HTTP provider, both backed by the same dedicated Redis snapshot/update
-  data plane.
+- Per-room transport and persistence selection: new authenticated Cloudflare WebSocket rooms use
+  Durable Object SQLite, while persistence-version-1 WebSocket and Upstash Realtime SSE/HTTP rooms
+  retain the dedicated Redis snapshot/update data plane.
 - D1 rooms, invitations, owner/editor/viewer ACLs, role revocation, audit events, and room quotas.
 - Durable Object WebSocket hibernation, immediate connected-role enforcement, ephemeral awareness
   fan-out, participants, named relative remote cursors/selections, active-file state, and
   follow-host UI. Realtime fallback rooms retain Redis-backed awareness.
-- Offline update retention, reconnect/bootstrap race handling, compaction, seven-day closed-room
-  retention, QStash-signed cleanup, and owner recovery export.
+- Offline update retention, reconnect/bootstrap race handling, SQLite alarm or legacy QStash
+  compaction, seven-day closed-room retention, QStash-signed cleanup, and owner recovery export.
 - Content-addressed binary project assets in private R2. Yjs stores only digest/MIME/size
   descriptors; clients hydrate bytes into the local workspace and can retry missing assets.
 - Local-origin text undo/redo, playback isolation, and host-only browser recording. SCR3 remains
@@ -118,12 +119,14 @@ flowchart LR
     Provider <-->|selected per room| Transport{Live transport}
     Transport <-->|authenticated WebSocket| DO[Hibernating room Durable Object]
     Transport <-->|SSE downstream and HTTP upstream| Realtime[Upstash Realtime fallback]
-    DO -->|persist before acknowledgement| Persist[(Upstash Redis update log and snapshots)]
+    DO -->|persistence v2: transaction before acknowledgement| SQL[(Room-local SQLite log and snapshot)]
+    DO -.->|persistence v1 only| Persist[(Upstash Redis update log and snapshots)]
     Realtime <--> Persist
-    Worker[Hono collaboration routes] -->|authenticate upgrade and notify control changes| DO
-    Worker <--> Persist
+    Worker[Hono collaboration routes] -->|upgrade, v2 bootstrap/export, and control| DO
+    Worker -.->|persistence v1 bootstrap/export| Persist
     Worker <--> D1[(D1 rooms and membership)]
-    QStash[QStash] -->|signed compaction and cleanup| Worker
+    Alarm[Durable Object alarm] -->|compact v2 tail| DO
+    QStash[QStash] -->|legacy compaction and delayed cleanup| Worker
 
     Awareness[Presence and awareness] <-->|ephemeral messages| Provider
     UI <--> Awareness
@@ -144,18 +147,18 @@ explicit host-follow signals are shared.
 
 ## State ownership
 
-| Data                                             | Source of truth while connected                     | Persistence            |
-| ------------------------------------------------ | --------------------------------------------------- | ---------------------- |
-| File text                                        | CRDT text value keyed by stable file ID             | Room document          |
-| File/folder names, parents, and order            | CRDT project tree                                   | Room document          |
-| Project-level collaborative settings             | CRDT project metadata                               | Room document          |
-| Active file, panels, collapsed folders           | Local client                                        | Existing local state   |
-| Participant name, cursor, selection, active file | Awareness state                                     | Ephemeral with a TTL   |
-| Room membership and role                         | Collaboration service                               | Server ACL/session     |
+| Data                                             | Source of truth while connected                     | Persistence              |
+| ------------------------------------------------ | --------------------------------------------------- | ------------------------ |
+| File text                                        | CRDT text value keyed by stable file ID             | Room document            |
+| File/folder names, parents, and order            | CRDT project tree                                   | Room document            |
+| Project-level collaborative settings             | CRDT project metadata                               | Room document            |
+| Active file, panels, collapsed folders           | Local client                                        | Existing local state     |
+| Participant name, cursor, selection, active file | Awareness state                                     | Ephemeral with a TTL     |
+| Room membership and role                         | Collaboration service                               | Server ACL/session       |
 | Binary project asset bytes                       | Private R2 object keyed by room and SHA-256         | Seven-day room retention |
-| Preview/runtime output                           | Each client; host is authoritative for follow mode  | Not durable by default |
-| Recording timeline and capture state             | Room host's `editorMachine`                         | Browser-local SCR3     |
-| Playback workspace                               | `editorMachine` projection while playback is active | Loaded SCR3            |
+| Preview/runtime output                           | Each client; host is authoritative for follow mode  | Not durable by default   |
+| Recording timeline and capture state             | Room host's `editorMachine`                         | Browser-local SCR3       |
+| Playback workspace                               | `editorMachine` projection while playback is active | Loaded SCR3              |
 
 Outside a room, the current ownership rules remain unchanged. Inside a room, the CRDT document
 becomes authoritative for collaborative project fields and `workspaceStore` becomes their local

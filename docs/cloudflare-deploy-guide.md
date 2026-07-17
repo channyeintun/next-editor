@@ -172,14 +172,16 @@ npx wrangler secret delete UPSTASH_REDIS_REST_URL
 npx wrangler secret delete UPSTASH_REDIS_REST_TOKEN
 ```
 
-Do **not** delete `COLLAB_REDIS_REST_URL` or `COLLAB_REDIS_REST_TOKEN`; those
-credentials serve only the live collaboration/Realtime data plane.
+Do **not** delete `COLLAB_REDIS_REST_URL` or `COLLAB_REDIS_REST_TOKEN` while any
+persistence-version-1 or Realtime room remains. Those credentials serve only
+the legacy collaboration/Realtime data plane.
 
-### Required when enabling live collaboration: Upstash Redis data plane
+### Required for legacy/Realtime collaboration: Upstash Redis data plane
 
 Live collaboration is fail-closed and does not reuse the `CACHE` KV binding.
-Create a production Redis database reserved for collaboration/Realtime, then
-set its REST URL and token with the same secret-handling precautions:
+Create a production Redis database when retaining persistence-version-1 or
+Realtime rooms, then set its REST URL and token with the same secret-handling
+precautions:
 
 ```sh
 npx wrangler secret put COLLAB_REDIS_REST_URL   < /path/to/tmpfile
@@ -187,11 +189,12 @@ npx wrangler secret put COLLAB_REDIS_REST_TOKEN < /path/to/tmpfile
 ```
 
 The gallery cache does not use these credentials; it is isolated in Workers
-KV. Apply D1 migrations before deploying so
-`collaboration_rooms` and `collaboration_members` exist. The Worker returns
-`503 collaboration unavailable` from collaboration data-plane routes when the
-dedicated credentials are absent; unrelated editor and gallery routes continue
-to operate.
+KV. Apply every D1 migration before deploying so `collaboration_rooms`,
+`collaboration_members`, and `persistence_version` exist. New WebSocket rooms
+use `COLLABORATION_WEBSOCKET_PERSISTENCE=sqlite` and do not require Redis on
+their update/bootstrap path. Version-1 and Realtime routes return
+`503 collaboration unavailable` when the dedicated credentials are absent;
+unrelated editor, gallery, and version-2 room routes continue to operate.
 
 ## Custom domain cutover
 

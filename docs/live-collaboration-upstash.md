@@ -1,6 +1,6 @@
 # Live Collaboration — Upstash Deployment Evaluation
 
-Status: Redis and QStash remain selected; Realtime is implemented as a per-room fallback
+Status: persistence-version-1 legacy and rollback provider; Realtime remains a per-room fallback
 
 Companion documents:
 
@@ -24,20 +24,20 @@ again before production capacity is purchased.
 
 Upstash can support a small-room collaboration MVP, but the three services have different roles:
 
-| Service          | Appropriate collaboration role                                                                  | Recommendation                           |
-| ---------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| Upstash Redis    | CRDT update streams, compacted snapshots, presence TTLs, idempotency keys, and rate-limit state | Strong fit, using a dedicated database   |
-| Upstash Realtime | Redis Streams and Pub/Sub exposed to browsers through Server-Sent Events                        | Retained per-room fallback transport      |
-| QStash           | Snapshot compaction, cleanup, exports, invitations, and recovery jobs                           | Background work only                     |
+| Service          | Appropriate collaboration role                                                | Recommendation                       |
+| ---------------- | ----------------------------------------------------------------------------- | ------------------------------------ |
+| Upstash Redis    | Version-1 CRDT streams/snapshots, presence TTLs, idempotency, and rate limits | Retained legacy and rollback store   |
+| Upstash Realtime | Redis Streams and Pub/Sub exposed to browsers through Server-Sent Events      | Retained per-room fallback transport |
+| QStash           | Version-1 snapshot compaction and delayed room cleanup                        | Background work only                 |
 
 Realtime remains useful for existing rooms and explicit rollback, but its SSE downstream and HTTP
 upstream lifecycle consumes Redis commands even when a participant is idle. New rooms therefore
-default to the hybrid Cloudflare WebSocket coordinator when its binding is available, while
-Upstash Redis continues as the durable persistence layer.
+default to the Cloudflare WebSocket coordinator with persistence version 2 in room-local SQLite.
+Upstash Redis continues as the durable persistence layer only for version-1 rooms.
 
-Both providers remain deployed, but they are isolated by the immutable D1 room transport field.
-One room never opens Realtime and WebSocket connections together, avoiding split ordering and
-duplicate fan-out.
+Both providers remain deployed, but they are isolated by immutable D1 room transport and
+persistence-version fields. One room never opens Realtime and WebSocket connections together or
+switches its durable authority in place, avoiding split ordering and duplicate fan-out.
 
 Option A does not require Durable Objects: Realtime and Redis supply the live transport and room
 history, while the Worker enforces authorization. Browser-local recording does not affect that
@@ -49,9 +49,12 @@ The Realtime fallback and shared Upstash foundation are implemented:
 
 - [`0008_collaboration_transport.sql`](../infra/db/migrations/0008_collaboration_transport.sql)
   keeps existing rooms on `upstash-realtime` and records the immutable transport for every room.
+- [`0009_collaboration_persistence_version.sql`](../infra/db/migrations/0009_collaboration_persistence_version.sql)
+  keeps every existing room on Redis-backed persistence version 1 while new WebSocket rooms may
+  select Durable Object SQLite version 2.
 - [`roomDurableObject.ts`](../infra/worker/collaboration/roomDurableObject.ts) implements the
-  selected hibernating WebSocket coordinator while continuing to persist accepted updates through
-  the Redis document store without Pub/Sub.
+  hibernating WebSocket coordinator and retains this Redis document path for version-1 rooms
+  without Pub/Sub.
 
 - [`protocol.ts`](../src/collaboration/protocol.ts) defines versioned, size-bounded Yjs update
   envelopes, exact room-channel parsing, and owner/editor/viewer write policy.

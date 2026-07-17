@@ -1,6 +1,6 @@
 # Live Collaboration — Cloudflare-native Deployment
 
-Status: proposed Cloudflare-native provider option; not selected
+Status: room-local SQLite persistence implemented for new WebSocket rooms; binary protocol pending
 
 Companion documents:
 
@@ -9,7 +9,7 @@ Companion documents:
 - [Upstash Deployment Evaluation](./live-collaboration-upstash.md) evaluates Redis, Realtime, and
   QStash as an alternative provider stack.
 - [Cloudflare WebSocket + Upstash Hybrid](./live-collaboration-hybrid-cloudflare-upstash.md)
-  documents the selected implementation that uses a Durable Object only for live coordination.
+  documents the selected versioned implementation and legacy Redis boundary.
 
 This document maps the abstract room service and persistence layer in the feature plan onto the
 Cloudflare services already used by the application. The option evaluated here uses one
@@ -20,27 +20,28 @@ limits must be verified again before production rollout.
 
 ## Relationship to the implemented hybrid
 
-The selected MVP combines the application's Cloudflare platform with Upstash durability:
+The selected MVP now uses Cloudflare room-local durability for persistence-version-2 rooms while
+retaining Upstash as the version-1/Realtime rollback:
 
-| Cloudflare service | Current platform responsibility |
-| ------------------ | ------------------------------- |
-| Workers + Hono     | Same-origin room and membership APIs, WebSocket authentication, assets, exports, and signed maintenance endpoints |
-| Workers Static Assets | Serve the editor on the same origin so its first-party session authenticates SSE and HTTP safely |
-| D1                 | Rooms, members, invitations, roles, asset metadata, retention state, and audit events |
-| R2                 | Private SHA-256-addressed binary project assets; never live SCR3 recordings |
-| Workers KV         | Disposable public lesson/playlist cache; separate from collaboration state and credentials |
-| Workers Logs       | Structured update and maintenance telemetry for dashboards and alerts |
-| Durable Objects    | Hibernating WebSocket coordination and ephemeral room fan-out |
+| Cloudflare service    | Current platform responsibility                                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Workers + Hono        | Same-origin room and membership APIs, WebSocket authentication, assets, exports, and signed maintenance endpoints             |
+| Workers Static Assets | Serve the editor on the same origin so its first-party session authenticates SSE and HTTP safely                              |
+| D1                    | Rooms, members, invitations, roles, asset metadata, retention state, and audit events                                         |
+| R2                    | Private SHA-256-addressed binary project assets; never live SCR3 recordings                                                   |
+| Workers KV            | Disposable public lesson/playlist cache; separate from collaboration state and credentials                                    |
+| Workers Logs          | Structured update and maintenance telemetry for dashboards and alerts                                                         |
+| Durable Objects       | Hibernating WebSocket coordination, room-local SQLite durability, alarm compaction, and ephemeral fan-out for version-2 rooms |
 
-The implemented hybrid deliberately does **not** use Durable Object SQLite, Alarms, or Cloudflare
-Queues. Its Durable Object is the only live coordinator for `cloudflare-websocket` rooms, while
-Upstash Redis remains the durable Yjs snapshot/update store and QStash supplies compaction and
-delayed cleanup. The retained Realtime provider operates only for rooms assigned to it.
+The implemented hybrid uses Durable Object SQLite and Alarms for new WebSocket room history.
+Upstash Redis remains authoritative for persistence-version-1 rooms; QStash supplies their
+compaction plus delayed cleanup for both versions. Cloudflare Queues are still not used. The
+browser-local recording decision is unchanged: the host keeps SCR3 locally under every provider
+and uses the existing post-recording upload modal only after live ends.
 
-The design below remains a distinct, fully Cloudflare-native alternative: it would move durable
-room history from Redis into room-local Durable Object SQLite. The browser-local recording
-decision does not affect that choice: the host keeps SCR3 locally under every provider and uses
-the existing post-recording upload modal only after live ends.
+The design below also records later Cloudflare-native extensions. Room-local snapshot/update
+storage and alarm compaction are implemented; binary Yjs framing, optional Queues, and moving large
+snapshots/exports to R2 remain separate follow-up work.
 
 ## Decision within this option
 
@@ -92,18 +93,18 @@ between the browser and the room Durable Object. The gateway is not called once 
 
 ## Cloudflare service map
 
-| Service                        | Collaboration responsibility                                                    | Status in this option |
-| ------------------------------ | ------------------------------------------------------------------------------- | --------------------- |
-| Workers Static Assets          | Serve the existing SPA under the same cross-origin-isolated origin              | Existing         |
-| Hono Worker                    | Room CRUD, session authentication, invitations, tokens, WebSocket upgrade       | Existing         |
-| D1                             | Rooms, members, roles, invite records, retention state, searchable audit metadata | Existing         |
-| Durable Objects                | WebSocket hub and single coordination point for each room                       | New              |
-| Durable Object SQLite storage  | CRDT updates, snapshots, protocol version, stream sequence, durable room state  | New              |
-| Durable Object WebSocket API   | Binary document frames plus awareness and control frames                        | New              |
-| Durable Object Alarms          | Snapshot compaction, tombstone/update cleanup, idle-room maintenance            | New              |
-| R2                             | Content-addressed assets, oversized snapshots, and project exports              | Existing         |
-| Cloudflare Queues              | Heavy export, asset reconciliation, or cross-room maintenance                   | Optional         |
-| Workers Logs and tracing       | Connection and operational metadata, excluding editor content                   | Existing         |
+| Service                       | Collaboration responsibility                                                      | Status in this option                 |
+| ----------------------------- | --------------------------------------------------------------------------------- | ------------------------------------- |
+| Workers Static Assets         | Serve the existing SPA under the same cross-origin-isolated origin                | Existing                              |
+| Hono Worker                   | Room CRUD, session authentication, invitations, tokens, WebSocket upgrade         | Existing                              |
+| D1                            | Rooms, members, roles, invite records, retention state, searchable audit metadata | Existing                              |
+| Durable Objects               | WebSocket hub and single coordination point for each room                         | Implemented                           |
+| Durable Object SQLite storage | CRDT updates, snapshots, protocol version, stream sequence, durable room state    | Implemented for persistence version 2 |
+| Durable Object WebSocket API  | Binary document frames plus awareness and control frames                          | JSON implemented; binary pending      |
+| Durable Object Alarms         | Snapshot compaction and update/deduplication cleanup                              | Implemented                           |
+| R2                            | Content-addressed assets, oversized snapshots, and project exports                | Existing                              |
+| Cloudflare Queues             | Heavy export, asset reconciliation, or cross-room maintenance                     | Optional                              |
+| Workers Logs and tracing      | Connection and operational metadata, excluding editor content                     | Existing                              |
 
 The collaboration data plane does not use the Workers KV `CACHE` binding, Pub/Sub, Containers,
 Workflows, or Calls:
@@ -205,11 +206,11 @@ write by modifying the browser.
 
 The original three message classes remain unchanged:
 
-| Class       | Durable Object behavior                                                                  |
-| ----------- | ---------------------------------------------------------------------------------------- |
-| Document    | Validate role and size, persist binary Yjs update, acknowledge, broadcast                |
-| Awareness   | Validate/rate-limit, update in-memory session state, broadcast, do not add to update log |
-| Control     | Validate protocol transition; persist only durable room-level decisions                  |
+| Class     | Durable Object behavior                                                                  |
+| --------- | ---------------------------------------------------------------------------------------- |
+| Document  | Validate role and size, persist binary Yjs update, acknowledge, broadcast                |
+| Awareness | Validate/rate-limit, update in-memory session state, broadcast, do not add to update log |
+| Control   | Validate protocol transition; persist only durable room-level decisions                  |
 
 Persist before broadcasting a document update. If persistence fails, send a recoverable error
 and move the connection into a non-writing/reconnecting state. Never broadcast an update and then
@@ -408,17 +409,17 @@ to separate objects.
 
 ## Failure and recovery behavior
 
-| Failure                                      | Required behavior                                                                     |
-| -------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Browser loses network                        | Keep offline Yjs edits; clear remote awareness; reconnect with backoff                 |
-| Room object hibernates                        | Preserve sockets; reconstruct document and session state on wake                       |
-| Room object restarts                          | Reconstruct from SQLite snapshot and update tail; clients reconnect if needed           |
-| SQLite write fails                            | Do not acknowledge/broadcast the update; surface reconnecting or failed state           |
-| D1 unavailable during a new join              | Reject/defer the join; existing authenticated room sockets may continue                 |
-| R2 asset missing                              | Show a recoverable placeholder; do not block unrelated text edits                       |
-| Compaction alarm retries                      | Resume idempotently from generation and cutoff metadata                                 |
-| Host recorder disconnects                     | Browser-local recording recovery applies; the room object never receives or finalizes SCR3 |
-| Host transfer requested during recording      | Reject it until the current host stops and finalizes the browser-local recording              |
+| Failure                                  | Required behavior                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Browser loses network                    | Keep offline Yjs edits; clear remote awareness; reconnect with backoff                     |
+| Room object hibernates                   | Preserve sockets; reconstruct document and session state on wake                           |
+| Room object restarts                     | Reconstruct from SQLite snapshot and update tail; clients reconnect if needed              |
+| SQLite write fails                       | Do not acknowledge/broadcast the update; surface reconnecting or failed state              |
+| D1 unavailable during a new join         | Reject/defer the join; existing authenticated room sockets may continue                    |
+| R2 asset missing                         | Show a recoverable placeholder; do not block unrelated text edits                          |
+| Compaction alarm retries                 | Resume idempotently from generation and cutoff metadata                                    |
+| Host recorder disconnects                | Browser-local recording recovery applies; the room object never receives or finalizes SCR3 |
+| Host transfer requested during recording | Reject it until the current host stops and finalizes the browser-local recording           |
 
 SQLite-backed Durable Objects include point-in-time recovery for approximately the prior 30 days,
 but that platform capability is not a substitute for owner exports, retention policies, or tested
@@ -463,10 +464,10 @@ Workers Paid. In that case collaboration does not add another $5 base subscripti
 
 Workers Paid includes:
 
-| Metric                   | Included                         | Overage                    |
-| ------------------------ | -------------------------------- | -------------------------- |
-| Durable Object requests  | 1 million per month              | $0.15 per additional million |
-| Duration                 | 400,000 GB-seconds per month     | $12.50 per million GB-s    |
+| Metric                  | Included                     | Overage                      |
+| ----------------------- | ---------------------------- | ---------------------------- |
+| Durable Object requests | 1 million per month          | $0.15 per additional million |
+| Duration                | 400,000 GB-seconds per month | $12.50 per million GB-s      |
 
 The initial Durable Object request, RPC calls, alarm invocations, and incoming WebSocket messages
 contribute to request billing. Incoming WebSocket messages receive a 20:1 billing ratio: 100
@@ -487,11 +488,11 @@ can be much greater when connected but idle rooms hibernate.
 
 Workers Paid includes:
 
-| Metric        | Included                    | Overage                  |
-| ------------- | --------------------------- | ------------------------ |
-| Rows read     | 25 billion per month        | $0.001 per million rows  |
-| Rows written  | 50 million per month        | $1.00 per million rows   |
-| Stored data   | 5 GB-month                  | $0.20 per GB-month       |
+| Metric       | Included             | Overage                 |
+| ------------ | -------------------- | ----------------------- |
+| Rows read    | 25 billion per month | $0.001 per million rows |
+| Rows written | 50 million per month | $1.00 per million rows  |
+| Stored data  | 5 GB-month           | $0.20 per GB-month      |
 
 Inserts, updates, and deletes count as rows written. An append-only update that is later removed
 during compaction normally produces at least two row writes. Index maintenance can add writes.
@@ -536,11 +537,11 @@ The following deliberately conservative model assumes:
 - Worker API traffic, D1, R2 operations, and stored bytes stay inside their included amounts.
 - The account is on Workers Paid and has no other usage consuming the inclusions.
 
-| Active room-hours/month | Billed DO request units | DO duration | SQLite rows written | Estimated total |
-| ----------------------: | ----------------------: | ----------: | ------------------: | --------------: |
-| 100                     | 90,000                  | 45,000 GB-s | 1.44 million        | About $5.00     |
-| 1,000                   | 900,000                 | 450,000 GB-s | 14.4 million       | About $5.63     |
-| 10,000                  | 9 million               | 4.5 million GB-s | 144 million     | About $151.45   |
+| Active room-hours/month | Billed DO request units |      DO duration | SQLite rows written | Estimated total |
+| ----------------------: | ----------------------: | ---------------: | ------------------: | --------------: |
+|                     100 |                  90,000 |      45,000 GB-s |        1.44 million |     About $5.00 |
+|                   1,000 |                 900,000 |     450,000 GB-s |        14.4 million |     About $5.63 |
+|                  10,000 |               9 million | 4.5 million GB-s |         144 million |   About $151.45 |
 
 At 10,000 room-hours the illustrative breakdown is:
 
