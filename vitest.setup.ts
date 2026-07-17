@@ -16,9 +16,10 @@ if (!existsSync(dmpCodecPath)) {
 }
 installDmpCodec(await instantiateDmpCodec(readFileSync(dmpCodecPath)));
 
-// jsdom does not implement Blob.prototype.arrayBuffer, which real browsers (our
-// Chromium target) provide. Polyfill it via FileReader so code under test can
-// read uploaded File/Blob bytes the same way it does in production.
+// jsdom does not implement Blob.prototype.arrayBuffer or Blob.prototype.stream,
+// which real browsers (our Chromium target) provide. Polyfill them via FileReader
+// so code under test can read uploaded File/Blob bytes the same way it does in
+// production.
 if (typeof Blob !== "undefined" && typeof Blob.prototype.arrayBuffer !== "function") {
   Blob.prototype.arrayBuffer = function arrayBuffer(this: Blob): Promise<ArrayBuffer> {
     return new Promise((resolve, reject) => {
@@ -26,6 +27,22 @@ if (typeof Blob !== "undefined" && typeof Blob.prototype.arrayBuffer !== "functi
       reader.onload = () => resolve(reader.result as ArrayBuffer);
       reader.onerror = () => reject(reader.error);
       reader.readAsArrayBuffer(this);
+    });
+  };
+}
+
+if (typeof Blob !== "undefined" && typeof Blob.prototype.stream !== "function") {
+  Blob.prototype.stream = function stream(this: Blob): ReadableStream<Uint8Array<ArrayBuffer>> {
+    return new ReadableStream<Uint8Array<ArrayBuffer>>({
+      start: async (controller) => {
+        try {
+          const bytes = new Uint8Array(await this.arrayBuffer()) as Uint8Array<ArrayBuffer>;
+          if (bytes.byteLength > 0) controller.enqueue(bytes);
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+        }
+      },
     });
   };
 }

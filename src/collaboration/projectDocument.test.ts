@@ -87,13 +87,24 @@ describe("collaboration project document", () => {
 
     const second = new Y.Doc();
     Y.applyUpdate(second, Y.encodeStateAsUpdate(first));
-    expect(projectCollaborationDocument(first)).toEqual(projectCollaborationDocument(second));
-    expect(projectCollaborationDocument(first).issues.map((issue) => issue.kind)).toContain(
-      "invalid-parent",
+    const firstProjection = projectCollaborationDocument(first);
+    const secondProjection = projectCollaborationDocument(second);
+    expect(firstProjection.project).toEqual(secondProjection.project);
+    expect(Array.from(firstProjection.nodeIdByPath.entries())).toEqual(
+      Array.from(secondProjection.nodeIdByPath.entries()),
     );
-    expect(projectCollaborationDocument(first).issues.map((issue) => issue.kind)).toContain(
-      "parent-cycle",
+    expect(Array.from(firstProjection.pathByNodeId.entries())).toEqual(
+      Array.from(secondProjection.pathByNodeId.entries()),
     );
+    expect(Array.from(firstProjection.textIdByType.values()).sort()).toEqual(
+      Array.from(secondProjection.textIdByType.values()).sort(),
+    );
+    expect(Array.from(firstProjection.assetsByNodeId.entries())).toEqual(
+      Array.from(secondProjection.assetsByNodeId.entries()),
+    );
+    expect(firstProjection.issues).toEqual(secondProjection.issues);
+    expect(firstProjection.issues.map((issue) => issue.kind)).toContain("invalid-parent");
+    expect(firstProjection.issues.map((issue) => issue.kind)).toContain("parent-cycle");
   });
 
   it("keeps colliding siblings with deterministic stable-ID suffixes", () => {

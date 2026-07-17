@@ -119,7 +119,9 @@ describe.skipIf(!hasArtifact)("frameDelta reconstruction errors", () => {
     const appendedBytes = new TextEncoder().encode(appended);
     expect(applyContentDelta(base, created)).toBe(base + appended);
     expect(created.delta.byteLength).toBeLessThan(new TextEncoder().encode(base + appended).length);
-    expect(created.delta.slice(-appendedBytes.byteLength)).toEqual(appendedBytes);
+    expect(Array.from(created.delta.slice(-appendedBytes.byteLength))).toEqual(
+      Array.from(appendedBytes),
+    );
     expect(createAppendContentDelta(base, "")).toBeNull();
     expect(() => applyContentDelta(`${base}!`, created)).toThrow(DmpBaseMismatchError);
 

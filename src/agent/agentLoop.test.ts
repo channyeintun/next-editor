@@ -145,7 +145,9 @@ describe("runAgentLoop", () => {
     if (finalContentDelta?.k !== "content") {
       throw new Error("expected a content delta");
     }
-    expect(finalContentDelta.delta.delta.slice(-streamedSuffix.byteLength)).toEqual(streamedSuffix);
+    expect(Array.from(finalContentDelta.delta.delta.slice(-streamedSuffix.byteLength))).toEqual(
+      Array.from(streamedSuffix),
+    );
     expect(deltas.some((d) => d.k === "tool_call")).toBe(false);
     expect(calls[0].instructions).not.toContain("Workspace session memory:");
   });

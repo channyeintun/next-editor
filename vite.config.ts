@@ -15,6 +15,8 @@ const crossOriginHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
 };
 
+const monacoTestMock = fileURLToPath(new URL("./src/test/monaco-editor.mock.ts", import.meta.url));
+
 function quoteShellArgument(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
@@ -107,9 +109,16 @@ export default ({ mode }: { mode: string }) => {
         "infra/client/**/*.{test,spec}.{ts,tsx}",
       ],
       alias: {
-        "monaco-editor": fileURLToPath(
-          new URL("./src/test/monaco-editor.mock.ts", import.meta.url),
-        ),
+        // y-monaco imports Monaco's deep editor API entrypoint. Keep it inline
+        // so Vitest resolves that import through this mock instead of asking
+        // Node to load Monaco's CSS-bearing ESM graph directly.
+        "monaco-editor/esm/vs/editor/editor.api.js": monacoTestMock,
+        "monaco-editor": monacoTestMock,
+      },
+      server: {
+        deps: {
+          inline: ["y-monaco"],
+        },
       },
     },
     fmt: {

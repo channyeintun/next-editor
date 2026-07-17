@@ -10,6 +10,7 @@ import {
   collectWorkspaceFolders,
   getWorkspaceFileMimeType,
   inferLanguageFromPath,
+  isWorkspaceAssetFile,
   isWorkspaceTextFile,
   parseWorkspacePath,
   type WorkspaceFile,
@@ -160,7 +161,9 @@ export function seedCollaborationProject(
 
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const pathIds = new Map<string, string>();
-  const unsupportedAsset = Object.values(project.files).find((file) => !isWorkspaceTextFile(file));
+  const unsupportedAsset = Object.values(project.files).find(
+    (file) => !isWorkspaceTextFile(file) && !isWorkspaceAssetFile(file),
+  );
   if (unsupportedAsset && !options.skipBinaryAssets) {
     throw new CollaborationProjectError(
       `Binary asset ${unsupportedAsset.path} must be uploaded before a collaboration room is created`,
@@ -199,11 +202,33 @@ export function seedCollaborationProject(
       left.path.localeCompare(right.path),
     );
     for (const file of files) {
-      if (!isWorkspaceTextFile(file)) continue;
+      if (isWorkspaceAssetFile(file) && options.skipBinaryAssets) continue;
+      if (!isWorkspaceTextFile(file) && !isWorkspaceAssetFile(file)) continue;
       const normalizedPath = parseWorkspacePath(file.path);
       const { parentPath, name } = splitPath(normalizedPath);
       const id = idFactory();
       pathIds.set(normalizedPath, id);
+      if (isWorkspaceAssetFile(file)) {
+        const asset = collaborationAssetDescriptorSchema.parse({
+          id: file.content.assetId,
+          mimeType: file.content.mimeType,
+          size: file.content.size,
+        });
+        nodes.set(
+          id,
+          createNodeMap({
+            id,
+            kind: "file",
+            name,
+            parentId: parentPath ? (pathIds.get(parentPath) ?? null) : null,
+            orderKey: orderedKey(order++),
+            deleted: false,
+            encoding: "base64",
+            asset,
+          }),
+        );
+        continue;
+      }
       nodes.set(
         id,
         createNodeMap({

@@ -242,6 +242,10 @@ describe("RecordingStreamBridge", () => {
   it("applies one-write-at-a-time backpressure and closes exactly once", async () => {
     const recording = makeRecording();
     const firstWrite: { release: (() => void) | null } = { release: null };
+    let markFirstWriteStarted!: () => void;
+    const firstWriteStarted = new Promise<void>((resolve) => {
+      markFirstWriteStarted = resolve;
+    });
     let activeWrites = 0;
     let maximumActiveWrites = 0;
     let writeCount = 0;
@@ -251,6 +255,7 @@ describe("RecordingStreamBridge", () => {
         activeWrites += 1;
         maximumActiveWrites = Math.max(maximumActiveWrites, activeWrites);
         if (writeCount === 1) {
+          markFirstWriteStarted();
           await new Promise<void>((resolve) => {
             firstWrite.release = resolve;
           });
@@ -265,7 +270,7 @@ describe("RecordingStreamBridge", () => {
     bridge.start(session);
     bridge.sync(session);
     const finish = bridge.finish(recording);
-    await Promise.resolve();
+    await firstWriteStarted;
     expect(maximumActiveWrites).toBe(1);
 
     firstWrite.release?.();
