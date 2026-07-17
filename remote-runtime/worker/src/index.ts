@@ -138,18 +138,11 @@ async function createSession(request: Request, env: Env): Promise<Response> {
     )
     .run();
   if (reservation.meta.changes !== 1) {
-    const [active, _usage] = await Promise.all([
-      env.RUNTIME_QUOTAS.prepare(
-        "SELECT COUNT(*) AS count FROM runtime_sessions WHERE user_id = ? AND ended_at IS NULL",
-      )
-        .bind(claims.userId)
-        .first<{ count: number }>(),
-      env.RUNTIME_QUOTAS.prepare(
-        "SELECT minutes FROM runtime_daily_usage WHERE user_id = ? AND day = ?",
-      )
-        .bind(claims.userId, day)
-        .first<{ minutes: number }>(),
-    ]);
+    const active = await env.RUNTIME_QUOTAS.prepare(
+      "SELECT COUNT(*) AS count FROM runtime_sessions WHERE user_id = ? AND ended_at IS NULL",
+    )
+      .bind(claims.userId)
+      .first<{ count: number }>();
     const concurrent = (active?.count ?? 0) >= maxConcurrent;
     runtimeMetric("quota_hit", {
       kind: concurrent ? "concurrent" : "daily_minutes",
