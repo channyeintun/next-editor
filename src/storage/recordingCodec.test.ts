@@ -12,6 +12,10 @@ import {
   encodeRecordingToStream,
 } from "./streamingRecordingCodec";
 import { FLAG_HAS_AUDIO, FLAG_HAS_CAMERA } from "./streamingRecordingCodec/format";
+import {
+  flushPerformanceMetrics,
+  resetPerformanceMetricsForTests,
+} from "../utils/performanceMetrics";
 
 function makeKeyframe(timestamp: number, content: string) {
   return {
@@ -241,6 +245,7 @@ describe("recordingCodec", () => {
   });
 
   it("progressive snapshots reuse already-normalized frames instead of re-cloning them", async () => {
+    resetPerformanceMetricsForTests();
     // Regression guard for the long-recording CPU spike: frames are normalized once at
     // ingest, so successive getRecording() snapshots must hand back the *same* frame
     // objects (reference-equal), not fresh deep clones of the whole growing array.
@@ -269,6 +274,15 @@ describe("recordingCodec", () => {
     if (!again) throw new Error("Expected a repeat snapshot");
     expect(again.frames[0]).toBe(late.frames[0]);
     expect(again.frames).not.toBe(late.frames);
+    expect(flushPerformanceMetrics()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "recording.segment_encode" }),
+        expect.objectContaining({ name: "recording.reader_push" }),
+        expect.objectContaining({ name: "recording.reader_retained" }),
+        expect.objectContaining({ name: "recording.reader_capacity" }),
+        expect.objectContaining({ name: "recording.reader_snapshot", count: 3 }),
+      ]),
+    );
   });
 
   it("progressive snapshots do not share mutable event arrays", async () => {

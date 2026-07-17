@@ -10,6 +10,7 @@ import type {
 import type { Slide } from "../../core/src/slides";
 import type { RuntimeRecordingSnapshot } from "../../types/runtime";
 import type { WorkspaceRecordingSnapshot } from "../../types/workspace";
+import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/performanceMetrics";
 
 // ============================================================================
 // SCR3 — append-only, seekable, range-loadable recording stream container.
@@ -183,7 +184,14 @@ export function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 export function encodeRecords(records: ReadonlyArray<unknown>): Uint8Array {
-  return zlibSync(msgpackEncode(records, { ignoreUndefined: true }));
+  const endEncodeSpan = startPerformanceSpan("recording.segment_encode");
+  try {
+    const compressed = zlibSync(msgpackEncode(records, { ignoreUndefined: true }));
+    recordPerformanceMetric("recording.segment_compressed", compressed.byteLength, "bytes");
+    return compressed;
+  } finally {
+    endEncodeSpan();
+  }
 }
 
 function boundedUnzlib(payload: Uint8Array, maxBytes: number, label: string): Uint8Array {

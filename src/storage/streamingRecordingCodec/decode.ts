@@ -39,6 +39,7 @@ import {
 import { hydrateFramePreviewContent } from "./framePreviewContentDedup";
 import { createPreviewAddNodeHydrator } from "./previewPatchDedup";
 import { createWorkspaceEventContentHydrator } from "./workspaceEventDedup";
+import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/performanceMetrics";
 
 // ============================================================================
 // Decoding: turn SCR3 bytes into a `Recording`.
@@ -635,35 +636,51 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
 
   return {
     push(bytes) {
-      if (bytes.length > 0) {
-        grow(bytes);
+      const endPushSpan = startPerformanceSpan("recording.reader_push");
+      let outcome = "success";
+      try {
+        if (bytes.length > 0) {
+          grow(bytes);
+        }
+        tryParseHeader();
+        parseSegments();
+      } catch (error) {
+        outcome = "failure";
+        throw error;
+      } finally {
+        endPushSpan({ outcome });
+        recordPerformanceMetric("recording.reader_retained", length, "bytes");
+        recordPerformanceMetric("recording.reader_capacity", buffer.byteLength, "bytes");
       }
-      tryParseHeader();
-      parseSegments();
     },
     getRecording() {
       if (!headerParsed || !meta) return null;
-      return assembleRecording({
-        meta,
-        streamFinalized: finalized,
-        // Frames were normalized at ingest; skip the whole-recording normalize pass.
-        prenormalized: true,
-        hasSegments: segmentCount > 0,
-        maxSegmentTimeMs: Math.max(meta.duration, maxSegmentTimeMs),
-        // Fresh arrays per snapshot so consumers keyed on reference see the growth;
-        // copying pointers is cheap, unlike the per-frame deep clone this replaces.
-        frames: frames.slice(),
-        slideEvents: slideEvents.slice(),
-        previewEvents: previewEvents.slice(),
-        previewInitialDocuments: previewInitialDocuments.slice(),
-        previewPatchBatches: previewPatchBatches.slice(),
-        workspaceEvents: workspaceEvents.slice(),
-        runtimeEvents: runtimeEvents.slice(),
-        cursorEvents: cursorEvents.slice(),
-        whiteboardEvents: whiteboardEvents.slice(),
-        chatEvents: chatEvents.slice(),
-        clusterSummaries: Array.from(clusterMap.values()),
-      });
+      const endSnapshotSpan = startPerformanceSpan("recording.reader_snapshot");
+      try {
+        return assembleRecording({
+          meta,
+          streamFinalized: finalized,
+          // Frames were normalized at ingest; skip the whole-recording normalize pass.
+          prenormalized: true,
+          hasSegments: segmentCount > 0,
+          maxSegmentTimeMs: Math.max(meta.duration, maxSegmentTimeMs),
+          // Fresh arrays per snapshot so consumers keyed on reference see the growth;
+          // copying pointers is cheap, unlike the per-frame deep clone this replaces.
+          frames: frames.slice(),
+          slideEvents: slideEvents.slice(),
+          previewEvents: previewEvents.slice(),
+          previewInitialDocuments: previewInitialDocuments.slice(),
+          previewPatchBatches: previewPatchBatches.slice(),
+          workspaceEvents: workspaceEvents.slice(),
+          runtimeEvents: runtimeEvents.slice(),
+          cursorEvents: cursorEvents.slice(),
+          whiteboardEvents: whiteboardEvents.slice(),
+          chatEvents: chatEvents.slice(),
+          clusterSummaries: Array.from(clusterMap.values()),
+        });
+      } finally {
+        endSnapshotSpan();
+      }
     },
     isFinalized() {
       return finalized;
