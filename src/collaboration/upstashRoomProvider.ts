@@ -32,6 +32,7 @@ import {
   collaborationMachine,
   type CollaborationConnectionState,
 } from "./collaborationMachine";
+import { recordPerformanceMetric, startPerformanceSpan } from "../utils/performanceMetrics";
 
 const DEFAULT_BATCH_WINDOW_MS = 75;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 5;
@@ -100,6 +101,17 @@ interface RealtimeUserMessage {
 
 interface PendingUpdate {
   input: CollaborationDocumentUpdateInput;
+  queuedAt: number;
+  firstSentAt?: number;
+}
+
+interface PendingLocalUpdate {
+  update: Uint8Array;
+  queuedAt: number;
+}
+
+function monotonicNow(): number {
+  return globalThis.performance?.now() ?? Date.now();
 }
 
 function errorStatus(error: unknown): number | null {
@@ -183,7 +195,7 @@ export class UpstashRoomProvider {
   private isPublishing = false;
   private readonly lastAcknowledgedStreamIds = new Map<string, string>();
   private bufferedMessages: RealtimeUserMessage[] = [];
-  private pendingUpdates: Uint8Array[] = [];
+  private pendingUpdates: PendingLocalUpdate[] = [];
   private outbox: PendingUpdate[] = [];
   private seenStreamIds = new Set<string>();
   private isRefreshingControl = false;
@@ -323,7 +335,7 @@ export class UpstashRoomProvider {
     ) {
       return;
     }
-    this.pendingUpdates.push(update);
+    this.pendingUpdates.push({ update, queuedAt: monotonicNow() });
     this.actor.send({ type: "OFFLINE_CHANGES" });
     if (this.batchTimer) return;
     this.batchTimer = setTimeout(() => {
@@ -338,24 +350,29 @@ export class UpstashRoomProvider {
     const updates = this.pendingUpdates;
     this.pendingUpdates = [];
 
-    let batch: Uint8Array[] = [];
+    let batch: PendingLocalUpdate[] = [];
     const enqueueBatch = () => {
       if (batch.length === 0) return;
       this.outbox.push({
-        input: createCollaborationDocumentUpdate(Y.mergeUpdates(batch), this.clientId),
+        input: createCollaborationDocumentUpdate(
+          Y.mergeUpdates(batch.map((pending) => pending.update)),
+          this.clientId,
+        ),
+        queuedAt: batch[0]?.queuedAt ?? monotonicNow(),
       });
       batch = [];
     };
-    for (const update of updates) {
+    for (const pending of updates) {
+      const { update } = pending;
       if (update.byteLength > MAX_YJS_UPDATE_BYTES) {
         this.fatal(
           `A local collaboration change exceeded the ${MAX_YJS_UPDATE_BYTES}-byte update limit`,
         );
         return;
       }
-      const candidate = Y.mergeUpdates([...batch, update]);
+      const candidate = Y.mergeUpdates([...batch.map((item) => item.update), update]);
       if (candidate.byteLength > MAX_YJS_UPDATE_BYTES) enqueueBatch();
-      batch.push(update);
+      batch.push(pending);
     }
     enqueueBatch();
   }
@@ -595,7 +612,17 @@ export class UpstashRoomProvider {
     if (message.event === "document.update") {
       const event = collaborationDocumentUpdateEventSchema.safeParse(message.data);
       if (!event.success || event.data.roomId !== this.roomId) return;
+      const endApplySpan = startPerformanceSpan("collaboration.remote_apply", {
+        transport: this.roomSession?.room.transport ?? "unknown",
+      });
       applyEncodedYjsUpdate(this.doc, event.data.update, COLLABORATION_ORIGIN.remoteProvider);
+      endApplySpan();
+      recordPerformanceMetric(
+        "collaboration.remote_update",
+        Math.floor((event.data.update.length * 3) / 4),
+        "bytes",
+        { transport: this.roomSession?.room.transport ?? "unknown" },
+      );
     } else if (message.event === "awareness.state") {
       const event = collaborationAwarenessEventSchema.safeParse(message.data);
       if (!event.success || event.data.roomId !== this.roomId) return;
@@ -698,6 +725,10 @@ export class UpstashRoomProvider {
   private async synchronize(attemptId: string): Promise<void> {
     if (this.isSynchronizing) return;
     this.isSynchronizing = true;
+    const endSynchronizationSpan = startPerformanceSpan("collaboration.bootstrap", {
+      transport: this.roomSession?.room.transport ?? "unknown",
+    });
+    let synchronizationOutcome = "success";
     try {
       let cursor: string | undefined;
       for (let pageIndex = 0; pageIndex < MAX_BOOTSTRAP_PAGES; pageIndex += 1) {
@@ -757,6 +788,7 @@ export class UpstashRoomProvider {
       for (const message of finalBuffered) this.applyRealtimeMessage(message);
       await this.flushOutbox();
     } catch (error) {
+      synchronizationOutcome = "failure";
       if (this.isStopped || attemptId !== this.attemptId) return;
       if (isFatalRequestError(error)) {
         this.fatal(errorMessage(error, "Collaboration synchronization was rejected"), attemptId);
@@ -768,6 +800,7 @@ export class UpstashRoomProvider {
       }
     } finally {
       this.isSynchronizing = false;
+      endSynchronizationSpan({ outcome: synchronizationOutcome });
     }
   }
 
@@ -777,13 +810,43 @@ export class UpstashRoomProvider {
     try {
       while (!this.isStopped && this.connectionState === "live" && this.outbox.length > 0) {
         const pending = this.outbox[0];
+        const sentAt = monotonicNow();
+        const transport = this.roomSession?.room.transport ?? "unknown";
+        if (pending.firstSentAt === undefined) {
+          pending.firstSentAt = sentAt;
+          recordPerformanceMetric(
+            "collaboration.queue_to_send",
+            Math.max(0, sentAt - pending.queuedAt),
+            "ms",
+            { transport },
+          );
+        }
         try {
           const accepted = await this.publishTransportUpdate(pending.input);
           if (!accepted.accepted || accepted.updateId !== pending.input.updateId) {
             throw new Error("Collaboration update acknowledgement did not match the request");
           }
+          const acknowledgedAt = monotonicNow();
+          recordPerformanceMetric(
+            "collaboration.send_to_ack",
+            Math.max(0, acknowledgedAt - sentAt),
+            "ms",
+            { outcome: "success", transport },
+          );
+          recordPerformanceMetric(
+            "collaboration.enqueue_to_ack",
+            Math.max(0, acknowledgedAt - pending.queuedAt),
+            "ms",
+            { transport },
+          );
           this.outbox.shift();
         } catch (error) {
+          recordPerformanceMetric(
+            "collaboration.send_to_ack",
+            Math.max(0, monotonicNow() - sentAt),
+            "ms",
+            { outcome: "failure", transport },
+          );
           if (errorStatus(error) === 403) {
             await this.handleWriteRejection(error);
           } else if (isFatalRequestError(error)) {

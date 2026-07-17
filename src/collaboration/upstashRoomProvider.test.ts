@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
@@ -23,6 +23,10 @@ import {
   type CollaborationRoomApi,
   type CollaborationWebSocket,
 } from "./upstashRoomProvider";
+import {
+  flushPerformanceMetrics,
+  resetPerformanceMetricsForTests,
+} from "../utils/performanceMetrics";
 
 const ROOM_ID = "10000000-0000-4000-8000-000000000001";
 const CLIENT_ID = "20000000-0000-4000-8000-000000000001";
@@ -168,6 +172,14 @@ function remoteMessage(update: Uint8Array, streamId = "1-0") {
 }
 
 describe("UpstashRoomProvider", () => {
+  beforeEach(() => {
+    resetPerformanceMetricsForTests();
+  });
+
+  afterEach(() => {
+    resetPerformanceMetricsForTests();
+  });
+
   it("uses a duplex WebSocket for WebSocket rooms and waits for durable acknowledgements", async () => {
     const server = new Y.Doc();
     server.getText("source").insert(0, "start");
@@ -224,6 +236,25 @@ describe("UpstashRoomProvider", () => {
 
     expect(api.published).toEqual([]);
     expect(provider.hasPendingUpdates).toBe(false);
+    expect(flushPerformanceMetrics()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "collaboration.queue_to_send",
+          dimensions: { transport: "cloudflare-websocket" },
+          count: 1,
+        }),
+        expect.objectContaining({
+          name: "collaboration.send_to_ack",
+          dimensions: { outcome: "success", transport: "cloudflare-websocket" },
+          count: 1,
+        }),
+        expect.objectContaining({
+          name: "collaboration.enqueue_to_ack",
+          dimensions: { transport: "cloudflare-websocket" },
+          count: 1,
+        }),
+      ]),
+    );
 
     await provider.publishAwareness({
       kind: "state",
@@ -385,9 +416,7 @@ describe("UpstashRoomProvider", () => {
     const remote = new Y.Doc();
     applyEncodedYjsSnapshot(remote, encodeYjsDocument(server));
     remote.getText("source").insert(5, "-remote");
-    sources[0].message(
-      remoteMessage(Y.encodeStateAsUpdate(remote, Y.encodeStateVector(server))),
-    );
+    sources[0].message(remoteMessage(Y.encodeStateAsUpdate(remote, Y.encodeStateVector(server))));
     releaseBootstrap();
     await waitUntil(() => provider.connectionState === "live");
     expect(provider.doc.getText("source").toString()).toBe("start-remote");
