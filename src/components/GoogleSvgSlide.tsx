@@ -12,6 +12,7 @@ interface GoogleSvgSlideProps {
   steps?: DeckStep[];
   /** Number of build steps to reveal (0..steps.length). */
   stepsRevealed: number;
+  onLoad?: () => void;
 }
 
 /**
@@ -21,7 +22,12 @@ interface GoogleSvgSlideProps {
  * host app. A trusted, nonce-restricted child bridge receives only animation
  * state over postMessage; the parent never receives access to the slide DOM.
  */
-export default function GoogleSvgSlide({ content, steps, stepsRevealed }: GoogleSvgSlideProps) {
+export default function GoogleSvgSlide({
+  content,
+  steps,
+  stepsRevealed,
+  onLoad,
+}: GoogleSvgSlideProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDoc = createSandboxedSlideDocument(content, "image/svg+xml", {
     animationBridge: true,
@@ -63,8 +69,12 @@ export default function GoogleSvgSlide({ content, steps, stepsRevealed }: Google
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
       srcDoc={srcDoc}
-      onLoad={initializeAnimation}
+      onLoad={() => {
+        initializeAnimation();
+        onLoad?.();
+      }}
       className="size-full border-0 bg-black"
+      style={{ colorScheme: "dark" }}
     />
   );
 }

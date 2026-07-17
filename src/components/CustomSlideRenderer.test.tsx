@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import CustomSlideRenderer from "./CustomSlideRenderer";
 import type { Slide } from "../types/slides";
 
@@ -30,6 +30,8 @@ describe("CustomSlideRenderer", () => {
     const iframe = container.querySelector("iframe");
     expect(iframe?.getAttribute("sandbox")).toBe("");
     expect(iframe?.srcdoc).toContain("<h1>Hello</h1>");
+    expect(iframe?.srcdoc).toContain('<meta name="color-scheme" content="dark">');
+    expect(iframe?.style.colorScheme).toBe("dark");
   });
 
   it("removes executable HTML from untrusted slide content", () => {
@@ -96,6 +98,43 @@ describe("CustomSlideRenderer", () => {
     const iframeAfter = container.querySelector("iframe");
 
     expect(iframeAfter).toBe(iframeBefore);
+  });
+
+  it("keeps the previous slide visible until the incoming iframe has loaded", () => {
+    const slides = [htmlSlide("a", "<h1>First</h1>"), htmlSlide("b", "<h1>Second</h1>")];
+    const { container, rerender } = render(
+      <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
+    );
+    const firstFrame = container.querySelector("iframe");
+
+    rerender(
+      <CustomSlideRenderer slides={slides} currentSlideIndex={1} currentVerticalIndex={0} />,
+    );
+
+    const frames = [...container.querySelectorAll("iframe")];
+    const incomingFrame = frames.find((frame) => frame.srcdoc.includes("Second"));
+    expect(frames).toHaveLength(2);
+    if (!incomingFrame) throw new Error("Expected the incoming slide iframe");
+    expect(
+      firstFrame
+        ?.closest("[data-slide-buffer-state]")
+        ?.getAttribute("data-slide-buffer-state"),
+    ).toBe("displayed");
+    expect(
+      incomingFrame
+        ?.closest("[data-slide-buffer-state]")
+        ?.getAttribute("data-slide-buffer-state"),
+    ).toBe("loading");
+
+    fireEvent.load(incomingFrame);
+
+    expect(container.querySelectorAll("iframe")).toHaveLength(1);
+    expect(container.querySelector("iframe")).toBe(incomingFrame);
+    expect(
+      incomingFrame
+        ?.closest("[data-slide-buffer-state]")
+        ?.getAttribute("data-slide-buffer-state"),
+    ).toBe("displayed");
   });
 
   it("keeps slide CSS out of the host document", () => {
