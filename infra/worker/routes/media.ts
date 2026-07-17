@@ -37,6 +37,12 @@ mediaRoute.get("/:key{.+}", async (c) => {
   // content-type was stored — the upload route's extension allow-list is the
   // primary defense (see routes/uploads.ts).
   headers.set("x-content-type-options", "nosniff");
+  // Imported slides render inside a sandboxed srcdoc iframe. That frame has
+  // an opaque origin, so these otherwise same-origin image requests must opt
+  // into cross-origin embedding to satisfy the app's COEP: require-corp.
+  // /media objects are already public, and CORP does not grant script access
+  // to their bytes (CORS still governs that).
+  headers.set("cross-origin-resource-policy", "cross-origin");
   // Upload retries and owner edits may replace an existing key. Keep the ETag
   // available for validators, but require clients/CDNs to revalidate rather
   // than serving an obsolete recording, thumbnail, or companion track for a
