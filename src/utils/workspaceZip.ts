@@ -33,6 +33,12 @@ async function streamBlobIntoEntry(blob: Blob, entry: ZipPassThrough): Promise<v
   }
 }
 
+function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 export async function downloadWorkspaceProjectAsZip(project: WorkspaceProject): Promise<void> {
   const chunks: Uint8Array[] = [];
   let resolveArchive!: (blob: Blob) => void;
@@ -48,14 +54,7 @@ export async function downloadWorkspaceProjectAsZip(project: WorkspaceProject): 
     }
     chunks.push(chunk);
     if (final) {
-      resolveArchive(
-        new Blob(
-          chunks.map((value) =>
-            value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
-          ),
-          { type: "application/zip" },
-        ),
-      );
+      resolveArchive(new Blob(chunks.map(copyToArrayBuffer), { type: "application/zip" }));
     }
   });
 

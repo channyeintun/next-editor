@@ -1,4 +1,5 @@
 import { useContext } from "react";
+import { shallowEqual } from "@xstate/react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import {
   NextEditorActionsContext,

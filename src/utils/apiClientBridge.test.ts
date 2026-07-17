@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vite-plus/test";
+/* oxlint-disable vitest/require-mock-type-parameters */
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   API_CLIENT_CANCEL_MESSAGE_TYPE,
   API_CLIENT_REQUEST_MESSAGE_TYPE,
@@ -176,9 +177,9 @@ describe("createApiClientProxyScript", () => {
   });
 
   it("aborts an endless request by id without posting a late result", async () => {
-    let signal: AbortSignal | null = null;
+    const captured: { signal: AbortSignal | null } = { signal: null };
     const fetchImplementation = vi.fn<typeof fetch>((_input, init) => {
-      signal = init?.signal ?? null;
+      captured.signal = init?.signal ?? null;
       return new Promise<Response>(() => {});
     });
     const proxy = installProxy(fetchImplementation);
@@ -193,7 +194,7 @@ describe("createApiClientProxyScript", () => {
       payload: { id: "endless" },
     });
 
-    expect(signal?.aborted).toBe(true);
+    expect(captured.signal?.aborted).toBe(true);
     expect(proxy.parentPostMessage).not.toHaveBeenCalled();
   });
 });

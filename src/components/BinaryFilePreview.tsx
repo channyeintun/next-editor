@@ -50,7 +50,7 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
   const [loadedAsset, setLoadedAsset] = useState<{ assetId: string; url: string } | null>(null);
   const [unavailableAssetId, setUnavailableAssetId] = useState<string | null>(null);
   const [retryVersion, setRetryVersion] = useState(0);
-  const objectUrl = loadedAsset?.assetId === assetId ? loadedAsset.url : null;
+  const objectUrl = loadedAsset && loadedAsset.assetId === assetId ? loadedAsset.url : null;
   const assetUnavailable = unavailableAssetId === assetId;
   const legacyDataUrl = isLegacyWorkspaceBinaryFile(file)
     ? `data:${mimeType};base64,${file.content}`

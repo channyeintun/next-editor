@@ -31,11 +31,7 @@ function makeFile(path: string, content: string, encoding?: "base64"): Workspace
   return encoding ? { ...file, encoding } : file;
 }
 
-function makeAssetFile(
-  path: string,
-  assetId = `asset-${path}`,
-  size = 3,
-): WorkspaceFile {
+function makeAssetFile(path: string, assetId = `asset-${path}`, size = 3): WorkspaceFile {
   return {
     path,
     name: path.split("/").pop() ?? path,
@@ -343,9 +339,9 @@ describe("persistWorkspaceAssets", () => {
     const failure = new Error("open failed");
     const factory = {
       open: vi.fn(() => {
-        const request: Partial<IDBOpenDBRequest> = { error: failure as DOMException };
+        const request = { error: failure as DOMException } as unknown as IDBOpenDBRequest;
         queueMicrotask(() => request.onerror?.(new Event("error")));
-        return request as IDBOpenDBRequest;
+        return request;
       }),
     } as unknown as IDBFactory;
     vi.stubGlobal("indexedDB", factory);
@@ -383,9 +379,9 @@ describe("persistWorkspaceAssets", () => {
     } as unknown as IDBDatabase;
     const factory = {
       open: vi.fn(() => {
-        const request: Partial<IDBOpenDBRequest> = { result: database };
+        const request = { result: database } as unknown as IDBOpenDBRequest;
         queueMicrotask(() => request.onsuccess?.(new Event("success")));
-        return request as IDBOpenDBRequest;
+        return request;
       }),
     } as unknown as IDBFactory;
     vi.stubGlobal("indexedDB", factory);

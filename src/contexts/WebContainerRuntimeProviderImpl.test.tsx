@@ -6,6 +6,7 @@ import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProviderImpl";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions, useWorkspaceDirtyState } from "../hooks/useWorkspace";
+import { isWorkspaceTextFile } from "../types/workspace";
 import type { WorkspaceActions, WorkspaceDirtyState } from "./WorkspaceContext";
 import type { WebContainerRuntimeActions } from "./WebContainerRuntimeContext";
 
@@ -315,8 +316,9 @@ describe("WebContainerRuntimeProviderImpl reverse sync", () => {
     const harness = renderProviders();
     const initialProject = harness.workspace.getProject();
     const entryPath = initialProject.entryFilePath;
-    const initialContent = initialProject.files[entryPath].content;
-    fakeFs.addFile(entryPath, initialContent);
+    const entryFile = initialProject.files[entryPath];
+    if (!isWorkspaceTextFile(entryFile)) throw new Error("Expected a text entry file");
+    fakeFs.addFile(entryPath, entryFile.content);
 
     let releaseStaleRead: ((content: string) => void) | null = null;
     vi.mocked(instance.fs.readFile).mockImplementationOnce(

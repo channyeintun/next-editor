@@ -26,7 +26,7 @@ function nodeProject(htmlContent: string): WorkspaceProject {
   };
 }
 
-function getIndexHtml(tree: ReturnType<typeof createWorkspaceTree>): string {
+function getIndexHtml(tree: Awaited<ReturnType<typeof createWorkspaceTree>>): string {
   const entry = tree["index.html"];
   if (!entry || !("file" in entry) || !("contents" in entry.file)) {
     throw new Error("index.html not found in workspace tree");

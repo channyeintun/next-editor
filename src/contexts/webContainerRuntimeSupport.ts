@@ -19,10 +19,7 @@ import {
   type WorkspaceFile,
   type WorkspaceProject,
 } from "../types/workspace";
-import {
-  getWorkspaceAssetBytes,
-  registerWorkspaceAsset,
-} from "../storage/workspaceAssetStore";
+import { getWorkspaceAssetBytes, registerWorkspaceAsset } from "../storage/workspaceAssetStore";
 import { createRrwebPreviewRecorderScript } from "../components/preview/rrwebPreview";
 import {
   RUNTIME_SNAPSHOT_MESSAGE_TYPE,
@@ -362,11 +359,7 @@ function workspaceFileContentsEqual(left: WorkspaceFile, right: WorkspaceFile): 
   if (isWorkspaceAssetFile(left) && isWorkspaceAssetFile(right)) {
     return left.content.assetId === right.content.assetId;
   }
-  return (
-    isWorkspaceTextFile(left) &&
-    isWorkspaceTextFile(right) &&
-    left.content === right.content
-  );
+  return isWorkspaceTextFile(left) && isWorkspaceTextFile(right) && left.content === right.content;
 }
 
 export async function createWorkspaceTree(project: WorkspaceProject): Promise<FileSystemTree> {
@@ -569,7 +562,7 @@ export function resolveRuntimeRunCommand(
 
   const packageJsonFile = project?.files["package.json"];
 
-  if (!packageJsonFile) {
+  if (!packageJsonFile || !isWorkspaceTextFile(packageJsonFile)) {
     return normalizedCommandLine;
   }
 

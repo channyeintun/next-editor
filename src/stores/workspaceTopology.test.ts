@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { createWorkspaceStore } from "./workspaceStore";
-import type { WorkspaceFile, WorkspaceProject } from "../types/workspace";
+import type { WorkspaceProject, WorkspaceTextFile } from "../types/workspace";
 
-function file(path: string, content: string): WorkspaceFile {
+function file(path: string, content: string): WorkspaceTextFile {
   return {
     path,
     name: path.split("/").at(-1) ?? path,
@@ -62,7 +62,7 @@ describe("workspace tree topology", () => {
         ...contentOnly,
         files: {
           ...contentOnly.files,
-          "src/a.ts": { ...contentOnly.files["src/a.ts"], content: "changed remotely" },
+          "src/a.ts": file("src/a.ts", "changed remotely"),
         },
       },
     });

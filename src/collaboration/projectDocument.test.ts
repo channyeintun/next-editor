@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
+import { isWorkspaceTextFile } from "../types/workspace";
 import {
   COLLABORATION_ORIGIN,
   CollaborationProjectController,
@@ -144,11 +145,13 @@ describe("collaboration project document", () => {
   it("applies Monaco text ranges to Y.Text without replacing the whole value", () => {
     const project = createStarterHtmlCssWorkspace();
     const path = project.entryFilePath;
-    const before = project.files[path].content;
+    const file = project.files[path];
+    if (!isWorkspaceTextFile(file)) throw new Error("Expected a text entry file");
+    const before = file.content;
     const doc = new Y.Doc();
     seedCollaborationProject(doc, project, { idFactory: idFactory() });
     const projection = projectCollaborationDocument(doc);
-    const getProjection = vi.fn(() => projection);
+    const getProjection = vi.fn<() => typeof projection>(() => projection);
     const controller = new CollaborationProjectController(doc, {
       canWrite: () => true,
       getProjection,

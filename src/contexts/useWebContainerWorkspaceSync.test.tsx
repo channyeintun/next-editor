@@ -11,7 +11,7 @@ import {
   resetPerformanceMetricsForTests,
 } from "../utils/performanceMetrics";
 
-const project: WorkspaceProject = {
+const project = {
   id: "project-1",
   name: "Project",
   lessonType: "react",
@@ -25,7 +25,7 @@ const project: WorkspaceProject = {
       content: "<main>Hello</main>",
     },
   },
-};
+} satisfies WorkspaceProject;
 
 function renderWorkspaceSyncHook(options?: Parameters<typeof useWebContainerWorkspaceSync>[0]) {
   // Captured via an object so control-flow analysis keeps the declared union type

@@ -3,10 +3,7 @@ import type { Recording, RecordingStreamSink } from "../core/src/types";
 import type { RecordingSession } from "../core/src/machine/types";
 import type { WorkspaceProject } from "../types/workspace";
 import { RecordingStreamBridge } from "./recordingStreamSink";
-import {
-  registerWorkspaceAsset,
-  resetWorkspaceAssetStoreForTests,
-} from "./workspaceAssetStore";
+import { registerWorkspaceAsset, resetWorkspaceAssetStoreForTests } from "./workspaceAssetStore";
 import {
   createStreamingRecordingWriter,
   createStreamingRecordingReader,
@@ -224,7 +221,9 @@ describe("RecordingStreamBridge", () => {
     recording.workspaceEvents![0].snapshot.project = assetProject;
     const chunks: Uint8Array[] = [];
     const bridge = new RecordingStreamBridge({
-      write: (chunk) => chunks.push(chunk.slice()),
+      write: (chunk) => {
+        chunks.push(chunk.slice());
+      },
       close: vi.fn<() => void>(),
     });
     const session = makeSession(recording);

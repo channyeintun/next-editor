@@ -77,7 +77,7 @@ export function createWorkspaceEventContentStripper(): (
   return (events) =>
     events.map((record) =>
       mapEventFiles(record as WorkspaceEventRecord, (path, file) => {
-        if (typeof file.content !== "string" || file.content === "") {
+        if (file.encoding === "asset" || file.content === "") {
           return file;
         }
 
@@ -105,6 +105,10 @@ export function createWorkspaceEventContentHydrator(): (
     events.map((event) =>
       mapEventFiles(event, (path, file) => {
         if (file.contentUnchanged) {
+          if (file.encoding === "asset") {
+            const { contentUnchanged: _contentUnchanged, ...rest } = file;
+            return rest;
+          }
           const { contentUnchanged: _contentUnchanged, ...rest } = file;
           return { ...rest, content: lastContentByPath.get(path) ?? "" };
         }

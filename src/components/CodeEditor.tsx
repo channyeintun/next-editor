@@ -257,13 +257,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     } finally {
       isApplyingExternalModelValueRef.current = false;
     }
-  }, [
-    activeTextContent,
-    activeFile.path,
-    isBinaryActiveFile,
-    selectedLanguage,
-    usesPlaybackModel,
-  ]);
+  }, [activeTextContent, activeFile.path, isBinaryActiveFile, selectedLanguage, usesPlaybackModel]);
 
   // Stable options identity so MonacoEditor's updateOptions only runs when
   // playback state actually changes, not on every keystroke re-render.
@@ -845,10 +839,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     const activeFileNodeId = collaboration.getNodeIdForPath(activeFile.path) ?? undefined;
     if (!activeFileNodeId) {
       cursorLabelManager.clear();
-      remoteDecorationIdsRef.current = editor.deltaDecorations(
-        remoteDecorationIdsRef.current,
-        [],
-      );
+      remoteDecorationIdsRef.current = editor.deltaDecorations(remoteDecorationIdsRef.current, []);
       return;
     }
     const decorations: monaco.editor.IModelDeltaDecoration[] = [];
@@ -937,7 +928,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       selection: EditorSelection;
     }> = [];
 
-    if (editor && model && provider && collaborationDoc && !usesPlaybackModel) {
+    if (editor && model && collaboration && provider && collaborationDoc && !usesPlaybackModel) {
       const captureSelection = (
         participant: CollaborationParticipant,
         anchorOffset: number,
