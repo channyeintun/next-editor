@@ -224,6 +224,15 @@ explicitly during the WebSocket upgrade. A version mismatch leaves the client on
 HTTP-bootstrap/JSON-update path. Version 2 intentionally supersedes the document-only version-1
 envelope so rolling deployments never send awareness frames to a document-only room object.
 
+Writable collaborative Monaco models bind directly to their active `Y.Text` through `y-monaco`.
+The binding is enabled by default and can be rolled back at build time with
+`VITE_COLLABORATION_Y_MONACO=false`; the binary transport has the independent
+`VITE_COLLABORATION_BINARY_PROTOCOL=false` rollback. A role downgrade destroys the direct binding
+before the model can accept another local edit. Read-only clients still resolve standard awareness
+selections for display without attaching a mutating binding. Only the `MonacoBinding` constructor
+and the explicit local-editor origin enter collaborative undo history; remote provider,
+projection, playback, and model-replacement transactions remain excluded.
+
 Batch small logical messages into one WebSocket frame, especially cursor movement and rapid Yjs
 transactions. Cloudflare recommends time- or count-based batching for high-frequency Durable
 Object WebSockets; 50–100 ms is an appropriate starting point to measure rather than a hard-coded

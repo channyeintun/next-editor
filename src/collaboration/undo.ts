@@ -1,3 +1,4 @@
+import { MonacoBinding } from "y-monaco";
 import * as Y from "yjs";
 import { COLLABORATION_ORIGIN, getCollaborationTexts } from "./projectDocument";
 
@@ -8,7 +9,7 @@ import { COLLABORATION_ORIGIN, getCollaborationTexts } from "./projectDocument";
  */
 export function createCollaborationUndoManager(doc: Y.Doc): Y.UndoManager {
   return new Y.UndoManager(getCollaborationTexts(doc), {
-    trackedOrigins: new Set([COLLABORATION_ORIGIN.localEditor]),
+    trackedOrigins: new Set([COLLABORATION_ORIGIN.localEditor, MonacoBinding]),
     captureTimeout: 500,
   });
 }

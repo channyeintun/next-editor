@@ -284,6 +284,10 @@ export class UpstashRoomProvider {
     return this.sessionId;
   }
 
+  get isBinaryProtocolActive(): boolean {
+    return this.binaryProtocolActive;
+  }
+
   get canWrite(): boolean {
     return Boolean(
       this.roomSession && canWriteCollaborationDocument(this.roomSession.membership.role),

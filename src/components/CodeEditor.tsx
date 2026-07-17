@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { useSelector } from "@xstate/store-react";
+import { MonacoBinding } from "y-monaco";
+import * as Y from "yjs";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
   useWorkspaceActions,
@@ -12,7 +14,10 @@ import {
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
-import { useOptionalCollaboration } from "../contexts/CollaborationContext";
+import {
+  useOptionalCollaboration,
+  type CollaborationParticipant,
+} from "../contexts/CollaborationContext";
 import type { EditorSelection } from "../core/src/types";
 import type { UpstashRoomProvider } from "../collaboration/upstashRoomProvider";
 import { selectIsCollapsed, selectIsFullHeight } from "../stores/runtimePanelStore";
@@ -20,8 +25,10 @@ import { lessonRunsInWebContainer } from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
 import {
   canWriteCollaborationDocument,
+  getCollaborationTexts,
   projectCollaborationDocument,
 } from "../collaboration/projectDocument";
+import { resolveMonacoAwarenessSelections } from "../collaboration/monacoAwareness";
 import {
   collaborationParticipantColorIndex,
   resolveCollaborationCursor,
@@ -52,6 +59,27 @@ import {
 import { startPerformanceSpan } from "../utils/performanceMetrics";
 
 const Preview = lazy(() => import("./Preview"));
+const Y_MONACO_BINDING_ENABLED = import.meta.env.VITE_COLLABORATION_Y_MONACO !== "false";
+const COLLABORATION_CURSOR_COLORS = [
+  "#38bdf8",
+  "#34d399",
+  "#fbbf24",
+  "#e879f9",
+  "#22d3ee",
+  "#fb923c",
+  "#a78bfa",
+  "#a3e635",
+] as const;
+const COLLABORATION_SELECTION_COLORS = [
+  "rgb(56 189 248 / 28%)",
+  "rgb(52 211 153 / 28%)",
+  "rgb(251 191 36 / 28%)",
+  "rgb(232 121 249 / 28%)",
+  "rgb(34 211 238 / 28%)",
+  "rgb(251 146 60 / 28%)",
+  "rgb(167 139 250 / 28%)",
+  "rgb(163 230 53 / 28%)",
+] as const;
 
 interface CodeEditorProps {
   language?: string;
@@ -107,6 +135,16 @@ function WorkspaceEventRecorder({
 
 type StandaloneEditor = monaco.editor.IStandaloneCodeEditor;
 
+interface ActiveYMonacoBinding {
+  binding: MonacoBinding;
+  editor: StandaloneEditor;
+  model: monaco.editor.ITextModel;
+  provider: UpstashRoomProvider;
+  text: Y.Text;
+  path: string;
+  usesAwareness: boolean;
+}
+
 function displayParticipantName(participant: { name: string | null; username: string }): string {
   return participant.name?.trim() || participant.username;
 }
@@ -154,6 +192,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const modelVersionByUriRef = useRef(new Map<string, number>());
   const remoteDecorationIdsRef = useRef<string[]>([]);
   const remoteCursorLabelManagerRef = useRef<CollaborationCursorLabelManager | null>(null);
+  const remoteAwarenessStyleRef = useRef<HTMLStyleElement | null>(null);
+  const yMonacoBindingRef = useRef<ActiveYMonacoBinding | null>(null);
+  const isConfiguringYMonacoRef = useRef(false);
   const recordedRemoteCursorSignaturesRef = useRef(new Map<string, string>());
   const remoteCursorRecordingScopeRef = useRef<{
     provider: UpstashRoomProvider | null;
@@ -259,8 +300,104 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     handleEditorChange(selection);
   });
 
+  const disposeYMonacoBinding = useEffectEvent((clearAwareness = true) => {
+    const active = yMonacoBindingRef.current;
+    yMonacoBindingRef.current = null;
+    active?.binding.destroy();
+    if (clearAwareness && active?.usesAwareness) {
+      active.provider.awareness.setLocalStateField("selection", null);
+    }
+  });
+
+  const reconcileYMonacoBinding = useEffectEvent((editor: StandaloneEditor | null) => {
+    const provider = collaboration?.provider;
+    const model = editor?.getModel();
+    if (
+      !Y_MONACO_BINDING_ENABLED ||
+      !provider ||
+      !collaboration.canWrite ||
+      usesPlaybackModel ||
+      isBinaryActiveFile ||
+      !editor ||
+      !model ||
+      model !== activeModel
+    ) {
+      disposeYMonacoBinding();
+      return false;
+    }
+
+    let text: Y.Text | undefined;
+    try {
+      const fileNodeId = projectCollaborationDocument(provider.doc).nodeIdByPath.get(
+        activeFile.path,
+      );
+      text = fileNodeId ? getCollaborationTexts(provider.doc).get(fileNodeId) : undefined;
+    } catch {
+      text = undefined;
+    }
+    if (!text) {
+      disposeYMonacoBinding();
+      return false;
+    }
+
+    const usesAwareness = provider.isBinaryProtocolActive;
+    const current = yMonacoBindingRef.current;
+    if (
+      current?.editor === editor &&
+      current.model === model &&
+      current.provider === provider &&
+      current.text === text &&
+      current.path === activeFile.path &&
+      current.usesAwareness === usesAwareness
+    ) {
+      return true;
+    }
+
+    disposeYMonacoBinding(false);
+    isConfiguringYMonacoRef.current = true;
+    try {
+      const binding = new MonacoBinding(
+        text,
+        model,
+        new Set([editor]),
+        usesAwareness ? provider.awareness : null,
+      );
+      yMonacoBindingRef.current = {
+        binding,
+        editor,
+        model,
+        provider,
+        text,
+        path: activeFile.path,
+        usesAwareness,
+      };
+      if (usesAwareness) {
+        const selection = editor.getSelection();
+        if (selection) {
+          let anchorOffset = model.getOffsetAt(selection.getStartPosition());
+          let headOffset = model.getOffsetAt(selection.getEndPosition());
+          if (selection.getDirection() === monaco.SelectionDirection.RTL) {
+            [anchorOffset, headOffset] = [headOffset, anchorOffset];
+          }
+          provider.awareness.setLocalStateField("selection", {
+            anchor: Y.createRelativePositionFromTypeIndex(text, anchorOffset),
+            head: Y.createRelativePositionFromTypeIndex(text, headOffset),
+          });
+        }
+      }
+      return true;
+    } catch {
+      yMonacoBindingRef.current = null;
+      if (usesAwareness) provider.awareness.setLocalStateField("selection", null);
+      return false;
+    } finally {
+      isConfiguringYMonacoRef.current = false;
+    }
+  });
+
   const publishCollaborationCursor = useEffectEvent((editor: StandaloneEditor | null) => {
     if (!collaboration?.provider || usesPlaybackModel || !editor) return;
+    if (yMonacoBindingRef.current?.usesAwareness) return;
     const model = editor.getModel();
     const selection = editor.getSelection();
     if (!model || !selection) return;
@@ -356,6 +493,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     if (editor) {
       syncEditorContentToWorkspace(editor);
     }
+
+    await collaboration?.provider?.flushNow();
 
     try {
       await saveWorkspace();
@@ -454,7 +593,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     // The view state was already saved by MonacoEditor's onWillDispose — its
     // cleanup runs before this one and the editor is disposed by now.
     disposeEditorListeners();
+    disposeYMonacoBinding();
     remoteCursorLabelManagerRef.current?.clear();
+    remoteAwarenessStyleRef.current?.remove();
+    remoteAwarenessStyleRef.current = null;
     const monaco = monacoRef.current;
 
     if (monaco) {
@@ -527,6 +669,25 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     syncEditorRef(editor);
   }, [editorModelPath, editorRef, syncEditorRef]);
 
+  useLayoutEffect(() => {
+    reconcileYMonacoBinding(editorRef.current);
+  }, [
+    activeFile.path,
+    activeModel,
+    collaboration?.canWrite,
+    collaboration?.connectionState,
+    collaboration?.provider,
+    isBinaryActiveFile,
+    usesPlaybackModel,
+  ]);
+
+  const wasRecordingRef = useRef(isRecording);
+  useEffect(() => {
+    const stoppedRecording = wasRecordingRef.current && !isRecording;
+    wasRecordingRef.current = isRecording;
+    if (stoppedRecording) void collaboration?.provider?.flushNow();
+  }, [collaboration?.provider, isRecording]);
+
   useEffect(() => {
     const editor = editorRef.current;
     const model = editor?.getModel();
@@ -535,6 +696,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     remoteCursorLabelManagerRef.current = cursorLabelManager;
     if (!editor || !model || !collaboration?.provider || !collaboration.doc) {
       cursorLabelManager.clear();
+      remoteAwarenessStyleRef.current?.remove();
+      remoteAwarenessStyleRef.current = null;
       if (editor && remoteDecorationIdsRef.current.length > 0) {
         remoteDecorationIdsRef.current = editor.deltaDecorations(
           remoteDecorationIdsRef.current,
@@ -543,6 +706,152 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       }
       return;
     }
+    const yMonacoBinding = yMonacoBindingRef.current;
+    const yMonacoRendersSelections = Boolean(
+      yMonacoBinding?.editor === editor &&
+      yMonacoBinding.model === model &&
+      yMonacoBinding.usesAwareness,
+    );
+    let awarenessText = yMonacoRendersSelections ? yMonacoBinding?.text : undefined;
+    if (!awarenessText && collaboration.provider.isBinaryProtocolActive) {
+      try {
+        const fileNodeId = projectCollaborationDocument(collaboration.doc).nodeIdByPath.get(
+          activeFile.path,
+        );
+        awarenessText = fileNodeId
+          ? getCollaborationTexts(collaboration.doc).get(fileNodeId)
+          : undefined;
+      } catch {
+        awarenessText = undefined;
+      }
+    }
+    if (awarenessText) {
+      const selections = resolveMonacoAwarenessSelections(
+        collaboration.provider.awareness,
+        awarenessText,
+      );
+      const labels: CollaborationCursorLabel[] = [];
+      const awarenessDecorations: monaco.editor.IModelDeltaDecoration[] = [];
+      const styleRules: string[] = [];
+      const standardParticipantKeys = new Set<string>();
+      for (const selection of selections) {
+        standardParticipantKeys.add(
+          `${selection.participant.actorId}:${selection.participant.sessionId}`,
+        );
+        const colorIndex = collaborationParticipantColorIndex(selection.participant);
+        const color = COLLABORATION_CURSOR_COLORS[colorIndex] ?? COLLABORATION_CURSOR_COLORS[0];
+        const selectionColor =
+          COLLABORATION_SELECTION_COLORS[colorIndex] ?? COLLABORATION_SELECTION_COLORS[0];
+        if (yMonacoRendersSelections) {
+          styleRules.push(
+            `.monaco-editor .yRemoteSelection-${selection.clientId}{background:${selectionColor};border-radius:2px}`,
+            `.monaco-editor .yRemoteSelectionHead-${selection.clientId}{display:inline-block;height:1.2em;margin-left:-1px;border-left:2px solid ${color};vertical-align:text-bottom}`,
+          );
+        } else {
+          const anchor = model.getPositionAt(selection.anchorOffset);
+          const head = model.getPositionAt(selection.headOffset);
+          const startsBeforeHead = selection.anchorOffset <= selection.headOffset;
+          const start = startsBeforeHead ? anchor : head;
+          const end = startsBeforeHead ? head : anchor;
+          if (selection.anchorOffset !== selection.headOffset) {
+            awarenessDecorations.push({
+              range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
+              options: {
+                className: `collaboration-selection collaboration-color-${colorIndex}`,
+                hoverMessage: { value: displayParticipantName(selection.participant) },
+              },
+            });
+          }
+          awarenessDecorations.push({
+            range: new monaco.Range(head.lineNumber, head.column, head.lineNumber, head.column),
+            options: {
+              beforeContentClassName: `collaboration-cursor collaboration-color-${colorIndex}`,
+              hoverMessage: { value: displayParticipantName(selection.participant) },
+            },
+          });
+        }
+        labels.push({
+          id: `${selection.participant.actorId}:${selection.participant.sessionId}`,
+          name: displayParticipantName(selection.participant),
+          colorIndex,
+          position: model.getPositionAt(selection.headOffset),
+        });
+      }
+      let activeFileNodeId: string | undefined;
+      try {
+        activeFileNodeId = projectCollaborationDocument(collaboration.doc).nodeIdByPath.get(
+          activeFile.path,
+        );
+      } catch {
+        activeFileNodeId = undefined;
+      }
+      for (const participant of collaboration.participants) {
+        const key = `${participant.actorId}:${participant.sessionId}`;
+        if (
+          standardParticipantKeys.has(key) ||
+          participant.sessionId === collaboration.provider.awarenessSessionId ||
+          !participant.cursor ||
+          participant.cursor.fileNodeId !== activeFileNodeId
+        ) {
+          continue;
+        }
+        const cursor = resolveCollaborationCursor(collaboration.doc, participant.cursor);
+        if (!cursor) continue;
+        const anchor = model.getPositionAt(cursor.anchorOffset);
+        const head = model.getPositionAt(cursor.headOffset);
+        const startsBeforeHead = cursor.anchorOffset <= cursor.headOffset;
+        const start = startsBeforeHead ? anchor : head;
+        const end = startsBeforeHead ? head : anchor;
+        const colorIndex = collaborationParticipantColorIndex(participant);
+        const participantName = displayParticipantName(participant);
+        if (cursor.anchorOffset !== cursor.headOffset) {
+          awarenessDecorations.push({
+            range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
+            options: {
+              className: `collaboration-selection collaboration-color-${colorIndex}`,
+              hoverMessage: { value: participantName },
+            },
+          });
+        }
+        awarenessDecorations.push({
+          range: new monaco.Range(head.lineNumber, head.column, head.lineNumber, head.column),
+          options: {
+            beforeContentClassName: `collaboration-cursor collaboration-color-${colorIndex}`,
+            hoverMessage: { value: participantName },
+          },
+        });
+        labels.push({
+          id: key,
+          name: participantName,
+          colorIndex,
+          position: head,
+        });
+      }
+      if (styleRules.length > 0) {
+        let style = remoteAwarenessStyleRef.current;
+        if (!style) {
+          style = document.createElement("style");
+          style.dataset.nextEditorCollaborationAwareness = "true";
+          document.head.append(style);
+          remoteAwarenessStyleRef.current = style;
+        }
+        style.textContent = styleRules.join("\n");
+      } else {
+        remoteAwarenessStyleRef.current?.remove();
+        remoteAwarenessStyleRef.current = null;
+      }
+      cursorLabelManager.reconcile(editor, labels, [
+        monaco.editor.ContentWidgetPositionPreference.ABOVE,
+        monaco.editor.ContentWidgetPositionPreference.BELOW,
+      ]);
+      remoteDecorationIdsRef.current = editor.deltaDecorations(
+        remoteDecorationIdsRef.current,
+        awarenessDecorations,
+      );
+      return;
+    }
+    remoteAwarenessStyleRef.current?.remove();
+    remoteAwarenessStyleRef.current = null;
     let activeFileNodeId: string | undefined;
     try {
       activeFileNodeId = projectCollaborationDocument(collaboration.doc).nodeIdByPath.get(
@@ -610,7 +919,15 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         );
       }
     };
-  }, [activeFile.path, collaboration?.doc, collaboration?.participants, collaboration?.provider]);
+  }, [
+    activeFile.path,
+    collaboration?.canWrite,
+    collaboration?.connectionState,
+    collaboration?.doc,
+    collaboration?.participants,
+    collaboration?.provider,
+    collaboration?.provider?.isBinaryProtocolActive,
+  ]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -631,37 +948,23 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     }> = [];
 
     if (editor && model && provider && collaborationDoc && !usesPlaybackModel) {
-      let activeFileNodeId: string | undefined;
-      try {
-        activeFileNodeId = projectCollaborationDocument(collaborationDoc).nodeIdByPath.get(
-          activeFile.path,
-        );
-      } catch {
-        activeFileNodeId = undefined;
-      }
-
-      for (const participant of participants) {
-        if (
-          participant.sessionId === provider.awarenessSessionId ||
-          !participant.cursor ||
-          participant.cursor.fileNodeId !== activeFileNodeId ||
-          !canWriteCollaborationDocument(participant.role)
-        ) {
-          continue;
-        }
-        const cursor = resolveCollaborationCursor(collaborationDoc, participant.cursor);
-        if (!cursor) continue;
+      const captureSelection = (
+        participant: CollaborationParticipant,
+        anchorOffset: number,
+        headOffset: number,
+      ) => {
+        if (!canWriteCollaborationDocument(participant.role)) return;
         const key = `${participant.actorId}:${participant.sessionId}`;
-        const signature = `${cursor.anchorOffset}:${cursor.headOffset}`;
+        const signature = `${anchorOffset}:${headOffset}`;
         currentSignatures.set(key, signature);
         if (
           !scopeChanged &&
           isRecording &&
           recordedRemoteCursorSignaturesRef.current.get(key) !== signature
         ) {
-          const anchor = model.getPositionAt(cursor.anchorOffset);
-          const head = model.getPositionAt(cursor.headOffset);
-          const startsBeforeHead = cursor.anchorOffset <= cursor.headOffset;
+          const anchor = model.getPositionAt(anchorOffset);
+          const head = model.getPositionAt(headOffset);
+          const startsBeforeHead = anchorOffset <= headOffset;
           const start = startsBeforeHead ? anchor : head;
           const end = startsBeforeHead ? head : anchor;
           changedSelections.push({
@@ -679,6 +982,60 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             },
           });
         }
+      };
+
+      const yMonacoBinding = yMonacoBindingRef.current;
+      const standardParticipantKeys = new Set<string>();
+      let awarenessText =
+        yMonacoBinding?.editor === editor &&
+        yMonacoBinding.model === model &&
+        yMonacoBinding.usesAwareness
+          ? yMonacoBinding.text
+          : undefined;
+      if (!awarenessText && provider.isBinaryProtocolActive) {
+        try {
+          const fileNodeId = projectCollaborationDocument(collaborationDoc).nodeIdByPath.get(
+            activeFile.path,
+          );
+          awarenessText = fileNodeId
+            ? getCollaborationTexts(collaborationDoc).get(fileNodeId)
+            : undefined;
+        } catch {
+          awarenessText = undefined;
+        }
+      }
+      if (awarenessText) {
+        for (const selection of resolveMonacoAwarenessSelections(
+          provider.awareness,
+          awarenessText,
+        )) {
+          standardParticipantKeys.add(
+            `${selection.participant.actorId}:${selection.participant.sessionId}`,
+          );
+          captureSelection(selection.participant, selection.anchorOffset, selection.headOffset);
+        }
+      }
+      let activeFileNodeId: string | undefined;
+      try {
+        activeFileNodeId = projectCollaborationDocument(collaborationDoc).nodeIdByPath.get(
+          activeFile.path,
+        );
+      } catch {
+        activeFileNodeId = undefined;
+      }
+
+      for (const participant of participants) {
+        if (
+          standardParticipantKeys.has(`${participant.actorId}:${participant.sessionId}`) ||
+          participant.sessionId === provider.awarenessSessionId ||
+          !participant.cursor ||
+          participant.cursor.fileNodeId !== activeFileNodeId
+        ) {
+          continue;
+        }
+        const cursor = resolveCollaborationCursor(collaborationDoc, participant.cursor);
+        if (!cursor) continue;
+        captureSelection(participant, cursor.anchorOffset, cursor.headOffset);
       }
     }
 
@@ -700,6 +1057,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     collaboration?.doc,
     collaboration?.participants,
     collaboration?.provider,
+    collaboration?.provider?.isBinaryProtocolActive,
     editorRef,
     isRecording,
     usesPlaybackModel,
@@ -717,6 +1075,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   useEffect(() => {
     if (isBinaryActiveFile) {
       disposeEditorListeners();
+      disposeYMonacoBinding();
       editorRef.current = null;
       syncEditorRef(null);
     }
@@ -740,6 +1099,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
     editorDisposablesRef.current = [
       editor.onDidChangeModel(() => {
+        disposeYMonacoBinding();
         const model = editor.getModel();
         if (model) {
           modelVersionByUriRef.current.set(model.uri.toString(), model.getVersionId());
@@ -751,6 +1111,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         disposePlaybackModelsIfIdle(editor.getModel()?.uri ?? null);
         syncEditorRef(editor);
         publishCollaborationCursor(editor);
+        reconcileYMonacoBinding(editor);
       }),
       editor.onDidChangeModelContent((changeEvent) => {
         const endChangeSpan = startPerformanceSpan("editor.model_change");
@@ -765,6 +1126,19 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         if (isApplyingExternalModelValueRef.current) {
           pendingExternalModelCaptureRef.current = true;
           endChangeSpan({ source: "external" });
+          return;
+        }
+        const yMonacoBinding = yMonacoBindingRef.current;
+        if (
+          isConfiguringYMonacoRef.current ||
+          (yMonacoBinding?.editor === editor && yMonacoBinding.model === editor.getModel())
+        ) {
+          onEditorChange();
+          endChangeSpan({
+            source: "y-monaco",
+            update_mode: "direct-ytext",
+            change_count: changeEvent.changes.length,
+          });
           return;
         }
         const updateMode = applyEditorChangeToWorkspace(editor, changeEvent, beforeVersion);
@@ -789,7 +1163,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         if (isApplyingExternalModelValueRef.current) return;
         onEditorChange();
       }),
+      editor.onDidBlurEditorText(() => {
+        void collaboration?.provider?.flushNow();
+      }),
     ];
+    reconcileYMonacoBinding(editor);
   };
 
   return (
