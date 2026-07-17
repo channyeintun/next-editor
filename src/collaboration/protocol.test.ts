@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+  COLLABORATION_LEGACY_PERSISTENCE_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
+  COLLABORATION_SQLITE_PERSISTENCE_VERSION,
   MAX_ENCODED_YJS_UPDATE_LENGTH,
   canPublishCollaborationUpdate,
   collaborationAwarenessChannel,
   collaborationControlChannel,
   collaborationDocumentUpdateInputSchema,
   collaborationCreateRoomInputSchema,
+  collaborationPersistenceVersionSchema,
   collaborationRoomChannel,
   collaborationTransportSchema,
   collaborationWebSocketClientMessageSchema,
@@ -84,11 +87,13 @@ describe("collaboration protocol", () => {
 
     const snapshot = createCollaborationRoomSnapshot(doc, CLIENT_ID);
     expect(collaborationCreateRoomInputSchema.safeParse(snapshot).success).toBe(true);
-    expect(collaborationDocumentUpdateInputSchema.safeParse({
-      ...snapshot,
-      update: snapshot.snapshot,
-      snapshot: undefined,
-    }).success).toBe(false);
+    expect(
+      collaborationDocumentUpdateInputSchema.safeParse({
+        ...snapshot,
+        update: snapshot.snapshot,
+        snapshot: undefined,
+      }).success,
+    ).toBe(false);
   });
 
   it("parses only exact room channels and applies write roles", () => {
@@ -118,6 +123,15 @@ describe("collaboration protocol", () => {
 
     expect(collaborationTransportSchema.safeParse("cloudflare-websocket").success).toBe(true);
     expect(collaborationTransportSchema.safeParse("upstash-realtime").success).toBe(true);
+    expect(
+      collaborationPersistenceVersionSchema.safeParse(COLLABORATION_LEGACY_PERSISTENCE_VERSION)
+        .success,
+    ).toBe(true);
+    expect(
+      collaborationPersistenceVersionSchema.safeParse(COLLABORATION_SQLITE_PERSISTENCE_VERSION)
+        .success,
+    ).toBe(true);
+    expect(collaborationPersistenceVersionSchema.safeParse(3).success).toBe(false);
     expect(collaborationTransportSchema.safeParse("both").success).toBe(false);
     expect(
       collaborationWebSocketClientMessageSchema.safeParse({

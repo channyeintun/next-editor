@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const COLLABORATION_PROTOCOL_VERSION = 1 as const;
 export const COLLABORATION_DOCUMENT_SCHEMA_VERSION = 1 as const;
+export const COLLABORATION_LEGACY_PERSISTENCE_VERSION = 1 as const;
+export const COLLABORATION_SQLITE_PERSISTENCE_VERSION = 2 as const;
 
 // Keep the first transport limit deliberately below provider/request limits. The
 // client will batch small Yjs updates, while large initial states need a separate
@@ -23,6 +25,10 @@ export const collaborationRoleSchema = z.enum(["owner", "editor", "viewer"]);
 export const collaborationInviteRoleSchema = z.enum(["editor", "viewer"]);
 export const collaborationRoomStatusSchema = z.enum(["provisioning", "active", "closed", "failed"]);
 export const collaborationTransportSchema = z.enum(["upstash-realtime", "cloudflare-websocket"]);
+export const collaborationPersistenceVersionSchema = z.union([
+  z.literal(COLLABORATION_LEGACY_PERSISTENCE_VERSION),
+  z.literal(COLLABORATION_SQLITE_PERSISTENCE_VERSION),
+]);
 export const collaborationAssetIdSchema = z
   .string()
   .regex(SHA256_PATTERN, "expected a SHA-256 digest");
@@ -31,6 +37,7 @@ export type CollaborationRole = z.infer<typeof collaborationRoleSchema>;
 export type CollaborationInviteRole = z.infer<typeof collaborationInviteRoleSchema>;
 export type CollaborationRoomStatus = z.infer<typeof collaborationRoomStatusSchema>;
 export type CollaborationTransport = z.infer<typeof collaborationTransportSchema>;
+export type CollaborationPersistenceVersion = z.infer<typeof collaborationPersistenceVersionSchema>;
 
 export const collaborationAssetDescriptorSchema = z
   .object({
@@ -48,6 +55,7 @@ export interface CollaborationRoomDescriptor {
   hostUserId: string;
   status: CollaborationRoomStatus;
   transport: CollaborationTransport;
+  persistenceVersion: CollaborationPersistenceVersion;
   protocolVersion: number;
   documentSchemaVersion: number;
   roleVersion: number;

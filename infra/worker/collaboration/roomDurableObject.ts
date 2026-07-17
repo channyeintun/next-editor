@@ -1,16 +1,20 @@
 import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 import {
+  COLLABORATION_SQLITE_PERSISTENCE_VERSION,
   MAX_ENCODED_YJS_UPDATE_LENGTH,
   canPublishCollaborationUpdate,
   collaborationAwarenessEventSchema,
+  collaborationDocumentUpdateEventSchema,
   collaborationIdSchema,
+  collaborationPersistenceVersionSchema,
   collaborationRoleSchema,
   collaborationRoomControlCommandSchema,
   collaborationRoomDocumentBroadcastSchema,
   collaborationWebSocketClientMessageSchema,
   collaborationWebSocketServerMessageSchema,
   type CollaborationAwarenessEvent,
+  type CollaborationBootstrapResponse,
   type CollaborationControlEvent,
   type CollaborationDocumentUpdateEvent,
   type CollaborationRole,
@@ -24,7 +28,14 @@ import {
   getCollaborationSnapshotGeneration,
   shouldCompactCollaborationDocument,
 } from "./documentStore";
+import {
+  CollaborationRoomSqliteQuotaError,
+  RoomSqliteDocumentStore,
+  type AppendRoomSqliteUpdateResult,
+  type RoomSqliteStorage,
+} from "./roomSqliteDocumentStore";
 import { COLLABORATION_AWARENESS_TTL_MS } from "./awarenessStore";
+import { CollaborationRateLimitError } from "./rateLimits";
 import { getCollaborationRedis } from "./realtime";
 import { publishCollaborationMaintenanceJob } from "./qstash";
 import type { Env } from "../env";
@@ -35,6 +46,8 @@ const MAX_WEBSOCKET_MESSAGE_LENGTH = MAX_ENCODED_YJS_UPDATE_LENGTH + 16 * 1024;
 const MAX_USER_UPDATES_PER_SECOND = 30;
 const MAX_ROOM_UPDATES_PER_SECOND = 120;
 const MAX_AWARENESS_UPDATES_PER_SECOND = 20;
+const MAX_USER_CONNECTIONS_PER_MINUTE = 30;
+const ACCESS_REVALIDATION_INTERVAL_MS = 5_000;
 
 const canonicalSocketSessionSchema = z
   .object({
@@ -48,6 +61,7 @@ const canonicalSocketSessionSchema = z
     roleVersion: z.number().int().positive(),
     sessionId: collaborationIdSchema,
     attemptId: collaborationIdSchema,
+    persistenceVersion: collaborationPersistenceVersionSchema,
   })
   .strict();
 
@@ -60,6 +74,7 @@ const socketAttachmentSchema = canonicalSocketSessionSchema
     updateWindowCount: z.number().int().nonnegative().optional(),
     awarenessWindowSecond: z.number().int().nonnegative().optional(),
     awarenessWindowCount: z.number().int().nonnegative().optional(),
+    accessCheckedAt: z.number().int().nonnegative().optional(),
   })
   .strict();
 
@@ -165,6 +180,89 @@ export async function broadcastCollaborationRoomDocument(
   return true;
 }
 
+const sqliteDocumentInitializationSchema = z
+  .object({ roomId: collaborationIdSchema, snapshot: z.string().min(1) })
+  .strict();
+
+const sqliteAppendResultSchema = z
+  .object({
+    streamId: z.string().regex(/^\d+-0$/),
+    updateCount: z.number().int().nonnegative(),
+    duplicate: z.boolean(),
+    shouldCompact: z.boolean(),
+  })
+  .strict();
+
+export async function initializeCollaborationRoomSqliteDocument(
+  env: Env,
+  roomId: string,
+  snapshot: string,
+): Promise<boolean> {
+  const stub = roomStub(env, roomId);
+  if (!stub) return false;
+  const response = await stub.fetch(`${ROOM_ORIGIN}/sqlite/initialize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sqliteDocumentInitializationSchema.parse({ roomId, snapshot })),
+  });
+  if (!response.ok) throw new Error(`room SQLite initialization failed with ${response.status}`);
+  return true;
+}
+
+export async function getCollaborationRoomSqliteBootstrap(
+  env: Env,
+  roomId: string,
+  cursor?: string,
+): Promise<CollaborationBootstrapResponse | null> {
+  const stub = roomStub(env, roomId);
+  if (!stub) return null;
+  const url = new URL(`${ROOM_ORIGIN}/sqlite/bootstrap`);
+  if (cursor) url.searchParams.set("cursor", cursor);
+  const response = await stub.fetch(url);
+  if (!response.ok) throw new Error(`room SQLite bootstrap failed with ${response.status}`);
+  return (await response.json()) as CollaborationBootstrapResponse;
+}
+
+export async function appendCollaborationRoomSqliteDocument(
+  env: Env,
+  roomId: string,
+  event: CollaborationDocumentUpdateEvent,
+): Promise<AppendRoomSqliteUpdateResult | null> {
+  const stub = roomStub(env, roomId);
+  if (!stub) return null;
+  const response = await stub.fetch(`${ROOM_ORIGIN}/sqlite/append`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(collaborationDocumentUpdateEventSchema.parse(event)),
+  });
+  if (response.status === 429) throw new CollaborationRateLimitError("update");
+  if (response.status === 413) throw new CollaborationRoomSqliteQuotaError();
+  if (!response.ok) throw new Error(`room SQLite append failed with ${response.status}`);
+  return sqliteAppendResultSchema.parse(await response.json());
+}
+
+export async function exportCollaborationRoomSqliteDocument(
+  env: Env,
+  roomId: string,
+): Promise<CollaborationBootstrapResponse | null> {
+  const stub = roomStub(env, roomId);
+  if (!stub) return null;
+  const response = await stub.fetch(`${ROOM_ORIGIN}/sqlite/export`, { method: "POST" });
+  if (!response.ok) throw new Error(`room SQLite export failed with ${response.status}`);
+  return (await response.json()) as CollaborationBootstrapResponse;
+}
+
+export async function deleteCollaborationRoomSqliteDocument(
+  env: Env,
+  roomId: string,
+): Promise<boolean> {
+  const stub = roomStub(env, roomId);
+  if (!stub) return false;
+  const response = await stub.fetch(`${ROOM_ORIGIN}/sqlite/purge`, { method: "POST" });
+  if (!response.ok) throw new Error(`room SQLite purge failed with ${response.status}`);
+  return true;
+}
+
 export async function listCollaborationRoomSocketAwareness(
   env: Env,
   roomId: string,
@@ -183,9 +281,16 @@ export async function listCollaborationRoomSocketAwareness(
 export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private roomUpdateWindowSecond = 0;
   private roomUpdateWindowCount = 0;
+  private internalUpdateWindowSecond = 0;
+  private readonly internalUpdateWindowCounts = new Map<string, number>();
+  private connectionWindowMinute = 0;
+  private readonly connectionWindowCounts = new Map<string, number>();
+  private sqliteCompactionScheduled = false;
+  private readonly sqliteDocument: RoomSqliteDocumentStore;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.sqliteDocument = new RoomSqliteDocumentStore(ctx.storage as unknown as RoomSqliteStorage);
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
@@ -196,6 +301,81 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     }
     if (request.method === "GET" && url.pathname === "/participants") {
       return Response.json({ participants: this.currentParticipants() });
+    }
+    if (request.method === "POST" && url.pathname === "/sqlite/initialize") {
+      const parsed = sqliteDocumentInitializationSchema.safeParse(
+        await request.json().catch(() => null),
+      );
+      if (!parsed.success) {
+        return Response.json({ error: "invalid SQLite document initialization" }, { status: 400 });
+      }
+      if (!this.isCurrentRoom(parsed.data.roomId)) {
+        return Response.json({ error: "invalid collaboration room" }, { status: 403 });
+      }
+      try {
+        this.sqliteDocument.initialize(parsed.data.snapshot);
+        return Response.json({ initialized: true });
+      } catch (error) {
+        if (error instanceof CollaborationRoomSqliteQuotaError) {
+          return Response.json({ error: error.message }, { status: 413 });
+        }
+        throw error;
+      }
+    }
+    if (request.method === "GET" && url.pathname === "/sqlite/bootstrap") {
+      const cursor = url.searchParams.get("cursor") ?? undefined;
+      if (cursor && !/^\d+-0$/.test(cursor)) {
+        return Response.json({ error: "invalid cursor" }, { status: 400 });
+      }
+      return Response.json(this.sqliteDocument.bootstrap(cursor));
+    }
+    if (request.method === "POST" && url.pathname === "/sqlite/append") {
+      const parsed = collaborationDocumentUpdateEventSchema.safeParse(
+        await request.json().catch(() => null),
+      );
+      if (!parsed.success) {
+        return Response.json({ error: "invalid SQLite document update" }, { status: 400 });
+      }
+      if (!this.isCurrentRoom(parsed.data.roomId)) {
+        return Response.json({ error: "invalid collaboration room" }, { status: 403 });
+      }
+      try {
+        if (!this.consumeInternalUpdateQuota(parsed.data.actorId)) {
+          return Response.json(
+            { error: "collaboration update rate limit exceeded" },
+            { status: 429 },
+          );
+        }
+        const stored = this.sqliteDocument.append(parsed.data);
+        if (stored.event) {
+          this.broadcast({
+            type: "document.update",
+            streamId: stored.streamId,
+            data: stored.event,
+          });
+        }
+        if (stored.shouldCompact) this.scheduleSqliteCompaction();
+        return Response.json({
+          streamId: stored.streamId,
+          updateCount: stored.updateCount,
+          duplicate: stored.duplicate,
+          shouldCompact: stored.shouldCompact,
+        });
+      } catch (error) {
+        if (error instanceof CollaborationRoomSqliteQuotaError) {
+          return Response.json({ error: error.message }, { status: 413 });
+        }
+        throw error;
+      }
+    }
+    if (request.method === "POST" && url.pathname === "/sqlite/export") {
+      return Response.json(this.sqliteDocument.exportDocument());
+    }
+    if (request.method === "POST" && url.pathname === "/sqlite/purge") {
+      for (const socket of this.ctx.getWebSockets()) socket.close(4001, "room purged");
+      await this.ctx.storage.deleteAlarm();
+      await this.ctx.storage.deleteAll();
+      return Response.json({ purged: true });
     }
     if (request.method === "POST" && url.pathname === "/control") {
       const parsed = collaborationRoomControlCommandSchema.safeParse(
@@ -270,6 +450,25 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     this.broadcastLeave(socket);
   }
 
+  alarm(): void {
+    this.sqliteCompactionScheduled = false;
+    const startedAt = performance.now();
+    try {
+      const result = this.sqliteDocument.compact();
+      console.log("collaboration_sqlite_compaction", {
+        roomId: this.ctx.id.name ?? null,
+        ...result,
+        durationMs: performance.now() - startedAt,
+      });
+    } catch (error) {
+      console.error("collaboration_sqlite_compaction_failed", {
+        roomId: this.ctx.id.name ?? null,
+        durationMs: performance.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   private acceptConnection(request: Request): Response {
     const session = decodeCanonicalSession(request);
     if (!session) return new Response("invalid collaboration session", { status: 403 });
@@ -278,6 +477,12 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       request.headers.get("Upgrade")?.toLowerCase() !== "websocket"
     ) {
       return new Response("invalid collaboration room", { status: 403 });
+    }
+    if (!this.consumeConnectionQuota(session.userId)) {
+      return new Response("collaboration connection rate limit exceeded", {
+        status: 429,
+        headers: { "Retry-After": "60" },
+      });
     }
 
     for (const existing of this.ctx.getWebSockets()) {
@@ -294,7 +499,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
-    const attachment: SocketAttachment = { ...session };
+    const attachment: SocketAttachment = { ...session, accessCheckedAt: Date.now() };
     this.ctx.acceptWebSocket(server, [`room:${session.roomId}`, `user:${session.userId}`]);
     server.serializeAttachment(attachment);
     sendMessage(server, {
@@ -329,12 +534,23 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     socket: WebSocket,
     attachment: SocketAttachment,
   ): Promise<SocketAttachment | null> {
+    if (
+      attachment.persistenceVersion === COLLABORATION_SQLITE_PERSISTENCE_VERSION &&
+      attachment.accessCheckedAt !== undefined &&
+      Date.now() - attachment.accessCheckedAt < ACCESS_REVALIDATION_INTERVAL_MS
+    ) {
+      return attachment;
+    }
     const access = await getCollaborationRoomAccess(
       this.env.DB,
       attachment.roomId,
       attachment.userId,
     );
-    if (!access || access.transport !== "cloudflare-websocket") {
+    if (
+      !access ||
+      access.transport !== "cloudflare-websocket" ||
+      access.persistence_version !== attachment.persistenceVersion
+    ) {
       this.rejectSocket(socket, "access-revoked", "Room access was revoked", true, 4003);
       return null;
     }
@@ -347,7 +563,11 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       return null;
     }
     if (access.member_role !== attachment.role || access.role_version !== attachment.roleVersion) {
-      const next = this.withRole(attachment, access.member_role, access.role_version);
+      const next = this.withRole(
+        { ...attachment, accessCheckedAt: Date.now() },
+        access.member_role,
+        access.role_version,
+      );
       socket.serializeAttachment(next);
       sendMessage(socket, {
         type: "control.room",
@@ -355,7 +575,9 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       });
       return next;
     }
-    return attachment;
+    const checkedAttachment = { ...attachment, accessCheckedAt: Date.now() };
+    socket.serializeAttachment(checkedAttachment);
+    return checkedAttachment;
   }
 
   private withRole(
@@ -368,6 +590,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       ...attachment,
       role,
       roleVersion,
+      accessCheckedAt: Date.now(),
       ...(awareness?.kind === "state"
         ? { awareness: { ...awareness, role, isHost: attachment.hostUserId === attachment.userId } }
         : {}),
@@ -449,6 +672,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     if (this.roomUpdateWindowSecond !== second) {
       this.roomUpdateWindowSecond = second;
       this.roomUpdateWindowCount = 0;
+      this.internalUpdateWindowCounts.clear();
     }
     this.roomUpdateWindowCount += 1;
     if (
@@ -478,6 +702,41 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       receivedAt: Date.now(),
     };
     try {
+      if (attachment.persistenceVersion === COLLABORATION_SQLITE_PERSISTENCE_VERSION) {
+        const persistenceStartedAt = performance.now();
+        const result = this.sqliteDocument.append(event);
+        const persistedAt = performance.now();
+        sendMessage(socket, {
+          type: "document.ack",
+          updateId: event.updateId,
+          streamId: result.streamId,
+          duplicate: result.duplicate,
+        });
+        const acknowledgedAt = performance.now();
+        if (result.event) {
+          this.broadcast(
+            { type: "document.update", streamId: result.streamId, data: result.event },
+            socket,
+          );
+        }
+        const broadcastAt = performance.now();
+        if (result.shouldCompact) this.scheduleSqliteCompaction();
+        console.log("collaboration_websocket_update", {
+          roomId: attachment.roomId,
+          actorId: attachment.userId,
+          updateId: event.updateId,
+          bytes: Math.floor((event.update.length * 3) / 4),
+          duplicate: result.duplicate,
+          updateCount: result.updateCount,
+          persistence: "do-sqlite",
+          durableInsertMs: persistedAt - persistenceStartedAt,
+          acknowledgeMs: acknowledgedAt - persistedAt,
+          broadcastMs: broadcastAt - acknowledgedAt,
+          totalMs: broadcastAt - handlerStartedAt,
+        });
+        return;
+      }
+
       const redis = getCollaborationRedis(this.env);
       const persistenceStartedAt = performance.now();
       const result = await appendCollaborationUpdate(redis, event, { publish: false });
@@ -501,6 +760,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         bytes: Math.floor((event.update.length * 3) / 4),
         duplicate: result.duplicate,
         updateCount: result.updateCount,
+        persistence: "upstash-redis",
         persistenceMs: persistedAt - persistenceStartedAt,
         acknowledgeMs: acknowledgedAt - persistedAt,
         broadcastMs: broadcastAt - acknowledgedAt,
@@ -514,12 +774,15 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         totalMs: performance.now() - handlerStartedAt,
         error: error instanceof Error ? error.message : String(error),
       });
+      const quotaExceeded = error instanceof CollaborationRoomSqliteQuotaError;
       this.rejectSocket(
         socket,
-        "persistence-failed",
-        "Collaboration update could not be persisted",
+        quotaExceeded ? "quota-exceeded" : "persistence-failed",
+        quotaExceeded
+          ? "Collaboration room document quota exceeded"
+          : "Collaboration update could not be persisted",
         false,
-        1011,
+        quotaExceeded ? undefined : 1011,
         event.updateId,
       );
     }
@@ -552,6 +815,55 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
           error: error instanceof Error ? error.message : String(error),
         });
       }),
+    );
+  }
+
+  private consumeInternalUpdateQuota(actorId: string): boolean {
+    const second = Math.floor(Date.now() / 1_000);
+    if (this.internalUpdateWindowSecond !== second) {
+      this.internalUpdateWindowSecond = second;
+      this.internalUpdateWindowCounts.clear();
+    }
+    if (this.roomUpdateWindowSecond !== second) {
+      this.roomUpdateWindowSecond = second;
+      this.roomUpdateWindowCount = 0;
+    }
+    const userCount = (this.internalUpdateWindowCounts.get(actorId) ?? 0) + 1;
+    this.internalUpdateWindowCounts.set(actorId, userCount);
+    this.roomUpdateWindowCount += 1;
+    return (
+      userCount <= MAX_USER_UPDATES_PER_SECOND &&
+      this.roomUpdateWindowCount <= MAX_ROOM_UPDATES_PER_SECOND
+    );
+  }
+
+  private consumeConnectionQuota(userId: string): boolean {
+    const minute = Math.floor(Date.now() / 60_000);
+    if (this.connectionWindowMinute !== minute) {
+      this.connectionWindowMinute = minute;
+      this.connectionWindowCounts.clear();
+    }
+    const count = (this.connectionWindowCounts.get(userId) ?? 0) + 1;
+    this.connectionWindowCounts.set(userId, count);
+    return count <= MAX_USER_CONNECTIONS_PER_MINUTE;
+  }
+
+  private scheduleSqliteCompaction(): void {
+    if (this.sqliteCompactionScheduled) return;
+    this.sqliteCompactionScheduled = true;
+    this.ctx.waitUntil(
+      this.ctx.storage
+        .getAlarm()
+        .then((scheduledAt) =>
+          scheduledAt === null ? this.ctx.storage.setAlarm(Date.now() + 1_000) : undefined,
+        )
+        .catch((error) => {
+          this.sqliteCompactionScheduled = false;
+          console.error("collaboration_sqlite_alarm_failed", {
+            roomId: this.ctx.id.name ?? null,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }),
     );
   }
 

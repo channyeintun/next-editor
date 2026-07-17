@@ -3,7 +3,9 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+  COLLABORATION_LEGACY_PERSISTENCE_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
+  COLLABORATION_SQLITE_PERSISTENCE_VERSION,
   MAX_ENCODED_YJS_SNAPSHOT_LENGTH,
   MAX_ENCODED_YJS_UPDATE_LENGTH,
   canPublishCollaborationUpdate,
@@ -21,6 +23,7 @@ import {
   updateCollaborationMemberInputSchema,
   type CollaborationDocumentUpdateInput,
   type CollaborationCreateRoomInput,
+  type CollaborationPersistenceVersion,
   type CollaborationRole,
   type CollaborationTransport,
 } from "../../../src/collaboration/protocol";
@@ -94,12 +97,18 @@ import {
 } from "../collaboration/assetStore";
 import type { Env } from "../env";
 import {
+  appendCollaborationRoomSqliteDocument,
   broadcastCollaborationRoomDocument,
+  deleteCollaborationRoomSqliteDocument,
+  exportCollaborationRoomSqliteDocument,
   forwardCollaborationWebSocket,
+  getCollaborationRoomSqliteBootstrap,
   hasCollaborationRoomBinding,
+  initializeCollaborationRoomSqliteDocument,
   listCollaborationRoomSocketAwareness,
   notifyCollaborationRoomControl,
 } from "../collaboration/roomDurableObject";
+import { CollaborationRoomSqliteQuotaError } from "../collaboration/roomSqliteDocumentStore";
 
 const MAX_UPDATE_REQUEST_BYTES = MAX_ENCODED_YJS_UPDATE_LENGTH + 2 * 1024;
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
@@ -128,6 +137,7 @@ function roomResponse(room: CollaborationRoomRow, role: CollaborationRoomAccess[
       hostUserId: room.host_user_id,
       status: room.status,
       transport: room.transport,
+      persistenceVersion: room.persistence_version,
       protocolVersion: room.protocol_version,
       documentSchemaVersion: room.document_schema_version,
       roleVersion: room.role_version,
@@ -151,6 +161,19 @@ function defaultCollaborationTransport(env: Env): CollaborationTransport {
     return parsed.data;
   }
   return hasCollaborationRoomBinding(env) ? "cloudflare-websocket" : "upstash-realtime";
+}
+
+function defaultCollaborationPersistenceVersion(
+  env: Env,
+  transport: CollaborationTransport,
+): CollaborationPersistenceVersion {
+  if (transport === "upstash-realtime") return COLLABORATION_LEGACY_PERSISTENCE_VERSION;
+  const configured = env.COLLABORATION_WEBSOCKET_PERSISTENCE;
+  if (configured === undefined || configured === "sqlite") {
+    return COLLABORATION_SQLITE_PERSISTENCE_VERSION;
+  }
+  if (configured === "redis") return COLLABORATION_LEGACY_PERSISTENCE_VERSION;
+  throw new CollaborationTransportConfigurationError();
 }
 
 function memberResponse(member: Awaited<ReturnType<typeof listCollaborationRoomMembers>>[number]) {
@@ -529,9 +552,12 @@ collaborationRoute.post("/jobs/maintenance", async (c) => {
 
   const room = await getCollaborationRoomById(c.env.DB, job.data.roomId);
   if (!room || room.purged_at !== null) return c.body(null, 204);
-  const redis = getCollaborationRedis(c.env);
   if (job.data.kind === "compact-room") {
     if (room.status !== "active" && room.status !== "closed") return c.body(null, 204);
+    if (room.persistence_version === COLLABORATION_SQLITE_PERSISTENCE_VERSION) {
+      return c.json({ compacted: false, delegatedToRoomAlarm: true });
+    }
+    const redis = getCollaborationRedis(c.env);
     const result = await compactCollaborationDocument(redis, room.id, job.data.expectedGeneration);
     if (result.compacted) {
       scheduleAuditEvent(c, {
@@ -556,7 +582,14 @@ collaborationRoute.post("/jobs/maintenance", async (c) => {
   ) {
     return c.body(null, 204);
   }
-  const deletedKeys = await deleteCollaborationDocument(redis, room.id);
+  let deletedKeys: number;
+  if (room.persistence_version === COLLABORATION_SQLITE_PERSISTENCE_VERSION) {
+    const deleted = await deleteCollaborationRoomSqliteDocument(c.env, room.id);
+    if (!deleted) throw new Error("collaboration room SQLite binding unavailable during purge");
+    deletedKeys = 1;
+  } else {
+    deletedKeys = await deleteCollaborationDocument(getCollaborationRedis(c.env), room.id);
+  }
   const deletedAssets = await deleteCollaborationRoomAssets(c.env.BUCKET, room.id);
   const deletedAssetRecords = await deleteCollaborationRoomAssetRegistrations(c.env.DB, room.id);
   const marked = await markCollaborationRoomPurged(c.env.DB, room.id, job.data.closedAt);
@@ -593,10 +626,19 @@ collaborationRoute.post("/rooms", async (c) => {
   const parsed = await parseCreateRoomBody(c);
   if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
 
-  let redis;
+  let transport: CollaborationTransport;
+  let persistenceVersion: CollaborationPersistenceVersion;
+  let legacyRedis: ReturnType<typeof getCollaborationRedis> | null = null;
   try {
-    redis = getCollaborationRedis(c.env);
+    transport = defaultCollaborationTransport(c.env);
+    persistenceVersion = defaultCollaborationPersistenceVersion(c.env, transport);
+    if (persistenceVersion === COLLABORATION_LEGACY_PERSISTENCE_VERSION) {
+      legacyRedis = getCollaborationRedis(c.env);
+    }
   } catch (error) {
+    if (error instanceof CollaborationTransportConfigurationError) {
+      return c.json({ error: "collaboration transport unavailable" }, 503);
+    }
     if (error instanceof CollaborationConfigurationError) {
       return c.json({ error: "collaboration unavailable" }, 503);
     }
@@ -609,7 +651,8 @@ collaborationRoute.post("/rooms", async (c) => {
       ownerId: user.id,
       protocolVersion: COLLABORATION_PROTOCOL_VERSION,
       documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
-      transport: defaultCollaborationTransport(c.env),
+      transport,
+      persistenceVersion,
     });
   } catch (error) {
     if (error instanceof CollaborationRoomQuotaError) {
@@ -621,7 +664,17 @@ collaborationRoute.post("/rooms", async (c) => {
     throw error;
   }
   try {
-    await initializeCollaborationDocument(redis, room.id, parsed.data.snapshot);
+    if (room.persistence_version === COLLABORATION_SQLITE_PERSISTENCE_VERSION) {
+      const initialized = await initializeCollaborationRoomSqliteDocument(
+        c.env,
+        room.id,
+        parsed.data.snapshot,
+      );
+      if (!initialized) throw new Error("collaboration room SQLite binding unavailable");
+    } else {
+      if (!legacyRedis) throw new Error("collaboration Redis binding unavailable");
+      await initializeCollaborationDocument(legacyRedis, room.id, parsed.data.snapshot);
+    }
   } catch (error) {
     await setCollaborationRoomStatus(c.env.DB, room.id, "failed");
     console.error("Failed to seed collaboration room", {
@@ -674,6 +727,11 @@ collaborationRoute.get("/rooms/:roomId/bootstrap", async (c) => {
   if (!access) return c.json({ error: "not found" }, 404);
   if (access.status !== "active") return c.json({ error: "room is not active" }, 409);
   try {
+    if (access.persistence_version === COLLABORATION_SQLITE_PERSISTENCE_VERSION) {
+      const bootstrap = await getCollaborationRoomSqliteBootstrap(c.env, access.id, cursor);
+      if (!bootstrap) return c.json({ error: "collaboration unavailable" }, 503);
+      return c.json(bootstrap);
+    }
     return c.json(await getCollaborationBootstrap(getCollaborationRedis(c.env), access.id, cursor));
   } catch (error) {
     if (error instanceof CollaborationConfigurationError) {
@@ -800,7 +858,11 @@ collaborationRoute.get("/rooms/:roomId/export", async (c) => {
   if (!access || access.member_role !== "owner") return c.json({ error: "not found" }, 404);
   if (access.purged_at !== null) return c.json({ error: "room document has expired" }, 410);
   try {
-    const document = await exportCollaborationDocument(getCollaborationRedis(c.env), access.id);
+    const document =
+      access.persistence_version === COLLABORATION_SQLITE_PERSISTENCE_VERSION
+        ? await exportCollaborationRoomSqliteDocument(c.env, access.id)
+        : await exportCollaborationDocument(getCollaborationRedis(c.env), access.id);
+    if (!document) return c.json({ error: "collaboration unavailable" }, 503);
     scheduleAuditEvent(c, {
       roomId: access.id,
       actorUserId: user.id,
@@ -1134,21 +1196,29 @@ collaborationRoute.post("/rooms/:roomId/updates", async (c) => {
 
   const event = eventFor(parsed.data, access.id, user.id);
   try {
-    const redis = getCollaborationRedis(c.env);
-    await enforceCollaborationUpdateRateLimit(redis, access.id, user.id);
-    const result = await appendCollaborationUpdate(redis, event, {
-      publish: access.transport === "upstash-realtime",
-    });
-    if (access.transport === "cloudflare-websocket") {
+    const sqlitePersistence =
+      access.persistence_version === COLLABORATION_SQLITE_PERSISTENCE_VERSION;
+    let result;
+    if (sqlitePersistence) {
+      result = await appendCollaborationRoomSqliteDocument(c.env, access.id, event);
+    } else {
+      const redis = getCollaborationRedis(c.env);
+      await enforceCollaborationUpdateRateLimit(redis, access.id, user.id);
+      result = await appendCollaborationUpdate(redis, event, {
+        publish: access.transport === "upstash-realtime",
+      });
+      if (shouldCompactCollaborationDocument(result.updateCount)) {
+        const generation = await getCollaborationSnapshotGeneration(redis, access.id);
+        scheduleCompaction(c, access.id, generation);
+      }
+    }
+    if (!result) throw new Error("collaboration room coordinator unavailable");
+    if (!sqlitePersistence && access.transport === "cloudflare-websocket") {
       const delivered = await broadcastCollaborationRoomDocument(c.env, access.id, {
         streamId: result.streamId,
         event,
       });
       if (!delivered) throw new Error("collaboration room coordinator unavailable");
-    }
-    if (shouldCompactCollaborationDocument(result.updateCount)) {
-      const generation = await getCollaborationSnapshotGeneration(redis, access.id);
-      scheduleCompaction(c, access.id, generation);
     }
     console.log("collaboration_update", {
       roomId: access.id,
@@ -1167,7 +1237,10 @@ collaborationRoute.post("/rooms/:roomId/updates", async (c) => {
         "Retry-After": "1",
       });
     }
-    if (error instanceof CollaborationDocumentQuotaError) {
+    if (
+      error instanceof CollaborationDocumentQuotaError ||
+      error instanceof CollaborationRoomSqliteQuotaError
+    ) {
       return c.json({ error: "collaboration room document quota exceeded" }, 413);
     }
     if (error instanceof CollaborationConfigurationError) {
@@ -1203,18 +1276,20 @@ collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
   if (!hasCollaborationRoomBinding(c.env)) {
     return c.json({ error: "collaboration WebSocket unavailable" }, 503);
   }
-  try {
-    await enforceCollaborationConnectionRateLimit(getCollaborationRedis(c.env), user.id);
-  } catch (error) {
-    if (error instanceof CollaborationRateLimitError) {
-      return c.json({ error: "collaboration connection rate limit exceeded" }, 429, {
-        "Retry-After": "60",
-      });
+  if (access.persistence_version === COLLABORATION_LEGACY_PERSISTENCE_VERSION) {
+    try {
+      await enforceCollaborationConnectionRateLimit(getCollaborationRedis(c.env), user.id);
+    } catch (error) {
+      if (error instanceof CollaborationRateLimitError) {
+        return c.json({ error: "collaboration connection rate limit exceeded" }, 429, {
+          "Retry-After": "60",
+        });
+      }
+      if (error instanceof CollaborationConfigurationError) {
+        return c.json({ error: "collaboration unavailable" }, 503);
+      }
+      throw error;
     }
-    if (error instanceof CollaborationConfigurationError) {
-      return c.json({ error: "collaboration unavailable" }, 503);
-    }
-    throw error;
   }
   return forwardCollaborationWebSocket(c.env, c.req.raw, {
     roomId: access.id,
@@ -1225,6 +1300,7 @@ collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
     hostUserId: access.host_user_id,
     role: access.member_role,
     roleVersion: access.role_version,
+    persistenceVersion: access.persistence_version,
     sessionId: sessionId.data,
     attemptId: attemptId.data,
   });

@@ -94,6 +94,7 @@ const roomSession: CollaborationRoomSession = {
     hostUserId: "10000000-0000-4000-8000-000000000001",
     status: "active",
     transport: "upstash-realtime",
+    persistenceVersion: 1,
     protocolVersion: 1,
     documentSchemaVersion: 1,
     roleVersion: 1,

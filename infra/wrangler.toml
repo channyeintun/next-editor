@@ -14,12 +14,13 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 PUBLIC_URL = "https://nexteditor.dev"
 COLLABORATION_DEFAULT_TRANSPORT = "cloudflare-websocket"
+COLLABORATION_WEBSOCKET_PERSISTENCE = "sqlite"
 # Required for authentication — auth fails at runtime without these. Set them with:
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
 #   wrangler secret put GOOGLE_CLIENT_SECRET --config infra/wrangler.toml
 #   wrangler secret put SESSION_SECRET       --config infra/wrangler.toml
-# Live collaboration is fail-closed. Upstash Redis is reserved for this data
-# plane; public lesson/playlist caching uses the CACHE Workers KV binding:
+# Upstash Redis is reserved for legacy room durability and the Realtime
+# fallback; public lesson/playlist caching uses the CACHE Workers KV binding:
 #   wrangler secret put COLLAB_REDIS_REST_URL   --config infra/wrangler.toml
 #   wrangler secret put COLLAB_REDIS_REST_TOKEN --config infra/wrangler.toml
 # QStash is optional for local development. Production should configure all
@@ -111,9 +112,9 @@ bucket_name = "next-editor-tube-media"
 [[kv_namespaces]]
 binding = "CACHE"
 
-# One hibernating WebSocket coordinator per live-collaboration room. Durable
-# Yjs state remains in Upstash Redis; this object owns only live sockets,
-# ephemeral awareness, immediate role enforcement, and direct fan-out.
+# One hibernating WebSocket coordinator per live-collaboration room. New rooms
+# keep their durable Yjs log in this object's SQLite storage; persistence v1
+# rooms retain the legacy Upstash Redis path during migration and rollback.
 [[durable_objects.bindings]]
 name = "COLLABORATION_ROOMS"
 class_name = "CollaborationRoomDurableObject"
