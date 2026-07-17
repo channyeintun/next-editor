@@ -273,6 +273,18 @@ export function createContentDelta(prev: string, next: string): ContentDelta | n
  */
 export function createAppendContentDelta(base: string, appended: string): ContentDelta | null {
   if (appended.length === 0) return null;
+  const baseLastCodeUnit = base.charCodeAt(base.length - 1);
+  const appendedFirstCodeUnit = appended.charCodeAt(0);
+  if (
+    baseLastCodeUnit >= 0xd800 &&
+    baseLastCodeUnit <= 0xdbff &&
+    appendedFirstCodeUnit >= 0xdc00 &&
+    appendedFirstCodeUnit <= 0xdfff
+  ) {
+    // TextEncoder must see a surrogate pair together. Encoding its halves in
+    // separate equal/insert operations would turn both into replacement chars.
+    return null;
+  }
 
   const baseBytes = contentTextEncoder.encode(base);
   const appendedBytes = contentTextEncoder.encode(appended);

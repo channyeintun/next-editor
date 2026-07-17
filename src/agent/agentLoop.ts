@@ -247,9 +247,10 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
           onDelta({ k: "status", status: "streaming" });
         }
         const text = outputMessageText(item.content);
-        const delta = text.startsWith(messageSnapshot)
+        const appendDelta = text.startsWith(messageSnapshot)
           ? createAppendContentDelta(messageSnapshot, text.slice(messageSnapshot.length))
-          : createContentDelta(messageSnapshot, text);
+          : null;
+        const delta = appendDelta ?? createContentDelta(messageSnapshot, text);
         if (delta) {
           messageSnapshot = text;
           onDelta({ k: "content", delta });

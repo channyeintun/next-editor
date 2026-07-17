@@ -123,6 +123,17 @@ describe.skipIf(!hasArtifact)("frameDelta reconstruction errors", () => {
     expect(created.delta.slice(-appendedBytes.byteLength)).toEqual(appendedBytes);
     expect(createAppendContentDelta(base, "")).toBeNull();
     expect(() => applyContentDelta(`${base}!`, created)).toThrow(DmpBaseMismatchError);
+
+    const splitSurrogateBase = "split emoji: \ud83c";
+    const splitSurrogateSuffix = "\udf0d";
+    expect(createAppendContentDelta(splitSurrogateBase, splitSurrogateSuffix)).toBeNull();
+    const fallback = createContentDelta(
+      splitSurrogateBase,
+      splitSurrogateBase + splitSurrogateSuffix,
+    );
+    expect(fallback).not.toBeNull();
+    if (!fallback) throw new Error("Expected a split-surrogate fallback delta");
+    expect(applyContentDelta("split emoji: �", fallback)).toBe("split emoji: 🌍");
   });
 
   it("attributes a base-mismatch failure to the failing frame index", async () => {
