@@ -253,8 +253,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   useEffect(() => {
     if (isRecording && collaboration?.provider && !collaboration.isHost) {
-      stopRecording();
-      onStopRecording?.();
+      void stopRecording().then(() => onStopRecording?.());
     }
   }, [collaboration?.isHost, collaboration?.provider, isRecording, onStopRecording, stopRecording]);
 
@@ -367,7 +366,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   const handleRecordButtonClick = async () => {
     if (isRecording) {
-      stopRecording();
+      await stopRecording();
       onStopRecording?.();
       return;
     }

@@ -47,7 +47,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   const {
     clearRecording,
     startRecording,
-    stopRecording,
+    stopRecording: stopRecordingImmediately,
     play,
     pause,
     stop,
@@ -70,6 +70,28 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handleChatEvent,
   } = useNextEditorActorActions(actorRef);
   useNextEditorInteractionEffects(actorRef, config);
+  const previewHandle = usePreviewAdapterHandle();
+  const stopRecordingPromiseRef = useRef<Promise<void> | null>(null);
+
+  const stopRecording = () => {
+    if (stopRecordingPromiseRef.current) {
+      return stopRecordingPromiseRef.current;
+    }
+
+    const request = (async () => {
+      try {
+        await previewHandle.recordingStopPreparer.current?.();
+      } finally {
+        try {
+          stopRecordingImmediately();
+        } finally {
+          stopRecordingPromiseRef.current = null;
+        }
+      }
+    })();
+    stopRecordingPromiseRef.current = request;
+    return request;
+  };
 
   // Opt-in: forward the live SCR3 recording stream to a configured sink (inert if absent).
   useRecordingStreamSink(actorRef, config.recordingStreamSink);

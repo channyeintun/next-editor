@@ -24,7 +24,7 @@ export interface NextEditorActions {
     enableCamera?: boolean;
     screenStream?: MediaStream;
   }) => void;
-  stopRecording: () => void;
+  stopRecording: () => Promise<void>;
   play: () => void;
   pause: () => void;
   stop: () => void;

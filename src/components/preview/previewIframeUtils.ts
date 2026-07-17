@@ -1,4 +1,5 @@
 export const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
+export const RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE = "NEXT_EDITOR_REQUEST_RUNTIME_SNAPSHOT";
 
 export interface PreviewScrollPosition {
   scrollTop: number;

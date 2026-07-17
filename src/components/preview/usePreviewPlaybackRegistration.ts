@@ -20,7 +20,6 @@ import { RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
 interface UsePreviewPlaybackRegistrationOptions {
   previewHandle: PreviewAdapterHandle;
-  captureRuntimePreviewSnapshot: () => string | null;
   isPlaybackPreviewActive: boolean;
   isRuntimePreviewActive: boolean;
   isLiveRuntimePreviewActive: boolean;
@@ -75,7 +74,6 @@ function getIframeDocumentAndWindow(iframe: HTMLIFrameElement): {
 
 export function usePreviewPlaybackRegistration({
   previewHandle,
-  captureRuntimePreviewSnapshot,
   isPlaybackPreviewActive,
   isRuntimePreviewActive,
   isLiveRuntimePreviewActive,
@@ -217,7 +215,7 @@ export function usePreviewPlaybackRegistration({
       const interaction = pendingInteractionRef.current;
       pendingInteractionRef.current = null;
       const content = isRuntimePreviewActive
-        ? captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || undefined
+        ? lastRuntimeSnapshotRef.current || undefined
         : lastContentRef.current;
 
       return {
@@ -236,7 +234,6 @@ export function usePreviewPlaybackRegistration({
       previewHandle.snapshotGetter.current = null;
     };
   }, [
-    captureRuntimePreviewSnapshot,
     isRuntimePreviewActive,
     isOpenRef,
     lastContentRef,

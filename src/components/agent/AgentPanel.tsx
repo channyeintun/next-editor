@@ -158,7 +158,9 @@ function MessageRow({ item }: { item: Extract<ChatItem, { kind: "message" }> }) 
               ))}
             </div>
           ) : null}
-          {item.text ? <div className="whitespace-pre-wrap wrap-break-word">{item.text}</div> : null}
+          {item.text ? (
+            <div className="whitespace-pre-wrap wrap-break-word">{item.text}</div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -295,7 +297,13 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const handleSubmit = () => {
     const prompt = promptInput.trim();
 
-    if ((!prompt && promptImages.length === 0) || isBusy || !apiKey || !workspaceStore || isReplayActive) {
+    if (
+      (!prompt && promptImages.length === 0) ||
+      isBusy ||
+      !apiKey ||
+      !workspaceStore ||
+      isReplayActive
+    ) {
       return;
     }
 
@@ -325,8 +333,8 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
           status: snapshot.status,
         };
       },
-      getPreviewInspection: () =>
-        previewHandle.livePreviewInspectionGetter.current?.() ?? null,
+      getPreviewInspection: async () =>
+        (await previewHandle.livePreviewInspectionGetter.current?.()) ?? null,
       capturePreviewScreenshot: async () => {
         if (!selectedModelOption?.supportsImages) {
           throw new Error(
@@ -380,7 +388,9 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
       const latestSlots = MAX_CHAT_IMAGES - agentStore.getSnapshot().context.draftImages.length;
       agentStore.trigger.addDraftImages({ images: images.slice(0, latestSlots) });
       setAttachmentError(
-        files.length > availableSlots ? `Only the first ${availableSlots} images were attached.` : null,
+        files.length > availableSlots
+          ? `Only the first ${availableSlots} images were attached.`
+          : null,
       );
     } catch (pasteError) {
       setAttachmentError(pasteError instanceof Error ? pasteError.message : String(pasteError));
@@ -592,7 +602,9 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                     type="button"
                     onClick={() => void handleSubmit()}
                     disabled={
-                      (!promptInput.trim() && promptImages.length === 0) || !apiKey || isReplayActive
+                      (!promptInput.trim() && promptImages.length === 0) ||
+                      !apiKey ||
+                      isReplayActive
                     }
                     className="inline-flex size-7 shrink-0 items-center justify-center rounded bg-[#58d88d] text-[#0b2416] transition-colors hover:bg-[#7ce5a5] disabled:cursor-not-allowed disabled:bg-[#27382f] disabled:text-slate-500"
                     aria-label="Send message"
@@ -675,7 +687,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                 <p className="mt-2 text-[11px] text-slate-500">
                   {isModelCatalogLoading
                     ? "Loading models from OpenRouter…"
-                    : modelCatalogError ?? `${modelOptions.length} models from OpenRouter.`}
+                    : (modelCatalogError ?? `${modelOptions.length} models from OpenRouter.`)}
                 </p>
                 <p className="mt-2 text-[11px] text-slate-500">
                   Usage this session: {usage.inputTokens} in / {usage.outputTokens} out tokens.

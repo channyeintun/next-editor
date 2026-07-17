@@ -17,6 +17,10 @@ import {
   type WorkspaceProject,
 } from "../types/workspace";
 import { createRrwebPreviewRecorderScript } from "../components/preview/rrwebPreview";
+import {
+  RUNTIME_SNAPSHOT_MESSAGE_TYPE,
+  RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE,
+} from "../components/preview/previewIframeUtils";
 import { createIframeScreenshotBridgeScript } from "../utils/iframeScreenshotBridge";
 import { createIframeConsoleBridgeScript } from "../utils/iframeConsoleBridge";
 import { createApiClientProxyScript } from "../utils/apiClientBridge";
@@ -40,7 +44,6 @@ export const TERMINAL_SHELL_CANDIDATES = [
 ] as const;
 
 const RUNTIME_ENVIRONMENT_STORAGE_KEY = "next-editor-runtime-environment";
-const RUNTIME_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_SNAPSHOT";
 const RUNTIME_SNAPSHOT_SCRIPT_MARKER = "__NEXT_EDITOR_RUNTIME_SNAPSHOT__";
 const RUNTIME_SCREENSHOT_BRIDGE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_SCREENSHOT_BRIDGE__";
 const RUNTIME_CONSOLE_BRIDGE_SETUP_MARKER = "__NEXT_EDITOR_RUNTIME_CONSOLE_BRIDGE__";
@@ -205,9 +208,11 @@ export function createRuntimePreviewScript(): string {
 
   const snapshotScript = `(function(){const marker=${JSON.stringify(
     RUNTIME_SNAPSHOT_SCRIPT_MARKER,
-  )};if(window[marker])return;window[marker]=true;const messageType=${JSON.stringify(
+  )};if(window[marker])return;window[marker]=true;const responseType=${JSON.stringify(
     RUNTIME_SNAPSHOT_MESSAGE_TYPE,
-  )};${consoleBridgeScript}${interactionCaptureScript}const postSnapshot=()=>{try{window.parent.postMessage({type:messageType,payload:{html:document.documentElement.outerHTML.replace(/<script[\\s\\S]*?<\\/script>/gi,"")}},"*");}catch{}};let frame=0;const schedule=()=>{if(frame)return;frame=window.requestAnimationFrame(()=>{frame=0;postSnapshot();});};const root=document.documentElement;if(root){new MutationObserver(schedule).observe(root,{attributes:true,childList:true,subtree:true,characterData:true});}window.addEventListener("load",schedule);window.addEventListener("pageshow",schedule);document.addEventListener("readystatechange",schedule);schedule();window.setTimeout(schedule,50);window.setTimeout(schedule,250);window.setTimeout(schedule,1000);})();`;
+  )};const requestType=${JSON.stringify(
+    RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE,
+  )};${consoleBridgeScript}${interactionCaptureScript}const minIntervalMs=100;let snapshotVersion=0;let lastSnapshotAt=-Infinity;let pendingRequestId=null;let snapshotTimer=0;const postSnapshot=(requestId)=>{try{const startedAt=performance.now();const root=document.documentElement;if(!root)return;const clone=root.cloneNode(true);if(!(clone instanceof Element))return;clone.querySelectorAll("script").forEach((script)=>script.remove());const html=clone.outerHTML;const durationMs=Math.max(0,performance.now()-startedAt);const byteLength=new TextEncoder().encode(html).byteLength;snapshotVersion+=1;lastSnapshotAt=performance.now();window.parent.postMessage({type:responseType,payload:{html,requestId,snapshotVersion,durationMs,byteLength}},"*");}catch{}};const scheduleSnapshot=(requestId)=>{pendingRequestId=requestId;if(snapshotTimer)return;const delay=Math.max(0,minIntervalMs-(performance.now()-lastSnapshotAt));snapshotTimer=window.setTimeout(()=>{snapshotTimer=0;const nextRequestId=pendingRequestId;pendingRequestId=null;postSnapshot(nextRequestId);},delay);};window.addEventListener("message",(event)=>{if(event.source!==window.parent)return;const data=event.data;if(!data||data.type!==requestType)return;const payload=data.payload;const requestId=payload&&typeof payload.requestId==="string"?payload.requestId.slice(0,128):null;scheduleSnapshot(requestId);});})();`;
 
   return `${rrwebRecordScript}\n${apiClientProxyScript}\n${screenshotBridgeScript}\n${snapshotScript}`;
 }

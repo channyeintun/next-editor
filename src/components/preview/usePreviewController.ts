@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   type RefObject,
@@ -40,7 +41,13 @@ import {
   createReplayableRuntimePreview,
   patchIframeContentFromHtml,
   type PreviewScrollPosition,
+  RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE,
 } from "./previewIframeUtils";
+import {
+  incrementPerformanceCounter,
+  recordPerformanceMetric,
+  startPerformanceSpan,
+} from "../../utils/performanceMetrics";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
 import {
   buildHeaderRecord,
@@ -106,6 +113,24 @@ export interface PreviewController {
   recordApiClientTab: (tab: ApiClientRequestTab) => void;
   recordApiClientInspect: (entry: ApiClientHistoryEntry) => void;
 }
+
+type RuntimeSnapshotRequestReason =
+  | "inspection"
+  | "load"
+  | "recording-finalize"
+  | "recording-start"
+  | "refresh"
+  | "route-change"
+  | "runtime-ready";
+
+interface PendingRuntimeSnapshotRequest {
+  requestId: string;
+  promise: Promise<string | null>;
+  resolve: (snapshot: string | null) => void;
+  timeoutId: number;
+}
+
+const RUNTIME_SNAPSHOT_REQUEST_TIMEOUT_MS = 1_200;
 
 /** Pointer coordinates from a mouse or touch event (React or native). */
 function getPointerCoords(event: MouseEvent | TouchEvent | ReactMouseEvent | ReactTouchEvent): {
@@ -207,6 +232,10 @@ export function usePreviewController(): PreviewController {
 
   const lastContentRef = useRef("");
   const lastRuntimeSnapshotRef = useRef("");
+  const lastRuntimeSnapshotCapturedAtRef = useRef(0);
+  const lastRuntimeSnapshotUrlRef = useRef<string | null>(null);
+  const runtimeSnapshotRequestSequenceRef = useRef(0);
+  const pendingRuntimeSnapshotRequestRef = useRef<PendingRuntimeSnapshotRequest | null>(null);
   const scrollPositionRef = useRef<PreviewScrollPosition>({
     scrollTop: 0,
     scrollLeft: 0,
@@ -328,32 +357,6 @@ export function usePreviewController(): PreviewController {
     }
   }, [activeMode, showModeToggle]);
 
-  useEffect(() => {
-    previewHandle.livePreviewInspectionGetter.current = () => {
-      const html = lastRuntimeSnapshotRef.current;
-      if (!html) {
-        return null;
-      }
-
-      const iframe = iframeRef.current;
-      return {
-        capturedAt: Date.now(),
-        height: iframe?.clientHeight ?? 0,
-        html,
-        route: previewRouteRef.current,
-        url: effectiveRuntimePreviewUrl,
-        width: iframe?.clientWidth ?? 0,
-      };
-    };
-    previewHandle.previewScreenshotCapturer.current = () =>
-      requestPreviewScreenshot(iframeRef.current);
-
-    return () => {
-      previewHandle.livePreviewInspectionGetter.current = null;
-      previewHandle.previewScreenshotCapturer.current = null;
-    };
-  }, [effectiveRuntimePreviewUrl, previewHandle]);
-
   // The store instance is created once in its provider, so it is referentially
   // stable and safe to close over directly (no ref indirection needed).
   const apiClientStore = useApiClientStoreInstance();
@@ -372,29 +375,6 @@ export function usePreviewController(): PreviewController {
       emitPreviewEvent("api_client_response", { apiClientResult: result });
     },
   });
-
-  useEffect(() => {
-    if (!isRecording) {
-      recordedPreviewInitialDocumentIdRef.current = null;
-      return;
-    }
-
-    // Ask the in-page recorder for a fresh snapshot of the CURRENT document. The
-    // answer comes back as a `refresh` initial document (recorded by the message
-    // bridge), so replay opens from the true recording-start state. The stale
-    // page-load snapshot the preview posted long ago is deliberately not
-    // recorded: if nothing answers (preview hidden, runtime rebooting, recorder
-    // absent), that snapshot describes a document that is not live anyway, and
-    // the iframe's own initial document seeds replay when it (re)loads.
-    try {
-      iframeRef.current?.contentWindow?.postMessage(
-        { type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE },
-        "*",
-      );
-    } catch {
-      // Cross-origin/postMessage failures behave like an unanswered request.
-    }
-  }, [isRecording]);
 
   const sizeRef = useRef<PreviewSize>(size);
   const isOpenRef = useRef(isOpen);
@@ -423,14 +403,14 @@ export function usePreviewController(): PreviewController {
   const previousPanelStateRef = useRef({ isOpen, panelMode });
   const hasRequestedRuntimeStartForOpenRef = useRef(false);
 
-  const applyPreviewRoute = (route: string) => {
+  const applyPreviewRoute = useCallback((route: string) => {
     const normalizedRoute = normalizePreviewRoute(route);
 
     previewRouteRef.current = normalizedRoute;
     setPreviewRoute((currentRoute) =>
       currentRoute === normalizedRoute ? currentRoute : normalizedRoute,
     );
-  };
+  }, []);
 
   useEffect(() => {
     const location = createRuntimePreviewLocationFromUrl(
@@ -441,7 +421,7 @@ export function usePreviewController(): PreviewController {
     applyPreviewRoute(location?.route ?? "/");
   }, [applyPreviewRoute, effectiveRuntimePreviewPort, effectiveRuntimePreviewUrl]);
 
-  const captureRuntimePreviewSnapshot = () => {
+  const captureRuntimePreviewSnapshot = useCallback(() => {
     if (!effectiveRuntimePreviewUrl) {
       return null;
     }
@@ -452,23 +432,196 @@ export function usePreviewController(): PreviewController {
       return null;
     }
 
+    const finishSpan = startPerformanceSpan("preview.snapshot_serialize", {
+      source: "same_origin",
+    });
     const snapshot = createReplayableRuntimePreview(iframe, effectiveRuntimePreviewUrl);
+    finishSpan({ outcome: snapshot ? "success" : "unavailable" });
 
     if (snapshot) {
       lastRuntimeSnapshotRef.current = snapshot;
+      lastRuntimeSnapshotCapturedAtRef.current = Date.now();
       lastContentRef.current = snapshot;
+      recordPerformanceMetric(
+        "preview.snapshot_bytes",
+        new TextEncoder().encode(snapshot).byteLength,
+        "bytes",
+        { source: "same_origin" },
+      );
     }
 
     return snapshot;
-  };
+  }, [effectiveRuntimePreviewUrl]);
+
+  const completeRuntimeSnapshotRequest = useCallback(
+    (snapshot: string, requestId: string | null) => {
+      lastRuntimeSnapshotCapturedAtRef.current = Date.now();
+      const pendingRequest = pendingRuntimeSnapshotRequestRef.current;
+      if (!pendingRequest || requestId !== pendingRequest.requestId) {
+        return;
+      }
+
+      window.clearTimeout(pendingRequest.timeoutId);
+      pendingRuntimeSnapshotRequestRef.current = null;
+      pendingRequest.resolve(snapshot);
+    },
+    [],
+  );
+
+  const shouldAcceptRuntimeSnapshot = useCallback((requestId: string | null) => {
+    const pendingRequest = pendingRuntimeSnapshotRequestRef.current;
+    return Boolean(pendingRequest && requestId === pendingRequest.requestId);
+  }, []);
+
+  const requestRuntimePreviewSnapshot = useCallback(
+    (reason: RuntimeSnapshotRequestReason): Promise<string | null> => {
+      if (!effectiveRuntimePreviewUrl) {
+        return Promise.resolve(null);
+      }
+
+      const iframeWindow = iframeRef.current?.contentWindow;
+      if (!iframeWindow) {
+        return Promise.resolve(null);
+      }
+
+      const pendingRequest = pendingRuntimeSnapshotRequestRef.current;
+      if (pendingRequest) {
+        incrementPerformanceCounter("preview.snapshot_request_coalesced", 1, { reason });
+        return pendingRequest.promise;
+      }
+
+      incrementPerformanceCounter("preview.snapshot_request", 1, { reason });
+
+      const sameOriginSnapshot = captureRuntimePreviewSnapshot();
+      if (sameOriginSnapshot) {
+        return Promise.resolve(sameOriginSnapshot);
+      }
+
+      const requestId = `runtime-snapshot-${++runtimeSnapshotRequestSequenceRef.current}`;
+      let resolveRequest: (snapshot: string | null) => void = () => undefined;
+      const promise = new Promise<string | null>((resolve) => {
+        resolveRequest = resolve;
+      });
+      const timeoutId = window.setTimeout(() => {
+        const activeRequest = pendingRuntimeSnapshotRequestRef.current;
+        if (!activeRequest || activeRequest.requestId !== requestId) {
+          return;
+        }
+
+        pendingRuntimeSnapshotRequestRef.current = null;
+        incrementPerformanceCounter("preview.snapshot_request_timeout", 1, { reason });
+        activeRequest.resolve(lastRuntimeSnapshotRef.current || null);
+      }, RUNTIME_SNAPSHOT_REQUEST_TIMEOUT_MS);
+
+      pendingRuntimeSnapshotRequestRef.current = {
+        requestId,
+        promise,
+        resolve: resolveRequest,
+        timeoutId,
+      };
+
+      try {
+        iframeWindow.postMessage(
+          {
+            type: RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE,
+            payload: { reason, requestId },
+          },
+          "*",
+        );
+      } catch {
+        window.clearTimeout(timeoutId);
+        pendingRuntimeSnapshotRequestRef.current = null;
+        resolveRequest(lastRuntimeSnapshotRef.current || null);
+      }
+
+      return promise;
+    },
+    [captureRuntimePreviewSnapshot, effectiveRuntimePreviewUrl],
+  );
 
   useEffect(() => {
-    if (isRuntimePreviewActive) {
+    return () => {
+      const pendingRequest = pendingRuntimeSnapshotRequestRef.current;
+      if (!pendingRequest) {
+        return;
+      }
+
+      window.clearTimeout(pendingRequest.timeoutId);
+      pendingRuntimeSnapshotRequestRef.current = null;
+      pendingRequest.resolve(null);
+    };
+  }, [effectiveRuntimePreviewUrl]);
+
+  useEffect(() => {
+    const didUrlChange = lastRuntimeSnapshotUrlRef.current !== effectiveRuntimePreviewUrl;
+    lastRuntimeSnapshotUrlRef.current = effectiveRuntimePreviewUrl;
+
+    if (didUrlChange || !isRuntimePreviewActive) {
+      lastRuntimeSnapshotRef.current = "";
+      lastRuntimeSnapshotCapturedAtRef.current = 0;
+    }
+  }, [effectiveRuntimePreviewUrl, isRuntimePreviewActive]);
+
+  useEffect(() => {
+    previewHandle.livePreviewInspectionGetter.current = async () => {
+      const html =
+        (await requestRuntimePreviewSnapshot("inspection")) || lastRuntimeSnapshotRef.current;
+      if (!html) {
+        return null;
+      }
+
+      const iframe = iframeRef.current;
+      return {
+        capturedAt: lastRuntimeSnapshotCapturedAtRef.current || Date.now(),
+        height: iframe?.clientHeight ?? 0,
+        html,
+        route: previewRouteRef.current,
+        url: effectiveRuntimePreviewUrl,
+        width: iframe?.clientWidth ?? 0,
+      };
+    };
+    previewHandle.previewScreenshotCapturer.current = () =>
+      requestPreviewScreenshot(iframeRef.current);
+    previewHandle.recordingStopPreparer.current = async () => {
+      await requestRuntimePreviewSnapshot("recording-finalize");
+    };
+
+    return () => {
+      previewHandle.livePreviewInspectionGetter.current = null;
+      previewHandle.previewScreenshotCapturer.current = null;
+      previewHandle.recordingStopPreparer.current = null;
+    };
+  }, [effectiveRuntimePreviewUrl, previewHandle, requestRuntimePreviewSnapshot]);
+
+  useEffect(() => {
+    if (!isRecording) {
+      recordedPreviewInitialDocumentIdRef.current = null;
       return;
     }
 
-    lastRuntimeSnapshotRef.current = "";
-  }, [effectiveRuntimePreviewUrl, isRuntimePreviewActive]);
+    // Capture both replay formats at the explicit recording-start checkpoint.
+    // rrweb provides ordered DOM mutations; the HTML snapshot remains the
+    // bounded fallback used by recordings that cannot initialize rrweb replay.
+    void requestRuntimePreviewSnapshot("recording-start");
+    try {
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE },
+        "*",
+      );
+    } catch {
+      // Cross-origin/postMessage failures behave like an unanswered request.
+    }
+  }, [isRecording]);
+
+  const handleRuntimeRouteChange = useCallback(
+    (route: string) => {
+      applyPreviewRoute(route);
+      window.setTimeout(() => {
+        void requestRuntimePreviewSnapshot("route-change");
+      }, 0);
+    },
+    [applyPreviewRoute, requestRuntimePreviewSnapshot],
+  );
 
   const emitPreviewEvent = (
     eventType: PreviewEvent["type"],
@@ -524,7 +677,9 @@ export function usePreviewController(): PreviewController {
     pendingInteractionRef,
     sizeRef,
     onConsoleMessage: (msg: string) => consoleAppender.current?.(msg),
-    onRouteChange: applyPreviewRoute,
+    onRouteChange: handleRuntimeRouteChange,
+    shouldAcceptRuntimeSnapshot,
+    onRuntimeSnapshot: completeRuntimeSnapshotRequest,
     onApiClientResponse: apiClient.handleResponse,
   });
 
@@ -590,14 +745,13 @@ export function usePreviewController(): PreviewController {
       }
 
       let didFinalize = false;
-      let runtimeSnapshotPollTimeout: number | null = null;
-      const initialRuntimeSnapshot =
-        captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || "";
+      let runtimeSnapshotFallbackTimeout: number | null = null;
+      const initialRuntimeSnapshot = lastRuntimeSnapshotRef.current || "";
 
       const cleanupRuntimeRefresh = () => {
         iframe.removeEventListener("load", handleRuntimeRefreshLoad);
-        if (runtimeSnapshotPollTimeout !== null) {
-          window.clearTimeout(runtimeSnapshotPollTimeout);
+        if (runtimeSnapshotFallbackTimeout !== null) {
+          window.clearTimeout(runtimeSnapshotFallbackTimeout);
         }
       };
 
@@ -618,39 +772,32 @@ export function usePreviewController(): PreviewController {
         finishRefresh();
       };
 
-      const pollRuntimeSnapshot = () => {
-        const content =
-          captureRuntimePreviewSnapshot() || lastRuntimeSnapshotRef.current || undefined;
-
-        if (content !== undefined && content !== initialRuntimeSnapshot) {
-          finalizeRuntimeRefresh(content);
-          return;
-        }
-
-        const hasTimedOut = performance.now() - refreshStartedAt >= 1500;
-
-        if (hasTimedOut) {
-          finalizeRuntimeRefresh(content);
-          return;
-        }
-
-        runtimeSnapshotPollTimeout = window.setTimeout(pollRuntimeSnapshot, 100);
+      const captureRefreshSnapshot = () => {
+        void requestRuntimePreviewSnapshot("refresh").then((content) => {
+          finalizeRuntimeRefresh(content || initialRuntimeSnapshot || undefined);
+        });
       };
 
       const handleRuntimeRefreshLoad = () => {
-        runtimeSnapshotPollTimeout = window.setTimeout(pollRuntimeSnapshot, 0);
+        if (runtimeSnapshotFallbackTimeout !== null) {
+          window.clearTimeout(runtimeSnapshotFallbackTimeout);
+          runtimeSnapshotFallbackTimeout = null;
+        }
+        captureRefreshSnapshot();
       };
 
-      const refreshStartedAt = performance.now();
-
       if (!shouldReloadRuntime) {
-        pollRuntimeSnapshot();
+        captureRefreshSnapshot();
         return;
       }
 
       iframe.addEventListener("load", handleRuntimeRefreshLoad, {
         once: true,
       });
+      runtimeSnapshotFallbackTimeout = window.setTimeout(
+        () => finalizeRuntimeRefresh(lastRuntimeSnapshotRef.current || undefined),
+        1_500,
+      );
 
       void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).catch(() =>
         finalizeRuntimeRefresh(initialRuntimeSnapshot || undefined),
@@ -676,7 +823,6 @@ export function usePreviewController(): PreviewController {
 
   usePreviewPlaybackRegistration({
     previewHandle,
-    captureRuntimePreviewSnapshot,
     isPlaybackPreviewActive,
     isRuntimePreviewActive,
     isLiveRuntimePreviewActive,
@@ -750,16 +896,15 @@ export function usePreviewController(): PreviewController {
     }
 
     const syncSnapshot = () => {
-      captureRuntimePreviewSnapshot();
+      void requestRuntimePreviewSnapshot("load");
     };
 
     iframe.addEventListener("load", syncSnapshot);
-    syncSnapshot();
 
     return () => {
       iframe.removeEventListener("load", syncSnapshot);
     };
-  }, [captureRuntimePreviewSnapshot, isPlaybackPreviewActive, isRuntimePreviewActive]);
+  }, [isPlaybackPreviewActive, isRuntimePreviewActive, requestRuntimePreviewSnapshot]);
 
   useEffect(() => {
     if (isPlaybackPreviewActive) {
@@ -776,13 +921,14 @@ export function usePreviewController(): PreviewController {
     }
 
     if (lessonRunsInWebContainer(lessonType) && runtimePreviewUrl) {
-      captureRuntimePreviewSnapshot();
       // Guarded via the src *attribute* (see runtimePreviewSrcNeedsReset): any
       // `src` assignment navigates the frame, so re-assigning on every effect
       // run would reload the live preview and lose its state.
       if (runtimePreviewSrcNeedsReset(iframe, runtimePreviewUrl)) {
         iframe.removeAttribute("srcdoc");
         iframe.src = runtimePreviewUrl;
+      } else {
+        void requestRuntimePreviewSnapshot("runtime-ready");
       }
 
       return;
@@ -807,7 +953,7 @@ export function usePreviewController(): PreviewController {
     runtimePreviewPlaceholder,
     runtimePreviewUrl,
     updateIframeContent,
-    captureRuntimePreviewSnapshot,
+    requestRuntimePreviewSnapshot,
   ]);
 
   useEffect(() => {

@@ -44,7 +44,7 @@ describe("runtime observation tools", () => {
 
   it("returns visible text and bounded live HTML", async () => {
     const ctx = makeBaseContext();
-    ctx.getPreviewInspection = () => ({
+    ctx.getPreviewInspection = async () => ({
       capturedAt: 1_700_000_000_000,
       height: 720,
       html: "<html><body><main>Hello <strong>preview</strong></main><script>hidden()</script></body></html>",

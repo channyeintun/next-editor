@@ -36,8 +36,8 @@ export function makeInspectPreviewTool(ctx: ToolContext) {
       "Inspect the current rendered preview route, viewport, document text, and serialized live DOM " +
       "without running or restarting the dev server.",
     inputSchema,
-    execute: (input): string => {
-      const inspection = ctx.getPreviewInspection?.();
+    execute: async (input): Promise<string> => {
+      const inspection = await ctx.getPreviewInspection?.();
       if (!inspection) {
         return "The live preview has not produced a DOM snapshot yet. Check runtime_diagnostics first.";
       }

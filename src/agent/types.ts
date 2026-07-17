@@ -42,7 +42,7 @@ export interface ToolContext {
   /** Resolves `true` to proceed. Only the `bash` tool requests it (confirm-gate). */
   requestConfirmation: (request: ToolConfirmationRequest) => Promise<boolean>;
   getRuntimeDiagnostics?: () => AgentRuntimeDiagnostics;
-  getPreviewInspection?: () => LivePreviewInspection | null;
+  getPreviewInspection?: () => Promise<LivePreviewInspection | null>;
   capturePreviewScreenshot?: () => Promise<PreviewScreenshotResult>;
 }
 

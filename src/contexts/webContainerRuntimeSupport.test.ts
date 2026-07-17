@@ -47,6 +47,10 @@ describe("createRuntimePreviewScript", () => {
     expect(script).toContain("function (g, f)");
     // The snapshot/postMessage wiring keyed on the runtime snapshot message type.
     expect(script).toContain("NEXT_EDITOR_RUNTIME_SNAPSHOT");
+    expect(script).toContain("NEXT_EDITOR_REQUEST_RUNTIME_SNAPSHOT");
+    expect(script).not.toContain("new MutationObserver(schedule)");
+    expect(script).toContain('window.addEventListener("message"');
+    expect(script).toContain("minIntervalMs=100");
     expect(script).toContain("NEXT_EDITOR_PREVIEW_SCREENSHOT_REQUEST");
     expect(script).toContain("NEXT_EDITOR_PREVIEW_SCREENSHOT_RESPONSE");
   });

@@ -13,6 +13,7 @@ import {
   API_CLIENT_RESPONSE_MESSAGE_TYPE,
   type ApiClientResultPayload,
 } from "../../utils/apiClientBridge";
+import { recordPerformanceMetric } from "../../utils/performanceMetrics";
 import {
   IFRAME_CONSOLE_MESSAGE_TYPE,
   isIframeConsoleMethod,
@@ -46,6 +47,8 @@ interface UsePreviewMessageBridgeOptions {
   sizeRef: RefObject<PreviewSize>;
   onConsoleMessage: (message: string) => void;
   onRouteChange: (route: string) => void;
+  shouldAcceptRuntimeSnapshot?: (requestId: string | null) => boolean;
+  onRuntimeSnapshot?: (snapshot: string, requestId: string | null) => void;
   onApiClientResponse?: (payload: ApiClientResultPayload) => void;
 }
 
@@ -165,6 +168,8 @@ export function usePreviewMessageBridge({
   sizeRef,
   onConsoleMessage,
   onRouteChange,
+  shouldAcceptRuntimeSnapshot,
+  onRuntimeSnapshot,
   onApiClientResponse,
 }: UsePreviewMessageBridgeOptions) {
   useEffect(() => {
@@ -234,6 +239,28 @@ export function usePreviewMessageBridge({
         if (typeof payload?.html !== "string" || !effectiveRuntimePreviewUrl) {
           return;
         }
+        const requestId =
+          typeof payload.requestId === "string" ? payload.requestId.slice(0, 128) : null;
+        if (shouldAcceptRuntimeSnapshot && !shouldAcceptRuntimeSnapshot(requestId)) {
+          return;
+        }
+
+        if (isFiniteNumber(payload.durationMs)) {
+          recordPerformanceMetric(
+            "preview.snapshot_serialize",
+            Math.min(payload.durationMs, 60_000),
+            "ms",
+            { source: "runtime_bridge" },
+          );
+        }
+        if (isFiniteNumber(payload.byteLength)) {
+          recordPerformanceMetric(
+            "preview.snapshot_bytes",
+            Math.min(payload.byteLength, 50 * 1024 * 1024),
+            "bytes",
+            { source: "runtime_bridge" },
+          );
+        }
 
         const snapshot = createReplayableRuntimePreviewFromHtml(
           payload.html,
@@ -242,6 +269,7 @@ export function usePreviewMessageBridge({
 
         if (snapshot) {
           lastRuntimeSnapshotRef.current = snapshot;
+          onRuntimeSnapshot?.(snapshot, requestId);
         }
 
         return;
@@ -357,9 +385,11 @@ export function usePreviewMessageBridge({
     onApiClientResponse,
     onConsoleMessage,
     onRouteChange,
+    onRuntimeSnapshot,
     pendingInteractionRef,
     recordedPreviewInitialDocumentIdRef,
     scrollPositionRef,
+    shouldAcceptRuntimeSnapshot,
     sizeRef,
     targetScrollRef,
     userScrollTimeoutRef,
