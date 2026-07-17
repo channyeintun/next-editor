@@ -357,9 +357,7 @@ export const useUrlLoader = () => {
     const applyStreamed = async () => {
       if (!loadedOnce) {
         const decoded = streamReader.getRecording();
-        const hydrated = decoded
-          ? await hydrateDecodedRecordingWorkspaceAssets(decoded)
-          : null;
+        const hydrated = decoded ? await hydrateDecodedRecordingWorkspaceAssets(decoded) : null;
         const resolved = resolveRecording(hydrated);
         if (!resolved) return;
         loadRecording(resolved);

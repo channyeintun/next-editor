@@ -46,12 +46,7 @@ export function collaborationRoomLocationHintFromCf(
       return "oc";
     case "AS":
       if (longitude !== undefined && longitude < 65) return "me";
-      if (
-        latitude !== undefined &&
-        longitude !== undefined &&
-        latitude >= 25 &&
-        longitude >= 105
-      ) {
+      if (latitude !== undefined && longitude !== undefined && latitude >= 25 && longitude >= 105) {
         return "apac-ne";
       }
       if (latitude !== undefined && latitude < 25) return "apac-se";

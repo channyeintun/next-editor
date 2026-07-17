@@ -1,11 +1,7 @@
 import { Container } from "@cloudflare/containers";
 import type { StopParams } from "@cloudflare/containers";
 import type { Env } from "./types";
-import {
-  previewResponseHeaders,
-  previewScriptMarkup,
-  previewWebSocketInit,
-} from "./preview";
+import { previewResponseHeaders, previewScriptMarkup, previewWebSocketInit } from "./preview";
 import { runtimeMetric } from "./telemetry";
 
 interface PreviewScript {
@@ -51,10 +47,15 @@ export class RuntimeGoSessionDO extends Container<Env> {
         return new Response("invalid session config", { status: 400 });
       }
       const config = value as SessionConfig;
-      if (!config.sessionId || !config.userId || !Number.isFinite(config.createdAt)
-        || !Number.isFinite(config.idleTimeoutSeconds)
-        || !/^[A-Za-z0-9._-]{1,64}$/.test(config.workdirName)
-        || config.workdirName === "." || config.workdirName === "..") {
+      if (
+        !config.sessionId ||
+        !config.userId ||
+        !Number.isFinite(config.createdAt) ||
+        !Number.isFinite(config.idleTimeoutSeconds) ||
+        !/^[A-Za-z0-9._-]{1,64}$/.test(config.workdirName) ||
+        config.workdirName === "." ||
+        config.workdirName === ".."
+      ) {
         return new Response("invalid session config", { status: 400 });
       }
       config.idleTimeoutSeconds = Math.min(3_600, Math.max(30, config.idleTimeoutSeconds || 300));
@@ -83,16 +84,22 @@ export class RuntimeGoSessionDO extends Container<Env> {
         return new Response("invalid preview script", { status: 400 });
       }
       const script = value as PreviewScript;
-      if (typeof script.src !== "string" || typeof script.options !== "object" || script.options === null
-        || Array.isArray(script.options)
-        || (script.prelude !== undefined && typeof script.prelude !== "string")) {
+      if (
+        typeof script.src !== "string" ||
+        typeof script.options !== "object" ||
+        script.options === null ||
+        Array.isArray(script.options) ||
+        (script.prelude !== undefined && typeof script.prelude !== "string")
+      ) {
         return new Response("invalid preview script", { status: 400 });
       }
-      if ((script.options.type !== undefined
-          && script.options.type !== "module"
-          && script.options.type !== "importmap")
-        || (script.options.defer !== undefined && typeof script.options.defer !== "boolean")
-        || (script.options.async !== undefined && typeof script.options.async !== "boolean")) {
+      if (
+        (script.options.type !== undefined &&
+          script.options.type !== "module" &&
+          script.options.type !== "importmap") ||
+        (script.options.defer !== undefined && typeof script.options.defer !== "boolean") ||
+        (script.options.async !== undefined && typeof script.options.async !== "boolean")
+      ) {
         return new Response("invalid preview script options", { status: 400 });
       }
       if (script.src.length + (script.prelude?.length ?? 0) > 1024 * 1024) {
@@ -120,7 +127,7 @@ export class RuntimeGoSessionDO extends Container<Env> {
 
   override async onStop(_params: StopParams): Promise<void> {
     const config = await this.ctx.storage.get<SessionConfig>("sessionConfig");
-    if (!config || await this.ctx.storage.get<boolean>("usageFinalized")) return;
+    if (!config || (await this.ctx.storage.get<boolean>("usageFinalized"))) return;
     const endedAt = Date.now();
     const minutes = Math.max(1, Math.ceil((endedAt - config.createdAt) / 60_000));
     const day = new Date(endedAt).toISOString().slice(0, 10);
@@ -129,7 +136,11 @@ export class RuntimeGoSessionDO extends Container<Env> {
         "UPDATE runtime_sessions SET ended_at = ? WHERE session_id = ? AND ended_at IS NULL",
       ).bind(endedAt, config.sessionId),
       this.env.RUNTIME_QUOTAS.prepare(`INSERT INTO runtime_daily_usage (user_id, day, minutes) VALUES (?, ?, ?)
-        ON CONFLICT(user_id, day) DO UPDATE SET minutes = minutes + excluded.minutes`).bind(config.userId, day, minutes),
+        ON CONFLICT(user_id, day) DO UPDATE SET minutes = minutes + excluded.minutes`).bind(
+        config.userId,
+        day,
+        minutes,
+      ),
     ]);
     await this.ctx.storage.put("usageFinalized", true);
     runtimeMetric("session_stopped", { sessionId: config.sessionId, minutes });
@@ -142,7 +153,11 @@ export class RuntimeGoSessionDO extends Container<Env> {
     const contentType = headers.get("Content-Type") ?? "";
     const script = await this.ctx.storage.get<PreviewScript>("previewScript");
     if (!script || !contentType.toLowerCase().includes("text/html")) {
-      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
     }
     const markup = previewScriptMarkup(script);
     let injectedIntoHead = false;
@@ -159,7 +174,13 @@ export class RuntimeGoSessionDO extends Container<Env> {
           if (!injectedIntoHead) end.append(markup, { html: true });
         },
       })
-      .transform(new Response(response.body, { status: response.status, statusText: response.statusText, headers }));
+      .transform(
+        new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        }),
+      );
     return injected;
   }
 

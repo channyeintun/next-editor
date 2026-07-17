@@ -14,7 +14,9 @@ export class RemoteProcess implements WebContainerProcess {
     outChannel: number,
     inChannel: number,
   ) {
-    this.exit = new Promise<number>((resolve) => { this.resolveExit = resolve; });
+    this.exit = new Promise<number>((resolve) => {
+      this.resolveExit = resolve;
+    });
     const bytes = connection.channels.readable(outChannel);
     const decoder = new TextDecoder("utf-8");
     const reader = bytes.getReader();
@@ -29,7 +31,10 @@ export class RemoteProcess implements WebContainerProcess {
             return;
           }
           const text = decoder.decode(value, { stream: true });
-          if (text) { controller.enqueue(text); return; }
+          if (text) {
+            controller.enqueue(text);
+            return;
+          }
         }
       },
       cancel: () => reader.cancel(),

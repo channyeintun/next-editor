@@ -299,10 +299,7 @@ export class CollaborationRoomProvider {
     changes: { added: number[]; updated: number[]; removed: number[] },
     origin: unknown,
   ) => {
-    if (
-      origin === COLLABORATION_ORIGIN.remoteProvider ||
-      this.connectionState !== "live"
-    ) {
+    if (origin === COLLABORATION_ORIGIN.remoteProvider || this.connectionState !== "live") {
       return;
     }
     const changedClients = [...changes.added, ...changes.updated, ...changes.removed];

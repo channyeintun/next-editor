@@ -66,7 +66,9 @@ export class ChannelMux {
             RCP_LIMITS.maxBinaryFrameBytes,
           );
           state.credit -= size;
-          await this.sendBinary(encodeBinaryFrame(channelId, chunk.subarray(offset, offset + size)));
+          await this.sendBinary(
+            encodeBinaryFrame(channelId, chunk.subarray(offset, offset + size)),
+          );
           offset += size;
         }
       },
@@ -85,7 +87,8 @@ export class ChannelMux {
     const state = this.getState(frame.channelId);
     if (state.closed) return;
     if (frame.payload.byteLength > 0) {
-      if (!state.controller) throw new RcpError("EPROTO", `channel ${frame.channelId} has no reader`);
+      if (!state.controller)
+        throw new RcpError("EPROTO", `channel ${frame.channelId} has no reader`);
       state.controller.enqueue(frame.payload);
       state.pendingCredit += frame.payload.byteLength;
     }
@@ -120,7 +123,12 @@ export class ChannelMux {
   private getState(channelId: number): ChannelState {
     let state = this.channels.get(channelId);
     if (!state) {
-      state = { credit: RCP_LIMITS.initialChannelCredit, waiters: [], closed: false, pendingCredit: 0 };
+      state = {
+        credit: RCP_LIMITS.initialChannelCredit,
+        waiters: [],
+        closed: false,
+        pendingCredit: 0,
+      };
       this.channels.set(channelId, state);
     }
     return state;

@@ -24,10 +24,7 @@ vi.mock("../../contexts/webContainerRuntimeSupport", () => support);
 
 const { makeBashTool } = await import("./bash");
 
-function makeFile(
-  path: string,
-  content: string,
-): WorkspaceFile {
+function makeFile(path: string, content: string): WorkspaceFile {
   return {
     path,
     name: path.split("/").pop() ?? path,
@@ -170,10 +167,7 @@ describe("bash tool", () => {
     const instance = makeFakeInstance(createFakeProcess(["generated binary"], 0));
     support.getOrBootSharedWebContainer.mockResolvedValue(instance);
     support.readWorkspaceProject.mockResolvedValue(
-      makeProject([
-        makeFile("fallback.html", "fallback"),
-        makeAssetFile("public/image.png"),
-      ]),
+      makeProject([makeFile("fallback.html", "fallback"), makeAssetFile("public/image.png")]),
     );
 
     await run(makeCtx(store))({ command: "rm index.html && generate-image" });
@@ -279,7 +273,7 @@ describe("bash tool", () => {
           resolveExit = resolve;
         }),
       });
-      const kill = vi.fn(() => resolveExit?.(143));
+      const kill = vi.fn<() => void>(() => resolveExit?.(143));
       Object.defineProperty(process, "kill", { value: kill });
       const instance = makeFakeInstance(process);
       support.getOrBootSharedWebContainer.mockResolvedValue(instance);

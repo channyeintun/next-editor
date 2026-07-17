@@ -70,15 +70,29 @@ export class RcpConnection {
     const socket = new this.WebSocketImpl(url);
     socket.binaryType = "arraybuffer";
     this.socket = socket;
-    await this.withTimeout(new Promise<void>((resolve, reject) => {
-      const onOpen = () => { cleanup(); resolve(); };
-      const onError = () => { cleanup(); reject(new RcpError("EGONE", "WebSocket open failed")); };
-      const cleanup = () => { socket.removeEventListener("open", onOpen); socket.removeEventListener("error", onError); };
-      socket.addEventListener("open", onOpen);
-      socket.addEventListener("error", onError);
-    }), "WebSocket open timed out");
+    await this.withTimeout(
+      new Promise<void>((resolve, reject) => {
+        const onOpen = () => {
+          cleanup();
+          resolve();
+        };
+        const onError = () => {
+          cleanup();
+          reject(new RcpError("EGONE", "WebSocket open failed"));
+        };
+        const cleanup = () => {
+          socket.removeEventListener("open", onOpen);
+          socket.removeEventListener("error", onError);
+        };
+        socket.addEventListener("open", onOpen);
+        socket.addEventListener("error", onError);
+      }),
+      "WebSocket open timed out",
+    );
     socket.addEventListener("message", (event) => this.handleMessage(event));
-    socket.addEventListener("close", () => { if (this.socket === socket) void this.handleClose(); });
+    socket.addEventListener("close", () => {
+      if (this.socket === socket) void this.handleClose();
+    });
     const hello = await this.withTimeout(
       this.request("session.hello", { protocolVersion, resumeToken }),
       "session.hello timed out",
@@ -93,7 +107,10 @@ export class RcpConnection {
     return response;
   }
 
-  beginRequest<M extends Method>(method: M, params: MethodParams<M>): {
+  beginRequest<M extends Method>(
+    method: M,
+    params: MethodParams<M>,
+  ): {
     id: number;
     response: Promise<MethodResult<M>>;
   } {
@@ -111,7 +128,10 @@ export class RcpConnection {
 
   on<M extends EventMethod>(method: M, listener: (payload: EventMap[M]) => void): () => void {
     let listeners = this.listeners.get(method);
-    if (!listeners) { listeners = new Set(); this.listeners.set(method, listeners); }
+    if (!listeners) {
+      listeners = new Set();
+      this.listeners.set(method, listeners);
+    }
     listeners.add(listener as (payload: never) => void);
     return () => listeners!.delete(listener as (payload: never) => void);
   }
@@ -136,14 +156,16 @@ export class RcpConnection {
 
   private startKeepalive(): void {
     if (this.keepalive) clearInterval(this.keepalive);
-    this.keepalive = setInterval(() => { void this.request("session.ping", {}).catch(() => {}); }, 20_000);
+    this.keepalive = setInterval(() => {
+      void this.request("session.ping", {}).catch(() => {});
+    }, 20_000);
   }
 
   private send(data: string | Uint8Array): void {
     if (!this.socket || this.socket.readyState !== this.WebSocketImpl.OPEN) {
       throw new RcpError("EGONE", "connection is not open");
     }
-    this.socket.send(typeof data === "string" ? data : data.slice().buffer as ArrayBuffer);
+    this.socket.send(typeof data === "string" ? data : (data.slice().buffer as ArrayBuffer));
   }
 
   private sendControl(frame: ControlFrame): void {
@@ -153,9 +175,12 @@ export class RcpConnection {
   private handleMessage(message: MessageEvent): void {
     try {
       if (typeof message.data !== "string") {
-        const data = message.data instanceof ArrayBuffer
-          ? message.data
-          : message.data instanceof Uint8Array ? message.data : undefined;
+        const data =
+          message.data instanceof ArrayBuffer
+            ? message.data
+            : message.data instanceof Uint8Array
+              ? message.data
+              : undefined;
         if (!data) throw new RcpError("EPROTO", "unsupported WebSocket message");
         this.channels.receive(parseBinaryFrame(data));
         return;
@@ -181,7 +206,11 @@ export class RcpConnection {
       this.channels.grantCredit(credit.ch, credit.bytes);
     }
     for (const listener of this.listeners.get(frame.m) ?? []) {
-      try { listener(frame.p as never); } catch (error) { console.error(error); }
+      try {
+        listener(frame.p as never);
+      } catch (error) {
+        console.error(error);
+      }
     }
   }
 
@@ -194,7 +223,10 @@ export class RcpConnection {
     let lastError: unknown = new Error("connection lost");
     for (const delay of delays) {
       await new Promise((resolve) => setTimeout(resolve, delay));
-      if (this.closed) { this.reconnecting = false; return; }
+      if (this.closed) {
+        this.reconnecting = false;
+        return;
+      }
       try {
         await this.openSocket(this.resumeToken);
         for (const listener of this.reconnectListeners) await listener();
@@ -207,9 +239,13 @@ export class RcpConnection {
       }
     }
     this.reconnecting = false;
-    this.emit({ t: "evt", m: "fatal", p: {
-      message: `Remote runtime connection lost: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
-    } });
+    this.emit({
+      t: "evt",
+      m: "fatal",
+      p: {
+        message: `Remote runtime connection lost: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+      },
+    });
   }
 
   private rejectPending(error: Error): void {

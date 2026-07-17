@@ -7,7 +7,10 @@ export interface Env {
   MAX_DAILY_MINUTES: string;
 }
 
-export interface AuthClaims { userId: string; exp: number }
+export interface AuthClaims {
+  userId: string;
+  exp: number;
+}
 
 export interface SessionRecord {
   sessionId: string;

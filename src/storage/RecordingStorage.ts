@@ -246,9 +246,7 @@ export class RecordingStorage {
           if (done) break;
           if (value && value.byteLength > 0) {
             recordingReader.push(value);
-            await persistDecodedWorkspaceAssets(
-              recordingReader.readDelta()?.newWorkspaceAssets,
-            );
+            await persistDecodedWorkspaceAssets(recordingReader.readDelta()?.newWorkspaceAssets);
           }
         }
       } finally {

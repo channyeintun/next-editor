@@ -21,7 +21,9 @@ function quotaEnv(result: {
   const database = {
     prepare(sql: string) {
       return {
-        bind() { return this; },
+        bind() {
+          return this;
+        },
         async first() {
           if (sql.includes("COUNT(*)")) return { count: result.count ?? 0 };
           if (sql.includes("runtime_daily_usage")) return { minutes: result.minutes ?? 0 };
@@ -31,9 +33,13 @@ function quotaEnv(result: {
           if (sql.startsWith("INSERT INTO runtime_sessions") && result.reservationError) {
             throw result.reservationError;
           }
-          return { meta: { changes: sql.startsWith("INSERT INTO runtime_sessions")
-            ? result.reservationChanges ?? 0
-            : 1 } };
+          return {
+            meta: {
+              changes: sql.startsWith("INSERT INTO runtime_sessions")
+                ? (result.reservationChanges ?? 0)
+                : 1,
+            },
+          };
         },
       };
     },
@@ -58,12 +64,19 @@ function quotaEnv(result: {
 }
 
 async function request(env: Env): Promise<Response> {
-  const token = await signToken(env.RUNTIME_SESSION_SECRET, { userId: "user-1", exp: Date.now()/1000+60 });
-  return worker.fetch!(new Request("http://worker/api/runtime/sessions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ runtime: "go1.26.5" }),
-  }) as never, env, {} as ExecutionContext);
+  const token = await signToken(env.RUNTIME_SESSION_SECRET, {
+    userId: "user-1",
+    exp: Date.now() / 1000 + 60,
+  });
+  return worker.fetch!(
+    new Request("http://worker/api/runtime/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ runtime: "go1.26.5" }),
+    }) as never,
+    env,
+    {} as ExecutionContext,
+  );
 }
 
 describe("session quotas", () => {
@@ -84,12 +97,19 @@ describe("session quotas", () => {
 
   it("rejects unsupported image selectors before provisioning", async () => {
     const env = quotaEnv({ count: 0 });
-    const token = await signToken(env.RUNTIME_SESSION_SECRET, { userId: "user-1", exp: Date.now()/1000+60 });
-    const response = await worker.fetch!(new Request("http://worker/api/runtime/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ runtime: "arbitrary-image" }),
-    }) as never, env, {} as ExecutionContext);
+    const token = await signToken(env.RUNTIME_SESSION_SECRET, {
+      userId: "user-1",
+      exp: Date.now() / 1000 + 60,
+    });
+    const response = await worker.fetch!(
+      new Request("http://worker/api/runtime/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ runtime: "arbitrary-image" }),
+      }) as never,
+      env,
+      {} as ExecutionContext,
+    );
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({ code: "ERUNTIME" });
   });
@@ -98,14 +118,23 @@ describe("session quotas", () => {
     let configuredBody: unknown;
     const env = quotaEnv({
       reservationChanges: 1,
-      onConfigure: async (configureRequest) => { configuredBody = await configureRequest.json(); },
+      onConfigure: async (configureRequest) => {
+        configuredBody = await configureRequest.json();
+      },
     });
-    const token = await signToken(env.RUNTIME_SESSION_SECRET, { userId: "user-1", exp: Date.now()/1000+60 });
-    const response = await worker.fetch!(new Request("http://worker/api/runtime/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ runtime: "go1.26.5", workdirName: "lesson-one" }),
-    }) as never, env, {} as ExecutionContext);
+    const token = await signToken(env.RUNTIME_SESSION_SECRET, {
+      userId: "user-1",
+      exp: Date.now() / 1000 + 60,
+    });
+    const response = await worker.fetch!(
+      new Request("http://worker/api/runtime/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ runtime: "go1.26.5", workdirName: "lesson-one" }),
+      }) as never,
+      env,
+      {} as ExecutionContext,
+    );
 
     expect(response.status).toBe(201);
     expect(configuredBody).toMatchObject({ workdirName: "lesson-one" });
@@ -113,12 +142,19 @@ describe("session quotas", () => {
 
   it("distinguishes bad input and infrastructure failures from authentication errors", async () => {
     const env = quotaEnv({ reservationChanges: 1 });
-    const token = await signToken(env.RUNTIME_SESSION_SECRET, { userId: "user-1", exp: Date.now()/1000+60 });
-    const malformed = await worker.fetch!(new Request("http://worker/api/runtime/sessions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: "null",
-    }) as never, env, {} as ExecutionContext);
+    const token = await signToken(env.RUNTIME_SESSION_SECRET, {
+      userId: "user-1",
+      exp: Date.now() / 1000 + 60,
+    });
+    const malformed = await worker.fetch!(
+      new Request("http://worker/api/runtime/sessions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: "null",
+      }) as never,
+      env,
+      {} as ExecutionContext,
+    );
     expect(malformed.status).toBe(400);
     await expect(malformed.json()).resolves.toMatchObject({ code: "EBADREQUEST" });
 
@@ -130,12 +166,16 @@ describe("session quotas", () => {
   it("fails closed when the session signing secret is too short", async () => {
     const env = quotaEnv({ reservationChanges: 1 });
     env.RUNTIME_SESSION_SECRET = "short";
-    const token = await signToken("short", { userId: "user-1", exp: Date.now()/1000+60 });
-    const response = await worker.fetch!(new Request("http://worker/api/runtime/sessions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: "{}",
-    }) as never, env, {} as ExecutionContext);
+    const token = await signToken("short", { userId: "user-1", exp: Date.now() / 1000 + 60 });
+    const response = await worker.fetch!(
+      new Request("http://worker/api/runtime/sessions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: "{}",
+      }) as never,
+      env,
+      {} as ExecutionContext,
+    );
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({ code: "ECONFIG" });
   });

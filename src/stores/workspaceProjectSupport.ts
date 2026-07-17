@@ -18,9 +18,7 @@ import {
 } from "../types/workspace";
 
 function areStringArraysEqual(left: string[], right: string[]): boolean {
-  return (
-    left.length === right.length && left.every((value, index) => value === right[index])
-  );
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 export function areWorkspaceFilesEqual(left: WorkspaceFile, right: WorkspaceFile): boolean {
@@ -137,11 +135,7 @@ export function isPathWithinFolder(path: string, folderPath: string): boolean {
   return path === folderPath || path.startsWith(`${folderPath}/`);
 }
 
-export function replacePathPrefix(
-  path: string,
-  currentPrefix: string,
-  nextPrefix: string,
-): string {
+export function replacePathPrefix(path: string, currentPrefix: string, nextPrefix: string): string {
   if (path === currentPrefix) return nextPrefix;
   return `${nextPrefix}${path.slice(currentPrefix.length)}`;
 }
@@ -175,9 +169,7 @@ function inferWorkspaceLessonType(
   if (project.lessonType && KNOWN_LESSON_TYPES.has(project.lessonType as WorkspaceLessonType)) {
     return project.lessonType as WorkspaceLessonType;
   }
-  return project.files["package.json"] || project.files["vite.config.js"]
-    ? "react"
-    : "html-css";
+  return project.files["package.json"] || project.files["vite.config.js"] ? "react" : "html-css";
 }
 
 export class WorkspaceProjectValidationError extends Error {
@@ -266,8 +258,7 @@ export function normalizeProject(project: WorkspaceProject): WorkspaceProject {
     project?.files && typeof project.files === "object"
       ? project.files
       : ({} as Record<string, WorkspaceFile>);
-  const sourceFiles =
-    Object.keys(suppliedFiles).length > 0 ? suppliedFiles : fallbackProject.files;
+  const sourceFiles = Object.keys(suppliedFiles).length > 0 ? suppliedFiles : fallbackProject.files;
   const files = canonicalizeProjectFiles(sourceFiles);
   const explicitFolders = new Set<string>();
 

@@ -12,10 +12,7 @@ import {
   toSidebarWidthDeltaSnapshot,
   type WorkspaceRecordingEvent,
 } from "../../../types/workspace";
-import {
-  createContentEditDelta,
-  type CreatedContentEditDelta,
-} from "../utils/frameDelta";
+import { createContentEditDelta, type CreatedContentEditDelta } from "../utils/frameDelta";
 import { createFrameStreamEncoder, pushFrame } from "../utils/frameStreamEncoder";
 import {
   appendChatDelta,
@@ -484,11 +481,7 @@ export const captureFrame = ({
     event.type === "CAPTURE_FRAME" ? event.selection : undefined,
   );
 
-  const { state: encoder, emitted } = pushFrame(
-    context.session.encoder,
-    frame,
-    contentEditDelta,
-  );
+  const { state: encoder, emitted } = pushFrame(context.session.encoder, frame, contentEditDelta);
 
   if (emitted) {
     context.session.frames.push(emitted);

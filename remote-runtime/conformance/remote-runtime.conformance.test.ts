@@ -4,14 +4,21 @@ import { RemoteContainer } from "../src/remote/RemoteContainer";
 const agentUrl = process.env.REMOTE_RUNTIME_AGENT_WS;
 const endpoint = process.env.REMOTE_RUNTIME_ENDPOINT;
 if (process.env.CI && !agentUrl && !endpoint) {
-  throw new Error("REMOTE_RUNTIME_AGENT_WS or REMOTE_RUNTIME_ENDPOINT is required for conformance in CI");
+  throw new Error(
+    "REMOTE_RUNTIME_AGENT_WS or REMOTE_RUNTIME_ENDPOINT is required for conformance in CI",
+  );
 }
-if (endpoint && !process.env.REMOTE_RUNTIME_AUTH_TOKEN) throw new Error("REMOTE_RUNTIME_AUTH_TOKEN is required in boot mode");
+if (endpoint && !process.env.REMOTE_RUNTIME_AUTH_TOKEN)
+  throw new Error("REMOTE_RUNTIME_AUTH_TOKEN is required in boot mode");
 
 async function collect(stream: ReadableStream<string>): Promise<string> {
   const reader = stream.getReader();
   let output = "";
-  while (true) { const { done, value } = await reader.read(); if (done) return output; output += value; }
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) return output;
+    output += value;
+  }
 }
 
 describe.skipIf(!agentUrl && !endpoint)("RemoteContainer conformance", () => {
@@ -19,7 +26,11 @@ describe.skipIf(!agentUrl && !endpoint)("RemoteContainer conformance", () => {
 
   beforeAll(async () => {
     container = endpoint
-      ? await RemoteContainer.boot({ endpoint, runtime: "go1.26.5", authorizationToken: process.env.REMOTE_RUNTIME_AUTH_TOKEN })
+      ? await RemoteContainer.boot({
+          endpoint,
+          runtime: "go1.26.5",
+          authorizationToken: process.env.REMOTE_RUNTIME_AUTH_TOKEN,
+        })
       : await RemoteContainer.attach({
           wsUrl: agentUrl!,
           previewUrlTemplate: "http://127.0.0.1:8600/proxy/{{port}}",
@@ -56,7 +67,9 @@ describe.skipIf(!agentUrl && !endpoint)("RemoteContainer conformance", () => {
     expect(await collect(piped.output)).toContain("stdoutstderr");
     expect(await piped.exit).toBe(7);
 
-    const terminal = await container.spawn("sh", ["-c", "stty size"], { terminal: { cols: 93, rows: 41 } });
+    const terminal = await container.spawn("sh", ["-c", "stty size"], {
+      terminal: { cols: 93, rows: 41 },
+    });
     expect(await collect(terminal.output)).toContain("41 93");
     expect(await terminal.exit).toBe(0);
 
@@ -67,7 +80,7 @@ describe.skipIf(!agentUrl && !endpoint)("RemoteContainer conformance", () => {
 
   it("bridges stdin and applies cwd, env, and dynamic PTY resize", async () => {
     await container.fs.mkdir("cwd", { recursive: true });
-    const configured = await container.spawn("sh", ["-c", "printf '%s:%s' \"$RCP_VALUE\" \"$PWD\""], {
+    const configured = await container.spawn("sh", ["-c", 'printf \'%s:%s\' "$RCP_VALUE" "$PWD"'], {
       cwd: "cwd",
       env: { RCP_VALUE: 42 },
     });
@@ -111,20 +124,29 @@ describe.skipIf(!agentUrl && !endpoint)("RemoteContainer conformance", () => {
   });
 
   it("translates listening ports into port and server-ready events", async () => {
-    await container.fs.writeFile("server.go", `package main
+    await container.fs.writeFile(
+      "server.go",
+      `package main
 import "net/http"
 func main() { _ = http.ListenAndServe(":18080", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })) }
-`);
+`,
+    );
     const ready = new Promise<string>((resolve) => {
       const off = container.on("server-ready", (port, url) => {
-        if (port === 18080) { off(); resolve(url); }
+        if (port === 18080) {
+          off();
+          resolve(url);
+        }
       });
     });
     const server = await container.spawn("go", ["run", "server.go"]);
     await expect(ready).resolves.toContain("18080");
     const closed = new Promise<void>((resolve) => {
       const off = container.on("port", (port, type) => {
-        if (port === 18080 && type === "close") { off(); resolve(); }
+        if (port === 18080 && type === "close") {
+          off();
+          resolve();
+        }
       });
     });
     server.kill();
@@ -132,15 +154,22 @@ func main() { _ = http.ListenAndServe(":18080", http.HandlerFunc(func(w http.Res
     await expect(closed).resolves.toBeUndefined();
   });
 
-  it.runIf(process.env.REMOTE_RUNTIME_SOAK === "1")("preserves ordered output through a 30-minute reconnect soak", async () => {
-    const process = await container.spawn("sh", ["-c", "i=1; while [ $i -le 1800 ]; do echo $i; i=$((i+1)); sleep 1; done"]);
-    const output = collect(process.output);
-    for (let drop = 0; drop < 180; drop += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 10_000));
-      container.forceReconnectForTesting();
-    }
-    expect(await process.exit).toBe(0);
-    const records = (await output).trim().split(/\r?\n/).map(Number);
-    expect(records).toEqual(Array.from({ length: 1800 }, (_, index) => index + 1));
-  }, 31 * 60_000);
+  it.runIf(process.env.REMOTE_RUNTIME_SOAK === "1")(
+    "preserves ordered output through a 30-minute reconnect soak",
+    async () => {
+      const process = await container.spawn("sh", [
+        "-c",
+        "i=1; while [ $i -le 1800 ]; do echo $i; i=$((i+1)); sleep 1; done",
+      ]);
+      const output = collect(process.output);
+      for (let drop = 0; drop < 180; drop += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10_000));
+        container.forceReconnectForTesting();
+      }
+      expect(await process.exit).toBe(0);
+      const records = (await output).trim().split(/\r?\n/).map(Number);
+      expect(records).toEqual(Array.from({ length: 1800 }, (_, index) => index + 1));
+    },
+    31 * 60_000,
+  );
 });

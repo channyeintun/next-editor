@@ -53,9 +53,13 @@ export function parseControlFrame(input: string | Uint8Array): ControlFrame {
       throw new RcpError("EPROTO", "malformed success frame");
     }
   } else if (value.t === "err") {
-    if (!Number.isSafeInteger(value.id) || !isRecord(value.e) ||
-        typeof value.e.code !== "string" || !errorCodes.has(value.e.code as ErrorCode) ||
-        typeof value.e.message !== "string") {
+    if (
+      !Number.isSafeInteger(value.id) ||
+      !isRecord(value.e) ||
+      typeof value.e.code !== "string" ||
+      !errorCodes.has(value.e.code as ErrorCode) ||
+      typeof value.e.message !== "string"
+    ) {
       throw new RcpError("EPROTO", "malformed error frame");
     }
   } else if (typeof value.m !== "string" || !isRecord(value.p)) {

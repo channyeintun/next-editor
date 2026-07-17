@@ -89,7 +89,10 @@ export function formatAgentError(error: unknown): string {
     addMessage(record.summary);
 
     const code = record.code;
-    if ((typeof code === "string" || typeof code === "number") && !details.includes(`Code: ${code}`)) {
+    if (
+      (typeof code === "string" || typeof code === "number") &&
+      !details.includes(`Code: ${code}`)
+    ) {
       details.push(`Code: ${code}`);
     }
 

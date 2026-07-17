@@ -64,8 +64,13 @@ describe("proxyUrl", () => {
             status: 200,
             url: "https://example.com/x.png",
             headers: new Headers({ "content-type": "image/png" }),
-          body: new ReadableStream({ start: (controller) => { controller.enqueue(bytes); controller.close(); } }),
-        }) as unknown as Response,
+            body: new ReadableStream({
+              start: (controller) => {
+                controller.enqueue(bytes);
+                controller.close();
+              },
+            }),
+          }) as unknown as Response,
       ),
     );
     const result = await proxyUrl("https://example.com/x.png");
@@ -111,21 +116,17 @@ describe("proxyUrl", () => {
   it("follows an allowed redirect manually", async () => {
     const fetchMock = vi
       .fn<() => Promise<Response>>()
-      .mockResolvedValueOnce(
-        {
-          ok: false,
-          status: 302,
-          headers: new Headers({ location: "/image.png" }),
-        } as unknown as Response,
-      )
-      .mockResolvedValueOnce(
-        {
-          ok: true,
-          status: 200,
-          headers: new Headers({ "content-type": "image/png" }),
-          body: new ReadableStream({ start: (controller) => controller.close() }),
-        } as unknown as Response,
-      );
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 302,
+        headers: new Headers({ location: "/image.png" }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "image/png" }),
+        body: new ReadableStream({ start: (controller) => controller.close() }),
+      } as unknown as Response);
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await proxyUrl("https://example.com/start");

@@ -18,15 +18,15 @@ limits must be verified again before production rollout.
 
 The collaboration data plane has one deployment path:
 
-| Cloudflare service    | Current platform responsibility                                                                                               |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Workers + Hono        | Same-origin room and membership APIs, WebSocket authentication, assets, exports, and signed maintenance endpoints             |
-| Workers Static Assets | Serve the editor on the same origin so its first-party session authenticates HTTP and WebSocket requests safely               |
-| D1                    | Rooms, members, invitations, roles, asset metadata, retention state, and audit events                                         |
-| R2                    | Private SHA-256-addressed binary project assets; never live SCR3 recordings                                                   |
-| Workers KV            | Disposable public lesson/playlist cache; separate from collaboration state and credentials                                    |
-| Workers Logs          | Structured update and maintenance telemetry for dashboards and alerts                                                         |
-| Durable Objects       | Hibernating WebSocket coordination, room-local SQLite durability, alarm compaction, and ephemeral fan-out                     |
+| Cloudflare service    | Current platform responsibility                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Workers + Hono        | Same-origin room and membership APIs, WebSocket authentication, assets, exports, and signed maintenance endpoints |
+| Workers Static Assets | Serve the editor on the same origin so its first-party session authenticates HTTP and WebSocket requests safely   |
+| D1                    | Rooms, members, invitations, roles, asset metadata, retention state, and audit events                             |
+| R2                    | Private SHA-256-addressed binary project assets; never live SCR3 recordings                                       |
+| Workers KV            | Disposable public lesson/playlist cache; separate from collaboration state and credentials                        |
+| Workers Logs          | Structured update and maintenance telemetry for dashboards and alerts                                             |
+| Durable Objects       | Hibernating WebSocket coordination, room-local SQLite durability, alarm compaction, and ephemeral fan-out         |
 
 Durable Object SQLite and Alarms own room history and compaction. QStash schedules delayed purge
 of closed room data and assets. Cloudflare Queues are still not used. The browser-local recording
@@ -87,18 +87,18 @@ between the browser and the room Durable Object. The gateway is not called once 
 
 ## Cloudflare service map
 
-| Service                       | Collaboration responsibility                                                       | Status in this option                 |
-| ----------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------- |
-| Workers Static Assets         | Serve the existing SPA under the same cross-origin-isolated origin                 | Existing                              |
-| Hono Worker                   | Room CRUD, session authentication, invitations, tokens, WebSocket upgrade          | Existing                              |
-| D1                            | Rooms, members, roles, invite records, retention state, searchable audit metadata  | Existing                              |
-| Durable Objects               | WebSocket hub and single coordination point for each room                          | Implemented                           |
-| Durable Object SQLite storage | CRDT updates, snapshots, protocol version, stream sequence, durable room state     | Implemented                           |
-| Durable Object WebSocket API  | Mandatory binary Yjs document/awareness frames plus JSON control and acknowledgements | Implemented                        |
-| Durable Object Alarms         | Snapshot compaction and update/deduplication cleanup                               | Implemented                           |
-| R2                            | Content-addressed assets, oversized snapshots, and project exports                 | Existing                              |
-| Cloudflare Queues             | Heavy export, asset reconciliation, or cross-room maintenance                      | Optional                              |
-| Workers Logs and tracing      | Connection and operational metadata, excluding editor content                      | Existing                              |
+| Service                       | Collaboration responsibility                                                          | Status in this option |
+| ----------------------------- | ------------------------------------------------------------------------------------- | --------------------- |
+| Workers Static Assets         | Serve the existing SPA under the same cross-origin-isolated origin                    | Existing              |
+| Hono Worker                   | Room CRUD, session authentication, invitations, tokens, WebSocket upgrade             | Existing              |
+| D1                            | Rooms, members, roles, invite records, retention state, searchable audit metadata     | Existing              |
+| Durable Objects               | WebSocket hub and single coordination point for each room                             | Implemented           |
+| Durable Object SQLite storage | CRDT updates, snapshots, protocol version, stream sequence, durable room state        | Implemented           |
+| Durable Object WebSocket API  | Mandatory binary Yjs document/awareness frames plus JSON control and acknowledgements | Implemented           |
+| Durable Object Alarms         | Snapshot compaction and update/deduplication cleanup                                  | Implemented           |
+| R2                            | Content-addressed assets, oversized snapshots, and project exports                    | Existing              |
+| Cloudflare Queues             | Heavy export, asset reconciliation, or cross-room maintenance                         | Optional              |
+| Workers Logs and tracing      | Connection and operational metadata, excluding editor content                         | Existing              |
 
 The collaboration data plane does not use the Workers KV `CACHE` binding, Pub/Sub, Containers,
 Workflows, or Calls:

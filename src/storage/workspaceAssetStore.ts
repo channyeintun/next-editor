@@ -169,9 +169,7 @@ export async function registerWorkspaceAsset(
   return descriptor;
 }
 
-export async function getWorkspaceAssetBlob(
-  descriptor: WorkspaceAssetDescriptor,
-): Promise<Blob> {
+export async function getWorkspaceAssetBlob(descriptor: WorkspaceAssetDescriptor): Promise<Blob> {
   const cached = blobCache.get(descriptor.assetId);
   if (cached) {
     if (cached.size !== descriptor.size) {

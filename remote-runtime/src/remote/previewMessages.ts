@@ -19,22 +19,26 @@ export interface PreviewMessage {
 export function isPreviewMessage(data: unknown): data is PreviewMessage {
   if (typeof data !== "object" || data === null) return false;
   const message = data as Partial<PreviewMessage>;
-  if (!Object.values(PreviewMessageType).includes(message.type as PreviewMessageType)
-    || typeof message.previewId !== "string"
-    || typeof message.port !== "number"
-    || !Number.isInteger(message.port)
-    || message.port < 1
-    || message.port > 65_535
-    || typeof message.pathname !== "string"
-    || typeof message.search !== "string"
-    || typeof message.hash !== "string") {
+  if (
+    !Object.values(PreviewMessageType).includes(message.type as PreviewMessageType) ||
+    typeof message.previewId !== "string" ||
+    typeof message.port !== "number" ||
+    !Number.isInteger(message.port) ||
+    message.port < 1 ||
+    message.port > 65_535 ||
+    typeof message.pathname !== "string" ||
+    typeof message.search !== "string" ||
+    typeof message.hash !== "string"
+  ) {
     return false;
   }
   if (message.type === PreviewMessageType.ConsoleError) {
     return Array.isArray(message.args) && typeof message.stack === "string";
   }
-  return typeof message.message === "string"
-    && (message.stack === undefined || typeof message.stack === "string");
+  return (
+    typeof message.message === "string" &&
+    (message.stack === undefined || typeof message.stack === "string")
+  );
 }
 
 export function listenForPreviewMessages(
@@ -43,7 +47,8 @@ export function listenForPreviewMessages(
 ): () => void {
   if (typeof window === "undefined") return () => {};
   const handler = (event: MessageEvent) => {
-    if (isPreviewMessage(event.data) && allowedOrigin(event.origin, event.data)) listener(event.data);
+    if (isPreviewMessage(event.data) && allowedOrigin(event.origin, event.data))
+      listener(event.data);
   };
   window.addEventListener("message", handler);
   return () => window.removeEventListener("message", handler);
@@ -58,14 +63,15 @@ export function createPreviewErrorForwarder(options: {
   previewId: string;
   mode: true | "exceptions-only";
 }): string {
-  const consoleForwarding = options.mode === true
-    ? `
+  const consoleForwarding =
+    options.mode === true
+      ? `
   const originalConsoleError = console.error.bind(console);
   console.error = (...args) => {
     originalConsoleError(...args);
     send({ type: "${PreviewMessageType.ConsoleError}", args, stack: new Error().stack || "" });
   };`
-    : "";
+      : "";
   return `(() => {
   const targetOrigin = ${scriptLiteral(options.targetOrigin)};
   const previewId = ${scriptLiteral(options.previewId)};

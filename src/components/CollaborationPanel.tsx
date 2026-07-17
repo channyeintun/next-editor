@@ -216,7 +216,7 @@ export default function CollaborationPanel() {
                         return (
                           <div
                             key={`${participant.actorId}:${participant.sessionId}`}
-                            className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2.5 py-2"
+                            className="flex items-center gap-2 rounded-lg bg-white/3 px-2.5 py-2"
                           >
                             {participant.avatarUrl ? (
                               <img
@@ -256,7 +256,7 @@ export default function CollaborationPanel() {
                           type="button"
                           disabled={isBusy}
                           onClick={() => void createShareLink("editor")}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/15 px-2 py-2 text-xs font-semibold text-sky-200 hover:bg-sky-500/25 disabled:opacity-50"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/15 text-xs font-semibold text-sky-200 hover:bg-sky-500/25 disabled:opacity-50 p-2"
                         >
                           <Link2 size={13} /> Editor link
                         </button>
@@ -264,7 +264,7 @@ export default function CollaborationPanel() {
                           type="button"
                           disabled={isBusy}
                           onClick={() => void createShareLink("viewer")}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-500/15 px-2 py-2 text-xs font-semibold text-violet-200 hover:bg-violet-500/25 disabled:opacity-50"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-500/15 text-xs font-semibold text-violet-200 hover:bg-violet-500/25 disabled:opacity-50 p-2"
                         >
                           <Link2 size={13} /> Viewer link
                         </button>
@@ -273,7 +273,7 @@ export default function CollaborationPanel() {
                         <button
                           type="button"
                           onClick={() => void copyShareUrl()}
-                          className="mt-2 flex w-full items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-2 text-left text-[11px] text-slate-300 hover:bg-white/[0.03]"
+                          className="mt-2 flex w-full items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-2 text-left text-[11px] text-slate-300 hover:bg-white/3"
                         >
                           {copied ? <Check size={13} /> : <Copy size={13} />}
                           <span className="min-w-0 flex-1 truncate">
@@ -372,7 +372,7 @@ export default function CollaborationPanel() {
                       type="button"
                       disabled={isBusy}
                       onClick={() => void downloadRecoveryExport()}
-                      className="w-full rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/[0.03] disabled:opacity-50"
+                      className="w-full rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/3 disabled:opacity-50"
                     >
                       Export room recovery snapshot
                     </button>

@@ -160,9 +160,7 @@ export function seedCollaborationProject(
 
   const idFactory = options.idFactory ?? (() => crypto.randomUUID());
   const pathIds = new Map<string, string>();
-  const unsupportedAsset = Object.values(project.files).find(
-    (file) => !isWorkspaceTextFile(file),
-  );
+  const unsupportedAsset = Object.values(project.files).find((file) => !isWorkspaceTextFile(file));
   if (unsupportedAsset && !options.skipBinaryAssets) {
     throw new CollaborationProjectError(
       `Binary asset ${unsupportedAsset.path} must be uploaded before a collaboration room is created`,

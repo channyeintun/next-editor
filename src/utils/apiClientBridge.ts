@@ -55,7 +55,7 @@ export function truncateUtf8(value: string, maxBytes: number): TruncatedUtf8Stri
   let byteLength = 0;
   let end = 0;
 
-  for (let index = 0; index < value.length; ) {
+  for (let index = 0; index < value.length;) {
     const codePoint = value.codePointAt(index) ?? 0;
     const codeUnits = codePoint > 0xffff ? 2 : 1;
     const nextBytes = codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;

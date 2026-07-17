@@ -3,8 +3,9 @@ import { RcpError, fromWireError, isFatalRcpError } from "./errors";
 
 describe("RCP errors", () => {
   it("prefixes errno messages", () => {
-    expect(fromWireError({ code: "ENOENT", message: "no such file" }).message)
-      .toBe("ENOENT: no such file");
+    expect(fromWireError({ code: "ENOENT", message: "no such file" }).message).toBe(
+      "ENOENT: no such file",
+    );
   });
 
   it("classifies protocol and gone errors as fatal", () => {

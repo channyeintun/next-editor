@@ -8,7 +8,9 @@ describe("formatAgentError", () => {
       message: "Provider returned error",
       metadata: {
         provider_name: "Example AI",
-        raw: JSON.stringify({ error: { message: "The selected model is temporarily overloaded." } }),
+        raw: JSON.stringify({
+          error: { message: "The selected model is temporarily overloaded." },
+        }),
       },
     });
 

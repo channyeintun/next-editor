@@ -5,14 +5,26 @@ import { RCP_LIMITS } from "./types";
 
 describe("channel mux", () => {
   it("allocates odd client and even agent channel ids", () => {
-    const client = new ChannelMux("client", () => {}, () => {});
-    const agent = new ChannelMux("agent", () => {}, () => {});
+    const client = new ChannelMux(
+      "client",
+      () => {},
+      () => {},
+    );
+    const agent = new ChannelMux(
+      "agent",
+      () => {},
+      () => {},
+    );
     expect([client.allocate(), client.allocate()]).toEqual([1, 3]);
     expect([agent.allocate(), agent.allocate()]).toEqual([2, 4]);
   });
 
   it("keeps interleaved channel data separate and closes on FIN", async () => {
-    const mux = new ChannelMux("client", () => {}, () => {});
+    const mux = new ChannelMux(
+      "client",
+      () => {},
+      () => {},
+    );
     const first = mux.readable(2).getReader();
     const second = mux.readable(4).getReader();
     mux.receive({ channelId: 4, fin: false, payload: new Uint8Array([4]) });
@@ -24,16 +36,25 @@ describe("channel mux", () => {
 
   it("blocks a writer after initial credit is exhausted", async () => {
     const frames: Uint8Array[] = [];
-    const mux = new ChannelMux("client", (frame) => { frames.push(frame); }, () => {});
+    const mux = new ChannelMux(
+      "client",
+      (frame) => {
+        frames.push(frame);
+      },
+      () => {},
+    );
     const channel = mux.allocate();
     const writer = mux.writable(channel).getWriter();
     const data = new Uint8Array(RCP_LIMITS.initialChannelCredit + 1);
     let finished = false;
-    const write = writer.write(data).then(() => { finished = true; });
+    const write = writer.write(data).then(() => {
+      finished = true;
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(finished).toBe(false);
-    expect(frames.reduce((total, frame) => total + parseBinaryFrame(frame).payload.length, 0))
-      .toBe(RCP_LIMITS.initialChannelCredit);
+    expect(frames.reduce((total, frame) => total + parseBinaryFrame(frame).payload.length, 0)).toBe(
+      RCP_LIMITS.initialChannelCredit,
+    );
     mux.grantCredit(channel, 1);
     await write;
     expect(finished).toBe(true);
@@ -41,7 +62,13 @@ describe("channel mux", () => {
 
   it("replenishes only bytes consumed by a readable channel", async () => {
     const credits: number[] = [];
-    const mux = new ChannelMux("client", () => {}, (_channel, bytes) => { credits.push(bytes); });
+    const mux = new ChannelMux(
+      "client",
+      () => {},
+      (_channel, bytes) => {
+        credits.push(bytes);
+      },
+    );
     const reader = mux.readable(2).getReader();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(credits).toEqual([]);
@@ -52,7 +79,11 @@ describe("channel mux", () => {
   });
 
   it("rejects credit that would overflow safe integer accounting", () => {
-    const mux = new ChannelMux("client", () => {}, () => {});
+    const mux = new ChannelMux(
+      "client",
+      () => {},
+      () => {},
+    );
     const channel = mux.allocate();
     expect(() => mux.grantCredit(channel, Number.MAX_SAFE_INTEGER)).toThrow("ELIMIT:");
   });

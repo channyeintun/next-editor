@@ -142,11 +142,10 @@ describe("runAgentLoop", () => {
     const streamedSuffix = new TextEncoder().encode(" there");
     const finalContentDelta = contentDeltas.at(-1);
     expect(finalContentDelta?.k).toBe("content");
-    if (finalContentDelta?.k === "content") {
-      expect(finalContentDelta.delta.delta.slice(-streamedSuffix.byteLength)).toEqual(
-        streamedSuffix,
-      );
+    if (finalContentDelta?.k !== "content") {
+      throw new Error("expected a content delta");
     }
+    expect(finalContentDelta.delta.delta.slice(-streamedSuffix.byteLength)).toEqual(streamedSuffix);
     expect(deltas.some((d) => d.k === "tool_call")).toBe(false);
     expect(calls[0].instructions).not.toContain("Workspace session memory:");
   });
@@ -274,7 +273,9 @@ describe("runAgentLoop", () => {
 
     expect(calls[0].instructions).toContain("Use our coral design tokens.");
     expect(calls[0].instructions).toContain("Run the focused test before handing off.");
-    expect(calls[0].instructions).not.toContain("NESTED MEMORY MUST NOT BE AUTOMATICALLY INJECTED.");
+    expect(calls[0].instructions).not.toContain(
+      "NESTED MEMORY MUST NOT BE AUTOMATICALLY INJECTED.",
+    );
   });
 
   it("sends pasted images as user input content", async () => {

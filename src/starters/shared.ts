@@ -9,10 +9,7 @@ const STARTER_FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 
 export { STARTER_FAVICON_SVG };
 
-export function createWorkspaceFile(
-  path: string,
-  content: string,
-): WorkspaceFile {
+export function createWorkspaceFile(path: string, content: string): WorkspaceFile {
   const normalizedPath = normalizeWorkspacePath(path);
 
   return {

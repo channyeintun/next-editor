@@ -136,7 +136,7 @@ export function sanitizePostHogEvent<T extends PostHogEvent>(
     return event;
   }
 
-  const properties = { ...(event.properties ?? {}) };
+  const properties = { ...event.properties };
   properties.$exception_list = sanitizeExceptionList(properties.$exception_list);
 
   for (const key of Object.keys(properties)) {

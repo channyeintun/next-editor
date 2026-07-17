@@ -10,9 +10,7 @@ export function previewWebSocketInit(
   response: Pick<Response, "webSocket">,
   headers: Headers,
 ): ResponseInit | undefined {
-  return response.webSocket
-    ? { status: 101, headers, webSocket: response.webSocket }
-    : undefined;
+  return response.webSocket ? { status: 101, headers, webSocket: response.webSocket } : undefined;
 }
 
 export function previewScriptMarkup(script: {
@@ -25,7 +23,9 @@ export function previewScriptMarkup(script: {
     script.options.type ? `type="${script.options.type}"` : "",
     script.options.defer ? "defer" : "",
     script.options.async ? "async" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
   const prelude = script.prelude ? `<script>${escapeScript(script.prelude)}</script>` : "";
   return `${prelude}<script${attributes ? ` ${attributes}` : ""}>${escapeScript(script.src)}</script>`;
 }

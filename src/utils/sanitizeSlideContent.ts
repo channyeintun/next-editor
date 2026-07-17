@@ -17,7 +17,11 @@ const FORBIDDEN_ELEMENTS = new Set([
 const URL_ATTRIBUTES = new Set(["href", "src", "xlink:href", "action", "formaction"]);
 
 function isSafeUrl(value: string, elementName: string): boolean {
-  const normalized = value.trim().replace(/[\u0000-\u001f\u007f\s]/g, "").toLowerCase();
+  const normalized = value
+    .trim()
+    // eslint-disable-next-line no-control-regex -- intentionally strips control characters to block obfuscated `javascript:`/`data:` URLs
+    .replace(/[\u0000-\u001f\u007f\s]/g, "")
+    .toLowerCase();
   if (normalized.startsWith("javascript:") || normalized.startsWith("vbscript:")) return false;
   if (normalized.startsWith("data:")) {
     return elementName === "img" || elementName === "image"

@@ -14,9 +14,7 @@ function descriptorsMatch(
   right: WorkspaceAssetDescriptor,
 ): boolean {
   return (
-    left.assetId === right.assetId &&
-    left.mimeType === right.mimeType &&
-    left.size === right.size
+    left.assetId === right.assetId && left.mimeType === right.mimeType && left.size === right.size
   );
 }
 

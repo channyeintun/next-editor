@@ -4,7 +4,11 @@ import { RemoteFs } from "./RemoteFs";
 
 describe("RemoteFs compatibility", () => {
   it("supports WebContainer buffer encodings and buffered directory names", async () => {
-    const mux = new ChannelMux("client", () => {}, () => {});
+    const mux = new ChannelMux(
+      "client",
+      () => {},
+      () => {},
+    );
     let nextChannel = 2;
     const connection = {
       channels: mux,
@@ -13,11 +17,15 @@ describe("RemoteFs compatibility", () => {
         if (method === "fs.readFile") {
           const ch = nextChannel;
           nextChannel += 2;
-          setTimeout(() => mux.receive({
-            channelId: ch,
-            fin: true,
-            payload: new Uint8Array([0, 0xff, 0x10]),
-          }), 0);
+          setTimeout(
+            () =>
+              mux.receive({
+                channelId: ch,
+                fin: true,
+                payload: new Uint8Array([0, 0xff, 0x10]),
+              }),
+            0,
+          );
           return { ch };
         }
         if (method === "fs.readdir") {

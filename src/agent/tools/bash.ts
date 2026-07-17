@@ -161,9 +161,7 @@ function areFilesEqual(left: WorkspaceFile | undefined, right: WorkspaceFile | u
   const contentEqual =
     isWorkspaceAssetFile(left) && isWorkspaceAssetFile(right)
       ? left.content.assetId === right.content.assetId
-      : isWorkspaceTextFile(left) &&
-        isWorkspaceTextFile(right) &&
-        left.content === right.content;
+      : isWorkspaceTextFile(left) && isWorkspaceTextFile(right) && left.content === right.content;
   return (
     left.path === right.path &&
     left.name === right.name &&

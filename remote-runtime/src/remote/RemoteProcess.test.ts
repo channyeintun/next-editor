@@ -4,11 +4,18 @@ import { RemoteProcess } from "./RemoteProcess";
 
 describe("RemoteProcess", () => {
   it("preserves UTF-8 codepoints split across output frames", async () => {
-    const mux = new ChannelMux("client", () => {}, () => {});
+    const mux = new ChannelMux(
+      "client",
+      () => {},
+      () => {},
+    );
     const listeners = new Map<string, (event: never) => void>();
     const connection = {
       channels: mux,
-      on: (name: string, listener: (event: never) => void) => { listeners.set(name, listener); return () => {}; },
+      on: (name: string, listener: (event: never) => void) => {
+        listeners.set(name, listener);
+        return () => {};
+      },
       request: async () => ({}),
     };
     const process = new RemoteProcess(connection as never, 1, 2, 3);

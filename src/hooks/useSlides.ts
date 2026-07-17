@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SlideEvent } from "../types/slides";
-import {
-  createSlidesStore,
-  subscribeSlidesPersistence,
-} from "../stores/slidesStore";
+import { createSlidesStore, subscribeSlidesPersistence } from "../stores/slidesStore";
 import { useSlidesController } from "./useSlidesController";
 
 interface UseSlidesConfig {

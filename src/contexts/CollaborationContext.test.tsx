@@ -199,11 +199,7 @@ describe("CollaborationProvider", () => {
       await collaboration!.createRoom();
     });
 
-    expect(mocks.uploadAsset).toHaveBeenCalledWith(
-      roomSession.room.id,
-      bytes,
-      descriptor.mimeType,
-    );
+    expect(mocks.uploadAsset).toHaveBeenCalledWith(roomSession.room.id, bytes, descriptor.mimeType);
     const doc = new Y.Doc();
     applyEncodedYjsSnapshot(doc, mocks.createRoom.mock.calls[0][0].snapshot);
     expect(projectCollaborationDocument(doc).project.files["logo.png"]).toMatchObject({

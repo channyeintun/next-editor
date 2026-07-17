@@ -15,8 +15,13 @@ function decodeBase64url(value: string): Uint8Array {
 }
 
 async function hmacKey(secret: string, usages: KeyUsage[]): Promise<CryptoKey> {
-  return crypto.subtle.importKey("raw", encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" }, false, usages);
+  return crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    usages,
+  );
 }
 
 async function signature(secret: string, payload: string): Promise<string> {
@@ -24,12 +29,18 @@ async function signature(secret: string, payload: string): Promise<string> {
   return base64url(new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(payload))));
 }
 
-export async function signToken(secret: string, claims: AuthClaims & { sessionId?: string }): Promise<string> {
+export async function signToken(
+  secret: string,
+  claims: AuthClaims & { sessionId?: string },
+): Promise<string> {
   const payload = base64url(encoder.encode(JSON.stringify(claims)));
   return `${payload}.${await signature(secret, payload)}`;
 }
 
-export async function verifyToken(secret: string, token: string): Promise<AuthClaims & { sessionId?: string }> {
+export async function verifyToken(
+  secret: string,
+  token: string,
+): Promise<AuthClaims & { sessionId?: string }> {
   const [payload, provided, extra] = token.split(".");
   if (!payload || !provided || extra) throw new Error("invalid token");
   const valid = await crypto.subtle.verify(
@@ -39,8 +50,11 @@ export async function verifyToken(secret: string, token: string): Promise<AuthCl
     encoder.encode(payload),
   );
   if (!valid) throw new Error("invalid token");
-  const claims = JSON.parse(new TextDecoder().decode(decodeBase64url(payload))) as AuthClaims & { sessionId?: string };
-  if (!claims.userId || !Number.isFinite(claims.exp) || claims.exp < Date.now() / 1000) throw new Error("expired token");
+  const claims = JSON.parse(new TextDecoder().decode(decodeBase64url(payload))) as AuthClaims & {
+    sessionId?: string;
+  };
+  if (!claims.userId || !Number.isFinite(claims.exp) || claims.exp < Date.now() / 1000)
+    throw new Error("expired token");
   return claims;
 }
 

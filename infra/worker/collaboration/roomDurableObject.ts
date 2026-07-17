@@ -898,10 +898,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     }
   }
 
-  private broadcastAwareness(
-    entry: CollaborationAwarenessProtocolEntry,
-    except?: WebSocket,
-  ): void {
+  private broadcastAwareness(entry: CollaborationAwarenessProtocolEntry, except?: WebSocket): void {
     const binary = exactArrayBuffer(
       encodeCollaborationAwarenessUpdate(encodeCollaborationAwarenessProtocolUpdate([entry])),
     );
@@ -930,7 +927,8 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private broadcastLeave(socket: WebSocket): void {
     const attachment = attachmentFor(socket);
     if (!attachment?.awareness || attachment.awareness.kind !== "state") return;
-    if (attachment.awarenessClientId === undefined || attachment.awarenessClock === undefined) return;
+    if (attachment.awarenessClientId === undefined || attachment.awarenessClock === undefined)
+      return;
     this.broadcastAwareness(
       {
         clientId: attachment.awarenessClientId,

@@ -32,8 +32,16 @@ export const FALLBACK_MODEL_OPTIONS: AgentModelOption[] = [
   { id: "openai/gpt-5.6-luna", label: "OpenAI: GPT-5.6 Luna", supportsImages: true },
   { id: "openai/gpt-5.6-luna-pro", label: "OpenAI: GPT-5.6 Luna Pro", supportsImages: true },
   { id: "google/gemma-4-26b-a4b-it", label: "Google: Gemma 4 26B A4B", supportsImages: true },
-  { id: "google/gemini-3.1-pro-preview", label: "Google: Gemini 3.1 Pro Preview", supportsImages: true },
-  { id: "google/gemini-3-flash-preview", label: "Google: Gemini 3 Flash Preview", supportsImages: true },
+  {
+    id: "google/gemini-3.1-pro-preview",
+    label: "Google: Gemini 3.1 Pro Preview",
+    supportsImages: true,
+  },
+  {
+    id: "google/gemini-3-flash-preview",
+    label: "Google: Gemini 3 Flash Preview",
+    supportsImages: true,
+  },
 ];
 
 function hasModelId(model: OpenRouterModel): model is OpenRouterModel & { id: string } {
@@ -68,10 +76,7 @@ export async function fetchOpenRouterModelOptions(
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-export function filterModelOptions(
-  options: AgentModelOption[],
-  query: string,
-): AgentModelOption[] {
+export function filterModelOptions(options: AgentModelOption[], query: string): AgentModelOption[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   if (!normalizedQuery) {
     return options;

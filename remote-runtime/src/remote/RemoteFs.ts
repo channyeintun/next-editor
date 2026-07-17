@@ -22,11 +22,15 @@ async function collect(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    chunks.push(value); length += value.byteLength;
+    chunks.push(value);
+    length += value.byteLength;
   }
   const result = new Uint8Array(length);
   let offset = 0;
-  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.byteLength; }
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   return result;
 }
 
@@ -47,7 +51,8 @@ function decode(bytes: Uint8Array, encoding: BufferEncoding): string {
     case "hex":
       return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
     case "base64":
-    case "base64url": { // btoa avoids a Node-only Buffer dependency in the browser SDK.
+    case "base64url": {
+      // btoa avoids a Node-only Buffer dependency in the browser SDK.
       let binary = "";
       for (const byte of bytes) binary += String.fromCharCode(byte);
       const encoded = btoa(binary);
@@ -131,8 +136,11 @@ export class RemoteFs implements FileSystemAPI {
   mkdir(path: string, options?: { recursive?: false }): Promise<void>;
   mkdir(path: string, options: { recursive: true }): Promise<string>;
   async mkdir(path: string, options: { recursive?: boolean } = {}): Promise<string | void> {
-    const result = await this.connection.request("fs.mkdir", { path, recursive: options.recursive ?? false });
-    return options.recursive ? result.created ?? path : undefined;
+    const result = await this.connection.request("fs.mkdir", {
+      path,
+      recursive: options.recursive ?? false,
+    });
+    return options.recursive ? (result.created ?? path) : undefined;
   }
 
   async readdir(
@@ -153,20 +161,24 @@ export class RemoteFs implements FileSystemAPI {
   ): Promise<DirEnt<string>[]>;
   async readdir(
     path: string,
-    options?: { encoding?: BufferEncoding | "buffer" | null; withFileTypes?: boolean }
-      | BufferEncoding | "buffer" | null,
+    options?:
+      | { encoding?: BufferEncoding | "buffer" | null; withFileTypes?: boolean }
+      | BufferEncoding
+      | "buffer"
+      | null,
   ): Promise<string[] | Uint8Array[] | RemoteDirEnt<string>[] | RemoteDirEnt<Uint8Array>[]> {
     const withFileTypes = typeof options === "object" && options?.withFileTypes === true;
-    const bufferNames = options === "buffer"
-      || (typeof options === "object" && options?.encoding === "buffer");
+    const bufferNames =
+      options === "buffer" || (typeof options === "object" && options?.encoding === "buffer");
     const { entries } = await this.connection.request("fs.readdir", { path, withFileTypes });
     if (!withFileTypes) {
-      return entries.map(({ name }) => bufferNames ? new TextEncoder().encode(name) : name) as string[] | Uint8Array[];
+      return entries.map(({ name }) => (bufferNames ? new TextEncoder().encode(name) : name)) as
+        | string[]
+        | Uint8Array[];
     }
-    return entries.map(({ name, kind }) => this.dirEnt(
-      bufferNames ? new TextEncoder().encode(name) : name,
-      kind,
-    )) as RemoteDirEnt<string>[] | RemoteDirEnt<Uint8Array>[];
+    return entries.map(({ name, kind }) =>
+      this.dirEnt(bufferNames ? new TextEncoder().encode(name) : name, kind),
+    ) as RemoteDirEnt<string>[] | RemoteDirEnt<Uint8Array>[];
   }
 
   async rm(path: string, options: { recursive?: boolean; force?: boolean } = {}): Promise<void> {
@@ -189,9 +201,8 @@ export class RemoteFs implements FileSystemAPI {
     callback?: FSWatchCallback,
   ): IFSWatcher {
     const listener = typeof options === "function" ? options : callback;
-    const recursive = typeof options === "object" && options !== null
-      ? options.recursive ?? false
-      : false;
+    const recursive =
+      typeof options === "object" && options !== null ? (options.recursive ?? false) : false;
     const watchId = this.nextWatchId++;
     this.watches.set(watchId, { path, recursive });
     let closed = false;
@@ -201,7 +212,9 @@ export class RemoteFs implements FileSystemAPI {
     void this.connection.request("fs.watch", { watchId, path, recursive }).catch(() => close());
     const close = () => {
       if (closed) return;
-      closed = true; this.watches.delete(watchId); unsubscribe();
+      closed = true;
+      this.watches.delete(watchId);
+      unsubscribe();
       void this.connection.request("fs.unwatch", { watchId }).catch(() => {});
     };
     return { close };

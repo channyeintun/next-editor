@@ -386,8 +386,8 @@ export default function ArchitecturePage() {
               </title>
               <desc>
                 User's browser runs the client app and connects over HTTPS to a Cloudflare Worker
-                edge, which uses Cloudflare D1, R2, and Workers KV. Google provides identity;
-                Room Durable Objects provide binary WebSockets and SQLite collaboration state. The client
+                edge, which uses Cloudflare D1, R2, and Workers KV. Google provides identity; Room
+                Durable Objects provide binary WebSockets and SQLite collaboration state. The client
                 also sends analytics events, masked session replay and error reports to PostHog
                 Cloud (US).
               </desc>

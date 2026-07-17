@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { RcpError } from "./errors";
-import { encodeBinaryFrame, encodeControlFrame, parseBinaryFrame, parseControlFrame } from "./frames";
+import {
+  encodeBinaryFrame,
+  encodeControlFrame,
+  parseBinaryFrame,
+  parseControlFrame,
+} from "./frames";
 
 describe("RCP frames", () => {
   it("round-trips control frames", () => {

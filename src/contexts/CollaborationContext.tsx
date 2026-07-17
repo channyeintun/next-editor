@@ -338,10 +338,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
             },
           );
           projectionRef.current = projection;
-          if (
-            projectedQueuedTextEdit &&
-            pendingLocalTextEditRef.current === queuedTextEdit
-          ) {
+          if (projectedQueuedTextEdit && pendingLocalTextEditRef.current === queuedTextEdit) {
             pendingLocalTextEditRef.current = null;
           }
           hydrateProjectionAssets(projection, roomId);
@@ -488,7 +485,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           return;
         }
         void getWorkspaceAssetBytes(content)
-          .then((bytes) => uploadCollaborationAsset(currentSession.room.id, bytes, content.mimeType))
+          .then((bytes) =>
+            uploadCollaborationAsset(currentSession.room.id, bytes, content.mimeType),
+          )
           .then((asset) => {
             if (providerRef.current !== currentProvider || !canWriteRef.current) return;
             controller.createAssetFile(path, asset);
@@ -566,11 +565,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         .sort((left, right) => left.path.localeCompare(right.path));
       for (const file of binaryFiles) {
         const bytes = await getWorkspaceAssetBytes(file.content);
-        const asset = await uploadCollaborationAsset(
-          created.room.id,
-          bytes,
-          file.content.mimeType,
-        );
+        const asset = await uploadCollaborationAsset(created.room.id, bytes, file.content.mimeType);
         if (
           asset.id !== file.content.assetId ||
           asset.mimeType !== file.content.mimeType ||
@@ -732,14 +727,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         })
         .catch(() => {});
     };
-  }, [
-    connectionState,
-    provider,
-    publishAwarenessState,
-    refreshRoomDataFor,
-    role,
-    session,
-  ]);
+  }, [connectionState, provider, publishAwarenessState, refreshRoomDataFor, role, session]);
 
   useEffect(() => {
     scheduleAwarenessPublish();
