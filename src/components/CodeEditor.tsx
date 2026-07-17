@@ -490,7 +490,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
       // Bulk/programmatic changes and stale model events retain a correctness
       // fallback. Ordinary Monaco typing never takes this whole-model read.
-      updateFileContent(modelPath, model.getValue());
+      updateFileContent(editEvent.path, model.getValue());
       return { mode: "fallback" };
     },
   );
