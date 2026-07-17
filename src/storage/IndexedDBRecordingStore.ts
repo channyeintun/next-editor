@@ -2,11 +2,13 @@ import type { Recording } from "../core/src";
 import { requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
 
 const RECORDING_DATABASE_NAME = "next-editor-recordings-db";
-// v5: recording schema renumbered to 4 (binary-only .ne, mandatory dmp check ops);
-// pre-v5 recordings are not retained (no legacy decoding).
-const RECORDING_DATABASE_VERSION = 5;
+// v5: recording schema renumbered to 4 (binary-only .ne, mandatory dmp check ops).
+// v6: persist each recording's next segment sequence instead of counting its full
+// segment range on every append. Pre-v5 recordings remain unsupported.
+const RECORDING_DATABASE_VERSION = 6;
 const RECORDING_METADATA_STORE = "recording-metadata";
 const RECORDING_SEGMENTS_STORE = "recording-segments";
+const RECORDING_STREAM_STATE_STORE = "recording-stream-state";
 // Media is stored outside the SCR3 byte stream, as standalone Blobs keyed by recording id.
 const RECORDING_CAMERA_STORE = "recording-camera";
 const RECORDING_AUDIO_STORE = "recording-audio";
@@ -15,6 +17,11 @@ interface StoredRecordingSegment {
   recordingId: string;
   seq: number;
   bytes: ArrayBuffer;
+}
+
+interface StoredRecordingStreamState {
+  recordingId: string;
+  nextSeq: number;
 }
 
 interface StoredCameraVideo {
@@ -83,15 +90,17 @@ export class IndexedDBRecordingStore {
     return new Promise((resolve, reject) => {
       const request = this.getIndexedDB().open(RECORDING_DATABASE_NAME, RECORDING_DATABASE_VERSION);
 
-      request.onupgradeneeded = () => {
+      request.onupgradeneeded = (event) => {
         const database = request.result;
         const upgradeTransaction = request.transaction;
+        const oldVersion = (event as IDBVersionChangeEvent).oldVersion;
+        const discardUnsupportedRecordings = oldVersion > 0 && oldVersion < 5;
 
         if (!database.objectStoreNames.contains(RECORDING_METADATA_STORE)) {
           database.createObjectStore(RECORDING_METADATA_STORE, {
             keyPath: "id",
           });
-        } else if (upgradeTransaction) {
+        } else if (upgradeTransaction && discardUnsupportedRecordings) {
           // Old recordings are not retained across an upgrade; discard the dangling metadata.
           upgradeTransaction.objectStore(RECORDING_METADATA_STORE).clear();
         }
@@ -105,7 +114,7 @@ export class IndexedDBRecordingStore {
           database.createObjectStore(RECORDING_SEGMENTS_STORE, {
             keyPath: ["recordingId", "seq"],
           });
-        } else if (upgradeTransaction) {
+        } else if (upgradeTransaction && discardUnsupportedRecordings) {
           // Stream segments of non-retained old recordings are dropped along with their metadata.
           upgradeTransaction.objectStore(RECORDING_SEGMENTS_STORE).clear();
         }
@@ -122,6 +131,30 @@ export class IndexedDBRecordingStore {
           database.createObjectStore(RECORDING_AUDIO_STORE, {
             keyPath: "recordingId",
           });
+        }
+
+        if (!database.objectStoreNames.contains(RECORDING_STREAM_STATE_STORE)) {
+          const stateStore = database.createObjectStore(RECORDING_STREAM_STATE_STORE, {
+            keyPath: "recordingId",
+          });
+
+          // Preserve current v5 payloads. Composite segment keys are ordered by
+          // recording id then sequence, so later cursor entries overwrite the state
+          // with the correct next sequence without loading every segment into memory.
+          if (upgradeTransaction && !discardUnsupportedRecordings) {
+            const segmentsStore = upgradeTransaction.objectStore(RECORDING_SEGMENTS_STORE);
+            const cursorRequest = segmentsStore.openCursor();
+            cursorRequest.onsuccess = () => {
+              const cursor = cursorRequest.result;
+              if (!cursor) return;
+              const segment = cursor.value as StoredRecordingSegment;
+              stateStore.put({
+                recordingId: segment.recordingId,
+                nextSeq: segment.seq + 1,
+              } satisfies StoredRecordingStreamState);
+              cursor.continue();
+            };
+          }
         }
       };
 
@@ -226,6 +259,7 @@ export class IndexedDBRecordingStore {
       [
         RECORDING_METADATA_STORE,
         RECORDING_SEGMENTS_STORE,
+        RECORDING_STREAM_STATE_STORE,
         RECORDING_CAMERA_STORE,
         RECORDING_AUDIO_STORE,
       ],
@@ -233,6 +267,7 @@ export class IndexedDBRecordingStore {
     );
     const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
     const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
+    const streamStateStore = transaction.objectStore(RECORDING_STREAM_STATE_STORE);
     const cameraStore = transaction.objectStore(RECORDING_CAMERA_STORE);
     const audioStore = transaction.objectStore(RECORDING_AUDIO_STORE);
 
@@ -245,6 +280,10 @@ export class IndexedDBRecordingStore {
         seq: 0,
         bytes: toArrayBuffer(entry.binaryData),
       } satisfies StoredRecordingSegment);
+      streamStateStore.put({
+        recordingId: entry.metadata.id,
+        nextSeq: 1,
+      } satisfies StoredRecordingStreamState);
       // Media lives in its own stores; replace or clear each to match the entry.
       if (entry.cameraBlob) {
         cameraStore.put({
@@ -278,14 +317,23 @@ export class IndexedDBRecordingStore {
     }
 
     const database = await this.getDatabase();
-    const transaction = database.transaction(RECORDING_SEGMENTS_STORE, "readwrite");
+    const transaction = database.transaction(
+      [RECORDING_SEGMENTS_STORE, RECORDING_STREAM_STATE_STORE],
+      "readwrite",
+    );
     const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
-    const seq = await requestToPromise(segmentsStore.count(this.segmentRange(recordingId)));
+    const streamStateStore = transaction.objectStore(RECORDING_STREAM_STATE_STORE);
+    const state = await requestToPromise(streamStateStore.get(recordingId));
+    const seq = state?.nextSeq ?? 0;
     segmentsStore.put({
       recordingId,
       seq,
       bytes: toArrayBuffer(bytes),
     } satisfies StoredRecordingSegment);
+    streamStateStore.put({
+      recordingId,
+      nextSeq: seq + 1,
+    } satisfies StoredRecordingStreamState);
     await transactionToPromise(transaction);
   }
 
@@ -295,6 +343,7 @@ export class IndexedDBRecordingStore {
       [
         RECORDING_METADATA_STORE,
         RECORDING_SEGMENTS_STORE,
+        RECORDING_STREAM_STATE_STORE,
         RECORDING_CAMERA_STORE,
         RECORDING_AUDIO_STORE,
       ],
@@ -302,6 +351,7 @@ export class IndexedDBRecordingStore {
     );
     transaction.objectStore(RECORDING_METADATA_STORE).delete(id);
     transaction.objectStore(RECORDING_SEGMENTS_STORE).delete(this.segmentRange(id));
+    transaction.objectStore(RECORDING_STREAM_STATE_STORE).delete(id);
     transaction.objectStore(RECORDING_CAMERA_STORE).delete(id);
     transaction.objectStore(RECORDING_AUDIO_STORE).delete(id);
     await transactionToPromise(transaction);
@@ -313,6 +363,7 @@ export class IndexedDBRecordingStore {
       [
         RECORDING_METADATA_STORE,
         RECORDING_SEGMENTS_STORE,
+        RECORDING_STREAM_STATE_STORE,
         RECORDING_CAMERA_STORE,
         RECORDING_AUDIO_STORE,
       ],
@@ -320,6 +371,7 @@ export class IndexedDBRecordingStore {
     );
     transaction.objectStore(RECORDING_METADATA_STORE).clear();
     transaction.objectStore(RECORDING_SEGMENTS_STORE).clear();
+    transaction.objectStore(RECORDING_STREAM_STATE_STORE).clear();
     transaction.objectStore(RECORDING_CAMERA_STORE).clear();
     transaction.objectStore(RECORDING_AUDIO_STORE).clear();
     await transactionToPromise(transaction);

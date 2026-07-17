@@ -148,6 +148,8 @@ Current storage rules:
 
 - The app stores and exports SCR3 recordings.
 - IndexedDB persists metadata plus append-only recording segments.
+- Each recording keeps its next segment sequence in a small state record, so appends do not scan
+  or count the existing segment range.
 - Exported `.ne` files are raw SCR3 bytes with no base64 wrapping; the runtime loader reads the same raw byte stream.
 - `src/storage/recordingCodec.worker.ts` (backing `recordingCodecClient.ts`) keeps msgpack and deflate work off the main thread for whole-file decodes; `src/storage/streamingRecordingCodec/decode.ts` does incremental prefix decoding for progressive/live loads.
 
