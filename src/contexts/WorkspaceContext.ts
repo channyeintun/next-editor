@@ -44,7 +44,12 @@ export interface WorkspaceActions {
   getSidebarWidth: () => number;
   getFile: (path: string) => WorkspaceFile | null;
   listFiles: () => WorkspaceFile[];
+  subscribeWorkspaceSync: (listener: (mutation: WorkspaceSyncMutation) => void) => () => void;
 }
+
+export type WorkspaceSyncMutation =
+  | { kind: "file"; revision: number; file: WorkspaceFile }
+  | { kind: "project"; revision: number; project: WorkspaceProject };
 
 export interface WorkspaceEditorState {
   activeFile: WorkspaceFile;

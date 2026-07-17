@@ -52,6 +52,7 @@ export type WorkspaceState =
       previewVersion: number;
       saveVersion: number;
       syncVersion: number;
+      lastFileSync: { path: string; revision: number } | null;
       isSaving: boolean;
       saveError: string | null;
     }
@@ -69,6 +70,7 @@ export type WorkspaceState =
       previewVersion: number;
       saveVersion: number;
       syncVersion: number;
+      lastFileSync: { path: string; revision: number } | null;
       isSaving: boolean;
       saveError: string | null;
       editorState: WorkspaceEditorState;
@@ -789,6 +791,7 @@ function withUpdatedFileContent(
         : context.editorState,
     previewVersion: context.previewVersion + 1,
     syncVersion: context.syncVersion + 1,
+    lastFileSync: { path, revision: context.syncVersion + 1 },
   };
   return withRefreshedDirtyPath(nextContext, path);
 }
@@ -805,6 +808,7 @@ function createUninitializedWorkspaceState(): WorkspaceState {
     previewVersion: 0,
     saveVersion: 0,
     syncVersion: 0,
+    lastFileSync: null,
     isSaving: false,
     saveError: null,
   };
@@ -843,6 +847,7 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
     previewVersion: 0,
     saveVersion: 0,
     syncVersion: 0,
+    lastFileSync: null,
     isSaving: false,
     saveError: null,
     editorState: createEditorState(project, activeFilePath, 0),

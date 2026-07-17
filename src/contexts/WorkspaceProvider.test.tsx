@@ -4,6 +4,7 @@ import type {
   WorkspaceActions,
   WorkspaceDirtyState,
   WorkspaceSaveStatus,
+  WorkspaceSyncMutation,
 } from "./WorkspaceContext";
 import type { PersistWorkspaceAssetsOptions } from "../storage/workspaceAssetStore";
 import type { WorkspaceProject } from "../types/workspace";
@@ -83,6 +84,26 @@ describe("WorkspaceProvider durable asset saves", () => {
     assets.persist.mockReset();
     assets.prune.mockReset();
     assets.prune.mockResolvedValue();
+  });
+
+  it("publishes every file mutation and marks topology changes as project syncs", () => {
+    const harness = renderWorkspaceProvider();
+    const listener = vi.fn<(mutation: WorkspaceSyncMutation) => void>();
+    const unsubscribe = harness.current.actions.subscribeWorkspaceSync(listener);
+    const entryPath = harness.current.actions.getProject().entryFilePath;
+
+    act(() => harness.current.actions.updateFileContent(entryPath, "first"));
+    act(() => harness.current.actions.updateFileContent(entryPath, "latest"));
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener.mock.calls.map(([mutation]) => mutation.kind)).toEqual(["file", "file"]);
+    expect(listener.mock.calls[1]?.[0]).toMatchObject({
+      kind: "file",
+      file: { path: entryPath, content: "latest" },
+    });
+
+    act(() => harness.current.actions.createFolder("examples"));
+    expect(listener.mock.calls[2]?.[0]).toMatchObject({ kind: "project" });
+    unsubscribe();
   });
 
   it("keeps the workspace dirty and exposes an error when asset persistence fails", async () => {

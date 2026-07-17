@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
-import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
+import {
+  WorkspaceActionsContext,
+  type WorkspaceActions,
+  type WorkspaceSyncMutation,
+} from "./WorkspaceContext";
 import {
   WORKSPACE_STORAGE_KEY,
   WorkspaceStoreContext,
@@ -362,6 +366,29 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       : [];
   };
 
+  const subscribeWorkspaceSync = (
+    listener: (mutation: WorkspaceSyncMutation) => void,
+  ): (() => void) => {
+    const store = workspaceStoreRef.current;
+    let observedRevision = store.getSnapshot().context.syncVersion;
+    const subscription = store.subscribe((snapshot) => {
+      const context = snapshot.context;
+      if (!context.isInitialized || context.syncVersion === observedRevision) return;
+      observedRevision = context.syncVersion;
+
+      if (context.lastFileSync?.revision === context.syncVersion) {
+        const file = context.project.files[context.lastFileSync.path];
+        if (file) {
+          listener({ kind: "file", revision: context.syncVersion, file });
+          return;
+        }
+      }
+
+      listener({ kind: "project", revision: context.syncVersion, project: context.project });
+    });
+    return () => subscription.unsubscribe();
+  };
+
   const actionsValue: WorkspaceActions = {
     setActiveFilePath,
     setPreviewFilePath,
@@ -392,6 +419,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     getSidebarWidth,
     getFile,
     listFiles,
+    subscribeWorkspaceSync,
   };
 
   return (

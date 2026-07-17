@@ -29,8 +29,8 @@ import {
   useWorkspaceLessonType,
   useWorkspaceProjectId,
   useWorkspaceProjectName,
-  useWorkspaceSyncVersion,
 } from "../hooks/useWorkspace";
+import type { WorkspaceSyncMutation } from "./WorkspaceContext";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
 import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";
 import { areWorkspaceProjectsEqual, lessonRunsInWebContainer } from "../types/workspace";
@@ -42,11 +42,11 @@ interface WebContainerRuntimeProviderProps {
 export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderProps> = ({
   children,
 }) => {
-  const { getProject, getWorkspaceRevision, reconcileExternalProject } = useWorkspaceActions();
+  const { getProject, getWorkspaceRevision, reconcileExternalProject, subscribeWorkspaceSync } =
+    useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
   const projectId = useWorkspaceProjectId();
   const projectName = useWorkspaceProjectName();
-  const syncVersion = useWorkspaceSyncVersion();
   const fileCount = useWorkspaceFileCount();
   const hasRunInitCommandRef = useRef(false);
   const hasAutoStartedRef = useRef(false);
@@ -62,7 +62,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const {
     hasMountedProjectRef,
     ensureProjectMounted,
+    flushWorkspaceSync,
     isFsWatchActive,
+    queueFileSync,
     queueProjectSync,
     runSerializedRuntimeTask,
     resetWorkspaceSync,
@@ -95,6 +97,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
           return;
         }
 
+        await flushWorkspaceSync({ instance });
         await runSerializedRuntimeTask({
           instance,
           task: async () => {
@@ -252,6 +255,10 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       project,
       onMountStart: () => setStatus("mounting"),
     });
+
+    // The workspace may change while the initial mount promise is in flight.
+    // Reconcile once at this lifecycle boundary before starting any process.
+    await queueProjectSync({ instance, project: getProject() });
 
     if (!isRuntimeGenerationActive(generation)) {
       return null;
@@ -421,6 +428,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
         return;
       }
 
+      await flushWorkspaceSync({ instance });
       await writeTerminalInput(instance, input);
 
       if (input.includes("\n") || input.includes("\u0003")) {
@@ -445,10 +453,10 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     const instance = instanceRef.current;
 
     if (instance) {
-      const project = getProject();
-
       try {
-        await queueProjectSync({ instance, project });
+        // Save is an explicit durability boundary. A latest-project sync also
+        // covers mutations that landed during an effect subscription handoff.
+        await queueProjectSync({ instance, project: getProject() });
       } catch (error) {
         setErrorMessage(getRuntimeErrorMessage(error));
         throw error;
@@ -553,25 +561,42 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     hasRunInitCommandRef.current = false;
   }, [runnerConfig.initCommand]);
 
-  useEffect(() => {
+  const onWorkspaceSyncMutation = useEffectEvent((mutation: WorkspaceSyncMutation) => {
     const instance = instanceRef.current;
     if (!instance || !hasMountedProjectRef.current) {
       return;
     }
 
-    const project = getProject();
-
-    void queueProjectSync({ instance, project }).catch((error) => {
+    const queuedSync =
+      mutation.kind === "file"
+        ? queueFileSync({ instance, file: mutation.file })
+        : queueProjectSync({ instance, project: mutation.project });
+    void queuedSync.catch((error) => {
       setErrorMessage(getRuntimeErrorMessage(error));
     });
-  }, [
-    getProject,
-    hasMountedProjectRef,
-    instanceRef,
-    queueProjectSync,
-    setErrorMessage,
-    syncVersion,
-  ]);
+  });
+
+  useEffect(() => {
+    return subscribeWorkspaceSync(onWorkspaceSyncMutation);
+  }, [onWorkspaceSyncMutation, subscribeWorkspaceSync]);
+
+  const onWorkspaceLifecycleBoundary = useEffectEvent(() => {
+    const instance = instanceRef.current;
+    if (!instance || !hasMountedProjectRef.current) return;
+    void flushWorkspaceSync({ instance }).catch((error) => {
+      setErrorMessage(getRuntimeErrorMessage(error));
+    });
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.addEventListener("blur", onWorkspaceLifecycleBoundary);
+    window.addEventListener("pagehide", onWorkspaceLifecycleBoundary);
+    return () => {
+      window.removeEventListener("blur", onWorkspaceLifecycleBoundary);
+      window.removeEventListener("pagehide", onWorkspaceLifecycleBoundary);
+    };
+  }, [onWorkspaceLifecycleBoundary]);
 
   useEffect(() => {
     return () => {

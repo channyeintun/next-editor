@@ -1,7 +1,10 @@
 import { act, render } from "@testing-library/react";
 import type { WebContainer } from "@webcontainer/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";
+import {
+  useWebContainerWorkspaceSync,
+  WEBCONTAINER_FILE_SYNC_WINDOW_MS,
+} from "./useWebContainerWorkspaceSync";
 import type { WorkspaceProject } from "../types/workspace";
 import {
   flushPerformanceMetrics,
@@ -52,7 +55,69 @@ describe("useWebContainerWorkspaceSync", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     resetPerformanceMetricsForTests();
+  });
+
+  it("coalesces each path to its latest value within the file-sync window", async () => {
+    vi.useFakeTimers();
+    const hook = renderWorkspaceSyncHook();
+    const instance = {
+      mount: vi.fn<() => Promise<void>>(async () => {}),
+      fs: {
+        watch: vi.fn<() => { close: () => void }>(() => ({ close: vi.fn<() => void>() })),
+        writeFile: vi.fn<() => Promise<void>>(async () => {}),
+      },
+    } as unknown as WebContainer;
+    await act(async () => {
+      await hook.ensureProjectMounted({ instance, project });
+    });
+
+    const first = hook.queueFileSync({
+      instance,
+      file: { ...project.files["index.html"], content: "first" },
+    });
+    const latest = hook.queueFileSync({
+      instance,
+      file: { ...project.files["index.html"], content: "latest" },
+    });
+    expect(instance.fs.writeFile).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WEBCONTAINER_FILE_SYNC_WINDOW_MS);
+      await Promise.all([first, latest]);
+    });
+    expect(instance.fs.writeFile).toHaveBeenCalledTimes(1);
+    expect(instance.fs.writeFile).toHaveBeenCalledWith("index.html", "latest");
+  });
+
+  it("flushes a pending file value immediately at an explicit boundary", async () => {
+    vi.useFakeTimers();
+    const hook = renderWorkspaceSyncHook();
+    const instance = {
+      mount: vi.fn<() => Promise<void>>(async () => {}),
+      fs: {
+        watch: vi.fn<() => { close: () => void }>(() => ({ close: vi.fn<() => void>() })),
+        writeFile: vi.fn<() => Promise<void>>(async () => {}),
+      },
+    } as unknown as WebContainer;
+    await act(async () => {
+      await hook.ensureProjectMounted({ instance, project });
+    });
+
+    const queued = hook.queueFileSync({
+      instance,
+      file: { ...project.files["index.html"], content: "save now" },
+    });
+    await act(async () => {
+      await hook.flushWorkspaceSync({ instance });
+      await queued;
+    });
+    expect(instance.fs.writeFile).toHaveBeenCalledTimes(1);
+    expect(instance.fs.writeFile).toHaveBeenCalledWith("index.html", "save now");
+
+    await vi.advanceTimersByTimeAsync(WEBCONTAINER_FILE_SYNC_WINDOW_MS);
+    expect(instance.fs.writeFile).toHaveBeenCalledTimes(1);
   });
 
   it("does not mark a project mounted when reset wins the mount race", async () => {

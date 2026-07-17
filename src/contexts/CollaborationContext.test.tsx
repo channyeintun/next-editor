@@ -71,6 +71,7 @@ const baseActions: WorkspaceActions = {
   getSidebarWidth: () => 260,
   getFile: (path) => project.files[path] ?? null,
   listFiles: () => Object.values(project.files),
+  subscribeWorkspaceSync: vi.fn(() => () => {}),
 };
 
 vi.mock("../hooks/useWorkspace", () => ({
