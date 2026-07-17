@@ -34,7 +34,7 @@ describe("timelineMachine ticker lifecycle", () => {
   beforeEach(() => {
     nextFrameId = 1;
     frames = new Map();
-    requestFrame = vi.fn((callback: FrameRequestCallback) => {
+    requestFrame = vi.fn<(callback: FrameRequestCallback) => number>((callback) => {
       const id = nextFrameId++;
       frames.set(id, callback);
       return id;

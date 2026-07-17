@@ -115,7 +115,7 @@ describe("QStash collaboration job verification", () => {
   });
 
   it("does not enqueue jobs unless publishing and receiver credentials are complete", async () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
@@ -138,7 +138,7 @@ describe("QStash collaboration job verification", () => {
   });
 
   it("publishes redacted JSON through the SDK with free-tier-compatible cleanup delay", async () => {
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         new Response('{"messageId":"msg_1"}', { status: 200 }),
     );

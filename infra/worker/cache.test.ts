@@ -11,15 +11,17 @@ function createFakeKv(initial: Record<string, unknown> = {}) {
   }
 
   return {
-    get: vi.fn(async (key: string, options?: { type?: string }) => {
-      const value = store.get(key);
-      if (value === undefined) return null;
-      return options?.type === "json" ? JSON.parse(value) : value;
-    }),
-    put: vi.fn(async (key: string, value: string) => {
+    get: vi.fn<(key: string, options?: { type?: string }) => Promise<unknown>>(
+      async (key, options) => {
+        const value = store.get(key);
+        if (value === undefined) return null;
+        return options?.type === "json" ? JSON.parse(value) : value;
+      },
+    ),
+    put: vi.fn<(key: string, value: string) => Promise<void>>(async (key, value) => {
       store.set(key, value);
     }),
-    delete: vi.fn(async (key: string) => {
+    delete: vi.fn<(key: string) => Promise<void>>(async (key) => {
       store.delete(key);
     }),
     store,

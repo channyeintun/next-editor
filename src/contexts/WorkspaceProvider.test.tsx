@@ -6,12 +6,17 @@ import type {
   WorkspaceSaveStatus,
   WorkspaceSyncMutation,
 } from "./WorkspaceContext";
-import type { WorkspaceProject } from "../types/workspace";
+import type { WorkspaceAssetDescriptor, WorkspaceProject } from "../types/workspace";
 
 const assets = vi.hoisted(() => ({
   persist: vi.fn<(project: WorkspaceProject) => Promise<void>>(),
   prune: vi.fn<(project: WorkspaceProject) => Promise<void>>(),
-  migrate: vi.fn(async () => ({})),
+  migrate: vi.fn<
+    (
+      project: WorkspaceProject,
+      generation?: string,
+    ) => Promise<Record<string, WorkspaceAssetDescriptor>>
+  >(async () => ({})),
 }));
 
 vi.mock("../storage/workspaceAssetStore", async (importOriginal) => {

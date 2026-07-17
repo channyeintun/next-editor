@@ -111,7 +111,7 @@ describe("audioRecordingActor lifecycle", () => {
         getUserMedia: () => Promise.resolve(new FakeAudioStream(track) as unknown as MediaStream),
       },
     });
-    const onError = vi.fn();
+    const onError = vi.fn<(error: Error) => void>();
     const actor = createActor(editorMachine, {
       input: { editorRef: { current: null }, enableAudioRecording: true, onError },
     }).start();

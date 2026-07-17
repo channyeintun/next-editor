@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
+import type { WorkspaceActions } from "../contexts/WorkspaceContext";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import {
   COLLABORATION_ORIGIN,
@@ -17,8 +18,8 @@ describe("collaboration workspace projection", () => {
     const doc = new Y.Doc();
     seedCollaborationProject(doc, project);
     const actions = {
-      reconcileExternalProject: vi.fn(),
-      updateFileContent: vi.fn(),
+      reconcileExternalProject: vi.fn<WorkspaceActions["reconcileExternalProject"]>(),
+      updateFileContent: vi.fn<WorkspaceActions["updateFileContent"]>(),
     };
     let projection = reprojectCollaborationWorkspace(doc, actions);
     const initialTextIndex = projection.textIdByType;
@@ -66,11 +67,11 @@ describe("collaboration workspace projection", () => {
       changes: [{ offset: file.content.length, deleteLength: 0, text: "!" }],
     };
     const actions = {
-      reconcileExternalProject: vi.fn(),
-      updateFileContent: vi.fn(),
-      applyFileTextEdits: vi.fn(() => `${file.content}!`),
+      reconcileExternalProject: vi.fn<WorkspaceActions["reconcileExternalProject"]>(),
+      updateFileContent: vi.fn<WorkspaceActions["updateFileContent"]>(),
+      applyFileTextEdits: vi.fn<WorkspaceActions["applyFileTextEdits"]>(() => `${file.content}!`),
     };
-    const onProjected = vi.fn();
+    const onProjected = vi.fn<(content: string | null) => void>();
     let projection = reprojectCollaborationWorkspace(doc, actions);
     actions.reconcileExternalProject.mockClear();
     const controller = new CollaborationProjectController(doc, { canWrite: () => true });

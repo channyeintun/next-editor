@@ -9,6 +9,7 @@ import {
   API_CLIENT_CANCEL_MESSAGE_TYPE,
   API_CLIENT_REQUEST_MESSAGE_TYPE,
 } from "../../utils/apiClientBridge";
+import type { ApiClientRecordedResult } from "../../types/slides";
 import { useApiClient } from "./useApiClient";
 
 interface CapturedApiClient {
@@ -17,12 +18,12 @@ interface CapturedApiClient {
 }
 
 function renderApiClient(runtimePreviewUrl = "https://preview.example.com/app") {
-  const postMessage = vi.fn();
+  const postMessage = vi.fn<(message: unknown, targetOrigin: string) => void>();
   const iframeRef = {
     current: { contentWindow: { postMessage } } as unknown as HTMLIFrameElement,
   };
   const captured = { current: null as CapturedApiClient | null };
-  const onResponseReceived = vi.fn();
+  const onResponseReceived = vi.fn<(result: ApiClientRecordedResult) => void>();
 
   function Harness({ url }: { url: string }) {
     captured.current = {
