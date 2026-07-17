@@ -13,6 +13,7 @@ compatibility_flags = ["nodejs_compat"]
 # override with the real production origin once one exists.
 [vars]
 PUBLIC_URL = "https://nexteditor.dev"
+COLLABORATION_DEFAULT_TRANSPORT = "cloudflare-websocket"
 # Required for authentication — auth fails at runtime without these. Set them with:
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
 #   wrangler secret put GOOGLE_CLIENT_SECRET --config infra/wrangler.toml
@@ -109,6 +110,17 @@ bucket_name = "next-editor-tube-media"
 # and automatically provisions/attaches one on the first deployment.
 [[kv_namespaces]]
 binding = "CACHE"
+
+# One hibernating WebSocket coordinator per live-collaboration room. Durable
+# Yjs state remains in Upstash Redis; this object owns only live sockets,
+# ephemeral awareness, immediate role enforcement, and direct fan-out.
+[[durable_objects.bindings]]
+name = "COLLABORATION_ROOMS"
+class_name = "CollaborationRoomDurableObject"
+
+[[migrations]]
+tag = "collaboration-room-v1"
+new_sqlite_classes = ["CollaborationRoomDurableObject"]
 
 # Workers Logs + automatic tracing (traces are open beta): queryable console.*
 # output plus auto-spans for handler lifecycle, D1/R2 binding calls, and

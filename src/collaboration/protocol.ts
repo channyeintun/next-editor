@@ -22,6 +22,7 @@ export const collaborationIdSchema = z.string().regex(UUID_PATTERN, "expected a 
 export const collaborationRoleSchema = z.enum(["owner", "editor", "viewer"]);
 export const collaborationInviteRoleSchema = z.enum(["editor", "viewer"]);
 export const collaborationRoomStatusSchema = z.enum(["provisioning", "active", "closed", "failed"]);
+export const collaborationTransportSchema = z.enum(["upstash-realtime", "cloudflare-websocket"]);
 export const collaborationAssetIdSchema = z
   .string()
   .regex(SHA256_PATTERN, "expected a SHA-256 digest");
@@ -29,6 +30,7 @@ export const collaborationAssetIdSchema = z
 export type CollaborationRole = z.infer<typeof collaborationRoleSchema>;
 export type CollaborationInviteRole = z.infer<typeof collaborationInviteRoleSchema>;
 export type CollaborationRoomStatus = z.infer<typeof collaborationRoomStatusSchema>;
+export type CollaborationTransport = z.infer<typeof collaborationTransportSchema>;
 
 export const collaborationAssetDescriptorSchema = z
   .object({
@@ -45,6 +47,7 @@ export interface CollaborationRoomDescriptor {
   ownerId: string;
   hostUserId: string;
   status: CollaborationRoomStatus;
+  transport: CollaborationTransport;
   protocolVersion: number;
   documentSchemaVersion: number;
   roleVersion: number;
@@ -87,7 +90,12 @@ export interface CollaborationRoomSession {
 export const createCollaborationInvitationInputSchema = z
   .object({
     role: collaborationInviteRoleSchema,
-    expiresInHours: z.number().int().min(1).max(24 * 7).default(24),
+    expiresInHours: z
+      .number()
+      .int()
+      .min(1)
+      .max(24 * 7)
+      .default(24),
     maxUses: z.number().int().min(1).max(25).default(10),
   })
   .strict();
@@ -97,7 +105,13 @@ export const updateCollaborationMemberInputSchema = z
   .strict();
 
 export const claimCollaborationInvitationInputSchema = z
-  .object({ token: z.string().min(32).max(128).regex(/^[A-Za-z0-9_-]+$/) })
+  .object({
+    token: z
+      .string()
+      .min(32)
+      .max(128)
+      .regex(/^[A-Za-z0-9_-]+$/),
+  })
   .strict();
 
 function decodedBase64ByteLength(value: string): number {
@@ -277,6 +291,90 @@ export const collaborationRealtimeSchema = {
 } as const;
 
 export type CollaborationRealtimeEvents = typeof collaborationRealtimeSchema;
+
+export const collaborationWebSocketClientMessageSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("document.update"),
+      data: collaborationDocumentUpdateInputSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("awareness.state"),
+      data: collaborationAwarenessInputSchema,
+    })
+    .strict(),
+]);
+
+export const collaborationWebSocketServerMessageSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("session.ready"),
+      sessionId: collaborationIdSchema,
+      attemptId: collaborationIdSchema,
+      participants: z.array(collaborationAwarenessEventSchema).max(50),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("document.update"),
+      streamId: z.string().regex(/^\d+-\d+$/),
+      data: collaborationDocumentUpdateEventSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("document.ack"),
+      updateId: collaborationIdSchema,
+      streamId: z.string().regex(/^\d+-\d+$/),
+      duplicate: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("awareness.state"),
+      data: collaborationAwarenessEventSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("control.room"),
+      data: collaborationControlEventSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("error"),
+      code: z.string().min(1).max(64),
+      message: z.string().min(1).max(512),
+      fatal: z.boolean(),
+      updateId: collaborationIdSchema.optional(),
+    })
+    .strict(),
+]);
+
+export const collaborationRoomControlCommandSchema = z
+  .object({
+    event: collaborationControlEventSchema,
+    targetRole: collaborationRoleSchema.nullable().optional(),
+  })
+  .strict();
+
+export const collaborationRoomDocumentBroadcastSchema = z
+  .object({
+    streamId: z.string().regex(/^\d+-\d+$/),
+    event: collaborationDocumentUpdateEventSchema,
+  })
+  .strict();
+
+export type CollaborationWebSocketClientMessage = z.infer<
+  typeof collaborationWebSocketClientMessageSchema
+>;
+export type CollaborationWebSocketServerMessage = z.infer<
+  typeof collaborationWebSocketServerMessageSchema
+>;
+export type CollaborationRoomControlCommand = z.infer<typeof collaborationRoomControlCommandSchema>;
 
 const ROOM_CHANNEL_PREFIX = "collab:room:";
 const AWARENESS_CHANNEL_SUFFIX = ":awareness";

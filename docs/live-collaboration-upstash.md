@@ -1,6 +1,6 @@
 # Live Collaboration — Upstash Deployment Evaluation
 
-Status: selected and implemented for the MVP; deployed transport validation pending
+Status: Redis and QStash remain selected; Realtime is implemented as a per-room fallback
 
 Companion documents:
 
@@ -8,6 +8,8 @@ Companion documents:
   CRDT, editor, recording, and protocol contracts.
 - [Cloudflare-native Deployment](./live-collaboration-cloudflare.md) evaluates a room service built
   with Cloudflare Durable Objects.
+- [Cloudflare WebSocket + Upstash Hybrid](./live-collaboration-hybrid-cloudflare-upstash.md)
+  documents the selected live transport and cost boundary.
 
 This document evaluates Upstash Redis, Realtime, and QStash for the live-collaboration data plane.
 Upstash is reserved for that purpose; unrelated lesson and playlist caching uses Cloudflare
@@ -25,17 +27,17 @@ Upstash can support a small-room collaboration MVP, but the three services have 
 | Service          | Appropriate collaboration role                                                                  | Recommendation                           |
 | ---------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | Upstash Redis    | CRDT update streams, compacted snapshots, presence TTLs, idempotency keys, and rate-limit state | Strong fit, using a dedicated database   |
-| Upstash Realtime | Redis Streams and Pub/Sub exposed to browsers through Server-Sent Events                        | Selected for the initial transport spike |
+| Upstash Realtime | Redis Streams and Pub/Sub exposed to browsers through Server-Sent Events                        | Retained per-room fallback transport      |
 | QStash           | Snapshot compaction, cleanup, exports, invitations, and recovery jobs                           | Background work only                     |
 
-Realtime should not be adopted merely because Redis is already present. Its SSE downstream and
-HTTP upstream model must first pass a realistic multi-client performance and cost spike. If it
-does not pass, retain the provider-neutral WebSocket protocol and use a WebSocket room service;
-Upstash Redis can still be that service's persistence layer.
+Realtime remains useful for existing rooms and explicit rollback, but its SSE downstream and HTTP
+upstream lifecycle consumes Redis commands even when a participant is idle. New rooms therefore
+default to the hybrid Cloudflare WebSocket coordinator when its binding is available, while
+Upstash Redis continues as the durable persistence layer.
 
-Do not operate Realtime beside a WebSocket data plane without a specific requirement. Two live
-transports add connection lifecycle, ordering, observability, and failure cases without improving
-CRDT convergence.
+Both providers remain deployed, but they are isolated by the immutable D1 room transport field.
+One room never opens Realtime and WebSocket connections together, avoiding split ordering and
+duplicate fan-out.
 
 Option A does not require Durable Objects: Realtime and Redis supply the live transport and room
 history, while the Worker enforces authorization. Browser-local recording does not affect that
@@ -43,7 +45,13 @@ choice and is not a reason to add a Durable Object.
 
 ## Implementation status
 
-The first Option A foundation is implemented:
+The Realtime fallback and shared Upstash foundation are implemented:
+
+- [`0008_collaboration_transport.sql`](../infra/db/migrations/0008_collaboration_transport.sql)
+  keeps existing rooms on `upstash-realtime` and records the immutable transport for every room.
+- [`roomDurableObject.ts`](../infra/worker/collaboration/roomDurableObject.ts) implements the
+  selected hibernating WebSocket coordinator while continuing to persist accepted updates through
+  the Redis document store without Pub/Sub.
 
 - [`protocol.ts`](../src/collaboration/protocol.ts) defines versioned, size-bounded Yjs update
   envelopes, exact room-channel parsing, and owner/editor/viewer write policy.
@@ -70,9 +78,10 @@ The first Option A foundation is implemented:
 - [`documentStore.ts`](../infra/worker/collaboration/documentStore.ts) persists an initial snapshot,
   deduplicates durable updates, serves paginated snapshot-plus-tail bootstrap data, and compacts an
   immutable stream cutoff without dropping concurrently appended updates.
-- [`upstashRoomProvider.ts`](../src/collaboration/upstashRoomProvider.ts) owns the same-origin SSE
-  connection, snapshot/live-event race buffer, paginated bootstrap, 75 ms Yjs batching, idempotent
-  HTTP outbox, capped reconnects, offline edits, stale-attempt rejection, and complete teardown.
+- [`upstashRoomProvider.ts`](../src/collaboration/upstashRoomProvider.ts) selects the descriptor's
+  transport and owns either the same-origin WebSocket or Realtime SSE/HTTP lifecycle, while sharing
+  snapshot/live-event race protection, paginated bootstrap, 75 ms Yjs batching, capped reconnects,
+  offline edits, stale-attempt rejection, and complete teardown.
 - [`collaborationMachine.ts`](../src/collaboration/collaborationMachine.ts) is the serializable room
   lifecycle/control plane; Yjs content and high-frequency editor updates remain in the provider.
 - [`CollaborationContext.tsx`](../src/contexts/CollaborationContext.tsx) activates rooms from invite
@@ -96,9 +105,8 @@ The first Option A foundation is implemented:
   upload modal only after the live provider has ended. Local-origin Yjs undo excludes remote and
   playback transactions.
 
-The MVP implementation is complete. Realtime must still pass the deployed transport spike in this
-document before the fallback WebSocket option is discarded; this is a production-validation gate,
-not an additional editor implementation phase.
+The MVP implementation is complete. The deployed transport spike should now compare both room
+types; it is a production-validation gate, not an additional editor implementation phase.
 
 ## The Workers KV cache is not collaboration infrastructure
 

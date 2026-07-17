@@ -3,6 +3,7 @@ import type {
   CollaborationInviteRole,
   CollaborationRole,
   CollaborationRoomStatus,
+  CollaborationTransport,
 } from "../../src/collaboration/protocol";
 import {
   MAX_COLLABORATION_ROOM_ASSET_BYTES,
@@ -14,6 +15,7 @@ export interface CollaborationRoomRow {
   owner_id: string;
   host_user_id: string;
   status: CollaborationRoomStatus;
+  transport: CollaborationTransport;
   protocol_version: number;
   document_schema_version: number;
   role_version: number;
@@ -81,6 +83,7 @@ export interface CreateCollaborationRoomParams {
   ownerId: string;
   protocolVersion: number;
   documentSchemaVersion: number;
+  transport: CollaborationTransport;
 }
 
 export async function createProvisioningCollaborationRoom(
@@ -103,6 +106,7 @@ export async function createProvisioningCollaborationRoom(
     owner_id: params.ownerId,
     host_user_id: params.ownerId,
     status: "provisioning",
+    transport: params.transport,
     protocol_version: params.protocolVersion,
     document_schema_version: params.documentSchemaVersion,
     role_version: 1,
@@ -117,15 +121,16 @@ export async function createProvisioningCollaborationRoom(
     db
       .prepare(
         `INSERT INTO collaboration_rooms
-           (id, owner_id, host_user_id, status, protocol_version,
+           (id, owner_id, host_user_id, status, transport, protocol_version,
             document_schema_version, created_at, updated_at, closed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       )
       .bind(
         room.id,
         room.owner_id,
         room.host_user_id,
         room.status,
+        room.transport,
         room.protocol_version,
         room.document_schema_version,
         room.created_at,

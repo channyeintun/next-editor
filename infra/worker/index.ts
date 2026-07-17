@@ -23,6 +23,9 @@ const app = new Hono<{ Bindings: Env }>();
 // coming back from a Fetcher binding (ASSETS.fetch) may have immutable headers.
 app.use("*", async (c, next) => {
   await next();
+  // Reconstructing a 101 response drops its WebSocket handle. Cross-origin
+  // isolation applies to documents and subresources, not the upgraded stream.
+  if (c.req.header("Upgrade")?.toLowerCase() === "websocket") return;
   const headers = new Headers(c.res.headers);
   headers.set("Cross-Origin-Embedder-Policy", "require-corp");
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
@@ -82,3 +85,4 @@ app.route("/api/slide-images", slideImagesRoute);
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export default app;
+export { CollaborationRoomDurableObject } from "./collaboration/roomDurableObject";

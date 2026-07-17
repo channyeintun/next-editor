@@ -70,14 +70,17 @@ class MemoryRedis {
     const exclusive = start.startsWith("(");
     const normalizedStart = exclusive ? start.slice(1) : start;
     const entries = Array.from(this.streams.get(key)?.entries() ?? []).filter(([id]) => {
-      const afterStart = normalizedStart === "-" || (exclusive ? id > normalizedStart : id >= normalizedStart);
+      const afterStart =
+        normalizedStart === "-" || (exclusive ? id > normalizedStart : id >= normalizedStart);
       return afterStart && (end === "+" || id <= end);
     });
     return Object.fromEntries(entries.slice(0, count)) as Record<string, T>;
   }
 
   async xrevrange<T>(key: string, _end: string, _start: string, count = 1000) {
-    const entries = Array.from(this.streams.get(key)?.entries() ?? []).reverse().slice(0, count);
+    const entries = Array.from(this.streams.get(key)?.entries() ?? [])
+      .reverse()
+      .slice(0, count);
     return Object.fromEntries(entries) as Record<string, T>;
   }
 
@@ -166,10 +169,7 @@ describe("collaboration Redis document store", () => {
     const doc = new Y.Doc();
     doc.getText("source").insert(0, "start");
     await initializeCollaborationDocument(redis(fake), ROOM_ID, encodeYjsDocument(doc));
-    const update = event(
-      Y.encodeStateAsUpdate(doc),
-      "40000000-0000-4000-8000-000000000002",
-    );
+    const update = event(Y.encodeStateAsUpdate(doc), "40000000-0000-4000-8000-000000000002");
 
     const first = await appendCollaborationUpdate(redis(fake), update);
     const second = await appendCollaborationUpdate(redis(fake), update);
@@ -177,6 +177,21 @@ describe("collaboration Redis document store", () => {
     expect(second).toMatchObject({ duplicate: true, streamId: first.streamId });
     expect(Array.from(fake.streams.values())[0]).toHaveLength(1);
     expect(fake.published).toHaveLength(2);
+  });
+
+  it("persists and deduplicates WebSocket updates without Redis Pub/Sub fan-out", async () => {
+    const fake = new MemoryRedis();
+    const doc = new Y.Doc();
+    doc.getText("source").insert(0, "start");
+    await initializeCollaborationDocument(redis(fake), ROOM_ID, encodeYjsDocument(doc));
+    const update = event(Y.encodeStateAsUpdate(doc), "40000000-0000-4000-8000-000000000004");
+
+    const first = await appendCollaborationUpdate(redis(fake), update, { publish: false });
+    const second = await appendCollaborationUpdate(redis(fake), update, { publish: false });
+
+    expect(first.duplicate).toBe(false);
+    expect(second).toMatchObject({ duplicate: true, streamId: first.streamId });
+    expect(fake.published).toEqual([]);
   });
 
   it("compacts an immutable update cutoff into the next snapshot generation", async () => {

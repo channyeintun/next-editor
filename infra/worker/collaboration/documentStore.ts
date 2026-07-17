@@ -162,8 +162,10 @@ async function republishStoredEvent(
 export async function appendCollaborationUpdate(
   redis: Redis,
   event: CollaborationDocumentUpdateEvent,
+  options: { publish?: boolean } = {},
 ): Promise<AppendCollaborationUpdateResult> {
   const parsed = collaborationDocumentUpdateEventSchema.parse(event);
+  const shouldPublish = options.publish ?? true;
   const deduplicationKey = updateDeduplicationKey(parsed.roomId, parsed.updateId);
   const reservation = await redis.set(deduplicationKey, "pending", {
     nx: true,
@@ -172,7 +174,7 @@ export async function appendCollaborationUpdate(
   if (reservation !== "OK") {
     const storedId = await redis.get<string>(deduplicationKey);
     if (storedId && storedId !== "pending") {
-      await republishStoredEvent(redis, parsed.roomId, storedId);
+      if (shouldPublish) await republishStoredEvent(redis, parsed.roomId, storedId);
       return {
         streamId: storedId,
         updateCount: (await redis.get<number>(updateCountKey(parsed.roomId))) ?? 0,
@@ -200,12 +202,14 @@ export async function appendCollaborationUpdate(
     // duplicate stream entry.
     await redis.set(deduplicationKey, streamId, { ex: DEDUPLICATION_TTL_SECONDS });
     const updateCount = await redis.incr(updateCountKey(parsed.roomId));
-    await redis.publish(channel, {
-      data: parsed,
-      event: "document.update",
-      channel,
-      id: streamId,
-    });
+    if (shouldPublish) {
+      await redis.publish(channel, {
+        data: parsed,
+        event: "document.update",
+        channel,
+        id: streamId,
+      });
+    }
     return { streamId, updateCount, duplicate: false };
   } catch (error) {
     if (bytesReserved) await redis.incrby(acceptedBytesKey(parsed.roomId), -acceptedBytes);

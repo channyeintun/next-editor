@@ -10,6 +10,9 @@ import {
   collaborationDocumentUpdateInputSchema,
   collaborationCreateRoomInputSchema,
   collaborationRoomChannel,
+  collaborationTransportSchema,
+  collaborationWebSocketClientMessageSchema,
+  collaborationWebSocketServerMessageSchema,
   parseCollaborationChannel,
   roomIdFromCollaborationChannel,
 } from "./protocol";
@@ -106,5 +109,37 @@ describe("collaboration protocol", () => {
     expect(canPublishCollaborationUpdate("owner")).toBe(true);
     expect(canPublishCollaborationUpdate("editor")).toBe(true);
     expect(canPublishCollaborationUpdate("viewer")).toBe(false);
+  });
+
+  it("validates room transports and bounded WebSocket envelopes", () => {
+    const doc = new Y.Doc();
+    doc.getText("content").insert(0, "hello");
+    const update = createCollaborationDocumentUpdate(Y.encodeStateAsUpdate(doc), CLIENT_ID);
+
+    expect(collaborationTransportSchema.safeParse("cloudflare-websocket").success).toBe(true);
+    expect(collaborationTransportSchema.safeParse("upstash-realtime").success).toBe(true);
+    expect(collaborationTransportSchema.safeParse("both").success).toBe(false);
+    expect(
+      collaborationWebSocketClientMessageSchema.safeParse({
+        type: "document.update",
+        data: update,
+      }).success,
+    ).toBe(true);
+    expect(
+      collaborationWebSocketServerMessageSchema.safeParse({
+        type: "document.ack",
+        updateId: update.updateId,
+        streamId: "1-0",
+        duplicate: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      collaborationWebSocketServerMessageSchema.safeParse({
+        type: "document.ack",
+        updateId: update.updateId,
+        streamId: "not-a-stream-id",
+        duplicate: false,
+      }).success,
+    ).toBe(false);
   });
 });

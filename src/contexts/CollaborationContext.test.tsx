@@ -90,6 +90,7 @@ const roomSession: CollaborationRoomSession = {
     ownerId: "10000000-0000-4000-8000-000000000001",
     hostUserId: "10000000-0000-4000-8000-000000000001",
     status: "active",
+    transport: "upstash-realtime",
     protocolVersion: 1,
     documentSchemaVersion: 1,
     roleVersion: 1,

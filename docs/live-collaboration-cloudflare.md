@@ -8,6 +8,8 @@ Companion documents:
   and protocol contracts.
 - [Upstash Deployment Evaluation](./live-collaboration-upstash.md) evaluates Redis, Realtime, and
   QStash as an alternative provider stack.
+- [Cloudflare WebSocket + Upstash Hybrid](./live-collaboration-hybrid-cloudflare-upstash.md)
+  documents the selected implementation that uses a Durable Object only for live coordination.
 
 This document maps the abstract room service and persistence layer in the feature plan onto the
 Cloudflare services already used by the application. The option evaluated here uses one
@@ -16,28 +18,29 @@ SQLite-backed Durable Object per collaboration room.
 Pricing and product behavior in this document were checked on 2026-07-16. Cloudflare pricing and
 limits must be verified again before production rollout.
 
-## Relationship to the implemented Upstash option
+## Relationship to the implemented hybrid
 
-The selected MVP still uses the application's existing Cloudflare platform around Upstash:
+The selected MVP combines the application's Cloudflare platform with Upstash durability:
 
 | Cloudflare service | Current platform responsibility |
 | ------------------ | ------------------------------- |
-| Workers + Hono     | Same-origin room, membership, update, awareness, asset, export, and signed maintenance endpoints |
+| Workers + Hono     | Same-origin room and membership APIs, WebSocket authentication, assets, exports, and signed maintenance endpoints |
 | Workers Static Assets | Serve the editor on the same origin so its first-party session authenticates SSE and HTTP safely |
 | D1                 | Rooms, members, invitations, roles, asset metadata, retention state, and audit events |
 | R2                 | Private SHA-256-addressed binary project assets; never live SCR3 recordings |
 | Workers KV         | Disposable public lesson/playlist cache; separate from collaboration state and credentials |
 | Workers Logs       | Structured update and maintenance telemetry for dashboards and alerts |
+| Durable Objects    | Hibernating WebSocket coordination and ephemeral room fan-out |
 
-Durable Objects, Durable Object SQLite, Alarms, and Cloudflare Queues are **not** used by the
-implemented Upstash provider. Redis/Realtime already supply fan-out and recoverable room history,
-while QStash supplies compaction and delayed cleanup. Adding a Durable Object as well would create
-two stateful room coordinators.
+The implemented hybrid deliberately does **not** use Durable Object SQLite, Alarms, or Cloudflare
+Queues. Its Durable Object is the only live coordinator for `cloudflare-websocket` rooms, while
+Upstash Redis remains the durable Yjs snapshot/update store and QStash supplies compaction and
+delayed cleanup. The retained Realtime provider operates only for rooms assigned to it.
 
-The Durable Object design below remains the provider fallback if the deployed Upstash transport
-fails its latency, throughput, reconnect, or cost gates. The browser-local recording decision does
-not affect that choice: the host keeps SCR3 locally under either provider and uses the existing
-post-recording upload modal only after live ends.
+The design below remains a distinct, fully Cloudflare-native alternative: it would move durable
+room history from Redis into room-local Durable Object SQLite. The browser-local recording
+decision does not affect that choice: the host keeps SCR3 locally under every provider and uses
+the existing post-recording upload modal only after live ends.
 
 ## Decision within this option
 

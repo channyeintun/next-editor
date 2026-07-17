@@ -1,15 +1,17 @@
 # Live Collaboration Feature Plan
 
-Status: MVP implementation complete; deployment and multi-browser load validation pending
+Status: hybrid MVP implementation complete; deployment and multi-browser load validation pending
 
 Deployment evaluations:
 
 - [Cloudflare-native Deployment](./live-collaboration-cloudflare.md)
 - [Upstash Deployment Evaluation](./live-collaboration-upstash.md)
+- [Cloudflare WebSocket + Upstash Hybrid](./live-collaboration-hybrid-cloudflare-upstash.md)
 
-Deployment status: Upstash Realtime plus a dedicated Redis data plane is implemented for the MVP.
-The Cloudflare-native room service remains the documented fallback until the deployed Upstash
-transport passes the required latency, throughput, reconnect, and cost checks.
+Deployment status: the selected default for new rooms is a hibernating Cloudflare Durable Object
+WebSocket coordinator with Upstash Redis durability and QStash maintenance. The original Upstash
+Realtime SSE/HTTP provider remains implemented as an immutable per-room fallback. Existing rooms
+default to that provider through the D1 migration, and no room opens both transports.
 
 This Redis data plane is collaboration-only. Public lesson and playlist caching now uses the
 Cloudflare Workers KV `CACHE` binding and never shares collaboration credentials, command budget,
@@ -20,11 +22,13 @@ retention, or failure semantics.
 The repository now contains the complete provider, control-plane, and editor integration:
 
 - Yjs text/tree/metadata documents with deterministic collision and recovery rules.
-- Same-origin authenticated HTTP writes and Upstash Realtime SSE subscriptions, backed by a
-  dedicated Redis snapshot/update data plane.
+- Per-room transport selection between an authenticated Cloudflare WebSocket and the retained
+  Upstash Realtime SSE/HTTP provider, both backed by the same dedicated Redis snapshot/update
+  data plane.
 - D1 rooms, invitations, owner/editor/viewer ACLs, role revocation, audit events, and room quotas.
-- Awareness TTLs, participants, relative remote cursors/selections, active-file state, and
-  follow-host UI.
+- Durable Object WebSocket hibernation, immediate connected-role enforcement, ephemeral awareness
+  fan-out, participants, named relative remote cursors/selections, active-file state, and
+  follow-host UI. Realtime fallback rooms retain Redis-backed awareness.
 - Offline update retention, reconnect/bootstrap race handling, compaction, seven-day closed-room
   retention, QStash-signed cleanup, and owner recovery export.
 - Content-addressed binary project assets in private R2. Yjs stores only digest/MIME/size
@@ -111,8 +115,15 @@ capture the converged result in its expected order.
 flowchart LR
     UI[Monaco and project UI] <-->|local commands and projection| Doc[(Shared CRDT document)]
     Doc <-->|durable updates| Provider[Room provider]
-    Provider <-->|authenticated SSE and HTTP| Room[Hono collaboration routes]
-    Room <--> Persist[(Upstash Redis update log and snapshots)]
+    Provider <-->|selected per room| Transport{Live transport}
+    Transport <-->|authenticated WebSocket| DO[Hibernating room Durable Object]
+    Transport <-->|SSE downstream and HTTP upstream| Realtime[Upstash Realtime fallback]
+    DO -->|persist before acknowledgement| Persist[(Upstash Redis update log and snapshots)]
+    Realtime <--> Persist
+    Worker[Hono collaboration routes] -->|authenticate upgrade and notify control changes| DO
+    Worker <--> Persist
+    Worker <--> D1[(D1 rooms and membership)]
+    QStash[QStash] -->|signed compaction and cleanup| Worker
 
     Awareness[Presence and awareness] <-->|ephemeral messages| Provider
     UI <--> Awareness
@@ -197,12 +208,20 @@ The provider-neutral protocol has three logical message classes:
 3. **Control:** protocol/schema versions, effective role, host assignment, room closure, and
    recoverable errors.
 
-The selected Upstash adapter maps downstream messages onto one same-origin Realtime SSE
-subscription and maps upstream document/awareness writes onto bounded HTTP endpoints. The
-browser's first-party `HttpOnly` session cookie authenticates those requests, and the Worker
-checks current D1 room membership and status for every subscription and write. It deliberately
-does not place bearer credentials in the EventSource URL, where tokens can leak through logs and
-history. A future WebSocket adapter may exchange the session for a short-lived room token.
+The room descriptor selects one of two implemented adapters. `cloudflare-websocket` uses one
+same-origin authenticated WebSocket to a hibernating Durable Object named by room ID. The Worker
+authenticates the first-party `HttpOnly` session, looks up current D1 membership, and forwards only
+canonical server-derived identity. The room object revalidates membership before every durable
+document input, applies immediate role/control notifications to socket attachments, persists
+document updates to Redis before acknowledgement, and directly fans out document, awareness, and
+control events. Awareness uses those canonical attachments and never enters D1 or Redis on its
+high-frequency path.
+
+`upstash-realtime` maps downstream messages onto one same-origin Realtime SSE subscription and
+maps upstream document/awareness writes onto bounded HTTP endpoints. The same session and D1
+membership checks apply. It deliberately does not place bearer credentials in the EventSource
+URL, where tokens can leak through logs and history. Transport is fixed when the room is created;
+clients never combine both buses for one room.
 
 Bootstrap includes `protocolVersion`, `documentSchemaVersion`, a compacted snapshot, its stream
 cutoff, and a paginated update tail. Live events are buffered while bootstrap runs, closing the
@@ -452,7 +471,8 @@ Status: implementation complete; deployed load/latency validation remains a rele
 ## Security, privacy, and operations
 
 - Use the same-origin `HttpOnly` session and authorize every connection and durable update against
-  current D1 membership. If a WebSocket provider is introduced, issue short-lived room tokens.
+  current D1 membership. The WebSocket gateway discards browser-supplied identity and forwards
+  canonical membership claims to the room object.
 - Apply room size, update size, awareness frequency, document size, and asset quotas.
 - Validate protocol/schema versions and reject unsupported clients before accepting updates.
 - Treat awareness fields as untrusted input, cap their size, and render names as plain text.
@@ -466,7 +486,7 @@ Status: implementation complete; deployed load/latency validation remains a rele
 
 | Topic              | Initial direction                                        | Still to decide                                   |
 | ------------------ | -------------------------------------------------------- | ------------------------------------------------- |
-| Merge engine       | Yjs-compatible CRDT                                      | Managed provider or self-hosted room service      |
+| Merge engine       | Yjs-compatible CRDT                                      | Future schema-version migration policy            |
 | Identity           | Application user ID plus per-tab session ID              | Guest invite policy and display-name source       |
 | Permissions        | Owner/editor/viewer, enforced by server                  | Granular file-level permissions, if ever needed   |
 | Tree conflicts     | Stable node IDs with deterministic display-name suffixes | Exact suffix UX and tombstone retention           |
@@ -484,6 +504,7 @@ migrated.
 
 ## References
 
+- [Cloudflare WebSocket + Upstash hybrid](./live-collaboration-hybrid-cloudflare-upstash.md)
 - [Cloudflare-native collaboration deployment](./live-collaboration-cloudflare.md)
 - [Upstash collaboration deployment evaluation](./live-collaboration-upstash.md)
 - [Yjs documentation](https://docs.yjs.dev/)

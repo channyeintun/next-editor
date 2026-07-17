@@ -112,6 +112,7 @@ const collaborationApi: CollaborationRoomApi = {
   getRoom: getCollaborationRoom,
   getBootstrap: getCollaborationBootstrap,
   publishUpdate: publishCollaborationUpdate,
+  publishAwareness: publishCollaborationAwareness,
 };
 
 function messageFromError(error: unknown, fallback: string): string {
@@ -583,7 +584,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (awarenessCursorRef.current?.fileNodeId !== activeFileNodeId) {
       awarenessCursorRef.current = null;
     }
-    const response = await publishCollaborationAwareness(currentSession.room.id, {
+    await current.publishAwareness({
       kind: "state",
       sessionId: current.awarenessSessionId,
       revision: ++awarenessRevisionRef.current,
@@ -591,8 +592,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       cursor: awarenessCursorRef.current,
       followingHost: followingHostRef.current,
     });
-    applyAwarenessEvent(response.event);
-  }, [applyAwarenessEvent]);
+  }, []);
 
   const scheduleAwarenessPublish = useCallback(
     (delay = 75) => {
@@ -609,7 +609,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (!provider || connectionState !== "live" || !session) return;
     let cancelled = false;
     void Promise.all([
-      listCollaborationAwareness(session.room.id),
+      session.room.transport === "upstash-realtime"
+        ? listCollaborationAwareness(session.room.id)
+        : Promise.resolve([]),
       refreshRoomDataFor(session.room.id, role === "owner"),
     ])
       .then(([initialParticipants]) => {
@@ -630,11 +632,13 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       clearInterval(heartbeat);
       if (awarenessPublishTimerRef.current) clearTimeout(awarenessPublishTimerRef.current);
       awarenessPublishTimerRef.current = null;
-      void publishCollaborationAwareness(session.room.id, {
-        kind: "leave",
-        sessionId: provider.awarenessSessionId,
-        revision: ++awarenessRevisionRef.current,
-      }).catch(() => {});
+      void provider
+        .publishAwareness({
+          kind: "leave",
+          sessionId: provider.awarenessSessionId,
+          revision: ++awarenessRevisionRef.current,
+        })
+        .catch(() => {});
     };
   }, [
     applyAwarenessEvent,

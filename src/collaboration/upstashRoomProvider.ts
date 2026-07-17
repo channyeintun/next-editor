@@ -10,17 +10,18 @@ import {
   collaborationControlEventSchema,
   collaborationDocumentUpdateEventSchema,
   collaborationRoomChannel,
+  collaborationWebSocketClientMessageSchema,
+  collaborationWebSocketServerMessageSchema,
   type CollaborationAwarenessEvent,
+  type CollaborationAwarenessInput,
   type CollaborationBootstrapResponse,
   type CollaborationControlEvent,
   type CollaborationDocumentUpdateInput,
   type CollaborationRoomSession,
   type CollaborationUpdateAccepted,
+  type CollaborationWebSocketServerMessage,
 } from "./protocol";
-import {
-  COLLABORATION_ORIGIN,
-  canWriteCollaborationDocument,
-} from "./projectDocument";
+import { COLLABORATION_ORIGIN, canWriteCollaborationDocument } from "./projectDocument";
 import {
   applyEncodedYjsSnapshot,
   applyEncodedYjsUpdate,
@@ -36,6 +37,9 @@ const DEFAULT_BATCH_WINDOW_MS = 75;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 5;
 const MAX_BOOTSTRAP_PAGES = 1_000;
 const MAX_SEEN_STREAM_IDS = 2_000;
+const WEBSOCKET_ACK_TIMEOUT_MS = 15_000;
+const WEBSOCKET_HEARTBEAT_MS = 20_000;
+const WEBSOCKET_OPEN = 1;
 
 export interface CollaborationRoomApi {
   getRoom(roomId: string): Promise<CollaborationRoomSession>;
@@ -44,6 +48,10 @@ export interface CollaborationRoomApi {
     roomId: string,
     update: CollaborationDocumentUpdateInput,
   ): Promise<CollaborationUpdateAccepted>;
+  publishAwareness(
+    roomId: string,
+    awareness: CollaborationAwarenessInput,
+  ): Promise<{ accepted: true; streamId: string; event: CollaborationAwarenessEvent }>;
 }
 
 export interface CollaborationEventSource {
@@ -55,12 +63,25 @@ export interface CollaborationEventSource {
 
 export type CollaborationEventSourceFactory = (url: string) => CollaborationEventSource;
 
+export interface CollaborationWebSocket {
+  readonly readyState: number;
+  onopen: ((event: Event) => void) | null;
+  onmessage: ((event: MessageEvent<unknown>) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onclose: ((event: CloseEvent) => void) | null;
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+}
+
+export type CollaborationWebSocketFactory = (url: string) => CollaborationWebSocket;
+
 export interface UpstashRoomProviderOptions {
   roomId: string;
   api: CollaborationRoomApi;
   doc?: Y.Doc;
   clientId?: string;
   eventSourceFactory?: CollaborationEventSourceFactory;
+  webSocketFactory?: CollaborationWebSocketFactory;
   batchWindowMs?: number;
   maxReconnectAttempts?: number;
   random?: () => number;
@@ -120,6 +141,16 @@ function defaultEventSourceFactory(url: string): CollaborationEventSource {
   return new EventSource(url, { withCredentials: true });
 }
 
+function defaultWebSocketFactory(url: string): CollaborationWebSocket {
+  return new WebSocket(url);
+}
+
+function websocketRequestError(message: string, status = 503): Error {
+  const error = new Error(message) as Error & { response?: { status: number } };
+  error.response = { status };
+  return error;
+}
+
 export class UpstashRoomProvider {
   readonly doc: Y.Doc;
   readonly actor: ActorRefFrom<typeof collaborationMachine>;
@@ -128,6 +159,7 @@ export class UpstashRoomProvider {
   private readonly api: CollaborationRoomApi;
   private readonly roomId: string;
   private readonly eventSourceFactory: CollaborationEventSourceFactory;
+  private readonly webSocketFactory: CollaborationWebSocketFactory;
   private readonly batchWindowMs: number;
   private readonly maxReconnectAttempts: number;
   private readonly random: () => number;
@@ -136,10 +168,12 @@ export class UpstashRoomProvider {
   private readonly onControlEvent?: UpstashRoomProviderOptions["onControlEvent"];
   private readonly onRejectedLocalChanges?: UpstashRoomProviderOptions["onRejectedLocalChanges"];
 
-  private sessionId = crypto.randomUUID();
-  private attemptId = crypto.randomUUID();
+  private sessionId: string = crypto.randomUUID();
+  private attemptId: string = crypto.randomUUID();
   private reconnectAttempt = 0;
   private source: CollaborationEventSource | null = null;
+  private socket: CollaborationWebSocket | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
   private roomSession: CollaborationRoomSession | null = null;
@@ -154,6 +188,14 @@ export class UpstashRoomProvider {
   private seenStreamIds = new Set<string>();
   private isRefreshingControl = false;
   private pendingControlRoleVersion = 0;
+  private readonly pendingWebSocketAcks = new Map<
+    string,
+    {
+      resolve: (value: CollaborationUpdateAccepted) => void;
+      reject: (reason: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
 
   constructor(options: UpstashRoomProviderOptions) {
     this.roomId = options.roomId;
@@ -161,9 +203,9 @@ export class UpstashRoomProvider {
     this.doc = options.doc ?? new Y.Doc();
     this.clientId = options.clientId ?? crypto.randomUUID();
     this.eventSourceFactory = options.eventSourceFactory ?? defaultEventSourceFactory;
+    this.webSocketFactory = options.webSocketFactory ?? defaultWebSocketFactory;
     this.batchWindowMs = options.batchWindowMs ?? DEFAULT_BATCH_WINDOW_MS;
-    this.maxReconnectAttempts =
-      options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
+    this.maxReconnectAttempts = options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     this.random = options.random ?? Math.random;
     this.onDocumentChange = options.onDocumentChange;
     this.onAwarenessEvent = options.onAwarenessEvent;
@@ -217,7 +259,7 @@ export class UpstashRoomProvider {
   stop(): void {
     if (this.isStopped) return;
     this.isStopped = true;
-    this.closeSource();
+    this.closeTransport();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.batchTimer) clearTimeout(this.batchTimer);
     this.reconnectTimer = null;
@@ -244,6 +286,28 @@ export class UpstashRoomProvider {
     this.batchTimer = null;
     this.movePendingUpdatesToOutbox();
     await this.flushOutbox();
+  }
+
+  async publishAwareness(input: CollaborationAwarenessInput): Promise<void> {
+    const session = this.roomSession;
+    if (!session || this.connectionState !== "live") return;
+    if (session.room.transport === "cloudflare-websocket") {
+      const socket = this.socket;
+      if (!socket || socket.readyState !== WEBSOCKET_OPEN) {
+        throw websocketRequestError("Collaboration WebSocket is not connected");
+      }
+      socket.send(
+        JSON.stringify(
+          collaborationWebSocketClientMessageSchema.parse({
+            type: "awareness.state",
+            data: input,
+          }),
+        ),
+      );
+      return;
+    }
+    const response = await this.api.publishAwareness(this.roomId, input);
+    this.onAwarenessEvent?.(response.event);
   }
 
   private readonly handleAfterTransaction = (transaction: Y.Transaction) => {
@@ -315,7 +379,11 @@ export class UpstashRoomProvider {
       if (roomSession.room.roleVersion >= this.pendingControlRoleVersion) {
         this.pendingControlRoleVersion = 0;
       }
-      this.openSource(attemptId, roomSession.channel);
+      if (roomSession.room.transport === "cloudflare-websocket") {
+        this.openSocket(attemptId);
+      } else {
+        this.openSource(attemptId, roomSession.channel);
+      }
     } catch (error) {
       if (this.isStopped || attemptId !== this.attemptId) return;
       if (isFatalRequestError(error)) {
@@ -330,7 +398,7 @@ export class UpstashRoomProvider {
   }
 
   private openSource(attemptId: string, channel: string): void {
-    this.closeSource();
+    this.closeTransport();
     this.bufferedMessages = [];
     const url = new URL("/api/collaboration/realtime", window.location.origin);
     const channels = [
@@ -361,6 +429,135 @@ export class UpstashRoomProvider {
       if (this.isStopped || attemptId !== this.attemptId || source !== this.source) return;
       this.handleTransportFailure("Realtime connection interrupted", attemptId);
     };
+  }
+
+  private openSocket(attemptId: string): void {
+    this.closeTransport();
+    this.bufferedMessages = [];
+    const url = new URL(
+      `/api/collaboration/rooms/${encodeURIComponent(this.roomId)}/websocket`,
+      window.location.origin,
+    );
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.searchParams.set("sessionId", this.sessionId);
+    url.searchParams.set("attemptId", attemptId);
+    const socket = this.webSocketFactory(url.toString());
+    this.socket = socket;
+    socket.onopen = () => {
+      if (this.isStopped || attemptId !== this.attemptId || socket !== this.socket) return;
+      this.actor.send({ type: "PROVIDER_OPEN", sessionId: this.sessionId, attemptId });
+      this.heartbeatTimer = setInterval(() => {
+        if (socket === this.socket && socket.readyState === WEBSOCKET_OPEN) socket.send("ping");
+      }, WEBSOCKET_HEARTBEAT_MS);
+      void this.synchronize(attemptId);
+    };
+    socket.onmessage = (event) => {
+      if (this.isStopped || attemptId !== this.attemptId || socket !== this.socket) return;
+      if (event.data === "pong") return;
+      this.handleWebSocketMessage(event.data, attemptId);
+    };
+    socket.onerror = () => {
+      if (this.isStopped || attemptId !== this.attemptId || socket !== this.socket) return;
+      this.handleTransportFailure("WebSocket connection interrupted", attemptId);
+    };
+    socket.onclose = (event) => {
+      if (this.isStopped || attemptId !== this.attemptId || socket !== this.socket) return;
+      if (event.code === 4001) {
+        this.fatal("The host ended this live collaboration room", attemptId);
+      } else if (event.code === 4003) {
+        this.fatal("You no longer have access to this collaboration room", attemptId);
+      } else {
+        this.handleTransportFailure("WebSocket connection closed", attemptId);
+      }
+    };
+  }
+
+  private handleWebSocketMessage(raw: unknown, attemptId: string): void {
+    if (typeof raw !== "string") {
+      this.handleTransportFailure("WebSocket provider sent an invalid message", attemptId);
+      return;
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(raw) as unknown;
+    } catch {
+      return;
+    }
+    const parsed = collaborationWebSocketServerMessageSchema.safeParse(value);
+    if (!parsed.success) return;
+    const message = parsed.data;
+    if (message.type === "session.ready") {
+      if (message.sessionId !== this.sessionId || message.attemptId !== attemptId) return;
+      for (const event of message.participants) this.onAwarenessEvent?.(event);
+      return;
+    }
+    if (message.type === "document.ack") {
+      const pending = this.pendingWebSocketAcks.get(message.updateId);
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      this.pendingWebSocketAcks.delete(message.updateId);
+      pending.resolve({
+        accepted: true,
+        updateId: message.updateId,
+        streamId: message.streamId,
+      });
+      return;
+    }
+    if (message.type === "document.update") {
+      const realtimeMessage: RealtimeUserMessage = {
+        id: message.streamId,
+        event: "document.update",
+        channel: collaborationRoomChannel(this.roomId),
+        data: message.data,
+      };
+      if (this.isSynchronizing || this.connectionState === "syncing") {
+        this.bufferedMessages.push(realtimeMessage);
+      } else {
+        this.applyRealtimeMessage(realtimeMessage);
+      }
+      return;
+    }
+    if (message.type === "awareness.state") {
+      this.onAwarenessEvent?.(message.data);
+      return;
+    }
+    if (message.type === "control.room") {
+      this.onControlEvent?.(message.data);
+      if (message.data.kind === "room-closed") {
+        this.fatal("The host ended this live collaboration room", attemptId);
+      } else {
+        void this.refreshRoomFromControl(message.data);
+      }
+      return;
+    }
+    this.handleWebSocketError(message, attemptId);
+  }
+
+  private handleWebSocketError(
+    message: Extract<CollaborationWebSocketServerMessage, { type: "error" }>,
+    attemptId: string,
+  ): void {
+    const status =
+      message.code === "read-only" || message.code === "access-revoked"
+        ? 403
+        : message.code === "rate-limited"
+          ? 429
+          : message.code === "invalid-message" || message.code === "invalid-session"
+            ? 400
+            : 503;
+    if (message.updateId) {
+      const pending = this.pendingWebSocketAcks.get(message.updateId);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingWebSocketAcks.delete(message.updateId);
+        pending.reject(websocketRequestError(message.message, status));
+      }
+    }
+    if (message.fatal) {
+      this.fatal(message.message, attemptId);
+    } else if (!message.updateId && message.code !== "rate-limited") {
+      this.handleTransportFailure(message.message, attemptId);
+    }
   }
 
   private handleRealtimeMessage(raw: string, attemptId: string): void {
@@ -430,10 +627,7 @@ export class UpstashRoomProvider {
   private markStreamIdSeen(channel: string, streamId: string): void {
     this.seenStreamIds.add(`${channel}|${streamId}`);
     const lastAcknowledgedStreamId = this.lastAcknowledgedStreamIds.get(channel);
-    if (
-      !lastAcknowledgedStreamId ||
-      compareStreamIds(streamId, lastAcknowledgedStreamId) > 0
-    ) {
+    if (!lastAcknowledgedStreamId || compareStreamIds(streamId, lastAcknowledgedStreamId) > 0) {
       this.lastAcknowledgedStreamIds.set(channel, streamId);
     }
     if (this.seenStreamIds.size > MAX_SEEN_STREAM_IDS) {
@@ -584,7 +778,7 @@ export class UpstashRoomProvider {
       while (!this.isStopped && this.connectionState === "live" && this.outbox.length > 0) {
         const pending = this.outbox[0];
         try {
-          const accepted = await this.api.publishUpdate(this.roomId, pending.input);
+          const accepted = await this.publishTransportUpdate(pending.input);
           if (!accepted.accepted || accepted.updateId !== pending.input.updateId) {
             throw new Error("Collaboration update acknowledgement did not match the request");
           }
@@ -619,6 +813,39 @@ export class UpstashRoomProvider {
     }
   }
 
+  private publishTransportUpdate(
+    input: CollaborationDocumentUpdateInput,
+  ): Promise<CollaborationUpdateAccepted> {
+    if (this.roomSession?.room.transport !== "cloudflare-websocket") {
+      return this.api.publishUpdate(this.roomId, input);
+    }
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WEBSOCKET_OPEN) {
+      return Promise.reject(websocketRequestError("Collaboration WebSocket is not connected"));
+    }
+    return new Promise<CollaborationUpdateAccepted>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingWebSocketAcks.delete(input.updateId);
+        reject(websocketRequestError("Collaboration update acknowledgement timed out"));
+      }, WEBSOCKET_ACK_TIMEOUT_MS);
+      this.pendingWebSocketAcks.set(input.updateId, { resolve, reject, timer });
+      try {
+        socket.send(
+          JSON.stringify(
+            collaborationWebSocketClientMessageSchema.parse({
+              type: "document.update",
+              data: input,
+            }),
+          ),
+        );
+      } catch (error) {
+        clearTimeout(timer);
+        this.pendingWebSocketAcks.delete(input.updateId);
+        reject(error instanceof Error ? error : websocketRequestError("WebSocket send failed"));
+      }
+    });
+  }
+
   private async handleWriteRejection(error: unknown): Promise<void> {
     try {
       const roomSession = await this.api.getRoom(this.roomId);
@@ -641,7 +868,7 @@ export class UpstashRoomProvider {
   private handleTransportFailure(message: string, attemptId: string): void {
     if (this.isStopped || attemptId !== this.attemptId) return;
     if (this.reconnectTimer) return;
-    this.closeSource();
+    this.closeTransport();
     this.actor.send({
       type: "DISCONNECTED",
       sessionId: this.sessionId,
@@ -675,7 +902,7 @@ export class UpstashRoomProvider {
 
   private fatal(message: string, attemptId = this.attemptId): void {
     if (this.isStopped || attemptId !== this.attemptId) return;
-    this.closeSource();
+    this.closeTransport();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.actor.send({
@@ -694,5 +921,28 @@ export class UpstashRoomProvider {
     source.onmessage = null;
     source.onerror = null;
     source.close();
+  }
+
+  private closeSocket(): void {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
+    const socket = this.socket;
+    this.socket = null;
+    for (const [updateId, pending] of this.pendingWebSocketAcks) {
+      clearTimeout(pending.timer);
+      pending.reject(websocketRequestError("Collaboration WebSocket disconnected"));
+      this.pendingWebSocketAcks.delete(updateId);
+    }
+    if (!socket) return;
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    socket.close(1000, "provider closed");
+  }
+
+  private closeTransport(): void {
+    this.closeSource();
+    this.closeSocket();
   }
 }

@@ -15,11 +15,14 @@ import {
   collaborationDocumentUpdateInputSchema,
   collaborationIdSchema,
   collaborationRoomChannel,
+  collaborationTransportSchema,
   createCollaborationInvitationInputSchema,
   parseCollaborationChannel,
   updateCollaborationMemberInputSchema,
   type CollaborationDocumentUpdateInput,
   type CollaborationCreateRoomInput,
+  type CollaborationRole,
+  type CollaborationTransport,
 } from "../../../src/collaboration/protocol";
 import {
   createProvisioningCollaborationRoom,
@@ -90,6 +93,13 @@ import {
   readCollaborationAsset,
 } from "../collaboration/assetStore";
 import type { Env } from "../env";
+import {
+  broadcastCollaborationRoomDocument,
+  forwardCollaborationWebSocket,
+  hasCollaborationRoomBinding,
+  listCollaborationRoomSocketAwareness,
+  notifyCollaborationRoomControl,
+} from "../collaboration/roomDurableObject";
 
 const MAX_UPDATE_REQUEST_BYTES = MAX_ENCODED_YJS_UPDATE_LENGTH + 2 * 1024;
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
@@ -97,6 +107,8 @@ const MAX_AWARENESS_REQUEST_BYTES = 8 * 1024;
 const MAX_MAINTENANCE_REQUEST_BYTES = 2 * 1024;
 const MAX_CHANNELS_PER_CONNECTION = 4;
 const CLOSED_ROOM_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+class CollaborationTransportConfigurationError extends Error {}
 
 type CollaborationContext = Context<{ Bindings: Env }>;
 
@@ -115,6 +127,7 @@ function roomResponse(room: CollaborationRoomRow, role: CollaborationRoomAccess[
       ownerId: room.owner_id,
       hostUserId: room.host_user_id,
       status: room.status,
+      transport: room.transport,
       protocolVersion: room.protocol_version,
       documentSchemaVersion: room.document_schema_version,
       roleVersion: room.role_version,
@@ -125,6 +138,19 @@ function roomResponse(room: CollaborationRoomRow, role: CollaborationRoomAccess[
     membership: { role },
     channel: collaborationRoomChannel(room.id),
   };
+}
+
+function defaultCollaborationTransport(env: Env): CollaborationTransport {
+  const configured = env.COLLABORATION_DEFAULT_TRANSPORT;
+  if (configured) {
+    const parsed = collaborationTransportSchema.safeParse(configured);
+    if (!parsed.success) throw new CollaborationTransportConfigurationError();
+    if (parsed.data === "cloudflare-websocket" && !hasCollaborationRoomBinding(env)) {
+      throw new CollaborationTransportConfigurationError();
+    }
+    return parsed.data;
+  }
+  return hasCollaborationRoomBinding(env) ? "cloudflare-websocket" : "upstash-realtime";
 }
 
 function memberResponse(member: Awaited<ReturnType<typeof listCollaborationRoomMembers>>[number]) {
@@ -310,21 +336,35 @@ function errorResponse(message: string, status: number): Response {
   });
 }
 
-function scheduleControlEvent(
+async function dispatchControlEvent(
   c: CollaborationContext,
   event: {
     kind: "membership-changed" | "room-closed";
     roomId: string;
     roleVersion: number;
     targetUserId: string | null;
+    transport: CollaborationTransport;
+    targetRole?: CollaborationRole | null;
   },
-): void {
+): Promise<void> {
+  const control = {
+    kind: event.kind,
+    roomId: event.roomId,
+    roleVersion: event.roleVersion,
+    targetUserId: event.targetUserId,
+    occurredAt: Date.now(),
+  } as const;
+  if (event.transport === "cloudflare-websocket") {
+    const delivered = await notifyCollaborationRoomControl(c.env, event.roomId, {
+      event: control,
+      ...(event.targetUserId ? { targetRole: event.targetRole ?? null } : {}),
+    });
+    if (!delivered) throw new Error("collaboration room coordinator unavailable");
+    return;
+  }
   try {
     c.executionCtx.waitUntil(
-      publishCollaborationControl(getCollaborationRedis(c.env), {
-        ...event,
-        occurredAt: Date.now(),
-      }).catch((error) => {
+      publishCollaborationControl(getCollaborationRedis(c.env), control).catch((error) => {
         console.error("Failed to publish collaboration control event", {
           roomId: event.roomId,
           kind: event.kind,
@@ -492,11 +532,7 @@ collaborationRoute.post("/jobs/maintenance", async (c) => {
   const redis = getCollaborationRedis(c.env);
   if (job.data.kind === "compact-room") {
     if (room.status !== "active" && room.status !== "closed") return c.body(null, 204);
-    const result = await compactCollaborationDocument(
-      redis,
-      room.id,
-      job.data.expectedGeneration,
-    );
+    const result = await compactCollaborationDocument(redis, room.id, job.data.expectedGeneration);
     if (result.compacted) {
       scheduleAuditEvent(c, {
         roomId: room.id,
@@ -573,10 +609,14 @@ collaborationRoute.post("/rooms", async (c) => {
       ownerId: user.id,
       protocolVersion: COLLABORATION_PROTOCOL_VERSION,
       documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+      transport: defaultCollaborationTransport(c.env),
     });
   } catch (error) {
     if (error instanceof CollaborationRoomQuotaError) {
       return c.json({ error: "active collaboration room limit reached" }, 409);
+    }
+    if (error instanceof CollaborationTransportConfigurationError) {
+      return c.json({ error: "collaboration transport unavailable" }, 503);
     }
     throw error;
   }
@@ -760,10 +800,7 @@ collaborationRoute.get("/rooms/:roomId/export", async (c) => {
   if (!access || access.member_role !== "owner") return c.json({ error: "not found" }, 404);
   if (access.purged_at !== null) return c.json({ error: "room document has expired" }, 410);
   try {
-    const document = await exportCollaborationDocument(
-      getCollaborationRedis(c.env),
-      access.id,
-    );
+    const document = await exportCollaborationDocument(getCollaborationRedis(c.env), access.id);
     scheduleAuditEvent(c, {
       roomId: access.id,
       actorUserId: user.id,
@@ -813,10 +850,12 @@ collaborationRoute.get("/rooms/:roomId/awareness", async (c) => {
   const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
   if (!access || access.status !== "active") return c.json({ error: "not found" }, 404);
   try {
-    const participants = await listCollaborationAwareness(
-      getCollaborationRedis(c.env),
-      access.id,
-    );
+    if (access.transport === "cloudflare-websocket") {
+      const participants = await listCollaborationRoomSocketAwareness(c.env, access.id);
+      if (!participants) return c.json({ error: "collaboration unavailable" }, 503);
+      return c.json({ participants });
+    }
+    const participants = await listCollaborationAwareness(getCollaborationRedis(c.env), access.id);
     return c.json({ participants });
   } catch (error) {
     if (error instanceof CollaborationConfigurationError) {
@@ -842,6 +881,9 @@ collaborationRoute.post("/rooms/:roomId/awareness", async (c) => {
   if (!input.success) return c.json({ error: "invalid awareness" }, 400);
   const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
   if (!access || access.status !== "active") return c.json({ error: "not found" }, 404);
+  if (access.transport === "cloudflare-websocket") {
+    return c.json({ error: "awareness must use the room WebSocket" }, 409);
+  }
 
   const now = Date.now();
   const event =
@@ -964,11 +1006,13 @@ collaborationRoute.patch("/rooms/:roomId/members/:userId", async (c) => {
   if (!member) return c.json({ error: "not found" }, 404);
   const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
   if (access) {
-    scheduleControlEvent(c, {
+    await dispatchControlEvent(c, {
       kind: "membership-changed",
       roomId: access.id,
       roleVersion: access.role_version,
       targetUserId: member.user_id,
+      targetRole: member.role,
+      transport: access.transport,
     });
   }
   scheduleAuditEvent(c, {
@@ -995,11 +1039,13 @@ collaborationRoute.delete("/rooms/:roomId/members/:userId", async (c) => {
   if (!removed) return c.json({ error: "not found" }, 404);
   const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
   if (access) {
-    scheduleControlEvent(c, {
+    await dispatchControlEvent(c, {
       kind: "membership-changed",
       roomId: access.id,
       roleVersion: access.role_version,
       targetUserId: userIdResult.data,
+      targetRole: null,
+      transport: access.transport,
     });
   }
   scheduleAuditEvent(c, {
@@ -1021,11 +1067,12 @@ collaborationRoute.post("/rooms/:roomId/close", async (c) => {
   if (access.status === "closed") return c.json(roomResponse(access, access.member_role));
   const room = await setCollaborationRoomStatus(c.env.DB, access.id, "closed");
   if (!room) return c.json({ error: "not found" }, 404);
-  scheduleControlEvent(c, {
+  await dispatchControlEvent(c, {
     kind: "room-closed",
     roomId: room.id,
     roleVersion: room.role_version,
     targetUserId: null,
+    transport: room.transport,
   });
   scheduleAuditEvent(c, {
     roomId: room.id,
@@ -1049,11 +1096,13 @@ collaborationRoute.post("/invitations/claim", async (c) => {
   if (!invitation) return c.json({ error: "invitation is invalid or expired" }, 404);
   const access = await claimCollaborationInvitation(c.env.DB, invitation, user.id);
   if (!access) return c.json({ error: "room is full or invitation is unavailable" }, 409);
-  scheduleControlEvent(c, {
+  await dispatchControlEvent(c, {
     kind: "membership-changed",
     roomId: access.id,
     roleVersion: access.role_version,
     targetUserId: user.id,
+    targetRole: access.member_role,
+    transport: access.transport,
   });
   scheduleAuditEvent(c, {
     roomId: access.id,
@@ -1087,7 +1136,16 @@ collaborationRoute.post("/rooms/:roomId/updates", async (c) => {
   try {
     const redis = getCollaborationRedis(c.env);
     await enforceCollaborationUpdateRateLimit(redis, access.id, user.id);
-    const result = await appendCollaborationUpdate(redis, event);
+    const result = await appendCollaborationUpdate(redis, event, {
+      publish: access.transport === "upstash-realtime",
+    });
+    if (access.transport === "cloudflare-websocket") {
+      const delivered = await broadcastCollaborationRoomDocument(c.env, access.id, {
+        streamId: result.streamId,
+        event,
+      });
+      if (!delivered) throw new Error("collaboration room coordinator unavailable");
+    }
     if (shouldCompactCollaborationDocument(result.updateCount)) {
       const generation = await getCollaborationSnapshotGeneration(redis, access.id);
       scheduleCompaction(c, access.id, generation);
@@ -1105,11 +1163,9 @@ collaborationRoute.post("/rooms/:roomId/updates", async (c) => {
     );
   } catch (error) {
     if (error instanceof CollaborationRateLimitError) {
-      return c.json(
-        { error: "collaboration update rate limit exceeded" },
-        429,
-        { "Retry-After": "1" },
-      );
+      return c.json({ error: "collaboration update rate limit exceeded" }, 429, {
+        "Retry-After": "1",
+      });
     }
     if (error instanceof CollaborationDocumentQuotaError) {
       return c.json({ error: "collaboration room document quota exceeded" }, 413);
@@ -1126,6 +1182,54 @@ collaborationRoute.post("/rooms/:roomId/updates", async (c) => {
   }
 });
 
+collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
+  if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
+    return c.json({ error: "expected WebSocket upgrade" }, 426);
+  }
+  const user = await getCurrentUser(c);
+  if (!user) return c.json({ error: "not signed in" }, 401);
+  const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
+  const sessionId = collaborationIdSchema.safeParse(c.req.query("sessionId"));
+  const attemptId = collaborationIdSchema.safeParse(c.req.query("attemptId"));
+  if (!roomId.success || !sessionId.success || !attemptId.success) {
+    return c.json({ error: "invalid collaboration session" }, 400);
+  }
+  const access = await getCollaborationRoomAccess(c.env.DB, roomId.data, user.id);
+  if (!access) return c.json({ error: "not found" }, 404);
+  if (access.status !== "active") return c.json({ error: "room is not active" }, 409);
+  if (access.transport !== "cloudflare-websocket") {
+    return c.json({ error: "room does not use WebSockets" }, 409);
+  }
+  if (!hasCollaborationRoomBinding(c.env)) {
+    return c.json({ error: "collaboration WebSocket unavailable" }, 503);
+  }
+  try {
+    await enforceCollaborationConnectionRateLimit(getCollaborationRedis(c.env), user.id);
+  } catch (error) {
+    if (error instanceof CollaborationRateLimitError) {
+      return c.json({ error: "collaboration connection rate limit exceeded" }, 429, {
+        "Retry-After": "60",
+      });
+    }
+    if (error instanceof CollaborationConfigurationError) {
+      return c.json({ error: "collaboration unavailable" }, 503);
+    }
+    throw error;
+  }
+  return forwardCollaborationWebSocket(c.env, c.req.raw, {
+    roomId: access.id,
+    userId: user.id,
+    username: user.username,
+    name: user.name,
+    avatarUrl: user.avatar_url,
+    hostUserId: access.host_user_id,
+    role: access.member_role,
+    roleVersion: access.role_version,
+    sessionId: sessionId.data,
+    attemptId: attemptId.data,
+  });
+});
+
 collaborationRoute.get("/realtime", async (c) => {
   const user = await getCurrentUser(c);
   if (!user) return c.json({ error: "not signed in" }, 401);
@@ -1134,11 +1238,9 @@ collaborationRoute.get("/realtime", async (c) => {
     await enforceCollaborationConnectionRateLimit(getCollaborationRedis(c.env), user.id);
   } catch (error) {
     if (error instanceof CollaborationRateLimitError) {
-      return c.json(
-        { error: "collaboration connection rate limit exceeded" },
-        429,
-        { "Retry-After": "60" },
-      );
+      return c.json({ error: "collaboration connection rate limit exceeded" }, 429, {
+        "Retry-After": "60",
+      });
     }
     if (error instanceof CollaborationConfigurationError) {
       return c.json({ error: "collaboration unavailable" }, 503);
@@ -1161,7 +1263,7 @@ collaborationRoute.get("/realtime", async (c) => {
         if (!parsedChannel) return errorResponse("forbidden", 403);
 
         const access = await getCollaborationRoomAccess(c.env.DB, parsedChannel.roomId, user.id);
-        if (!access || access.status !== "active") {
+        if (!access || access.status !== "active" || access.transport !== "upstash-realtime") {
           return errorResponse("forbidden", 403);
         }
       }

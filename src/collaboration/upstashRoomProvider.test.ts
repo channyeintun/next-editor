@@ -7,6 +7,7 @@ import {
   collaborationControlChannel,
   collaborationDocumentUpdateEventSchema,
   collaborationRoomChannel,
+  collaborationWebSocketClientMessageSchema,
   type CollaborationBootstrapResponse,
   type CollaborationDocumentUpdateInput,
   type CollaborationRoomSession,
@@ -20,6 +21,7 @@ import {
   UpstashRoomProvider,
   type CollaborationEventSource,
   type CollaborationRoomApi,
+  type CollaborationWebSocket,
 } from "./upstashRoomProvider";
 
 const ROOM_ID = "10000000-0000-4000-8000-000000000001";
@@ -33,6 +35,7 @@ function roomSession(role: "owner" | "editor" | "viewer" = "editor"): Collaborat
       ownerId: ACTOR_ID,
       hostUserId: ACTOR_ID,
       status: "active",
+      transport: "upstash-realtime",
       protocolVersion: COLLABORATION_PROTOCOL_VERSION,
       documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
       roleVersion: 1,
@@ -79,6 +82,35 @@ class FakeEventSource implements CollaborationEventSource {
   }
 }
 
+class FakeWebSocket implements CollaborationWebSocket {
+  readyState = 0;
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+  readonly sent: string[] = [];
+
+  open() {
+    this.readyState = 1;
+    this.onopen?.(new Event("open"));
+  }
+
+  message(value: unknown) {
+    const data = typeof value === "string" ? value : JSON.stringify(value);
+    this.onmessage?.(new MessageEvent("message", { data }));
+  }
+
+  send(data: string) {
+    if (this.readyState !== 1) throw new Error("socket is not open");
+    this.sent.push(data);
+  }
+
+  close(code = 1000, reason = "") {
+    this.readyState = 3;
+    this.onclose?.(new CloseEvent("close", { code, reason }));
+  }
+}
+
 class FakeApi implements CollaborationRoomApi {
   readonly published: CollaborationDocumentUpdateInput[] = [];
   session = roomSession();
@@ -102,6 +134,10 @@ class FakeApi implements CollaborationRoomApi {
     this.published.push(update);
     return { accepted: true as const, updateId: update.updateId, streamId: "2-0" };
   }
+
+  publishAwareness: CollaborationRoomApi["publishAwareness"] = async () => {
+    throw new Error("awareness is not used by this provider test");
+  };
 }
 
 async function waitUntil(predicate: () => boolean): Promise<void> {
@@ -132,6 +168,197 @@ function remoteMessage(update: Uint8Array, streamId = "1-0") {
 }
 
 describe("UpstashRoomProvider", () => {
+  it("uses a duplex WebSocket for WebSocket rooms and waits for durable acknowledgements", async () => {
+    const server = new Y.Doc();
+    server.getText("source").insert(0, "start");
+    const api = new FakeApi(server);
+    api.session = {
+      ...roomSession(),
+      room: { ...roomSession().room, transport: "cloudflare-websocket" },
+    };
+    const sockets: FakeWebSocket[] = [];
+    const awarenessEvents: unknown[] = [];
+    const provider = new UpstashRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      clientId: CLIENT_ID,
+      batchWindowMs: 60_000,
+      webSocketFactory: () => {
+        const socket = new FakeWebSocket();
+        sockets.push(socket);
+        return socket;
+      },
+      eventSourceFactory: () => {
+        throw new Error("Realtime must not open for a WebSocket room");
+      },
+      onAwarenessEvent: (event) => awarenessEvents.push(event),
+    });
+
+    await provider.start();
+    sockets[0].open();
+    await waitUntil(() => provider.connectionState === "live");
+
+    provider.doc.getText("source").insert(5, "-local");
+    const flushing = provider.flushNow();
+    await waitUntil(() =>
+      sockets[0].sent.some((raw) => {
+        if (raw === "ping") return false;
+        const result = collaborationWebSocketClientMessageSchema.safeParse(JSON.parse(raw));
+        return result.success && result.data.type === "document.update";
+      }),
+    );
+    const updateMessage = sockets[0].sent
+      .filter((raw) => raw !== "ping")
+      .map((raw) => collaborationWebSocketClientMessageSchema.safeParse(JSON.parse(raw)))
+      .find((result) => result.success && result.data.type === "document.update");
+    if (!updateMessage?.success || updateMessage.data.type !== "document.update") {
+      throw new Error("document update was not sent");
+    }
+    sockets[0].message({
+      type: "document.ack",
+      updateId: updateMessage.data.data.updateId,
+      streamId: "2-0",
+      duplicate: false,
+    });
+    await flushing;
+
+    expect(api.published).toEqual([]);
+    expect(provider.hasPendingUpdates).toBe(false);
+
+    await provider.publishAwareness({
+      kind: "state",
+      sessionId: provider.awarenessSessionId,
+      revision: 1,
+      activeFileNodeId: null,
+      cursor: null,
+      followingHost: false,
+    });
+    const awarenessMessage = sockets[0].sent
+      .filter((raw) => raw !== "ping")
+      .map((raw) => collaborationWebSocketClientMessageSchema.safeParse(JSON.parse(raw)))
+      .find((result) => result.success && result.data.type === "awareness.state");
+    expect(awarenessMessage?.success).toBe(true);
+    sockets[0].message({
+      type: "awareness.state",
+      data: {
+        kind: "state",
+        roomId: ROOM_ID,
+        actorId: ACTOR_ID,
+        sessionId: provider.awarenessSessionId,
+        revision: 1,
+        role: "editor",
+        username: "editor",
+        name: null,
+        avatarUrl: null,
+        isHost: false,
+        activeFileNodeId: null,
+        cursor: null,
+        followingHost: false,
+        occurredAt: Date.now(),
+        expiresAt: Date.now() + 45_000,
+      },
+    });
+    expect(awarenessEvents).toHaveLength(1);
+    provider.stop();
+  });
+
+  it("applies WebSocket role notifications without reconnecting", async () => {
+    const server = new Y.Doc();
+    const api = new FakeApi(server);
+    const asWebSocketSession = (
+      role: "owner" | "editor" | "viewer",
+      roleVersion: number,
+    ): CollaborationRoomSession => {
+      const session = roomSession(role);
+      return {
+        ...session,
+        room: { ...session.room, transport: "cloudflare-websocket", roleVersion },
+      };
+    };
+    api.session = asWebSocketSession("viewer", 1);
+    const socket = new FakeWebSocket();
+    const provider = new UpstashRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      webSocketFactory: () => socket,
+    });
+
+    await provider.start();
+    socket.open();
+    await waitUntil(() => provider.connectionState === "live");
+    expect(provider.canWrite).toBe(false);
+
+    api.session = asWebSocketSession("editor", 2);
+    socket.message({
+      type: "control.room",
+      data: {
+        kind: "membership-changed",
+        roomId: ROOM_ID,
+        roleVersion: 2,
+        targetUserId: ACTOR_ID,
+        occurredAt: Date.now(),
+      },
+    });
+    await waitUntil(() => provider.canWrite);
+
+    expect(provider.session?.membership.role).toBe("editor");
+    expect(provider.connectionState).toBe("live");
+    provider.stop();
+  });
+
+  it("retains HTTP awareness publication for Realtime fallback rooms", async () => {
+    const api = new FakeApi(new Y.Doc());
+    const source = new FakeEventSource();
+    const awarenessEvents: unknown[] = [];
+    let publishedRoomId: string | null = null;
+    api.publishAwareness = async (roomId, input) => {
+      if (input.kind !== "state") throw new Error("expected state awareness");
+      publishedRoomId = roomId;
+      return {
+        accepted: true,
+        streamId: "2-0",
+        event: {
+          ...input,
+          kind: "state",
+          roomId,
+          actorId: ACTOR_ID,
+          role: "editor",
+          username: "editor",
+          name: null,
+          avatarUrl: null,
+          isHost: false,
+          occurredAt: Date.now(),
+          expiresAt: Date.now() + 45_000,
+        },
+      };
+    };
+    const provider = new UpstashRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      eventSourceFactory: () => source,
+      webSocketFactory: () => {
+        throw new Error("WebSocket must not open for a Realtime room");
+      },
+      onAwarenessEvent: (event) => awarenessEvents.push(event),
+    });
+
+    await provider.start();
+    source.open();
+    await waitUntil(() => provider.connectionState === "live");
+    await provider.publishAwareness({
+      kind: "state",
+      sessionId: provider.awarenessSessionId,
+      revision: 1,
+      activeFileNodeId: null,
+      cursor: null,
+      followingHost: false,
+    });
+
+    expect(publishedRoomId).toBe(ROOM_ID);
+    expect(awarenessEvents).toHaveLength(1);
+    provider.stop();
+  });
+
   it("buffers the SSE/bootstrap race and publishes batched local Yjs updates", async () => {
     const server = new Y.Doc();
     server.getText("source").insert(0, "start");

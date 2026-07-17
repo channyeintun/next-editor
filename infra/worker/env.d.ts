@@ -7,6 +7,10 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string;
   SESSION_SECRET: string;
   PUBLIC_URL: string;
+  // New rooms use the hibernating Durable Object WebSocket transport unless
+  // this is explicitly set to "upstash-realtime" for a room-level rollback.
+  COLLABORATION_DEFAULT_TRANSPORT?: string;
+  COLLABORATION_ROOMS?: DurableObjectNamespace;
   // Cloudflare Workers KV cache (infra/worker/cache.ts). Optional in the type
   // so self-hosted/test environments can omit it and fall through to D1.
   CACHE?: KVNamespace;
