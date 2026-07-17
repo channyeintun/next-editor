@@ -1,5 +1,10 @@
 import { createContext, type RefObject } from "react";
-import type { CaptionTrack, EditorSelection, Recording } from "../core/src/types";
+import type {
+  CaptionTrack,
+  EditorSelection,
+  Recording,
+  RecordingStreamDelta,
+} from "../core/src/types";
 import type { TimelineActorRef } from "../core/src/machine/timelineMachine";
 import type { EditorActorRef } from "../core/src/useNextEditor";
 import type { StoredRecordingMetadata } from "../storage/IndexedDBRecordingStore";
@@ -33,6 +38,7 @@ export interface NextEditorActions {
   setVolume: (volume: number) => void;
   loadRecording: (recording: Recording) => void;
   extendRecording: (recording: Recording) => void;
+  appendRecordingDelta: (delta: RecordingStreamDelta) => void;
   addCaptionTrack: (track: CaptionTrack) => void;
   removeCaptionTrack: (trackId: string) => void;
   clearRecording: () => void;

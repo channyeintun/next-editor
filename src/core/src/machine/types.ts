@@ -14,6 +14,7 @@ import type {
   CursorRecordingEvent,
   EditorFrame,
   Recording,
+  RecordingStreamDelta,
   EditorSelection,
   EditorPosition,
   RecordingAudioSource,
@@ -256,6 +257,8 @@ export interface EditorMachineContext {
   sessionRevision: number;
   /** Loaded recording data */
   recording: Recording | null;
+  /** Last append-only SCR delta cursor accepted for the loaded recording. */
+  recordingStreamCursor: number;
   /** Stream-oriented track metadata for the finalized recording facade. */
   tracks?: RecordingTrackMeta[];
   /** Stream-oriented cluster metadata for the finalized recording facade. */
@@ -422,6 +425,12 @@ export type LoadRecordingEvent = {
 export type ExtendRecordingEvent = {
   type: "EXTEND_RECORDING";
   recording: Recording;
+};
+
+/** Append only the newly decoded records from a growing SCR stream. */
+export type AppendRecordingDeltaEvent = {
+  type: "APPEND_RECORDING_DELTA";
+  delta: RecordingStreamDelta;
 };
 
 /** Recording loaded successfully */
@@ -645,6 +654,7 @@ export type EditorMachineEvent =
   | CaptureFrameEvent
   | LoadRecordingEvent
   | ExtendRecordingEvent
+  | AppendRecordingDeltaEvent
   | RecordingLoadedEvent
   | LoadFailedEvent
   | UnloadEvent
@@ -758,6 +768,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   session: null,
   sessionRevision: 0,
   recording: null,
+  recordingStreamCursor: 0,
   currentFrame: null,
   audio: {
     url: null,

@@ -56,6 +56,7 @@ function makeActionsMock(): NextEditorActions {
     setVolume: vi.fn(),
     loadRecording: vi.fn(),
     extendRecording: vi.fn(),
+    appendRecordingDelta: vi.fn(),
     addCaptionTrack: vi.fn(),
     removeCaptionTrack: vi.fn(),
     clearRecording: vi.fn(),

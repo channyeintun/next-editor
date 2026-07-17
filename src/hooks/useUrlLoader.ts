@@ -243,7 +243,8 @@ export const useUrlLoader = () => {
   // Surfaces a human-readable load failure to the UI instead of a blocking `alert()`,
   // so callers can render an inline, themeable error panel (with retry) in context.
   const [error, setError] = useState<string | null>(null);
-  const { loadRecording, extendRecording, addCaptionTrack } = useNextEditorActions();
+  const { loadRecording, extendRecording, appendRecordingDelta, addCaptionTrack } =
+    useNextEditorActions();
   const generationRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -316,8 +317,9 @@ export const useUrlLoader = () => {
   /**
    * Streams a `.ne` response and progressively decodes ever-larger prefixes of the SCR3 stream,
    * so playback can begin before the whole file has downloaded. The first decodable prefix is
-   * loaded; subsequent prefixes extend it in place (see `extendRecording`). Falls back to the
-   * caller for whole-file decoding when the body is not streamable.
+   * loaded; subsequent intervals append only newly decoded records. A complete immutable
+   * recording is constructed again only at finalization. Falls back to the caller for whole-file
+   * decoding when the body is not streamable.
    */
   const streamRecordingFromResponse = async (
     response: Response,
@@ -332,34 +334,45 @@ export const useUrlLoader = () => {
     const streamReader = createStreamingRecordingReader();
     let lastDecodeLength = 0;
     let loadedOnce = false;
+    let appliedFinalSnapshot = false;
     let latestRecording: Recording | null = null;
 
-    const applyRecording = (recording: Recording | null | undefined) => {
+    const resolveRecording = (recording: Recording | null | undefined): Recording | null => {
       if (!recording) {
-        return;
+        return null;
       }
 
       const resolved = withResolvedMediaUrls(recording, baseUrl);
       // Track the newest decoded snapshot — the caller needs the *final* recording
       // (for sibling captions/audio), not the first playable prefix.
       latestRecording = resolved;
+      return resolved;
+    };
 
+    const applyStreamed = () => {
       if (!loadedOnce) {
+        const resolved = resolveRecording(streamReader.getRecording());
+        if (!resolved) return;
         loadRecording(resolved);
         loadedOnce = true;
         setIsLoading(false);
+        // The initial snapshot already contains every record decoded so far. Advance
+        // the reader's delivery cursors without sending those records a second time.
+        streamReader.readDelta();
+        appliedFinalSnapshot = streamReader.isFinalized();
         return;
       }
 
-      extendRecording(resolved);
-    };
+      const delta = streamReader.readDelta();
+      if (delta) appendRecordingDelta(delta);
 
-    // Response chunks feed the incremental reader directly — a `.ne` is raw SCR3
-    // bytes. A prefix that isn't decodable yet simply yields `null` (no throw); a
-    // thrown error is genuine corruption/desync (or not an SCR3 stream at all) and
-    // propagates to the whole-file fallback in `fetchNextEditorFile`.
-    const applyStreamed = () => {
-      applyRecording(streamReader.getRecording());
+      if (streamReader.isFinalized() && !appliedFinalSnapshot) {
+        const finalRecording = resolveRecording(streamReader.getRecording());
+        if (finalRecording) {
+          extendRecording(finalRecording);
+          appliedFinalSnapshot = true;
+        }
+      }
     };
 
     try {

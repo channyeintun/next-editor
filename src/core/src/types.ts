@@ -250,6 +250,28 @@ export interface Recording {
 }
 
 /**
+ * Append-only records decoded from a growing SCR3 stream. A monotonic cursor
+ * lets the playback machine reject duplicate deliveries without rebuilding or
+ * comparing the complete recording arrays.
+ */
+export interface RecordingStreamDelta {
+  cursor: number;
+  recordingId: string;
+  duration: number;
+  streamFinalized: boolean;
+  newFrames: import("./utils/deltaTypes").DeltaFrame[];
+  newSlideEvents: SlideEvent[];
+  newPreviewEvents: PreviewEvent[];
+  newPreviewInitialDocuments: PreviewInitialDocument[];
+  newPreviewPatchBatches: PreviewDomPatchBatch[];
+  newWorkspaceEvents: WorkspaceRecordingEvent[];
+  newRuntimeEvents: RuntimeRecordingEvent[];
+  newCursorEvents: CursorRecordingEvent[];
+  newWhiteboardEvents: WhiteboardEvent[];
+  newChatEvents: ChatRecordingEvent[];
+}
+
+/**
  * Sink for the live SCR3 recording byte stream (WebSocket / fetch ReadableStream /
  * callback). Receives append-only chunks as they are recorded and is closed when the
  * recording ends. The bytes form a valid SCR3 stream replayable via `decodeRecordingStream`.
@@ -410,6 +432,7 @@ export interface UseNextEditorReturn {
   // Recording Management
   loadRecording: (recording: Recording) => void;
   extendRecording: (recording: Recording) => void;
+  appendRecordingDelta: (delta: RecordingStreamDelta) => void;
   addCaptionTrack: (track: CaptionTrack) => void;
   removeCaptionTrack: (trackId: string) => void;
   clearRecording: () => void;

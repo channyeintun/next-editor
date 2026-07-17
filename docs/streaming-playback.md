@@ -18,12 +18,13 @@ Yes — you can start playing from a partial download. You do **not** need the w
 
 The recording container (`SCR3`) is an append-only stream, and the incremental reader
 [`createStreamingRecordingReader`](../src/storage/streamingRecordingCodec/decode.ts) turns **any
-in-order prefix** of those bytes into a playable `Recording`. Two player actions consume it:
+in-order prefix** of those bytes into playable records. Three player actions consume it:
 
 - `loadRecording(recording)` — load the **first** decodable prefix (sets up the timeline).
-- `extendRecording(recording)` — swap in each **larger** prefix **in place**, keeping the
-  current time, timeline, and already-applied playback state. Because the stream is append-only,
-  every later prefix is a superset of the earlier one, so this never resets playback.
+- `appendRecordingDelta(delta)` — append only records decoded since the last delivery, keeping
+  the current time, timeline, and already-applied playback state.
+- `extendRecording(recording)` — install the complete immutable snapshot at finalization or apply
+  a later metadata/media update.
 
 Both are exposed from the actions hook (`useNextEditorActions`) and used by the shipped
 [useUrlLoader.ts](../src/hooks/useUrlLoader.ts).
@@ -46,9 +47,9 @@ Both are exposed from the actions hook (`useNextEditorActions`) and used by the 
    timeline/preview/slide/workspace cursors are all "latest event at-or-before currentTime"
    scans that work on a growing array unchanged.
 
-3. **Every prefix is a superset of the previous one.** Decoding a longer prefix yields the same
-   earlier frames/events plus more, so the player's applied indices (`lastAppliedFrameIndex`,
-   etc.) stay valid across an `extendRecording` — it swaps the arrays without resetting position.
+3. **Every prefix is a superset of the previous one.** `readDelta()` delivers only the new
+   frames/events with a monotonic cursor, so the player's applied indices (`lastAppliedFrameIndex`,
+   etc.) stay valid while the machine appends records without copying all earlier references.
 
 4. **The header carries the real total duration** for a finalized file. Because the header is at
    the very start of the stream, an early prefix of a finalized recording already knows the full
@@ -78,30 +79,40 @@ Both are valid `SCR3` and both decode with the same incremental reader.
 
 Stream the bytes with `fetch` and feed each chunk to a
 [`createStreamingRecordingReader`](../src/storage/streamingRecordingCodec/decode.ts), then feed the
-player `loadRecording` (first) then `extendRecording` (each larger prefix). A `.ne` is raw SCR3
-bytes end-to-end — the shipped [useUrlLoader.ts](../src/hooks/useUrlLoader.ts) does not sniff or
-decode base64 text.
+player `loadRecording` (first), `appendRecordingDelta` (later intervals), and `extendRecording`
+(final immutable snapshot). A `.ne` is raw SCR3 bytes end-to-end — the shipped
+[useUrlLoader.ts](../src/hooks/useUrlLoader.ts) does not sniff or decode base64 text.
 
 ```ts
 import { createStreamingRecordingReader } from "../src/storage/streamingRecordingCodec/decode";
 
 const reader = createStreamingRecordingReader();
+let loadedOnce = false;
 
 async function streamPrefixes(response: Response) {
   const body = response.body;
   if (!body) return;
   for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) {
     reader.push(chunk);
-    const recording = reader.getRecording();
-    if (recording) {
-      // feed loadRecording (first) / extendRecording (subsequent) here
+    if (!loadedOnce) {
+      const recording = reader.getRecording();
+      if (!recording) continue;
+      loadRecording(recording);
+      reader.readDelta(); // records already included in the initial snapshot
+      loadedOnce = true;
+    } else {
+      const delta = reader.readDelta();
+      if (delta) appendRecordingDelta(delta);
     }
   }
+  const finalized = reader.getRecording();
+  if (loadedOnce && finalized?.streamFinalized) extendRecording(finalized);
 }
 ```
 
-The rest of the flow stays the same: decode a growing prefix, call `loadRecording` for the first
-playable result, then `extendRecording` for every larger prefix.
+The reader discards compressed bytes after their segment is decoded. `byteLength()` tracks total
+download progress, while `retainedByteLength()` and `retainedCapacity()` expose the bounded
+incomplete tail for diagnostics.
 
 ### Wiring into React
 
@@ -171,13 +182,15 @@ let loadedOnce = false;
 
 socket.onmessage = (ev: MessageEvent<ArrayBuffer>) => {
   reader.push(new Uint8Array(ev.data));
-  const recording = reader.getRecording(); // header duration grows live
-  if (!recording) return;
   if (!loadedOnce) {
+    const recording = reader.getRecording();
+    if (!recording) return;
     loadRecording(recording);
+    reader.readDelta();
     loadedOnce = true;
   } else {
-    extendRecording(recording); // no re-seek; keeps the viewer's position
+    const delta = reader.readDelta();
+    if (delta) appendRecordingDelta(delta); // no re-seek; keeps the viewer's position
   }
 };
 ```
@@ -213,9 +226,10 @@ effective duration in your UI.
 
 ## Performance & correctness tips
 
-- **Throttle re-decodes.** `push()` only decodes newly-arrived complete segments, but calling
-  `getRecording()` still has a cost. Poll on a byte or time threshold, not on every chunk (the
-  shipped loader uses ~512 KB).
+- **Deliver deltas, not snapshots.** `push()` decodes newly arrived complete segments and
+  `readDelta()` slices only records not yet delivered. Call `getRecording()` for the first playable
+  prefix, finalization, or another explicit immutable snapshot request (the shipped loader polls
+  deltas at roughly 512 KiB).
 - **Decode in the worker.** For whole-file (non-progressive) decodes, prefer
   [`decompressBinaryToRecordings`](../src/storage/recordingCodecClient.ts) so deflate stays off
   the main thread.

@@ -14,7 +14,7 @@ import type {
   CameraRecordingInput,
 } from "./cameraActor";
 import { getPlaybackAudioState } from "./editorMachineHelpers";
-import type { Recording } from "../types";
+import type { Recording, RecordingStreamDelta } from "../types";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 
 const selection = {
@@ -261,6 +261,58 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  it("appends streamed recording deltas once without rebuilding prior arrays", async () => {
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording: createRecording() });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    const initialRecording = actor.getSnapshot().context.recording!;
+    const initialFrames = initialRecording.frames;
+    const firstFrame = initialFrames[0];
+    if (!firstFrame?.isKeyframe) throw new Error("Expected an initial keyframe");
+    const nextFrame = {
+      ...firstFrame,
+      timestamp: 500,
+      state: { ...firstFrame.state, content: "hello world" },
+    };
+    const delta: RecordingStreamDelta = {
+      cursor: 1,
+      recordingId: "recording-1",
+      duration: 2000,
+      streamFinalized: false,
+      newFrames: [nextFrame],
+      newSlideEvents: [],
+      newPreviewEvents: [],
+      newPreviewInitialDocuments: [],
+      newPreviewPatchBatches: [],
+      newWorkspaceEvents: [],
+      newRuntimeEvents: [],
+      newCursorEvents: [{ timestamp: 500, x: 10, y: 20, visible: true }],
+      newWhiteboardEvents: [],
+      newChatEvents: [],
+    };
+
+    actor.send({ type: "APPEND_RECORDING_DELTA", delta });
+
+    const appended = actor.getSnapshot().context;
+    expect(appended.recording).not.toBe(initialRecording);
+    expect(appended.recording!.frames).toBe(initialFrames);
+    expect(appended.recording!.frames).toHaveLength(2);
+    expect(appended.recording!.cursorEvents).toEqual(delta.newCursorEvents);
+    expect(appended.recording!.duration).toBe(2000);
+    expect(appended.recordingStreamCursor).toBe(1);
+
+    actor.send({ type: "APPEND_RECORDING_DELTA", delta });
+    expect(actor.getSnapshot().context.recording!.frames).toHaveLength(2);
+
+    actor.stop();
+  });
+
   it("stops mouse tracking on the no-audio recording path and emits callbacks", async () => {
     const events: string[] = [];
     // Held in an object so the assignment inside the callback doesn't make
@@ -294,7 +346,7 @@ describe("editorMachine actor lifecycle", () => {
 
   it("stops and clears an active camera when selected-file audio aborts", async () => {
     let failAudio = () => {};
-    const disposeCamera = vi.fn();
+    const disposeCamera = vi.fn<() => void>();
     const machine = editorMachine.provide({
       actors: {
         audioPlayback: fromCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
@@ -967,7 +1019,7 @@ describe("audioPlaybackActor", () => {
   });
 
   it("normalizes playback controls before storing, forwarding, and notifying", async () => {
-    const onSeek = vi.fn();
+    const onSeek = vi.fn<(time: number) => void>();
     const actor = createActor(editorMachine, {
       input: { editorRef: { current: null }, onSeek },
     }).start();

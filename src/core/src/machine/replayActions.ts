@@ -105,6 +105,7 @@ export const setRecording = ({
 
   return {
     recording,
+    recordingStreamCursor: 0,
     hasManualWorkspaceOverride: false,
     pendingPlaybackEditorSync: false,
     playbackAudioSpawned: false,
@@ -135,6 +136,68 @@ export const setRecording = ({
     // starts), so it always starts folded from empty — no `initialChatEvent` needed.
     lastAppliedChatEventIndex: -1,
     lastAppliedPreviewState: undefined,
+  };
+};
+
+function appendRecordsInPlace<T>(
+  current: T[] | undefined,
+  incoming: readonly T[],
+): T[] | undefined {
+  if (incoming.length === 0) return current;
+  const target = current ?? [];
+  for (const record of incoming) target.push(record);
+  return target;
+}
+
+/**
+ * Adds one decoded SCR delta without copying every record reference accumulated so
+ * far. The machine owns the arrays created by `setRecording`, so mutating those
+ * append-only arrays is safe; a fresh top-level Recording still notifies selectors.
+ */
+export const appendRecordingDelta = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "APPEND_RECORDING_DELTA" || !context.recording) return {};
+  const { delta } = event;
+  if (delta.recordingId !== context.recording.id || delta.cursor <= context.recordingStreamCursor) {
+    return {};
+  }
+
+  const current = context.recording;
+  const duration = normalizeTimelineDuration(delta.duration, context.timeline.duration);
+  const recording = {
+    ...current,
+    duration: Math.max(current.duration, duration),
+    streamFinalized: current.streamFinalized || delta.streamFinalized,
+    frames: appendRecordsInPlace(current.frames, delta.newFrames) ?? current.frames,
+    slideEvents: appendRecordsInPlace(current.slideEvents, delta.newSlideEvents),
+    previewEvents: appendRecordsInPlace(current.previewEvents, delta.newPreviewEvents),
+    previewInitialDocuments: appendRecordsInPlace(
+      current.previewInitialDocuments,
+      delta.newPreviewInitialDocuments,
+    ),
+    previewPatchBatches: appendRecordsInPlace(
+      current.previewPatchBatches,
+      delta.newPreviewPatchBatches,
+    ),
+    workspaceEvents: appendRecordsInPlace(current.workspaceEvents, delta.newWorkspaceEvents),
+    runtimeEvents: appendRecordsInPlace(current.runtimeEvents, delta.newRuntimeEvents),
+    cursorEvents: appendRecordsInPlace(current.cursorEvents, delta.newCursorEvents),
+    whiteboardEvents: appendRecordsInPlace(current.whiteboardEvents, delta.newWhiteboardEvents),
+    chatEvents: appendRecordsInPlace(current.chatEvents, delta.newChatEvents),
+  };
+
+  return {
+    recording,
+    recordingStreamCursor: delta.cursor,
+    timeline: {
+      ...context.timeline,
+      duration: Math.max(context.timeline.currentTime, duration),
+    },
   };
 };
 

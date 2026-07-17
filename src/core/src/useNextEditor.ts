@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type * as monaco from "monaco-editor";
-import { useActorRef, useSelector, shallowEqual } from "@xstate/react";
+import { useActorRef, useSelector } from "@xstate/react";
 import type { ActorRefFrom } from "xstate";
 import { editorMachine } from "./machine/editorMachine";
 import type {
@@ -11,6 +11,7 @@ import type {
   EditorFrame,
   EditorSelection,
   Recording,
+  RecordingStreamDelta,
 } from "./types";
 import type {
   PreviewDomPatchBatch,
@@ -162,6 +163,10 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     actorRef.send({ type: "EXTEND_RECORDING", recording });
   };
 
+  const appendRecordingDelta = (delta: RecordingStreamDelta) => {
+    actorRef.send({ type: "APPEND_RECORDING_DELTA", delta });
+  };
+
   const addCaptionTrack = (track: CaptionTrack) => {
     actorRef.send({ type: "ADD_CAPTION_TRACK", track });
   };
@@ -233,6 +238,7 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     setVolume,
     loadRecording,
     extendRecording,
+    appendRecordingDelta,
     addCaptionTrack,
     removeCaptionTrack,
     clearRecording,
@@ -257,7 +263,7 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
  * Memoized via useState rather than relying on the React Compiler: this hook
  * contains no React hook calls in its action bodies, so the compiler skips it
  * entirely (no memo cache is emitted) and every render would otherwise produce
- * 22 fresh sender identities. That churn is not cosmetic — CodeEditor keys its
+ * fresh sender identities. That churn is not cosmetic — CodeEditor keys its
  * unmount-cleanup effect on `syncEditorRef`, and that cleanup nulls
  * `editorRef.current` and detaches the editor from the machine, so unstable
  * identities silently break frame/cursor capture and replay.
@@ -380,8 +386,9 @@ export const useNextEditorActorBindings = (
   const volume = useSelector(actorRef, selectVolume);
   const duration = useSelector(actorRef, selectDuration);
 
-  // Data - using shallowEqual for object selectors per XState docs
-  const currentRecording = useSelector(actorRef, selectRecording, shallowEqual);
+  // Recording arrays grow in place for streamed deltas, while the top-level
+  // recording reference changes to notify consumers without copying prior records.
+  const currentRecording = useSelector(actorRef, selectRecording);
   const editor = useSelector(actorRef, selectEditor);
   const timelineActor = useSelector(actorRef, selectTimelineActor);
 

@@ -1,5 +1,4 @@
 import { useContext } from "react";
-import { shallowEqual } from "@xstate/react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import {
   NextEditorActionsContext,
@@ -47,7 +46,7 @@ export const useNextEditorMetadata = (): NextEditorMetadata => {
   const isPaused = NextEditorActorContext.useSelector(selectIsPaused);
   const hasEnded = NextEditorActorContext.useSelector(selectHasEnded);
   const usesPlaybackModel = NextEditorActorContext.useSelector(selectUsesPlaybackModel);
-  const currentRecording = NextEditorActorContext.useSelector(selectRecording, shallowEqual);
+  const currentRecording = NextEditorActorContext.useSelector(selectRecording);
   const recordingStartTime = NextEditorActorContext.useSelector(selectRecordingStartTime);
 
   return {

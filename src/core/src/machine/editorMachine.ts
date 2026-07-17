@@ -61,6 +61,7 @@ import {
 import {
   setRecording,
   extendRecording,
+  appendRecordingDelta,
   addCaptionTrack,
   removeCaptionTrack,
   applyFrameAtTime,
@@ -206,6 +207,7 @@ export const editorMachine = setup({
     // here so `setup()` can infer this machine's exact context/event/actor types.
     setRecording: assign(setRecording),
     extendRecording: assign(extendRecording),
+    appendRecordingDelta: assign(appendRecordingDelta),
     addCaptionTrack: assign(addCaptionTrack),
     removeCaptionTrack: assign(removeCaptionTrack),
     applyFrameAtTime: assign(applyFrameAtTime),
@@ -740,6 +742,30 @@ export const editorMachine = setup({
             ...APPLY_REPLAY_STATE_ACTIONS,
             enqueueActions(({ context, event, enqueue, check }) => {
               if (event.type !== "EXTEND_RECORDING") {
+                return;
+              }
+
+              enqueue.sendTo("timelineActor", {
+                type: "SET_DURATION",
+                duration: context.timeline.duration,
+              });
+
+              syncPlaybackAudio(context, enqueue, {
+                spawnIfMissing: true,
+                seek: true,
+                syncRate: true,
+                syncVolume: true,
+                play: check(stateIn({ playback: "playing" })),
+              });
+            }),
+          ],
+        },
+        APPEND_RECORDING_DELTA: {
+          actions: [
+            "appendRecordingDelta",
+            ...APPLY_REPLAY_STATE_ACTIONS,
+            enqueueActions(({ context, event, enqueue, check }) => {
+              if (event.type !== "APPEND_RECORDING_DELTA") {
                 return;
               }
 

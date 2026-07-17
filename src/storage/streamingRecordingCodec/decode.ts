@@ -1,4 +1,4 @@
-import type { Recording } from "../../core/src";
+import type { Recording, RecordingStreamDelta } from "../../core/src";
 import type { CursorRecordingEvent, RecordingClusterMeta } from "../../core/src/types";
 import type {
   PreviewDomPatchBatch,
@@ -405,22 +405,7 @@ export interface StreamingRecordingReader {
   retainedCapacity(): number;
 }
 
-export interface StreamingRecordingDelta {
-  cursor: number;
-  recordingId: string;
-  duration: number;
-  streamFinalized: boolean;
-  newFrames: DeltaFrame[];
-  newSlideEvents: SlideEvent[];
-  newPreviewEvents: PreviewEvent[];
-  newPreviewInitialDocuments: PreviewInitialDocument[];
-  newPreviewPatchBatches: PreviewDomPatchBatch[];
-  newWorkspaceEvents: WorkspaceRecordingEvent[];
-  newRuntimeEvents: RuntimeRecordingEvent[];
-  newCursorEvents: CursorRecordingEvent[];
-  newWhiteboardEvents: WhiteboardEvent[];
-  newChatEvents: ChatRecordingEvent[];
-}
+export type StreamingRecordingDelta = RecordingStreamDelta;
 
 const STREAMING_READER_INITIAL_CAPACITY = 64 * 1024;
 

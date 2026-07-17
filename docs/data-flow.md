@@ -140,7 +140,8 @@ flowchart LR
     IndexedDB --> Decode
     Live --> PrefixDecode[createStreamingRecordingReader prefix decode]
     Decode --> Load[loadRecording]
-    PrefixDecode --> Extend[extendRecording]
+    PrefixDecode --> Append[appendRecordingDelta]
+    PrefixDecode -->|first / finalized| Extend[loadRecording / extendRecording]
 ```
 
 Current storage rules:
@@ -156,7 +157,7 @@ The shipped URL loader supports both same-origin and cross-origin recording URLs
 
 - Same-origin files are fetched directly.
 - Cross-origin URLs try `/api/proxy?url=...` first and fall back to direct fetch if the proxy is missing.
-- When the response body is streamable, the loader feeds raw SCR3 bytes to an incremental `StreamingRecordingReader`, decodes progressively, and uses `extendRecording` for later prefixes.
+- When the response body is streamable, the loader feeds raw SCR3 bytes to an incremental `StreamingRecordingReader`, loads the first playable prefix, appends later `readDelta()` deliveries, and constructs another complete immutable recording only at finalization.
 - After the recording loads, the loader resolves any `captionFiles` the recording declares relative to the `.ne` URL, fetches and parses each one, and adds it via `addCaptionTrack`. Captions are never inferred from sibling filenames — HTTP exposes no directory listing.
 
 ## API Client Transport

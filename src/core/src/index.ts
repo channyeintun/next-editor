@@ -37,6 +37,7 @@ export type {
   CursorRecordingEvent,
   EditorFrame,
   Recording,
+  RecordingStreamDelta,
   RecordingCameraSource,
   CameraPlaceholder,
   RecordingStreamSink,
