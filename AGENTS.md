@@ -7,11 +7,17 @@ After completing the work, provide:
 ### Default Principles
 
 - Always finish by providing a recommended Git commit message
+- After every successful commit, push the current branch to `origin`.
+- For HTTPS pushes, use `channyeintun` as the GitHub username and the value of the `NE_GITHUB_TOKEN` environment variable as the password.
+- Never print, log, commit, or embed `NE_GITHUB_TOKEN` in a Git remote URL. If the variable is unset or authentication fails, report that the push could not be completed without exposing the token.
 
 ### Resource Constraints
 
-This environment runs on a low-memory (900MB RAM) VPS. To avoid OOM kills and hangs:
+This environment currently exposes 984,560 kB (about 961 MiB) of total RAM and 1 `x86_64` vCPU identified as `DO-Regular`. The following are strict, non-optional constraints. Do not relax them for speed or convenience:
 
-- Do not run background agents, background tools, or background/detached commands (no `&`, `nohup`, watch/dev servers left running, etc.).
+- Do not create or run subagents. Complete all work in the primary agent only.
+- Do not run background, detached, or concurrent agents, tools, or commands. Run only one bounded foreground operation at a time; never use `&`, `nohup`, watch mode, or leave a dev server running.
+- Do not run memory-heavy commands or tools, including full-repository builds, tests, typechecks, linters, browser automation, bundle analysis, or bulk code generation.
 - Do not run a full-repo-wide typecheck or test command. Scope typecheck/test/lint runs to the specific file(s) or package(s) you changed.
-- Prefer targeted commands (e.g. `tsc --noEmit <file>`, running a single test file) over workspace-wide equivalents.
+- Use the smallest targeted check possible (e.g. `tsc --noEmit <file>` or one test file), with a single worker/thread whenever supported.
+- If verification cannot be performed without a memory-heavy operation, do not run it. Report the skipped check and the resource constraint instead.
