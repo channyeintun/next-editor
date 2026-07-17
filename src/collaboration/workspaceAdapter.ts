@@ -41,11 +41,9 @@ export function projectCollaborationTransaction(
   if (!currentProjection) return reprojectCollaborationWorkspace(doc, actions);
 
   const texts = getCollaborationTexts(doc);
-  const textIdByType = new Map<object, string>();
-  for (const [id, text] of texts) textIdByType.set(text, id);
   const changedTypes = Array.from(transaction.changed.keys());
   const changedTextIds = changedTypes.flatMap((type) => {
-    const id = textIdByType.get(type);
+    const id = currentProjection.textIdByType.get(type);
     return id ? [id] : [];
   });
   if (changedTypes.length === 0 || changedTextIds.length !== changedTypes.length) {

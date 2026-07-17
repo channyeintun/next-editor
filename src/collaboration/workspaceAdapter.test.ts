@@ -21,6 +21,7 @@ describe("collaboration workspace projection", () => {
       updateFileContent: vi.fn(),
     };
     let projection = reprojectCollaborationWorkspace(doc, actions);
+    const initialTextIndex = projection.textIdByType;
     actions.reconcileExternalProject.mockClear();
     const controller = new CollaborationProjectController(doc, { canWrite: () => true });
     doc.on("afterTransaction", (transaction) => {
@@ -30,10 +31,12 @@ describe("collaboration workspace projection", () => {
     controller.replaceFileContent(project.entryFilePath, "changed");
     expect(actions.updateFileContent).toHaveBeenCalledWith(project.entryFilePath, "changed");
     expect(actions.reconcileExternalProject).not.toHaveBeenCalled();
+    expect(projection.textIdByType).toBe(initialTextIndex);
 
     controller.createFile("created.ts", "export {}");
     expect(actions.reconcileExternalProject).toHaveBeenCalledTimes(1);
     expect(projection.project.files["created.ts"].content).toBe("export {}");
+    expect(projection.textIdByType).not.toBe(initialTextIndex);
   });
 
   it("does not turn projection-origin store writes into Yjs writes", () => {

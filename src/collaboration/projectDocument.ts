@@ -58,6 +58,7 @@ export interface CollaborationProjectProjection {
   project: WorkspaceProject;
   nodeIdByPath: ReadonlyMap<string, string>;
   pathByNodeId: ReadonlyMap<string, string>;
+  textIdByType: ReadonlyMap<object, string>;
   assetsByNodeId: ReadonlyMap<string, CollaborationAssetDescriptor>;
   issues: readonly CollaborationProjectionIssue[];
 }
@@ -422,6 +423,7 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
   const folders: string[] = [];
   const nodeIdByPath = new Map<string, string>();
   const pathByNodeId = new Map<string, string>();
+  const textIdByType = new Map<object, string>();
   const assetsByNodeId = new Map<string, CollaborationAssetDescriptor>();
   const recoveryChildren = children.get(RECOVERY_PARENT) ?? [];
   let recoveryPath = COLLABORATION_RECOVERY_FOLDER_NAME;
@@ -448,6 +450,7 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
       }
 
       const text = texts.get(node.id);
+      if (text instanceof Y.Text) textIdByType.set(text, node.id);
       if (node.encoding === "base64") {
         if (node.asset) assetsByNodeId.set(node.id, node.asset);
         else issues.push({ nodeId: node.id, kind: "missing-asset" });
@@ -516,6 +519,7 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
     },
     nodeIdByPath,
     pathByNodeId,
+    textIdByType,
     assetsByNodeId,
     issues,
   };
