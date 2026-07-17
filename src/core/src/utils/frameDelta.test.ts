@@ -6,8 +6,10 @@ import type { PreviewState } from "../slides";
 import type { Keyframe } from "./deltaTypes";
 import {
   ContentEditBaseMismatchError,
+  applyContentDelta,
   applyFrameDelta,
   compressFrames,
+  createAppendContentDelta,
   createContentEditDelta,
   createFrameDelta,
   reconstructFrameAtIndex,
@@ -102,6 +104,27 @@ describe("Monaco content edit deltas", () => {
 });
 
 describe.skipIf(!hasArtifact)("frameDelta reconstruction errors", () => {
+  it("encodes append-only text as one codec-compatible suffix delta", async () => {
+    if (!isDmpCodecLoaded()) {
+      installDmpCodec(await instantiateDmpCodec(readFileSync(wasmPath)));
+    }
+
+    const base = "existing streamed response ".repeat(8);
+    const appended = "plus a final 🌍 suffix";
+    const created = createAppendContentDelta(base, appended);
+    expect(created).not.toBeNull();
+    if (!created) throw new Error("Expected an append-only content delta");
+
+    const appendedBytes = new TextEncoder().encode(appended);
+    expect(applyContentDelta(base, created)).toBe(base + appended);
+    expect(created.delta.byteLength).toBeLessThan(
+      new TextEncoder().encode(base + appended).length,
+    );
+    expect(created.delta.slice(-appendedBytes.byteLength)).toEqual(appendedBytes);
+    expect(createAppendContentDelta(base, "")).toBeNull();
+    expect(() => applyContentDelta(`${base}!`, created)).toThrow(DmpBaseMismatchError);
+  });
+
   it("attributes a base-mismatch failure to the failing frame index", async () => {
     if (!isDmpCodecLoaded()) {
       installDmpCodec(await instantiateDmpCodec(readFileSync(wasmPath)));

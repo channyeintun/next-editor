@@ -13,7 +13,7 @@ import { getProject } from "./tools/workspaceFs";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatDelta, ChatImage, ChatItem } from "../types/chat";
 import { outputMessageText, toEasyInputMessage, toResponsesInput } from "../types/chat";
-import { createContentDelta } from "../core/src/utils/frameDelta";
+import { createAppendContentDelta, createContentDelta } from "../core/src/utils/frameDelta";
 import { isDmpCodecLoaded, loadDmpCodec } from "../storage/dmpCodec/dmpCodec";
 import { AgentProviderError } from "./agentError";
 
@@ -247,7 +247,9 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
           onDelta({ k: "status", status: "streaming" });
         }
         const text = outputMessageText(item.content);
-        const delta = createContentDelta(messageSnapshot, text);
+        const delta = text.startsWith(messageSnapshot)
+          ? createAppendContentDelta(messageSnapshot, text.slice(messageSnapshot.length))
+          : createContentDelta(messageSnapshot, text);
         if (delta) {
           messageSnapshot = text;
           onDelta({ k: "content", delta });

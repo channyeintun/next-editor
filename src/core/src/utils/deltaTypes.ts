@@ -19,9 +19,10 @@ import type { TextEditChange } from "../../../types/textEdit";
  * Delta for content changes — an opaque diff-match-patch (Myers) delta that
  * transforms the previous frame's content into this frame's content. Unlike the
  * former prefix/suffix model it stays compact across multiple, non-contiguous
- * edits. Produced/consumed only by createContentDelta/applyContentDelta, which
- * round-trip it through the Rust WASM codec; msgpack stores it as a
- * binary blob.
+ * edits. General rewrites are produced by the Rust WASM codec; append-only
+ * streams can emit the same checked equal/insert wire format directly. All
+ * variants are consumed by applyContentDelta and stored by msgpack as a binary
+ * blob.
  */
 export interface ContentDelta {
   delta: Uint8Array;

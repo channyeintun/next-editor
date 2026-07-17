@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatDelta } from "../types/chat";
+import { getDmpCodec } from "../storage/dmpCodec/dmpCodec";
 import { runAgentLoop, type RunAgentLoopOptions } from "./agentLoop";
 
 function createFakeWorkspaceStore(
@@ -126,7 +127,10 @@ describe("runAgentLoop", () => {
 
   it("streams a plain text turn into message_start + content and ends done", async () => {
     const { deltas, ...options } = baseOptions();
-    const { callModel, calls } = fakeCallModel([messageItem("m1", "Hello there")]);
+    const { callModel, calls } = fakeCallModel([
+      messageItem("m1", "Hello"),
+      messageItem("m1", "Hello there"),
+    ]);
 
     await runAgentLoop({ ...options, prompt: "hi", callModel, onDelta: (d) => deltas.push(d) });
 
@@ -134,8 +138,38 @@ describe("runAgentLoop", () => {
     // A user message and an assistant message were started.
     const starts = deltas.filter((d) => d.k === "message_start");
     expect(starts.map((d) => d.k === "message_start" && d.role)).toEqual(["user", "assistant"]);
+    const contentDeltas = deltas.filter((d) => d.k === "content");
+    const streamedSuffix = new TextEncoder().encode(" there");
+    const finalContentDelta = contentDeltas.at(-1);
+    expect(finalContentDelta?.k).toBe("content");
+    if (finalContentDelta?.k === "content") {
+      expect(finalContentDelta.delta.delta.slice(-streamedSuffix.byteLength)).toEqual(
+        streamedSuffix,
+      );
+    }
     expect(deltas.some((d) => d.k === "tool_call")).toBe(false);
     expect(calls[0].instructions).not.toContain("Workspace session memory:");
+  });
+
+  it("bypasses Myers for append-only snapshots and uses it when a provider revises text", async () => {
+    const { deltas, ...options } = baseOptions();
+    const { callModel } = fakeCallModel([
+      messageItem("m1", "Hello"),
+      messageItem("m1", "Hello there"),
+      messageItem("m1", "Hello world"),
+    ]);
+    const diffDelta = vi.spyOn(getDmpCodec(), "diffDelta");
+
+    try {
+      await runAgentLoop({ ...options, prompt: "hi", callModel, onDelta: (d) => deltas.push(d) });
+
+      // One DMP call encodes the already-complete user prompt. The first two
+      // cumulative assistant snapshots are append-only; only the final provider
+      // rewrite needs the second DMP call.
+      expect(diffDelta).toHaveBeenCalledTimes(2);
+    } finally {
+      diffDelta.mockRestore();
+    }
   });
 
   it("emits a tool_call and its matching tool_result for an executed tool", async () => {
