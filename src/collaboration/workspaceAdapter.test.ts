@@ -44,4 +44,39 @@ describe("collaboration workspace projection", () => {
     doc.transact(() => {}, COLLABORATION_ORIGIN.workspaceProjection);
     expect(origins).toEqual([]);
   });
+
+  it("projects a queued local Monaco edit without replacing the full file", () => {
+    const project = createStarterHtmlCssWorkspace();
+    const path = project.entryFilePath;
+    const file = project.files[path];
+    if (!file || typeof file.content !== "string") throw new Error("Expected a text entry file");
+
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, project);
+    const event = {
+      fileId: path,
+      path,
+      beforeVersion: 1,
+      afterVersion: 2,
+      beforeLength: file.content.length,
+      afterLength: file.content.length + 1,
+      changes: [{ offset: file.content.length, deleteLength: 0, text: "!" }],
+    };
+    const actions = {
+      reconcileExternalProject: vi.fn(),
+      updateFileContent: vi.fn(),
+      applyFileTextEdits: vi.fn(() => `${file.content}!`),
+    };
+    let projection = reprojectCollaborationWorkspace(doc, actions);
+    actions.reconcileExternalProject.mockClear();
+    const controller = new CollaborationProjectController(doc, { canWrite: () => true });
+    doc.on("afterTransaction", (transaction) => {
+      projection = projectCollaborationTransaction(doc, transaction, projection, actions, event);
+    });
+
+    expect(controller.applyFileTextEdits(event)).toBe(true);
+    expect(actions.applyFileTextEdits).toHaveBeenCalledWith(event);
+    expect(actions.updateFileContent).not.toHaveBeenCalled();
+    expect(actions.reconcileExternalProject).not.toHaveBeenCalled();
+  });
 });

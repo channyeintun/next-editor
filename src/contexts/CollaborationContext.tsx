@@ -64,7 +64,7 @@ import {
   reprojectCollaborationWorkspace,
 } from "../collaboration/workspaceAdapter";
 import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
-import { applyTextEditEvent } from "../types/textEdit";
+import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useWorkspaceActions, useWorkspaceActiveFilePath } from "../hooks/useWorkspace";
 import { createCollaborationCursor } from "../collaboration/relativePosition";
@@ -110,6 +110,7 @@ interface CollaborationContextValue {
   removeMember: (userId: string) => Promise<void>;
   setFollowingHost: (following: boolean) => void;
   updateCursor: (path: string, anchorOffset: number, headOffset: number) => void;
+  queueLocalTextEdit: (event: TextEditEvent) => void;
   retryAssets: () => void;
   undo: () => void;
   redo: () => void;
@@ -160,6 +161,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<UpstashRoomProvider | null>(null);
   const providerRef = useRef<UpstashRoomProvider | null>(null);
   const projectionRef = useRef<CollaborationProjectProjection | null>(null);
+  const pendingLocalTextEditRef = useRef<{ event: TextEditEvent } | null>(null);
   const assetFetchesRef = useRef(new Set<string>());
   const undoManagerRef = useRef<Y.UndoManager | null>(null);
   const [runtimeVersion, setRuntimeVersion] = useState(0);
@@ -178,6 +180,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   activeFilePathRef.current = activeFilePath;
   const followingHostRef = useRef(isFollowingHost);
   followingHostRef.current = isFollowingHost;
+
+  const queueLocalTextEdit = useCallback((event: TextEditEvent) => {
+    const pending = { event };
+    pendingLocalTextEditRef.current = pending;
+    queueMicrotask(() => {
+      if (pendingLocalTextEditRef.current === pending) pendingLocalTextEditRef.current = null;
+    });
+  }, []);
 
   const hydrateProjectionAssets = useCallback(
     (projection: CollaborationProjectProjection, targetRoomId: string) => {
@@ -277,6 +287,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       if (providerRef.current) stopProviderAfterBestEffortFlush(providerRef.current);
       providerRef.current = null;
       projectionRef.current = null;
+      pendingLocalTextEditRef.current = null;
       assetFetchesRef.current.clear();
       setProvider(null);
       return;
@@ -288,11 +299,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       onDocumentChange: (doc, transaction) => {
         if (playbackRef.current) return;
         try {
+          const localTextEdit = pendingLocalTextEditRef.current?.event;
+          pendingLocalTextEditRef.current = null;
           const projection = projectCollaborationTransaction(
             doc,
             transaction,
             projectionRef.current,
             baseActionsRef.current,
+            localTextEdit,
           );
           projectionRef.current = projection;
           hydrateProjectionAssets(projection, roomId);
@@ -314,6 +328,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (providerRef.current) stopProviderAfterBestEffortFlush(providerRef.current);
     providerRef.current = nextProvider;
     projectionRef.current = null;
+    pendingLocalTextEditRef.current = null;
     assetFetchesRef.current.clear();
     awarenessCursorRef.current = null;
     awarenessRevisionRef.current = 0;
@@ -461,6 +476,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
               ? applyTextEditEvent(currentFile.content, event)
               : null;
           if (nextContent === null) return null;
+          queueLocalTextEdit(event);
           const applied = controller.applyFileTextEdits(event);
           setLocalError(null);
           return applied ? nextContent : null;
@@ -480,7 +496,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         else reportWriteError(new Error("Bulk project replacement is disabled in a live room."));
       },
     };
-  }, [baseActions, controller, reportWriteError]);
+  }, [baseActions, controller, queueLocalTextEdit, reportWriteError]);
 
   const updateRoomParam = useCallback(
     (nextRoomId: string | null) => {
@@ -839,6 +855,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       removeMember,
       setFollowingHost: setIsFollowingHost,
       updateCursor,
+      queueLocalTextEdit,
       retryAssets,
       undo,
       redo,
@@ -860,6 +877,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       machineSnapshot?.context.hasOfflineChanges,
       participants,
       provider,
+      queueLocalTextEdit,
       refreshRoomData,
       redo,
       removeMember,

@@ -135,6 +135,36 @@ function WorkspaceEventRecorder({
 
 type StandaloneEditor = monaco.editor.IStandaloneCodeEditor;
 
+function createMonacoTextEditEvent(
+  editor: StandaloneEditor,
+  changeEvent: monaco.editor.IModelContentChangedEvent,
+  beforeVersion: number,
+): TextEditEvent | null {
+  const model = editor.getModel();
+  const modelPath = model ? workspacePathFromMonacoModelUri(model.uri) : null;
+  if (!model || !modelPath) return null;
+
+  const changes: TextEditEvent["changes"] = changeEvent.changes.map((change) => ({
+    offset: change.rangeOffset,
+    deleteLength: change.rangeLength,
+    text: change.text,
+  }));
+  const afterLength = model.getValueLength();
+  const lengthDelta = changes.reduce(
+    (total, change) => total + change.text.length - change.deleteLength,
+    0,
+  );
+  return {
+    fileId: modelPath,
+    path: modelPath,
+    beforeVersion,
+    afterVersion: changeEvent.versionId,
+    beforeLength: afterLength - lengthDelta,
+    afterLength,
+    changes,
+  };
+}
+
 interface ActiveYMonacoBinding {
   binding: MonacoBinding;
   editor: StandaloneEditor;
@@ -451,28 +481,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       }
 
       const model = editor.getModel();
-      const modelPath = model ? workspacePathFromMonacoModelUri(model.uri) : null;
-      if (!model || !modelPath) return { mode: "ignored" };
-
-      const changes: TextEditEvent["changes"] = changeEvent.changes.map((change) => ({
-        offset: change.rangeOffset,
-        deleteLength: change.rangeLength,
-        text: change.text,
-      }));
-      const afterLength = model.getValueLength();
-      const lengthDelta = changes.reduce(
-        (total, change) => total + change.text.length - change.deleteLength,
-        0,
-      );
-      const editEvent: TextEditEvent = {
-        fileId: modelPath,
-        path: modelPath,
-        beforeVersion,
-        afterVersion: changeEvent.versionId,
-        beforeLength: afterLength - lengthDelta,
-        afterLength,
-        changes,
-      };
+      if (!model) return { mode: "ignored" };
+      const editEvent = createMonacoTextEditEvent(editor, changeEvent, beforeVersion);
+      if (!editEvent) return { mode: "ignored" };
 
       const acceptedContent = applyFileTextEdits(editEvent);
       if (acceptedContent !== null) {
@@ -1133,14 +1144,24 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           return;
         }
         const yMonacoBinding = yMonacoBindingRef.current;
-        if (
-          isConfiguringYMonacoRef.current ||
-          (yMonacoBinding?.editor === editor && yMonacoBinding.model === editor.getModel())
-        ) {
+        if (isConfiguringYMonacoRef.current) {
           onEditorChange();
           endChangeSpan({
             source: "y-monaco",
-            update_mode: "direct-ytext",
+            update_mode: "binding-setup",
+            change_count: changeEvent.changes.length,
+          });
+          return;
+        }
+        if (yMonacoBinding?.editor === editor && yMonacoBinding.model === editor.getModel()) {
+          const editEvent = changeEvent.isFlush
+            ? null
+            : createMonacoTextEditEvent(editor, changeEvent, beforeVersion);
+          if (editEvent) collaboration?.queueLocalTextEdit(editEvent);
+          onEditorChange(editEvent ?? undefined);
+          endChangeSpan({
+            source: "y-monaco",
+            update_mode: editEvent ? "incremental" : "direct-ytext",
             change_count: changeEvent.changes.length,
           });
           return;
