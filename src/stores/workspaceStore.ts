@@ -699,6 +699,100 @@ function withDirtyState(state: WorkspaceState): WorkspaceState {
   };
 }
 
+function updateSortedPathMembership(paths: string[], path: string, included: boolean): string[] {
+  let low = 0;
+  let high = paths.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (paths[middle].localeCompare(path) < 0) low = middle + 1;
+    else high = middle;
+  }
+
+  const currentlyIncluded = paths[low] === path;
+  if (currentlyIncluded === included) return paths;
+  return included
+    ? [...paths.slice(0, low), path, ...paths.slice(low)]
+    : [...paths.slice(0, low), ...paths.slice(low + 1)];
+}
+
+function withRefreshedDirtyPath(
+  state: InitializedWorkspaceState,
+  path: string,
+): InitializedWorkspaceState {
+  const currentFile = state.project.files[path];
+  const savedFile = state.savedSnapshot.project.files[path];
+  const isAdded = Boolean(currentFile && !savedFile);
+  const isDeleted = Boolean(!currentFile && savedFile);
+  const isModified = Boolean(
+    currentFile && savedFile && !areWorkspaceFilesEqual(currentFile, savedFile),
+  );
+  const isDirty = isAdded || isDeleted || isModified;
+  const addedFilePaths = updateSortedPathMembership(state.dirtyState.addedFilePaths, path, isAdded);
+  const deletedFilePaths = updateSortedPathMembership(
+    state.dirtyState.deletedFilePaths,
+    path,
+    isDeleted,
+  );
+  const modifiedFilePaths = updateSortedPathMembership(
+    state.dirtyState.modifiedFilePaths,
+    path,
+    isModified,
+  );
+  const dirtyFilePaths = updateSortedPathMembership(state.dirtyState.dirtyFilePaths, path, isDirty);
+
+  if (
+    addedFilePaths === state.dirtyState.addedFilePaths &&
+    deletedFilePaths === state.dirtyState.deletedFilePaths &&
+    modifiedFilePaths === state.dirtyState.modifiedFilePaths &&
+    dirtyFilePaths === state.dirtyState.dirtyFilePaths
+  ) {
+    return state;
+  }
+
+  return {
+    ...state,
+    dirtyState: {
+      ...state.dirtyState,
+      addedFilePaths,
+      deletedFilePaths,
+      modifiedFilePaths,
+      dirtyFilePaths,
+      hasUnsavedChanges:
+        dirtyFilePaths.length > 0 ||
+        state.dirtyState.projectMetadataChanged ||
+        state.dirtyState.folderStructureChanged,
+    },
+  };
+}
+
+function withUpdatedFileContent(
+  context: InitializedWorkspaceState,
+  path: string,
+  content: string,
+): InitializedWorkspaceState {
+  const existingFile = context.project.files[path];
+  if (!existingFile || existingFile.content === content) return context;
+
+  const nextFile = { ...existingFile, content };
+  const nextContext: InitializedWorkspaceState = {
+    ...context,
+    project: {
+      ...context.project,
+      files: {
+        ...context.project.files,
+        [path]: nextFile,
+      },
+    },
+    editorState:
+      context.activeFilePath === path
+        ? { activeFile: nextFile, projectVersion: context.editorState.projectVersion }
+        : context.editorState,
+    previewVersion: context.previewVersion + 1,
+    syncVersion: context.syncVersion + 1,
+  };
+  return withRefreshedDirtyPath(nextContext, path);
+}
+
 function createUninitializedWorkspaceState(): WorkspaceState {
   return {
     isInitialized: false,
@@ -1200,23 +1294,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           project_size: projectSizeBucket(context.fileCount),
           source: "incremental",
         });
-        const nextContext = withDirtyState(
-          withRefreshedWorkspaceSlices({
-            ...context,
-            project: {
-              ...context.project,
-              files: {
-                ...context.project.files,
-                [normalizedPath]: {
-                  ...existingFile,
-                  content,
-                },
-              },
-            },
-            previewVersion: context.previewVersion + 1,
-            syncVersion: context.syncVersion + 1,
-          }),
-        );
+        const nextContext = withUpdatedFileContent(context, normalizedPath, content);
         endUpdateSpan();
         return nextContext;
       },
@@ -1241,23 +1319,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           project_size: projectSizeBucket(context.fileCount),
           source: "replacement",
         });
-        const nextContext = withDirtyState(
-          withRefreshedWorkspaceSlices({
-            ...context,
-            project: {
-              ...context.project,
-              files: {
-                ...context.project.files,
-                [normalizedPath]: {
-                  ...existingFile,
-                  content: event.content,
-                },
-              },
-            },
-            previewVersion: context.previewVersion + 1,
-            syncVersion: context.syncVersion + 1,
-          }),
-        );
+        const nextContext = withUpdatedFileContent(context, normalizedPath, event.content);
         endUpdateSpan();
         return nextContext;
       },

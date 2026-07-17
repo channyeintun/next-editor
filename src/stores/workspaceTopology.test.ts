@@ -77,4 +77,48 @@ describe("workspace tree topology", () => {
     store.trigger.deleteFolder({ path: "examples" });
     expect(initialized(store).treeVersion).toBe(4);
   });
+
+  it("refreshes only the changed path's editor and dirty state", () => {
+    const store = createWorkspaceStore({ activeFilePath: "src/a.ts", project: project() });
+    const initial = initialized(store);
+    const initialSidebar = initial.sidebarState;
+    let unrelatedContentReads = 0;
+    const unrelatedFile = initial.project.files["src/b.ts"];
+    const unrelatedContent = unrelatedFile.content;
+    Object.defineProperty(unrelatedFile, "content", {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        unrelatedContentReads += 1;
+        return unrelatedContent;
+      },
+    });
+
+    store.trigger.updateFileContent({ path: "src/a.ts", content: "export const a = 2;" });
+    let context = initialized(store);
+    expect(context.editorState).not.toBe(initial.editorState);
+    expect(context.sidebarState).toBe(initialSidebar);
+    expect(context.dirtyState).toMatchObject({
+      dirtyFilePaths: ["src/a.ts"],
+      modifiedFilePaths: ["src/a.ts"],
+      addedFilePaths: [],
+      deletedFilePaths: [],
+      hasUnsavedChanges: true,
+    });
+    expect(unrelatedContentReads).toBe(0);
+
+    store.trigger.setActiveFilePath({ path: "src/b.ts" });
+    context = initialized(store);
+    const inactiveEditorState = context.editorState;
+    const readsAfterFileSwitch = unrelatedContentReads;
+    store.trigger.updateFileContent({ path: "src/a.ts", content: "export const a = 3;" });
+    context = initialized(store);
+    expect(context.editorState).toBe(inactiveEditorState);
+    expect(unrelatedContentReads).toBe(readsAfterFileSwitch);
+
+    store.trigger.updateFileContent({ path: "src/a.ts", content: "export const a = 1;" });
+    context = initialized(store);
+    expect(context.dirtyState.modifiedFilePaths).toEqual([]);
+    expect(context.dirtyState.hasUnsavedChanges).toBe(false);
+  });
 });
