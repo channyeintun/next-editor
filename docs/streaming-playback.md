@@ -230,6 +230,9 @@ effective duration in your UI.
   `readDelta()` slices only records not yet delivered. Call `getRecording()` for the first playable
   prefix, finalization, or another explicit immutable snapshot request (the shipped loader polls
   deltas at roughly 512 KiB).
+- **Encode live segments in the codec worker.** The bridge coalesces capture notifications and
+  permits one ordered worker encode plus sink write in flight. Finalization awaits the worker's
+  final metadata/footer response, so no queued segment can land after the sink closes.
 - **Decode in the worker.** For whole-file (non-progressive) decodes, prefer
   [`decompressBinaryToRecordings`](../src/storage/recordingCodecClient.ts) so deflate stays off
   the main thread.

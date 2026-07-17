@@ -129,6 +129,9 @@ What happens here:
 - camera capture spawns conditionally on entry if `enableCameraRecording`
 - `CAPTURE_FRAME`, `SLIDE_EVENT`, `PREVIEW_EVENT`, `PREVIEW_INITIAL_DOCUMENT`, `PREVIEW_PATCH_BATCH`, `WORKSPACE_EVENT`, and `RUNTIME_EVENT` are all captured into the session
 - audio chunks (`AUDIO_RECORDING_CHUNK`) and camera lifecycle events are folded into session/audio/camera state for live SCR3 streaming
+- the live stream bridge sends ordered frame/event batches to one worker-owned SCR3 writer; its
+  single in-flight queue provides backpressure, and recording finalization awaits the worker's
+  final metadata/footer flush before closing the sink
 - `STOP_RECORDING` branches on `isMicrophoneAudioRecording` / `isCameraRecording` / `isExternalAudioRecording` to decide whether a drain (`stoppingRecording`) is needed before finalizing
 
 ### `stoppingRecording`

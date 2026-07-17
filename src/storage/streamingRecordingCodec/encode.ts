@@ -42,7 +42,7 @@ import { createWorkspaceEventContentStripper } from "./workspaceEventDedup";
 // finalized file is laid out for seeking.
 // ============================================================================
 
-interface SegmentAppendOptions {
+export interface StreamingSegmentAppendOptions {
   startTimeMs?: number;
   endTimeMs?: number;
   clusterIndex?: number;
@@ -53,11 +53,11 @@ interface SegmentAppendOptions {
 
 export interface StreamingRecordingWriter {
   writeHeader(meta: RecordingStreamMeta): void;
-  appendFrameSegment(frames: DeltaFrame[], options?: SegmentAppendOptions): void;
+  appendFrameSegment(frames: DeltaFrame[], options?: StreamingSegmentAppendOptions): void;
   appendEventSegment(
     kind: SegmentKind,
     records: ReadonlyArray<unknown>,
-    options?: SegmentAppendOptions,
+    options?: StreamingSegmentAppendOptions,
   ): void;
   appendFinalMetadata(meta: RecordingStreamMeta): void;
   /** Finalize and materialize a one-shot stream. Invalid after bytes have been drained. */
@@ -119,7 +119,7 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   const appendSegment = (
     kind: number,
     payload: Uint8Array,
-    options: SegmentAppendOptions,
+    options: StreamingSegmentAppendOptions,
   ): void => {
     const startTimeMs = clampU32(options.startTimeMs ?? 0);
     const endTimeMs = clampU32(Math.max(startTimeMs, options.endTimeMs ?? startTimeMs));

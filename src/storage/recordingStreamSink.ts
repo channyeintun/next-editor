@@ -6,12 +6,14 @@ import {
   SEGMENT_KIND,
   RECORDING_EVENT_SEGMENTS,
   createRecordingStreamMeta,
-  createStreamingRecordingWriter,
   readRecordTimestamp,
   type RecordingStreamMeta,
   type RecordingEventSegmentKey,
-  type StreamingRecordingWriter,
 } from "./streamingRecordingCodec";
+import {
+  createLiveRecordingStreamEncoder,
+  type LiveRecordingStreamEncoder,
+} from "./recordingCodecClient";
 
 /**
  * Flush event segments once this many new records have accumulated (or on finish), so
@@ -36,7 +38,7 @@ interface PendingStreamSegment {
   clusterIndex: number;
   startTimeMs: number;
   priority: number;
-  write: () => void | Promise<void>;
+  write: () => Promise<Uint8Array>;
 }
 
 /**
@@ -50,7 +52,7 @@ interface PendingStreamSegment {
  * `decodeRecordingStream`.
  */
 export class RecordingStreamBridge {
-  private readonly writer: StreamingRecordingWriter = createStreamingRecordingWriter();
+  private readonly codec: LiveRecordingStreamEncoder = createLiveRecordingStreamEncoder();
   private readonly counts = {
     frames: 0,
     ...Object.fromEntries(RECORDING_EVENT_SEGMENTS.map(({ key }) => [key, 0])),
@@ -96,10 +98,9 @@ export class RecordingStreamBridge {
     };
     this.provisionalMeta = meta;
     this.lastSession = session;
-    this.writer.writeHeader(meta);
     this.started = true;
     this.appendQueue = this.appendQueue
-      .then(() => this.flush())
+      .then(async () => this.writeBytes(await this.codec.start(meta)))
       .catch((error) => this.handleFailure(error));
   }
 
@@ -149,13 +150,7 @@ export class RecordingStreamBridge {
           }
         : null;
 
-    if (finalMeta) {
-      this.writer.appendFinalMetadata(finalMeta);
-      await this.flush();
-    }
-
-    this.writer.finalizeStream();
-    await this.flush();
+    await this.writeBytes(await this.codec.finalize(finalMeta ?? undefined));
     await this.closeSink();
   }
 
@@ -163,7 +158,12 @@ export class RecordingStreamBridge {
   abort(): void {
     if (this.aborted) return;
     this.aborted = true;
-    void this.appendQueue.then(() => this.closeSink()).catch((error) => this.handleFailure(error));
+    void this.appendQueue
+      .then(async () => {
+        await this.codec.abort();
+        await this.closeSink();
+      })
+      .catch((error) => this.handleFailure(error));
   }
 
   private collectSessionSegments(
@@ -207,9 +207,9 @@ export class RecordingStreamBridge {
 
     for (const segment of orderedSegments) {
       if (this.aborted) break;
-      await segment.write();
+      const bytes = await segment.write();
       if (this.aborted) break;
-      await this.flush();
+      await this.writeBytes(bytes);
     }
   }
 
@@ -250,7 +250,7 @@ export class RecordingStreamBridge {
       startTimeMs,
       priority: 0,
       write: () =>
-        this.writer.appendFrameSegment(frames, {
+        this.codec.appendFrameSegment(frames, {
           startTimeMs,
           endTimeMs: Math.max(startTimeMs, endTimeMs),
           clusterIndex,
@@ -308,7 +308,7 @@ export class RecordingStreamBridge {
         startTimeMs: firstTimestamp,
         priority: 1,
         write: () =>
-          this.writer.appendEventSegment(kind, group, {
+          this.codec.appendEventSegment(kind, group, {
             startTimeMs: firstTimestamp,
             endTimeMs: readRecordTimestamp(group[group.length - 1]),
             clusterIndex,
@@ -320,8 +320,7 @@ export class RecordingStreamBridge {
     return segments;
   }
 
-  private async flush(): Promise<void> {
-    const bytes = this.writer.drainPending();
+  private async writeBytes(bytes: Uint8Array): Promise<void> {
     if (bytes.length === 0) return;
     await this.sink.write(bytes);
   }
@@ -337,6 +336,12 @@ export class RecordingStreamBridge {
     if (!this.failure) {
       this.failure = error;
       this.aborted = true;
+
+      try {
+        await this.codec.abort();
+      } catch {
+        // The original write/encode failure remains authoritative.
+      }
 
       try {
         await this.sink.onError?.(error);

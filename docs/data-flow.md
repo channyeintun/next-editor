@@ -157,7 +157,11 @@ Current storage rules:
 - Each recording keeps its next segment sequence in a small state record, so appends do not scan
   or count the existing segment range.
 - Exported `.ne` files are raw SCR3 bytes with no base64 wrapping; the runtime loader reads the same raw byte stream.
-- `src/storage/recordingCodec.worker.ts` (backing `recordingCodecClient.ts`) keeps msgpack and deflate work off the main thread for whole-file decodes; `src/storage/streamingRecordingCodec/decode.ts` does incremental prefix decoding for progressive/live loads.
+- `src/storage/recordingCodec.worker.ts` (backing `recordingCodecClient.ts`) owns each live SCR3
+  writer and keeps per-segment MessagePack/deflate plus whole-file codec work off the main thread.
+  Completed segment buffers transfer back in sequence; the bridge permits one encode/write in
+  flight and coalesces later capture notifications. `src/storage/streamingRecordingCodec/decode.ts`
+  does incremental prefix decoding for progressive/live loads.
 
 ## URL Loading Flow
 

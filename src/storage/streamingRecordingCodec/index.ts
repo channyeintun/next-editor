@@ -25,7 +25,7 @@ export {
   createStreamingRecordingWriter,
   encodeRecordingToStream,
 } from "./encode";
-export type { StreamingRecordingWriter } from "./encode";
+export type { StreamingRecordingWriter, StreamingSegmentAppendOptions } from "./encode";
 
 export { decodeRecordingStream, createStreamingRecordingReader } from "./decode";
 export type { StreamingRecordingDelta, StreamingRecordingReader } from "./decode";
