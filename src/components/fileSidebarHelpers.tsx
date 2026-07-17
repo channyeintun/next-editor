@@ -4,7 +4,7 @@ import {
   getWorkspaceBaseName,
   getWorkspaceMediaKind,
   inferLanguageFromPath,
-  type WorkspaceFile,
+  type WorkspaceTreeFile,
 } from "../types/workspace";
 
 // ============================================================================
@@ -21,7 +21,7 @@ export type WorkspaceTreeNode =
       kind: "file";
       path: string;
       name: string;
-      file: WorkspaceFile;
+      file: WorkspaceTreeFile;
     }
   | {
       kind: "folder";
@@ -156,7 +156,7 @@ function langBadge(bg: string, fg: string, label: string): ReactElement {
   );
 }
 
-export function getFileIcon(file: WorkspaceFile): ReactElement {
+export function getFileIcon(file: WorkspaceTreeFile): ReactElement {
   const name = getWorkspaceBaseName(file.path).toLowerCase();
   const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
 
@@ -419,7 +419,7 @@ export function copyTextToClipboard(text: string) {
 }
 
 export function buildWorkspaceTree(
-  files: WorkspaceFile[],
+  files: WorkspaceTreeFile[],
   folders: string[],
   activeFilePath: string,
 ): WorkspaceTreeNode[] {

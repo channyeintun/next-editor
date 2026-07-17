@@ -4,6 +4,7 @@ import type {
   WorkspaceFileEncoding,
   WorkspaceLessonType,
   WorkspaceProject,
+  WorkspaceTreeFile,
 } from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
 
@@ -52,8 +53,9 @@ export interface WorkspaceEditorState {
 
 export interface WorkspaceSidebarState {
   activeFilePath: string;
-  files: WorkspaceFile[];
+  files: WorkspaceTreeFile[];
   folders: string[];
+  treeVersion: number;
   collapsedFolders: string[];
   sidebarScrollTop: number;
   sidebarWidth: number;

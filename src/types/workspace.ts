@@ -15,6 +15,9 @@ export interface WorkspaceFile {
   encoding?: WorkspaceFileEncoding;
 }
 
+/** Lightweight file metadata used by tree/sidebar consumers. */
+export type WorkspaceTreeFile = Omit<WorkspaceFile, "content">;
+
 export type WorkspaceLessonType =
   | "html-css"
   | "react"

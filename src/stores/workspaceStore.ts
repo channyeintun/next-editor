@@ -20,6 +20,7 @@ import {
   type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
+  type WorkspaceTreeFile,
 } from "../types/workspace";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { createStarterWorkspaceProject } from "../starters/react";
@@ -47,6 +48,7 @@ export type WorkspaceState =
       collapsedFolders: string[];
       sidebarScrollTop: number;
       projectVersion: number;
+      treeVersion: number;
       previewVersion: number;
       saveVersion: number;
       syncVersion: number;
@@ -63,6 +65,7 @@ export type WorkspaceState =
       sidebarCollapsed: boolean;
       savedSnapshot: StoredWorkspaceSnapshot;
       projectVersion: number;
+      treeVersion: number;
       previewVersion: number;
       saveVersion: number;
       syncVersion: number;
@@ -213,8 +216,33 @@ function getDefaultFile(project: WorkspaceProject): WorkspaceFile {
   );
 }
 
-function listProjectFiles(project: WorkspaceProject): WorkspaceFile[] {
-  return Object.values(project.files).sort((left, right) => left.path.localeCompare(right.path));
+function listProjectTreeFiles(project: WorkspaceProject): WorkspaceTreeFile[] {
+  return Object.values(project.files)
+    .map(({ path, name, language, encoding }) => ({
+      path,
+      name,
+      language,
+      ...(encoding ? { encoding } : {}),
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function areWorkspaceTopologiesEqual(left: WorkspaceProject, right: WorkspaceProject): boolean {
+  if (!areStringArraysEqual(left.folders, right.folders)) return false;
+  const leftPaths = Object.keys(left.files).sort((first, second) => first.localeCompare(second));
+  const rightPaths = Object.keys(right.files).sort((first, second) => first.localeCompare(second));
+  if (!areStringArraysEqual(leftPaths, rightPaths)) return false;
+
+  return leftPaths.every((path) => {
+    const leftFile = left.files[path];
+    const rightFile = right.files[path];
+    return (
+      leftFile.path === rightFile.path &&
+      leftFile.name === rightFile.name &&
+      leftFile.language === rightFile.language &&
+      (leftFile.encoding ?? "utf-8") === (rightFile.encoding ?? "utf-8")
+    );
+  });
 }
 
 function createWorkspaceFile(
@@ -536,11 +564,15 @@ function createSidebarState(
   collapsedFolders: string[],
   sidebarScrollTop: number,
   sidebarWidth: number,
+  treeVersion: number,
+  previousState?: WorkspaceSidebarState,
 ): WorkspaceSidebarState {
+  const canReuseTopology = previousState?.treeVersion === treeVersion;
   return {
     activeFilePath,
-    files: listProjectFiles(project),
-    folders: project.folders,
+    files: canReuseTopology ? previousState.files : listProjectTreeFiles(project),
+    folders: canReuseTopology ? previousState.folders : project.folders,
+    treeVersion,
     collapsedFolders,
     sidebarScrollTop,
     sidebarWidth,
@@ -557,7 +589,7 @@ function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.every((value, index) => value === right[index]);
 }
 
-function areSidebarFilesEqual(left: WorkspaceFile[], right: WorkspaceFile[]): boolean {
+function areSidebarFilesEqual(left: WorkspaceTreeFile[], right: WorkspaceTreeFile[]): boolean {
   if (left.length !== right.length) {
     return false;
   }
@@ -586,6 +618,7 @@ function areEditorStatesEqual(left: WorkspaceEditorState, right: WorkspaceEditor
 function areSidebarStatesEqual(left: WorkspaceSidebarState, right: WorkspaceSidebarState): boolean {
   return (
     left.activeFilePath === right.activeFilePath &&
+    left.treeVersion === right.treeVersion &&
     left.lessonType === right.lessonType &&
     left.previewFilePath === right.previewFilePath &&
     left.sidebarScrollTop === right.sidebarScrollTop &&
@@ -628,6 +661,8 @@ function withRefreshedWorkspaceSlices(state: WorkspaceState): WorkspaceState {
     nextCollapsedFolders,
     state.sidebarScrollTop,
     state.sidebarWidth,
+    state.treeVersion,
+    state.sidebarState,
   );
 
   return {
@@ -672,6 +707,7 @@ function createUninitializedWorkspaceState(): WorkspaceState {
     collapsedFolders: [],
     sidebarScrollTop: 0,
     projectVersion: 0,
+    treeVersion: 0,
     previewVersion: 0,
     saveVersion: 0,
     syncVersion: 0,
@@ -709,6 +745,7 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
     sidebarCollapsed,
     savedSnapshot,
     projectVersion: 0,
+    treeVersion: 0,
     previewVersion: 0,
     saveVersion: 0,
     syncVersion: 0,
@@ -721,6 +758,7 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
       collapsedFolders,
       sidebarScrollTop,
       sidebarWidth,
+      0,
     ),
     lessonType: project.lessonType,
     projectName: project.name,
@@ -862,6 +900,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               files: nextFiles,
             },
             activeFilePath: normalizedPath,
+            treeVersion: context.treeVersion + 1,
             previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
@@ -891,6 +930,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
                 normalizedPath,
               ]),
             },
+            treeVersion: context.treeVersion + 1,
             previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
@@ -946,6 +986,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               context.activeFilePath === normalizedCurrentPath
                 ? normalizedNextPath
                 : context.activeFilePath,
+            treeVersion: context.treeVersion + 1,
             previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
@@ -1025,6 +1066,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               normalizedCurrentPath,
               normalizedNextPath,
             ),
+            treeVersion: context.treeVersion + 1,
             previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
@@ -1051,6 +1093,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               ...context,
               project: fallbackProject,
               activeFilePath: fallbackProject.entryFilePath,
+              treeVersion: context.treeVersion + 1,
               previewVersion: context.previewVersion + 1,
               syncVersion: context.syncVersion + 1,
             }),
@@ -1073,6 +1116,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             activeFilePath: nextFiles[context.activeFilePath]
               ? context.activeFilePath
               : nextProject.entryFilePath,
+            treeVersion: context.treeVersion + 1,
             previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
@@ -1102,6 +1146,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               ...context,
               project: fallbackProject,
               activeFilePath: fallbackProject.entryFilePath,
+              treeVersion: context.treeVersion + 1,
               previewVersion: context.previewVersion + 1,
               syncVersion: context.syncVersion + 1,
             }),
@@ -1131,6 +1176,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               !nextFiles[context.activeFilePath]
                 ? nextEntryFilePath
                 : context.activeFilePath,
+            treeVersion: context.treeVersion + 1,
             previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
@@ -1254,6 +1300,9 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         const baseContext: InitializedWorkspaceState = context.isInitialized
           ? context
           : (createWorkspaceState(event.savedSnapshot) as InitializedWorkspaceState);
+        const treeVersion = areWorkspaceTopologiesEqual(baseContext.project, event.project)
+          ? baseContext.treeVersion
+          : baseContext.treeVersion + 1;
         return withDirtyState(
           withRefreshedWorkspaceSlices({
             ...baseContext,
@@ -1267,6 +1316,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
                 : normalizeSidebarWidth(event.sidebarWidth),
             savedSnapshot: event.savedSnapshot,
             projectVersion: baseContext.projectVersion + 1,
+            treeVersion,
             previewVersion: baseContext.previewVersion + 1,
             saveVersion: baseContext.saveVersion + 1,
             syncVersion: baseContext.syncVersion + 1,
@@ -1289,6 +1339,9 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         const activeFilePath = project.files[context.activeFilePath]
           ? context.activeFilePath
           : project.entryFilePath;
+        const treeVersion = areWorkspaceTopologiesEqual(context.project, project)
+          ? context.treeVersion
+          : context.treeVersion + 1;
 
         return withDirtyState(
           withRefreshedWorkspaceSlices({
@@ -1296,6 +1349,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             project,
             activeFilePath,
             projectVersion: context.projectVersion + 1,
+            treeVersion,
             previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
@@ -1410,6 +1464,7 @@ const emptySidebarState: WorkspaceSidebarState = {
   activeFilePath: "",
   files: [],
   folders: [],
+  treeVersion: 0,
   collapsedFolders: [],
   sidebarScrollTop: 0,
   // Must match the uninitialized context.sidebarWidth (DEFAULT_FILE_SIDEBAR_WIDTH):
@@ -1456,6 +1511,8 @@ export const selectWorkspaceProjectId = (context: WorkspaceState): string =>
 
 export const selectWorkspaceProjectVersion = (context: WorkspaceState): number =>
   context.projectVersion;
+
+export const selectWorkspaceTreeVersion = (context: WorkspaceState): number => context.treeVersion;
 
 export const selectWorkspaceFileCount = (context: WorkspaceState): number =>
   context.isInitialized ? context.fileCount : 0;

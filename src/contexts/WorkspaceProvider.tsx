@@ -354,7 +354,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
   const listFiles = () => {
     const context = workspaceStoreRef.current.getSnapshot().context;
-    return context.isInitialized ? context.sidebarState.files : [];
+    return context.isInitialized
+      ? Object.values(context.project.files).sort((left, right) =>
+          left.path.localeCompare(right.path),
+        )
+      : [];
   };
 
   const actionsValue: WorkspaceActions = {

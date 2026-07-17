@@ -1,4 +1,4 @@
-import { type UIEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type UIEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FilePlus2, FolderPlus, Upload } from "lucide-react";
 import {
   getParentWorkspacePath,
@@ -88,9 +88,13 @@ function FileSidebarPanel() {
     previewFilePath,
     sidebarScrollTop,
     sidebarWidth,
+    treeVersion,
   } = useWorkspaceSidebarState();
   const collapsedFolders = new Set(collapsedFolderPaths);
-  const tree = buildWorkspaceTree(files, folders, activeFilePath);
+  const tree = useMemo(
+    () => buildWorkspaceTree(files, folders, activeFilePath),
+    [activeFilePath, files, folders, treeVersion],
+  );
   const menuPlacement = contextMenu
     ? getViewportClampedContextMenuPlacement({
         anchorX: contextMenu.x,

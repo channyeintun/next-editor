@@ -27,6 +27,7 @@ import {
   selectWorkspaceSidebarState,
   selectWorkspaceSidebarWidth,
   selectWorkspaceSyncVersion,
+  selectWorkspaceTreeVersion,
 } from "../stores/workspaceStore";
 import type { WorkspaceLessonType } from "../types/workspace";
 
@@ -86,6 +87,10 @@ export const useWorkspaceProjectName = (): string => {
 
 export const useWorkspaceProjectVersion = (): number => {
   return useWorkspaceSelector("useWorkspaceProjectVersion", selectWorkspaceProjectVersion);
+};
+
+export const useWorkspaceTreeVersion = (): number => {
+  return useWorkspaceSelector("useWorkspaceTreeVersion", selectWorkspaceTreeVersion);
 };
 
 export const useWorkspaceProjectId = (): string => {
