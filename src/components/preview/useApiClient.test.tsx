@@ -17,6 +17,20 @@ interface CapturedApiClient {
   store: ApiClientStoreInstance;
 }
 
+interface ApiClientRequestMessage {
+  type: typeof API_CLIENT_REQUEST_MESSAGE_TYPE;
+  payload: { id: string };
+}
+
+function expectApiClientRequestMessage(value: unknown): asserts value is ApiClientRequestMessage {
+  expect(value).toEqual(
+    expect.objectContaining({
+      type: API_CLIENT_REQUEST_MESSAGE_TYPE,
+      payload: expect.objectContaining({ id: expect.any(String) }),
+    }),
+  );
+}
+
 function renderApiClient(runtimePreviewUrl = "https://preview.example.com/app") {
   const postMessage = vi.fn<(message: unknown, targetOrigin: string) => void>();
   const iframeRef = {
@@ -75,7 +89,7 @@ describe("useApiClient cancellation", () => {
       harness.captured.current.api.send();
     });
     const requestMessage = harness.postMessage.mock.calls[0]?.[0];
-    expect(requestMessage.type).toBe(API_CLIENT_REQUEST_MESSAGE_TYPE);
+    expectApiClientRequestMessage(requestMessage);
 
     act(() => {
       store.trigger.setMethod({ method: "DELETE" });
@@ -111,6 +125,7 @@ describe("useApiClient cancellation", () => {
     const harness = renderApiClient();
     act(() => harness.captured.current.api.send());
     const request = harness.postMessage.mock.calls[0]?.[0];
+    expectApiClientRequestMessage(request);
 
     act(() => harness.rerenderUrl("https://replacement.example.com/app"));
     expect(harness.postMessage).toHaveBeenCalledWith(
