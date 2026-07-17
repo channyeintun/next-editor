@@ -1,8 +1,12 @@
 import { act, render } from "@testing-library/react";
 import type { WebContainer } from "@webcontainer/api";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";
 import type { WorkspaceProject } from "../types/workspace";
+import {
+  flushPerformanceMetrics,
+  resetPerformanceMetricsForTests,
+} from "../utils/performanceMetrics";
 
 const project: WorkspaceProject = {
   id: "project-1",
@@ -43,6 +47,14 @@ function renderWorkspaceSyncHook(options?: Parameters<typeof useWebContainerWork
 }
 
 describe("useWebContainerWorkspaceSync", () => {
+  beforeEach(() => {
+    resetPerformanceMetricsForTests();
+  });
+
+  afterEach(() => {
+    resetPerformanceMetricsForTests();
+  });
+
   it("does not mark a project mounted when reset wins the mount race", async () => {
     const hook = renderWorkspaceSyncHook();
     const deferredMount: { resolve: (() => void) | null } = { resolve: null };
@@ -139,6 +151,20 @@ describe("useWebContainerWorkspaceSync", () => {
     });
 
     expect(instance.fs.writeFile).toHaveBeenCalledWith("index.html", "<main>Updated</main>");
+    expect(flushPerformanceMetrics()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "webcontainer.project_sync",
+          dimensions: { outcome: "success" },
+          count: 1,
+        }),
+        expect.objectContaining({
+          name: "webcontainer.fs_mutations",
+          dimensions: { outcome: "success" },
+          sum: 1,
+        }),
+      ]),
+    );
     fireWatch("change", "index.html");
     expect(onExternalFileChange).toHaveBeenCalledTimes(1);
 

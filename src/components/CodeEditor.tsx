@@ -47,6 +47,7 @@ import {
   type Monaco,
   workspacePathFromMonacoModelUri,
 } from "../monaco";
+import { startPerformanceSpan } from "../utils/performanceMetrics";
 
 const Preview = lazy(() => import("./Preview"));
 
@@ -694,15 +695,18 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         publishCollaborationCursor(editor);
       }),
       editor.onDidChangeModelContent(() => {
+        const endChangeSpan = startPerformanceSpan("editor.model_change");
         // syncWorkspaceModel can synchronously emit Monaco events while React
         // is rendering. Check the ref before entering a useEffectEvent wrapper,
         // which React intentionally rejects during render (error #440).
         if (isApplyingExternalModelValueRef.current) {
           pendingExternalModelCaptureRef.current = true;
+          endChangeSpan({ source: "external" });
           return;
         }
         syncEditorContentToWorkspace(editor);
         onEditorChange();
+        endChangeSpan({ source: "local" });
       }),
       editor.onDidChangeCursorPosition(() => {
         if (isApplyingExternalModelValueRef.current) return;

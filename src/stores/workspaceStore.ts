@@ -28,6 +28,7 @@ import {
   getClampedFileSidebarWidth,
   readStoredFileSidebarCollapsed,
 } from "../utils/sidebarLayout";
+import { startPerformanceSpan } from "../utils/performanceMetrics";
 
 export interface StoredWorkspaceSnapshot {
   activeFilePath: string;
@@ -124,6 +125,12 @@ function areWorkspaceFilesEqual(left: WorkspaceFile, right: WorkspaceFile): bool
     left.content === right.content &&
     (left.encoding ?? "utf-8") === (right.encoding ?? "utf-8")
   );
+}
+
+function projectSizeBucket(fileCount: number): "small" | "medium" | "large" {
+  if (fileCount <= 25) return "small";
+  if (fileCount <= 250) return "medium";
+  return "large";
 }
 
 function hasFilePathConflict(
@@ -1145,7 +1152,10 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           return context;
         }
 
-        return withDirtyState(
+        const endUpdateSpan = startPerformanceSpan("workspace.content_update", {
+          project_size: projectSizeBucket(context.fileCount),
+        });
+        const nextContext = withDirtyState(
           withRefreshedWorkspaceSlices({
             ...context,
             project: {
@@ -1162,6 +1172,8 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             syncVersion: context.syncVersion + 1,
           }),
         );
+        endUpdateSpan();
+        return nextContext;
       },
       updateLessonType: (
         context,

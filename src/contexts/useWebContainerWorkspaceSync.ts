@@ -7,6 +7,7 @@ import {
   syncWorkspaceProject,
 } from "./webContainerRuntimeSupport";
 import { normalizeWorkspacePath, type WorkspaceProject } from "../types/workspace";
+import { incrementPerformanceCounter, startPerformanceSpan } from "../utils/performanceMetrics";
 
 // How long a forward-sync write suppresses watch events for its path. The
 // container delivers watch events for our own writes within milliseconds; the
@@ -149,9 +150,18 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     const generation = syncGenerationRef.current;
 
     onMountStart?.();
-    await runSerializedWebContainerTask(instance, () =>
-      instance.mount(createWorkspaceTree(project)),
-    );
+    const endMountSpan = startPerformanceSpan("webcontainer.initial_mount");
+    let mountOutcome = "success";
+    try {
+      await runSerializedWebContainerTask(instance, () =>
+        instance.mount(createWorkspaceTree(project)),
+      );
+    } catch (error) {
+      mountOutcome = "failure";
+      throw error;
+    } finally {
+      endMountSpan({ outcome: mountOutcome });
+    }
 
     if (syncGenerationRef.current !== generation) {
       return;
@@ -189,14 +199,25 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
           continue;
         }
 
-        await runSerializedWebContainerTask(instance, () =>
-          syncWorkspaceProject(
-            instance,
-            lastSyncedProjectRef.current,
-            nextProject,
-            recordForwardSyncWrite,
-          ),
-        );
+        const endSyncSpan = startPerformanceSpan("webcontainer.project_sync");
+        let mutationCount = 0;
+        let syncOutcome = "success";
+        try {
+          await runSerializedWebContainerTask(instance, () =>
+            syncWorkspaceProject(instance, lastSyncedProjectRef.current, nextProject, (path) => {
+              mutationCount += 1;
+              recordForwardSyncWrite(path);
+            }),
+          );
+        } catch (error) {
+          syncOutcome = "failure";
+          throw error;
+        } finally {
+          endSyncSpan({ outcome: syncOutcome });
+          incrementPerformanceCounter("webcontainer.fs_mutations", mutationCount, {
+            outcome: syncOutcome,
+          });
+        }
 
         if (syncGenerationRef.current !== generation) {
           return;
