@@ -14,6 +14,22 @@ const crossOriginHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
 };
 
+function quoteShellArgument(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function stagedChecks(stagedFileNames: readonly string[]): string[] {
+  const files = stagedFileNames.map(quoteShellArgument);
+  const lintableFiles = stagedFileNames
+    .filter((fileName) => /\.[cm]?[jt]sx?$/.test(fileName))
+    .map(quoteShellArgument);
+
+  return [
+    ...(files.length > 0 ? [`vp fmt --threads=1 ${files.join(" ")}`] : []),
+    ...(lintableFiles.length > 0 ? [`oxlint --fix --threads=1 ${lintableFiles.join(" ")}`] : []),
+  ];
+}
+
 // https://viteplus.dev/ alignment
 export default ({ mode }: { mode: string }) => {
   // Merge non-VITE_ prefixed vars (e.g. POSTHOG_API_KEY) into process.env so
@@ -21,9 +37,10 @@ export default ({ mode }: { mode: string }) => {
   // import.meta.env; everything else needs this explicit merge.
   process.env = { ...process.env, ...loadEnv(mode, process.cwd(), "") };
   return defineConfig({
-    staged: {
-      "*": "vp check --fix",
-    },
+    // Staged checks run serially on the low-memory deployment host. The
+    // embedded `vp check` linter otherwise starts one worker per CPU and can
+    // exhaust the allocator before analysis begins.
+    staged: stagedChecks,
     plugins: [
       // Dev-server equivalent of infra/worker/routes/proxy.ts: lets
       // `bun run dev` resolve the same /api/proxy route the Worker
