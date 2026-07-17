@@ -35,6 +35,16 @@ custom_domain = true
 [alias]
 hono = "hono"
 "hono/cookie" = "hono/cookie"
+# Landing-page edge SSR imports. Keep both package roots and exported
+# subpaths explicit so Wrangler bypasses an unrelated parent ~/.pnp.cjs.
+react = "react"
+"react/jsx-runtime" = "react/jsx-runtime"
+"react-dom" = "react-dom"
+"react-dom/server.edge" = "react-dom/server.edge"
+"react-router" = "react-router"
+"lucide-react" = "lucide-react"
+"cookie-es" = "cookie-es"
+"scheduler" = "scheduler"
 "@upstash/qstash" = "@upstash/qstash"
 "crypto-js" = "crypto-js"
 jose = "jose"
