@@ -10,7 +10,6 @@ const mocks = vi.hoisted(() => ({
   closeRoom: vi.fn(),
   createRoom: vi.fn(),
   getRoom: vi.fn(),
-  publishUpdate: vi.fn(),
   uploadAsset: vi.fn(),
 }));
 
@@ -21,13 +20,9 @@ vi.mock("@next-editor/infra", () => ({
   createCollaborationRoom: mocks.createRoom,
   downloadCollaborationAsset: vi.fn(),
   exportCollaborationRoom: vi.fn(),
-  getCollaborationBootstrap: vi.fn(),
   getCollaborationRoom: mocks.getRoom,
-  listCollaborationAwareness: vi.fn(async () => []),
   listCollaborationInvitations: vi.fn(async () => []),
   listCollaborationMembers: vi.fn(async () => ({ members: [], roleVersion: 1 })),
-  publishCollaborationAwareness: vi.fn(),
-  publishCollaborationUpdate: mocks.publishUpdate,
   removeCollaborationMember: vi.fn(),
   revokeCollaborationInvitation: vi.fn(),
   updateCollaborationMemberRole: vi.fn(),
@@ -85,7 +80,7 @@ vi.mock("../hooks/useNextEditorContext", () => ({
 
 import { CollaborationProvider, useCollaboration } from "./CollaborationContext";
 import type { CollaborationRoomSession } from "../collaboration/protocol";
-import { applyEncodedYjsSnapshot, applyEncodedYjsUpdate } from "../collaboration/yjsUpdates";
+import { applyEncodedYjsSnapshot } from "../collaboration/yjsUpdates";
 import { projectCollaborationDocument } from "../collaboration/projectDocument";
 import {
   registerWorkspaceAsset,
@@ -98,10 +93,7 @@ const roomSession: CollaborationRoomSession = {
     ownerId: "10000000-0000-4000-8000-000000000001",
     hostUserId: "10000000-0000-4000-8000-000000000001",
     status: "active",
-    transport: "upstash-realtime",
-    persistenceVersion: 1,
-    binaryProtocolVersion: null,
-    protocolVersion: 1,
+    protocolVersion: 2,
     documentSchemaVersion: 1,
     roleVersion: 1,
     maxMembers: 10,
@@ -109,7 +101,6 @@ const roomSession: CollaborationRoomSession = {
     updatedAt: 1,
   },
   membership: { role: "owner" },
-  channel: "collab:room:20000000-0000-4000-8000-000000000001",
 };
 
 describe("CollaborationProvider", () => {
@@ -143,14 +134,14 @@ describe("CollaborationProvider", () => {
 
     expect(mocks.createRoom).toHaveBeenCalledTimes(1);
     expect(mocks.createRoom.mock.calls[0][0]).toMatchObject({
-      protocolVersion: 1,
+      protocolVersion: 2,
       documentSchemaVersion: 1,
     });
     await waitFor(() => expect(search).toContain(`room=${roomSession.room.id}`));
     view.unmount();
   });
 
-  it("does not project or mutate an empty collaboration document before bootstrap", async () => {
+  it("does not project or mutate an empty collaboration document before socket sync", async () => {
     mocks.getRoom.mockImplementation(() => new Promise(() => {}));
     let collaboration: ReturnType<typeof useCollaboration> | null = null;
     function Probe() {
@@ -172,7 +163,7 @@ describe("CollaborationProvider", () => {
     view.unmount();
   });
 
-  it("uploads binary files before publishing descriptor-only room updates", async () => {
+  it("includes uploaded binary descriptors in the initial room snapshot", async () => {
     const bytes = new TextEncoder().encode("hello");
     const descriptor = await registerWorkspaceAsset(bytes, { mimeType: "image/png" });
     currentProject = structuredClone(project);
@@ -184,13 +175,12 @@ describe("CollaborationProvider", () => {
       encoding: "asset",
     };
     const asset = {
-      id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      mimeType: "image/png",
-      size: 5,
+      id: descriptor.assetId,
+      mimeType: descriptor.mimeType,
+      size: descriptor.size,
     };
     mocks.createRoom.mockResolvedValue(roomSession);
     mocks.uploadAsset.mockResolvedValue(asset);
-    mocks.publishUpdate.mockResolvedValue({ accepted: true });
     mocks.getRoom.mockRejectedValue({ response: { status: 404 } });
     let collaboration: ReturnType<typeof useCollaboration> | null = null;
     function Probe() {
@@ -209,26 +199,17 @@ describe("CollaborationProvider", () => {
       await collaboration!.createRoom();
     });
 
-    expect(mocks.uploadAsset).toHaveBeenCalledTimes(1);
-    expect(mocks.uploadAsset.mock.calls[0][0]).toBe(roomSession.room.id);
-    expect(mocks.uploadAsset.mock.calls[0][1]).toEqual(bytes);
-    expect(mocks.uploadAsset.mock.calls[0][2]).toBe("image/png");
-    expect(mocks.publishUpdate).toHaveBeenCalledTimes(1);
+    expect(mocks.uploadAsset).toHaveBeenCalledWith(
+      roomSession.room.id,
+      bytes,
+      descriptor.mimeType,
+    );
     const doc = new Y.Doc();
     applyEncodedYjsSnapshot(doc, mocks.createRoom.mock.calls[0][0].snapshot);
-    expect(projectCollaborationDocument(doc).project.files["logo.png"]).toBeUndefined();
-    applyEncodedYjsUpdate(doc, mocks.publishUpdate.mock.calls[0][1].update);
-    const projection = projectCollaborationDocument(doc);
-    expect(projection.project.files["logo.png"]).toMatchObject({
+    expect(projectCollaborationDocument(doc).project.files["logo.png"]).toMatchObject({
       encoding: "asset",
-      content: {
-        kind: "asset",
-        assetId: asset.id,
-        mimeType: asset.mimeType,
-        size: asset.size,
-      },
+      content: descriptor,
     });
-    expect(Array.from(projection.assetsByNodeId.values())).toContainEqual(asset);
     doc.destroy();
     view.unmount();
   });

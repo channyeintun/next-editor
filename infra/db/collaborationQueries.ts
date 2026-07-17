@@ -1,12 +1,13 @@
 import type {
   CollaborationAssetDescriptor,
   CollaborationInviteRole,
-  CollaborationPersistenceVersion,
   CollaborationRole,
   CollaborationRoomStatus,
-  CollaborationTransport,
 } from "../../src/collaboration/protocol";
 import {
+  COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+  COLLABORATION_PROTOCOL_VERSION,
+  COLLABORATION_SQLITE_PERSISTENCE_VERSION,
   MAX_COLLABORATION_ROOM_ASSET_BYTES,
   MAX_COLLABORATION_ROOM_ASSETS,
 } from "../../src/collaboration/protocol";
@@ -16,8 +17,8 @@ export interface CollaborationRoomRow {
   owner_id: string;
   host_user_id: string;
   status: CollaborationRoomStatus;
-  transport: CollaborationTransport;
-  persistence_version: CollaborationPersistenceVersion;
+  transport: "cloudflare-websocket";
+  persistence_version: typeof COLLABORATION_SQLITE_PERSISTENCE_VERSION;
   protocol_version: number;
   document_schema_version: number;
   role_version: number;
@@ -83,10 +84,6 @@ export interface CollaborationRoomAccess extends CollaborationRoomRow {
 
 export interface CreateCollaborationRoomParams {
   ownerId: string;
-  protocolVersion: number;
-  documentSchemaVersion: number;
-  transport: CollaborationTransport;
-  persistenceVersion: CollaborationPersistenceVersion;
 }
 
 export async function createProvisioningCollaborationRoom(
@@ -109,10 +106,10 @@ export async function createProvisioningCollaborationRoom(
     owner_id: params.ownerId,
     host_user_id: params.ownerId,
     status: "provisioning",
-    transport: params.transport,
-    persistence_version: params.persistenceVersion,
-    protocol_version: params.protocolVersion,
-    document_schema_version: params.documentSchemaVersion,
+    transport: "cloudflare-websocket",
+    persistence_version: COLLABORATION_SQLITE_PERSISTENCE_VERSION,
+    protocol_version: COLLABORATION_PROTOCOL_VERSION,
+    document_schema_version: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
     role_version: 1,
     max_members: 10,
     created_at: now,
@@ -190,7 +187,6 @@ export type CollaborationAuditAction =
   | "room.closed"
   | "room.exported"
   | "asset.uploaded"
-  | "room.compacted"
   | "room.purged";
 
 export async function getCollaborationAsset(

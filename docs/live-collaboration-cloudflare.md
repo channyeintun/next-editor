@@ -1,16 +1,11 @@
 # Live Collaboration — Cloudflare-native Deployment
 
-Status: room-local SQLite persistence and binary Yjs sync/awareness implemented for new WebSocket
-rooms, with the version-1 Redis/JSON path retained for rollback
+Status: room-local SQLite persistence and mandatory binary Yjs sync/awareness implemented
 
 Companion documents:
 
 - [Live Collaboration Feature Plan](./live-collaboration.md) defines the CRDT, editor, recording,
   and protocol contracts.
-- [Upstash Deployment Evaluation](./live-collaboration-upstash.md) evaluates Redis, Realtime, and
-  QStash as an alternative provider stack.
-- [Cloudflare WebSocket + Upstash Hybrid](./live-collaboration-hybrid-cloudflare-upstash.md)
-  documents the selected versioned implementation and legacy Redis boundary.
 
 This document maps the abstract room service and persistence layer in the feature plan onto the
 Cloudflare services already used by the application. The option evaluated here uses one
@@ -19,26 +14,24 @@ SQLite-backed Durable Object per collaboration room.
 Pricing and product behavior in this document were checked on 2026-07-16. Cloudflare pricing and
 limits must be verified again before production rollout.
 
-## Relationship to the implemented hybrid
+## Implemented Cloudflare stack
 
-The selected MVP now uses Cloudflare room-local durability for persistence-version-2 rooms while
-retaining Upstash as the version-1/Realtime rollback:
+The collaboration data plane has one deployment path:
 
 | Cloudflare service    | Current platform responsibility                                                                                               |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | Workers + Hono        | Same-origin room and membership APIs, WebSocket authentication, assets, exports, and signed maintenance endpoints             |
-| Workers Static Assets | Serve the editor on the same origin so its first-party session authenticates SSE and HTTP safely                              |
+| Workers Static Assets | Serve the editor on the same origin so its first-party session authenticates HTTP and WebSocket requests safely               |
 | D1                    | Rooms, members, invitations, roles, asset metadata, retention state, and audit events                                         |
 | R2                    | Private SHA-256-addressed binary project assets; never live SCR3 recordings                                                   |
 | Workers KV            | Disposable public lesson/playlist cache; separate from collaboration state and credentials                                    |
 | Workers Logs          | Structured update and maintenance telemetry for dashboards and alerts                                                         |
-| Durable Objects       | Hibernating WebSocket coordination, room-local SQLite durability, alarm compaction, and ephemeral fan-out for version-2 rooms |
+| Durable Objects       | Hibernating WebSocket coordination, room-local SQLite durability, alarm compaction, and ephemeral fan-out                     |
 
-The implemented hybrid uses Durable Object SQLite and Alarms for new WebSocket room history.
-Upstash Redis remains authoritative for persistence-version-1 rooms; QStash supplies their
-compaction plus delayed cleanup for both versions. Cloudflare Queues are still not used. The
-browser-local recording decision is unchanged: the host keeps SCR3 locally under every provider
-and uses the existing post-recording upload modal only after live ends.
+Durable Object SQLite and Alarms own room history and compaction. QStash schedules delayed purge
+of closed room data and assets. Cloudflare Queues are still not used. The browser-local recording
+decision is unchanged: the host keeps SCR3 locally and uses the existing post-recording upload
+modal only after live ends.
 
 The design below also records later Cloudflare-native extensions. Room-local snapshot/update
 storage, alarm compaction, state-vector sync, raw Yjs updates, and authenticated standard awareness
@@ -50,8 +43,8 @@ follow-up work.
 If a Cloudflare-native WebSocket room service is selected, use a SQLite-backed
 `CollaborationRoom` Durable Object as both the live room coordinator and the owner of the room's
 recoverable CRDT state. Durable Objects are not an inherent collaboration requirement and have no
-role in SCR3 recording; they are the Cloudflare-native way to supply a stateful room coordinator
-when an external realtime provider is not supplying that function.
+role in SCR3 recording; in this application they provide the stateful room coordinator for every
+live collaboration room.
 
 - The existing Hono Worker remains the same-origin HTTP API and WebSocket gateway.
 - D1 remains the globally queryable control plane for rooms, memberships, invitations, and roles.
@@ -63,9 +56,8 @@ when an external realtime provider is not supplying that function.
 - Cloudflare Queues are optional for work that should run outside the room object.
 
 This is a self-hosted room service in the sense used by the feature plan: Cloudflare manages the
-runtime and storage, but the application owns the collaboration protocol and implementation. No
-Upstash service is required by this data plane. The Cloudflare Workers KV `CACHE` binding
-continues serving unrelated public lesson and playlist reads.
+runtime and storage, but the application owns the collaboration protocol and implementation. The
+Cloudflare Workers KV `CACHE` binding continues serving unrelated public lesson and playlist reads.
 
 ## Production topology
 
@@ -101,8 +93,8 @@ between the browser and the room Durable Object. The gateway is not called once 
 | Hono Worker                   | Room CRUD, session authentication, invitations, tokens, WebSocket upgrade          | Existing                              |
 | D1                            | Rooms, members, roles, invite records, retention state, searchable audit metadata  | Existing                              |
 | Durable Objects               | WebSocket hub and single coordination point for each room                          | Implemented                           |
-| Durable Object SQLite storage | CRDT updates, snapshots, protocol version, stream sequence, durable room state     | Implemented for persistence version 2 |
-| Durable Object WebSocket API  | Versioned binary Yjs document/awareness frames plus JSON control and legacy frames | Implemented with negotiated fallback  |
+| Durable Object SQLite storage | CRDT updates, snapshots, protocol version, stream sequence, durable room state     | Implemented                           |
+| Durable Object WebSocket API  | Mandatory binary Yjs document/awareness frames plus JSON control and acknowledgements | Implemented                        |
 | Durable Object Alarms         | Snapshot compaction and update/deduplication cleanup                               | Implemented                           |
 | R2                            | Content-addressed assets, oversized snapshots, and project exports                 | Existing                              |
 | Cloudflare Queues             | Heavy export, asset reconciliation, or cross-room maintenance                      | Optional                              |
@@ -150,9 +142,7 @@ That matches the feature plan's requirements:
 - Initial sync can use a server-maintained Yjs document and state vector rather than a full log.
 - Reconnect can safely combine the durable server state with the client's offline Yjs changes.
 
-These are live synchronization duties only. Recording is intentionally absent from the list. If
-Upstash Realtime or another provider supplies fan-out and recoverable room history, this Durable
-Object is unnecessary.
+These are live synchronization duties only. Recording is intentionally absent from the list.
 
 The Durable Object is a coordination boundary, not the merge algorithm. Yjs remains necessary for
 offline edits, concurrent edits created before the room observed them, deterministic convergence,
@@ -219,15 +209,12 @@ and move the connection into a non-writing/reconnecting state. Never broadcast a
 silently fail to store it.
 
 Binary envelope version 2 carries Yjs v13-compatible sync, raw update, and standard awareness
-messages. The room descriptor advertises the supported binary version and the client requests it
-explicitly during the WebSocket upgrade. A version mismatch leaves the client on the existing
-HTTP-bootstrap/JSON-update path. Version 2 intentionally supersedes the document-only version-1
-envelope so rolling deployments never send awareness frames to a document-only room object.
+messages. The client requests it explicitly during the WebSocket upgrade; a missing or mismatched
+version is rejected. There is no HTTP bootstrap, JSON document/awareness, or protocol downgrade.
 
 Writable collaborative Monaco models bind directly to their active `Y.Text` through `y-monaco`.
-The binding is enabled by default and can be rolled back at build time with
-`VITE_COLLABORATION_Y_MONACO=false`; the binary transport has the independent
-`VITE_COLLABORATION_BINARY_PROTOCOL=false` rollback. A role downgrade destroys the direct binding
+The binding is enabled by default and can be disabled at build time with
+`VITE_COLLABORATION_Y_MONACO=false`. A role downgrade destroys the direct binding
 before the model can accept another local edit. Read-only clients still resolve standard awareness
 selections for display without attaching a mutating binding. Only the `MonacoBinding` constructor
 and the explicit local-editor origin enter collaborative undo history; remote provider,
@@ -243,7 +230,7 @@ cursor, and remote-text paths until a tree transaction replaces them.
 Batch small logical messages into one WebSocket frame, especially cursor movement and rapid Yjs
 transactions. Cloudflare recommends time- or count-based batching for high-frequency Durable
 Object WebSockets. The client currently starts at one animation frame for a healthy WebSocket,
-backs off to 75 ms for congestion or the legacy transport, caps each merge by count and raw byte
+backs off to 75 ms under congestion, caps each merge by count and raw byte
 budget, and merges each selected batch once. Blur, save, recording stop, explicit room leave,
 recovery export, room close, and membership control mutations await the active durable flush. A
 provider removed indirectly by navigation makes one best-effort flush before closing its socket.

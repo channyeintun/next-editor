@@ -1,9 +1,6 @@
 name = "next-editor-tube"
 main = "./worker/index.ts"
 compatibility_date = "2026-07-05"
-# Required by the collaboration data plane's @upstash/redis/cloudflare
-# dependency, whose "uncrypto" fallback requires the real "node:crypto"
-# module at runtime on Workers.
 compatibility_flags = ["nodejs_compat"]
 
 # The browser-facing origin, used to build the exact Google OAuth redirect_uri
@@ -13,16 +10,10 @@ compatibility_flags = ["nodejs_compat"]
 # override with the real production origin once one exists.
 [vars]
 PUBLIC_URL = "https://nexteditor.dev"
-COLLABORATION_DEFAULT_TRANSPORT = "cloudflare-websocket"
-COLLABORATION_WEBSOCKET_PERSISTENCE = "sqlite"
 # Required for authentication — auth fails at runtime without these. Set them with:
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
 #   wrangler secret put GOOGLE_CLIENT_SECRET --config infra/wrangler.toml
 #   wrangler secret put SESSION_SECRET       --config infra/wrangler.toml
-# Upstash Redis is reserved for legacy room durability and the Realtime
-# fallback; public lesson/playlist caching uses the CACHE Workers KV binding:
-#   wrangler secret put COLLAB_REDIS_REST_URL   --config infra/wrangler.toml
-#   wrangler secret put COLLAB_REDIS_REST_TOKEN --config infra/wrangler.toml
 # QStash is optional for local development. Production should configure all
 # three values; job routes fail closed if either signing key is absent:
 #   wrangler secret put QSTASH_TOKEN               --config infra/wrangler.toml
@@ -48,9 +39,6 @@ hono = "hono"
 "crypto-js" = "crypto-js"
 jose = "jose"
 neverthrow = "neverthrow"
-"@upstash/redis/cloudflare" = "@upstash/redis/cloudflare"
-"@upstash/realtime" = "@upstash/realtime"
-uncrypto = "uncrypto"
 yjs = "yjs"
 zod = "zod"
 "zod/v4" = "zod/v4"
@@ -112,9 +100,8 @@ bucket_name = "next-editor-tube-media"
 [[kv_namespaces]]
 binding = "CACHE"
 
-# One hibernating WebSocket coordinator per live-collaboration room. New rooms
-# keep their durable Yjs log in this object's SQLite storage; persistence v1
-# rooms retain the legacy Upstash Redis path during migration and rollback.
+# One hibernating WebSocket coordinator per live-collaboration room. Every room
+# keeps its durable Yjs log in this object's SQLite storage.
 [[durable_objects.bindings]]
 name = "COLLABORATION_ROOMS"
 class_name = "CollaborationRoomDurableObject"

@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-export const COLLABORATION_PROTOCOL_VERSION = 1 as const;
+export const COLLABORATION_PROTOCOL_VERSION = 2 as const;
 export const COLLABORATION_DOCUMENT_SCHEMA_VERSION = 1 as const;
-export const COLLABORATION_LEGACY_PERSISTENCE_VERSION = 1 as const;
 export const COLLABORATION_SQLITE_PERSISTENCE_VERSION = 2 as const;
+export const COLLABORATION_AWARENESS_TTL_MS = 30_000;
 
 // Keep the first transport limit deliberately below provider/request limits. The
 // client will batch small Yjs updates, while large initial states need a separate
@@ -24,11 +24,6 @@ export const collaborationIdSchema = z.string().regex(UUID_PATTERN, "expected a 
 export const collaborationRoleSchema = z.enum(["owner", "editor", "viewer"]);
 export const collaborationInviteRoleSchema = z.enum(["editor", "viewer"]);
 export const collaborationRoomStatusSchema = z.enum(["provisioning", "active", "closed", "failed"]);
-export const collaborationTransportSchema = z.enum(["upstash-realtime", "cloudflare-websocket"]);
-export const collaborationPersistenceVersionSchema = z.union([
-  z.literal(COLLABORATION_LEGACY_PERSISTENCE_VERSION),
-  z.literal(COLLABORATION_SQLITE_PERSISTENCE_VERSION),
-]);
 export const collaborationAssetIdSchema = z
   .string()
   .regex(SHA256_PATTERN, "expected a SHA-256 digest");
@@ -36,8 +31,6 @@ export const collaborationAssetIdSchema = z
 export type CollaborationRole = z.infer<typeof collaborationRoleSchema>;
 export type CollaborationInviteRole = z.infer<typeof collaborationInviteRoleSchema>;
 export type CollaborationRoomStatus = z.infer<typeof collaborationRoomStatusSchema>;
-export type CollaborationTransport = z.infer<typeof collaborationTransportSchema>;
-export type CollaborationPersistenceVersion = z.infer<typeof collaborationPersistenceVersionSchema>;
 
 export const collaborationAssetDescriptorSchema = z
   .object({
@@ -54,9 +47,6 @@ export interface CollaborationRoomDescriptor {
   ownerId: string;
   hostUserId: string;
   status: CollaborationRoomStatus;
-  transport: CollaborationTransport;
-  persistenceVersion: CollaborationPersistenceVersion;
-  binaryProtocolVersion?: number | null;
   protocolVersion: number;
   documentSchemaVersion: number;
   roleVersion: number;
@@ -93,7 +83,6 @@ export interface CreatedCollaborationInvitation extends CollaborationInvitation 
 export interface CollaborationRoomSession {
   room: CollaborationRoomDescriptor;
   membership: { role: CollaborationRole };
-  channel: string;
 }
 
 export const createCollaborationInvitationInputSchema = z
@@ -324,50 +313,12 @@ export interface CollaborationBootstrapResponse {
   hasMore: boolean;
 }
 
-export const collaborationRealtimeSchema = {
-  document: {
-    update: collaborationDocumentUpdateEventSchema,
-  },
-  awareness: {
-    state: collaborationAwarenessEventSchema,
-  },
-  control: {
-    room: collaborationControlEventSchema,
-  },
-} as const;
-
-export type CollaborationRealtimeEvents = typeof collaborationRealtimeSchema;
-
-export const collaborationWebSocketClientMessageSchema = z.discriminatedUnion("type", [
-  z
-    .object({
-      type: z.literal("document.update"),
-      data: collaborationDocumentUpdateInputSchema,
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("awareness.state"),
-      data: collaborationAwarenessInputSchema,
-    })
-    .strict(),
-]);
-
 export const collaborationWebSocketServerMessageSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("session.ready"),
       sessionId: collaborationIdSchema,
       attemptId: collaborationIdSchema,
-      binaryProtocolVersion: z.number().int().positive().nullable().optional(),
-      participants: z.array(collaborationAwarenessEventSchema).max(50),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("document.update"),
-      streamId: z.string().regex(/^\d+-\d+$/),
-      data: collaborationDocumentUpdateEventSchema,
     })
     .strict(),
   z
@@ -376,12 +327,6 @@ export const collaborationWebSocketServerMessageSchema = z.discriminatedUnion("t
       updateId: collaborationIdSchema,
       streamId: z.string().regex(/^\d+-\d+$/),
       duplicate: z.boolean(),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("awareness.state"),
-      data: collaborationAwarenessEventSchema,
     })
     .strict(),
   z
@@ -408,60 +353,10 @@ export const collaborationRoomControlCommandSchema = z
   })
   .strict();
 
-export const collaborationRoomDocumentBroadcastSchema = z
-  .object({
-    streamId: z.string().regex(/^\d+-\d+$/),
-    event: collaborationDocumentUpdateEventSchema,
-  })
-  .strict();
-
-export type CollaborationWebSocketClientMessage = z.infer<
-  typeof collaborationWebSocketClientMessageSchema
->;
 export type CollaborationWebSocketServerMessage = z.infer<
   typeof collaborationWebSocketServerMessageSchema
 >;
 export type CollaborationRoomControlCommand = z.infer<typeof collaborationRoomControlCommandSchema>;
-
-const ROOM_CHANNEL_PREFIX = "collab:room:";
-const AWARENESS_CHANNEL_SUFFIX = ":awareness";
-const CONTROL_CHANNEL_SUFFIX = ":control";
-
-export function collaborationRoomChannel(roomId: string): string {
-  return `${ROOM_CHANNEL_PREFIX}${collaborationIdSchema.parse(roomId)}`;
-}
-
-export function collaborationAwarenessChannel(roomId: string): string {
-  return `${collaborationRoomChannel(roomId)}${AWARENESS_CHANNEL_SUFFIX}`;
-}
-
-export function collaborationControlChannel(roomId: string): string {
-  return `${collaborationRoomChannel(roomId)}${CONTROL_CHANNEL_SUFFIX}`;
-}
-
-export type CollaborationChannelKind = "document" | "awareness" | "control";
-
-export function parseCollaborationChannel(
-  channel: string,
-): { roomId: string; kind: CollaborationChannelKind } | null {
-  let kind: CollaborationChannelKind = "document";
-  let roomChannel = channel;
-  if (channel.endsWith(AWARENESS_CHANNEL_SUFFIX)) {
-    kind = "awareness";
-    roomChannel = channel.slice(0, -AWARENESS_CHANNEL_SUFFIX.length);
-  } else if (channel.endsWith(CONTROL_CHANNEL_SUFFIX)) {
-    kind = "control";
-    roomChannel = channel.slice(0, -CONTROL_CHANNEL_SUFFIX.length);
-  }
-  if (!roomChannel.startsWith(ROOM_CHANNEL_PREFIX)) return null;
-  const result = collaborationIdSchema.safeParse(roomChannel.slice(ROOM_CHANNEL_PREFIX.length));
-  return result.success ? { roomId: result.data, kind } : null;
-}
-
-export function roomIdFromCollaborationChannel(channel: string): string | null {
-  const parsed = parseCollaborationChannel(channel);
-  return parsed?.kind === "document" ? parsed.roomId : null;
-}
 
 export function canPublishCollaborationUpdate(role: CollaborationRole): boolean {
   return role === "owner" || role === "editor";

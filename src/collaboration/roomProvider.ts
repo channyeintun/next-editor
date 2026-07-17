@@ -14,31 +14,17 @@ import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
   MAX_YJS_UPDATE_BYTES,
-  collaborationAwarenessChannel,
   collaborationAwarenessClientStateSchema,
-  collaborationAwarenessEventSchema,
   collaborationAwarenessServerStateSchema,
-  collaborationControlChannel,
-  collaborationControlEventSchema,
-  collaborationDocumentUpdateEventSchema,
-  collaborationRoomChannel,
-  collaborationWebSocketClientMessageSchema,
   collaborationWebSocketServerMessageSchema,
   type CollaborationAwarenessEvent,
   type CollaborationAwarenessInput,
-  type CollaborationBootstrapResponse,
   type CollaborationControlEvent,
-  type CollaborationDocumentUpdateInput,
   type CollaborationRoomSession,
   type CollaborationUpdateAccepted,
   type CollaborationWebSocketServerMessage,
 } from "./protocol";
 import { COLLABORATION_ORIGIN, canWriteCollaborationDocument } from "./projectDocument";
-import {
-  applyEncodedYjsSnapshot,
-  applyEncodedYjsUpdate,
-  createCollaborationDocumentUpdate,
-} from "./yjsUpdates";
 import {
   collaborationConnectionState,
   collaborationMachine,
@@ -53,7 +39,6 @@ const BATCH_MERGE_BUDGET_BYTES = MAX_YJS_UPDATE_BYTES - 1024;
 const WEBSOCKET_BACKPRESSURE_BYTES = 64 * 1024;
 const BUSY_PENDING_UPDATE_COUNT = 8;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 5;
-const MAX_BOOTSTRAP_PAGES = 1_000;
 const MAX_SEEN_STREAM_IDS = 2_000;
 const WEBSOCKET_ACK_TIMEOUT_MS = 15_000;
 const WEBSOCKET_HEARTBEAT_MS = 20_000;
@@ -61,25 +46,7 @@ const WEBSOCKET_OPEN = 1;
 
 export interface CollaborationRoomApi {
   getRoom(roomId: string): Promise<CollaborationRoomSession>;
-  getBootstrap(roomId: string, cursor?: string): Promise<CollaborationBootstrapResponse>;
-  publishUpdate(
-    roomId: string,
-    update: CollaborationDocumentUpdateInput,
-  ): Promise<CollaborationUpdateAccepted>;
-  publishAwareness(
-    roomId: string,
-    awareness: CollaborationAwarenessInput,
-  ): Promise<{ accepted: true; streamId: string; event: CollaborationAwarenessEvent }>;
 }
-
-export interface CollaborationEventSource {
-  onopen: ((event: Event) => void) | null;
-  onmessage: ((event: MessageEvent<string>) => void) | null;
-  onerror: ((event: Event) => void) | null;
-  close(): void;
-}
-
-export type CollaborationEventSourceFactory = (url: string) => CollaborationEventSource;
 
 export interface CollaborationWebSocket {
   readonly readyState: number;
@@ -95,28 +62,19 @@ export interface CollaborationWebSocket {
 
 export type CollaborationWebSocketFactory = (url: string) => CollaborationWebSocket;
 
-export interface UpstashRoomProviderOptions {
+export interface CollaborationRoomProviderOptions {
   roomId: string;
   api: CollaborationRoomApi;
   doc?: Y.Doc;
   clientId?: string;
-  eventSourceFactory?: CollaborationEventSourceFactory;
   webSocketFactory?: CollaborationWebSocketFactory;
   batchWindowMs?: number;
-  binaryProtocolEnabled?: boolean;
   maxReconnectAttempts?: number;
   random?: () => number;
   onDocumentChange?: (doc: Y.Doc, transaction: Y.Transaction) => void;
   onAwarenessEvent?: (event: CollaborationAwarenessEvent) => void;
   onControlEvent?: (event: CollaborationControlEvent) => void;
   onRejectedLocalChanges?: (message: string) => void;
-}
-
-interface RealtimeUserMessage {
-  id: string;
-  event: string;
-  channel: string;
-  data: unknown;
 }
 
 interface PendingUpdate {
@@ -139,10 +97,6 @@ function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
-function defaultBinaryProtocolEnabled(): boolean {
-  return import.meta.env.VITE_COLLABORATION_BINARY_PROTOCOL !== "false";
-}
-
 function errorStatus(error: unknown): number | null {
   if (typeof error !== "object" || error === null) return null;
   const response = (error as { response?: { status?: unknown } }).response;
@@ -159,29 +113,6 @@ function isFatalRequestError(error: unknown): boolean {
   return status === 400 || status === 401 || status === 403 || status === 404 || status === 409;
 }
 
-function compareStreamIds(left: string, right: string): number {
-  const [leftTime = "0", leftSequence = "0"] = left.split("-");
-  const [rightTime = "0", rightSequence = "0"] = right.split("-");
-  const timeDifference = BigInt(leftTime) - BigInt(rightTime);
-  if (timeDifference !== 0n) return timeDifference < 0n ? -1 : 1;
-  const sequenceDifference = BigInt(leftSequence) - BigInt(rightSequence);
-  return sequenceDifference === 0n ? 0 : sequenceDifference < 0n ? -1 : 1;
-}
-
-function parseRealtimeUserMessage(value: unknown): RealtimeUserMessage | null {
-  if (typeof value !== "object" || value === null) return null;
-  const candidate = value as Partial<RealtimeUserMessage>;
-  return typeof candidate.id === "string" &&
-    typeof candidate.event === "string" &&
-    typeof candidate.channel === "string"
-    ? (candidate as RealtimeUserMessage)
-    : null;
-}
-
-function defaultEventSourceFactory(url: string): CollaborationEventSource {
-  return new EventSource(url, { withCredentials: true });
-}
-
 function defaultWebSocketFactory(url: string): CollaborationWebSocket {
   return new WebSocket(url);
 }
@@ -192,7 +123,8 @@ function websocketRequestError(message: string, status = 503): Error {
   return error;
 }
 
-export class UpstashRoomProvider {
+/** Binary WebSocket provider for the room Durable Object. */
+export class CollaborationRoomProvider {
   readonly doc: Y.Doc;
   readonly awareness: awarenessProtocol.Awareness;
   readonly actor: ActorRefFrom<typeof collaborationMachine>;
@@ -200,34 +132,28 @@ export class UpstashRoomProvider {
 
   private readonly api: CollaborationRoomApi;
   private readonly roomId: string;
-  private readonly eventSourceFactory: CollaborationEventSourceFactory;
   private readonly webSocketFactory: CollaborationWebSocketFactory;
   private readonly batchWindowMs: number | null;
-  private readonly binaryProtocolEnabled: boolean;
   private readonly maxReconnectAttempts: number;
   private readonly random: () => number;
-  private readonly onDocumentChange?: UpstashRoomProviderOptions["onDocumentChange"];
-  private readonly onAwarenessEvent?: UpstashRoomProviderOptions["onAwarenessEvent"];
-  private readonly onControlEvent?: UpstashRoomProviderOptions["onControlEvent"];
-  private readonly onRejectedLocalChanges?: UpstashRoomProviderOptions["onRejectedLocalChanges"];
+  private readonly onDocumentChange?: CollaborationRoomProviderOptions["onDocumentChange"];
+  private readonly onAwarenessEvent?: CollaborationRoomProviderOptions["onAwarenessEvent"];
+  private readonly onControlEvent?: CollaborationRoomProviderOptions["onControlEvent"];
+  private readonly onRejectedLocalChanges?: CollaborationRoomProviderOptions["onRejectedLocalChanges"];
 
   private sessionId: string = crypto.randomUUID();
   private attemptId: string = crypto.randomUUID();
   private reconnectAttempt = 0;
-  private source: CollaborationEventSource | null = null;
   private socket: CollaborationWebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
   private roomSession: CollaborationRoomSession | null = null;
-  private binaryProtocolActive = false;
   private isSynchronizing = false;
   private isStarted = false;
   private isStopped = false;
   private isPublishing = false;
   private flushPromise: Promise<void> | null = null;
-  private readonly lastAcknowledgedStreamIds = new Map<string, string>();
-  private bufferedMessages: RealtimeUserMessage[] = [];
   private bufferedBinaryUpdates: Array<
     Extract<CollaborationBinaryFrame, { kind: "server-update" }>
   > = [];
@@ -252,16 +178,14 @@ export class UpstashRoomProvider {
     }
   >();
 
-  constructor(options: UpstashRoomProviderOptions) {
+  constructor(options: CollaborationRoomProviderOptions) {
     this.roomId = options.roomId;
     this.api = options.api;
     this.doc = options.doc ?? new Y.Doc();
     this.awareness = new awarenessProtocol.Awareness(this.doc);
     this.clientId = options.clientId ?? crypto.randomUUID();
-    this.eventSourceFactory = options.eventSourceFactory ?? defaultEventSourceFactory;
     this.webSocketFactory = options.webSocketFactory ?? defaultWebSocketFactory;
     this.batchWindowMs = options.batchWindowMs ?? null;
-    this.binaryProtocolEnabled = options.binaryProtocolEnabled ?? defaultBinaryProtocolEnabled();
     this.maxReconnectAttempts = options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     this.random = options.random ?? Math.random;
     this.onDocumentChange = options.onDocumentChange;
@@ -283,10 +207,6 @@ export class UpstashRoomProvider {
 
   get awarenessSessionId(): string {
     return this.sessionId;
-  }
-
-  get isBinaryProtocolActive(): boolean {
-    return this.binaryProtocolActive;
   }
 
   get canWrite(): boolean {
@@ -335,7 +255,6 @@ export class UpstashRoomProvider {
     this.remoteAwarenessEvents.clear();
     this.pendingUpdates = [];
     this.outbox = [];
-    this.bufferedMessages = [];
     this.bufferedBinaryUpdates = [];
     this.actor.send({ type: "LEAVE" });
     this.actor.stop();
@@ -359,37 +278,17 @@ export class UpstashRoomProvider {
   async publishAwareness(input: CollaborationAwarenessInput): Promise<void> {
     const session = this.roomSession;
     if (!session || this.connectionState !== "live") return;
-    if (session.room.transport === "cloudflare-websocket") {
-      if (this.binaryProtocolActive) {
-        if (input.kind === "leave") {
-          this.awareness.setLocalState(null);
-        } else {
-          const selection = this.awareness.getLocalState()?.selection;
-          this.awareness.setLocalState(
-            collaborationAwarenessClientStateSchema.parse({
-              collaboration: input,
-              ...(selection === undefined ? {} : { selection }),
-            }),
-          );
-        }
-        return;
-      }
-      const socket = this.socket;
-      if (!socket || socket.readyState !== WEBSOCKET_OPEN) {
-        throw websocketRequestError("Collaboration WebSocket is not connected");
-      }
-      socket.send(
-        JSON.stringify(
-          collaborationWebSocketClientMessageSchema.parse({
-            type: "awareness.state",
-            data: input,
-          }),
-        ),
+    if (input.kind === "leave") {
+      this.awareness.setLocalState(null);
+    } else {
+      const selection = this.awareness.getLocalState()?.selection;
+      this.awareness.setLocalState(
+        collaborationAwarenessClientStateSchema.parse({
+          collaboration: input,
+          ...(selection === undefined ? {} : { selection }),
+        }),
       );
-      return;
     }
-    const response = await this.api.publishAwareness(this.roomId, input);
-    this.onAwarenessEvent?.(response.event);
   }
 
   private readonly handleAfterTransaction = (transaction: Y.Transaction) => {
@@ -402,7 +301,6 @@ export class UpstashRoomProvider {
   ) => {
     if (
       origin === COLLABORATION_ORIGIN.remoteProvider ||
-      !this.binaryProtocolActive ||
       this.connectionState !== "live"
     ) {
       return;
@@ -475,9 +373,6 @@ export class UpstashRoomProvider {
 
   private currentBatchWindowMs(): number {
     if (this.batchWindowMs !== null) return this.batchWindowMs;
-    if (this.roomSession?.room.transport !== "cloudflare-websocket") {
-      return CONGESTED_BATCH_WINDOW_MS;
-    }
     if (
       (this.socket?.bufferedAmount ?? 0) >= WEBSOCKET_BACKPRESSURE_BYTES ||
       this.pendingUpdates.length >= BUSY_PENDING_UPDATE_COUNT ||
@@ -564,20 +459,10 @@ export class UpstashRoomProvider {
         return;
       }
       this.roomSession = roomSession;
-      this.binaryProtocolActive = Boolean(
-        this.binaryProtocolEnabled &&
-        roomSession.room.transport === "cloudflare-websocket" &&
-        roomSession.room.persistenceVersion === 2 &&
-        roomSession.room.binaryProtocolVersion === COLLABORATION_BINARY_PROTOCOL_VERSION,
-      );
       if (roomSession.room.roleVersion >= this.pendingControlRoleVersion) {
         this.pendingControlRoleVersion = 0;
       }
-      if (roomSession.room.transport === "cloudflare-websocket") {
-        this.openSocket(attemptId);
-      } else {
-        this.openSource(attemptId, roomSession.channel);
-      }
+      this.openSocket(attemptId);
     } catch (error) {
       if (this.isStopped || attemptId !== this.attemptId) return;
       if (isFatalRequestError(error)) {
@@ -591,43 +476,8 @@ export class UpstashRoomProvider {
     }
   }
 
-  private openSource(attemptId: string, channel: string): void {
-    this.closeTransport();
-    this.bufferedMessages = [];
-    const url = new URL("/api/collaboration/realtime", window.location.origin);
-    const channels = [
-      channel,
-      collaborationAwarenessChannel(this.roomId),
-      collaborationControlChannel(this.roomId),
-    ];
-    for (const currentChannel of channels) {
-      url.searchParams.append("channel", currentChannel);
-      const defaultCursor = currentChannel === channel ? String(Date.now()) : "0-0";
-      url.searchParams.set(
-        `last_ack_${currentChannel}`,
-        this.lastAcknowledgedStreamIds.get(currentChannel) ?? defaultCursor,
-      );
-    }
-    const source = this.eventSourceFactory(url.toString());
-    this.source = source;
-    source.onopen = () => {
-      if (this.isStopped || attemptId !== this.attemptId || source !== this.source) return;
-      this.actor.send({ type: "PROVIDER_OPEN", sessionId: this.sessionId, attemptId });
-      void this.synchronize(attemptId);
-    };
-    source.onmessage = (event) => {
-      if (this.isStopped || attemptId !== this.attemptId || source !== this.source) return;
-      this.handleRealtimeMessage(event.data, attemptId);
-    };
-    source.onerror = () => {
-      if (this.isStopped || attemptId !== this.attemptId || source !== this.source) return;
-      this.handleTransportFailure("Realtime connection interrupted", attemptId);
-    };
-  }
-
   private openSocket(attemptId: string): void {
     this.closeTransport();
-    this.bufferedMessages = [];
     const url = new URL(
       `/api/collaboration/rooms/${encodeURIComponent(this.roomId)}/websocket`,
       window.location.origin,
@@ -635,11 +485,9 @@ export class UpstashRoomProvider {
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("sessionId", this.sessionId);
     url.searchParams.set("attemptId", attemptId);
-    if (this.binaryProtocolActive) {
-      url.searchParams.set("binaryProtocolVersion", String(COLLABORATION_BINARY_PROTOCOL_VERSION));
-    }
+    url.searchParams.set("binaryProtocolVersion", String(COLLABORATION_BINARY_PROTOCOL_VERSION));
     const socket = this.webSocketFactory(url.toString());
-    if (this.binaryProtocolActive) socket.binaryType = "arraybuffer";
+    socket.binaryType = "arraybuffer";
     this.socket = socket;
     socket.onopen = () => {
       if (this.isStopped || attemptId !== this.attemptId || socket !== this.socket) return;
@@ -647,9 +495,7 @@ export class UpstashRoomProvider {
       this.heartbeatTimer = setInterval(() => {
         if (socket === this.socket && socket.readyState === WEBSOCKET_OPEN) socket.send("ping");
       }, WEBSOCKET_HEARTBEAT_MS);
-      void (this.binaryProtocolActive
-        ? this.synchronizeBinary(attemptId)
-        : this.synchronize(attemptId));
+      void this.synchronizeBinary(attemptId);
     };
     socket.onmessage = (event) => {
       if (this.isStopped || attemptId !== this.attemptId || socket !== this.socket) return;
@@ -692,7 +538,6 @@ export class UpstashRoomProvider {
     const message = parsed.data;
     if (message.type === "session.ready") {
       if (message.sessionId !== this.sessionId || message.attemptId !== attemptId) return;
-      for (const event of message.participants) this.onAwarenessEvent?.(event);
       return;
     }
     if (message.type === "document.ack") {
@@ -705,24 +550,6 @@ export class UpstashRoomProvider {
         updateId: message.updateId,
         streamId: message.streamId,
       });
-      return;
-    }
-    if (message.type === "document.update") {
-      const realtimeMessage: RealtimeUserMessage = {
-        id: message.streamId,
-        event: "document.update",
-        channel: collaborationRoomChannel(this.roomId),
-        data: message.data,
-      };
-      if (this.isSynchronizing || this.connectionState === "syncing") {
-        this.bufferedMessages.push(realtimeMessage);
-      } else {
-        this.applyRealtimeMessage(realtimeMessage);
-      }
-      return;
-    }
-    if (message.type === "awareness.state") {
-      this.onAwarenessEvent?.(message.data);
       return;
     }
     if (message.type === "control.room") {
@@ -782,9 +609,7 @@ export class UpstashRoomProvider {
   private applyBinaryServerUpdate(
     frame: Extract<CollaborationBinaryFrame, { kind: "server-update" }>,
   ): void {
-    const channel = collaborationRoomChannel(this.roomId);
-    const seenKey = `${channel}|${frame.streamId}`;
-    if (this.seenStreamIds.has(seenKey)) return;
+    if (this.seenStreamIds.has(frame.streamId)) return;
     const endApplySpan = startPerformanceSpan("collaboration.remote_apply", {
       transport: "cloudflare-websocket",
       wire: "binary",
@@ -795,7 +620,7 @@ export class UpstashRoomProvider {
       transport: "cloudflare-websocket",
       wire: "binary",
     });
-    this.markStreamIdSeen(channel, frame.streamId);
+    this.markStreamIdSeen(frame.streamId);
   }
 
   private handleWebSocketError(
@@ -825,86 +650,8 @@ export class UpstashRoomProvider {
     }
   }
 
-  private handleRealtimeMessage(raw: string, attemptId: string): void {
-    let value: unknown;
-    try {
-      value = JSON.parse(raw) as unknown;
-    } catch {
-      return;
-    }
-    if (typeof value === "object" && value !== null && "type" in value) {
-      const type = (value as { type?: unknown }).type;
-      if (type === "reconnect") {
-        this.handleTransportFailure("Realtime connection is rotating", attemptId);
-      } else if (type === "error") {
-        this.handleTransportFailure("Realtime provider reported an error", attemptId);
-      }
-      return;
-    }
-
-    const message = parseRealtimeUserMessage(value);
-    if (!message || !this.isRoomChannel(message.channel)) return;
-    if (
-      message.channel === collaborationRoomChannel(this.roomId) &&
-      (this.isSynchronizing || this.connectionState === "syncing")
-    ) {
-      this.bufferedMessages.push(message);
-      return;
-    }
-    this.applyRealtimeMessage(message);
-  }
-
-  private applyRealtimeMessage(message: RealtimeUserMessage): void {
-    const seenKey = `${message.channel}|${message.id}`;
-    if (this.seenStreamIds.has(seenKey)) return;
-    if (message.event === "document.update") {
-      const event = collaborationDocumentUpdateEventSchema.safeParse(message.data);
-      if (!event.success || event.data.roomId !== this.roomId) return;
-      const endApplySpan = startPerformanceSpan("collaboration.remote_apply", {
-        transport: this.roomSession?.room.transport ?? "unknown",
-      });
-      applyEncodedYjsUpdate(this.doc, event.data.update, COLLABORATION_ORIGIN.remoteProvider);
-      endApplySpan();
-      recordPerformanceMetric(
-        "collaboration.remote_update",
-        Math.floor((event.data.update.length * 3) / 4),
-        "bytes",
-        { transport: this.roomSession?.room.transport ?? "unknown" },
-      );
-    } else if (message.event === "awareness.state") {
-      const event = collaborationAwarenessEventSchema.safeParse(message.data);
-      if (!event.success || event.data.roomId !== this.roomId) return;
-      this.onAwarenessEvent?.(event.data);
-    } else if (message.event === "control.room") {
-      const event = collaborationControlEventSchema.safeParse(message.data);
-      if (!event.success || event.data.roomId !== this.roomId) return;
-      this.onControlEvent?.(event.data);
-      if (event.data.kind === "room-closed") {
-        this.markStreamIdSeen(message.channel, message.id);
-        this.fatal("The host ended this live collaboration room");
-        return;
-      }
-      void this.refreshRoomFromControl(event.data);
-    } else {
-      return;
-    }
-    this.markStreamIdSeen(message.channel, message.id);
-  }
-
-  private isRoomChannel(channel: string): boolean {
-    return (
-      channel === collaborationRoomChannel(this.roomId) ||
-      channel === collaborationAwarenessChannel(this.roomId) ||
-      channel === collaborationControlChannel(this.roomId)
-    );
-  }
-
-  private markStreamIdSeen(channel: string, streamId: string): void {
-    this.seenStreamIds.add(`${channel}|${streamId}`);
-    const lastAcknowledgedStreamId = this.lastAcknowledgedStreamIds.get(channel);
-    if (!lastAcknowledgedStreamId || compareStreamIds(streamId, lastAcknowledgedStreamId) > 0) {
-      this.lastAcknowledgedStreamIds.set(channel, streamId);
-    }
+  private markStreamIdSeen(streamId: string): void {
+    this.seenStreamIds.add(streamId);
     if (this.seenStreamIds.size > MAX_SEEN_STREAM_IDS) {
       const oldest = this.seenStreamIds.values().next().value;
       if (oldest) this.seenStreamIds.delete(oldest);
@@ -967,88 +714,6 @@ export class UpstashRoomProvider {
         this.pendingControlRoleVersion = 0;
       }
       this.isRefreshingControl = false;
-    }
-  }
-
-  private async synchronize(attemptId: string): Promise<void> {
-    if (this.isSynchronizing) return;
-    this.isSynchronizing = true;
-    const endSynchronizationSpan = startPerformanceSpan("collaboration.bootstrap", {
-      transport: this.roomSession?.room.transport ?? "unknown",
-    });
-    let synchronizationOutcome = "success";
-    try {
-      let cursor: string | undefined;
-      for (let pageIndex = 0; pageIndex < MAX_BOOTSTRAP_PAGES; pageIndex += 1) {
-        const bootstrap = await this.api.getBootstrap(this.roomId, cursor);
-        if (this.isStopped || attemptId !== this.attemptId) return;
-        if (
-          bootstrap.protocolVersion !== COLLABORATION_PROTOCOL_VERSION ||
-          bootstrap.documentSchemaVersion !== COLLABORATION_DOCUMENT_SCHEMA_VERSION
-        ) {
-          this.fatal("This room snapshot uses an unsupported schema", attemptId);
-          return;
-        }
-        if (pageIndex === 0) {
-          applyEncodedYjsSnapshot(
-            this.doc,
-            bootstrap.snapshot.update,
-            COLLABORATION_ORIGIN.remoteProvider,
-          );
-        }
-        for (const update of bootstrap.updates) {
-          const documentChannel = collaborationRoomChannel(this.roomId);
-          if (!this.seenStreamIds.has(`${documentChannel}|${update.streamId}`)) {
-            applyEncodedYjsUpdate(
-              this.doc,
-              update.event.update,
-              COLLABORATION_ORIGIN.remoteProvider,
-            );
-            this.markStreamIdSeen(documentChannel, update.streamId);
-          }
-        }
-        if (!bootstrap.hasMore) break;
-        if (bootstrap.nextCursor === cursor) {
-          throw new Error("Collaboration bootstrap cursor did not advance");
-        }
-        cursor = bootstrap.nextCursor;
-        if (pageIndex === MAX_BOOTSTRAP_PAGES - 1) {
-          throw new Error("Collaboration bootstrap page limit exceeded");
-        }
-      }
-
-      const buffered = this.bufferedMessages;
-      this.bufferedMessages = [];
-      for (const message of buffered) this.applyRealtimeMessage(message);
-      if (!this.roomSession) throw new Error("Collaboration room session is missing");
-      this.actor.send({
-        type: "SYNCED",
-        sessionId: this.sessionId,
-        attemptId,
-        roomSession: this.roomSession,
-      });
-      this.reconnectAttempt = 0;
-      // Once the machine is live, atomically stop buffering and drain the
-      // small tail that could have arrived while the first buffer was applied.
-      const finalBuffered = this.bufferedMessages;
-      this.bufferedMessages = [];
-      this.isSynchronizing = false;
-      for (const message of finalBuffered) this.applyRealtimeMessage(message);
-      await this.flushOutbox();
-    } catch (error) {
-      synchronizationOutcome = "failure";
-      if (this.isStopped || attemptId !== this.attemptId) return;
-      if (isFatalRequestError(error)) {
-        this.fatal(errorMessage(error, "Collaboration synchronization was rejected"), attemptId);
-      } else {
-        this.handleTransportFailure(
-          errorMessage(error, "Collaboration synchronization failed"),
-          attemptId,
-        );
-      }
-    } finally {
-      this.isSynchronizing = false;
-      endSynchronizationSpan({ outcome: synchronizationOutcome });
     }
   }
 
@@ -1141,7 +806,7 @@ export class UpstashRoomProvider {
       while (!this.isStopped && this.connectionState === "live" && this.outbox.length > 0) {
         const pending = this.outbox[0];
         const sentAt = monotonicNow();
-        const transport = this.roomSession?.room.transport ?? "unknown";
+        const transport = "cloudflare-websocket";
         if (pending.firstSentAt === undefined) {
           pending.firstSentAt = sentAt;
           recordPerformanceMetric(
@@ -1200,12 +865,6 @@ export class UpstashRoomProvider {
   }
 
   private publishTransportUpdate(pending: PendingUpdate): Promise<CollaborationUpdateAccepted> {
-    if (this.roomSession?.room.transport !== "cloudflare-websocket") {
-      return this.api.publishUpdate(
-        this.roomId,
-        createCollaborationDocumentUpdate(pending.update, this.clientId, pending.updateId),
-      );
-    }
     const socket = this.socket;
     if (!socket || socket.readyState !== WEBSOCKET_OPEN) {
       return Promise.reject(websocketRequestError("Collaboration WebSocket is not connected"));
@@ -1217,30 +876,15 @@ export class UpstashRoomProvider {
       }, WEBSOCKET_ACK_TIMEOUT_MS);
       this.pendingWebSocketAcks.set(pending.updateId, { resolve, reject, timer });
       try {
-        if (this.binaryProtocolActive) {
-          socket.send(
-            exactArrayBuffer(
-              encodeCollaborationClientUpdate({
-                clientId: this.clientId,
-                updateId: pending.updateId,
-                update: pending.update,
-              }),
-            ),
-          );
-        } else {
-          socket.send(
-            JSON.stringify(
-              collaborationWebSocketClientMessageSchema.parse({
-                type: "document.update",
-                data: createCollaborationDocumentUpdate(
-                  pending.update,
-                  this.clientId,
-                  pending.updateId,
-                ),
-              }),
-            ),
-          );
-        }
+        socket.send(
+          exactArrayBuffer(
+            encodeCollaborationClientUpdate({
+              clientId: this.clientId,
+              updateId: pending.updateId,
+              update: pending.update,
+            }),
+          ),
+        );
       } catch (error) {
         clearTimeout(timer);
         this.pendingWebSocketAcks.delete(pending.updateId);
@@ -1316,16 +960,6 @@ export class UpstashRoomProvider {
     });
   }
 
-  private closeSource(): void {
-    const source = this.source;
-    this.source = null;
-    if (!source) return;
-    source.onopen = null;
-    source.onmessage = null;
-    source.onerror = null;
-    source.close();
-  }
-
   private closeSocket(): void {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;
@@ -1352,7 +986,6 @@ export class UpstashRoomProvider {
   }
 
   private closeTransport(): void {
-    this.closeSource();
     this.closeSocket();
   }
 }

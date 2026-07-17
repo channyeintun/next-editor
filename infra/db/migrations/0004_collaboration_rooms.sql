@@ -1,5 +1,5 @@
--- Provider-neutral collaboration control plane. Live Yjs updates are stored
--- in the dedicated Upstash Redis database, not in D1.
+-- Collaboration control plane. Live Yjs updates are stored in each room's
+-- Durable Object SQLite database, not in D1.
 CREATE TABLE collaboration_rooms (
   id                      TEXT PRIMARY KEY,
   owner_id                TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -18,22 +18,13 @@ export type CollaborationQStashEnvironmentKey = (typeof QSTASH_ENVIRONMENT_KEYS)
 // Seven days is both the room-retention period and QStash Free's maximum delay.
 export const COLLABORATION_CLEANUP_DELAY = "7d" as const satisfies QStashDelay;
 
-export const collaborationMaintenanceJobSchema = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("compact-room"),
-      roomId: collaborationIdSchema,
-      expectedGeneration: z.number().int().positive(),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("cleanup-room"),
-      roomId: collaborationIdSchema,
-      closedAt: z.number().int().nonnegative(),
-    })
-    .strict(),
-]);
+export const collaborationMaintenanceJobSchema = z
+  .object({
+    kind: z.literal("cleanup-room"),
+    roomId: collaborationIdSchema,
+    closedAt: z.number().int().nonnegative(),
+  })
+  .strict();
 
 export type CollaborationMaintenanceJob = z.infer<typeof collaborationMaintenanceJobSchema>;
 
@@ -89,9 +80,7 @@ function maintenanceDestination(env: Env): string {
 }
 
 function deduplicationId(job: CollaborationMaintenanceJob): string {
-  return job.kind === "compact-room"
-    ? `collab-compact-${job.roomId}-${job.expectedGeneration}`
-    : `collab-cleanup-${job.roomId}-${job.closedAt}`;
+  return `collab-cleanup-${job.roomId}-${job.closedAt}`;
 }
 
 export async function publishCollaborationMaintenanceJob(

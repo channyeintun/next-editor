@@ -1,36 +1,26 @@
 # Live Collaboration Feature Plan
 
-Status: hybrid MVP implementation complete; deployment and multi-browser load validation pending
+Status: Cloudflare-native MVP implementation complete; deployment and multi-browser load validation pending
 
 Deployment evaluations:
 
 - [Cloudflare-native Deployment](./live-collaboration-cloudflare.md)
-- [Upstash Deployment Evaluation](./live-collaboration-upstash.md)
-- [Cloudflare WebSocket + Upstash Hybrid](./live-collaboration-hybrid-cloudflare-upstash.md)
 
-Deployment status: the selected default for new rooms is a hibernating Cloudflare Durable Object
-WebSocket coordinator with a room-local SQLite update log and alarm compaction. The original
-Upstash Redis durability and Realtime SSE/HTTP provider remain implemented as persistence-version-1
-fallbacks. Existing rooms retain version 1 through the D1 migration, and no room changes its
-stored transport or persistence version in place.
-
-The legacy Redis data plane is collaboration-only. Public lesson and playlist caching uses the
-Cloudflare Workers KV `CACHE` binding and never shares collaboration credentials, command budget,
-retention, or failure semantics.
+Deployment status: every room uses a hibernating Cloudflare Durable Object WebSocket coordinator
+with a room-local SQLite update log and alarm compaction. Binary collaboration protocol v2 is
+mandatory; there is no SSE, HTTP update, JSON awareness, or Redis downgrade path.
 
 ## Implemented MVP
 
 The repository now contains the complete provider, control-plane, and editor integration:
 
 - Yjs text/tree/metadata documents with deterministic collision and recovery rules.
-- Per-room transport and persistence selection: new authenticated Cloudflare WebSocket rooms use
-  Durable Object SQLite, while persistence-version-1 WebSocket and Upstash Realtime SSE/HTTP rooms
-  retain the dedicated Redis snapshot/update data plane.
+- Authenticated binary WebSocket rooms with room-local Durable Object SQLite persistence.
 - D1 rooms, invitations, owner/editor/viewer ACLs, role revocation, audit events, and room quotas.
 - Durable Object WebSocket hibernation, immediate connected-role enforcement, ephemeral awareness
   fan-out, participants, named relative remote cursors/selections, active-file state, and
-  follow-host UI. Realtime fallback rooms retain Redis-backed awareness.
-- Offline update retention, reconnect/bootstrap race handling, SQLite alarm or legacy QStash
+  follow-host UI.
+- Offline update retention, state-vector reconnect sync, SQLite alarm
   compaction, seven-day closed-room retention, QStash-signed cleanup, and owner recovery export.
 - Content-addressed binary project assets in private R2. Yjs stores only digest/MIME/size
   descriptors; clients hydrate bytes into the local workspace and can retry missing assets.
@@ -116,17 +106,12 @@ capture the converged result in its expected order.
 flowchart LR
     UI[Monaco and project UI] <-->|local commands and projection| Doc[(Shared CRDT document)]
     Doc <-->|durable updates| Provider[Room provider]
-    Provider <-->|selected per room| Transport{Live transport}
-    Transport <-->|authenticated WebSocket| DO[Hibernating room Durable Object]
-    Transport <-->|SSE downstream and HTTP upstream| Realtime[Upstash Realtime fallback]
-    DO -->|persistence v2: transaction before acknowledgement| SQL[(Room-local SQLite log and snapshot)]
-    DO -.->|persistence v1 only| Persist[(Upstash Redis update log and snapshots)]
-    Realtime <--> Persist
-    Worker[Hono collaboration routes] -->|upgrade, v2 bootstrap/export, and control| DO
-    Worker -.->|persistence v1 bootstrap/export| Persist
+    Provider <-->|authenticated binary WebSocket| DO[Hibernating room Durable Object]
+    DO -->|transaction before acknowledgement| SQL[(Room-local SQLite log and snapshot)]
+    Worker[Hono collaboration routes] -->|upgrade, export, and control| DO
     Worker <--> D1[(D1 rooms and membership)]
     Alarm[Durable Object alarm] -->|compact v2 tail| DO
-    QStash[QStash] -->|legacy compaction and delayed cleanup| Worker
+    QStash[QStash] -->|delayed closed-room cleanup| Worker
 
     Awareness[Presence and awareness] <-->|ephemeral messages| Provider
     UI <--> Awareness
@@ -211,24 +196,17 @@ The provider-neutral protocol has three logical message classes:
 3. **Control:** protocol/schema versions, effective role, host assignment, room closure, and
    recoverable errors.
 
-The room descriptor selects one of two implemented adapters. `cloudflare-websocket` uses one
-same-origin authenticated WebSocket to a hibernating Durable Object named by room ID. The Worker
+The provider uses one same-origin authenticated WebSocket to a hibernating Durable Object named
+by room ID. The Worker
 authenticates the first-party `HttpOnly` session, looks up current D1 membership, and forwards only
 canonical server-derived identity. The room object revalidates membership before every durable
 document input, applies immediate role/control notifications to socket attachments, persists
-document updates to Redis before acknowledgement, and directly fans out document, awareness, and
-control events. Awareness uses those canonical attachments and never enters D1 or Redis on its
-high-frequency path.
+document updates to SQLite before acknowledgement, and directly fans out binary document and
+awareness frames plus JSON control and acknowledgement messages. Awareness uses canonical socket
+attachments and never enters durable history.
 
-`upstash-realtime` maps downstream messages onto one same-origin Realtime SSE subscription and
-maps upstream document/awareness writes onto bounded HTTP endpoints. The same session and D1
-membership checks apply. It deliberately does not place bearer credentials in the EventSource
-URL, where tokens can leak through logs and history. Transport is fixed when the room is created;
-clients never combine both buses for one room.
-
-Bootstrap includes `protocolVersion`, `documentSchemaVersion`, a compacted snapshot, its stream
-cutoff, and a paginated update tail. Live events are buffered while bootstrap runs, closing the
-snapshot/subscription race. QStash periodically compacts the log into a new snapshot.
+Initial and reconnect synchronization use the standard Yjs state-vector exchange over the same
+socket. The room alarm compacts its SQLite update tail into a new snapshot.
 
 Reconnect uses capped exponential backoff with jitter. Local CRDT updates may continue while
 offline and merge after reconnection. Awareness is cleared on disconnect and republished only
@@ -347,7 +325,7 @@ current recording first; recording state and SCR3 bytes are never handed to the 
 
 Recording is not part of the collaboration data plane. SCR3 bytes stay in the host's browser and
 use the existing local recording persistence, including IndexedDB recovery. The room provider,
-Redis, Durable Object storage, and collaboration R2 namespaces must never receive or finalize the
+Durable Object storage and collaboration R2 namespaces must never receive or finalize the
 recording while the session is live.
 
 After the host ends the live session, the browser finalizes the local recording and presents the
@@ -507,9 +485,7 @@ migrated.
 
 ## References
 
-- [Cloudflare WebSocket + Upstash hybrid](./live-collaboration-hybrid-cloudflare-upstash.md)
 - [Cloudflare-native collaboration deployment](./live-collaboration-cloudflare.md)
-- [Upstash collaboration deployment evaluation](./live-collaboration-upstash.md)
 - [Yjs documentation](https://docs.yjs.dev/)
 - [Yjs awareness and presence](https://docs.yjs.dev/getting-started/adding-awareness)
 - [State Machines Documentation](./state-machines.md)

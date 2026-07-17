@@ -32,8 +32,6 @@
     "@rrweb/types": "2.1.0",
     "@tanstack/react-query": "^5.101.2",
     "@upstash/qstash": "^2.11.2",
-    "@upstash/realtime": "^1.0.4",
-    "@upstash/redis": "^1.38.0",
     "@webcontainer/api": "^1.6.4",
     "@xstate/react": "^6.1.0",
     "@xstate/store-react": "^2.0.0",

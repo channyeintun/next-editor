@@ -4,9 +4,8 @@ import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
 import { collaborationIdSchema } from "./protocol";
 
-// Version 2 adds authenticated standard-awareness frames to the version-1
-// document sync/update envelope. Bumping avoids sending awareness frames to a
-// document-only Durable Object during a rolling deployment.
+// The only supported room wire version carries document sync/update and
+// authenticated standard-awareness frames in one binary envelope.
 export const COLLABORATION_BINARY_PROTOCOL_VERSION = 2 as const;
 
 const BINARY_FRAME_SYNC = 0;

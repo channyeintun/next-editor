@@ -17,13 +17,9 @@ import {
   createCollaborationRoom,
   downloadCollaborationAsset,
   exportCollaborationRoom,
-  getCollaborationBootstrap,
   getCollaborationRoom,
-  listCollaborationAwareness,
   listCollaborationInvitations,
   listCollaborationMembers,
-  publishCollaborationAwareness,
-  publishCollaborationUpdate,
   removeCollaborationMember,
   revokeCollaborationInvitation,
   updateCollaborationMemberRole,
@@ -40,6 +36,7 @@ import type {
   CollaborationRoomSession,
   CreatedCollaborationInvitation,
 } from "../collaboration/protocol";
+import { COLLABORATION_AWARENESS_TTL_MS } from "../collaboration/protocol";
 import {
   CollaborationProjectController,
   canWriteCollaborationDocument,
@@ -47,14 +44,11 @@ import {
   seedCollaborationProject,
   type CollaborationProjectProjection,
 } from "../collaboration/projectDocument";
+import { createCollaborationRoomSnapshot } from "../collaboration/yjsUpdates";
 import {
-  createCollaborationDocumentUpdate,
-  createCollaborationRoomSnapshot,
-} from "../collaboration/yjsUpdates";
-import {
-  UpstashRoomProvider,
+  CollaborationRoomProvider,
   type CollaborationRoomApi,
-} from "../collaboration/upstashRoomProvider";
+} from "../collaboration/roomProvider";
 import {
   collaborationConnectionState,
   type CollaborationConnectionState,
@@ -84,7 +78,7 @@ import { createCollaborationUndoManager } from "../collaboration/undo";
 export type CollaborationParticipant = Extract<CollaborationAwarenessEvent, { kind: "state" }>;
 
 interface CollaborationContextValue {
-  provider: UpstashRoomProvider | null;
+  provider: CollaborationRoomProvider | null;
   doc: Y.Doc | null;
   session: CollaborationRoomSession | null;
   connectionState: CollaborationConnectionState;
@@ -126,9 +120,6 @@ const CollaborationContext = createContext<CollaborationContextValue | null>(nul
 
 const collaborationApi: CollaborationRoomApi = {
   getRoom: getCollaborationRoom,
-  getBootstrap: getCollaborationBootstrap,
-  publishUpdate: publishCollaborationUpdate,
-  publishAwareness: publishCollaborationAwareness,
 };
 
 function messageFromError(error: unknown, fallback: string): string {
@@ -140,7 +131,7 @@ function messageFromError(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function stopProviderAfterBestEffortFlush(provider: UpstashRoomProvider): void {
+function stopProviderAfterBestEffortFlush(provider: CollaborationRoomProvider): void {
   if (provider.connectionState === "live" && provider.hasPendingUpdates) {
     void provider.flushNow().then(
       () => provider.stop(),
@@ -163,8 +154,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const roomId = searchParams.get("room");
   const inviteToken = searchParams.get("invite");
-  const [provider, setProvider] = useState<UpstashRoomProvider | null>(null);
-  const providerRef = useRef<UpstashRoomProvider | null>(null);
+  const [provider, setProvider] = useState<CollaborationRoomProvider | null>(null);
+  const providerRef = useRef<CollaborationRoomProvider | null>(null);
   const projectionRef = useRef<CollaborationProjectProjection | null>(null);
   const pendingLocalTextEditRef = useRef<{
     event: TextEditEvent;
@@ -327,7 +318,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const nextProvider = new UpstashRoomProvider({
+    const nextProvider = new CollaborationRoomProvider({
       roomId,
       api: collaborationApi,
       onDocumentChange: (doc, transaction) => {
@@ -560,8 +551,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (!isSignedIn) throw new Error("Sign in before starting a collaboration room.");
     const project = baseActionsRef.current.getProject();
     const doc = new Y.Doc();
-    seedCollaborationProject(doc, project, { skipBinaryAssets: true });
-    const seededState = Y.encodeStateVector(doc);
+    seedCollaborationProject(doc, project);
     const clientId = crypto.randomUUID();
     let created: CollaborationRoomSession;
     try {
@@ -574,22 +564,20 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       const binaryFiles = Object.values(project.files)
         .filter(isWorkspaceAssetFile)
         .sort((left, right) => left.path.localeCompare(right.path));
-      if (binaryFiles.length > 0) {
-        const controller = new CollaborationProjectController(doc, { canWrite: () => true });
-        for (const file of binaryFiles) {
-          const bytes = await getWorkspaceAssetBytes(file.content);
-          const asset = await uploadCollaborationAsset(
-            created.room.id,
-            bytes,
-            file.content.mimeType,
-          );
-          controller.createAssetFile(file.path, asset);
-        }
-        controller.setEntryFile(project.entryFilePath);
-        await publishCollaborationUpdate(
+      for (const file of binaryFiles) {
+        const bytes = await getWorkspaceAssetBytes(file.content);
+        const asset = await uploadCollaborationAsset(
           created.room.id,
-          createCollaborationDocumentUpdate(Y.encodeStateAsUpdate(doc, seededState), clientId),
+          bytes,
+          file.content.mimeType,
         );
+        if (
+          asset.id !== file.content.assetId ||
+          asset.mimeType !== file.content.mimeType ||
+          asset.size !== file.content.size
+        ) {
+          throw new Error(`Uploaded collaboration asset did not match ${file.path}`);
+        }
       }
       updateRoomParam(created.room.id);
       return created;
@@ -601,7 +589,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     }
   }, [isSignedIn, updateRoomParam]);
 
-  const flushCurrentEdits = useCallback(async (current: UpstashRoomProvider) => {
+  const flushCurrentEdits = useCallback(async (current: CollaborationRoomProvider) => {
     await current.flushNow();
     if (!current.hasPendingUpdates) return;
     const message = "Wait for offline collaboration changes to synchronize before continuing.";
@@ -674,15 +662,35 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (awarenessCursorRef.current?.fileNodeId !== activeFileNodeId) {
       awarenessCursorRef.current = null;
     }
+    const revision = ++awarenessRevisionRef.current;
     await current.publishAwareness({
       kind: "state",
       sessionId: current.awarenessSessionId,
-      revision: ++awarenessRevisionRef.current,
+      revision,
       activeFileNodeId,
       cursor: awarenessCursorRef.current,
       followingHost: followingHostRef.current,
     });
-  }, [getNodeIdForPath]);
+    if (!user) return;
+    const now = Date.now();
+    applyAwarenessEvent({
+      kind: "state",
+      roomId: currentSession.room.id,
+      actorId: user.id,
+      sessionId: current.awarenessSessionId,
+      revision,
+      role: currentSession.membership.role,
+      username: user.username,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+      isHost: currentSession.room.hostUserId === user.id,
+      activeFileNodeId,
+      cursor: awarenessCursorRef.current,
+      followingHost: followingHostRef.current,
+      occurredAt: now,
+      expiresAt: now + COLLABORATION_AWARENESS_TTL_MS,
+    });
+  }, [applyAwarenessEvent, getNodeIdForPath, user]);
 
   const scheduleAwarenessPublish = useCallback(
     (delay = 75) => {
@@ -698,15 +706,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!provider || connectionState !== "live" || !session) return;
     let cancelled = false;
-    void Promise.all([
-      session.room.transport === "upstash-realtime"
-        ? listCollaborationAwareness(session.room.id)
-        : Promise.resolve([]),
-      refreshRoomDataFor(session.room.id, role === "owner"),
-    ])
-      .then(([initialParticipants]) => {
+    void refreshRoomDataFor(session.room.id, role === "owner")
+      .then(() => {
         if (cancelled) return;
-        for (const participant of initialParticipants) applyAwarenessEvent(participant);
         void publishAwarenessState().catch(() => {});
       })
       .catch((error: unknown) => {
@@ -731,7 +733,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         .catch(() => {});
     };
   }, [
-    applyAwarenessEvent,
     connectionState,
     provider,
     publishAwarenessState,

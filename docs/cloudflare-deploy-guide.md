@@ -170,31 +170,21 @@ exist:
 ```sh
 npx wrangler secret delete UPSTASH_REDIS_REST_URL
 npx wrangler secret delete UPSTASH_REDIS_REST_TOKEN
+npx wrangler secret delete COLLAB_REDIS_REST_URL
+npx wrangler secret delete COLLAB_REDIS_REST_TOKEN
 ```
 
-Do **not** delete `COLLAB_REDIS_REST_URL` or `COLLAB_REDIS_REST_TOKEN` while any
-persistence-version-1 or Realtime room remains. Those credentials serve only
-the legacy collaboration/Realtime data plane.
+### Required for live collaboration
 
-### Required for legacy/Realtime collaboration: Upstash Redis data plane
+Live collaboration is fail-closed and does not reuse the `CACHE` KV binding. Apply every D1
+migration, deploy the `CollaborationRoomDurableObject` class migration, and confirm the
+`COLLABORATION_ROOMS` binding is present. Every room uses binary WebSocket protocol v2 and its
+Durable Object's SQLite document log.
 
-Live collaboration is fail-closed and does not reuse the `CACHE` KV binding.
-Create a production Redis database when retaining persistence-version-1 or
-Realtime rooms, then set its REST URL and token with the same secret-handling
-precautions:
-
-```sh
-npx wrangler secret put COLLAB_REDIS_REST_URL   < /path/to/tmpfile
-npx wrangler secret put COLLAB_REDIS_REST_TOKEN < /path/to/tmpfile
-```
-
-The gallery cache does not use these credentials; it is isolated in Workers
-KV. Apply every D1 migration before deploying so `collaboration_rooms`,
-`collaboration_members`, and `persistence_version` exist. New WebSocket rooms
-use `COLLABORATION_WEBSOCKET_PERSISTENCE=sqlite` and do not require Redis on
-their update/bootstrap path. Version-1 and Realtime routes return
-`503 collaboration unavailable` when the dedicated credentials are absent;
-unrelated editor, gallery, and version-2 room routes continue to operate.
+Production should also configure `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, and
+`QSTASH_NEXT_SIGNING_KEY` for delayed closed-room cleanup. See
+[Collaboration Deployment and Operations](./deployment-operations-collaboration.md) for the full
+smoke and release gate.
 
 ## Custom domain cutover
 

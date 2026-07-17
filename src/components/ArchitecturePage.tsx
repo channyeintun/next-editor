@@ -296,7 +296,7 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
   {
     n: "11",
     title: "Hono API routes",
-    detail: "content, auth, uploads, guarded proxies, and collaboration HTTP/SSE routes.",
+    detail: "content, auth, uploads, guarded proxies, and collaboration HTTP/WebSocket routes.",
   },
   {
     n: "12",
@@ -330,9 +330,9 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
   },
   {
     n: "18",
-    title: "Upstash Realtime + Redis",
+    title: "Room Durable Objects",
     detail:
-      "collaboration-only SSE transport, recoverable Yjs history, snapshots, awareness, and rate state; fail-closed.",
+      "hibernating binary WebSockets, authoritative awareness, and per-room SQLite Yjs history.",
   },
 ];
 
@@ -387,7 +387,7 @@ export default function ArchitecturePage() {
               <desc>
                 User's browser runs the client app and connects over HTTPS to a Cloudflare Worker
                 edge, which uses Cloudflare D1, R2, and Workers KV. Google provides identity;
-                Upstash Realtime and Redis provide the collaboration-only data plane. The client
+                Room Durable Objects provide binary WebSockets and SQLite collaboration state. The client
                 also sends analytics events, masked session replay and error reports to PostHog
                 Cloud (US).
               </desc>
@@ -595,8 +595,8 @@ export default function ArchitecturePage() {
               <ExternalBox
                 x={948}
                 y={770}
-                title="Upstash Realtime + Redis"
-                lines={["collaboration transport + state", "SSE, Yjs history, presence"]}
+                title="Room Durable Objects"
+                lines={["binary WebSockets + SQLite", "Yjs history and presence"]}
                 tag={18}
               />
 
@@ -768,9 +768,9 @@ export default function ArchitecturePage() {
                   <td>collaboration</td>
                   <td>
                     <code>yjs</code>
-                    <code>upstash realtime + redis</code>{" "}
+                    <code>durable objects + sqlite</code>{" "}
                     <span className="note-inline">
-                      — authenticated SSE/HTTP with a fail-closed room data plane
+                      — authenticated binary WebSockets with per-room durability
                     </span>
                   </td>
                 </tr>

@@ -58,7 +58,7 @@ afterEach(() => {
 describe("QStash collaboration job verification", () => {
   const current = "current-signing-key";
   const next = "next-signing-key";
-  const body = '{"kind":"compact-room"}';
+  const body = '{"kind":"cleanup-room"}';
   const url = "https://nexteditor.dev/api/collaboration/jobs/maintenance";
 
   it("accepts signatures made with either configured signing key", async () => {
@@ -125,9 +125,9 @@ describe("QStash collaboration job verification", () => {
           QSTASH_TOKEN: "qstash-token",
         } as Env,
         {
-          kind: "compact-room",
+          kind: "cleanup-room",
           roomId: "10000000-0000-4000-8000-000000000001",
-          expectedGeneration: 4,
+          closedAt: 4,
         },
       ),
     ).resolves.toEqual({

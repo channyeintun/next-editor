@@ -16,7 +16,7 @@ the `/learn` catalog, lesson publishing, playlists, and live collaboration.
 | Who can create        | **Any Google account.** Sign in with Google → you can record, upload, and publish.                                                                    |
 | Existing JSON catalog | **Kept as-is.** The curated seed (e.g. `introduction`) stays static and D1-free — frequent-access, edge-cached. D1 only holds user-generated lessons. |
 | Public read cache     | **Cloudflare Workers KV.** Public lesson/playlist JSON uses the fail-open `CACHE` binding; search remains uncached.                                   |
-| Live collaboration    | **Versioned room durability.** New WebSocket rooms use Durable Object SQLite; legacy/Realtime rooms use dedicated Upstash Redis, never the KV cache.  |
+| Live collaboration    | **Room Durable Objects.** Binary WebSockets and per-room SQLite are the only collaboration transport and durability path.                         |
 
 ## Why same-origin is not negotiable here
 
@@ -46,7 +46,7 @@ and the session cookie is a plain first-party `HttpOnly` cookie.
 Cloudflare server bindings stay in `infra/worker`; browser composition can
 consume the exported `@next-editor/infra` client package at route boundaries.
 The editor and recording core do not directly access D1, R2, KV, Worker
-secrets, or Upstash credentials.
+secrets, or collaboration credentials.
 
 ```
 infra/
@@ -66,24 +66,22 @@ without exposing server bindings or credentials to browser code.
 
 ```mermaid
 flowchart LR
-    Browser[Browser SPA: editor, learn, Yjs] <-->|same-origin HTTPS and SSE| Worker[Cloudflare Worker: Hono]
+    Browser[Browser SPA: editor, learn, Yjs] <-->|same-origin HTTPS and WSS| Worker[Cloudflare Worker: Hono]
     Worker -->|built SPA and seed catalog| Assets[Static Assets]
     Worker -->|users, content, room control plane| D1[(D1)]
     Worker -->|lesson media and private room assets| R2[(R2)]
     Worker -->|fail-open public JSON cache| KV[(Workers KV: CACHE)]
     Worker <-->|OAuth| Google[Google]
     Worker -->|authenticated WebSocket| Room[Room Durable Object]
-    Room -->|new-room log and snapshots| SQL[(Room-local SQLite)]
-    Worker <-->|legacy Realtime and room state| Upstash[Upstash Realtime + Redis]
-    QStash[QStash] -->|legacy compaction and delayed cleanup| Worker
+    Room -->|room log and snapshots| SQL[(Room-local SQLite)]
+    QStash[QStash] -->|delayed closed-room cleanup| Worker
 ```
 
 Everything is one hostname, so COEP `require-corp` is satisfied and the session
 cookie is first-party. Cloudflare's CDN caches static assets and (with cache
 headers) `/media/*` at the edge. Workers KV serves only disposable public
-lesson/playlist cache entries. Durable Object SQLite is fail-closed for new
-WebSocket room history; Upstash Redis is fail-closed and reserved for legacy
-collaboration/Realtime rooms.
+lesson/playlist cache entries. Durable Object SQLite is fail-closed for
+WebSocket room history.
 
 ## Data model — D1
 
@@ -97,9 +95,8 @@ authoritative schema. D1 currently holds:
 | Collaboration control plane | rooms, members, invitations/claims, audit events, and asset metadata |
 
 The public gallery reads only published lessons; owner-scoped routes expose
-drafts. D1 does **not** store the live Yjs update log or presence state. New
-WebSocket logs live in room-local Durable Object SQLite; version-1 logs live in
-the dedicated collaboration Redis data plane.
+drafts. D1 does **not** store the live Yjs update log or presence state. Room
+logs live in room-local Durable Object SQLite.
 
 ## Storage model — R2
 
@@ -193,9 +190,8 @@ reads and writes.
   auto-provisioned on first deploy; operators can instead create a namespace
   manually and add its public ID to `wrangler.toml`.
 - **Migration boundary.** Existing Redis cache entries are disposable and are
-  not copied. After the KV-backed release is smoke-tested, remove only the old
-  `UPSTASH_REDIS_REST_*` Worker secrets. Keep `COLLAB_REDIS_REST_*`, which are
-  required by live collaboration.
+  not copied. After the KV-backed release is smoke-tested, remove obsolete
+  `UPSTASH_REDIS_REST_*` and `COLLAB_REDIS_REST_*` Worker secrets.
 
 See Cloudflare's documentation for [KV consistency](https://developers.cloudflare.com/kv/concepts/how-kv-works/),
 [KV pricing](https://developers.cloudflare.com/kv/platform/pricing/), and
@@ -244,8 +240,8 @@ the upload modal against the persisted recording.
 | `PUT /api/uploads/:id/media/:filename`                             | owner/sign-in    | Validate and stream a lesson object through the Worker to R2                              |
 | `/api/playlists/*`                                                 | mixed            | Public playlist detail plus owner CRUD, membership, and ordering                          |
 | `/api/authors/:username`, `/api/search`                            | —                | Public author/catalog discovery; search is intentionally uncached                         |
-| `/api/collaboration/rooms/*`, `/invitations/*`, `/realtime`        | member/role      | D1 control plane, private R2 assets, versioned SQLite/Redis persistence, and Realtime SSE |
-| `POST /api/collaboration/jobs/maintenance`                         | QStash signature | Legacy compaction and retained-room cleanup                                               |
+| `/api/collaboration/rooms/*`, `/invitations/*`                     | member/role      | D1 control plane, private R2 assets, binary WebSockets, and room-local SQLite             |
+| `POST /api/collaboration/jobs/maintenance`                         | QStash signature | Delayed closed-room cleanup                                                               |
 | `GET /media/*`                                                     | —                | Stream R2 objects with Range and immutable-cache support                                  |
 | `POST /api/slide-images`                                           | cookie           | Ingest Google Slides images into content-addressed R2 keys                                |
 | `GET /api/proxy?url=`, `POST /api/openrouter/responses`            | route-specific   | Guarded same-origin external-service proxies                                              |
@@ -278,12 +274,12 @@ use their smaller shared client/server constraint.
 
 ## Security notes
 
-- Google, legacy collaboration Redis, and QStash credentials live only as **Worker secrets**, never in the browser bundle.
+- Google and QStash credentials live only as **Worker secrets**, never in the browser bundle.
 - Session cookie is `HttpOnly; Secure; SameSite=Lax`; tokens are opaque and DB-validated; PKCE + `state` guard the OAuth handshake.
 - Ownership is enforced server-side on every mutating route (`owner_id === session.user_id`); "any Google account can create" does **not** mean any account can edit another's lesson.
 - The upload route validates authentication, existing-lesson ownership, exact content length, filename/extension, and size before writing under `lessons/<id>/…`.
 - Draft lessons are never returned by the public gallery query; only `/api/lessons/mine` (owner-scoped) exposes them.
-- Collaboration routes re-check room membership and roles server-side; browser clients never receive Redis or QStash credentials.
+- Collaboration routes re-check room membership and roles server-side; browser clients never receive QStash credentials.
 
 ## Cost / free-tier fit
 
@@ -299,4 +295,4 @@ Cloudflare pricing pages again before changing traffic or TTL assumptions.
 
 - The `.ne` / SCR3 format, the codec, the recorder machine, playback, sibling media resolution.
 - The static seed catalog and `public/lessons/introduction/*` assets.
-- Standalone editor behavior when no collaboration room is selected; Redis is never a fallback cache for ordinary editor or catalog requests.
+- Standalone editor behavior when no collaboration room is selected.

@@ -1,15 +1,10 @@
 import type {
   CollaborationAssetDescriptor,
-  CollaborationAwarenessEvent,
-  CollaborationAwarenessInput,
-  CollaborationBootstrapResponse,
   CollaborationCreateRoomInput,
-  CollaborationDocumentUpdateInput,
   CollaborationInviteRole,
   CollaborationInvitation,
   CollaborationMember,
   CollaborationRoomSession,
-  CollaborationUpdateAccepted,
   CreatedCollaborationInvitation,
 } from "../../../src/collaboration/protocol";
 import {
@@ -52,44 +47,12 @@ export async function listCollaborationRooms(): Promise<CollaborationRoomSession
   return response.data.rooms;
 }
 
-export async function getCollaborationBootstrap(
-  roomId: string,
-  cursor?: string,
-): Promise<CollaborationBootstrapResponse> {
-  const response = await apiClient.get<CollaborationBootstrapResponse>(
-    `/collaboration/rooms/${encodeURIComponent(roomId)}/bootstrap`,
-    { params: cursor ? { cursor } : undefined },
-  );
-  return response.data;
-}
-
 export async function listCollaborationMembers(
   roomId: string,
 ): Promise<{ members: CollaborationMember[]; roleVersion: number }> {
   const response = await apiClient.get<{ members: CollaborationMember[]; roleVersion: number }>(
     `/collaboration/rooms/${encodeURIComponent(roomId)}/members`,
   );
-  return response.data;
-}
-
-export async function listCollaborationAwareness(
-  roomId: string,
-): Promise<CollaborationAwarenessEvent[]> {
-  const response = await apiClient.get<{ participants: CollaborationAwarenessEvent[] }>(
-    `/collaboration/rooms/${encodeURIComponent(roomId)}/awareness`,
-  );
-  return response.data.participants;
-}
-
-export async function publishCollaborationAwareness(
-  roomId: string,
-  awareness: CollaborationAwarenessInput,
-): Promise<{ accepted: true; streamId: string; event: CollaborationAwarenessEvent }> {
-  const response = await apiClient.post<{
-    accepted: true;
-    streamId: string;
-    event: CollaborationAwarenessEvent;
-  }>(`/collaboration/rooms/${encodeURIComponent(roomId)}/awareness`, awareness);
   return response.data;
 }
 
@@ -165,17 +128,6 @@ export async function exportCollaborationRoom(roomId: string): Promise<Blob> {
   const response = await apiClient.get<Blob>(
     `/collaboration/rooms/${encodeURIComponent(roomId)}/export`,
     { responseType: "blob" },
-  );
-  return response.data;
-}
-
-export async function publishCollaborationUpdate(
-  roomId: string,
-  update: CollaborationDocumentUpdateInput,
-): Promise<CollaborationUpdateAccepted> {
-  const response = await apiClient.post<CollaborationUpdateAccepted>(
-    `/collaboration/rooms/${encodeURIComponent(roomId)}/updates`,
-    update,
   );
   return response.data;
 }

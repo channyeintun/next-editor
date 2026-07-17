@@ -19,7 +19,7 @@ import {
   type CollaborationParticipant,
 } from "../contexts/CollaborationContext";
 import type { EditorSelection } from "../core/src/types";
-import type { UpstashRoomProvider } from "../collaboration/upstashRoomProvider";
+import type { CollaborationRoomProvider } from "../collaboration/roomProvider";
 import { selectIsCollapsed, selectIsFullHeight } from "../stores/runtimePanelStore";
 import { isWorkspaceTextFile, lessonRunsInWebContainer } from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
@@ -168,10 +168,9 @@ interface ActiveYMonacoBinding {
   binding: MonacoBinding;
   editor: StandaloneEditor;
   model: monaco.editor.ITextModel;
-  provider: UpstashRoomProvider;
+  provider: CollaborationRoomProvider;
   text: Y.Text;
   path: string;
-  usesAwareness: boolean;
 }
 
 function displayParticipantName(participant: { name: string | null; username: string }): string {
@@ -226,7 +225,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const isConfiguringYMonacoRef = useRef(false);
   const recordedRemoteCursorSignaturesRef = useRef(new Map<string, string>());
   const remoteCursorRecordingScopeRef = useRef<{
-    provider: UpstashRoomProvider | null;
+    provider: CollaborationRoomProvider | null;
     path: string;
     isRecording: boolean;
   }>({ provider: null, path: "", isRecording: false });
@@ -334,7 +333,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     const active = yMonacoBindingRef.current;
     yMonacoBindingRef.current = null;
     active?.binding.destroy();
-    if (clearAwareness && active?.usesAwareness) {
+    if (clearAwareness && active) {
       active.provider.awareness.setLocalStateField("selection", null);
     }
   });
@@ -368,15 +367,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       return false;
     }
 
-    const usesAwareness = provider.isBinaryProtocolActive;
     const current = yMonacoBindingRef.current;
     if (
       current?.editor === editor &&
       current.model === model &&
       current.provider === provider &&
       current.text === text &&
-      current.path === activeFile.path &&
-      current.usesAwareness === usesAwareness
+      current.path === activeFile.path
     ) {
       return true;
     }
@@ -384,12 +381,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     disposeYMonacoBinding(false);
     isConfiguringYMonacoRef.current = true;
     try {
-      const binding = new MonacoBinding(
-        text,
-        model,
-        new Set([editor]),
-        usesAwareness ? provider.awareness : null,
-      );
+      const binding = new MonacoBinding(text, model, new Set([editor]), provider.awareness);
       yMonacoBindingRef.current = {
         binding,
         editor,
@@ -397,26 +389,23 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         provider,
         text,
         path: activeFile.path,
-        usesAwareness,
       };
-      if (usesAwareness) {
-        const selection = editor.getSelection();
-        if (selection) {
-          let anchorOffset = model.getOffsetAt(selection.getStartPosition());
-          let headOffset = model.getOffsetAt(selection.getEndPosition());
-          if (selection.getDirection() === monaco.SelectionDirection.RTL) {
-            [anchorOffset, headOffset] = [headOffset, anchorOffset];
-          }
-          provider.awareness.setLocalStateField("selection", {
-            anchor: Y.createRelativePositionFromTypeIndex(text, anchorOffset),
-            head: Y.createRelativePositionFromTypeIndex(text, headOffset),
-          });
+      const selection = editor.getSelection();
+      if (selection) {
+        let anchorOffset = model.getOffsetAt(selection.getStartPosition());
+        let headOffset = model.getOffsetAt(selection.getEndPosition());
+        if (selection.getDirection() === monaco.SelectionDirection.RTL) {
+          [anchorOffset, headOffset] = [headOffset, anchorOffset];
         }
+        provider.awareness.setLocalStateField("selection", {
+          anchor: Y.createRelativePositionFromTypeIndex(text, anchorOffset),
+          head: Y.createRelativePositionFromTypeIndex(text, headOffset),
+        });
       }
       return true;
     } catch {
       yMonacoBindingRef.current = null;
-      if (usesAwareness) provider.awareness.setLocalStateField("selection", null);
+      provider.awareness.setLocalStateField("selection", null);
       return false;
     } finally {
       isConfiguringYMonacoRef.current = false;
@@ -425,7 +414,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
   const publishCollaborationCursor = useEffectEvent((editor: StandaloneEditor | null) => {
     if (!collaboration?.provider || usesPlaybackModel || !editor) return;
-    if (yMonacoBindingRef.current?.usesAwareness) return;
+    if (yMonacoBindingRef.current) return;
     const model = editor.getModel();
     const selection = editor.getSelection();
     if (!model || !selection) return;
@@ -720,12 +709,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     }
     const yMonacoBinding = yMonacoBindingRef.current;
     const yMonacoRendersSelections = Boolean(
-      yMonacoBinding?.editor === editor &&
-      yMonacoBinding.model === model &&
-      yMonacoBinding.usesAwareness,
+      yMonacoBinding?.editor === editor && yMonacoBinding.model === model,
     );
     let awarenessText = yMonacoRendersSelections ? yMonacoBinding?.text : undefined;
-    if (!awarenessText && collaboration.provider.isBinaryProtocolActive) {
+    if (!awarenessText) {
       try {
         const fileNodeId = collaboration.getNodeIdForPath(activeFile.path);
         awarenessText = fileNodeId
@@ -930,7 +917,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     collaboration?.getNodeIdForPath,
     collaboration?.participants,
     collaboration?.provider,
-    collaboration?.provider?.isBinaryProtocolActive,
   ]);
 
   useEffect(() => {
@@ -991,12 +977,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       const yMonacoBinding = yMonacoBindingRef.current;
       const standardParticipantKeys = new Set<string>();
       let awarenessText =
-        yMonacoBinding?.editor === editor &&
-        yMonacoBinding.model === model &&
-        yMonacoBinding.usesAwareness
+        yMonacoBinding?.editor === editor && yMonacoBinding.model === model
           ? yMonacoBinding.text
           : undefined;
-      if (!awarenessText && provider.isBinaryProtocolActive) {
+      if (!awarenessText) {
         try {
           const fileNodeId = collaboration.getNodeIdForPath(activeFile.path);
           awarenessText = fileNodeId
@@ -1053,7 +1037,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     collaboration?.getNodeIdForPath,
     collaboration?.participants,
     collaboration?.provider,
-    collaboration?.provider?.isBinaryProtocolActive,
     editorRef,
     isRecording,
     usesPlaybackModel,

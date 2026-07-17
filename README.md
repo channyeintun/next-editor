@@ -30,7 +30,7 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 - Authenticated collaboration rooms support owner/editor/viewer roles, offline Yjs edits, remote
   cursors, follow-host state, private binary assets, and host-only browser recording.
 - Published lessons, authors, search, and playlists run through a same-origin Cloudflare Worker;
-  public lesson/playlist JSON uses Workers KV while Upstash Redis remains collaboration-only.
+  public lesson/playlist JSON uses Workers KV.
 
 ## Current Capabilities
 
@@ -68,7 +68,8 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 - Styling: Tailwind CSS 4, Motion
 - Recording/storage: SCR3 stream container, msgpack, fflate (zlib + zip)
 - Cloud platform: Cloudflare Workers + Hono, D1, R2, Workers KV, and Static Assets
-- Collaboration data plane: Yjs, Upstash Realtime + Redis, and QStash maintenance jobs
+- Collaboration data plane: Yjs over binary WebSockets, room Durable Objects with SQLite, and
+  QStash delayed-cleanup jobs
 - Quality checks: vite-plus, Oxlint, TypeScript native preview (`tsgo`)
 
 ## Project Structure
@@ -160,7 +161,7 @@ Recordings use the SCR3 `.ne` container as raw binary end-to-end — the exporte
 - [docs/state-machines.md](docs/state-machines.md) for the XState architecture.
 - [docs/streaming-playback.md](docs/streaming-playback.md) for partial-download and live-stream playback.
 - [docs/cloudflare-architecture.md](docs/cloudflare-architecture.md) for the deployed platform and
-  KV/Redis responsibility split.
+  storage responsibility split.
 - [docs/cloudflare-deploy-guide.md](docs/cloudflare-deploy-guide.md) for Cloudflare provisioning,
   secrets, migrations, and deployment.
 - [docs/live-collaboration.md](docs/live-collaboration.md) for the implemented Yjs collaboration

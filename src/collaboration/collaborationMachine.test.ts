@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
-  collaborationRoomChannel,
   type CollaborationRoomSession,
 } from "./protocol";
 import { collaborationMachine } from "./collaborationMachine";
@@ -19,9 +18,6 @@ function roomSession(role: "owner" | "editor" | "viewer" = "editor"): Collaborat
       ownerId: "40000000-0000-4000-8000-000000000001",
       hostUserId: "40000000-0000-4000-8000-000000000001",
       status: "active",
-      transport: "upstash-realtime",
-      persistenceVersion: 1,
-      binaryProtocolVersion: null,
       protocolVersion: COLLABORATION_PROTOCOL_VERSION,
       documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
       roleVersion: 1,
@@ -30,7 +26,6 @@ function roomSession(role: "owner" | "editor" | "viewer" = "editor"): Collaborat
       updatedAt: 1,
     },
     membership: { role },
-    channel: collaborationRoomChannel(ROOM_ID),
   };
 }
 

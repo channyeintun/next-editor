@@ -3,7 +3,6 @@ import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
 import { z } from "zod";
 import {
-  COLLABORATION_BINARY_PROTOCOL_VERSION,
   decodeCollaborationAwarenessProtocolUpdate,
   decodeCollaborationBinaryFrame,
   encodeCollaborationAwarenessProtocolUpdate,
@@ -16,21 +15,18 @@ import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
   COLLABORATION_SQLITE_PERSISTENCE_VERSION,
-  MAX_ENCODED_YJS_UPDATE_LENGTH,
+  COLLABORATION_AWARENESS_TTL_MS,
   MAX_YJS_UPDATE_BYTES,
   canPublishCollaborationUpdate,
   collaborationAwarenessClientStateSchema,
   collaborationAwarenessEventSchema,
   collaborationAwarenessServerStateSchema,
-  collaborationDocumentUpdateEventSchema,
   collaborationIdSchema,
-  collaborationPersistenceVersionSchema,
   collaborationRoleSchema,
   collaborationRoomControlCommandSchema,
-  collaborationRoomDocumentBroadcastSchema,
-  collaborationWebSocketClientMessageSchema,
   collaborationWebSocketServerMessageSchema,
   type CollaborationAwarenessEvent,
+  type CollaborationAwarenessInput,
   type CollaborationBootstrapResponse,
   type CollaborationControlEvent,
   type CollaborationDocumentUpdateEvent,
@@ -46,28 +42,16 @@ import {
 } from "../../../src/collaboration/yjsUpdates";
 import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
 import {
-  appendCollaborationUpdate,
-  compactCollaborationDocument,
-  getCollaborationSnapshotGeneration,
-  shouldCompactCollaborationDocument,
-} from "./documentStore";
-import {
   CollaborationRoomSqliteQuotaError,
   RoomSqliteDocumentStore,
-  type AppendRoomSqliteUpdateResult,
   type RoomSqliteStorage,
   type StoredAppendRoomSqliteUpdateResult,
 } from "./roomSqliteDocumentStore";
 import type { CollaborationRoomLocationHint } from "./roomLocation";
-import { COLLABORATION_AWARENESS_TTL_MS } from "./awarenessStore";
-import { CollaborationRateLimitError } from "./rateLimits";
-import { getCollaborationRedis } from "./realtime";
-import { publishCollaborationMaintenanceJob } from "./qstash";
 import type { Env } from "../env";
 
 const ROOM_ORIGIN = "https://collaboration-room.internal";
 const SESSION_HEADER = "X-Collaboration-Session";
-const MAX_WEBSOCKET_MESSAGE_LENGTH = MAX_ENCODED_YJS_UPDATE_LENGTH + 16 * 1024;
 const MAX_BINARY_WEBSOCKET_MESSAGE_LENGTH = MAX_YJS_UPDATE_BYTES + 1024;
 const MAX_BINARY_AWARENESS_MESSAGE_LENGTH = 16 * 1024;
 const MAX_USER_UPDATES_PER_SECOND = 30;
@@ -88,8 +72,6 @@ const canonicalSocketSessionSchema = z
     roleVersion: z.number().int().positive(),
     sessionId: collaborationIdSchema,
     attemptId: collaborationIdSchema,
-    persistenceVersion: collaborationPersistenceVersionSchema,
-    binaryProtocolVersion: z.literal(COLLABORATION_BINARY_PROTOCOL_VERSION).nullable(),
   })
   .strict();
 
@@ -211,33 +193,8 @@ export async function notifyCollaborationRoomControl(
   return true;
 }
 
-export async function broadcastCollaborationRoomDocument(
-  env: Env,
-  roomId: string,
-  input: { streamId: string; event: CollaborationDocumentUpdateEvent },
-): Promise<boolean> {
-  const stub = roomStub(env, roomId);
-  if (!stub) return false;
-  const response = await stub.fetch(`${ROOM_ORIGIN}/document`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(collaborationRoomDocumentBroadcastSchema.parse(input)),
-  });
-  if (!response.ok) throw new Error(`room document broadcast failed with ${response.status}`);
-  return true;
-}
-
 const sqliteDocumentInitializationSchema = z
   .object({ roomId: collaborationIdSchema, snapshot: z.string().min(1) })
-  .strict();
-
-const sqliteAppendResultSchema = z
-  .object({
-    streamId: z.string().regex(/^\d+-0$/),
-    updateCount: z.number().int().nonnegative(),
-    duplicate: z.boolean(),
-    shouldCompact: z.boolean(),
-  })
   .strict();
 
 export async function initializeCollaborationRoomSqliteDocument(
@@ -257,38 +214,6 @@ export async function initializeCollaborationRoomSqliteDocument(
   });
   if (!response.ok) throw new Error(`room SQLite initialization failed with ${response.status}`);
   return true;
-}
-
-export async function getCollaborationRoomSqliteBootstrap(
-  env: Env,
-  roomId: string,
-  cursor?: string,
-): Promise<CollaborationBootstrapResponse | null> {
-  const stub = roomStub(env, roomId);
-  if (!stub) return null;
-  const url = new URL(`${ROOM_ORIGIN}/sqlite/bootstrap`);
-  if (cursor) url.searchParams.set("cursor", cursor);
-  const response = await stub.fetch(url);
-  if (!response.ok) throw new Error(`room SQLite bootstrap failed with ${response.status}`);
-  return (await response.json()) as CollaborationBootstrapResponse;
-}
-
-export async function appendCollaborationRoomSqliteDocument(
-  env: Env,
-  roomId: string,
-  event: CollaborationDocumentUpdateEvent,
-): Promise<AppendRoomSqliteUpdateResult | null> {
-  const stub = roomStub(env, roomId);
-  if (!stub) return null;
-  const response = await stub.fetch(`${ROOM_ORIGIN}/sqlite/append`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(collaborationDocumentUpdateEventSchema.parse(event)),
-  });
-  if (response.status === 429) throw new CollaborationRateLimitError("update");
-  if (response.status === 413) throw new CollaborationRoomSqliteQuotaError();
-  if (!response.ok) throw new Error(`room SQLite append failed with ${response.status}`);
-  return sqliteAppendResultSchema.parse(await response.json());
 }
 
 export async function exportCollaborationRoomSqliteDocument(
@@ -313,26 +238,9 @@ export async function deleteCollaborationRoomSqliteDocument(
   return true;
 }
 
-export async function listCollaborationRoomSocketAwareness(
-  env: Env,
-  roomId: string,
-): Promise<CollaborationAwarenessEvent[] | null> {
-  const stub = roomStub(env, roomId);
-  if (!stub) return null;
-  const response = await stub.fetch(`${ROOM_ORIGIN}/participants`);
-  if (!response.ok) throw new Error(`room participant lookup failed with ${response.status}`);
-  const result = z
-    .object({ participants: z.array(collaborationAwarenessEventSchema).max(50) })
-    .safeParse(await response.json());
-  if (!result.success) throw new Error("room participant response was invalid");
-  return result.data.participants;
-}
-
 export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private roomUpdateWindowSecond = 0;
   private roomUpdateWindowCount = 0;
-  private internalUpdateWindowSecond = 0;
-  private readonly internalUpdateWindowCounts = new Map<string, number>();
   private connectionWindowMinute = 0;
   private readonly connectionWindowCounts = new Map<string, number>();
   private sqliteCompactionScheduled = false;
@@ -350,9 +258,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     if (request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
       return this.acceptConnection(request);
     }
-    if (request.method === "GET" && url.pathname === "/participants") {
-      return Response.json({ participants: this.currentParticipants() });
-    }
     if (request.method === "POST" && url.pathname === "/sqlite/initialize") {
       const parsed = sqliteDocumentInitializationSchema.safeParse(
         await request.json().catch(() => null),
@@ -368,48 +273,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         this.binaryDocument?.destroy();
         this.binaryDocument = null;
         return Response.json({ initialized: true });
-      } catch (error) {
-        if (error instanceof CollaborationRoomSqliteQuotaError) {
-          return Response.json({ error: error.message }, { status: 413 });
-        }
-        throw error;
-      }
-    }
-    if (request.method === "GET" && url.pathname === "/sqlite/bootstrap") {
-      const cursor = url.searchParams.get("cursor") ?? undefined;
-      if (cursor && !/^\d+-0$/.test(cursor)) {
-        return Response.json({ error: "invalid cursor" }, { status: 400 });
-      }
-      return Response.json(this.sqliteDocument.bootstrap(cursor));
-    }
-    if (request.method === "POST" && url.pathname === "/sqlite/append") {
-      const parsed = collaborationDocumentUpdateEventSchema.safeParse(
-        await request.json().catch(() => null),
-      );
-      if (!parsed.success) {
-        return Response.json({ error: "invalid SQLite document update" }, { status: 400 });
-      }
-      if (!this.isCurrentRoom(parsed.data.roomId)) {
-        return Response.json({ error: "invalid collaboration room" }, { status: 403 });
-      }
-      try {
-        if (!this.consumeInternalUpdateQuota(parsed.data.actorId)) {
-          return Response.json(
-            { error: "collaboration update rate limit exceeded" },
-            { status: 429 },
-          );
-        }
-        const stored = this.appendSqliteDocument(parsed.data);
-        if (stored.event) {
-          this.broadcastDocument(stored.streamId, stored.event);
-        }
-        if (stored.shouldCompact) this.scheduleSqliteCompaction();
-        return Response.json({
-          streamId: stored.streamId,
-          updateCount: stored.updateCount,
-          duplicate: stored.duplicate,
-          shouldCompact: stored.shouldCompact,
-        });
       } catch (error) {
         if (error instanceof CollaborationRoomSqliteQuotaError) {
           return Response.json({ error: error.message }, { status: 413 });
@@ -440,23 +303,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       this.applyControl(parsed.data);
       return Response.json({ delivered: true });
     }
-    if (request.method === "POST" && url.pathname === "/document") {
-      const parsed = collaborationRoomDocumentBroadcastSchema.safeParse(
-        await request.json().catch(() => null),
-      );
-      if (!parsed.success) {
-        return Response.json({ error: "invalid document broadcast" }, { status: 400 });
-      }
-      if (!this.isCurrentRoom(parsed.data.event.roomId)) {
-        return Response.json({ error: "invalid collaboration room" }, { status: 403 });
-      }
-      this.broadcast({
-        type: "document.update",
-        streamId: parsed.data.streamId,
-        data: parsed.data.event,
-      });
-      return Response.json({ delivered: true });
-    }
     return new Response("not found", { status: 404 });
   }
 
@@ -467,33 +313,17 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       this.rejectSocket(socket, "invalid-session", "Collaboration session is invalid", true, 1008);
       return;
     }
-    if (message instanceof ArrayBuffer) {
-      await this.acceptBinaryMessage(socket, attachment, message);
+    if (typeof message === "string") {
+      this.rejectSocket(
+        socket,
+        "invalid-message",
+        "Binary collaboration message required",
+        true,
+        1008,
+      );
       return;
     }
-    if (message.length > MAX_WEBSOCKET_MESSAGE_LENGTH) {
-      this.rejectSocket(socket, "invalid-message", "Invalid collaboration message", true, 1009);
-      return;
-    }
-    let json: unknown;
-    try {
-      json = JSON.parse(message) as unknown;
-    } catch {
-      this.rejectSocket(socket, "invalid-message", "Invalid collaboration message", true, 1008);
-      return;
-    }
-    const parsed = collaborationWebSocketClientMessageSchema.safeParse(json);
-    if (!parsed.success) {
-      this.rejectSocket(socket, "invalid-message", "Invalid collaboration message", true, 1008);
-      return;
-    }
-    if (parsed.data.type === "awareness.state") {
-      this.acceptAwareness(socket, attachment, parsed.data.data);
-      return;
-    }
-    const refreshed = await this.refreshAccess(socket, attachment);
-    if (!refreshed) return;
-    await this.acceptDocumentUpdate(socket, refreshed, parsed.data.data);
+    await this.acceptBinaryMessage(socket, attachment, message);
   }
 
   private async acceptBinaryMessage(
@@ -501,19 +331,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     attachment: SocketAttachment,
     message: ArrayBuffer,
   ): Promise<void> {
-    if (
-      attachment.binaryProtocolVersion !== COLLABORATION_BINARY_PROTOCOL_VERSION ||
-      attachment.persistenceVersion !== COLLABORATION_SQLITE_PERSISTENCE_VERSION
-    ) {
-      this.rejectSocket(
-        socket,
-        "invalid-message",
-        "Binary collaboration protocol was not negotiated",
-        true,
-        1008,
-      );
-      return;
-    }
     if (message.byteLength > MAX_BINARY_WEBSOCKET_MESSAGE_LENGTH) {
       this.rejectSocket(socket, "invalid-message", "Binary message is too large", true, 1009);
       return;
@@ -631,36 +448,32 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       type: "session.ready",
       sessionId: session.sessionId,
       attemptId: session.attemptId,
-      binaryProtocolVersion: session.binaryProtocolVersion,
-      participants: this.currentParticipants(),
     });
-    if (session.binaryProtocolVersion === COLLABORATION_BINARY_PROTOCOL_VERSION) {
-      const now = Date.now();
-      for (const existing of this.ctx.getWebSockets()) {
-        if (existing === server || !isOpen(existing)) continue;
-        const existingAttachment = attachmentFor(existing);
-        if (
-          existingAttachment?.awareness?.kind !== "state" ||
-          existingAttachment.awareness.expiresAt <= now ||
-          existingAttachment.awarenessClientId === undefined ||
-          existingAttachment.awarenessClock === undefined ||
-          !existingAttachment.awarenessState
-        ) {
-          continue;
-        }
-        sendBinary(
-          server,
-          encodeCollaborationAwarenessUpdate(
-            encodeCollaborationAwarenessProtocolUpdate([
-              {
-                clientId: existingAttachment.awarenessClientId,
-                clock: existingAttachment.awarenessClock,
-                state: existingAttachment.awarenessState,
-              },
-            ]),
-          ),
-        );
+    const now = Date.now();
+    for (const existing of this.ctx.getWebSockets()) {
+      if (existing === server || !isOpen(existing)) continue;
+      const existingAttachment = attachmentFor(existing);
+      if (
+        existingAttachment?.awareness?.kind !== "state" ||
+        existingAttachment.awareness.expiresAt <= now ||
+        existingAttachment.awarenessClientId === undefined ||
+        existingAttachment.awarenessClock === undefined ||
+        !existingAttachment.awarenessState
+      ) {
+        continue;
       }
+      sendBinary(
+        server,
+        encodeCollaborationAwarenessUpdate(
+          encodeCollaborationAwarenessProtocolUpdate([
+            {
+              clientId: existingAttachment.awarenessClientId,
+              clock: existingAttachment.awarenessClock,
+              state: existingAttachment.awarenessState,
+            },
+          ]),
+        ),
+      );
     }
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -668,20 +481,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private isCurrentRoom(roomId: string): boolean {
     const objectName = this.ctx.id.name;
     return !objectName || objectName === roomId;
-  }
-
-  private currentParticipants(): CollaborationAwarenessEvent[] {
-    const bySession = new Map<string, CollaborationAwarenessEvent>();
-    const now = Date.now();
-    for (const socket of this.ctx.getWebSockets()) {
-      if (!isOpen(socket)) continue;
-      const awareness = attachmentFor(socket)?.awareness;
-      if (!awareness || awareness.kind !== "state" || awareness.expiresAt <= now) continue;
-      const key = `${awareness.actorId}:${awareness.sessionId}`;
-      const previous = bySession.get(key);
-      if (!previous || previous.revision <= awareness.revision) bySession.set(key, awareness);
-    }
-    return Array.from(bySession.values());
   }
 
   private awarenessClientIdInUse(clientId: number, except?: WebSocket): boolean {
@@ -692,23 +491,11 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     return false;
   }
 
-  private allocateAwarenessClientId(except?: WebSocket): number {
-    const random = new Uint32Array(1);
-    crypto.getRandomValues(random);
-    let candidate = random[0] ?? 0;
-    for (let attempt = 0; attempt < 128; attempt += 1) {
-      if (!this.awarenessClientIdInUse(candidate, except)) return candidate;
-      candidate = (candidate + 1) >>> 0;
-    }
-    throw new Error("awareness client ID space is exhausted");
-  }
-
   private async refreshAccess(
     socket: WebSocket,
     attachment: SocketAttachment,
   ): Promise<SocketAttachment | null> {
     if (
-      attachment.persistenceVersion === COLLABORATION_SQLITE_PERSISTENCE_VERSION &&
       attachment.accessCheckedAt !== undefined &&
       Date.now() - attachment.accessCheckedAt < ACCESS_REVALIDATION_INTERVAL_MS
     ) {
@@ -722,7 +509,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     if (
       !access ||
       access.transport !== "cloudflare-websocket" ||
-      access.persistence_version !== attachment.persistenceVersion
+      access.persistence_version !== COLLABORATION_SQLITE_PERSISTENCE_VERSION
     ) {
       this.rejectSocket(socket, "access-revoked", "Room access was revoked", true, 4003);
       return null;
@@ -793,7 +580,12 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       return;
     }
     const entry = entries[0];
-    if (!entry || entries.length !== 1 || entry.clientId > 0xffff_ffff) {
+    if (
+      !entry ||
+      entries.length !== 1 ||
+      entry.clientId > 0xffff_ffff ||
+      entry.clock > Number.MAX_SAFE_INTEGER
+    ) {
       this.rejectSocket(socket, "invalid-message", "Invalid awareness update", true, 1008);
       return;
     }
@@ -846,11 +638,8 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private acceptAwareness(
     socket: WebSocket,
     attachment: SocketAttachment,
-    input: Extract<
-      z.infer<typeof collaborationWebSocketClientMessageSchema>,
-      { type: "awareness.state" }
-    >["data"],
-    binaryEntry?: CollaborationAwarenessProtocolEntry,
+    input: CollaborationAwarenessInput,
+    binaryEntry: CollaborationAwarenessProtocolEntry,
   ): void {
     if (input.sessionId !== attachment.sessionId) {
       this.rejectSocket(socket, "invalid-session", "Awareness session does not match", true, 1008);
@@ -884,12 +673,9 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
             occurredAt: now,
             expiresAt: now + COLLABORATION_AWARENESS_TTL_MS,
           };
-    const awarenessClientId =
-      binaryEntry?.clientId ??
-      attachment.awarenessClientId ??
-      this.allocateAwarenessClientId(socket);
-    const awarenessClock = binaryEntry?.clock ?? (attachment.awarenessClock ?? -1) + 1;
-    const selection = binaryEntry?.state?.selection;
+    const awarenessClientId = binaryEntry.clientId;
+    const awarenessClock = binaryEntry.clock;
+    const selection = binaryEntry.state?.selection;
     const awarenessState =
       event.kind === "state"
         ? collaborationAwarenessServerStateSchema.parse({
@@ -908,7 +694,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         : { awareness: undefined, awarenessState: undefined }),
     } satisfies SocketAttachment);
     this.broadcastAwareness(
-      event,
       {
         clientId: awarenessClientId,
         clock: awarenessClock,
@@ -921,10 +706,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private async acceptDocumentUpdate(
     socket: WebSocket,
     attachment: SocketAttachment,
-    input: Extract<
-      z.infer<typeof collaborationWebSocketClientMessageSchema>,
-      { type: "document.update" }
-    >["data"],
+    input: CollaborationDocumentUpdateInput,
   ): Promise<void> {
     const handlerStartedAt = performance.now();
     if (!canPublishCollaborationUpdate(attachment.role)) {
@@ -944,7 +726,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     if (this.roomUpdateWindowSecond !== second) {
       this.roomUpdateWindowSecond = second;
       this.roomUpdateWindowCount = 0;
-      this.internalUpdateWindowCounts.clear();
     }
     this.roomUpdateWindowCount += 1;
     if (
@@ -974,41 +755,8 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       receivedAt: Date.now(),
     };
     try {
-      if (attachment.persistenceVersion === COLLABORATION_SQLITE_PERSISTENCE_VERSION) {
-        const persistenceStartedAt = performance.now();
-        const result = this.appendSqliteDocument(event);
-        const persistedAt = performance.now();
-        sendMessage(socket, {
-          type: "document.ack",
-          updateId: event.updateId,
-          streamId: result.streamId,
-          duplicate: result.duplicate,
-        });
-        const acknowledgedAt = performance.now();
-        if (result.event) {
-          this.broadcastDocument(result.streamId, result.event, socket);
-        }
-        const broadcastAt = performance.now();
-        if (result.shouldCompact) this.scheduleSqliteCompaction();
-        console.log("collaboration_websocket_update", {
-          roomId: attachment.roomId,
-          actorId: attachment.userId,
-          updateId: event.updateId,
-          bytes: Math.floor((event.update.length * 3) / 4),
-          duplicate: result.duplicate,
-          updateCount: result.updateCount,
-          persistence: "do-sqlite",
-          durableInsertMs: persistedAt - persistenceStartedAt,
-          acknowledgeMs: acknowledgedAt - persistedAt,
-          broadcastMs: broadcastAt - acknowledgedAt,
-          totalMs: broadcastAt - handlerStartedAt,
-        });
-        return;
-      }
-
-      const redis = getCollaborationRedis(this.env);
       const persistenceStartedAt = performance.now();
-      const result = await appendCollaborationUpdate(redis, event, { publish: false });
+      const result = this.appendSqliteDocument(event);
       const persistedAt = performance.now();
       sendMessage(socket, {
         type: "document.ack",
@@ -1017,11 +765,11 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         duplicate: result.duplicate,
       });
       const acknowledgedAt = performance.now();
-      this.broadcast({ type: "document.update", streamId: result.streamId, data: event }, socket);
-      const broadcastAt = performance.now();
-      if (shouldCompactCollaborationDocument(result.updateCount)) {
-        this.scheduleCompaction(attachment.roomId);
+      if (result.event) {
+        this.broadcastDocument(result.streamId, result.event, socket);
       }
+      const broadcastAt = performance.now();
+      if (result.shouldCompact) this.scheduleSqliteCompaction();
       console.log("collaboration_websocket_update", {
         roomId: attachment.roomId,
         actorId: attachment.userId,
@@ -1029,8 +777,8 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         bytes: Math.floor((event.update.length * 3) / 4),
         duplicate: result.duplicate,
         updateCount: result.updateCount,
-        persistence: "upstash-redis",
-        persistenceMs: persistedAt - persistenceStartedAt,
+        persistence: "do-sqlite",
+        durableInsertMs: persistedAt - persistenceStartedAt,
         acknowledgeMs: acknowledgedAt - persistedAt,
         broadcastMs: broadcastAt - acknowledgedAt,
         totalMs: broadcastAt - handlerStartedAt,
@@ -1057,36 +805,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     }
   }
 
-  private scheduleCompaction(roomId: string): void {
-    this.ctx.waitUntil(
-      (async () => {
-        const redis = getCollaborationRedis(this.env);
-        const expectedGeneration = await getCollaborationSnapshotGeneration(redis, roomId);
-        try {
-          const result = await publishCollaborationMaintenanceJob(this.env, {
-            kind: "compact-room",
-            roomId,
-            expectedGeneration,
-          });
-          if (result.queued) return;
-        } catch (error) {
-          console.error("collaboration_websocket_qstash_publish_failed", {
-            roomId,
-            expectedGeneration,
-            fallback: "inline-compaction",
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-        await compactCollaborationDocument(redis, roomId, expectedGeneration);
-      })().catch((error) => {
-        console.error("collaboration_websocket_compaction_failed", {
-          roomId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }),
-    );
-  }
-
   private appendSqliteDocument(
     event: CollaborationDocumentUpdateEvent,
   ): StoredAppendRoomSqliteUpdateResult {
@@ -1100,25 +818,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private getBinaryDocument(): Y.Doc {
     if (!this.binaryDocument) this.binaryDocument = this.sqliteDocument.createDocument();
     return this.binaryDocument;
-  }
-
-  private consumeInternalUpdateQuota(actorId: string): boolean {
-    const second = Math.floor(Date.now() / 1_000);
-    if (this.internalUpdateWindowSecond !== second) {
-      this.internalUpdateWindowSecond = second;
-      this.internalUpdateWindowCounts.clear();
-    }
-    if (this.roomUpdateWindowSecond !== second) {
-      this.roomUpdateWindowSecond = second;
-      this.roomUpdateWindowCount = 0;
-    }
-    const userCount = (this.internalUpdateWindowCounts.get(actorId) ?? 0) + 1;
-    this.internalUpdateWindowCounts.set(actorId, userCount);
-    this.roomUpdateWindowCount += 1;
-    return (
-      userCount <= MAX_USER_UPDATES_PER_SECOND &&
-      this.roomUpdateWindowCount <= MAX_ROOM_UPDATES_PER_SECOND
-    );
   }
 
   private consumeConnectionQuota(userId: string): boolean {
@@ -1159,7 +858,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       return;
     }
 
-    const changedAwareness: CollaborationAwarenessEvent[] = [];
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = attachmentFor(socket);
       if (!attachment || attachment.roomId !== event.roomId) continue;
@@ -1171,14 +869,10 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         }
         const next = this.withRole(attachment, command.targetRole, event.roleVersion);
         socket.serializeAttachment(next);
-        if (next.awareness) changedAwareness.push(next.awareness);
       } else if (attachment.roleVersion < event.roleVersion) {
         socket.serializeAttachment({ ...attachment, roleVersion: event.roleVersion });
       }
       sendMessage(socket, { type: "control.room", data: event });
-    }
-    for (const awareness of changedAwareness) {
-      this.broadcast({ type: "awareness.state", data: awareness });
     }
   }
 
@@ -1187,13 +881,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     event: CollaborationDocumentUpdateEvent,
     except?: WebSocket,
   ): void {
-    const json = JSON.stringify(
-      collaborationWebSocketServerMessageSchema.parse({
-        type: "document.update",
-        streamId,
-        data: event,
-      }),
-    );
     const binary = exactArrayBuffer(
       encodeCollaborationServerUpdate({
         streamId,
@@ -1204,12 +891,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     for (const socket of this.ctx.getWebSockets()) {
       if (socket === except || !isOpen(socket)) continue;
       try {
-        const attachment = attachmentFor(socket);
-        socket.send(
-          attachment?.binaryProtocolVersion === COLLABORATION_BINARY_PROTOCOL_VERSION
-            ? binary
-            : json,
-        );
+        socket.send(binary);
       } catch {
         socket.close(1011, "broadcast failed");
       }
@@ -1217,26 +899,16 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   }
 
   private broadcastAwareness(
-    event: CollaborationAwarenessEvent,
     entry: CollaborationAwarenessProtocolEntry,
-    source: WebSocket,
+    except?: WebSocket,
   ): void {
-    const json = JSON.stringify(
-      collaborationWebSocketServerMessageSchema.parse({ type: "awareness.state", data: event }),
-    );
     const binary = exactArrayBuffer(
       encodeCollaborationAwarenessUpdate(encodeCollaborationAwarenessProtocolUpdate([entry])),
     );
     for (const socket of this.ctx.getWebSockets()) {
-      if (!isOpen(socket)) continue;
+      if (socket === except || !isOpen(socket)) continue;
       try {
-        const attachment = attachmentFor(socket);
-        socket.send(
-          socket !== source &&
-            attachment?.binaryProtocolVersion === COLLABORATION_BINARY_PROTOCOL_VERSION
-            ? binary
-            : json,
-        );
+        socket.send(binary);
       } catch {
         socket.close(1011, "broadcast failed");
       }
@@ -1258,27 +930,15 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private broadcastLeave(socket: WebSocket): void {
     const attachment = attachmentFor(socket);
     if (!attachment?.awareness || attachment.awareness.kind !== "state") return;
-    const event: CollaborationAwarenessEvent = {
-      kind: "leave",
-      roomId: attachment.roomId,
-      actorId: attachment.userId,
-      sessionId: attachment.sessionId,
-      revision: attachment.awareness.revision + 1,
-      occurredAt: Date.now(),
-    };
-    if (attachment.awarenessClientId === undefined || attachment.awarenessClock === undefined) {
-      this.broadcast({ type: "awareness.state", data: event }, socket);
-    } else {
-      this.broadcastAwareness(
-        event,
-        {
-          clientId: attachment.awarenessClientId,
-          clock: attachment.awarenessClock,
-          state: null,
-        },
-        socket,
-      );
-    }
+    if (attachment.awarenessClientId === undefined || attachment.awarenessClock === undefined) return;
+    this.broadcastAwareness(
+      {
+        clientId: attachment.awarenessClientId,
+        clock: attachment.awarenessClock + 1,
+        state: null,
+      },
+      socket,
+    );
   }
 
   private rejectSocket(

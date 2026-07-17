@@ -23,23 +23,15 @@ export {
   createCollaborationInvitation,
   downloadCollaborationAsset,
   exportCollaborationRoom,
-  getCollaborationBootstrap,
   getCollaborationRoom,
   listCollaborationInvitations,
-  listCollaborationAwareness,
   listCollaborationMembers,
   listCollaborationRooms,
-  publishCollaborationAwareness,
-  publishCollaborationUpdate,
   removeCollaborationMember,
   revokeCollaborationInvitation,
   updateCollaborationMemberRole,
   uploadCollaborationAsset,
 } from "./collaboration/collaborationApi";
-export {
-  CollaborationRealtimeProvider,
-  useCollaborationRealtime,
-} from "./collaboration/CollaborationRealtimeProvider";
 export type { AuthorSummary } from "../db/types";
 export { useSearch } from "./search/useSearch";
 export type { SearchResults } from "./search/searchApi";
