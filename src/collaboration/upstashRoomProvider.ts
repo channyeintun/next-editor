@@ -1,9 +1,11 @@
 import { createActor, type ActorRefFrom, type Subscription } from "xstate";
+import * as awarenessProtocol from "y-protocols/awareness";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
 import {
   COLLABORATION_BINARY_PROTOCOL_VERSION,
   decodeCollaborationBinaryFrame,
+  encodeCollaborationAwarenessUpdate,
   encodeCollaborationClientUpdate,
   encodeCollaborationSyncStep1,
   type CollaborationBinaryFrame,
@@ -13,7 +15,9 @@ import {
   COLLABORATION_PROTOCOL_VERSION,
   MAX_YJS_UPDATE_BYTES,
   collaborationAwarenessChannel,
+  collaborationAwarenessClientStateSchema,
   collaborationAwarenessEventSchema,
+  collaborationAwarenessServerStateSchema,
   collaborationControlChannel,
   collaborationControlEventSchema,
   collaborationDocumentUpdateEventSchema,
@@ -190,6 +194,7 @@ function websocketRequestError(message: string, status = 503): Error {
 
 export class UpstashRoomProvider {
   readonly doc: Y.Doc;
+  readonly awareness: awarenessProtocol.Awareness;
   readonly actor: ActorRefFrom<typeof collaborationMachine>;
   readonly clientId: string;
 
@@ -230,6 +235,7 @@ export class UpstashRoomProvider {
   private seenStreamIds = new Set<string>();
   private isRefreshingControl = false;
   private pendingControlRoleVersion = 0;
+  private readonly remoteAwarenessEvents = new Map<number, CollaborationAwarenessEvent>();
   private pendingBinarySync: {
     attemptId: string;
     resolve: (update: Uint8Array) => void;
@@ -249,6 +255,7 @@ export class UpstashRoomProvider {
     this.roomId = options.roomId;
     this.api = options.api;
     this.doc = options.doc ?? new Y.Doc();
+    this.awareness = new awarenessProtocol.Awareness(this.doc);
     this.clientId = options.clientId ?? crypto.randomUUID();
     this.eventSourceFactory = options.eventSourceFactory ?? defaultEventSourceFactory;
     this.webSocketFactory = options.webSocketFactory ?? defaultWebSocketFactory;
@@ -261,6 +268,8 @@ export class UpstashRoomProvider {
     this.onControlEvent = options.onControlEvent;
     this.onRejectedLocalChanges = options.onRejectedLocalChanges;
     this.actor = createActor(collaborationMachine);
+    this.awareness.on("update", this.handleAwarenessProtocolUpdate);
+    this.awareness.on("change", this.handleAwarenessProtocolChange);
   }
 
   get connectionState(): CollaborationConnectionState {
@@ -315,6 +324,10 @@ export class UpstashRoomProvider {
     this.batchTimer = null;
     this.doc.off("update", this.handleDocumentUpdate);
     this.doc.off("afterTransaction", this.handleAfterTransaction);
+    this.awareness.off("update", this.handleAwarenessProtocolUpdate);
+    this.awareness.off("change", this.handleAwarenessProtocolChange);
+    this.awareness.destroy();
+    this.remoteAwarenessEvents.clear();
     this.pendingUpdates = [];
     this.outbox = [];
     this.bufferedMessages = [];
@@ -342,6 +355,20 @@ export class UpstashRoomProvider {
     const session = this.roomSession;
     if (!session || this.connectionState !== "live") return;
     if (session.room.transport === "cloudflare-websocket") {
+      if (this.binaryProtocolActive) {
+        if (input.kind === "leave") {
+          this.awareness.setLocalState(null);
+        } else {
+          const selection = this.awareness.getLocalState()?.selection;
+          this.awareness.setLocalState(
+            collaborationAwarenessClientStateSchema.parse({
+              collaboration: input,
+              ...(selection === undefined ? {} : { selection }),
+            }),
+          );
+        }
+        return;
+      }
       const socket = this.socket;
       if (!socket || socket.readyState !== WEBSOCKET_OPEN) {
         throw websocketRequestError("Collaboration WebSocket is not connected");
@@ -362,6 +389,64 @@ export class UpstashRoomProvider {
 
   private readonly handleAfterTransaction = (transaction: Y.Transaction) => {
     this.onDocumentChange?.(this.doc, transaction);
+  };
+
+  private readonly handleAwarenessProtocolUpdate = (
+    changes: { added: number[]; updated: number[]; removed: number[] },
+    origin: unknown,
+  ) => {
+    if (
+      origin === COLLABORATION_ORIGIN.remoteProvider ||
+      !this.binaryProtocolActive ||
+      this.connectionState !== "live"
+    ) {
+      return;
+    }
+    const changedClients = [...changes.added, ...changes.updated, ...changes.removed];
+    if (!changedClients.includes(this.awareness.clientID)) return;
+    const state = this.awareness.getLocalState();
+    if (state !== null && !collaborationAwarenessClientStateSchema.safeParse(state).success) return;
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WEBSOCKET_OPEN) return;
+    try {
+      socket.send(
+        exactArrayBuffer(
+          encodeCollaborationAwarenessUpdate(
+            awarenessProtocol.encodeAwarenessUpdate(this.awareness, [this.awareness.clientID]),
+          ),
+        ),
+      );
+    } catch {
+      this.handleTransportFailure("Collaboration awareness could not be delivered", this.attemptId);
+    }
+  };
+
+  private readonly handleAwarenessProtocolChange = (changes: {
+    added: number[];
+    updated: number[];
+    removed: number[];
+  }) => {
+    for (const clientId of [...changes.added, ...changes.updated]) {
+      const state = collaborationAwarenessServerStateSchema.safeParse(
+        this.awareness.getStates().get(clientId),
+      );
+      if (!state.success) continue;
+      this.remoteAwarenessEvents.set(clientId, state.data.collaboration);
+      this.onAwarenessEvent?.(state.data.collaboration);
+    }
+    for (const clientId of changes.removed) {
+      const previous = this.remoteAwarenessEvents.get(clientId);
+      this.remoteAwarenessEvents.delete(clientId);
+      if (!previous || previous.kind !== "state") continue;
+      this.onAwarenessEvent?.({
+        kind: "leave",
+        roomId: previous.roomId,
+        actorId: previous.actorId,
+        sessionId: previous.sessionId,
+        revision: previous.revision + 1,
+        occurredAt: Date.now(),
+      });
+    }
   };
 
   private readonly handleDocumentUpdate = (update: Uint8Array, origin: unknown) => {
@@ -653,6 +738,18 @@ export class UpstashRoomProvider {
       frame = decodeCollaborationBinaryFrame(raw);
     } catch {
       this.handleTransportFailure("WebSocket provider sent an invalid binary message", attemptId);
+      return;
+    }
+    if (frame.kind === "awareness") {
+      try {
+        awarenessProtocol.applyAwarenessUpdate(
+          this.awareness,
+          frame.update,
+          COLLABORATION_ORIGIN.remoteProvider,
+        );
+      } catch {
+        this.handleTransportFailure("WebSocket provider sent invalid awareness", attemptId);
+      }
       return;
     }
     if (frame.kind === "sync") {

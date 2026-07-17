@@ -199,6 +199,29 @@ export const collaborationCursorSchema = z
 
 export type CollaborationCursor = z.infer<typeof collaborationCursorSchema>;
 
+const yjsRelativePositionIdSchema = z
+  .object({
+    client: z.number().int().nonnegative().max(0xffff_ffff),
+    clock: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+
+const yjsRelativePositionSchema = z
+  .object({
+    type: yjsRelativePositionIdSchema.nullable(),
+    tname: z.string().max(1024).nullable(),
+    item: yjsRelativePositionIdSchema.nullable(),
+    assoc: z.number().int().min(-1).max(1),
+  })
+  .strict();
+
+const collaborationAwarenessSelectionSchema = z
+  .object({
+    anchor: yjsRelativePositionSchema,
+    head: yjsRelativePositionSchema,
+  })
+  .strict();
+
 const collaborationAwarenessStateFields = {
   sessionId: collaborationIdSchema,
   revision: z.number().int().nonnegative(),
@@ -253,6 +276,20 @@ export const collaborationAwarenessEventSchema = z.discriminatedUnion("kind", [
 
 export type CollaborationAwarenessInput = z.infer<typeof collaborationAwarenessInputSchema>;
 export type CollaborationAwarenessEvent = z.infer<typeof collaborationAwarenessEventSchema>;
+
+export const collaborationAwarenessClientStateSchema = z
+  .object({
+    collaboration: collaborationAwarenessInputSchema,
+    selection: collaborationAwarenessSelectionSchema.nullable().optional(),
+  })
+  .strict();
+
+export const collaborationAwarenessServerStateSchema = z
+  .object({
+    collaboration: collaborationAwarenessEventSchema,
+    selection: collaborationAwarenessSelectionSchema.nullable().optional(),
+  })
+  .strict();
 
 export const collaborationControlEventSchema = z
   .object({

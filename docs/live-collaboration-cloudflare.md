@@ -1,6 +1,7 @@
 # Live Collaboration — Cloudflare-native Deployment
 
-Status: room-local SQLite persistence implemented for new WebSocket rooms; binary protocol pending
+Status: room-local SQLite persistence and binary Yjs sync/awareness implemented for new WebSocket
+rooms, with the version-1 Redis/JSON path retained for rollback
 
 Companion documents:
 
@@ -40,8 +41,9 @@ browser-local recording decision is unchanged: the host keeps SCR3 locally under
 and uses the existing post-recording upload modal only after live ends.
 
 The design below also records later Cloudflare-native extensions. Room-local snapshot/update
-storage and alarm compaction are implemented; binary Yjs framing, optional Queues, and moving large
-snapshots/exports to R2 remain separate follow-up work.
+storage, alarm compaction, state-vector sync, raw Yjs updates, and authenticated standard awareness
+frames are implemented. Optional Queues and moving large snapshots/exports to R2 remain separate
+follow-up work.
 
 ## Decision within this option
 
@@ -93,18 +95,18 @@ between the browser and the room Durable Object. The gateway is not called once 
 
 ## Cloudflare service map
 
-| Service                       | Collaboration responsibility                                                      | Status in this option                 |
-| ----------------------------- | --------------------------------------------------------------------------------- | ------------------------------------- |
-| Workers Static Assets         | Serve the existing SPA under the same cross-origin-isolated origin                | Existing                              |
-| Hono Worker                   | Room CRUD, session authentication, invitations, tokens, WebSocket upgrade         | Existing                              |
-| D1                            | Rooms, members, roles, invite records, retention state, searchable audit metadata | Existing                              |
-| Durable Objects               | WebSocket hub and single coordination point for each room                         | Implemented                           |
-| Durable Object SQLite storage | CRDT updates, snapshots, protocol version, stream sequence, durable room state    | Implemented for persistence version 2 |
-| Durable Object WebSocket API  | Binary document frames plus awareness and control frames                          | JSON implemented; binary pending      |
-| Durable Object Alarms         | Snapshot compaction and update/deduplication cleanup                              | Implemented                           |
-| R2                            | Content-addressed assets, oversized snapshots, and project exports                | Existing                              |
-| Cloudflare Queues             | Heavy export, asset reconciliation, or cross-room maintenance                     | Optional                              |
-| Workers Logs and tracing      | Connection and operational metadata, excluding editor content                     | Existing                              |
+| Service                       | Collaboration responsibility                                                       | Status in this option                 |
+| ----------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------- |
+| Workers Static Assets         | Serve the existing SPA under the same cross-origin-isolated origin                 | Existing                              |
+| Hono Worker                   | Room CRUD, session authentication, invitations, tokens, WebSocket upgrade          | Existing                              |
+| D1                            | Rooms, members, roles, invite records, retention state, searchable audit metadata  | Existing                              |
+| Durable Objects               | WebSocket hub and single coordination point for each room                          | Implemented                           |
+| Durable Object SQLite storage | CRDT updates, snapshots, protocol version, stream sequence, durable room state     | Implemented for persistence version 2 |
+| Durable Object WebSocket API  | Versioned binary Yjs document/awareness frames plus JSON control and legacy frames | Implemented with negotiated fallback  |
+| Durable Object Alarms         | Snapshot compaction and update/deduplication cleanup                               | Implemented                           |
+| R2                            | Content-addressed assets, oversized snapshots, and project exports                 | Existing                              |
+| Cloudflare Queues             | Heavy export, asset reconciliation, or cross-room maintenance                      | Optional                              |
+| Workers Logs and tracing      | Connection and operational metadata, excluding editor content                      | Existing                              |
 
 The collaboration data plane does not use the Workers KV `CACHE` binding, Pub/Sub, Containers,
 Workflows, or Calls:
@@ -215,6 +217,12 @@ The original three message classes remain unchanged:
 Persist before broadcasting a document update. If persistence fails, send a recoverable error
 and move the connection into a non-writing/reconnecting state. Never broadcast an update and then
 silently fail to store it.
+
+Binary envelope version 2 carries Yjs v13-compatible sync, raw update, and standard awareness
+messages. The room descriptor advertises the supported binary version and the client requests it
+explicitly during the WebSocket upgrade. A version mismatch leaves the client on the existing
+HTTP-bootstrap/JSON-update path. Version 2 intentionally supersedes the document-only version-1
+envelope so rolling deployments never send awareness frames to a document-only room object.
 
 Batch small logical messages into one WebSocket frame, especially cursor movement and rapid Yjs
 transactions. Cloudflare recommends time- or count-based batching for high-frequency Durable

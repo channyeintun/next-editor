@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import {
   COLLABORATION_BINARY_PROTOCOL_VERSION,
+  decodeCollaborationAwarenessProtocolUpdate,
   decodeCollaborationBinaryFrame,
+  encodeCollaborationAwarenessProtocolUpdate,
+  encodeCollaborationAwarenessUpdate,
   encodeCollaborationServerUpdate,
   encodeCollaborationSyncStep2,
 } from "./binaryProtocol";
@@ -216,6 +219,7 @@ describe("UpstashRoomProvider", () => {
     };
     const sockets: FakeWebSocket[] = [];
     const urls: string[] = [];
+    const awarenessEvents: unknown[] = [];
     const provider = new UpstashRoomProvider({
       roomId: ROOM_ID,
       api,
@@ -231,6 +235,7 @@ describe("UpstashRoomProvider", () => {
       eventSourceFactory: () => {
         throw new Error("Realtime must not open for a WebSocket room");
       },
+      onAwarenessEvent: (event) => awarenessEvents.push(event),
     });
 
     await provider.start();
@@ -247,6 +252,91 @@ describe("UpstashRoomProvider", () => {
       String(COLLABORATION_BINARY_PROTOCOL_VERSION),
     );
     expect(sockets[0].binaryType).toBe("arraybuffer");
+
+    await provider.publishAwareness({
+      kind: "state",
+      sessionId: provider.awarenessSessionId,
+      revision: 1,
+      activeFileNodeId: null,
+      cursor: null,
+      followingHost: false,
+    });
+    const localAwareness = sockets[0].binarySent
+      .map((raw) => decodeCollaborationBinaryFrame(raw))
+      .find((frame) => frame.kind === "awareness");
+    if (!localAwareness || localAwareness.kind !== "awareness") {
+      throw new Error("binary awareness update was not sent");
+    }
+    expect(decodeCollaborationAwarenessProtocolUpdate(localAwareness.update)).toEqual([
+      {
+        clientId: provider.awareness.clientID,
+        clock: 1,
+        state: {
+          collaboration: {
+            kind: "state",
+            sessionId: provider.awarenessSessionId,
+            revision: 1,
+            activeFileNodeId: null,
+            cursor: null,
+            followingHost: false,
+          },
+        },
+      },
+    ]);
+
+    const remoteAwarenessClientId = 42;
+    const remoteAwarenessEvent = {
+      kind: "state" as const,
+      roomId: ROOM_ID,
+      actorId: ACTOR_ID,
+      sessionId: "60000000-0000-4000-8000-000000000001",
+      revision: 1,
+      role: "owner" as const,
+      username: "host",
+      name: null,
+      avatarUrl: null,
+      isHost: true,
+      activeFileNodeId: null,
+      cursor: null,
+      followingHost: false,
+      occurredAt: Date.now(),
+      expiresAt: Date.now() + 45_000,
+    };
+    sockets[0].message(
+      exactArrayBuffer(
+        encodeCollaborationAwarenessUpdate(
+          encodeCollaborationAwarenessProtocolUpdate([
+            {
+              clientId: remoteAwarenessClientId,
+              clock: 1,
+              state: { collaboration: remoteAwarenessEvent },
+            },
+          ]),
+        ),
+      ),
+    );
+    await waitUntil(() => awarenessEvents.length === 1);
+    expect(awarenessEvents[0]).toEqual(remoteAwarenessEvent);
+    expect(provider.awareness.getStates().get(remoteAwarenessClientId)).toEqual({
+      collaboration: remoteAwarenessEvent,
+    });
+    sockets[0].message(
+      exactArrayBuffer(
+        encodeCollaborationAwarenessUpdate(
+          encodeCollaborationAwarenessProtocolUpdate([
+            { clientId: remoteAwarenessClientId, clock: 2, state: null },
+          ]),
+        ),
+      ),
+    );
+    await waitUntil(() => awarenessEvents.length === 2);
+    expect(awarenessEvents[1]).toMatchObject({
+      kind: "leave",
+      roomId: ROOM_ID,
+      actorId: ACTOR_ID,
+      sessionId: remoteAwarenessEvent.sessionId,
+      revision: 2,
+    });
 
     const source = provider.doc.getText("source");
     source.insert(source.length, "-one");

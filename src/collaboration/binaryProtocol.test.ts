@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import {
   CollaborationBinaryProtocolError,
+  decodeCollaborationAwarenessProtocolUpdate,
   decodeCollaborationBinaryFrame,
+  encodeCollaborationAwarenessProtocolUpdate,
   encodeCollaborationAwarenessUpdate,
   encodeCollaborationClientUpdate,
   encodeCollaborationServerUpdate,
@@ -73,8 +75,14 @@ describe("collaboration binary protocol", () => {
     const target = new awarenessProtocol.Awareness(targetDoc);
     source.setLocalStateField("name", "Ada");
     const encoded = awarenessProtocol.encodeAwarenessUpdate(source, [source.clientID]);
-    const frame = decodeCollaborationBinaryFrame(encodeCollaborationAwarenessUpdate(encoded));
-    expect(frame).toEqual({ kind: "awareness", update: encoded });
+    expect(decodeCollaborationAwarenessProtocolUpdate(encoded)).toEqual([
+      { clientId: source.clientID, clock: 1, state: { name: "Ada" } },
+    ]);
+    const reencoded = encodeCollaborationAwarenessProtocolUpdate(
+      decodeCollaborationAwarenessProtocolUpdate(encoded),
+    );
+    const frame = decodeCollaborationBinaryFrame(encodeCollaborationAwarenessUpdate(reencoded));
+    expect(frame).toEqual({ kind: "awareness", update: reencoded });
     if (frame.kind !== "awareness") throw new Error("expected awareness frame");
     awarenessProtocol.applyAwarenessUpdate(target, frame.update, "test");
     expect(target.getStates().get(source.clientID)).toEqual({ name: "Ada" });

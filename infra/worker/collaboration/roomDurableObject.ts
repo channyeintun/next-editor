@@ -4,9 +4,13 @@ import * as Y from "yjs";
 import { z } from "zod";
 import {
   COLLABORATION_BINARY_PROTOCOL_VERSION,
+  decodeCollaborationAwarenessProtocolUpdate,
   decodeCollaborationBinaryFrame,
+  encodeCollaborationAwarenessProtocolUpdate,
+  encodeCollaborationAwarenessUpdate,
   encodeCollaborationServerUpdate,
   encodeCollaborationSyncStep2,
+  type CollaborationAwarenessProtocolEntry,
 } from "../../../src/collaboration/binaryProtocol";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
@@ -15,7 +19,9 @@ import {
   MAX_ENCODED_YJS_UPDATE_LENGTH,
   MAX_YJS_UPDATE_BYTES,
   canPublishCollaborationUpdate,
+  collaborationAwarenessClientStateSchema,
   collaborationAwarenessEventSchema,
+  collaborationAwarenessServerStateSchema,
   collaborationDocumentUpdateEventSchema,
   collaborationIdSchema,
   collaborationPersistenceVersionSchema,
@@ -62,6 +68,7 @@ const ROOM_ORIGIN = "https://collaboration-room.internal";
 const SESSION_HEADER = "X-Collaboration-Session";
 const MAX_WEBSOCKET_MESSAGE_LENGTH = MAX_ENCODED_YJS_UPDATE_LENGTH + 16 * 1024;
 const MAX_BINARY_WEBSOCKET_MESSAGE_LENGTH = MAX_YJS_UPDATE_BYTES + 1024;
+const MAX_BINARY_AWARENESS_MESSAGE_LENGTH = 16 * 1024;
 const MAX_USER_UPDATES_PER_SECOND = 30;
 const MAX_ROOM_UPDATES_PER_SECOND = 120;
 const MAX_AWARENESS_UPDATES_PER_SECOND = 20;
@@ -90,6 +97,9 @@ type CanonicalSocketSession = z.infer<typeof canonicalSocketSessionSchema>;
 const socketAttachmentSchema = canonicalSocketSessionSchema
   .extend({
     awareness: collaborationAwarenessEventSchema.optional(),
+    awarenessClientId: z.number().int().nonnegative().max(0xffff_ffff).optional(),
+    awarenessClock: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    awarenessState: collaborationAwarenessServerStateSchema.optional(),
     updateWindowSecond: z.number().int().nonnegative().optional(),
     updateWindowCount: z.number().int().nonnegative().optional(),
     awarenessWindowSecond: z.number().int().nonnegative().optional(),
@@ -511,6 +521,14 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       );
       return;
     }
+    if (frame.kind === "awareness") {
+      if (frame.update.byteLength > MAX_BINARY_AWARENESS_MESSAGE_LENGTH) {
+        this.rejectSocket(socket, "invalid-message", "Awareness message is too large", true, 1009);
+        return;
+      }
+      this.acceptBinaryAwareness(socket, attachment, frame.update);
+      return;
+    }
     if (frame.kind === "sync") {
       if (frame.messageType !== syncProtocol.messageYjsSyncStep1) {
         this.rejectSocket(socket, "invalid-message", "Invalid Yjs sync request", true, 1008);
@@ -587,6 +605,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         existing.serializeAttachment({
           ...attachment,
           awareness: undefined,
+          awarenessState: undefined,
         } satisfies SocketAttachment);
         existing.close(4000, "replaced by reconnect");
       }
@@ -604,6 +623,34 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       binaryProtocolVersion: session.binaryProtocolVersion,
       participants: this.currentParticipants(),
     });
+    if (session.binaryProtocolVersion === COLLABORATION_BINARY_PROTOCOL_VERSION) {
+      const now = Date.now();
+      for (const existing of this.ctx.getWebSockets()) {
+        if (existing === server || !isOpen(existing)) continue;
+        const existingAttachment = attachmentFor(existing);
+        if (
+          existingAttachment?.awareness?.kind !== "state" ||
+          existingAttachment.awareness.expiresAt <= now ||
+          existingAttachment.awarenessClientId === undefined ||
+          existingAttachment.awarenessClock === undefined ||
+          !existingAttachment.awarenessState
+        ) {
+          continue;
+        }
+        sendBinary(
+          server,
+          encodeCollaborationAwarenessUpdate(
+            encodeCollaborationAwarenessProtocolUpdate([
+              {
+                clientId: existingAttachment.awarenessClientId,
+                clock: existingAttachment.awarenessClock,
+                state: existingAttachment.awarenessState,
+              },
+            ]),
+          ),
+        );
+      }
+    }
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -624,6 +671,25 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       if (!previous || previous.revision <= awareness.revision) bySession.set(key, awareness);
     }
     return Array.from(bySession.values());
+  }
+
+  private awarenessClientIdInUse(clientId: number, except?: WebSocket): boolean {
+    for (const socket of this.ctx.getWebSockets()) {
+      if (socket === except || !isOpen(socket)) continue;
+      if (attachmentFor(socket)?.awarenessClientId === clientId) return true;
+    }
+    return false;
+  }
+
+  private allocateAwarenessClientId(except?: WebSocket): number {
+    const random = new Uint32Array(1);
+    crypto.getRandomValues(random);
+    let candidate = random[0] ?? 0;
+    for (let attempt = 0; attempt < 128; attempt += 1) {
+      if (!this.awarenessClientIdInUse(candidate, except)) return candidate;
+      candidate = (candidate + 1) >>> 0;
+    }
+    throw new Error("awareness client ID space is exhausted");
   }
 
   private async refreshAccess(
@@ -682,15 +748,88 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     roleVersion: number,
   ): SocketAttachment {
     const awareness = attachment.awareness;
+    const updatedAwareness =
+      awareness?.kind === "state"
+        ? { ...awareness, role, isHost: attachment.hostUserId === attachment.userId }
+        : undefined;
+    const awarenessState =
+      updatedAwareness && attachment.awarenessState
+        ? collaborationAwarenessServerStateSchema.parse({
+            ...attachment.awarenessState,
+            collaboration: updatedAwareness,
+          })
+        : attachment.awarenessState;
     return {
       ...attachment,
       role,
       roleVersion,
       accessCheckedAt: Date.now(),
-      ...(awareness?.kind === "state"
-        ? { awareness: { ...awareness, role, isHost: attachment.hostUserId === attachment.userId } }
-        : {}),
+      awarenessState,
+      ...(updatedAwareness ? { awareness: updatedAwareness } : {}),
     };
+  }
+
+  private acceptBinaryAwareness(
+    socket: WebSocket,
+    attachment: SocketAttachment,
+    update: Uint8Array,
+  ): void {
+    let entries: CollaborationAwarenessProtocolEntry[];
+    try {
+      entries = decodeCollaborationAwarenessProtocolUpdate(update);
+    } catch {
+      this.rejectSocket(socket, "invalid-message", "Invalid awareness update", true, 1008);
+      return;
+    }
+    const entry = entries[0];
+    if (!entry || entries.length !== 1 || entry.clientId > 0xffff_ffff) {
+      this.rejectSocket(socket, "invalid-message", "Invalid awareness update", true, 1008);
+      return;
+    }
+    if (
+      (attachment.awarenessClientId !== undefined &&
+        attachment.awarenessClientId !== entry.clientId) ||
+      (attachment.awarenessClientId === undefined &&
+        this.awarenessClientIdInUse(entry.clientId, socket))
+    ) {
+      this.rejectSocket(socket, "invalid-session", "Awareness client identity changed", true, 1008);
+      return;
+    }
+    if (attachment.awarenessClock !== undefined && entry.clock <= attachment.awarenessClock) return;
+
+    if (entry.state === null) {
+      if (!attachment.awareness || attachment.awareness.kind !== "state") {
+        socket.serializeAttachment({
+          ...attachment,
+          awarenessClientId: entry.clientId,
+          awarenessClock: entry.clock,
+          awareness: undefined,
+          awarenessState: undefined,
+        } satisfies SocketAttachment);
+        return;
+      }
+      this.acceptAwareness(
+        socket,
+        attachment,
+        {
+          kind: "leave",
+          sessionId: attachment.sessionId,
+          revision: attachment.awareness.revision + 1,
+        },
+        entry,
+      );
+      return;
+    }
+
+    const state = collaborationAwarenessClientStateSchema.safeParse(entry.state);
+    if (!state.success || state.data.collaboration.kind !== "state") {
+      this.rejectSocket(socket, "invalid-message", "Invalid awareness state", true, 1008);
+      return;
+    }
+    this.acceptAwareness(socket, attachment, state.data.collaboration, {
+      ...entry,
+      state: state.data,
+    });
   }
 
   private acceptAwareness(
@@ -700,6 +839,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       z.infer<typeof collaborationWebSocketClientMessageSchema>,
       { type: "awareness.state" }
     >["data"],
+    binaryEntry?: CollaborationAwarenessProtocolEntry,
   ): void {
     if (input.sessionId !== attachment.sessionId) {
       this.rejectSocket(socket, "invalid-session", "Awareness session does not match", true, 1008);
@@ -733,13 +873,38 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
             occurredAt: now,
             expiresAt: now + COLLABORATION_AWARENESS_TTL_MS,
           };
+    const awarenessClientId =
+      binaryEntry?.clientId ??
+      attachment.awarenessClientId ??
+      this.allocateAwarenessClientId(socket);
+    const awarenessClock = binaryEntry?.clock ?? (attachment.awarenessClock ?? -1) + 1;
+    const selection = binaryEntry?.state?.selection;
+    const awarenessState =
+      event.kind === "state"
+        ? collaborationAwarenessServerStateSchema.parse({
+            collaboration: event,
+            ...(selection === undefined ? {} : { selection }),
+          })
+        : undefined;
     socket.serializeAttachment({
       ...attachment,
       awarenessWindowSecond: second,
       awarenessWindowCount: count,
-      ...(event.kind === "state" ? { awareness: event } : { awareness: undefined }),
+      awarenessClientId,
+      awarenessClock,
+      ...(event.kind === "state"
+        ? { awareness: event, awarenessState }
+        : { awareness: undefined, awarenessState: undefined }),
     } satisfies SocketAttachment);
-    this.broadcast({ type: "awareness.state", data: event });
+    this.broadcastAwareness(
+      event,
+      {
+        clientId: awarenessClientId,
+        clock: awarenessClock,
+        state: awarenessState ?? null,
+      },
+      socket,
+    );
   }
 
   private async acceptDocumentUpdate(
@@ -1040,6 +1205,33 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     }
   }
 
+  private broadcastAwareness(
+    event: CollaborationAwarenessEvent,
+    entry: CollaborationAwarenessProtocolEntry,
+    source: WebSocket,
+  ): void {
+    const json = JSON.stringify(
+      collaborationWebSocketServerMessageSchema.parse({ type: "awareness.state", data: event }),
+    );
+    const binary = exactArrayBuffer(
+      encodeCollaborationAwarenessUpdate(encodeCollaborationAwarenessProtocolUpdate([entry])),
+    );
+    for (const socket of this.ctx.getWebSockets()) {
+      if (!isOpen(socket)) continue;
+      try {
+        const attachment = attachmentFor(socket);
+        socket.send(
+          socket !== source &&
+            attachment?.binaryProtocolVersion === COLLABORATION_BINARY_PROTOCOL_VERSION
+            ? binary
+            : json,
+        );
+      } catch {
+        socket.close(1011, "broadcast failed");
+      }
+    }
+  }
+
   private broadcast(message: CollaborationWebSocketServerMessage, except?: WebSocket): void {
     const encoded = JSON.stringify(collaborationWebSocketServerMessageSchema.parse(message));
     for (const socket of this.ctx.getWebSockets()) {
@@ -1063,7 +1255,19 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       revision: attachment.awareness.revision + 1,
       occurredAt: Date.now(),
     };
-    this.broadcast({ type: "awareness.state", data: event }, socket);
+    if (attachment.awarenessClientId === undefined || attachment.awarenessClock === undefined) {
+      this.broadcast({ type: "awareness.state", data: event }, socket);
+    } else {
+      this.broadcastAwareness(
+        event,
+        {
+          clientId: attachment.awarenessClientId,
+          clock: attachment.awarenessClock,
+          state: null,
+        },
+        socket,
+      );
+    }
   }
 
   private rejectSocket(

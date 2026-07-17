@@ -4,12 +4,16 @@ import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
 import { collaborationIdSchema } from "./protocol";
 
-export const COLLABORATION_BINARY_PROTOCOL_VERSION = 1 as const;
+// Version 2 adds authenticated standard-awareness frames to the version-1
+// document sync/update envelope. Bumping avoids sending awareness frames to a
+// document-only Durable Object during a rolling deployment.
+export const COLLABORATION_BINARY_PROTOCOL_VERSION = 2 as const;
 
 const BINARY_FRAME_SYNC = 0;
 const BINARY_FRAME_CLIENT_UPDATE = 1;
 const BINARY_FRAME_SERVER_UPDATE = 2;
 const BINARY_FRAME_AWARENESS = 3;
+const MAX_AWARENESS_UPDATE_ENTRIES = 100;
 
 type SyncMessageType =
   | typeof syncProtocol.messageYjsSyncStep1
@@ -31,6 +35,12 @@ export type CollaborationBinaryFrame =
       update: Uint8Array;
     }
   | { kind: "awareness"; update: Uint8Array };
+
+export interface CollaborationAwarenessProtocolEntry {
+  clientId: number;
+  clock: number;
+  state: Record<string, unknown> | null;
+}
 
 export class CollaborationBinaryProtocolError extends Error {
   constructor(message = "invalid collaboration binary frame") {
@@ -82,6 +92,20 @@ function assertFrameConsumed(decoder: decoding.Decoder): void {
   }
 }
 
+function assertAwarenessInteger(value: number): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new CollaborationBinaryProtocolError("invalid awareness integer");
+  }
+}
+
+function parseAwarenessState(value: string): Record<string, unknown> | null {
+  const state = JSON.parse(value) as unknown;
+  if (state !== null && (typeof state !== "object" || Array.isArray(state))) {
+    throw new CollaborationBinaryProtocolError("invalid awareness state");
+  }
+  return state as Record<string, unknown> | null;
+}
+
 export function encodeCollaborationSyncStep1(doc: Y.Doc): Uint8Array {
   const encoder = createFrameEncoder(BINARY_FRAME_SYNC);
   syncProtocol.writeSyncStep1(encoder, doc);
@@ -125,6 +149,55 @@ export function encodeCollaborationAwarenessUpdate(update: Uint8Array): Uint8Arr
   const encoder = createFrameEncoder(BINARY_FRAME_AWARENESS);
   encoding.writeVarUint8Array(encoder, update);
   return finishFrame(encoder);
+}
+
+export function encodeCollaborationAwarenessProtocolUpdate(
+  entries: readonly CollaborationAwarenessProtocolEntry[],
+): Uint8Array {
+  if (entries.length > MAX_AWARENESS_UPDATE_ENTRIES) {
+    throw new CollaborationBinaryProtocolError("too many awareness entries");
+  }
+  const encoder = encoding.createEncoder();
+  encoding.writeVarUint(encoder, entries.length);
+  for (const entry of entries) {
+    assertAwarenessInteger(entry.clientId);
+    assertAwarenessInteger(entry.clock);
+    const state = JSON.stringify(entry.state);
+    if (state === undefined) throw new CollaborationBinaryProtocolError("invalid awareness state");
+    encoding.writeVarUint(encoder, entry.clientId);
+    encoding.writeVarUint(encoder, entry.clock);
+    encoding.writeVarString(encoder, state);
+  }
+  return encoding.toUint8Array(encoder);
+}
+
+export function decodeCollaborationAwarenessProtocolUpdate(
+  update: Uint8Array,
+): CollaborationAwarenessProtocolEntry[] {
+  try {
+    const decoder = decoding.createDecoder(update);
+    const length = decoding.readVarUint(decoder);
+    if (length > MAX_AWARENESS_UPDATE_ENTRIES) {
+      throw new CollaborationBinaryProtocolError("too many awareness entries");
+    }
+    const entries: CollaborationAwarenessProtocolEntry[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const clientId = decoding.readVarUint(decoder);
+      const clock = decoding.readVarUint(decoder);
+      assertAwarenessInteger(clientId);
+      assertAwarenessInteger(clock);
+      entries.push({
+        clientId,
+        clock,
+        state: parseAwarenessState(decoding.readVarString(decoder)),
+      });
+    }
+    assertFrameConsumed(decoder);
+    return entries;
+  } catch (error) {
+    if (error instanceof CollaborationBinaryProtocolError) throw error;
+    throw new CollaborationBinaryProtocolError("invalid awareness update");
+  }
 }
 
 export function decodeCollaborationBinaryFrame(
