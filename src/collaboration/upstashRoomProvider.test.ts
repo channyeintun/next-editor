@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import {
+  COLLABORATION_BINARY_PROTOCOL_VERSION,
+  decodeCollaborationBinaryFrame,
+  encodeCollaborationServerUpdate,
+  encodeCollaborationSyncStep2,
+} from "./binaryProtocol";
+import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
   collaborationAwarenessChannel,
@@ -31,6 +37,11 @@ import {
 const ROOM_ID = "10000000-0000-4000-8000-000000000001";
 const CLIENT_ID = "20000000-0000-4000-8000-000000000001";
 const ACTOR_ID = "30000000-0000-4000-8000-000000000001";
+const REMOTE_UPDATE_ID = "40000000-0000-4000-8000-000000000001";
+
+function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
 
 function roomSession(role: "owner" | "editor" | "viewer" = "editor"): CollaborationRoomSession {
   return {
@@ -90,11 +101,14 @@ class FakeEventSource implements CollaborationEventSource {
 
 class FakeWebSocket implements CollaborationWebSocket {
   readyState = 0;
+  bufferedAmount = 0;
+  binaryType?: BinaryType;
   onopen: ((event: Event) => void) | null = null;
   onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;
   readonly sent: string[] = [];
+  readonly binarySent: ArrayBuffer[] = [];
 
   open() {
     this.readyState = 1;
@@ -102,13 +116,15 @@ class FakeWebSocket implements CollaborationWebSocket {
   }
 
   message(value: unknown) {
-    const data = typeof value === "string" ? value : JSON.stringify(value);
+    const data =
+      typeof value === "string" || value instanceof ArrayBuffer ? value : JSON.stringify(value);
     this.onmessage?.(new MessageEvent("message", { data }));
   }
 
-  send(data: string) {
+  send(data: string | ArrayBuffer) {
     if (this.readyState !== 1) throw new Error("socket is not open");
-    this.sent.push(data);
+    if (typeof data === "string") this.sent.push(data);
+    else this.binarySent.push(data);
   }
 
   close(code = 1000, reason = "") {
@@ -122,6 +138,7 @@ class FakeApi implements CollaborationRoomApi {
   session = roomSession();
   bootstrapResponse: CollaborationBootstrapResponse;
   bootstrapGate: Promise<void> | null = null;
+  bootstrapCalls = 0;
 
   constructor(serverDoc: Y.Doc) {
     this.bootstrapResponse = bootstrap(serverDoc);
@@ -132,6 +149,7 @@ class FakeApi implements CollaborationRoomApi {
   }
 
   async getBootstrap() {
+    this.bootstrapCalls += 1;
     await this.bootstrapGate;
     return this.bootstrapResponse;
   }
@@ -180,6 +198,99 @@ describe("UpstashRoomProvider", () => {
 
   afterEach(() => {
     resetPerformanceMetricsForTests();
+  });
+
+  it("uses state vectors and raw Yjs updates for negotiated binary rooms", async () => {
+    const server = new Y.Doc();
+    server.getText("source").insert(0, "start");
+    const api = new FakeApi(server);
+    const session = roomSession();
+    api.session = {
+      ...session,
+      room: {
+        ...session.room,
+        transport: "cloudflare-websocket",
+        persistenceVersion: 2,
+        binaryProtocolVersion: COLLABORATION_BINARY_PROTOCOL_VERSION,
+      },
+    };
+    const sockets: FakeWebSocket[] = [];
+    const urls: string[] = [];
+    const provider = new UpstashRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      clientId: CLIENT_ID,
+      batchWindowMs: 60_000,
+      binaryProtocolEnabled: true,
+      webSocketFactory: (url) => {
+        urls.push(url);
+        const socket = new FakeWebSocket();
+        sockets.push(socket);
+        return socket;
+      },
+      eventSourceFactory: () => {
+        throw new Error("Realtime must not open for a WebSocket room");
+      },
+    });
+
+    await provider.start();
+    sockets[0].open();
+    await waitUntil(() => sockets[0].binarySent.length === 1);
+    const syncRequest = decodeCollaborationBinaryFrame(sockets[0].binarySent[0]);
+    if (syncRequest.kind !== "sync") throw new Error("state-vector sync was not requested");
+    sockets[0].message(exactArrayBuffer(encodeCollaborationSyncStep2(server, syncRequest.payload)));
+    await waitUntil(() => provider.connectionState === "live");
+
+    expect(api.bootstrapCalls).toBe(0);
+    expect(provider.doc.getText("source").toString()).toBe("start");
+    expect(new URL(urls[0]).searchParams.get("binaryProtocolVersion")).toBe(
+      String(COLLABORATION_BINARY_PROTOCOL_VERSION),
+    );
+    expect(sockets[0].binaryType).toBe("arraybuffer");
+
+    const source = provider.doc.getText("source");
+    source.insert(source.length, "-one");
+    source.insert(source.length, "-two");
+    const flushing = provider.flushNow();
+    await waitUntil(
+      () =>
+        sockets[0].binarySent
+          .map((raw) => decodeCollaborationBinaryFrame(raw))
+          .filter((frame) => frame.kind === "client-update").length === 1,
+    );
+    const clientUpdate = sockets[0].binarySent
+      .map((raw) => decodeCollaborationBinaryFrame(raw))
+      .find((frame) => frame.kind === "client-update");
+    if (!clientUpdate || clientUpdate.kind !== "client-update") {
+      throw new Error("binary document update was not sent");
+    }
+    expect(clientUpdate.clientId).toBe(CLIENT_ID);
+    Y.applyUpdate(server, clientUpdate.update);
+    expect(server.getText("source").toString()).toBe("start-one-two");
+    sockets[0].message({
+      type: "document.ack",
+      updateId: clientUpdate.updateId,
+      streamId: "2-0",
+      duplicate: false,
+    });
+    await flushing;
+    expect(provider.hasPendingUpdates).toBe(false);
+
+    const serverStateVector = Y.encodeStateVector(server);
+    server.getText("source").insert(server.getText("source").length, "-remote");
+    const remoteUpdate = Y.encodeStateAsUpdate(server, serverStateVector);
+    sockets[0].message(
+      exactArrayBuffer(
+        encodeCollaborationServerUpdate({
+          streamId: "3-0",
+          updateId: REMOTE_UPDATE_ID,
+          update: remoteUpdate,
+        }),
+      ),
+    );
+    await waitUntil(() => provider.doc.getText("source").toString().endsWith("-remote"));
+    expect(provider.doc.getText("source").toString()).toBe("start-one-two-remote");
+    provider.stop();
   });
 
   it("uses a duplex WebSocket for WebSocket rooms and waits for durable acknowledgements", async () => {

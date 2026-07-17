@@ -1,5 +1,13 @@
 import { createActor, type ActorRefFrom, type Subscription } from "xstate";
+import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
+import {
+  COLLABORATION_BINARY_PROTOCOL_VERSION,
+  decodeCollaborationBinaryFrame,
+  encodeCollaborationClientUpdate,
+  encodeCollaborationSyncStep1,
+  type CollaborationBinaryFrame,
+} from "./binaryProtocol";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
@@ -34,7 +42,12 @@ import {
 } from "./collaborationMachine";
 import { recordPerformanceMetric, startPerformanceSpan } from "../utils/performanceMetrics";
 
-const DEFAULT_BATCH_WINDOW_MS = 75;
+const FAST_WEBSOCKET_BATCH_WINDOW_MS = 16;
+const CONGESTED_BATCH_WINDOW_MS = 75;
+const MAX_BATCH_UPDATE_COUNT = 32;
+const BATCH_MERGE_BUDGET_BYTES = MAX_YJS_UPDATE_BYTES - 1024;
+const WEBSOCKET_BACKPRESSURE_BYTES = 64 * 1024;
+const BUSY_PENDING_UPDATE_COUNT = 8;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 5;
 const MAX_BOOTSTRAP_PAGES = 1_000;
 const MAX_SEEN_STREAM_IDS = 2_000;
@@ -66,11 +79,13 @@ export type CollaborationEventSourceFactory = (url: string) => CollaborationEven
 
 export interface CollaborationWebSocket {
   readonly readyState: number;
+  readonly bufferedAmount?: number;
+  binaryType?: BinaryType;
   onopen: ((event: Event) => void) | null;
   onmessage: ((event: MessageEvent<unknown>) => void) | null;
   onerror: ((event: Event) => void) | null;
   onclose: ((event: CloseEvent) => void) | null;
-  send(data: string): void;
+  send(data: string | ArrayBuffer): void;
   close(code?: number, reason?: string): void;
 }
 
@@ -84,6 +99,7 @@ export interface UpstashRoomProviderOptions {
   eventSourceFactory?: CollaborationEventSourceFactory;
   webSocketFactory?: CollaborationWebSocketFactory;
   batchWindowMs?: number;
+  binaryProtocolEnabled?: boolean;
   maxReconnectAttempts?: number;
   random?: () => number;
   onDocumentChange?: (doc: Y.Doc, transaction: Y.Transaction) => void;
@@ -100,7 +116,8 @@ interface RealtimeUserMessage {
 }
 
 interface PendingUpdate {
-  input: CollaborationDocumentUpdateInput;
+  updateId: string;
+  update: Uint8Array;
   queuedAt: number;
   firstSentAt?: number;
 }
@@ -112,6 +129,14 @@ interface PendingLocalUpdate {
 
 function monotonicNow(): number {
   return globalThis.performance?.now() ?? Date.now();
+}
+
+function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function defaultBinaryProtocolEnabled(): boolean {
+  return import.meta.env.VITE_COLLABORATION_BINARY_PROTOCOL !== "false";
 }
 
 function errorStatus(error: unknown): number | null {
@@ -172,7 +197,8 @@ export class UpstashRoomProvider {
   private readonly roomId: string;
   private readonly eventSourceFactory: CollaborationEventSourceFactory;
   private readonly webSocketFactory: CollaborationWebSocketFactory;
-  private readonly batchWindowMs: number;
+  private readonly batchWindowMs: number | null;
+  private readonly binaryProtocolEnabled: boolean;
   private readonly maxReconnectAttempts: number;
   private readonly random: () => number;
   private readonly onDocumentChange?: UpstashRoomProviderOptions["onDocumentChange"];
@@ -189,17 +215,27 @@ export class UpstashRoomProvider {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
   private roomSession: CollaborationRoomSession | null = null;
+  private binaryProtocolActive = false;
   private isSynchronizing = false;
   private isStarted = false;
   private isStopped = false;
   private isPublishing = false;
   private readonly lastAcknowledgedStreamIds = new Map<string, string>();
   private bufferedMessages: RealtimeUserMessage[] = [];
+  private bufferedBinaryUpdates: Array<
+    Extract<CollaborationBinaryFrame, { kind: "server-update" }>
+  > = [];
   private pendingUpdates: PendingLocalUpdate[] = [];
   private outbox: PendingUpdate[] = [];
   private seenStreamIds = new Set<string>();
   private isRefreshingControl = false;
   private pendingControlRoleVersion = 0;
+  private pendingBinarySync: {
+    attemptId: string;
+    resolve: (update: Uint8Array) => void;
+    reject: (reason: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
   private readonly pendingWebSocketAcks = new Map<
     string,
     {
@@ -216,7 +252,8 @@ export class UpstashRoomProvider {
     this.clientId = options.clientId ?? crypto.randomUUID();
     this.eventSourceFactory = options.eventSourceFactory ?? defaultEventSourceFactory;
     this.webSocketFactory = options.webSocketFactory ?? defaultWebSocketFactory;
-    this.batchWindowMs = options.batchWindowMs ?? DEFAULT_BATCH_WINDOW_MS;
+    this.batchWindowMs = options.batchWindowMs ?? null;
+    this.binaryProtocolEnabled = options.binaryProtocolEnabled ?? defaultBinaryProtocolEnabled();
     this.maxReconnectAttempts = options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     this.random = options.random ?? Math.random;
     this.onDocumentChange = options.onDocumentChange;
@@ -281,6 +318,7 @@ export class UpstashRoomProvider {
     this.pendingUpdates = [];
     this.outbox = [];
     this.bufferedMessages = [];
+    this.bufferedBinaryUpdates = [];
     this.actor.send({ type: "LEAVE" });
     this.actor.stop();
   }
@@ -342,8 +380,23 @@ export class UpstashRoomProvider {
       this.batchTimer = null;
       this.movePendingUpdatesToOutbox();
       void this.flushOutbox();
-    }, this.batchWindowMs);
+    }, this.currentBatchWindowMs());
   };
+
+  private currentBatchWindowMs(): number {
+    if (this.batchWindowMs !== null) return this.batchWindowMs;
+    if (this.roomSession?.room.transport !== "cloudflare-websocket") {
+      return CONGESTED_BATCH_WINDOW_MS;
+    }
+    if (
+      (this.socket?.bufferedAmount ?? 0) >= WEBSOCKET_BACKPRESSURE_BYTES ||
+      this.pendingUpdates.length >= BUSY_PENDING_UPDATE_COUNT ||
+      this.outbox.length >= 4
+    ) {
+      return CONGESTED_BATCH_WINDOW_MS;
+    }
+    return FAST_WEBSOCKET_BATCH_WINDOW_MS;
+  }
 
   private movePendingUpdatesToOutbox(): void {
     if (this.pendingUpdates.length === 0) return;
@@ -351,16 +404,39 @@ export class UpstashRoomProvider {
     this.pendingUpdates = [];
 
     let batch: PendingLocalUpdate[] = [];
+    let batchBytes = 0;
     const enqueueBatch = () => {
-      if (batch.length === 0) return;
+      const first = batch[0];
+      if (!first) return;
+      const update =
+        batch.length === 1 ? first.update : Y.mergeUpdates(batch.map((item) => item.update));
+      if (update.byteLength > MAX_YJS_UPDATE_BYTES) {
+        if (batch.length === 1) {
+          this.fatal(
+            `A local collaboration change exceeded the ${MAX_YJS_UPDATE_BYTES}-byte update limit`,
+          );
+          batch = [];
+          batchBytes = 0;
+          return;
+        }
+        for (const pending of batch) {
+          this.outbox.push({
+            updateId: crypto.randomUUID(),
+            update: pending.update,
+            queuedAt: pending.queuedAt,
+          });
+        }
+        batch = [];
+        batchBytes = 0;
+        return;
+      }
       this.outbox.push({
-        input: createCollaborationDocumentUpdate(
-          Y.mergeUpdates(batch.map((pending) => pending.update)),
-          this.clientId,
-        ),
-        queuedAt: batch[0]?.queuedAt ?? monotonicNow(),
+        updateId: crypto.randomUUID(),
+        update,
+        queuedAt: first.queuedAt,
       });
       batch = [];
+      batchBytes = 0;
     };
     for (const pending of updates) {
       const { update } = pending;
@@ -370,9 +446,14 @@ export class UpstashRoomProvider {
         );
         return;
       }
-      const candidate = Y.mergeUpdates([...batch.map((item) => item.update), update]);
-      if (candidate.byteLength > MAX_YJS_UPDATE_BYTES) enqueueBatch();
+      if (
+        batch.length >= MAX_BATCH_UPDATE_COUNT ||
+        (batch.length > 0 && batchBytes + update.byteLength > BATCH_MERGE_BUDGET_BYTES)
+      ) {
+        enqueueBatch();
+      }
       batch.push(pending);
+      batchBytes += update.byteLength;
     }
     enqueueBatch();
   }
@@ -393,6 +474,12 @@ export class UpstashRoomProvider {
         return;
       }
       this.roomSession = roomSession;
+      this.binaryProtocolActive = Boolean(
+        this.binaryProtocolEnabled &&
+        roomSession.room.transport === "cloudflare-websocket" &&
+        roomSession.room.persistenceVersion === 2 &&
+        roomSession.room.binaryProtocolVersion === COLLABORATION_BINARY_PROTOCOL_VERSION,
+      );
       if (roomSession.room.roleVersion >= this.pendingControlRoleVersion) {
         this.pendingControlRoleVersion = 0;
       }
@@ -458,7 +545,11 @@ export class UpstashRoomProvider {
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("sessionId", this.sessionId);
     url.searchParams.set("attemptId", attemptId);
+    if (this.binaryProtocolActive) {
+      url.searchParams.set("binaryProtocolVersion", String(COLLABORATION_BINARY_PROTOCOL_VERSION));
+    }
     const socket = this.webSocketFactory(url.toString());
+    if (this.binaryProtocolActive) socket.binaryType = "arraybuffer";
     this.socket = socket;
     socket.onopen = () => {
       if (this.isStopped || attemptId !== this.attemptId || socket !== this.socket) return;
@@ -466,7 +557,9 @@ export class UpstashRoomProvider {
       this.heartbeatTimer = setInterval(() => {
         if (socket === this.socket && socket.readyState === WEBSOCKET_OPEN) socket.send("ping");
       }, WEBSOCKET_HEARTBEAT_MS);
-      void this.synchronize(attemptId);
+      void (this.binaryProtocolActive
+        ? this.synchronizeBinary(attemptId)
+        : this.synchronize(attemptId));
     };
     socket.onmessage = (event) => {
       if (this.isStopped || attemptId !== this.attemptId || socket !== this.socket) return;
@@ -490,6 +583,10 @@ export class UpstashRoomProvider {
   }
 
   private handleWebSocketMessage(raw: unknown, attemptId: string): void {
+    if (raw instanceof ArrayBuffer) {
+      this.handleBinaryWebSocketMessage(raw, attemptId);
+      return;
+    }
     if (typeof raw !== "string") {
       this.handleTransportFailure("WebSocket provider sent an invalid message", attemptId);
       return;
@@ -548,6 +645,55 @@ export class UpstashRoomProvider {
       return;
     }
     this.handleWebSocketError(message, attemptId);
+  }
+
+  private handleBinaryWebSocketMessage(raw: ArrayBuffer, attemptId: string): void {
+    let frame: CollaborationBinaryFrame;
+    try {
+      frame = decodeCollaborationBinaryFrame(raw);
+    } catch {
+      this.handleTransportFailure("WebSocket provider sent an invalid binary message", attemptId);
+      return;
+    }
+    if (frame.kind === "sync") {
+      const pending = this.pendingBinarySync;
+      if (
+        !pending ||
+        pending.attemptId !== attemptId ||
+        frame.messageType !== syncProtocol.messageYjsSyncStep2
+      ) {
+        return;
+      }
+      clearTimeout(pending.timer);
+      this.pendingBinarySync = null;
+      pending.resolve(frame.payload);
+      return;
+    }
+    if (frame.kind !== "server-update") return;
+    if (this.isSynchronizing || this.connectionState === "syncing") {
+      this.bufferedBinaryUpdates.push(frame);
+    } else {
+      this.applyBinaryServerUpdate(frame);
+    }
+  }
+
+  private applyBinaryServerUpdate(
+    frame: Extract<CollaborationBinaryFrame, { kind: "server-update" }>,
+  ): void {
+    const channel = collaborationRoomChannel(this.roomId);
+    const seenKey = `${channel}|${frame.streamId}`;
+    if (this.seenStreamIds.has(seenKey)) return;
+    const endApplySpan = startPerformanceSpan("collaboration.remote_apply", {
+      transport: "cloudflare-websocket",
+      wire: "binary",
+    });
+    Y.applyUpdate(this.doc, frame.update, COLLABORATION_ORIGIN.remoteProvider);
+    endApplySpan();
+    recordPerformanceMetric("collaboration.remote_update", frame.update.byteLength, "bytes", {
+      transport: "cloudflare-websocket",
+      wire: "binary",
+    });
+    this.markStreamIdSeen(channel, frame.streamId);
   }
 
   private handleWebSocketError(
@@ -804,6 +950,71 @@ export class UpstashRoomProvider {
     }
   }
 
+  private async synchronizeBinary(attemptId: string): Promise<void> {
+    if (this.isSynchronizing) return;
+    this.isSynchronizing = true;
+    const endSynchronizationSpan = startPerformanceSpan("collaboration.bootstrap", {
+      transport: "cloudflare-websocket",
+      wire: "binary",
+    });
+    let synchronizationOutcome = "success";
+    try {
+      const socket = this.socket;
+      if (!socket || socket.readyState !== WEBSOCKET_OPEN) {
+        throw websocketRequestError("Collaboration WebSocket is not connected");
+      }
+      const update = await new Promise<Uint8Array>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          const pending = this.pendingBinarySync;
+          if (!pending || pending.attemptId !== attemptId || pending.timer !== timer) return;
+          this.pendingBinarySync = null;
+          pending.reject(websocketRequestError("Collaboration synchronization timed out"));
+        }, WEBSOCKET_ACK_TIMEOUT_MS);
+        this.pendingBinarySync = { attemptId, resolve, reject, timer };
+        try {
+          socket.send(exactArrayBuffer(encodeCollaborationSyncStep1(this.doc)));
+        } catch (error) {
+          clearTimeout(timer);
+          if (this.pendingBinarySync?.timer === timer) this.pendingBinarySync = null;
+          reject(error instanceof Error ? error : websocketRequestError("WebSocket send failed"));
+        }
+      });
+      if (this.isStopped || attemptId !== this.attemptId) return;
+
+      Y.applyUpdate(this.doc, update, COLLABORATION_ORIGIN.remoteProvider);
+      const buffered = this.bufferedBinaryUpdates;
+      this.bufferedBinaryUpdates = [];
+      for (const frame of buffered) this.applyBinaryServerUpdate(frame);
+      if (!this.roomSession) throw new Error("Collaboration room session is missing");
+      this.actor.send({
+        type: "SYNCED",
+        sessionId: this.sessionId,
+        attemptId,
+        roomSession: this.roomSession,
+      });
+      this.reconnectAttempt = 0;
+      const finalBuffered = this.bufferedBinaryUpdates;
+      this.bufferedBinaryUpdates = [];
+      this.isSynchronizing = false;
+      for (const frame of finalBuffered) this.applyBinaryServerUpdate(frame);
+      await this.flushOutbox();
+    } catch (error) {
+      synchronizationOutcome = "failure";
+      if (this.isStopped || attemptId !== this.attemptId) return;
+      if (isFatalRequestError(error)) {
+        this.fatal(errorMessage(error, "Collaboration synchronization was rejected"), attemptId);
+      } else {
+        this.handleTransportFailure(
+          errorMessage(error, "Collaboration synchronization failed"),
+          attemptId,
+        );
+      }
+    } finally {
+      this.isSynchronizing = false;
+      endSynchronizationSpan({ outcome: synchronizationOutcome });
+    }
+  }
+
   private async flushOutbox(): Promise<void> {
     if (this.isPublishing || this.connectionState !== "live" || !this.canWrite) return;
     this.isPublishing = true;
@@ -822,8 +1033,8 @@ export class UpstashRoomProvider {
           );
         }
         try {
-          const accepted = await this.publishTransportUpdate(pending.input);
-          if (!accepted.accepted || accepted.updateId !== pending.input.updateId) {
+          const accepted = await this.publishTransportUpdate(pending);
+          if (!accepted.accepted || accepted.updateId !== pending.updateId) {
             throw new Error("Collaboration update acknowledgement did not match the request");
           }
           const acknowledgedAt = monotonicNow();
@@ -876,11 +1087,12 @@ export class UpstashRoomProvider {
     }
   }
 
-  private publishTransportUpdate(
-    input: CollaborationDocumentUpdateInput,
-  ): Promise<CollaborationUpdateAccepted> {
+  private publishTransportUpdate(pending: PendingUpdate): Promise<CollaborationUpdateAccepted> {
     if (this.roomSession?.room.transport !== "cloudflare-websocket") {
-      return this.api.publishUpdate(this.roomId, input);
+      return this.api.publishUpdate(
+        this.roomId,
+        createCollaborationDocumentUpdate(pending.update, this.clientId, pending.updateId),
+      );
     }
     const socket = this.socket;
     if (!socket || socket.readyState !== WEBSOCKET_OPEN) {
@@ -888,22 +1100,38 @@ export class UpstashRoomProvider {
     }
     return new Promise<CollaborationUpdateAccepted>((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.pendingWebSocketAcks.delete(input.updateId);
+        this.pendingWebSocketAcks.delete(pending.updateId);
         reject(websocketRequestError("Collaboration update acknowledgement timed out"));
       }, WEBSOCKET_ACK_TIMEOUT_MS);
-      this.pendingWebSocketAcks.set(input.updateId, { resolve, reject, timer });
+      this.pendingWebSocketAcks.set(pending.updateId, { resolve, reject, timer });
       try {
-        socket.send(
-          JSON.stringify(
-            collaborationWebSocketClientMessageSchema.parse({
-              type: "document.update",
-              data: input,
-            }),
-          ),
-        );
+        if (this.binaryProtocolActive) {
+          socket.send(
+            exactArrayBuffer(
+              encodeCollaborationClientUpdate({
+                clientId: this.clientId,
+                updateId: pending.updateId,
+                update: pending.update,
+              }),
+            ),
+          );
+        } else {
+          socket.send(
+            JSON.stringify(
+              collaborationWebSocketClientMessageSchema.parse({
+                type: "document.update",
+                data: createCollaborationDocumentUpdate(
+                  pending.update,
+                  this.clientId,
+                  pending.updateId,
+                ),
+              }),
+            ),
+          );
+        }
       } catch (error) {
         clearTimeout(timer);
-        this.pendingWebSocketAcks.delete(input.updateId);
+        this.pendingWebSocketAcks.delete(pending.updateId);
         reject(error instanceof Error ? error : websocketRequestError("WebSocket send failed"));
       }
     });
@@ -991,6 +1219,13 @@ export class UpstashRoomProvider {
     this.heartbeatTimer = null;
     const socket = this.socket;
     this.socket = null;
+    const pendingSync = this.pendingBinarySync;
+    this.pendingBinarySync = null;
+    if (pendingSync) {
+      clearTimeout(pendingSync.timer);
+      pendingSync.reject(websocketRequestError("Collaboration WebSocket disconnected"));
+    }
+    this.bufferedBinaryUpdates = [];
     for (const [updateId, pending] of this.pendingWebSocketAcks) {
       clearTimeout(pending.timer);
       pending.reject(websocketRequestError("Collaboration WebSocket disconnected"));
