@@ -114,6 +114,17 @@ export function createSlidesStore() {
 
 export type SlidesStoreInstance = ReturnType<typeof createSlidesStore>;
 
+/** Persist only when the slides array identity changes; preview state stays ephemeral. */
+export function subscribeSlidesPersistence(store: SlidesStoreInstance): () => void {
+  let previousSlides = store.getSnapshot().context.slides;
+  const subscription = store.subscribe((snapshot) => {
+    if (snapshot.context.slides === previousSlides) return;
+    previousSlides = snapshot.context.slides;
+    saveSlidesToStorage(previousSlides);
+  });
+  return () => subscription.unsubscribe();
+}
+
 export const selectSlides = (context: SlidesContext): Slide[] => context.slides;
 export const selectPreviewState = (context: SlidesContext): SlidePreviewState =>
   context.previewState;

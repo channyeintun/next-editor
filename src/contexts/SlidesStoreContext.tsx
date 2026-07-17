@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from "react";
 import {
   createSlidesStore,
-  saveSlidesToStorage,
+  subscribeSlidesPersistence,
   type SlidesStoreInstance,
 } from "../stores/slidesStore";
 
@@ -18,16 +18,7 @@ export function SlidesStoreProvider({ children }: PropsWithChildren) {
 
   // Persist slides to localStorage whenever they change.
   useEffect(() => {
-    const { store } = value;
-    let previousSlides = store.getSnapshot().context.slides;
-    const subscription = store.subscribe((snapshot) => {
-      if (snapshot.context.slides !== previousSlides) {
-        previousSlides = snapshot.context.slides;
-        saveSlidesToStorage(previousSlides);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    return subscribeSlidesPersistence(value.store);
   }, [value]);
 
   return <SlidesStoreContext value={value}>{children}</SlidesStoreContext>;
