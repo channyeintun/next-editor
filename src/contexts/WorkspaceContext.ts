@@ -5,6 +5,7 @@ import type {
   WorkspaceLessonType,
   WorkspaceProject,
 } from "../types/workspace";
+import type { TextEditEvent } from "../types/textEdit";
 
 export interface WorkspaceActions {
   setActiveFilePath: (path: string) => void;
@@ -21,6 +22,7 @@ export interface WorkspaceActions {
   deleteFile: (path: string) => void;
   deleteFolder: (path: string) => void;
   updateFileContent: (path: string, content: string) => void;
+  applyFileTextEdits: (event: TextEditEvent) => boolean;
   updateActiveFileContent: (content: string) => void;
   hydrateAssetContents: (contents: Record<string, string>) => void;
   saveProject: () => Promise<void>;

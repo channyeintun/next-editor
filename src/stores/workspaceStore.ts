@@ -29,6 +29,7 @@ import {
   readStoredFileSidebarCollapsed,
 } from "../utils/sidebarLayout";
 import { startPerformanceSpan } from "../utils/performanceMetrics";
+import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 
 export interface StoredWorkspaceSnapshot {
   activeFilePath: string;
@@ -1135,6 +1136,44 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           }),
         );
       },
+      applyFileTextEdits: (context, event: TextEditEvent) => {
+        if (!context.isInitialized) {
+          return context;
+        }
+        const normalizedPath = normalizeWorkspacePath(event.path);
+        const existingFile = context.project.files[normalizedPath];
+        if (!existingFile || existingFile.encoding === "base64") return context;
+
+        const content = applyTextEditEvent(existingFile.content, {
+          ...event,
+          path: normalizedPath,
+        });
+        if (content === null || content === existingFile.content) return context;
+
+        const endUpdateSpan = startPerformanceSpan("workspace.content_update", {
+          project_size: projectSizeBucket(context.fileCount),
+          source: "incremental",
+        });
+        const nextContext = withDirtyState(
+          withRefreshedWorkspaceSlices({
+            ...context,
+            project: {
+              ...context.project,
+              files: {
+                ...context.project.files,
+                [normalizedPath]: {
+                  ...existingFile,
+                  content,
+                },
+              },
+            },
+            previewVersion: context.previewVersion + 1,
+            syncVersion: context.syncVersion + 1,
+          }),
+        );
+        endUpdateSpan();
+        return nextContext;
+      },
       updateFileContent: (
         context,
         event: {
@@ -1154,6 +1193,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
 
         const endUpdateSpan = startPerformanceSpan("workspace.content_update", {
           project_size: projectSizeBucket(context.fileCount),
+          source: "replacement",
         });
         const nextContext = withDirtyState(
           withRefreshedWorkspaceSlices({

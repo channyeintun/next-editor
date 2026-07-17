@@ -15,6 +15,7 @@ import {
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
+import { prepareTextEditEvent, type TextEditEvent } from "../types/textEdit";
 
 export const COLLABORATION_PROJECT_ROOT = "project";
 export const COLLABORATION_PROJECT_METADATA = "metadata";
@@ -417,7 +418,8 @@ export function projectCollaborationDocument(
   }
   for (const siblings of children.values()) {
     siblings.sort(
-      (left, right) => left.orderKey.localeCompare(right.orderKey) || left.id.localeCompare(right.id),
+      (left, right) =>
+        left.orderKey.localeCompare(right.orderKey) || left.id.localeCompare(right.id),
     );
   }
 
@@ -479,7 +481,8 @@ export function projectCollaborationDocument(
 
   const sortedPaths = Object.keys(files).sort((left, right) => left.localeCompare(right));
   const entryNodeId = metadata.get("entryNodeId");
-  const requestedEntry = typeof entryNodeId === "string" ? pathByNodeId.get(entryNodeId) : undefined;
+  const requestedEntry =
+    typeof entryNodeId === "string" ? pathByNodeId.get(entryNodeId) : undefined;
   const entryFilePath =
     (requestedEntry && files[requestedEntry] ? requestedEntry : undefined) ??
     (files[DEFAULT_WORKSPACE_ENTRY_PATH] ? DEFAULT_WORKSPACE_ENTRY_PATH : sortedPaths[0]) ??
@@ -532,7 +535,8 @@ function sharedTextReplacement(text: Y.Text, nextContent: string) {
   let suffixLength = 0;
   while (
     suffixLength < commonLength - prefixLength &&
-    current[current.length - 1 - suffixLength] === nextContent[nextContent.length - 1 - suffixLength]
+    current[current.length - 1 - suffixLength] ===
+      nextContent[nextContent.length - 1 - suffixLength]
   ) {
     suffixLength += 1;
   }
@@ -611,18 +615,34 @@ export class CollaborationProjectController {
     }
   }
 
+  applyFileTextEdits(event: TextEditEvent): boolean {
+    this.assertWritable();
+    const { id, node } = this.nodeAtPath(event.path);
+    if (node.get("kind") !== "file" || node.get("deleted") === true) {
+      throw new CollaborationProjectError(`Collaboration file not found: ${event.path}`);
+    }
+    const text = getCollaborationTexts(this.doc).get(id);
+    if (!(text instanceof Y.Text)) {
+      throw new CollaborationProjectError(`Collaboration text not found: ${event.path}`);
+    }
+    const prepared = prepareTextEditEvent(event, text.length);
+    if (!prepared) return false;
+
+    this.doc.transact(() => {
+      for (const change of prepared.changes) {
+        if (change.deleteLength > 0) text.delete(change.offset, change.deleteLength);
+        if (change.text.length > 0) text.insert(change.offset, change.text);
+      }
+    }, COLLABORATION_ORIGIN.localEditor);
+    return true;
+  }
+
   createFile(path: string, content = "", encoding: WorkspaceFileEncoding = "utf-8"): void {
     this.createNode("file", path, content, encoding);
   }
 
   createAssetFile(path: string, asset: CollaborationAssetDescriptor): void {
-    this.createNode(
-      "file",
-      path,
-      "",
-      "base64",
-      collaborationAssetDescriptorSchema.parse(asset),
-    );
+    this.createNode("file", path, "", "base64", collaborationAssetDescriptorSchema.parse(asset));
   }
 
   createFolder(path: string): void {

@@ -33,7 +33,9 @@ describe("collaboration project document", () => {
     const projection = projectCollaborationDocument(doc);
     expect(projection.project).toEqual(project);
     expect(projection.issues).toEqual([]);
-    expect(projection.nodeIdByPath.size).toBe(project.folders.length + Object.keys(project.files).length);
+    expect(projection.nodeIdByPath.size).toBe(
+      project.folders.length + Object.keys(project.files).length,
+    );
   });
 
   it("converges text after concurrent, duplicated, and reordered updates", () => {
@@ -119,8 +121,7 @@ describe("collaboration project document", () => {
     let commandId = 0;
     const controller = new CollaborationProjectController(doc, {
       canWrite: () => true,
-      idFactory: () =>
-        `f0000000-0000-4000-8000-${String(++commandId).padStart(12, "0")}`,
+      idFactory: () => `f0000000-0000-4000-8000-${String(++commandId).padStart(12, "0")}`,
     });
 
     controller.createFolder("examples");
@@ -138,6 +139,41 @@ describe("collaboration project document", () => {
 
     controller.deleteFolder("examples");
     expect(projectCollaborationDocument(doc).project.files["examples/renamed.ts"]).toBeUndefined();
+  });
+
+  it("applies Monaco text ranges to Y.Text without replacing the whole value", () => {
+    const project = createStarterHtmlCssWorkspace();
+    const path = project.entryFilePath;
+    const before = project.files[path].content;
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, project, { idFactory: idFactory() });
+    const controller = new CollaborationProjectController(doc, { canWrite: () => true });
+    const insertion = "<!-- incremental -->\n";
+
+    expect(
+      controller.applyFileTextEdits({
+        fileId: path,
+        path,
+        beforeVersion: 10,
+        afterVersion: 11,
+        beforeLength: before.length,
+        afterLength: before.length + insertion.length,
+        changes: [{ offset: 0, deleteLength: 0, text: insertion }],
+      }),
+    ).toBe(true);
+    expect(projectCollaborationDocument(doc).project.files[path].content).toBe(insertion + before);
+
+    expect(
+      controller.applyFileTextEdits({
+        fileId: path,
+        path,
+        beforeVersion: 11,
+        afterVersion: 12,
+        beforeLength: before.length,
+        afterLength: before.length + 1,
+        changes: [{ offset: 0, deleteLength: 0, text: "!" }],
+      }),
+    ).toBe(false);
   });
 
   it("keeps binary bytes outside Yjs and projects content-addressed asset descriptors", () => {
@@ -200,7 +236,9 @@ describe("collaboration project document", () => {
     const rightUpdate = Y.encodeStateAsUpdate(right, Y.encodeStateVector(seed));
     Y.applyUpdate(left, rightUpdate);
     Y.applyUpdate(right, leftUpdate);
-    expect(projectCollaborationDocument(left).project).toEqual(projectCollaborationDocument(right).project);
+    expect(projectCollaborationDocument(left).project).toEqual(
+      projectCollaborationDocument(right).project,
+    );
     expect(
       Object.keys(projectCollaborationDocument(left).project.files).filter((path) =>
         path.startsWith("same.ts"),

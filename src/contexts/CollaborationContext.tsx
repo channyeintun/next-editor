@@ -251,7 +251,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setLocalError(messageFromError(error, "The collaboration invitation could not be accepted."));
+          setLocalError(
+            messageFromError(error, "The collaboration invitation could not be accepted."),
+          );
           claimingTokenRef.current = null;
         }
       });
@@ -294,10 +296,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       onControlEvent: () => {
         const session = providerRef.current?.session;
         if (session) {
-          void refreshRoomDataFor(
-            session.room.id,
-            session.membership.role === "owner",
-          ).catch(() => {});
+          void refreshRoomDataFor(session.room.id, session.membership.role === "owner").catch(
+            () => {},
+          );
         }
       },
       onRejectedLocalChanges: setLocalError,
@@ -378,10 +379,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const role = session?.membership.role ?? machineSnapshot?.context.role ?? null;
   const canWrite = Boolean(
     provider &&
-      role &&
-      canWriteCollaborationDocument(role) &&
-      (connectionState === "live" || connectionState === "reconnecting") &&
-      !usesPlaybackModel,
+    role &&
+    canWriteCollaborationDocument(role) &&
+    (connectionState === "live" || connectionState === "reconnecting") &&
+    !usesPlaybackModel,
   );
   const canWriteRef = useRef(canWrite);
   canWriteRef.current = canWrite;
@@ -411,7 +412,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     };
     return {
       ...baseActions,
-      createNewEditor: () => reportWriteError(new Error("Leave the room before replacing the project.")),
+      createNewEditor: () =>
+        reportWriteError(new Error("Leave the room before replacing the project.")),
       createFile: (path, content = "", encoding) => {
         if (encoding !== "base64") {
           run(() => controller.createFile(path, content, encoding));
@@ -443,13 +445,23 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         run(() => controller.renameFolder(currentPath, nextPath)),
       deleteFile: (path) => run(() => controller.deleteFile(path)),
       deleteFolder: (path) => run(() => controller.deleteFolder(path)),
-      updateFileContent: (path, content) =>
-        run(() => controller.replaceFileContent(path, content)),
+      updateFileContent: (path, content) => run(() => controller.replaceFileContent(path, content)),
+      applyFileTextEdits: (event) => {
+        try {
+          const applied = controller.applyFileTextEdits(event);
+          setLocalError(null);
+          return applied;
+        } catch (error) {
+          reportWriteError(error);
+          return false;
+        }
+      },
       updateActiveFileContent: (content) =>
         run(() => controller.replaceFileContent(baseActions.getActiveFilePath(), content)),
       setPreviewFilePath: (path) => run(() => controller.setEntryFile(path)),
       updateLessonType: (lessonType) => run(() => controller.updateLessonType(lessonType)),
-      loadProject: () => reportWriteError(new Error("Leave the room before loading another project.")),
+      loadProject: () =>
+        reportWriteError(new Error("Leave the room before loading another project.")),
       reconcileExternalProject: (project) => {
         if (playbackRef.current) baseActions.reconcileExternalProject(project);
         else reportWriteError(new Error("Bulk project replacement is disabled in a live room."));
@@ -690,7 +702,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       const path = projectCollaborationDocument(provider.doc).pathByNodeId.get(
         host.activeFileNodeId,
       );
-      if (path && path !== activeFilePathRef.current) baseActionsRef.current.setActiveFilePath(path);
+      if (path && path !== activeFilePathRef.current)
+        baseActionsRef.current.setActiveFilePath(path);
     } catch {
       // The host may announce a node just before its document update is applied.
     }

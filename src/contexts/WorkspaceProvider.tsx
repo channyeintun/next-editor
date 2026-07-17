@@ -23,6 +23,7 @@ import {
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
+import { prepareTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { writeStoredFileSidebarCollapsed } from "../utils/sidebarLayout";
 
@@ -142,6 +143,20 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
       path,
       content,
     });
+  };
+
+  const applyFileTextEdits = (event: TextEditEvent): boolean => {
+    const context = workspaceStoreRef.current.getSnapshot().context;
+    if (!context.isInitialized) return false;
+
+    const path = normalizeWorkspacePath(event.path);
+    const file = context.project.files[path];
+    if (!file || file.encoding === "base64" || !prepareTextEditEvent(event, file.content.length)) {
+      return false;
+    }
+
+    workspaceStoreRef.current.trigger.applyFileTextEdits({ ...event, path });
+    return true;
   };
 
   const updateActiveFileContent = (content: string) => {
@@ -357,6 +372,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     renameFolder,
     deleteFile,
     updateFileContent,
+    applyFileTextEdits,
     updateActiveFileContent,
     hydrateAssetContents,
     saveProject,

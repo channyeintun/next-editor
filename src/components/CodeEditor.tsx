@@ -17,6 +17,7 @@ import type { EditorSelection } from "../core/src/types";
 import type { UpstashRoomProvider } from "../collaboration/upstashRoomProvider";
 import { selectIsCollapsed, selectIsFullHeight } from "../stores/runtimePanelStore";
 import { lessonRunsInWebContainer } from "../types/workspace";
+import type { TextEditEvent } from "../types/textEdit";
 import {
   canWriteCollaborationDocument,
   projectCollaborationDocument,
@@ -128,7 +129,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   "use no memo";
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
-  const { saveProject, updateFileContent } = useWorkspaceActions();
+  const { applyFileTextEdits, saveProject, updateFileContent } = useWorkspaceActions();
   const saveWorkspace = useWebContainerRuntimeSaveWorkspace();
   const { activeFile } = useWorkspaceEditorState();
   const lessonType = useWorkspaceLessonType();
@@ -149,6 +150,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const viewStatesRef = useRef(new Map<string, monaco.editor.ICodeEditorViewState | null>());
   const isApplyingExternalModelValueRef = useRef(false);
   const pendingExternalModelCaptureRef = useRef(false);
+  const modelVersionByUriRef = useRef(new Map<string, number>());
   const remoteDecorationIdsRef = useRef<string[]>([]);
   const remoteCursorLabelManagerRef = useRef<CollaborationCursorLabelManager | null>(null);
   const recordedRemoteCursorSignaturesRef = useRef(new Map<string, string>());
@@ -295,6 +297,49 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
     updateFileContent(modelPath, editor.getValue());
   });
+
+  const applyEditorChangeToWorkspace = useEffectEvent(
+    (
+      editor: StandaloneEditor,
+      changeEvent: monaco.editor.IModelContentChangedEvent,
+      beforeVersion: number,
+    ): "incremental" | "fallback" | "ignored" => {
+      if (usesPlaybackModel || isBinaryActiveFile || isApplyingExternalModelValueRef.current) {
+        return "ignored";
+      }
+
+      const model = editor.getModel();
+      const modelPath = model ? workspacePathFromMonacoModelUri(model.uri) : null;
+      if (!model || !modelPath) return "ignored";
+
+      const changes: TextEditEvent["changes"] = changeEvent.changes.map((change) => ({
+        offset: change.rangeOffset,
+        deleteLength: change.rangeLength,
+        text: change.text,
+      }));
+      const afterLength = model.getValueLength();
+      const lengthDelta = changes.reduce(
+        (total, change) => total + change.text.length - change.deleteLength,
+        0,
+      );
+      const editEvent: TextEditEvent = {
+        fileId: modelPath,
+        path: modelPath,
+        beforeVersion,
+        afterVersion: changeEvent.versionId,
+        beforeLength: afterLength - lengthDelta,
+        afterLength,
+        changes,
+      };
+
+      if (applyFileTextEdits(editEvent)) return "incremental";
+
+      // Bulk/programmatic changes and stale model events retain a correctness
+      // fallback. Ordinary Monaco typing never takes this whole-model read.
+      updateFileContent(modelPath, model.getValue());
+      return "fallback";
+    },
+  );
 
   const runSaveAction = useEffectEvent(async () => {
     if (usesPlaybackModel) {
@@ -680,12 +725,20 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     disposeEditorListeners();
     editorRef.current = editor;
     syncEditorRef(editor);
+    const mountedModel = editor.getModel();
+    if (mountedModel) {
+      modelVersionByUriRef.current.set(mountedModel.uri.toString(), mountedModel.getVersionId());
+    }
     restoreNormalViewState(editor, editor.getModel());
 
     focusEditorIfNeeded(editor);
 
     editorDisposablesRef.current = [
       editor.onDidChangeModel(() => {
+        const model = editor.getModel();
+        if (model) {
+          modelVersionByUriRef.current.set(model.uri.toString(), model.getVersionId());
+        }
         if (syncPlaybackEditorModel(editor)) {
           return;
         }
@@ -694,8 +747,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         syncEditorRef(editor);
         publishCollaborationCursor(editor);
       }),
-      editor.onDidChangeModelContent(() => {
+      editor.onDidChangeModelContent((changeEvent) => {
         const endChangeSpan = startPerformanceSpan("editor.model_change");
+        const modelKey = editor.getModel()?.uri.toString();
+        const beforeVersion = modelKey
+          ? (modelVersionByUriRef.current.get(modelKey) ?? Math.max(0, changeEvent.versionId - 1))
+          : Math.max(0, changeEvent.versionId - 1);
+        if (modelKey) modelVersionByUriRef.current.set(modelKey, changeEvent.versionId);
         // syncWorkspaceModel can synchronously emit Monaco events while React
         // is rendering. Check the ref before entering a useEffectEvent wrapper,
         // which React intentionally rejects during render (error #440).
@@ -704,9 +762,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           endChangeSpan({ source: "external" });
           return;
         }
-        syncEditorContentToWorkspace(editor);
+        const updateMode = applyEditorChangeToWorkspace(editor, changeEvent, beforeVersion);
         onEditorChange();
-        endChangeSpan({ source: "local" });
+        endChangeSpan({
+          source: "local",
+          update_mode: updateMode,
+          change_count: changeEvent.changes.length,
+        });
       }),
       editor.onDidChangeCursorPosition(() => {
         if (isApplyingExternalModelValueRef.current) return;

@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/require-mock-type-parameters */
 import { act, render, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,6 +56,7 @@ const baseActions: WorkspaceActions = {
   deleteFile: vi.fn(),
   deleteFolder: vi.fn(),
   updateFileContent: vi.fn(),
+  applyFileTextEdits: vi.fn(() => true),
   updateActiveFileContent: vi.fn(),
   hydrateAssetContents: vi.fn(),
   saveProject: vi.fn(async () => {}),
