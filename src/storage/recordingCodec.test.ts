@@ -11,6 +11,7 @@ import {
   decodeRecordingStream,
   encodeRecordingToStream,
 } from "./streamingRecordingCodec";
+import type { StreamingRecordingDelta } from "./streamingRecordingCodec";
 import { FLAG_HAS_AUDIO, FLAG_HAS_CAMERA } from "./streamingRecordingCodec/format";
 import {
   flushPerformanceMetrics,
@@ -217,8 +218,13 @@ describe("recordingCodec", () => {
     // Feed the bytes in tiny chunks so segment boundaries land mid-chunk.
     const reader = createStreamingRecordingReader();
     const CHUNK_SIZE = 13;
+    const deltas: StreamingRecordingDelta[] = [];
+    let releasedParsedInput = false;
     for (let offset = 0; offset < bytes.length; offset += CHUNK_SIZE) {
       reader.push(bytes.subarray(offset, Math.min(offset + CHUNK_SIZE, bytes.length)));
+      const delta = reader.readDelta();
+      if (delta) deltas.push(delta);
+      releasedParsedInput ||= reader.retainedByteLength() < reader.byteLength();
     }
 
     const streamed = reader.getRecording();
@@ -233,6 +239,14 @@ describe("recordingCodec", () => {
     expect(streamed.mediaFragments).toEqual(oneShot.mediaFragments);
     expect(streamed.cursorEvents).toEqual(oneShot.cursorEvents);
     expect(streamed.streamFinalized).toBe(true);
+    expect(deltas.flatMap((delta) => delta.newFrames)).toEqual(oneShot.frames);
+    expect(deltas.flatMap((delta) => delta.newCursorEvents)).toEqual(oneShot.cursorEvents);
+    expect(deltas.map((delta) => delta.cursor)).toEqual(deltas.map((_, index) => index + 1));
+    expect(reader.readDelta()).toBeNull();
+    expect(reader.byteLength()).toBe(bytes.byteLength);
+    expect(reader.retainedByteLength()).toBe(0);
+    expect(reader.retainedCapacity()).toBeLessThanOrEqual(64 * 1024);
+    expect(releasedParsedInput).toBe(true);
 
     // Media bytes are never embedded in the stream, so even though the recording had audio and
     // camera blobs, neither decode path reconstructs them — only the metadata survives.

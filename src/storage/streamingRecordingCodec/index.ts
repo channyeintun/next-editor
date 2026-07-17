@@ -28,4 +28,4 @@ export {
 export type { StreamingRecordingWriter } from "./encode";
 
 export { decodeRecordingStream, createStreamingRecordingReader } from "./decode";
-export type { StreamingRecordingReader } from "./decode";
+export type { StreamingRecordingDelta, StreamingRecordingReader } from "./decode";

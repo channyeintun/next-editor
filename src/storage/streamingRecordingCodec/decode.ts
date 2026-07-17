@@ -372,12 +372,12 @@ export function decodeRecordingStream(bytes: Uint8Array): Recording {
 // ============================================================================
 // Incremental streaming reader
 //
-// Feed network chunks with `push()` and read the current `Recording` with
-// `getRecording()`. Only newly-completed segments are decoded on each push (the
-// header is parsed once, segment payloads are inflated once), so progressive
-// playback cost is O(total bytes) instead of the O(n²) of re-decoding the whole
-// prefix every interval. Frames are normalized once at ingest, and media bytes never
-// live in the stream (audio/camera are external files referenced from the header).
+// Feed network chunks with `push()`, append newly decoded records from `readDelta()`,
+// and construct a complete `Recording` with `getRecording()` only when explicitly
+// needed. Completed compressed input is discarded after each push, the header is
+// parsed once, and segment payloads are inflated once. Frames are normalized once at
+// ingest, and media bytes never live in the stream (audio/camera are external files
+// referenced from the header).
 //
 // Stream bytes are written in timeline (cluster/time) order, so accumulators stay
 // sorted by arrival and need no re-sort. Output matches a one-shot
@@ -387,24 +387,50 @@ export function decodeRecordingStream(bytes: Uint8Array): Recording {
 export interface StreamingRecordingReader {
   /** Appends freshly-downloaded bytes and decodes any whole segments now available. */
   push(bytes: Uint8Array): void;
+  /**
+   * Returns only records decoded since the previous call. The cursor is monotonic
+   * and lets downstream consumers ignore a duplicate delivery without comparing
+   * the accumulated recording arrays.
+   */
+  readDelta(): StreamingRecordingDelta | null;
   /** Current decoded recording, or `null` until the header has fully arrived. */
   getRecording(): Recording | null;
   /** True once the footer has been parsed (the stream is complete). */
   isFinalized(): boolean;
   /** Total number of bytes fed so far. */
   byteLength(): number;
+  /** Compressed bytes still needed to finish the current header/segment/footer. */
+  retainedByteLength(): number;
+  /** Current backing-buffer capacity, exposed for bounded-memory regression tests. */
+  retainedCapacity(): number;
+}
+
+export interface StreamingRecordingDelta {
+  cursor: number;
+  recordingId: string;
+  duration: number;
+  streamFinalized: boolean;
+  newFrames: DeltaFrame[];
+  newSlideEvents: SlideEvent[];
+  newPreviewEvents: PreviewEvent[];
+  newPreviewInitialDocuments: PreviewInitialDocument[];
+  newPreviewPatchBatches: PreviewDomPatchBatch[];
+  newWorkspaceEvents: WorkspaceRecordingEvent[];
+  newRuntimeEvents: RuntimeRecordingEvent[];
+  newCursorEvents: CursorRecordingEvent[];
+  newWhiteboardEvents: WhiteboardEvent[];
+  newChatEvents: ChatRecordingEvent[];
 }
 
 const STREAMING_READER_INITIAL_CAPACITY = 64 * 1024;
 
 export function createStreamingRecordingReader(): StreamingRecordingReader {
   let buffer = new Uint8Array(0);
-  let length = 0;
+  let retainedLength = 0;
+  let totalLength = 0;
 
   let headerParsed = false;
   let meta: RecordingStreamMeta | null = null;
-  let headerEnd = 0;
-  let cursor = 0;
   let finalized = false;
 
   const frames: DeltaFrame[] = [];
@@ -428,44 +454,86 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   let segmentCount = 0;
   let maxSegmentTimeMs = 0;
 
-  const grow = (incoming: Uint8Array): void => {
-    if (length + incoming.length > MAX_STREAM_BYTES) {
+  let deltaCursor = 0;
+  let deliveredSegmentCount = 0;
+  let deliveredDuration = 0;
+  let deliveredFinalized = false;
+  const deliveredRecordCounts = {
+    frames: 0,
+    slideEvents: 0,
+    previewEvents: 0,
+    previewInitialDocuments: 0,
+    previewPatchBatches: 0,
+    workspaceEvents: 0,
+    runtimeEvents: 0,
+    cursorEvents: 0,
+    whiteboardEvents: 0,
+    chatEvents: 0,
+  };
+
+  const append = (incoming: Uint8Array): void => {
+    if (totalLength + incoming.length > MAX_STREAM_BYTES) {
       throw new Error("Invalid SCR3 stream: recording exceeds the size limit");
     }
-    if (length + incoming.length > buffer.length) {
+    if (retainedLength + incoming.length > buffer.length) {
       let capacity = buffer.length || STREAMING_READER_INITIAL_CAPACITY;
-      while (capacity < length + incoming.length) {
+      while (capacity < retainedLength + incoming.length) {
         capacity *= 2;
       }
       const next = new Uint8Array(capacity);
-      next.set(buffer.subarray(0, length), 0);
+      next.set(buffer.subarray(0, retainedLength), 0);
       buffer = next;
     }
-    buffer.set(incoming, length);
-    length += incoming.length;
+    buffer.set(incoming, retainedLength);
+    retainedLength += incoming.length;
+    totalLength += incoming.length;
+  };
+
+  const discardPrefix = (byteLength: number): void => {
+    if (byteLength <= 0) return;
+    if (byteLength > retainedLength) {
+      throw new Error("SCR3 streaming reader consumed past its retained input");
+    }
+
+    const remaining = retainedLength - byteLength;
+    if (remaining > 0) {
+      buffer.copyWithin(0, byteLength, retainedLength);
+    }
+    retainedLength = remaining;
+
+    // Release a large segment allocation once only a small tail remains. Capacity
+    // therefore follows the largest incomplete unit instead of the whole download.
+    const minimumCapacity = Math.max(STREAMING_READER_INITIAL_CAPACITY, remaining * 2);
+    if (buffer.byteLength > minimumCapacity * 2) {
+      let capacity = STREAMING_READER_INITIAL_CAPACITY;
+      while (capacity < remaining) capacity *= 2;
+      const next = new Uint8Array(capacity);
+      next.set(buffer.subarray(0, remaining));
+      buffer = next;
+    }
   };
 
   const tryParseHeader = (): void => {
-    if (headerParsed || length < HEADER_PREFIX_SIZE) return;
+    if (headerParsed || retainedLength < HEADER_PREFIX_SIZE) return;
     if (!hasMagicAt(buffer, 0)) {
       throw new Error("Invalid SCR3 stream: bad magic number");
     }
-    const view = new DataView(buffer.buffer, 0, length);
+    const view = new DataView(buffer.buffer, buffer.byteOffset, retainedLength);
     const metaLength = view.getUint32(8, true);
     if (metaLength === 0 || metaLength > MAX_COMPRESSED_META_BYTES) {
       throw new Error("Invalid SCR3 stream: bad header length");
     }
     const metaEnd = HEADER_PREFIX_SIZE + metaLength;
-    if (metaEnd > length) return; // header not fully downloaded yet
+    if (metaEnd > retainedLength) return; // header not fully downloaded yet
 
     const formatVersion = view.getUint16(4, true);
     if (formatVersion !== STREAM_FORMAT_VERSION) {
       throw new Error(`Unsupported SCR3 format version: ${formatVersion}`);
     }
     meta = parseHeader(buffer.subarray(0, metaEnd)).meta;
-    headerEnd = metaEnd;
-    cursor = metaEnd;
     headerParsed = true;
+    deliveredDuration = meta.duration;
+    discardPrefix(metaEnd);
   };
 
   // Decodes the payload *before* mutating any accumulator so that a throw (a partial
@@ -589,20 +657,13 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   };
 
   const parseSegments = (): void => {
-    if (!headerParsed) return;
+    if (!headerParsed || finalized) return;
 
-    const footerStart = findFooterStart(buffer.subarray(0, length), headerEnd);
-    if (footerStart !== null) {
-      finalized = true;
-      // A confirmed footer that sits behind the cursor means an earlier push parsed
-      // footer bytes as a segment — the reader is desynchronized and must not be
-      // trusted. Surface it so the caller can fall back to a one-shot decode.
-      if (cursor > footerStart) {
-        throw new Error("SCR3 streaming reader desynchronized past footer");
-      }
-    }
-    const segmentsEnd = footerStart ?? length;
-    const view = new DataView(buffer.buffer, 0, length);
+    const retained = buffer.subarray(0, retainedLength);
+    const footerStart = findFooterStart(retained, 0);
+    const segmentsEnd = footerStart ?? retainedLength;
+    const view = new DataView(buffer.buffer, buffer.byteOffset, retainedLength);
+    let cursor = 0;
 
     while (cursor + SEGMENT_HEADER_SIZE <= segmentsEnd) {
       const header = readSegmentHeader(view, cursor);
@@ -614,10 +675,11 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       }
       if (!isKnownSegmentKind(header.kind)) {
         // Until the footer is confirmed these bytes might be a partial footer rather
-        // than a real segment, so wait. Once finalized, an unknown kind is a genuine
-        // future segment that is safe to skip past.
-        if (!finalized) break;
+        // than a real segment, so wait. Once the footer is visible, an unknown kind
+        // inside its segment region is a genuine future segment that is safe to skip.
+        if (footerStart === null) break;
         cursor = payloadEnd;
+        segmentCount += 1;
         continue;
       }
 
@@ -627,11 +689,26 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         // Inside the segment region (footer already seen) this is real corruption.
         // Otherwise these are most likely partial-footer bytes that happen to read as
         // a known kind — leave the cursor put and wait for the footer to complete.
-        if (finalized) throw error;
+        if (footerStart !== null) throw error;
         break;
       }
       cursor = payloadEnd;
     }
+
+    if (footerStart !== null) {
+      if (cursor !== footerStart) {
+        throw new Error("Invalid SCR3 stream: malformed segment tail before footer");
+      }
+      const footerSegmentCount = view.getUint32(footerStart, true);
+      if (footerSegmentCount !== segmentCount) {
+        throw new Error("Invalid SCR3 stream: footer segment count does not match the stream");
+      }
+      finalized = true;
+      discardPrefix(retainedLength);
+      return;
+    }
+
+    discardPrefix(cursor);
   };
 
   return {
@@ -640,7 +717,10 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       let outcome = "success";
       try {
         if (bytes.length > 0) {
-          grow(bytes);
+          if (finalized) {
+            throw new Error("Invalid SCR3 stream: bytes found after the footer");
+          }
+          append(bytes);
         }
         tryParseHeader();
         parseSegments();
@@ -649,9 +729,54 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         throw error;
       } finally {
         endPushSpan({ outcome });
-        recordPerformanceMetric("recording.reader_retained", length, "bytes");
+        recordPerformanceMetric("recording.reader_retained", retainedLength, "bytes");
         recordPerformanceMetric("recording.reader_capacity", buffer.byteLength, "bytes");
       }
+    },
+    readDelta() {
+      if (!headerParsed || !meta) return null;
+      const duration = Math.max(meta.duration, maxSegmentTimeMs);
+      const hasChanges =
+        deliveredSegmentCount !== segmentCount ||
+        deliveredDuration !== duration ||
+        deliveredFinalized !== finalized;
+      if (!hasChanges) return null;
+
+      const delta: StreamingRecordingDelta = {
+        cursor: ++deltaCursor,
+        recordingId: meta.id,
+        duration,
+        streamFinalized: finalized,
+        newFrames: frames.slice(deliveredRecordCounts.frames),
+        newSlideEvents: slideEvents.slice(deliveredRecordCounts.slideEvents),
+        newPreviewEvents: previewEvents.slice(deliveredRecordCounts.previewEvents),
+        newPreviewInitialDocuments: previewInitialDocuments.slice(
+          deliveredRecordCounts.previewInitialDocuments,
+        ),
+        newPreviewPatchBatches: previewPatchBatches.slice(
+          deliveredRecordCounts.previewPatchBatches,
+        ),
+        newWorkspaceEvents: workspaceEvents.slice(deliveredRecordCounts.workspaceEvents),
+        newRuntimeEvents: runtimeEvents.slice(deliveredRecordCounts.runtimeEvents),
+        newCursorEvents: cursorEvents.slice(deliveredRecordCounts.cursorEvents),
+        newWhiteboardEvents: whiteboardEvents.slice(deliveredRecordCounts.whiteboardEvents),
+        newChatEvents: chatEvents.slice(deliveredRecordCounts.chatEvents),
+      };
+
+      deliveredSegmentCount = segmentCount;
+      deliveredDuration = duration;
+      deliveredFinalized = finalized;
+      deliveredRecordCounts.frames = frames.length;
+      deliveredRecordCounts.slideEvents = slideEvents.length;
+      deliveredRecordCounts.previewEvents = previewEvents.length;
+      deliveredRecordCounts.previewInitialDocuments = previewInitialDocuments.length;
+      deliveredRecordCounts.previewPatchBatches = previewPatchBatches.length;
+      deliveredRecordCounts.workspaceEvents = workspaceEvents.length;
+      deliveredRecordCounts.runtimeEvents = runtimeEvents.length;
+      deliveredRecordCounts.cursorEvents = cursorEvents.length;
+      deliveredRecordCounts.whiteboardEvents = whiteboardEvents.length;
+      deliveredRecordCounts.chatEvents = chatEvents.length;
+      return delta;
     },
     getRecording() {
       if (!headerParsed || !meta) return null;
@@ -686,7 +811,13 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       return finalized;
     },
     byteLength() {
-      return length;
+      return totalLength;
+    },
+    retainedByteLength() {
+      return retainedLength;
+    },
+    retainedCapacity() {
+      return buffer.byteLength;
     },
   };
 }
