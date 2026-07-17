@@ -6,6 +6,13 @@ import { normalizeWorkspacePath } from "../types/workspace";
 const NEXT_EDITOR_RESERVED_ROOT = "file:///__next-editor__/";
 const PLAYBACK_MODEL_ROOT = `${NEXT_EDITOR_RESERVED_ROOT}playback`;
 const FILE_URI_PREFIX = "file:///";
+type TextModel = ReturnType<Monaco["editor"]["createModel"]>;
+const synchronizedWorkspaceContent = new WeakMap<TextModel, string>();
+
+/** Mark a Monaco value as already accepted by workspace state. */
+export function acknowledgeWorkspaceModelContent(model: TextModel, content: string): void {
+  synchronizedWorkspaceContent.set(model, content);
+}
 
 export function toMonacoModelPath(workspacePath: string) {
   return `${FILE_URI_PREFIX}${encodeURI(normalizeWorkspacePath(workspacePath))}`;
@@ -63,14 +70,18 @@ export function syncWorkspaceModel(
   language: string,
 ) {
   const uri = monaco.Uri.parse(toMonacoModelPath(workspacePath));
-  const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(content, language, uri);
+  const existingModel = monaco.editor.getModel(uri);
+  const model = existingModel ?? monaco.editor.createModel(content, language, uri);
+
+  if (!existingModel) acknowledgeWorkspaceModelContent(model, content);
 
   if (model.getLanguageId() !== language) {
     monaco.editor.setModelLanguage(model, language);
   }
 
-  if (model.getValue() !== content) {
-    model.setValue(content);
+  if (synchronizedWorkspaceContent.get(model) !== content) {
+    if (model.getValue() !== content) model.setValue(content);
+    acknowledgeWorkspaceModelContent(model, content);
   }
 
   return model;

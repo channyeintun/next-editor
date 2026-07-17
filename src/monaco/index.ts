@@ -13,6 +13,7 @@ export {
   getMonacoCompilerOptions,
 } from "./typescriptDefaults";
 export {
+  acknowledgeWorkspaceModelContent,
   disposePlaybackModels,
   isPlaybackModelUri,
   syncPlaybackModel,

@@ -145,18 +145,19 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     });
   };
 
-  const applyFileTextEdits = (event: TextEditEvent): boolean => {
+  const applyFileTextEdits = (event: TextEditEvent): string | null => {
     const context = workspaceStoreRef.current.getSnapshot().context;
-    if (!context.isInitialized) return false;
+    if (!context.isInitialized) return null;
 
     const path = normalizeWorkspacePath(event.path);
     const file = context.project.files[path];
     if (!file || file.encoding === "base64" || !prepareTextEditEvent(event, file.content.length)) {
-      return false;
+      return null;
     }
 
     workspaceStoreRef.current.trigger.applyFileTextEdits({ ...event, path });
-    return true;
+    const nextContext = workspaceStoreRef.current.getSnapshot().context;
+    return nextContext.isInitialized ? (nextContext.project.files[path]?.content ?? null) : null;
   };
 
   const updateActiveFileContent = (content: string) => {

@@ -56,7 +56,7 @@ const baseActions: WorkspaceActions = {
   deleteFile: vi.fn(),
   deleteFolder: vi.fn(),
   updateFileContent: vi.fn(),
-  applyFileTextEdits: vi.fn(() => true),
+  applyFileTextEdits: vi.fn(() => "updated"),
   updateActiveFileContent: vi.fn(),
   hydrateAssetContents: vi.fn(),
   saveProject: vi.fn(async () => {}),

@@ -35,6 +35,7 @@ import {
   type CollaborationCursorLabel,
 } from "./collaborationCursorLabels";
 import {
+  acknowledgeWorkspaceModelContent,
   disposePlaybackModels,
   getEditorOptions,
   isPlaybackModelUri,
@@ -332,7 +333,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         changes,
       };
 
-      if (applyFileTextEdits(editEvent)) return "incremental";
+      const acceptedContent = applyFileTextEdits(editEvent);
+      if (acceptedContent !== null) {
+        acknowledgeWorkspaceModelContent(model, acceptedContent);
+        return "incremental";
+      }
 
       // Bulk/programmatic changes and stale model events retain a correctness
       // fallback. Ordinary Monaco typing never takes this whole-model read.

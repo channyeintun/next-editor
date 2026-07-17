@@ -64,6 +64,7 @@ import {
   reprojectCollaborationWorkspace,
 } from "../collaboration/workspaceAdapter";
 import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
+import { applyTextEditEvent } from "../types/textEdit";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useWorkspaceActions, useWorkspaceActiveFilePath } from "../hooks/useWorkspace";
 import { createCollaborationCursor } from "../collaboration/relativePosition";
@@ -448,12 +449,16 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       updateFileContent: (path, content) => run(() => controller.replaceFileContent(path, content)),
       applyFileTextEdits: (event) => {
         try {
+          const currentContent = baseActions.getFile(event.path)?.content;
+          const nextContent =
+            currentContent === undefined ? null : applyTextEditEvent(currentContent, event);
+          if (nextContent === null) return null;
           const applied = controller.applyFileTextEdits(event);
           setLocalError(null);
-          return applied;
+          return applied ? nextContent : null;
         } catch (error) {
           reportWriteError(error);
-          return false;
+          return null;
         }
       },
       updateActiveFileContent: (content) =>
