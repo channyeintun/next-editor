@@ -198,6 +198,9 @@ describe("CollaborationRoomProvider", () => {
     if (!clientUpdate || clientUpdate.kind !== "client-update") {
       throw new Error("binary document update was not sent");
     }
+    // The Durable Object applies an accepted update before acknowledging it. Mirror that
+    // causal ordering so the next server change is not concurrent with this local insert.
+    Y.applyUpdate(server, clientUpdate.update);
     socket.message({
       type: "document.ack",
       updateId: clientUpdate.updateId,
