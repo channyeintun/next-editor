@@ -7,15 +7,16 @@ and exception capture is filtered separately because DOM replay selectors do not
 
 ## Data classification
 
-| Surface                                                          | Classification           | PostHog handling                                                                 |
-| ---------------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------- |
-| Navigation chrome and coarse feature actions                     | Product telemetry        | Allowed when the event contains no user-authored values                          |
-| Filenames, paths, source code, binary assets, and preview DOM    | Sensitive workspace data | Blocked from session replay; never attach to analytics events                    |
-| Agent prompts, transcripts, model/tool output, and confirmations | Sensitive workspace data | Blocked from session replay; never attach to analytics or exceptions             |
-| Runner, shell, console, and runtime diagnostics                  | Sensitive workspace data | Blocked from session replay; messages and breadcrumbs removed from exceptions    |
-| API request paths, headers, bodies, and responses                | Sensitive request data   | Blocked from session replay; request/response properties removed from exceptions |
-| Slides, drawings, captions, recordings, and playback state       | Sensitive lesson data    | Blocked from session replay; never attach authored content to analytics          |
-| Credentials, tokens, cookies, and authorization headers          | Secret                   | Never capture; inputs are masked as defense in depth                             |
+| Surface                                                           | Classification           | PostHog handling                                                                 |
+| ----------------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------- |
+| Navigation chrome and coarse feature actions                      | Product telemetry        | Allowed when the event contains no user-authored values                          |
+| Aggregated performance timings, byte counts, and operation counts | Product telemetry        | Allowed with enumerated system dimensions; no IDs, paths, URLs, or authored data |
+| Filenames, paths, source code, binary assets, and preview DOM     | Sensitive workspace data | Blocked from session replay; never attach to analytics events                    |
+| Agent prompts, transcripts, model/tool output, and confirmations  | Sensitive workspace data | Blocked from session replay; never attach to analytics or exceptions             |
+| Runner, shell, console, and runtime diagnostics                   | Sensitive workspace data | Blocked from session replay; messages and breadcrumbs removed from exceptions    |
+| API request paths, headers, bodies, and responses                 | Sensitive request data   | Blocked from session replay; request/response properties removed from exceptions |
+| Slides, drawings, captions, recordings, and playback state        | Sensitive lesson data    | Blocked from session replay; never attach authored content to analytics          |
+| Credentials, tokens, cookies, and authorization headers           | Secret                   | Never capture; inputs are masked as defense in depth                             |
 
 ## Enforcement
 
@@ -29,6 +30,10 @@ and exception capture is filtered separately because DOM replay selectors do not
   and request/response payloads are removed.
 - New analytics events must use enumerated/coarse values. Do not pass free-form labels, paths,
   URLs with queries, tool arguments, or serialized objects.
+- `performance_metrics` contains only bounded aggregate summaries from
+  `src/utils/performanceMetrics.ts`. Metric dimensions describe system behavior (for example,
+  transport or outcome); room/user/update IDs, filenames, paths, source text, preview URLs, and
+  other user-controlled values are prohibited.
 
 The targeted privacy regression test uses sentinel source, tool, terminal, URL, and exception
 values. Changes to the editor root or exception filter must keep every sentinel outside the

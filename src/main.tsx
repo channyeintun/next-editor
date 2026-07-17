@@ -9,6 +9,7 @@ import {
   POSTHOG_SENSITIVE_SURFACE_SELECTOR,
   sanitizePostHogEvent,
 } from "./utils/posthogExceptionFilter";
+import { installPerformanceMetricsReporter } from "./utils/performanceMetrics";
 
 posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN, {
   api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
@@ -26,6 +27,10 @@ posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN, {
     maskAllInputs: true,
     blockSelector: POSTHOG_SENSITIVE_SURFACE_SELECTOR,
   },
+});
+
+installPerformanceMetricsReporter((metrics) => {
+  posthog.capture("performance_metrics", { metrics });
 });
 
 // Warm the diff-match-patch WASM codec that the recording encode/decode/replay
