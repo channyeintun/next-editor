@@ -6,6 +6,10 @@ Deployment evaluations:
 
 - [Cloudflare-native Deployment](./live-collaboration-cloudflare.md)
 
+Improvement plans:
+
+- [P0 Collaborator Following](./collaborator-following-plan.md)
+
 Deployment status: every room uses a hibernating Cloudflare Durable Object WebSocket coordinator
 with a room-local SQLite update log and alarm compaction. Binary collaboration protocol v2 is
 mandatory; there is no SSE, HTTP update, JSON awareness, or Redis downgrade path.
