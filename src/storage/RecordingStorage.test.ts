@@ -240,6 +240,26 @@ describe("RecordingStorage lazy library loading", () => {
     expect(getEntry).toHaveBeenCalledWith("rec-a");
   });
 
+  it("loadById() incrementally decodes an OPFS payload stream", async () => {
+    const storage = new RecordingStorage();
+    const recording = createRecording({ id: "rec-opfs", name: "OPFS" });
+    const binaryData = await encodeRecordingToStream(recording);
+    const entry: StoredRecordingEntry = {
+      metadata: { ...metadataFor(recording), payloadStorage: "opfs" },
+      binaryStream: new Blob([binaryData as BlobPart]).stream(),
+    };
+    const getEntry = vi
+      .fn<(id: string) => Promise<StoredRecordingEntry | null>>()
+      .mockResolvedValue(entry);
+    withStubbedStore(storage, { getEntry });
+
+    const loaded = await storage.loadById("rec-opfs");
+
+    expect(loaded?.id).toBe("rec-opfs");
+    expect(loaded?.frames).toEqual(recording.frames);
+    expect(loaded?.streamFinalized).toBe(true);
+  });
+
   it("loadById() returns null when the entry is missing", async () => {
     const storage = new RecordingStorage();
     withStubbedStore(storage, { getEntry: async () => null });

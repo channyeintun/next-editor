@@ -14,6 +14,7 @@ import {
   cameraExtensionFromMime,
   isStreamingRecording,
 } from "./streamingRecordingCodec/format";
+import { createStreamingRecordingReader } from "./streamingRecordingCodec";
 import { createImportedCameraObjectUrl } from "./cameraVideoUrl";
 
 interface StorageStats {
@@ -223,15 +224,37 @@ export class RecordingStorage {
   }
 
   private async decodeStoredEntry(entry: StoredRecordingEntry): Promise<Recording> {
-    const recordings = await decompressBinaryToRecordings(entry.binaryData);
-
-    if (recordings.length !== 1) {
-      throw new Error(
-        `Expected one recording payload for ${entry.metadata.id}, received ${recordings.length}`,
-      );
+    let decoded: Recording;
+    if (entry.binaryData) {
+      const recordings = await decompressBinaryToRecordings(entry.binaryData);
+      if (recordings.length !== 1) {
+        throw new Error(
+          `Expected one recording payload for ${entry.metadata.id}, received ${recordings.length}`,
+        );
+      }
+      decoded = recordings[0];
+    } else if (entry.binaryStream) {
+      const streamReader = entry.binaryStream.getReader();
+      const recordingReader = createStreamingRecordingReader();
+      try {
+        for (;;) {
+          const { value, done } = await streamReader.read();
+          if (done) break;
+          if (value && value.byteLength > 0) recordingReader.push(value);
+        }
+      } finally {
+        streamReader.releaseLock();
+      }
+      const recording = recordingReader.getRecording();
+      if (!recording?.streamFinalized) {
+        throw new Error(`Stored OPFS recording ${entry.metadata.id} is incomplete`);
+      }
+      decoded = recording;
+    } else {
+      throw new Error(`Recording ${entry.metadata.id} has no stored payload`);
     }
 
-    let recording = normalizeRecording(recordings[0]);
+    let recording = normalizeRecording(decoded);
     // Reattach the separately-stored camera video (CameraOverlay turns the blob into an object URL).
     if (entry.cameraBlob) {
       recording = { ...recording, cameraBlob: entry.cameraBlob };
