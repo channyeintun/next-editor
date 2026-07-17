@@ -90,7 +90,7 @@ interface CollaborationContextValue {
   error: string | null;
   createRoom: () => Promise<CollaborationRoomSession>;
   joinRoom: (roomId: string) => void;
-  leaveRoom: () => void;
+  leaveRoom: () => Promise<void>;
   retry: () => Promise<void>;
   closeRoom: () => Promise<void>;
   exportRoom: () => Promise<Blob>;
@@ -123,6 +123,17 @@ function messageFromError(error: unknown, fallback: string): string {
     if (typeof responseMessage === "string") return responseMessage;
   }
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function stopProviderAfterBestEffortFlush(provider: UpstashRoomProvider): void {
+  if (provider.connectionState === "live" && provider.hasPendingUpdates) {
+    void provider.flushNow().then(
+      () => provider.stop(),
+      () => provider.stop(),
+    );
+  } else {
+    provider.stop();
+  }
 }
 
 export function CollaborationProvider({ children }: { children: ReactNode }) {
@@ -265,7 +276,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!roomId || inviteToken) {
-      providerRef.current?.stop();
+      if (providerRef.current) stopProviderAfterBestEffortFlush(providerRef.current);
       providerRef.current = null;
       projectionRef.current = null;
       assetContentsRef.current.clear();
@@ -304,7 +315,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       },
       onRejectedLocalChanges: setLocalError,
     });
-    providerRef.current?.stop();
+    if (providerRef.current) stopProviderAfterBestEffortFlush(providerRef.current);
     providerRef.current = nextProvider;
     projectionRef.current = null;
     assetContentsRef.current.clear();
@@ -324,7 +335,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
     return () => {
       subscription.unsubscribe();
-      nextProvider.stop();
+      stopProviderAfterBestEffortFlush(nextProvider);
       if (providerRef.current === nextProvider) providerRef.current = null;
     };
   }, [applyAwarenessEvent, hydrateProjectionAssets, inviteToken, refreshRoomDataFor, roomId]);
@@ -531,14 +542,30 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     }
   }, [isSignedIn, updateRoomParam]);
 
-  const leaveRoom = useCallback(() => {
-    if (providerRef.current?.hasPendingUpdates) {
-      setLocalError("Wait for offline collaboration changes to synchronize before leaving.");
-      return;
+  const flushCurrentEdits = useCallback(async (current: UpstashRoomProvider) => {
+    await current.flushNow();
+    if (!current.hasPendingUpdates) return;
+    const message = "Wait for offline collaboration changes to synchronize before continuing.";
+    setLocalError(message);
+    throw new Error(message);
+  }, []);
+
+  const leaveRoom = useCallback(async () => {
+    const current = providerRef.current;
+    if (current) {
+      await flushCurrentEdits(current);
+      await current
+        .publishAwareness({
+          kind: "leave",
+          sessionId: current.awarenessSessionId,
+          revision: ++awarenessRevisionRef.current,
+        })
+        .catch(() => {});
+      current.stop();
     }
-    providerRef.current?.stop();
+    setLocalError(null);
     updateRoomParam(null);
-  }, [updateRoomParam]);
+  }, [flushCurrentEdits, updateRoomParam]);
 
   const retry = useCallback(async () => {
     setLocalError(null);
@@ -574,17 +601,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       setLocalError(message);
       throw new Error(message);
     }
-    await current.flushNow();
-    const pendingBlockReason = liveRoomEndBlockReason(false, current.hasPendingUpdates);
-    if (pendingBlockReason) {
-      const message = pendingBlockReason;
-      setLocalError(message);
-      throw new Error(message);
-    }
+    await flushCurrentEdits(current);
     await closeCollaborationRoom(current.session?.room.id ?? roomId ?? "");
     current.stop();
     updateRoomParam(null);
-  }, [isRecording, roomId, updateRoomParam]);
+  }, [flushCurrentEdits, isRecording, roomId, updateRoomParam]);
 
   const publishAwarenessState = useCallback(async () => {
     const current = providerRef.current;
@@ -721,12 +742,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   }, [refreshRoomDataFor]);
 
   const exportRoom = useCallback(async () => {
-    const current = providerRef.current?.session;
-    if (!current || current.membership.role !== "owner") {
+    const currentProvider = providerRef.current;
+    const current = currentProvider?.session;
+    if (!currentProvider || !current || current.membership.role !== "owner") {
       throw new Error("Only the room owner can export a recovery snapshot.");
     }
+    await flushCurrentEdits(currentProvider);
     return exportCollaborationRoom(current.room.id);
-  }, []);
+  }, [flushCurrentEdits]);
 
   const createInvitation = useCallback(async (inviteRole: CollaborationInviteRole) => {
     const current = providerRef.current?.session;
@@ -749,22 +772,29 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
   const updateMemberRole = useCallback(
     async (userId: string, nextRole: CollaborationInviteRole) => {
-      const current = providerRef.current?.session;
-      if (!current) return;
+      const currentProvider = providerRef.current;
+      const current = currentProvider?.session;
+      if (!currentProvider || !current) return;
+      await flushCurrentEdits(currentProvider);
       const member = await updateCollaborationMemberRole(current.room.id, userId, nextRole);
       setMembers((existing) =>
         existing.map((item) => (item.userId === member.userId ? member : item)),
       );
     },
-    [],
+    [flushCurrentEdits],
   );
 
-  const removeMember = useCallback(async (userId: string) => {
-    const current = providerRef.current?.session;
-    if (!current) return;
-    await removeCollaborationMember(current.room.id, userId);
-    setMembers((existing) => existing.filter((item) => item.userId !== userId));
-  }, []);
+  const removeMember = useCallback(
+    async (userId: string) => {
+      const currentProvider = providerRef.current;
+      const current = currentProvider?.session;
+      if (!currentProvider || !current) return;
+      await flushCurrentEdits(currentProvider);
+      await removeCollaborationMember(current.room.id, userId);
+      setMembers((existing) => existing.filter((item) => item.userId !== userId));
+    },
+    [flushCurrentEdits],
+  );
 
   const updateCursor = useCallback(
     (path: string, anchorOffset: number, headOffset: number) => {

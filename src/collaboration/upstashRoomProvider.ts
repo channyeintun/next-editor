@@ -225,6 +225,7 @@ export class UpstashRoomProvider {
   private isStarted = false;
   private isStopped = false;
   private isPublishing = false;
+  private flushPromise: Promise<void> | null = null;
   private readonly lastAcknowledgedStreamIds = new Map<string, string>();
   private bufferedMessages: RealtimeUserMessage[] = [];
   private bufferedBinaryUpdates: Array<
@@ -1116,8 +1117,25 @@ export class UpstashRoomProvider {
     }
   }
 
-  private async flushOutbox(): Promise<void> {
-    if (this.isPublishing || this.connectionState !== "live" || !this.canWrite) return;
+  private flushOutbox(): Promise<void> {
+    if (this.flushPromise) return this.flushPromise;
+    if (this.connectionState !== "live" || !this.canWrite) return Promise.resolve();
+    const promise = this.drainOutbox();
+    this.flushPromise = promise;
+    return promise.finally(() => {
+      if (this.flushPromise === promise) this.flushPromise = null;
+      if (
+        !this.isStopped &&
+        this.connectionState === "live" &&
+        this.outbox.length > 0 &&
+        this.canWrite
+      ) {
+        void this.flushOutbox();
+      }
+    });
+  }
+
+  private async drainOutbox(): Promise<void> {
     this.isPublishing = true;
     try {
       while (!this.isStopped && this.connectionState === "live" && this.outbox.length > 0) {
@@ -1175,14 +1193,7 @@ export class UpstashRoomProvider {
       if (!this.hasPendingUpdates) this.actor.send({ type: "CHANGES_FLUSHED" });
     } finally {
       this.isPublishing = false;
-      if (
-        !this.isStopped &&
-        this.connectionState === "live" &&
-        this.outbox.length > 0 &&
-        this.canWrite
-      ) {
-        void this.flushOutbox();
-      } else if (this.pendingUpdates.length === 0 && this.outbox.length === 0) {
+      if (this.pendingUpdates.length === 0 && this.outbox.length === 0) {
         this.actor.send({ type: "CHANGES_FLUSHED" });
       }
     }

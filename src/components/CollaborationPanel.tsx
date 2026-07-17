@@ -1,15 +1,5 @@
 import { useState } from "react";
-import {
-  Check,
-  Copy,
-  Crown,
-  Link2,
-  Radio,
-  RefreshCw,
-  UserMinus,
-  Users,
-  X,
-} from "lucide-react";
+import { Check, Copy, Crown, Link2, Radio, RefreshCw, UserMinus, Users, X } from "lucide-react";
 import { avatarProxyUrl, signInUrl, useAuth } from "@next-editor/infra";
 import { useCollaboration } from "../contexts/CollaborationContext";
 import { collaborationParticipantColorIndex } from "../collaboration/relativePosition";
@@ -129,7 +119,9 @@ export default function CollaborationPanel() {
             <div>
               <p className="text-sm font-semibold text-white">Live collaboration</p>
               <p className="text-[11px] text-slate-400">
-                {isInRoom ? `${status} · ${collaboration.role ?? "checking access"}` : "Edit together in real time"}
+                {isInRoom
+                  ? `${status} · ${collaboration.role ?? "checking access"}`
+                  : "Edit together in real time"}
               </p>
             </div>
             <button
@@ -357,15 +349,14 @@ export default function CollaborationPanel() {
                                 className="flex items-center justify-between text-[11px] text-slate-400"
                               >
                                 <span className="capitalize">
-                                  {invitation.role} · {invitation.useCount}/{invitation.maxUses} used
+                                  {invitation.role} · {invitation.useCount}/{invitation.maxUses}{" "}
+                                  used
                                 </span>
                                 <button
                                   type="button"
                                   disabled={isBusy}
                                   onClick={() =>
-                                    void run(() =>
-                                      collaboration.revokeInvitation(invitation.id),
-                                    )
+                                    void run(() => collaboration.revokeInvitation(invitation.id))
                                   }
                                   className="text-rose-300 hover:text-rose-200"
                                 >
@@ -389,7 +380,10 @@ export default function CollaborationPanel() {
                 ) : null}
 
                 {panelError || collaboration.error ? (
-                  <p role="alert" className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                  <p
+                    role="alert"
+                    className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-200"
+                  >
                     {panelError ?? collaboration.error}
                   </p>
                 ) : null}
@@ -400,7 +394,7 @@ export default function CollaborationPanel() {
                   onClick={() =>
                     void run(async () => {
                       if (collaboration.isHost) await collaboration.closeRoom();
-                      else collaboration.leaveRoom();
+                      else await collaboration.leaveRoom();
                     })
                   }
                   className="w-full rounded-lg border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-500/10 disabled:opacity-50"

@@ -342,6 +342,10 @@ describe("UpstashRoomProvider", () => {
     source.insert(source.length, "-one");
     source.insert(source.length, "-two");
     const flushing = provider.flushNow();
+    let concurrentFlushResolved = false;
+    const concurrentFlush = provider.flushNow().then(() => {
+      concurrentFlushResolved = true;
+    });
     await waitUntil(
       () =>
         sockets[0].binarySent
@@ -354,6 +358,7 @@ describe("UpstashRoomProvider", () => {
     if (!clientUpdate || clientUpdate.kind !== "client-update") {
       throw new Error("binary document update was not sent");
     }
+    expect(concurrentFlushResolved).toBe(false);
     expect(clientUpdate.clientId).toBe(CLIENT_ID);
     Y.applyUpdate(server, clientUpdate.update);
     expect(server.getText("source").toString()).toBe("start-one-two");
@@ -363,7 +368,7 @@ describe("UpstashRoomProvider", () => {
       streamId: "2-0",
       duplicate: false,
     });
-    await flushing;
+    await Promise.all([flushing, concurrentFlush]);
     expect(provider.hasPendingUpdates).toBe(false);
 
     const serverStateVector = Y.encodeStateVector(server);

@@ -235,8 +235,11 @@ projection, playback, and model-replacement transactions remain excluded.
 
 Batch small logical messages into one WebSocket frame, especially cursor movement and rapid Yjs
 transactions. Cloudflare recommends time- or count-based batching for high-frequency Durable
-Object WebSockets; 50–100 ms is an appropriate starting point to measure rather than a hard-coded
-product guarantee.
+Object WebSockets. The client currently starts at one animation frame for a healthy WebSocket,
+backs off to 75 ms for congestion or the legacy transport, caps each merge by count and raw byte
+budget, and merges each selected batch once. Blur, save, recording stop, explicit room leave,
+recovery export, room close, and membership control mutations await the active durable flush. A
+provider removed indirectly by navigation makes one best-effort flush before closing its socket.
 
 Protocol frames should include:
 
