@@ -9,6 +9,7 @@ import type {
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent } from "../../../types/workspace";
 import type { ChatRecordingEvent } from "../../../types/chat";
+import type { TextEditChange } from "../../../types/textEdit";
 
 // ============================================================================
 // Delta Compression Types
@@ -24,6 +25,21 @@ import type { ChatRecordingEvent } from "../../../types/chat";
  */
 export interface ContentDelta {
   delta: Uint8Array;
+}
+
+/**
+ * Versioned Monaco edit batch for ordinary local text changes. Offsets and
+ * lengths are UTF-16 code units, matching Monaco and JavaScript strings. The
+ * hashes make applying the batch to a stale replay base fail loudly instead of
+ * silently producing divergent content.
+ */
+export interface ContentEditDelta {
+  version: 1;
+  beforeLength: number;
+  afterLength: number;
+  beforeHash: number;
+  afterHash: number;
+  changes: readonly TextEditChange[];
 }
 
 /**
@@ -81,6 +97,8 @@ export interface FrameDelta {
   isKeyframe: false;
   /** Content delta (omitted if content unchanged) */
   contentDelta?: ContentDelta;
+  /** Exact Monaco edits (SCR format v3; mutually exclusive with contentDelta). */
+  contentEditDelta?: ContentEditDelta;
   /** Position delta (omitted if position unchanged) */
   positionDelta?: PositionDelta;
   /** Selection delta (omitted if selection unchanged) */

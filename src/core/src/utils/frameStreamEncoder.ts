@@ -1,6 +1,12 @@
 import type { EditorFrame } from "../types";
 import type { DeltaFrame } from "./deltaTypes";
-import { createFrameDelta, createKeyframe, hasChanges, shouldBeKeyframe } from "./frameDelta";
+import {
+  createFrameDelta,
+  createKeyframe,
+  hasChanges,
+  shouldBeKeyframe,
+  type CreatedContentEditDelta,
+} from "./frameDelta";
 
 /**
  * Running state for the incremental (capture-time) frame encoder.
@@ -44,6 +50,7 @@ export function createFrameStreamEncoder(): FrameStreamEncoderState {
 export function pushFrame(
   state: FrameStreamEncoderState,
   frame: EditorFrame,
+  contentEditDelta?: CreatedContentEditDelta,
 ): { state: FrameStreamEncoderState; emitted: DeltaFrame | null } {
   const index = state.inputFrameCount;
   let lastStoredFrame = state.lastStoredFrame;
@@ -56,7 +63,7 @@ export function pushFrame(
   } else if (shouldBeKeyframe(index)) {
     // Keyframe slot - but only store if there are changes.
     if (lastStoredFrame) {
-      const delta = createFrameDelta(lastStoredFrame, frame);
+      const delta = createFrameDelta(lastStoredFrame, frame, contentEditDelta);
       if (hasChanges(delta)) {
         emitted = createKeyframe(frame);
         lastStoredFrame = frame;
@@ -64,7 +71,7 @@ export function pushFrame(
     }
   } else if (lastStoredFrame) {
     // Delta slot - only store if there are changes.
-    const delta = createFrameDelta(lastStoredFrame, frame);
+    const delta = createFrameDelta(lastStoredFrame, frame, contentEditDelta);
     if (hasChanges(delta)) {
       emitted = delta;
       lastStoredFrame = frame;

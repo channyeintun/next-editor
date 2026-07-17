@@ -5,8 +5,10 @@ import type { EditorFrame } from "../types";
 import type { PreviewState } from "../slides";
 import type { Keyframe } from "./deltaTypes";
 import {
+  ContentEditBaseMismatchError,
   applyFrameDelta,
   compressFrames,
+  createContentEditDelta,
   createFrameDelta,
   reconstructFrameAtIndex,
 } from "./frameDelta";
@@ -40,6 +42,63 @@ const frameAt = (timestamp: number, content: string): EditorFrame => ({
     viewState: null,
     mouseCursor: { x: 0, y: 0, visible: false },
   },
+});
+
+describe("Monaco content edit deltas", () => {
+  const base = "const one = 1;\nconst two = 2;\n";
+  const event = {
+    fileId: "/index.ts",
+    path: "/index.ts",
+    beforeVersion: 10,
+    afterVersion: 11,
+    beforeLength: base.length,
+    afterLength: base.length + 3,
+    changes: [
+      { offset: base.indexOf("one"), deleteLength: 3, text: "first" },
+      { offset: base.lastIndexOf("2"), deleteLength: 1, text: "20" },
+    ],
+  };
+
+  it("stores and replays exact multi-edits without a DMP payload", () => {
+    const created = createContentEditDelta(base, event);
+    expect(created).not.toBeNull();
+    if (!created) throw new Error("Expected an exact content edit delta");
+
+    const prev = frameAt(0, base);
+    const next = frameAt(16, created.content);
+    const delta = createFrameDelta(prev, next, created);
+
+    expect(delta.contentDelta).toBeUndefined();
+    expect(delta.contentEditDelta).toEqual(created.delta);
+    expect(applyFrameDelta(prev, delta, 1).state.content).toBe(created.content);
+  });
+
+  it("attributes a stale-base failure to the replay frame", () => {
+    const created = createContentEditDelta(base, event);
+    if (!created) throw new Error("Expected an exact content edit delta");
+    const delta = createFrameDelta(frameAt(0, base), frameAt(16, created.content), created);
+    const staleBase = frameAt(0, base.replace("one", "ONE"));
+
+    let caught: unknown;
+    try {
+      applyFrameDelta(staleBase, delta, 7);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ContentEditBaseMismatchError);
+    expect((caught as Error).message).toMatch(/at frame 7/);
+  });
+
+  it("keeps full-document replacement on the DMP fallback path", () => {
+    expect(
+      createContentEditDelta(base, {
+        ...event,
+        afterLength: 12,
+        changes: [{ offset: 0, deleteLength: base.length, text: "replacement\n" }],
+      }),
+    ).toBeNull();
+  });
 });
 
 describe.skipIf(!hasArtifact)("frameDelta reconstruction errors", () => {

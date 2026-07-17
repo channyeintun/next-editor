@@ -118,7 +118,7 @@ classDiagram
     }
 ```
 
-`Recording.frames` is an array of delta-compressed `DeltaFrame` entries (`src/core/src/utils/deltaTypes.ts`), not raw `EditorFrame`s. Playback reconstructs the full `EditorFrame` from the nearest earlier keyframe plus subsequent deltas via `reconstructFrameAtIndex` (`src/core/src/utils/frameDelta.ts`).
+`Recording.frames` is an array of delta-compressed `DeltaFrame` entries (`src/core/src/utils/deltaTypes.ts`), not raw `EditorFrame`s. Playback reconstructs the full `EditorFrame` from the nearest earlier keyframe plus subsequent deltas via `reconstructFrameAtIndex` (`src/core/src/utils/frameDelta.ts`). SCR3 format v3 stores bounded, versioned Monaco edit batches for ordinary local changes, with base/result integrity hashes; bulk replacement, imported or remote state, preview HTML, and other non-local changes retain the verified DMP delta. Existing SCR3 v2 recordings remain readable.
 
 ## Cursor Data
 

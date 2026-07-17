@@ -31,6 +31,7 @@ import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../t
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "../whiteboard";
 import type { ChatCheckpoint, ChatDelta, ChatRecordingEvent } from "../../../types/chat";
+import type { TextEditEvent } from "../../../types/textEdit";
 import type { CapturedViewStateRef } from "./editorMachineHelpers";
 import { normalizePlaybackSpeed } from "./playbackValues";
 
@@ -403,6 +404,8 @@ export type CaptureFrameEvent = {
   type: "CAPTURE_FRAME";
   isMouseMovement?: boolean;
   mousePosition?: MouseCursorPosition;
+  /** Exact local Monaco edits when this capture immediately follows them. */
+  textEdit?: TextEditEvent;
   /**
    * Records another collaborator's caret/selection without moving the local
    * Monaco editor. The recording still captures the local editor's current

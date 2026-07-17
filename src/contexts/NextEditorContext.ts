@@ -16,6 +16,7 @@ import type {
 } from "../types/slides";
 import type { WhiteboardEvent } from "../core/src/whiteboard";
 import type { ChatCheckpoint, ChatDelta } from "../types/chat";
+import type { TextEditEvent } from "../types/textEdit";
 import type * as monaco from "monaco-editor";
 
 export type { TimelineActorRef, EditorActorRef };
@@ -42,7 +43,7 @@ export interface NextEditorActions {
   addCaptionTrack: (track: CaptionTrack) => void;
   removeCaptionTrack: (trackId: string) => void;
   clearRecording: () => void;
-  handleEditorChange: (selection?: EditorSelection) => void;
+  handleEditorChange: (selection?: EditorSelection, textEdit?: TextEditEvent) => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
   handlePreviewInitialDocument: (document: PreviewInitialDocument) => void;

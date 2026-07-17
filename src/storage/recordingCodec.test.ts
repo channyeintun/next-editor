@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Recording } from "../core/src";
 import {
   createContentDelta,
+  createContentEditDelta,
   createFrameDelta,
   reconstructFrameAtIndex,
 } from "../core/src/utils/frameDelta";
@@ -12,7 +13,12 @@ import {
   encodeRecordingToStream,
 } from "./streamingRecordingCodec";
 import type { StreamingRecordingDelta } from "./streamingRecordingCodec";
-import { FLAG_HAS_AUDIO, FLAG_HAS_CAMERA } from "./streamingRecordingCodec/format";
+import {
+  FLAG_HAS_AUDIO,
+  FLAG_HAS_CAMERA,
+  LEGACY_STREAM_FORMAT_VERSION,
+  STREAM_FORMAT_VERSION,
+} from "./streamingRecordingCodec/format";
 import {
   flushPerformanceMetrics,
   resetPerformanceMetricsForTests,
@@ -92,6 +98,41 @@ describe("recordingCodec", () => {
     expect(decoded.audioSource).toBe("external");
     expect(decoded.audioBlob).toBeUndefined();
     expect(decoded.frames).toEqual(recording.frames);
+  });
+
+  it("writes SCR format v3 and remains compatible with v2 recordings", async () => {
+    const recording = createRecording();
+    const encoded = await encodeRecordingToStream(recording);
+    const view = new DataView(encoded.buffer, encoded.byteOffset, encoded.byteLength);
+    expect(view.getUint16(4, true)).toBe(STREAM_FORMAT_VERSION);
+
+    const legacy = encoded.slice();
+    new DataView(legacy.buffer).setUint16(4, LEGACY_STREAM_FORMAT_VERSION, true);
+    expect(decodeRecordingStream(legacy).frames).toEqual(recording.frames);
+  });
+
+  it("requires SCR format v3 for exact Monaco edit records", async () => {
+    const base = "const value = 1;\n";
+    const created = createContentEditDelta(base, {
+      fileId: "/index.ts",
+      path: "/index.ts",
+      beforeVersion: 1,
+      afterVersion: 2,
+      beforeLength: base.length,
+      afterLength: base.length,
+      changes: [{ offset: base.indexOf("1"), deleteLength: 1, text: "2" }],
+    });
+    if (!created) throw new Error("Expected an exact content edit delta");
+
+    const keyframe = makeKeyframe(0, base);
+    const delta = createFrameDelta(keyframe, makeKeyframe(16, created.content), created);
+    const encoded = await encodeRecordingToStream(
+      createRecording({ duration: 16, frames: [keyframe, delta] }),
+    );
+    const legacy = encoded.slice();
+    new DataView(legacy.buffer).setUint16(4, LEGACY_STREAM_FORMAT_VERSION, true);
+
+    expect(() => decodeRecordingStream(legacy)).toThrow(/require format version 3/);
   });
 
   it("round trips a dmp content delta through the stream and reconstructs it", async () => {

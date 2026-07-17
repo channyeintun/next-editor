@@ -285,9 +285,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
   // useEffectEvent provides a stable function reference that always reads
   // the latest playback attachment value without causing dependency issues
-  const onEditorChange = useEffectEvent(() => {
+  const onEditorChange = useEffectEvent((textEdit?: TextEditEvent) => {
     if (usesPlaybackModel || isApplyingExternalModelValueRef.current) return;
-    handleEditorChange();
+    handleEditorChange(undefined, textEdit);
   });
 
   const recordExternalModelChange = useEffectEvent(() => {
@@ -441,14 +441,17 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       editor: StandaloneEditor,
       changeEvent: monaco.editor.IModelContentChangedEvent,
       beforeVersion: number,
-    ): "incremental" | "fallback" | "ignored" => {
+    ): {
+      mode: "incremental" | "fallback" | "ignored";
+      editEvent?: TextEditEvent;
+    } => {
       if (usesPlaybackModel || isBinaryActiveFile || isApplyingExternalModelValueRef.current) {
-        return "ignored";
+        return { mode: "ignored" };
       }
 
       const model = editor.getModel();
       const modelPath = model ? workspacePathFromMonacoModelUri(model.uri) : null;
-      if (!model || !modelPath) return "ignored";
+      if (!model || !modelPath) return { mode: "ignored" };
 
       const changes: TextEditEvent["changes"] = changeEvent.changes.map((change) => ({
         offset: change.rangeOffset,
@@ -473,13 +476,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       const acceptedContent = applyFileTextEdits(editEvent);
       if (acceptedContent !== null) {
         acknowledgeWorkspaceModelContent(model, acceptedContent);
-        return "incremental";
+        return { mode: "incremental", editEvent };
       }
 
       // Bulk/programmatic changes and stale model events retain a correctness
       // fallback. Ordinary Monaco typing never takes this whole-model read.
       updateFileContent(modelPath, model.getValue());
-      return "fallback";
+      return { mode: "fallback" };
     },
   );
 
@@ -1141,11 +1144,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           });
           return;
         }
-        const updateMode = applyEditorChangeToWorkspace(editor, changeEvent, beforeVersion);
-        onEditorChange();
+        const update = applyEditorChangeToWorkspace(editor, changeEvent, beforeVersion);
+        onEditorChange(
+          update.mode === "incremental" && !changeEvent.isFlush ? update.editEvent : undefined,
+        );
         endChangeSpan({
           source: "local",
-          update_mode: updateMode,
+          update_mode: update.mode,
           change_count: changeEvent.changes.length,
         });
       }),

@@ -18,11 +18,11 @@ import {
   hasMagicAt,
   HEADER_PREFIX_SIZE,
   isKnownSegmentKind,
+  isSupportedStreamFormatVersion,
   parseHeader,
   readSegmentHeader,
   SEGMENT_HEADER_SIZE,
   SEGMENT_KIND,
-  STREAM_FORMAT_VERSION,
   MAX_COMPRESSED_META_BYTES,
   MAX_COMPRESSED_SEGMENT_BYTES,
   MAX_DECODED_RECORDS,
@@ -60,6 +60,16 @@ interface DecodedSegment {
   containsKeyframe: boolean;
   isInit: boolean;
   sequence: number;
+}
+
+function assertFrameFormatCompatibility(
+  frames: ReadonlyArray<DeltaFrame>,
+  formatVersion: number,
+): void {
+  if (formatVersion >= 3) return;
+  if (frames.some((frame) => !frame.isKeyframe && frame.contentEditDelta !== undefined)) {
+    throw new Error("Invalid SCR3 v2 stream: content edit deltas require format version 3");
+  }
 }
 
 function* walkSegments(bytes: Uint8Array, start: number, end: number): Generator<DecodedSegment> {
@@ -235,7 +245,7 @@ function assembleRecording(state: DecodedStreamState): Recording {
 function decodeSegments(bytes: Uint8Array): Recording {
   const parsedHeader = parseHeader(bytes);
   let meta = parsedHeader.meta;
-  const { headerEnd } = parsedHeader;
+  const { headerEnd, formatVersion } = parsedHeader;
   const footerStart = findFooterStart(bytes, headerEnd);
   const segmentsEnd = footerStart ?? bytes.length;
   const streamFinalized = footerStart !== null;
@@ -271,11 +281,14 @@ function decodeSegments(bytes: Uint8Array): Recording {
       segment.containsKeyframe,
     );
     switch (segment.kind) {
-      case SEGMENT_KIND.frames:
+      case SEGMENT_KIND.frames: {
         // Per-segment marker resolution — self-contained, no cross-segment carry
         // (see framePreviewContentDedup.ts).
-        frames.push(...hydrateFramePreviewContent(decodeRecords<DeltaFrame>(segment.payload)));
+        const records = hydrateFramePreviewContent(decodeRecords<DeltaFrame>(segment.payload));
+        assertFrameFormatCompatibility(records, formatVersion);
+        frames.push(...records);
         break;
+      }
       case SEGMENT_KIND.slide:
         slideEvents.push(...decodeRecords<SlideEvent>(segment.payload));
         break;
@@ -416,6 +429,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
 
   let headerParsed = false;
   let meta: RecordingStreamMeta | null = null;
+  let formatVersion: number | null = null;
   let finalized = false;
 
   const frames: DeltaFrame[] = [];
@@ -511,11 +525,13 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     const metaEnd = HEADER_PREFIX_SIZE + metaLength;
     if (metaEnd > retainedLength) return; // header not fully downloaded yet
 
-    const formatVersion = view.getUint16(4, true);
-    if (formatVersion !== STREAM_FORMAT_VERSION) {
-      throw new Error(`Unsupported SCR3 format version: ${formatVersion}`);
+    const nextFormatVersion = view.getUint16(4, true);
+    if (!isSupportedStreamFormatVersion(nextFormatVersion)) {
+      throw new Error(`Unsupported SCR3 format version: ${nextFormatVersion}`);
     }
-    meta = parseHeader(buffer.subarray(0, metaEnd)).meta;
+    const parsedHeader = parseHeader(buffer.subarray(0, metaEnd));
+    meta = parsedHeader.meta;
+    formatVersion = parsedHeader.formatVersion;
     headerParsed = true;
     deliveredDuration = meta.duration;
     discardPrefix(metaEnd);
@@ -525,7 +541,8 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   // footer misparsed as a segment, or genuine corruption) leaves the reader's state and
   // cursor untouched and the parse can be safely retried or rolled back.
   const ingestSegment = (header: SegmentHeaderFields, payload: Uint8Array): void => {
-    if (!meta) return;
+    const currentFormatVersion = formatVersion;
+    if (!meta || currentFormatVersion === null) return;
     if (header.byteLength > MAX_COMPRESSED_SEGMENT_BYTES) {
       throw new Error("Invalid SCR3 stream: segment exceeds the compressed size limit");
     }
@@ -542,6 +559,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         const records = hydrateFramePreviewContent(decodeRecords<DeltaFrame>(payload)).map(
           normalizeDeltaFrame,
         );
+        assertFrameFormatCompatibility(records, currentFormatVersion);
         pendingRecordCount = records.length;
         commit = () => frames.push(...records);
         break;

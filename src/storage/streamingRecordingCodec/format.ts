@@ -27,9 +27,9 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 //
 // Three independent "version" numbers exist; do not conflate them:
 //   * STREAM_MAGIC ("SCR3")     — container family marker (the file magic).
-//   * STREAM_FORMAT_VERSION (2) — on-wire byte layout of the segment headers.
-//                                 The only supported layout; older layouts are
-//                                 rejected (no legacy compatibility).
+//   * STREAM_FORMAT_VERSION (3) — on-wire record capabilities. Version 3 adds
+//                                 exact Monaco content-edit deltas. Version 2
+//                                 remains readable for existing SCR3 files.
 //   * meta.version (4)          — the Recording *schema* version carried inside
 //                                 the metadata, unrelated to the byte layout.
 //
@@ -50,7 +50,12 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 
 export const STREAM_MAGIC = "SCR3";
 const STREAM_MAGIC_BYTES = new Uint8Array([0x53, 0x43, 0x52, 0x33]);
-export const STREAM_FORMAT_VERSION = 2;
+export const STREAM_FORMAT_VERSION = 3;
+export const LEGACY_STREAM_FORMAT_VERSION = 2;
+
+export function isSupportedStreamFormatVersion(version: number): boolean {
+  return version === STREAM_FORMAT_VERSION || version === LEGACY_STREAM_FORMAT_VERSION;
+}
 
 export const FLAG_HAS_AUDIO = 1 << 0;
 export const FLAG_HAS_CAMERA = 1 << 1;
@@ -317,13 +322,14 @@ export function isStreamingRecording(bytes: Uint8Array): boolean {
 export function parseHeader(bytes: Uint8Array): {
   meta: RecordingStreamMeta;
   headerEnd: number;
+  formatVersion: number;
 } {
   if (!isStreamingRecording(bytes)) {
     throw new Error("Invalid SCR3 stream: bad magic number");
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const formatVersion = view.getUint16(4, true);
-  if (formatVersion !== STREAM_FORMAT_VERSION) {
+  if (!isSupportedStreamFormatVersion(formatVersion)) {
     throw new Error(`Unsupported SCR3 format version: ${formatVersion}`);
   }
   const metaLength = view.getUint32(8, true);
@@ -335,7 +341,7 @@ export function parseHeader(bytes: Uint8Array): {
   const meta = msgpackDecode(
     boundedUnzlib(bytes.subarray(metaStart, metaEnd), MAX_INFLATED_META_BYTES, "header"),
   ) as RecordingStreamMeta;
-  return { meta, headerEnd: metaEnd };
+  return { meta, headerEnd: metaEnd, formatVersion };
 }
 
 export function findFooterStart(bytes: Uint8Array, headerEnd: number): number | null {

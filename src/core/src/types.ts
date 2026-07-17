@@ -14,6 +14,7 @@ import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../type
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../types/workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "./whiteboard";
 import type { ChatCheckpoint, ChatRecordingEvent } from "../../types/chat";
+import type { TextEditEvent } from "../../types/textEdit";
 
 /**
  * Audio storage placeholder for serialization
@@ -185,9 +186,10 @@ export interface EditorFrame {
 
 /**
  * Complete recording with metadata
- * Version 4: keyframe + delta compressed frames (with mandatory base-integrity
- * check ops in each content delta) plus workspace and runtime snapshots for
- * multi-file mode. Older schema versions are not supported.
+ * Version 4: keyframe + delta compressed frames (verified exact-edit deltas for
+ * ordinary Monaco changes and verified DMP deltas for other content changes)
+ * plus workspace and runtime snapshots for multi-file mode. Older schema
+ * versions are not supported.
  */
 export interface Recording {
   /** Recording schema version. Older versions are not decodable (no legacy support). */
@@ -439,7 +441,7 @@ export interface UseNextEditorReturn {
 
   // Monaco Editor Integration
   syncEditorRef: (editor: monaco.editor.IStandaloneCodeEditor | null) => void;
-  handleEditorChange: (selection?: EditorSelection) => void;
+  handleEditorChange: (selection?: EditorSelection, textEdit?: TextEditEvent) => void;
   handleSlideEvent: (event: SlideEvent) => void;
   handlePreviewEvent: (event: PreviewEvent) => void;
   handlePreviewInitialDocument: (document: PreviewInitialDocument) => void;

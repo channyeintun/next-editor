@@ -21,6 +21,7 @@ import type {
 } from "./slides";
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatCheckpoint, ChatDelta } from "../../types/chat";
+import type { TextEditEvent } from "../../types/textEdit";
 import { findFrameIndexAtTime, reconstructFrameAtIndex } from "./utils/frameDelta";
 import { PLAYBACK_END_EPSILON_MS } from "./machine/editorMachineHelpers";
 import type { TimelineActorRef } from "./machine/timelineMachine";
@@ -184,8 +185,8 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   };
 
   // Event Handlers for UI
-  const handleEditorChange = (selection?: EditorSelection) => {
-    actorRef.send({ type: "CAPTURE_FRAME", selection });
+  const handleEditorChange = (selection?: EditorSelection, textEdit?: TextEditEvent) => {
+    actorRef.send({ type: "CAPTURE_FRAME", selection, textEdit });
   };
 
   const handleSlideEvent = (event: SlideEvent) => {

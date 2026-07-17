@@ -2,6 +2,7 @@ import type { EditorFrame, MouseCursorPosition, EditorSelection, EditorPosition 
 import type { SlidePreviewState, PreviewState } from "../slides";
 import type {
   ContentDelta,
+  ContentEditDelta,
   PositionDelta,
   SelectionDelta,
   FrameDelta,
@@ -20,6 +21,11 @@ import {
   normalizeEditorViewState,
 } from "./editorState";
 import { areMouseCursorPositionsEqual } from "./cursorCoordinates";
+import {
+  applyTextEditEvent,
+  type TextEditChange,
+  type TextEditEvent,
+} from "../../../types/textEdit";
 
 const LINEAR_SCAN_LIMIT = 128;
 const keyframeIndexCache = new WeakMap<DeltaFrame[], number[]>();
@@ -46,6 +52,170 @@ export function findCommonSuffixLength(str1: string, str2: string): number {
 
 const contentTextEncoder = new TextEncoder();
 const contentTextDecoder = new TextDecoder();
+const MAX_CONTENT_EDIT_CHANGES = 64;
+const MAX_CONTENT_EDIT_CODE_UNITS = 256 * 1024;
+
+function hasBoundedContentEditChanges(value: unknown): value is readonly TextEditChange[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_CONTENT_EDIT_CHANGES) {
+    return false;
+  }
+
+  let changedCodeUnits = 0;
+  for (const candidate of value) {
+    if (typeof candidate !== "object" || candidate === null) return false;
+    const change = candidate as Partial<TextEditChange>;
+    if (
+      typeof change.offset !== "number" ||
+      !Number.isSafeInteger(change.offset) ||
+      change.offset < 0 ||
+      typeof change.deleteLength !== "number" ||
+      !Number.isSafeInteger(change.deleteLength) ||
+      change.deleteLength < 0 ||
+      typeof change.text !== "string"
+    ) {
+      return false;
+    }
+    changedCodeUnits += change.deleteLength + change.text.length;
+    if (!Number.isSafeInteger(changedCodeUnits) || changedCodeUnits > MAX_CONTENT_EDIT_CODE_UNITS) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** FNV-1a over UTF-16 code units, without allocating an encoded full-string copy. */
+function hashContentEditText(value: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    hash ^= codeUnit & 0xff;
+    hash = Math.imul(hash, 0x01000193);
+    hash ^= codeUnit >>> 8;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+export class ContentEditBaseMismatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ContentEditBaseMismatchError";
+  }
+}
+
+export interface CreatedContentEditDelta {
+  base: string;
+  content: string;
+  delta: ContentEditDelta;
+}
+
+/**
+ * Converts a validated, ordinary Monaco change into the compact replay form.
+ * Full-document replacement and large edit batches intentionally return null,
+ * retaining the DMP fallback for bulk/programmatic changes.
+ */
+export function createContentEditDelta(
+  base: string,
+  event: TextEditEvent,
+): CreatedContentEditDelta | null {
+  if (!hasBoundedContentEditChanges(event.changes)) return null;
+
+  const onlyChange = event.changes.length === 1 ? event.changes[0] : undefined;
+  if (
+    onlyChange &&
+    event.beforeLength > 0 &&
+    onlyChange.offset === 0 &&
+    onlyChange.deleteLength === event.beforeLength
+  ) {
+    return null;
+  }
+
+  const content = applyTextEditEvent(base, event);
+  if (content === null || content === base) return null;
+
+  return {
+    base,
+    content,
+    delta: {
+      version: 1,
+      beforeLength: base.length,
+      afterLength: content.length,
+      beforeHash: hashContentEditText(base),
+      afterHash: hashContentEditText(content),
+      changes: event.changes.map((change) => ({ ...change })),
+    },
+  };
+}
+
+function contentEditDeltaMatches(
+  base: string,
+  content: string,
+  created: CreatedContentEditDelta,
+): boolean {
+  const { delta } = created;
+  return (
+    created.base === base &&
+    created.content === content &&
+    delta.version === 1 &&
+    delta.beforeLength === base.length &&
+    delta.afterLength === content.length &&
+    Number.isSafeInteger(delta.beforeHash) &&
+    Number.isSafeInteger(delta.afterHash)
+  );
+}
+
+export function applyContentEditDelta(base: string, delta: ContentEditDelta): string {
+  if (
+    delta.version !== 1 ||
+    !Number.isSafeInteger(delta.beforeLength) ||
+    !Number.isSafeInteger(delta.afterLength) ||
+    delta.beforeLength < 0 ||
+    delta.afterLength < 0 ||
+    !Number.isSafeInteger(delta.beforeHash) ||
+    !Number.isSafeInteger(delta.afterHash) ||
+    delta.beforeHash < 0 ||
+    delta.beforeHash > 0xffffffff ||
+    delta.afterHash < 0 ||
+    delta.afterHash > 0xffffffff ||
+    !hasBoundedContentEditChanges(delta.changes)
+  ) {
+    throw new Error("content edit delta is malformed or uses an unsupported version");
+  }
+  if (base.length !== delta.beforeLength || hashContentEditText(base) !== delta.beforeHash) {
+    throw new ContentEditBaseMismatchError(
+      "content edit delta base mismatch — edits applied against the wrong base content",
+    );
+  }
+
+  const content = applyTextEditEvent(base, {
+    fileId: "recording",
+    path: "recording",
+    beforeVersion: 0,
+    afterVersion: 1,
+    beforeLength: delta.beforeLength,
+    afterLength: delta.afterLength,
+    changes: delta.changes,
+  });
+  if (content === null) throw new Error("content edit delta contains invalid edits");
+  if (hashContentEditText(content) !== delta.afterHash) {
+    throw new Error("content edit delta result failed its integrity check");
+  }
+  return content;
+}
+
+function applyContentEditDeltaAt(
+  base: string,
+  delta: ContentEditDelta,
+  frameIndex?: number,
+): string {
+  try {
+    return applyContentEditDelta(base, delta);
+  } catch (error) {
+    if (frameIndex === undefined || !(error instanceof Error)) throw error;
+    error.message = `content edit delta failed at frame ${frameIndex}: ${error.message}`;
+    throw error;
+  }
+}
 
 /**
  * Creates a content delta representing the change from prev to next.
@@ -243,15 +413,28 @@ function previewStateChanged(
 /**
  * Creates a delta from previous frame to next frame.
  */
-export function createFrameDelta(prev: EditorFrame, next: EditorFrame): FrameDelta {
+export function createFrameDelta(
+  prev: EditorFrame,
+  next: EditorFrame,
+  contentEditDelta?: CreatedContentEditDelta,
+): FrameDelta {
   const delta: FrameDelta = {
     timestamp: next.timestamp,
     isKeyframe: false,
   };
 
   // Content delta
-  const contentDelta = createContentDelta(prev.state.content, next.state.content);
-  if (contentDelta) delta.contentDelta = contentDelta;
+  if (prev.state.content !== next.state.content) {
+    if (
+      contentEditDelta &&
+      contentEditDeltaMatches(prev.state.content, next.state.content, contentEditDelta)
+    ) {
+      delta.contentEditDelta = contentEditDelta.delta;
+    } else {
+      const contentDelta = createContentDelta(prev.state.content, next.state.content);
+      if (contentDelta) delta.contentDelta = contentDelta;
+    }
+  }
 
   // Position delta
   const positionDelta = createPositionDelta(prev.state.position, next.state.position);
@@ -323,6 +506,7 @@ export function createFrameDelta(prev: EditorFrame, next: EditorFrame): FrameDel
 export function hasChanges(delta: FrameDelta): boolean {
   return !!(
     delta.contentDelta ||
+    delta.contentEditDelta ||
     delta.positionDelta ||
     delta.selectionDelta ||
     delta.viewState !== undefined ||
@@ -375,9 +559,18 @@ export function applyFrameDelta(
   frameIndex?: number,
 ): EditorFrame {
   const normalizedBase = normalizeEditorFrame(base);
-  const newContent = delta.contentDelta
-    ? applyContentDeltaAt(normalizedBase.state.content, delta.contentDelta, frameIndex)
-    : normalizedBase.state.content;
+  if (delta.contentDelta && delta.contentEditDelta) {
+    throw new Error(
+      frameIndex === undefined
+        ? "frame contains conflicting content delta variants"
+        : `frame ${frameIndex} contains conflicting content delta variants`,
+    );
+  }
+  const newContent = delta.contentEditDelta
+    ? applyContentEditDeltaAt(normalizedBase.state.content, delta.contentEditDelta, frameIndex)
+    : delta.contentDelta
+      ? applyContentDeltaAt(normalizedBase.state.content, delta.contentDelta, frameIndex)
+      : normalizedBase.state.content;
 
   const newPosition = delta.positionDelta
     ? applyPositionDelta(normalizedBase.state.position, delta.positionDelta)

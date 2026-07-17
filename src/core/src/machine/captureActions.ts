@@ -12,6 +12,10 @@ import {
   toSidebarWidthDeltaSnapshot,
   type WorkspaceRecordingEvent,
 } from "../../../types/workspace";
+import {
+  createContentEditDelta,
+  type CreatedContentEditDelta,
+} from "../utils/frameDelta";
 import { createFrameStreamEncoder, pushFrame } from "../utils/frameStreamEncoder";
 import {
   appendChatDelta,
@@ -445,18 +449,46 @@ export const captureFrame = ({
         }
       : undefined;
 
+  let capturedContent = previousContent;
+  let contentEditDelta: CreatedContentEditDelta | undefined;
+  const textEdit = event.type === "CAPTURE_FRAME" ? event.textEdit : undefined;
+  const model = editor.getModel();
+  const currentModelUri = model?.uri.toString() ?? "";
+  const currentVersionId = model?.getVersionId() ?? -1;
+  if (
+    textEdit &&
+    previousContent &&
+    previousContent.modelUri === currentModelUri &&
+    previousContent.versionId === textEdit.beforeVersion &&
+    currentVersionId === textEdit.afterVersion
+  ) {
+    const created = createContentEditDelta(previousContent.value, textEdit);
+    if (created) {
+      capturedContent = {
+        value: created.content,
+        versionId: currentVersionId,
+        modelUri: currentModelUri,
+      };
+      contentEditDelta = created;
+    }
+  }
+
   const { frame, contentVersionId, modelUri, viewStateRef } = createFrame(
     editor,
     timestamp,
     mousePosition,
     context.getSlideState,
     context.getPreviewState,
-    previousContent,
+    capturedContent,
     context.session.lastCapturedViewStateRef,
     event.type === "CAPTURE_FRAME" ? event.selection : undefined,
   );
 
-  const { state: encoder, emitted } = pushFrame(context.session.encoder, frame);
+  const { state: encoder, emitted } = pushFrame(
+    context.session.encoder,
+    frame,
+    contentEditDelta,
+  );
 
   if (emitted) {
     context.session.frames.push(emitted);
