@@ -165,9 +165,10 @@ Use two signed-in browser profiles and one separate viewer invitation:
 ## Transport spike and release gate
 
 The creation route synchronously initializes the named room object from the creator's edge before
-the room becomes active. This makes the first creator request the deliberate placement request;
-do not prewarm new room IDs from a centralized operator or cron location. Durable Object placement
-is fixed afterward, so run the smoke flow at 1, 5, and 20 simultaneous editors with same-file and
+the room becomes active, passing the bounded location hint derived from that request's Cloudflare
+continent/coordinates. This makes the first creator request the deliberate placement request; do
+not prewarm new room IDs from a centralized operator or cron location. Durable Object placement is
+fixed afterward, so run the smoke flow at 1, 5, and 20 simultaneous editors with same-file and
 different-file edits, one-minute offline recovery, reconnect storms, duplicated delivery, role
 changes, and a near-limit initial snapshot. Run both creator-nearby pairs and intercontinental
 pairs, and capture:

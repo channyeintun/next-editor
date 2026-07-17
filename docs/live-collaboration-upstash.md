@@ -83,14 +83,15 @@ The Realtime fallback and shared Upstash foundation are implemented:
   immutable stream cutoff without dropping concurrently appended updates.
 - [`upstashRoomProvider.ts`](../src/collaboration/upstashRoomProvider.ts) selects the descriptor's
   transport and owns either the same-origin WebSocket or Realtime SSE/HTTP lifecycle, while sharing
-  snapshot/live-event race protection, paginated bootstrap, 75 ms Yjs batching, capped reconnects,
-  offline edits, stale-attempt rejection, and complete teardown.
+  snapshot/live-event race protection, paginated bootstrap, adaptive 16–75 ms Yjs batching, capped
+  reconnects, offline edits, stale-attempt rejection, and complete teardown.
 - [`collaborationMachine.ts`](../src/collaboration/collaborationMachine.ts) is the serializable room
   lifecycle/control plane; Yjs content and high-frequency editor updates remain in the provider.
 - [`CollaborationContext.tsx`](../src/contexts/CollaborationContext.tsx) activates rooms from invite
   URLs, projects text transactions incrementally into the workspace/WebContainer, routes tree and
-  text commands through Yjs, pauses projection during playback, and makes viewer Monaco models
-  read-only.
+  text commands through Yjs, keeps path/text reverse indexes in the topology projection, reuses
+  exact local Monaco edits without serializing `Y.Text`, pauses projection during playback, and
+  makes viewer Monaco models read-only.
 - [`awarenessStore.ts`](../infra/worker/collaboration/awarenessStore.ts), the provider, and editor UI
   implement TTL presence, separate awareness/control streams, participant state, relative remote
   cursors/selections, active-file presence, and follow-host behavior.

@@ -200,9 +200,13 @@ At 200 tail updates the object schedules its alarm. The alarm folds the current 
 Yjs snapshot, advances the cutoff/generation transactionally, deletes incorporated tail rows, and
 prunes expired deduplication entries. New updates after that cutoff remain the reconnect tail.
 
-The room is first initialized synchronously by its creator's edge request. That first access is
-the deliberate placement request; Durable Object placement remains fixed, so production tests must
-compare nearby and intercontinental participants for creators in each primary geography.
+The room is first initialized synchronously by its creator's edge request. The worker maps the
+request's Cloudflare continent/coordinates to a bounded Durable Object location hint (including
+east/west North America, east/west Europe, northeast/southeast/general APAC, Middle East, South
+America, Oceania, and Africa), falling back to Cloudflare's default when metadata is unavailable.
+That first access is the deliberate placement request; Durable Object placement remains fixed, so
+production tests must compare nearby and intercontinental participants for creators in each
+primary geography.
 
 ### Upstash Redis (persistence version 1)
 

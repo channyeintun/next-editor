@@ -233,6 +233,13 @@ selections for display without attaching a mutating binding. Only the `MonacoBin
 and the explicit local-editor origin enter collaborative undo history; remote provider,
 projection, playback, and model-replacement transactions remain excluded.
 
+The editor listener is installed before the binding listener, so it queues the exact versioned
+Monaco edit for the following Yjs transaction. That one event drives recording and the workspace
+projection while `y-monaco` remains the only writer to `Y.Text`. The projection acknowledges the
+stored content back to Monaco, avoiding a reconciliation `getValue()` read. Path-to-node and
+text-type-to-node indexes are built with topology projection and reused by controller, awareness,
+cursor, and remote-text paths until a tree transaction replaces them.
+
 Batch small logical messages into one WebSocket frame, especially cursor movement and rapid Yjs
 transactions. Cloudflare recommends time- or count-based batching for high-frequency Durable
 Object WebSockets. The client currently starts at one animation frame for a healthy WebSocket,
