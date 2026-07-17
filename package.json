@@ -45,6 +45,7 @@
     "driver.js": "^1.7.0",
     "fflate": "^0.8.3",
     "hono": "^4.12.30",
+    "lib0": "0.2.117",
     "lucide-react": "^0.562.0",
     "marked": "^18.0.6",
     "posthog-js": "^1.403.0",
@@ -52,6 +53,8 @@
     "react-dom": "^19.2.7",
     "react-router": "^8.2.0",
     "xstate": "5.32.2",
+    "y-monaco": "0.1.6",
+    "y-protocols": "1.0.7",
     "yjs": "^13.6.31",
     "zod": "^4.4.3"
   },
