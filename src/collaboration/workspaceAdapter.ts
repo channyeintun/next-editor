@@ -37,8 +37,16 @@ export function projectCollaborationTransaction(
   currentProjection: CollaborationProjectProjection | null,
   actions: ProjectionWorkspaceActions,
   localTextEdit?: TextEditEvent,
+  onLocalTextEditProjected?: (content: string | null) => void,
 ): CollaborationProjectProjection {
-  if (!currentProjection) return reprojectCollaborationWorkspace(doc, actions);
+  if (!currentProjection) {
+    const projection = reprojectCollaborationWorkspace(doc, actions);
+    if (localTextEdit) {
+      const file = projection.project.files[localTextEdit.path];
+      onLocalTextEditProjected?.(file && typeof file.content === "string" ? file.content : null);
+    }
+    return projection;
+  }
 
   const texts = getCollaborationTexts(doc);
   const changedTypes = Array.from(transaction.changed.keys());
@@ -56,9 +64,14 @@ export function projectCollaborationTransaction(
     if (!path || !(text instanceof Y.Text)) continue;
     if (localTextEdit?.path === path && actions.applyFileTextEdits) {
       const projectedContent = actions.applyFileTextEdits(localTextEdit);
-      if (projectedContent !== null) continue;
+      if (projectedContent !== null) {
+        onLocalTextEditProjected?.(projectedContent);
+        continue;
+      }
     }
-    actions.updateFileContent(path, text.toString());
+    const content = text.toString();
+    actions.updateFileContent(path, content);
+    if (localTextEdit?.path === path) onLocalTextEditProjected?.(content);
   }
   return currentProjection;
 }

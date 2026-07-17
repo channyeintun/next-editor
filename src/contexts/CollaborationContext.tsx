@@ -110,7 +110,10 @@ interface CollaborationContextValue {
   removeMember: (userId: string) => Promise<void>;
   setFollowingHost: (following: boolean) => void;
   updateCursor: (path: string, anchorOffset: number, headOffset: number) => void;
-  queueLocalTextEdit: (event: TextEditEvent) => void;
+  queueLocalTextEdit: (
+    event: TextEditEvent,
+    onProjected?: (content: string | null) => void,
+  ) => void;
   getNodeIdForPath: (path: string) => string | null;
   getPathForNodeId: (nodeId: string) => string | null;
   retryAssets: () => void;
@@ -163,7 +166,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<UpstashRoomProvider | null>(null);
   const providerRef = useRef<UpstashRoomProvider | null>(null);
   const projectionRef = useRef<CollaborationProjectProjection | null>(null);
-  const pendingLocalTextEditRef = useRef<{ event: TextEditEvent } | null>(null);
+  const pendingLocalTextEditRef = useRef<{
+    event: TextEditEvent;
+    onProjected?: (content: string | null) => void;
+  } | null>(null);
   const assetFetchesRef = useRef(new Set<string>());
   const undoManagerRef = useRef<Y.UndoManager | null>(null);
   const [runtimeVersion, setRuntimeVersion] = useState(0);
@@ -183,13 +189,16 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const followingHostRef = useRef(isFollowingHost);
   followingHostRef.current = isFollowingHost;
 
-  const queueLocalTextEdit = useCallback((event: TextEditEvent) => {
-    const pending = { event };
-    pendingLocalTextEditRef.current = pending;
-    queueMicrotask(() => {
-      if (pendingLocalTextEditRef.current === pending) pendingLocalTextEditRef.current = null;
-    });
-  }, []);
+  const queueLocalTextEdit = useCallback(
+    (event: TextEditEvent, onProjected?: (content: string | null) => void) => {
+      const pending = { event, onProjected };
+      pendingLocalTextEditRef.current = pending;
+      queueMicrotask(() => {
+        if (pendingLocalTextEditRef.current === pending) pendingLocalTextEditRef.current = null;
+      });
+    },
+    [],
+  );
 
   const getCurrentProjection = useCallback((): CollaborationProjectProjection | null => {
     if (projectionRef.current) return projectionRef.current;
@@ -324,16 +333,26 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       onDocumentChange: (doc, transaction) => {
         if (playbackRef.current) return;
         try {
-          const localTextEdit = pendingLocalTextEditRef.current?.event;
-          pendingLocalTextEditRef.current = null;
+          const queuedTextEdit = pendingLocalTextEditRef.current;
+          let projectedQueuedTextEdit = false;
           const projection = projectCollaborationTransaction(
             doc,
             transaction,
             projectionRef.current,
             baseActionsRef.current,
-            localTextEdit,
+            queuedTextEdit?.event,
+            (content) => {
+              projectedQueuedTextEdit = true;
+              queuedTextEdit?.onProjected?.(content);
+            },
           );
           projectionRef.current = projection;
+          if (
+            projectedQueuedTextEdit &&
+            pendingLocalTextEditRef.current === queuedTextEdit
+          ) {
+            pendingLocalTextEditRef.current = null;
+          }
           hydrateProjectionAssets(projection, roomId);
         } catch (error) {
           setLocalError(messageFromError(error, "The shared workspace could not be projected."));

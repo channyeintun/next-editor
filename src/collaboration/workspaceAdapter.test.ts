@@ -70,15 +70,24 @@ describe("collaboration workspace projection", () => {
       updateFileContent: vi.fn(),
       applyFileTextEdits: vi.fn(() => `${file.content}!`),
     };
+    const onProjected = vi.fn();
     let projection = reprojectCollaborationWorkspace(doc, actions);
     actions.reconcileExternalProject.mockClear();
     const controller = new CollaborationProjectController(doc, { canWrite: () => true });
     doc.on("afterTransaction", (transaction) => {
-      projection = projectCollaborationTransaction(doc, transaction, projection, actions, event);
+      projection = projectCollaborationTransaction(
+        doc,
+        transaction,
+        projection,
+        actions,
+        event,
+        onProjected,
+      );
     });
 
     expect(controller.applyFileTextEdits(event)).toBe(true);
     expect(actions.applyFileTextEdits).toHaveBeenCalledWith(event);
+    expect(onProjected).toHaveBeenCalledWith(`${file.content}!`);
     expect(actions.updateFileContent).not.toHaveBeenCalled();
     expect(actions.reconcileExternalProject).not.toHaveBeenCalled();
   });

@@ -1138,7 +1138,18 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           const editEvent = changeEvent.isFlush
             ? null
             : createMonacoTextEditEvent(editor, changeEvent, beforeVersion);
-          if (editEvent) collaboration?.queueLocalTextEdit(editEvent);
+          if (editEvent) {
+            const editedModel = yMonacoBinding.model;
+            collaboration?.queueLocalTextEdit(editEvent, (projectedContent) => {
+              if (
+                projectedContent !== null &&
+                editor.getModel() === editedModel &&
+                editedModel.getVersionId() === editEvent.afterVersion
+              ) {
+                acknowledgeWorkspaceModelContent(editedModel, projectedContent);
+              }
+            });
+          }
           onEditorChange(editEvent ?? undefined);
           endChangeSpan({
             source: "y-monaco",
