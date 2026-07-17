@@ -116,14 +116,10 @@ describe("CustomSlideRenderer", () => {
     expect(frames).toHaveLength(2);
     if (!incomingFrame) throw new Error("Expected the incoming slide iframe");
     expect(
-      firstFrame
-        ?.closest("[data-slide-buffer-state]")
-        ?.getAttribute("data-slide-buffer-state"),
+      firstFrame?.closest("[data-slide-buffer-state]")?.getAttribute("data-slide-buffer-state"),
     ).toBe("displayed");
     expect(
-      incomingFrame
-        ?.closest("[data-slide-buffer-state]")
-        ?.getAttribute("data-slide-buffer-state"),
+      incomingFrame?.closest("[data-slide-buffer-state]")?.getAttribute("data-slide-buffer-state"),
     ).toBe("loading");
 
     fireEvent.load(incomingFrame);
@@ -131,9 +127,7 @@ describe("CustomSlideRenderer", () => {
     expect(container.querySelectorAll("iframe")).toHaveLength(1);
     expect(container.querySelector("iframe")).toBe(incomingFrame);
     expect(
-      incomingFrame
-        ?.closest("[data-slide-buffer-state]")
-        ?.getAttribute("data-slide-buffer-state"),
+      incomingFrame?.closest("[data-slide-buffer-state]")?.getAttribute("data-slide-buffer-state"),
     ).toBe("displayed");
   });
 

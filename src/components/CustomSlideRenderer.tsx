@@ -93,19 +93,11 @@ interface SlideLayer {
 
 function isSameSlideDocument(left: Slide, right: Slide): boolean {
   return (
-    left.id === right.id &&
-    left.contentType === right.contentType &&
-    left.content === right.content
+    left.id === right.id && left.contentType === right.contentType && left.content === right.content
   );
 }
 
-function BufferedSlideContent({
-  slide,
-  stepsRevealed,
-}: {
-  slide: Slide;
-  stepsRevealed: number;
-}) {
+function BufferedSlideContent({ slide, stepsRevealed }: { slide: Slide; stepsRevealed: number }) {
   const nextLayerKeyRef = useRef(1);
   const currentSlideRef = useRef(slide);
   currentSlideRef.current = slide;
