@@ -15,6 +15,15 @@ update loop.
 | `editorMachine` (XState machine)   | Async orchestration | The timeline: recording/playback state, frames, cursor/preview/slide/workspace/runtime event streams, replay cursors, audio/camera  |
 | React contexts                     | Wiring/transport    | No durable state — split Actions/Metadata/Playback contexts (render perf), domain adapters, and panel-local UI only                 |
 
+A fourth, self-contained machine exists outside this table: the collaboration
+voice machine (`src/voice/machine.ts`), an XState machine owned by the
+`VoiceEngine` (not by React) that models the voice-chat lifecycle
+(`idle → joining → listening → unmuting → live`, plus reconnect/failed/leaving
+paths). All media side effects live in the engine; `CollaborationVoiceContext`
+only subscribes to its snapshots. See
+`docs/live-collaboration-voice-cloudflare-realtime-sfu.md` §9 for the full
+state model and its cleanup invariants.
+
 ### Who owns `project` / `activeFilePath`
 
 This is the field pair most likely to look "shared." It is not — ownership moves

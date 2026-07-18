@@ -246,6 +246,7 @@ const clientChips: Array<Omit<ChipProps, "x" | "y" | "width">> = [
   { title: "dmp (Rust→WASM) + fflate", lines: ["delta codec for the SCR3 stream"], tag: 8 },
   { title: "xterm.js", lines: ["in-browser terminal"], tag: 9 },
   { title: "PostHog SDK", lines: ["analytics · replay · errors → PostHog (US)"], tag: 10 },
+  { title: "partytracks · WebRTC", lines: ["room voice chat via Cloudflare SFU"], tag: 11 },
 ];
 
 const notes: Array<{ n: string; title: string; detail: string }> = [
@@ -295,44 +296,63 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
   },
   {
     n: "11",
-    title: "Hono API routes",
-    detail: "content, auth, uploads, guarded proxies, and collaboration HTTP/WebSocket routes.",
+    title: "partytracks + WebRTC",
+    detail:
+      "audio-only voice chat; join is muted, unmute publishes one Opus track, mute releases the mic. Remote voice never enters the recorder.",
   },
   {
     n: "12",
+    title: "Hono API routes",
+    detail:
+      "content, auth, uploads, guarded proxies, and collaboration + voice HTTP/WebSocket routes.",
+  },
+  {
+    n: "13",
     title: "Static assets",
     detail: "Cloudflare Static Assets binding serves the built client.",
   },
   {
-    n: "13",
+    n: "14",
     title: "/api/proxy",
     detail: "fetch proxy for the preview; blocks loopback/private hosts.",
   },
   {
-    n: "14",
+    n: "15",
     title: "Google OAuth 2.0",
     detail: "sign-in; edge issues its own session cookie afterward.",
   },
   {
-    n: "15",
+    n: "16",
     title: "D1",
     detail: "relational identity/content plus the collaboration room and access control plane.",
   },
   {
-    n: "16",
+    n: "17",
     title: "R2",
     detail: "lesson media, slide images, and private content-addressed collaboration assets.",
   },
   {
-    n: "17",
+    n: "18",
     title: "Workers KV",
     detail: "public lesson/playlist JSON cache; eventually consistent and fail-open to D1.",
   },
   {
-    n: "18",
+    n: "19",
     title: "Room Durable Objects",
     detail:
       "hibernating binary WebSockets, authoritative awareness, and per-room SQLite Yjs history.",
+  },
+  {
+    n: "20",
+    title: "Voice Room Durable Objects",
+    detail:
+      "per-room voice roster and per-connection capabilities; the only path to the SFU API — validates session/track/mid ownership before proxying.",
+  },
+  {
+    n: "21",
+    title: "Cloudflare Realtime SFU",
+    detail:
+      "Opus audio forwarding between room members over DTLS-SRTP; roomless by design, so the app decides who may subscribe. Feature-flagged via VOICE_CHAT_ENABLED.",
   },
 ];
 
@@ -354,8 +374,8 @@ export default function ArchitecturePage() {
             <div>
               <h1>next-editor — system architecture</h1>
               <p className="sub">
-                Collaborative browser code editor with live preview, session recording and a
-                whiteboard, running on Cloudflare's edge.
+                Collaborative browser code editor with live preview, session recording, a
+                whiteboard, and room voice chat, running on Cloudflare's edge.
               </p>
             </div>
             <div className="meta">
@@ -369,17 +389,17 @@ export default function ArchitecturePage() {
               </div>
               <div>
                 <b>rev</b>
-                <span>C</span>
+                <span>D</span>
               </div>
               <div>
                 <b>date</b>
-                <span>2026-07-16</span>
+                <span>2026-07-18</span>
               </div>
             </div>
           </div>
 
           <div className="diagram-wrap">
-            <svg viewBox="0 0 1320 1038" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
+            <svg viewBox="0 0 1320 1130" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
               <title>
                 Layered architecture: browser client, Cloudflare edge, storage, and external
                 services
@@ -387,9 +407,11 @@ export default function ArchitecturePage() {
               <desc>
                 User's browser runs the client app and connects over HTTPS to a Cloudflare Worker
                 edge, which uses Cloudflare D1, R2, and Workers KV. Google provides identity; Room
-                Durable Objects provide binary WebSockets and SQLite collaboration state. The client
-                also sends analytics events, masked session replay and error reports to PostHog
-                Cloud (US).
+                Durable Objects provide binary WebSockets and SQLite collaboration state. Voice Room
+                Durable Objects coordinate opt-in voice chat and gate every call to the Cloudflare
+                Realtime SFU, which exchanges audio-only WebRTC media directly with the client. The
+                client also sends analytics events, masked session replay and error reports to
+                PostHog Cloud (US).
               </desc>
 
               <defs>
@@ -440,7 +462,7 @@ export default function ArchitecturePage() {
                 </marker>
               </defs>
 
-              <rect x={0} y={0} width={1320} height={1038} fill="url(#arch-grid)" />
+              <rect x={0} y={0} width={1320} height={1130} fill="url(#arch-grid)" />
 
               <rect
                 x={580}
@@ -564,8 +586,8 @@ export default function ArchitecturePage() {
                 y={684}
                 width={256}
                 title="Hono API routes"
-                lines={["content, auth, uploads,", "collaboration + proxies"]}
-                tag={11}
+                lines={["content, auth, uploads,", "collab + voice + proxies"]}
+                tag={12}
               />
               <Chip
                 x={336}
@@ -573,7 +595,7 @@ export default function ArchitecturePage() {
                 width={256}
                 title="static assets"
                 lines={["serves built dist/ via", "ASSETS binding"]}
-                tag={12}
+                tag={13}
               />
               <Chip
                 x={608}
@@ -581,7 +603,7 @@ export default function ArchitecturePage() {
                 width={256}
                 title="/api/proxy"
                 lines={["SSRF-guarded fetch,", "blocks private hosts"]}
-                tag={13}
+                tag={14}
               />
 
               <ExternalBox
@@ -589,7 +611,7 @@ export default function ArchitecturePage() {
                 y={650}
                 title="Google OAuth 2.0"
                 lines={["external identity provider", "session cookie issued by edge"]}
-                tag={14}
+                tag={15}
               />
 
               <ExternalBox
@@ -597,18 +619,53 @@ export default function ArchitecturePage() {
                 y={770}
                 title="Room Durable Objects"
                 lines={["binary WebSockets + SQLite", "Yjs history and presence"]}
-                tag={18}
+                tag={19}
+              />
+
+              <ExternalBox
+                x={948}
+                y={890}
+                title="Voice Room Durable Objects"
+                lines={["voice roster + capabilities", "authorized SFU gateway"]}
+                tag={20}
+              />
+
+              <ExternalBox
+                x={948}
+                y={1010}
+                title="Cloudflare Realtime SFU"
+                lines={["audio-only WebRTC media plane", "Opus fan-out between members"]}
+                tag={21}
               />
 
               <line
-                x1={900}
+                x1={924}
                 y1={786}
-                x2={900}
-                y2={822}
+                x2={924}
+                y2={1062}
                 stroke="var(--dashline)"
                 strokeWidth={1.4}
                 strokeDasharray="4 4"
               />
+
+              <path
+                d="M1280 520 H1306 V1062 H1288"
+                fill="none"
+                stroke="var(--dashline)"
+                strokeWidth={1.4}
+                strokeDasharray="5 4"
+                markerEnd="url(#arch-arrow-dash)"
+              />
+              <text
+                transform="rotate(90 1300 700)"
+                x={1300}
+                y={700}
+                fontFamily="var(--font-mono)"
+                fontSize={11}
+                fill="var(--ink-faint)"
+              >
+                webrtc audio · dtls-srtp
+              </text>
 
               <line
                 x1={470}
@@ -659,7 +716,7 @@ export default function ArchitecturePage() {
                 width={256}
                 title="D1 (SQLite)"
                 lines={["identity, content, rooms,", "memberships + audit"]}
-                tag={15}
+                tag={16}
               />
               <Chip
                 x={336}
@@ -667,7 +724,7 @@ export default function ArchitecturePage() {
                 width={256}
                 title="R2 (object storage)"
                 lines={["lesson/slide media +", "private room assets"]}
-                tag={16}
+                tag={17}
               />
               <Chip
                 x={608}
@@ -675,7 +732,7 @@ export default function ArchitecturePage() {
                 width={256}
                 title="Workers KV (cache)"
                 lines={["public lesson/playlist", "JSON · ttl · fail-open"]}
-                tag={17}
+                tag={18}
               />
             </svg>
           </div>
@@ -771,6 +828,16 @@ export default function ArchitecturePage() {
                     <code>durable objects + sqlite</code>{" "}
                     <span className="note-inline">
                       — authenticated binary WebSockets with per-room durability
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td>voice chat</td>
+                  <td>
+                    <code>partytracks 0.0.56</code>
+                    <code>cloudflare realtime sfu</code>{" "}
+                    <span className="note-inline">
+                      — audio-only WebRTC behind a capability-checked room gateway; feature-flagged
                     </span>
                   </td>
                 </tr>

@@ -9,14 +9,15 @@ the `/learn` catalog, lesson publishing, playlists, and live collaboration.
 
 ## Decisions locked in
 
-| Question              | Decision                                                                                                                                              |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment topology   | **Full Cloudflare, same-origin.** SPA served by Workers Static Assets; API, OAuth, and R2 all live behind the same origin via one Hono Worker.        |
-| Lesson lifecycle      | **Draft → Publish.** Uploaded lessons start as private drafts; only `published` rows appear in the public gallery.                                    |
-| Who can create        | **Any Google account.** Sign in with Google → you can record, upload, and publish.                                                                    |
-| Existing JSON catalog | **Kept as-is.** The curated seed (e.g. `introduction`) stays static and D1-free — frequent-access, edge-cached. D1 only holds user-generated lessons. |
-| Public read cache     | **Cloudflare Workers KV.** Public lesson/playlist JSON uses the fail-open `CACHE` binding; search remains uncached.                                   |
-| Live collaboration    | **Room Durable Objects.** Binary WebSockets and per-room SQLite are the only collaboration transport and durability path.                             |
+| Question              | Decision                                                                                                                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Deployment topology   | **Full Cloudflare, same-origin.** SPA served by Workers Static Assets; API, OAuth, and R2 all live behind the same origin via one Hono Worker.                                                                                 |
+| Lesson lifecycle      | **Draft → Publish.** Uploaded lessons start as private drafts; only `published` rows appear in the public gallery.                                                                                                             |
+| Who can create        | **Any Google account.** Sign in with Google → you can record, upload, and publish.                                                                                                                                             |
+| Existing JSON catalog | **Kept as-is.** The curated seed (e.g. `introduction`) stays static and D1-free — frequent-access, edge-cached. D1 only holds user-generated lessons.                                                                          |
+| Public read cache     | **Cloudflare Workers KV.** Public lesson/playlist JSON uses the fail-open `CACHE` binding; search remains uncached.                                                                                                            |
+| Live collaboration    | **Room Durable Objects.** Binary WebSockets and per-room SQLite are the only collaboration transport and durability path.                                                                                                      |
+| Voice chat            | **Direct Cloudflare Realtime SFU.** Audio-only WebRTC coordinated by a separate per-room voice Durable Object behind a room-scoped gateway; fails closed on the `VOICE_CHAT_ENABLED` flag and never touches the Yjs transport. |
 
 ## Why same-origin is not negotiable here
 
@@ -50,11 +51,12 @@ secrets, or collaboration credentials.
 
 ```
 infra/
-  worker/  Hono API, OAuth, D1/R2/KV bindings, collaboration gateway
+  worker/  Hono API, OAuth, D1/R2/KV bindings, collaboration + voice/SFU gateways
   db/      D1 migrations and typed content/collaboration queries
   client/  auth, upload, playlist, and lesson-management browser adapters
 
 src/       editor/runtime/recorder, Yjs project model, room provider and UI
+src/voice/ voice-chat engine and partytracks adapter (browser media only)
 tube/      /learn gallery, lesson detail, authors, playlists and search
 ```
 
@@ -231,20 +233,21 @@ the upload modal against the persisted recording.
 
 ## API surface (Hono routes)
 
-| Method & path                                                      | Auth             | Current responsibility                                                        |
-| ------------------------------------------------------------------ | ---------------- | ----------------------------------------------------------------------------- |
-| `GET /api/auth/google/login`, `/callback`                          | —                | OAuth PKCE handshake and first-party session creation                         |
-| `GET /api/auth/me`, `PATCH /username`, `POST /logout`              | cookie           | Session and profile lifecycle                                                 |
-| `GET /api/lessons`, `GET /api/lessons/:slug`                       | —                | Published lesson reads through Workers KV, then D1                            |
-| `/api/lessons/mine`, create/update/publish/unpublish/delete routes | owner            | Draft and published lesson lifecycle                                          |
-| `PUT /api/uploads/:id/media/:filename`                             | owner/sign-in    | Validate and stream a lesson object through the Worker to R2                  |
-| `/api/playlists/*`                                                 | mixed            | Public playlist detail plus owner CRUD, membership, and ordering              |
-| `/api/authors/:username`, `/api/search`                            | —                | Public author/catalog discovery; search is intentionally uncached             |
-| `/api/collaboration/rooms/*`, `/invitations/*`                     | member/role      | D1 control plane, private R2 assets, binary WebSockets, and room-local SQLite |
-| `POST /api/collaboration/jobs/maintenance`                         | QStash signature | Delayed closed-room cleanup                                                   |
-| `GET /media/*`                                                     | —                | Stream R2 objects with Range and immutable-cache support                      |
-| `POST /api/slide-images`                                           | cookie           | Ingest Google Slides images into content-addressed R2 keys                    |
-| `GET /api/proxy?url=`, `POST /api/openrouter/responses`            | route-specific   | Guarded same-origin external-service proxies                                  |
+| Method & path                                                      | Auth                | Current responsibility                                                                                                |
+| ------------------------------------------------------------------ | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/auth/google/login`, `/callback`                          | —                   | OAuth PKCE handshake and first-party session creation                                                                 |
+| `GET /api/auth/me`, `PATCH /username`, `POST /logout`              | cookie              | Session and profile lifecycle                                                                                         |
+| `GET /api/lessons`, `GET /api/lessons/:slug`                       | —                   | Published lesson reads through Workers KV, then D1                                                                    |
+| `/api/lessons/mine`, create/update/publish/unpublish/delete routes | owner               | Draft and published lesson lifecycle                                                                                  |
+| `PUT /api/uploads/:id/media/:filename`                             | owner/sign-in       | Validate and stream a lesson object through the Worker to R2                                                          |
+| `/api/playlists/*`                                                 | mixed               | Public playlist detail plus owner CRUD, membership, and ordering                                                      |
+| `/api/authors/:username`, `/api/search`                            | —                   | Public author/catalog discovery; search is intentionally uncached                                                     |
+| `/api/collaboration/rooms/*`, `/invitations/*`                     | member/role         | D1 control plane, private R2 assets, binary WebSockets, and room-local SQLite                                         |
+| `/api/collaboration/rooms/:id/voice/*`                             | member + capability | Voice availability probe, JSON coordination WebSocket, and the authorized SFU gateway (feature-flagged, fails closed) |
+| `POST /api/collaboration/jobs/maintenance`                         | QStash signature    | Delayed closed-room cleanup                                                                                           |
+| `GET /media/*`                                                     | —                   | Stream R2 objects with Range and immutable-cache support                                                              |
+| `POST /api/slide-images`                                           | cookie              | Ingest Google Slides images into content-addressed R2 keys                                                            |
+| `GET /api/proxy?url=`, `POST /api/openrouter/responses`            | route-specific      | Guarded same-origin external-service proxies                                                                          |
 
 ## Upload & publish sequence
 
@@ -280,6 +283,7 @@ use their smaller shared client/server constraint.
 - The upload route validates authentication, existing-lesson ownership, exact content length, filename/extension, and size before writing under `lessons/<id>/…`.
 - Draft lessons are never returned by the public gallery query; only `/api/lessons/mine` (owner-scoped) exposes them.
 - Collaboration routes re-check room membership and roles server-side; browser clients never receive QStash credentials.
+- The Realtime SFU application ID and token are Worker secrets. Every SFU operation is re-authenticated (session + D1 membership) and then authorized inside the room's voice Durable Object against per-connection capabilities and a session/track/mid ownership registry; upstream responses are sanitized before reaching the browser.
 
 ## Cost / free-tier fit
 

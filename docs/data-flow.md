@@ -254,3 +254,5 @@ Each `applyXAtTime` action reads its own `lastApplied*Index` cursor from context
 - `docs/data-structures.md` for concrete type shapes.
 - `docs/state-machines.md` for the event/state topology.
 - `docs/streaming-playback.md` for the partial-download behavior in detail.
+- `docs/live-collaboration-voice-cloudflare-realtime-sfu.md` for the voice-chat coordination and
+  media flow — voice runs beside these flows and never enters the recording pipeline.

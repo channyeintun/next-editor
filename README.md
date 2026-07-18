@@ -29,6 +29,8 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 - Progressive loading lets `/code?url=...` start playing a recording from a partial download.
 - Authenticated collaboration rooms support owner/editor/viewer roles, offline Yjs edits, remote
   cursors, follow-host state, private binary assets, and host-only browser recording.
+- Opt-in, audio-only voice chat inside a live room runs over the direct Cloudflare Realtime SFU
+  behind a room-scoped authenticated gateway; remote voice is never captured by recordings.
 - Published lessons, authors, search, and playlists run through a same-origin Cloudflare Worker;
   public lesson/playlist JSON uses Workers KV.
 
@@ -50,6 +52,8 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 - Built-in reveal.js slide support.
 - Live Yjs collaboration with invitations, role enforcement, awareness, reconnect/bootstrap
   recovery, and content-addressed R2 assets.
+- Feature-flagged voice chat per room: join muted, explicit unmute, speaking indicators, and a
+  mute that physically releases the microphone.
 - Authenticated lesson publishing, public author pages, search, and ordered playlists.
 
 ## Browser Support
@@ -70,6 +74,8 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 - Cloud platform: Cloudflare Workers + Hono, D1, R2, Workers KV, and Static Assets
 - Collaboration data plane: Yjs over binary WebSockets, room Durable Objects with SQLite, and
   QStash delayed-cleanup jobs
+- Voice media plane: partytracks/WebRTC to the Cloudflare Realtime SFU, coordinated by per-room
+  voice Durable Objects (audio only, feature-flagged)
 - Quality checks: vite-plus, Oxlint, TypeScript native preview (`tsgo`)
 
 ## Project Structure
@@ -80,6 +86,8 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 - `src/storage`: SCR3 codec, IndexedDB persistence, import/export helpers, and worker-backed decoding.
 - `src/hooks`: URL loading, live stream forwarding, workspace/runtime hooks, and app adapters.
 - `src/collaboration`: Yjs project schema, provider protocol, room lifecycle, and workspace adapter.
+- `src/voice`: voice-chat engine, state machine, partytracks adapter, audio sinks, and recorder
+  privacy bridge.
 - `public`: static assets, wasm artifacts, fonts, and sample recordings.
 - `infra`: Hono Worker, D1 migrations, Cloudflare bindings, and browser auth/upload adapters.
 - `tube`: `/learn` catalog, lesson detail, authors, search, and playlists.
@@ -166,6 +174,8 @@ Recordings use the SCR3 `.ne` container as raw binary end-to-end — the exporte
   secrets, migrations, and deployment.
 - [docs/live-collaboration.md](docs/live-collaboration.md) for the implemented Yjs collaboration
   architecture and release gates.
+- [docs/live-collaboration-voice-cloudflare-realtime-sfu.md](docs/live-collaboration-voice-cloudflare-realtime-sfu.md)
+  for the voice-chat architecture, trust model, and rollout state.
 
 ## License
 
