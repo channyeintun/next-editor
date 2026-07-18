@@ -23,7 +23,7 @@ VOICE_CHAT_ENABLED = "true"
 # Playground maintainers and confirming the user agent — since enabling it
 # sends authenticated users' Run requests to play.golang.org. Go editing and
 # recorded playback work regardless of this flag.
-GO_PLAYGROUND_ENABLED = "false"
+GO_PLAYGROUND_ENABLED = "true"
 # Required for authentication — auth fails at runtime without these. Set them with:
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
 #   wrangler secret put GOOGLE_CLIENT_SECRET --config infra/wrangler.toml
