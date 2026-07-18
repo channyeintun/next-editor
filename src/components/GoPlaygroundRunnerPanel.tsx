@@ -196,7 +196,8 @@ function GoPlaygroundRunnerPanel() {
     // Read every current Go source file at click time — never a stale copy.
     const project = getProject();
     const goFiles = Object.values(project.files)
-      .filter((file) => file.path.endsWith(".go") && isWorkspaceTextFile(file))
+      .filter(isWorkspaceTextFile)
+      .filter((file) => file.path.endsWith(".go"))
       .sort((left, right) => {
         if (left.path === "main.go") return right.path === "main.go" ? 0 : -1;
         if (right.path === "main.go") return 1;
