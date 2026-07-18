@@ -1,6 +1,6 @@
 # Live Teaching Collaboration and Collaborator Following — Implementation Plan
 
-Status: proposed
+Status: implemented in code; deployed three-profile smoke validation pending
 
 Priority: P0
 

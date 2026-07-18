@@ -43,6 +43,8 @@ import { createStarterWorkspaceForLessonType } from "../starters";
 import SlidesButton from "./SlidesButton";
 import CollaborationPanel from "./CollaborationPanel";
 import { startTour } from "./tour/productTour";
+import { useOptionalCollaboration } from "../contexts/CollaborationContext";
+import { useSlidesContext } from "../contexts/SlidesContext";
 
 const LESSON_TYPE_OPTIONS: Array<{
   value: WorkspaceLessonType;
@@ -149,6 +151,10 @@ export function PreviewHeaderButton() {
 
 function WhiteboardHeaderButton() {
   const { isOpen, setOpen } = useWhiteboardContext();
+  const slides = useSlidesContext();
+  const collaboration = useOptionalCollaboration();
+
+  if (collaboration?.provider && !collaboration.teaching.initialized) return null;
 
   return (
     <button
@@ -157,7 +163,11 @@ function WhiteboardHeaderButton() {
       aria-label={isOpen ? "Close whiteboard" : "Open whiteboard"}
       aria-pressed={isOpen}
       title={isOpen ? "Close whiteboard" : "Open whiteboard"}
-      onClick={() => setOpen(!isOpen)}
+      onClick={() => {
+        collaboration?.stopFollowing("local-surface-change");
+        if (!isOpen && slides.previewState.isOpen) slides.closePresentation();
+        setOpen(!isOpen);
+      }}
       className={`${HEADER_ICON_BUTTON_CLASS} ${isOpen ? "bg-[#273449] text-white" : HEADER_ICON_BUTTON_NEUTRAL_CLASS}`}
     >
       <PenTool size={16} />

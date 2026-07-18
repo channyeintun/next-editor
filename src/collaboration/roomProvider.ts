@@ -177,6 +177,8 @@ export class CollaborationRoomProvider {
       timer: ReturnType<typeof setTimeout>;
     }
   >();
+  private awarenessPublicationSuppressed = false;
+  private isPublishingExplicitAwareness = false;
 
   constructor(options: CollaborationRoomProviderOptions) {
     this.roomId = options.roomId;
@@ -278,17 +280,29 @@ export class CollaborationRoomProvider {
   async publishAwareness(input: CollaborationAwarenessInput): Promise<void> {
     const session = this.roomSession;
     if (!session || this.connectionState !== "live") return;
-    if (input.kind === "leave") {
-      this.awareness.setLocalState(null);
-    } else {
-      const selection = this.awareness.getLocalState()?.selection;
-      this.awareness.setLocalState(
-        collaborationAwarenessClientStateSchema.parse({
-          collaboration: input,
-          ...(selection === undefined ? {} : { selection }),
-        }),
-      );
+    this.isPublishingExplicitAwareness = true;
+    try {
+      if (input.kind === "leave") {
+        this.awareness.setLocalState(null);
+      } else {
+        const selection =
+          input.surface.kind === "editor" && !this.awarenessPublicationSuppressed
+            ? this.awareness.getLocalState()?.selection
+            : null;
+        this.awareness.setLocalState(
+          collaborationAwarenessClientStateSchema.parse({
+            collaboration: input,
+            ...(selection === undefined ? {} : { selection }),
+          }),
+        );
+      }
+    } finally {
+      this.isPublishingExplicitAwareness = false;
     }
+  }
+
+  setAwarenessPublicationSuppressed(suppressed: boolean): void {
+    this.awarenessPublicationSuppressed = suppressed;
   }
 
   private readonly handleAfterTransaction = (transaction: Y.Transaction) => {
@@ -302,6 +316,7 @@ export class CollaborationRoomProvider {
     if (origin === COLLABORATION_ORIGIN.remoteProvider || this.connectionState !== "live") {
       return;
     }
+    if (this.awarenessPublicationSuppressed && !this.isPublishingExplicitAwareness) return;
     const changedClients = [...changes.added, ...changes.updated, ...changes.removed];
     if (!changedClients.includes(this.awareness.clientID)) return;
     const state = this.awareness.getLocalState();
@@ -343,7 +358,7 @@ export class CollaborationRoomProvider {
         roomId: previous.roomId,
         actorId: previous.actorId,
         sessionId: previous.sessionId,
-        revision: previous.revision + 1,
+        revision: Math.min(previous.revision + 1, Number.MAX_SAFE_INTEGER),
         occurredAt: Date.now(),
       });
     }

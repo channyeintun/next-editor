@@ -160,4 +160,38 @@ describe("RoomSqliteDocumentStore", () => {
     materialized.destroy();
     source.destroy();
   });
+
+  it("replaces the snapshot atomically while retaining the current update tail", () => {
+    const { store } = createStore();
+    const source = new Y.Doc();
+    source.getText("content").insert(0, "a");
+    store.initialize(encodeYjsDocument(source), 100);
+    const stateVector = Y.encodeStateVector(source);
+    source.getText("content").insert(1, "b");
+    const tailEvent = updateEvent(Y.encodeStateAsUpdate(source, stateVector));
+    store.append(tailEvent, 200);
+
+    const replacement = store.createDocument();
+    replacement.getMap("project").set("teachingInitialized", true);
+    const result = store.replaceSnapshot(encodeYjsDocument(replacement), 128, 300);
+
+    expect(result).toEqual({ generation: 2, streamId: "1-1" });
+    expect(store.bootstrap()).toMatchObject({
+      snapshot: { generation: 2, streamCutoff: "1-0" },
+      updates: [],
+      nextCursor: "1-0",
+    });
+    const restored = store.createDocument();
+    expect(restored.getText("content").toString()).toBe("ab");
+    expect(restored.getMap("project").get("teachingInitialized")).toBe(true);
+    expect(store.append(tailEvent, 400)).toMatchObject({
+      streamId: "1-0",
+      duplicate: true,
+      event: null,
+    });
+
+    restored.destroy();
+    replacement.destroy();
+    source.destroy();
+  });
 });

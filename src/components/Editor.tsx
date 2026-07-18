@@ -39,6 +39,8 @@ import RecordingLoadError from "./RecordingLoadError.tsx";
 import { ApiClientStoreProvider } from "../contexts/ApiClientStoreContext";
 import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
 import { startTour } from "./tour/productTour";
+import CollaborationSurfaceBridge from "./CollaborationSurfaceBridge";
+import CollaborationFollowOverlay from "./CollaborationFollowOverlay";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
 // Bundles Excalidraw (~180KB gzip) — deferred until the panel is actually opened,
@@ -253,6 +255,7 @@ export function EditorLayout({
             <WhiteboardPanel />
           </Suspense>
         ) : null}
+        <CollaborationFollowOverlay />
 
         {/* Loading / error overlays live inside the (relative) editor surface so they
             center on the editor region in both viewport and `fill` layouts. */}
@@ -305,6 +308,7 @@ export default function Editor(props: EditorProps = {}) {
                         <SlidesProvider>
                           <WhiteboardProvider>
                             <PreviewPanelProvider>
+                              <CollaborationSurfaceBridge />
                               <EditorLayout {...props} />
                             </PreviewPanelProvider>
                           </WhiteboardProvider>

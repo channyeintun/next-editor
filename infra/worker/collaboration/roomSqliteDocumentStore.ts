@@ -71,6 +71,11 @@ export interface CompactRoomSqliteDocumentResult {
   appliedUpdates: number;
 }
 
+export interface ReplaceRoomSqliteSnapshotResult {
+  generation: number;
+  streamId: string;
+}
+
 export class CollaborationRoomSqliteQuotaError extends Error {
   constructor() {
     super("collaboration room document byte quota exceeded");
@@ -268,6 +273,43 @@ export class RoomSqliteDocumentStore {
         shouldCompact: tailCount >= COMPACTION_EVERY_UPDATES,
         event: parsed,
       };
+    });
+  }
+
+  replaceSnapshot(
+    snapshot: string,
+    acceptedUpdateBytes: number,
+    now = Date.now(),
+  ): ReplaceRoomSqliteSnapshotResult {
+    encodedYjsSnapshotSchema.parse(snapshot);
+    if (!Number.isSafeInteger(acceptedUpdateBytes) || acceptedUpdateBytes < 0) {
+      throw new Error("collaboration snapshot update length is invalid");
+    }
+    return this.storage.transactionSync(() => {
+      const metadata = this.metadata();
+      if (metadata.accepted_bytes + acceptedUpdateBytes > MAX_COLLABORATION_ROOM_ACCEPTED_BYTES) {
+        throw new CollaborationRoomSqliteQuotaError();
+      }
+      const latest = this.storage.sql
+        .exec<{ sequence: number | null }>(
+          "SELECT MAX(sequence) AS sequence FROM collaboration_updates",
+        )
+        .toArray()[0];
+      const cutoff = latest?.sequence ?? metadata.stream_cutoff;
+      const generation = metadata.generation + 1;
+      this.storage.sql.exec(
+        `UPDATE collaboration_document
+         SET generation = ?, stream_cutoff = ?, snapshot = ?,
+             accepted_bytes = accepted_bytes + ?, tail_count = 0, updated_at = ?
+         WHERE singleton = 1`,
+        generation,
+        cutoff,
+        snapshot,
+        acceptedUpdateBytes,
+        now,
+      );
+      this.storage.sql.exec("DELETE FROM collaboration_updates WHERE sequence <= ?", cutoff);
+      return { generation, streamId: `${cutoff}-1` };
     });
   }
 

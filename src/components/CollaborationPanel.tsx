@@ -138,8 +138,8 @@ export default function CollaborationPanel() {
             {!isInRoom ? (
               <div className="space-y-3">
                 <p className="text-xs leading-5 text-slate-300">
-                  Start from the current project. Text and file-tree changes are shared; each
-                  participant keeps a separate local runtime.
+                  Start from the current project, prepared slides, and whiteboard. Room content is
+                  shared while each participant keeps a separate local runtime and view.
                 </p>
                 <button
                   type="button"
@@ -186,22 +186,36 @@ export default function CollaborationPanel() {
                   ) : null}
                 </div>
 
-                {!collaboration.isHost ? (
-                  <label className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-700/70 px-3 py-2 text-xs text-slate-200">
-                    Follow host’s active file
-                    <input
-                      type="checkbox"
-                      checked={collaboration.isFollowingHost}
-                      onChange={(event) => collaboration.setFollowingHost(event.target.checked)}
-                      className="accent-emerald-400"
-                    />
-                  </label>
-                ) : (
+                {collaboration.isHost ? (
                   <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-200">
                     You are the room host. Recording is available only in this browser and stays
                     local until live ends.
                   </p>
-                )}
+                ) : null}
+
+                {collaboration.followedParticipant ? (
+                  <button
+                    type="button"
+                    onClick={() => collaboration.stopFollowing("user")}
+                    className="flex w-full items-center justify-between rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100"
+                  >
+                    <span className="truncate">
+                      Following {displayName(collaboration.followedParticipant)}
+                    </span>
+                    <span className="font-semibold">Stop</span>
+                  </button>
+                ) : null}
+
+                {!collaboration.teaching.initialized && collaboration.role === "owner" ? (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => void run(() => collaboration.initializeTeachingSurfaces())}
+                    className="w-full rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100 disabled:opacity-50"
+                  >
+                    Initialize room slides and whiteboard
+                  </button>
+                ) : null}
 
                 <section>
                   <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -213,6 +227,32 @@ export default function CollaborationPanel() {
                     ) : (
                       collaboration.participants.map((participant) => {
                         const color = collaborationParticipantColorIndex(participant);
+                        const isSelf =
+                          participant.sessionId === collaboration.provider?.awarenessSessionId;
+                        const isFollowed =
+                          participant.sessionId === collaboration.followedSessionId;
+                        const surfaceLabel = (() => {
+                          if (participant.surface.kind === "slides") {
+                            if (collaboration.isTeachingLoading) return "Loading shared slide…";
+                            if (collaboration.teachingSlides === null) {
+                              return "Shared slide unavailable";
+                            }
+                            const index = collaboration.teaching.currentSlideId
+                              ? collaboration.teaching.slideOrder.indexOf(
+                                  collaboration.teaching.currentSlideId,
+                                )
+                              : -1;
+                            return index >= 0
+                              ? `Slides · ${index + 1}/${collaboration.teaching.slideOrder.length}`
+                              : "Slides";
+                          }
+                          if (participant.surface.kind === "whiteboard") return "Whiteboard";
+                          if (!participant.surface.fileNodeId) return "Editor";
+                          const path = collaboration.getPathForNodeId(
+                            participant.surface.fileNodeId,
+                          );
+                          return path?.split("/").at(-1) ?? "Editor";
+                        })();
                         return (
                           <div
                             key={`${participant.actorId}:${participant.sessionId}`}
@@ -229,8 +269,14 @@ export default function CollaborationPanel() {
                                 className={`size-2.5 rounded-full ${PARTICIPANT_COLORS[color]}`}
                               />
                             )}
-                            <span className="min-w-0 flex-1 truncate text-xs text-slate-200">
-                              {displayName(participant)}
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-xs text-slate-200">
+                                {displayName(participant)}
+                                {isSelf ? " (you)" : ""}
+                              </span>
+                              <span className="block truncate text-[10px] text-slate-500">
+                                {surfaceLabel}
+                              </span>
                             </span>
                             {participant.isHost ? (
                               <Crown size={13} className="text-amber-300" aria-label="Host" />
@@ -238,6 +284,25 @@ export default function CollaborationPanel() {
                             <span className="text-[10px] capitalize text-slate-500">
                               {participant.role}
                             </span>
+                            {!isSelf ? (
+                              <button
+                                type="button"
+                                aria-label={`${isFollowed ? "Stop following" : "Follow"} ${displayName(participant)}`}
+                                aria-pressed={isFollowed}
+                                onClick={() =>
+                                  isFollowed
+                                    ? collaboration.stopFollowing("user")
+                                    : collaboration.followParticipant(participant.sessionId)
+                                }
+                                className={`rounded px-2 py-1 text-[10px] font-semibold ${
+                                  isFollowed
+                                    ? "bg-sky-400 text-slate-950"
+                                    : "bg-white/5 text-slate-300 hover:bg-white/10"
+                                }`}
+                              >
+                                {isFollowed ? "Following" : "Follow"}
+                              </button>
+                            ) : null}
                           </div>
                         );
                       })
@@ -380,12 +445,21 @@ export default function CollaborationPanel() {
                 ) : null}
 
                 {panelError || collaboration.error ? (
-                  <p
+                  <div
                     role="alert"
-                    className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-200"
+                    className="space-y-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-200"
                   >
-                    {panelError ?? collaboration.error}
-                  </p>
+                    <p>{panelError ?? collaboration.error}</p>
+                    {collaboration.error && collaboration.canRetryAssets ? (
+                      <button
+                        type="button"
+                        onClick={collaboration.retryAssets}
+                        className="inline-flex items-center gap-1 font-semibold text-sky-200 hover:text-sky-100"
+                      >
+                        <RefreshCw size={12} /> Retry shared assets
+                      </button>
+                    ) : null}
+                  </div>
                 ) : null}
 
                 <button

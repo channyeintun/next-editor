@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { collaborationAssetKey, readCollaborationAsset, sha256Hex } from "./assetStore";
+import {
+  collaborationAssetKey,
+  deleteCollaborationRoomAssets,
+  readCollaborationAsset,
+  sha256Hex,
+} from "./assetStore";
 
 describe("collaboration asset store", () => {
   it("hashes and bounds a private room asset", async () => {
@@ -48,5 +53,41 @@ describe("collaboration asset store", () => {
       status: 413,
       error: "collaboration asset is too large",
     });
+  });
+
+  it("deletes every paginated asset under only the selected room prefix", async () => {
+    const prefixes: string[] = [];
+    const deleted: string[][] = [];
+    const bucket = {
+      list: async (options: R2ListOptions) => {
+        prefixes.push(options.prefix ?? "");
+        if (!options.cursor) {
+          return {
+            objects: [{ key: `${options.prefix}first` }],
+            truncated: true,
+            cursor: "next-page",
+          };
+        }
+        return {
+          objects: [{ key: `${options.prefix}second` }],
+          truncated: false,
+        };
+      },
+      delete: async (keys: string[]) => {
+        deleted.push(keys);
+      },
+    } as unknown as R2Bucket;
+
+    await expect(
+      deleteCollaborationRoomAssets(bucket, "20000000-0000-4000-8000-000000000001"),
+    ).resolves.toBe(2);
+    expect(prefixes).toEqual([
+      "collaboration/rooms/20000000-0000-4000-8000-000000000001/assets/",
+      "collaboration/rooms/20000000-0000-4000-8000-000000000001/assets/",
+    ]);
+    expect(deleted).toEqual([
+      ["collaboration/rooms/20000000-0000-4000-8000-000000000001/assets/first"],
+      ["collaboration/rooms/20000000-0000-4000-8000-000000000001/assets/second"],
+    ]);
   });
 });

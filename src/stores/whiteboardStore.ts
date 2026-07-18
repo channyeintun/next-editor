@@ -17,4 +17,15 @@ export function createWhiteboardStore() {
 
 export type WhiteboardStoreInstance = ReturnType<typeof createWhiteboardStore>;
 
+export function snapshotWhiteboardStore(store: WhiteboardStoreInstance): WhiteboardSceneState {
+  return structuredClone(store.getSnapshot().context.scene);
+}
+
+export function restoreWhiteboardStore(
+  store: WhiteboardStoreInstance,
+  scene: WhiteboardSceneState,
+): void {
+  store.trigger.setScene({ scene: structuredClone(scene) });
+}
+
 export const selectScene = (context: WhiteboardStoreContext): WhiteboardSceneState => context.scene;

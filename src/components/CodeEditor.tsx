@@ -56,6 +56,12 @@ import {
   workspacePathFromMonacoModelUri,
 } from "../monaco";
 import { startPerformanceSpan } from "../utils/performanceMetrics";
+import {
+  createCollaborationEditorViewport,
+  resolveCollaborationEditorViewport,
+} from "../collaboration/editorViewport";
+import { useSlidesContext } from "../contexts/SlidesContext";
+import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 
 const Preview = lazy(() => import("./Preview"));
 const Y_MONACO_BINDING_ENABLED = import.meta.env.VITE_COLLABORATION_Y_MONACO !== "false";
@@ -134,6 +140,25 @@ function WorkspaceEventRecorder({
 
 type StandaloneEditor = monaco.editor.IStandaloneCodeEditor;
 
+function publishYMonacoSelection(
+  provider: CollaborationRoomProvider,
+  editor: StandaloneEditor,
+  model: monaco.editor.ITextModel,
+  text: Y.Text,
+): void {
+  const selection = editor.getSelection();
+  if (!selection) return;
+  let anchorOffset = model.getOffsetAt(selection.getStartPosition());
+  let headOffset = model.getOffsetAt(selection.getEndPosition());
+  if (selection.getDirection() === monaco.SelectionDirection.RTL) {
+    [anchorOffset, headOffset] = [headOffset, anchorOffset];
+  }
+  provider.awareness.setLocalStateField("selection", {
+    anchor: Y.createRelativePositionFromTypeIndex(text, anchorOffset),
+    head: Y.createRelativePositionFromTypeIndex(text, headOffset),
+  });
+}
+
 function createMonacoTextEditEvent(
   editor: StandaloneEditor,
   changeEvent: monaco.editor.IModelContentChangedEvent,
@@ -205,6 +230,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const isFullHeight = useSelector(runtimePanelStore, (s) => selectIsFullHeight(s.context));
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
   const collaboration = useOptionalCollaboration();
+  const slidesContext = useSlidesContext();
+  const whiteboardContext = useWhiteboardContext();
   const displayIsCollapsed = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.isCollapsed ?? false)
     : isCollapsed;
@@ -221,6 +248,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const remoteDecorationIdsRef = useRef<string[]>([]);
   const remoteCursorLabelManagerRef = useRef<CollaborationCursorLabelManager | null>(null);
   const remoteAwarenessStyleRef = useRef<HTMLStyleElement | null>(null);
+  const appliedFollowViewportRef = useRef<string | null>(null);
   const yMonacoBindingRef = useRef<ActiveYMonacoBinding | null>(null);
   const isConfiguringYMonacoRef = useRef(false);
   const recordedRemoteCursorSignaturesRef = useRef(new Map<string, string>());
@@ -369,6 +397,13 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       current.text === text &&
       current.path === activeFile.path
     ) {
+      if (
+        !slidesContext.previewState.isOpen &&
+        !whiteboardContext.isOpen &&
+        !collaboration.followedSessionId
+      ) {
+        publishYMonacoSelection(provider, editor, model, text);
+      }
       return true;
     }
 
@@ -384,17 +419,12 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         text,
         path: activeFile.path,
       };
-      const selection = editor.getSelection();
-      if (selection) {
-        let anchorOffset = model.getOffsetAt(selection.getStartPosition());
-        let headOffset = model.getOffsetAt(selection.getEndPosition());
-        if (selection.getDirection() === monaco.SelectionDirection.RTL) {
-          [anchorOffset, headOffset] = [headOffset, anchorOffset];
-        }
-        provider.awareness.setLocalStateField("selection", {
-          anchor: Y.createRelativePositionFromTypeIndex(text, anchorOffset),
-          head: Y.createRelativePositionFromTypeIndex(text, headOffset),
-        });
+      if (
+        !slidesContext.previewState.isOpen &&
+        !whiteboardContext.isOpen &&
+        !collaboration.followedSessionId
+      ) {
+        publishYMonacoSelection(provider, editor, model, text);
       }
       return true;
     } catch {
@@ -407,7 +437,15 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   });
 
   const publishCollaborationCursor = useEffectEvent((editor: StandaloneEditor | null) => {
-    if (!collaboration?.provider || usesPlaybackModel || !editor) return;
+    if (
+      !collaboration?.provider ||
+      usesPlaybackModel ||
+      !editor ||
+      slidesContext.previewState.isOpen ||
+      whiteboardContext.isOpen
+    ) {
+      return;
+    }
     if (yMonacoBindingRef.current) return;
     const model = editor.getModel();
     const selection = editor.getSelection();
@@ -425,6 +463,37 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         column: selection.positionColumn,
       }),
     );
+  });
+
+  const publishCollaborationViewport = useEffectEvent((editor: StandaloneEditor | null) => {
+    if (
+      !collaboration?.provider ||
+      usesPlaybackModel ||
+      !editor ||
+      slidesContext.previewState.isOpen ||
+      whiteboardContext.isOpen
+    ) {
+      return;
+    }
+    const model = editor.getModel();
+    if (!model) return;
+    const path = workspacePathFromMonacoModelUri(model.uri);
+    const firstVisible = editor.getVisibleRanges()[0];
+    if (!path || !firstVisible) return;
+    const fileNodeId = collaboration.getNodeIdForPath(path);
+    if (!fileNodeId) return;
+    const topOffset = model.getOffsetAt({
+      lineNumber: firstVisible.startLineNumber,
+      column: 1,
+    });
+    const viewport = createCollaborationEditorViewport(
+      collaboration.provider.doc,
+      fileNodeId,
+      topOffset,
+      Math.max(0, editor.getScrollTop() - editor.getTopForLineNumber(firstVisible.startLineNumber)),
+      editor.getScrollLeft(),
+    );
+    collaboration.publishSurface({ kind: "editor", fileNodeId, viewport });
   });
 
   const syncEditorContentToWorkspace = useEffectEvent((editor: StandaloneEditor | null) => {
@@ -662,7 +731,15 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     }
 
     syncEditorRef(editor);
-  }, [editorModelPath, editorRef, syncEditorRef]);
+    publishCollaborationCursor(editor);
+    publishCollaborationViewport(editor);
+  }, [
+    editorModelPath,
+    editorRef,
+    slidesContext.previewState.isOpen,
+    syncEditorRef,
+    whiteboardContext.isOpen,
+  ]);
 
   useLayoutEffect(() => {
     reconcileYMonacoBinding(editorRef.current);
@@ -671,8 +748,84 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     activeModel,
     collaboration?.canWrite,
     collaboration?.connectionState,
+    collaboration?.followedSessionId,
     collaboration?.provider,
     isBinaryActiveFile,
+    slidesContext.previewState.isOpen,
+    usesPlaybackModel,
+    whiteboardContext.isOpen,
+  ]);
+
+  useLayoutEffect(() => {
+    const target = collaboration?.followedParticipant;
+    if (!target) {
+      appliedFollowViewportRef.current = null;
+      return;
+    }
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (
+      !collaboration?.provider ||
+      collaboration.connectionState !== "live" ||
+      usesPlaybackModel ||
+      target.surface.kind !== "editor" ||
+      !target.surface.fileNodeId ||
+      !editor ||
+      !model ||
+      model !== activeModel ||
+      collaboration.getNodeIdForPath(activeFile.path) !== target.surface.fileNodeId
+    ) {
+      return;
+    }
+    const applicationKey = `${target.sessionId}:${target.revision}:${target.surface.fileNodeId}:${model.getVersionId()}`;
+    if (appliedFollowViewportRef.current === applicationKey) return;
+
+    let applied = false;
+    collaboration.runFollowApplication(() => {
+      const viewport = target.surface.kind === "editor" ? target.surface.viewport : null;
+      const resolved = viewport
+        ? resolveCollaborationEditorViewport(
+            collaboration.provider!.doc,
+            target.surface.fileNodeId!,
+            viewport,
+          )
+        : null;
+      if (resolved) {
+        const position = model.getPositionAt(resolved.topOffset);
+        editor.setScrollPosition(
+          {
+            scrollTop: editor.getTopForLineNumber(position.lineNumber) + resolved.topDeltaPx,
+            scrollLeft: resolved.scrollLeftPx,
+          },
+          monaco.editor.ScrollType.Immediate,
+        );
+        applied = true;
+        return;
+      }
+      if (target.cursor?.fileNodeId === target.surface.fileNodeId) {
+        const cursor = resolveCollaborationCursor(collaboration.provider!.doc, target.cursor);
+        if (cursor) {
+          editor.revealPositionInCenter(
+            model.getPositionAt(cursor.headOffset),
+            monaco.editor.ScrollType.Immediate,
+          );
+          applied = true;
+        }
+      } else if (!viewport) {
+        applied = true;
+      }
+    });
+    if (applied) appliedFollowViewportRef.current = applicationKey;
+  }, [
+    activeFile.content,
+    activeFile.path,
+    activeModel,
+    collaboration?.connectionState,
+    collaboration?.followedParticipant,
+    collaboration?.getNodeIdForPath,
+    collaboration?.provider,
+    collaboration?.runFollowApplication,
+    editorRef,
     usesPlaybackModel,
   ]);
 
@@ -1067,7 +1220,39 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
     focusEditorIfNeeded(editor);
 
+    const editorDomNode = editor.getDomNode();
+    const localIntentListeners: Array<{
+      type: "keydown" | "pointerdown" | "wheel" | "paste" | "compositionstart";
+      listener: EventListener;
+    }> = [];
+    if (editorDomNode) {
+      const addLocalIntentListener = (
+        type: (typeof localIntentListeners)[number]["type"],
+        reason: "local-editor-input" | "local-scroll",
+      ) => {
+        const listener: EventListener = () => collaboration?.stopFollowing(reason);
+        editorDomNode.addEventListener(type, listener, {
+          capture: true,
+          passive: type === "wheel",
+        });
+        localIntentListeners.push({ type, listener });
+      };
+      addLocalIntentListener("keydown", "local-editor-input");
+      addLocalIntentListener("pointerdown", "local-editor-input");
+      addLocalIntentListener("wheel", "local-scroll");
+      addLocalIntentListener("paste", "local-editor-input");
+      addLocalIntentListener("compositionstart", "local-editor-input");
+    }
+
     editorDisposablesRef.current = [
+      {
+        dispose: () => {
+          if (!editorDomNode) return;
+          for (const { type, listener } of localIntentListeners) {
+            editorDomNode.removeEventListener(type, listener, true);
+          }
+        },
+      },
       editor.onDidChangeModel(() => {
         disposeYMonacoBinding();
         const model = editor.getModel();
@@ -1081,6 +1266,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         disposePlaybackModelsIfIdle(editor.getModel()?.uri ?? null);
         syncEditorRef(editor);
         publishCollaborationCursor(editor);
+        publishCollaborationViewport(editor);
         reconcileYMonacoBinding(editor);
       }),
       editor.onDidChangeModelContent((changeEvent) => {
@@ -1152,15 +1338,19 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         onEditorChange();
         publishCollaborationCursor(editor);
       }),
-      editor.onDidScrollChange(() => {
+      editor.onDidScrollChange((event) => {
         if (isApplyingExternalModelValueRef.current) return;
         onEditorChange();
+        if (event.scrollTopChanged || event.scrollLeftChanged) {
+          publishCollaborationViewport(editor);
+        }
       }),
       editor.onDidBlurEditorText(() => {
         void collaboration?.provider?.flushNow();
       }),
     ];
     reconcileYMonacoBinding(editor);
+    publishCollaborationViewport(editor);
   };
 
   return (

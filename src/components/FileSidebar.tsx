@@ -40,8 +40,10 @@ import {
   type SidebarEntryKind,
   type WorkspaceTreeNode,
 } from "./fileSidebarHelpers";
+import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 
 function FileSidebarPanel() {
+  const collaboration = useOptionalCollaboration();
   const [draftName, setDraftName] = useState("");
   const [editState, setEditState] = useState<SidebarEditState>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
@@ -487,6 +489,7 @@ function FileSidebarPanel() {
   };
 
   const openFile = (path: string) => {
+    collaboration?.stopFollowing("local-file-navigation");
     setActiveFilePath(path);
     handleWorkspaceEvent();
   };

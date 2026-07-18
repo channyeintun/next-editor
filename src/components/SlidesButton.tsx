@@ -3,6 +3,8 @@ import { Presentation, Circle } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import SlidesManager from "./SlidesManager";
+import { useOptionalCollaboration } from "../contexts/CollaborationContext";
+import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 
 export default function SlidesButton({
   presentationToggleOnly = false,
@@ -14,6 +16,8 @@ export default function SlidesButton({
   const { pause } = useNextEditorActions();
   const { isRecording, isPlaying, usesPlaybackModel } = useNextEditorMetadata();
   const [showManager, setShowManager] = useState(false);
+  const collaboration = useOptionalCollaboration();
+  const whiteboard = useWhiteboardContext();
 
   const {
     slides,
@@ -25,9 +29,16 @@ export default function SlidesButton({
   } = useSlidesContext();
 
   const hasSlides = slides.length > 0;
+  const roomPresentationOnly = Boolean(
+    collaboration?.provider || collaboration?.isCreatingRoom,
+  );
   // In recording/playback/presentation states, this button should only act as a slide visibility toggle.
   const showPresentationToggle =
-    presentationToggleOnly || usesPlaybackModel || isRecording || previewState.isOpen;
+    presentationToggleOnly ||
+    roomPresentationOnly ||
+    usesPlaybackModel ||
+    isRecording ||
+    previewState.isOpen;
   const isPresentationVisible = previewState.isOpen && previewState.isMaximized === true;
 
   useEffect(() => {
@@ -45,17 +56,20 @@ export default function SlidesButton({
       pause();
     }
 
+    collaboration?.stopFollowing("local-surface-change");
+
     if (isPresentationVisible) {
       closePresentation();
       return;
     }
 
+    if (whiteboard.isOpen) whiteboard.setOpen(false);
     openPresentation();
   };
 
   // Read-only/toggle-only mode is purely for showing an existing deck, so there's
   // nothing to render when the project has no slides.
-  if (presentationToggleOnly && !hasSlides) {
+  if ((presentationToggleOnly || roomPresentationOnly) && !hasSlides) {
     return null;
   }
 
@@ -74,6 +88,13 @@ export default function SlidesButton({
         }}
         disabled={showPresentationToggle && !hasSlides}
         aria-pressed={showPresentationToggle ? isPresentationVisible : showManager}
+        aria-label={
+          showPresentationToggle
+            ? isPresentationVisible
+              ? "Hide slides"
+              : "Show slides"
+            : "Manage presentation slides"
+        }
         className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors ${
           showPresentationToggle
             ? isPresentationVisible

@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { isSlide, loadSlidesFromStorage, saveSlidesToStorage } from "./slidesStore";
+import {
+  createSlidesStore,
+  isSlide,
+  loadSlidesFromStorage,
+  restoreSlidesStore,
+  saveSlidesToStorage,
+  setSlidesStoreRoomScoped,
+  snapshotSlidesStore,
+  subscribeSlidesPersistence,
+} from "./slidesStore";
 import type { Slide } from "../types/slides";
 
 const STORAGE_KEY = "next-editor-slides";
@@ -45,6 +54,24 @@ describe("isSlide", () => {
 });
 
 describe("slides storage round-trip", () => {
+  it("keeps room-scoped projection out of standalone persistence and restores it exactly", () => {
+    const store = createSlidesStore();
+    const unsubscribe = subscribeSlidesPersistence(store);
+    const standalone = [makeHtmlSlide("standalone")];
+    store.trigger.setSlides({ slides: standalone });
+    const snapshot = snapshotSlidesStore(store);
+
+    setSlidesStoreRoomScoped(store, true);
+    store.trigger.setSlides({ slides: [makeHtmlSlide("room")] });
+    expect(loadSlidesFromStorage()).toEqual(standalone);
+
+    restoreSlidesStore(store, snapshot);
+    setSlidesStoreRoomScoped(store, false);
+    expect(store.getSnapshot().context).toEqual(snapshot);
+    expect(loadSlidesFromStorage()).toEqual(standalone);
+    unsubscribe();
+  });
+
   it("stores small decks as plain JSON", () => {
     const slides = [makeHtmlSlide("a"), makeHtmlSlide("b")];
     saveSlidesToStorage(slides);

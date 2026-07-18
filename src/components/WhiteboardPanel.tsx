@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { Maximize2, Minimize2, X } from "lucide-react";
 import { CaptureUpdateAction, Excalidraw, MainMenu } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { AppState, BinaryFiles, NormalizedZoomValue } from "@excalidraw/excalidraw/types";
@@ -8,6 +8,7 @@ import "@excalidraw/excalidraw/index.css";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import type { WhiteboardElementJSON } from "../core/src/whiteboard";
+import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 
 // Image embeds are out of scope for v1 (binary files aren't recorded into the
 // .ne, see whiteboard-plan.md §4) — this also gates paste/drag-drop of images,
@@ -26,16 +27,19 @@ function toExcalidrawElements(
 }
 
 export default function WhiteboardPanel() {
-  const { scene, isOpen, setOpen, handleExcalidrawChange } = useWhiteboardContext();
+  const { scene, isOpen, setOpen, setMaximized, handleExcalidrawChange } = useWhiteboardContext();
   const { usesPlaybackModel } = useNextEditorMetadata();
+  const collaboration = useOptionalCollaboration();
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
+  const contentReadOnly =
+    usesPlaybackModel || Boolean(collaboration?.provider && !collaboration.canWrite);
 
   // Replay drives the board through the store; push its scene into Excalidraw.
   // Live drawing never reaches here — while `usesPlaybackModel` is false, Excalidraw
   // is already the source of truth for its own onChange output, so pushing it back
   // would be a redundant, self-triggering round trip.
   useEffect(() => {
-    if (!apiRef.current || !usesPlaybackModel) return;
+    if (!apiRef.current || (!usesPlaybackModel && !collaboration?.provider)) return;
     apiRef.current.updateScene({
       elements: toExcalidrawElements(scene.elements),
       appState: {
@@ -45,7 +49,7 @@ export default function WhiteboardPanel() {
       },
       captureUpdate: CaptureUpdateAction.NEVER,
     });
-  }, [scene, usesPlaybackModel]);
+  }, [collaboration?.provider, scene, usesPlaybackModel]);
 
   if (!isOpen) return null;
 
@@ -53,33 +57,64 @@ export default function WhiteboardPanel() {
     <>
       <div
         className="fixed inset-0 z-90 bg-[#0b0d12]/90 opacity-0 animate-[fade-in_0.2s_ease-out_forwards] motion-reduce:animate-none motion-reduce:opacity-100"
-        onClick={() => setOpen(false)}
+        onClick={() => {
+          collaboration?.stopFollowing("local-whiteboard-input");
+          setOpen(false);
+        }}
       />
-      <div className="fixed top-[5%] left-[5%] right-[5%] bottom-[5%] z-100 bg-slate-900 rounded-2xl overflow-hidden flex flex-col shadow-2xl">
+      <div
+        className={`fixed z-100 flex flex-col overflow-hidden bg-slate-900 shadow-2xl transition-[inset,border-radius] motion-reduce:transition-none ${
+          scene.isMaximized
+            ? "inset-0 rounded-none"
+            : "top-[5%] left-[5%] right-[5%] bottom-[5%] rounded-2xl"
+        }`}
+      >
         <div className="flex items-center justify-between px-4 py-2 bg-[#11141c] border-b border-white/10 shrink-0">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
             Whiteboard
           </span>
-          <button
-            type="button"
-            aria-label="Close whiteboard"
-            onClick={() => setOpen(false)}
-            className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label={scene.isMaximized ? "Restore whiteboard" : "Maximize whiteboard"}
+              aria-pressed={scene.isMaximized}
+              onClick={() => {
+                collaboration?.stopFollowing("local-whiteboard-input");
+                setMaximized(!scene.isMaximized);
+              }}
+              className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              {scene.isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            </button>
+            <button
+              type="button"
+              aria-label="Close whiteboard"
+              onClick={() => {
+                collaboration?.stopFollowing("local-whiteboard-input");
+                setOpen(false);
+              }}
+              className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
         {/* The arbitrary variant hides the library sidebar toggle — the library
             has no recording semantics and Excalidraw exposes no UIOptions flag
             for it. Zen mode is a default (via initialData, so the presenter can
             still toggle it), not the controlled `zenModeEnabled` prop. */}
-        <div className="relative flex-1 [&_.default-sidebar-trigger]:hidden">
+        <div
+          className="relative flex-1 [&_.default-sidebar-trigger]:hidden"
+          onPointerDownCapture={() => collaboration?.stopFollowing("local-whiteboard-input")}
+          onWheelCapture={() => collaboration?.stopFollowing("local-whiteboard-input")}
+          onKeyDownCapture={() => collaboration?.stopFollowing("local-whiteboard-input")}
+        >
           <Excalidraw
             excalidrawAPI={(api) => {
               apiRef.current = api;
             }}
             theme="dark"
-            viewModeEnabled={usesPlaybackModel}
+            viewModeEnabled={contentReadOnly}
             UIOptions={UI_OPTIONS}
             initialData={{
               elements: toExcalidrawElements(scene.elements),
@@ -102,7 +137,7 @@ export default function WhiteboardPanel() {
                   scrollY: appState.scrollY,
                   zoom: appState.zoom.value,
                 },
-                usesPlaybackModel,
+                contentReadOnly,
               );
             }}
           >

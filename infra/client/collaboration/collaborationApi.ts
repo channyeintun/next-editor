@@ -1,6 +1,7 @@
 import type {
   CollaborationAssetDescriptor,
   CollaborationCreateRoomInput,
+  CollaborationTeachingInitializationInput,
   CollaborationInviteRole,
   CollaborationInvitation,
   CollaborationMember,
@@ -38,6 +39,16 @@ export async function getCollaborationRoom(roomId: string): Promise<Collaboratio
     { headers: { "Cache-Control": "no-cache" } },
   );
   return response.data;
+}
+
+export async function initializeCollaborationTeachingSurfaces(
+  roomId: string,
+  update: CollaborationTeachingInitializationInput,
+): Promise<void> {
+  await apiClient.post(
+    `/collaboration/rooms/${encodeURIComponent(roomId)}/teaching/initialize`,
+    update,
+  );
 }
 
 export async function listCollaborationRooms(): Promise<CollaborationRoomSession[]> {
@@ -147,7 +158,12 @@ export async function uploadCollaborationAsset(
     exactArrayBuffer(bytes),
     { headers: { "Content-Type": mimeType || "application/octet-stream" } },
   );
-  return collaborationAssetDescriptorSchema.parse(response.data);
+  const asset = collaborationAssetDescriptorSchema.parse(response.data);
+  const expectedMimeType = mimeType || "application/octet-stream";
+  if (asset.id !== id || asset.mimeType !== expectedMimeType || asset.size !== bytes.byteLength) {
+    throw new Error("The uploaded collaboration asset failed its integrity check.");
+  }
+  return asset;
 }
 
 export async function downloadCollaborationAsset(

@@ -16,6 +16,7 @@ import {
   COLLABORATION_PROTOCOL_VERSION,
   COLLABORATION_SQLITE_PERSISTENCE_VERSION,
   COLLABORATION_AWARENESS_TTL_MS,
+  MAX_YJS_SNAPSHOT_BYTES,
   MAX_YJS_UPDATE_BYTES,
   canPublishCollaborationUpdate,
   collaborationAwarenessClientStateSchema,
@@ -24,6 +25,7 @@ import {
   collaborationIdSchema,
   collaborationRoleSchema,
   collaborationRoomControlCommandSchema,
+  collaborationTeachingInitializationInputSchema,
   collaborationWebSocketServerMessageSchema,
   type CollaborationAwarenessEvent,
   type CollaborationAwarenessInput,
@@ -31,16 +33,28 @@ import {
   type CollaborationControlEvent,
   type CollaborationDocumentUpdateEvent,
   type CollaborationDocumentUpdateInput,
+  type CollaborationTeachingInitializationInput,
   type CollaborationRole,
   type CollaborationRoomControlCommand,
   type CollaborationWebSocketServerMessage,
 } from "../../../src/collaboration/protocol";
 import {
+  assertCollaborationTeachingTransition,
+  collaborationTransactionTouchesOnlyTeaching,
+  collaborationTransactionTouchesTeaching,
+  validateCollaborationTeachingDocument,
+  type CollaborationTeachingIntegrity,
+} from "../../../src/collaboration/teachingDocument";
+import { projectCollaborationDocument } from "../../../src/collaboration/projectDocument";
+import {
   applyEncodedYjsUpdate,
+  decodeYjsSnapshot,
   decodeYjsUpdate,
+  encodeYjsSnapshotUpdate,
   encodeYjsUpdate,
 } from "../../../src/collaboration/yjsUpdates";
 import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
+import { getCollaborationAsset } from "../../db/collaborationQueries";
 import {
   CollaborationRoomSqliteQuotaError,
   RoomSqliteDocumentStore,
@@ -127,6 +141,10 @@ function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
+}
+
 function sendBinary(socket: WebSocket, bytes: Uint8Array): void {
   if (!isOpen(socket)) return;
   socket.send(exactArrayBuffer(bytes));
@@ -197,6 +215,14 @@ const sqliteDocumentInitializationSchema = z
   .object({ roomId: collaborationIdSchema, snapshot: z.string().min(1) })
   .strict();
 
+const teachingDocumentInitializationSchema = z
+  .object({
+    roomId: collaborationIdSchema,
+    actorId: collaborationIdSchema,
+    update: collaborationTeachingInitializationInputSchema,
+  })
+  .strict();
+
 export async function initializeCollaborationRoomSqliteDocument(
   env: Env,
   roomId: string,
@@ -214,6 +240,28 @@ export async function initializeCollaborationRoomSqliteDocument(
   });
   if (!response.ok) throw new Error(`room SQLite initialization failed with ${response.status}`);
   return true;
+}
+
+export async function initializeCollaborationRoomTeachingDocument(
+  env: Env,
+  roomId: string,
+  actorId: string,
+  update: CollaborationTeachingInitializationInput,
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const stub = roomStub(env, roomId);
+  if (!stub) return { ok: false, status: 503, error: "collaboration transport unavailable" };
+  const response = await stub.fetch(`${ROOM_ORIGIN}/sqlite/teaching/initialize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(teachingDocumentInitializationSchema.parse({ roomId, actorId, update })),
+  });
+  if (response.ok) return { ok: true };
+  const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+  return {
+    ok: false,
+    status: response.status,
+    error: typeof body?.error === "string" ? body.error : "teaching initialization failed",
+  };
 }
 
 export async function exportCollaborationRoomSqliteDocument(
@@ -246,9 +294,13 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private sqliteCompactionScheduled = false;
   private readonly sqliteDocument: RoomSqliteDocumentStore;
   private binaryDocument: Y.Doc | null = null;
+  private binaryTeachingIntegrity: CollaborationTeachingIntegrity | null = null;
+  private readonly bindings: Env;
+  private teachingInitializationTail: Promise<void> = Promise.resolve();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.bindings = env;
     this.sqliteDocument = new RoomSqliteDocumentStore(ctx.storage as unknown as RoomSqliteStorage);
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
@@ -270,8 +322,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       }
       try {
         this.sqliteDocument.initialize(parsed.data.snapshot);
-        this.binaryDocument?.destroy();
-        this.binaryDocument = null;
+        this.resetBinaryDocument();
         return Response.json({ initialized: true });
       } catch (error) {
         if (error instanceof CollaborationRoomSqliteQuotaError) {
@@ -283,10 +334,18 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     if (request.method === "POST" && url.pathname === "/sqlite/export") {
       return Response.json(this.sqliteDocument.exportDocument());
     }
+    if (request.method === "POST" && url.pathname === "/sqlite/teaching/initialize") {
+      const parsed = teachingDocumentInitializationSchema.safeParse(
+        await request.json().catch(() => null),
+      );
+      if (!parsed.success || !this.isCurrentRoom(parsed.data.roomId)) {
+        return Response.json({ error: "invalid teaching initialization" }, { status: 400 });
+      }
+      return this.initializeTeachingDocument(parsed.data);
+    }
     if (request.method === "POST" && url.pathname === "/sqlite/purge") {
       for (const socket of this.ctx.getWebSockets()) socket.close(4001, "room purged");
-      this.binaryDocument?.destroy();
-      this.binaryDocument = null;
+      this.resetBinaryDocument();
       await this.ctx.storage.deleteAlarm();
       await this.ctx.storage.deleteAll();
       return Response.json({ purged: true });
@@ -428,15 +487,17 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
 
     for (const existing of this.ctx.getWebSockets()) {
       const attachment = attachmentFor(existing);
-      if (attachment?.userId === session.userId && attachment.sessionId === session.sessionId) {
-        this.broadcastLeave(existing);
-        existing.serializeAttachment({
-          ...attachment,
-          awareness: undefined,
-          awarenessState: undefined,
-        } satisfies SocketAttachment);
-        existing.close(4000, "replaced by reconnect");
+      if (attachment?.sessionId !== session.sessionId) continue;
+      if (attachment.userId !== session.userId) {
+        return new Response("collaboration session is already in use", { status: 409 });
       }
+      this.broadcastLeave(existing);
+      existing.serializeAttachment({
+        ...attachment,
+        awareness: undefined,
+        awarenessState: undefined,
+      } satisfies SocketAttachment);
+      existing.close(4000, "replaced by reconnect");
     }
 
     const pair = new WebSocketPair();
@@ -617,7 +678,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         {
           kind: "leave",
           sessionId: attachment.sessionId,
-          revision: attachment.awareness.revision + 1,
+          revision: Math.min(attachment.awareness.revision + 1, Number.MAX_SAFE_INTEGER),
         },
         entry,
       );
@@ -651,6 +712,34 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     if (count > MAX_AWARENESS_UPDATES_PER_SECOND) {
       this.rejectSocket(socket, "rate-limited", "Awareness rate limit exceeded", false);
       return;
+    }
+    const previous = attachment.awareness?.kind === "state" ? attachment.awareness : null;
+    if (previous) {
+      if (input.revision < previous.revision) {
+        socket.serializeAttachment({
+          ...attachment,
+          awarenessWindowSecond: second,
+          awarenessWindowCount: count,
+          awarenessClientId: binaryEntry.clientId,
+          awarenessClock: binaryEntry.clock,
+        } satisfies SocketAttachment);
+        return;
+      }
+      if (
+        input.kind === "state" &&
+        input.revision === previous.revision &&
+        (JSON.stringify(input.surface) !== JSON.stringify(previous.surface) ||
+          JSON.stringify(input.cursor) !== JSON.stringify(previous.cursor))
+      ) {
+        this.rejectSocket(
+          socket,
+          "invalid-message",
+          "Awareness revision cannot change an existing view state",
+          true,
+          1008,
+        );
+        return;
+      }
     }
     const now = Date.now();
     const event: CollaborationAwarenessEvent =
@@ -748,6 +837,48 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       updateWindowCount: userCount,
     } satisfies SocketAttachment);
 
+    const validationDocument = this.getBinaryDocument();
+    try {
+      const before =
+        this.binaryTeachingIntegrity ?? validateCollaborationTeachingDocument(validationDocument);
+      this.binaryTeachingIntegrity = before;
+      let teachingTouched = false;
+      const observeTransaction = (transaction: Y.Transaction) => {
+        if (collaborationTransactionTouchesTeaching(validationDocument, transaction)) {
+          teachingTouched = true;
+        }
+      };
+      validationDocument.on("afterTransaction", observeTransaction);
+      try {
+        Y.applyUpdate(
+          validationDocument,
+          decodeYjsUpdate(input.update),
+          "server-teaching-validation",
+        );
+      } finally {
+        validationDocument.off("afterTransaction", observeTransaction);
+      }
+      if (teachingTouched) {
+        const after = validateCollaborationTeachingDocument(validationDocument);
+        assertCollaborationTeachingTransition(before, after);
+        if (Y.encodeStateAsUpdate(validationDocument).byteLength > MAX_YJS_SNAPSHOT_BYTES) {
+          throw new Error("the room teaching state exceeds the snapshot limit");
+        }
+        this.binaryTeachingIntegrity = after;
+      }
+    } catch {
+      this.resetBinaryDocument();
+      this.rejectSocket(
+        socket,
+        "invalid-message",
+        "Invalid teaching-surface update",
+        true,
+        1008,
+        input.updateId,
+      );
+      return;
+    }
+
     const event: CollaborationDocumentUpdateEvent = {
       ...input,
       roomId: attachment.roomId,
@@ -772,7 +903,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       if (result.shouldCompact) this.scheduleSqliteCompaction();
       console.log("collaboration_websocket_update", {
         roomId: attachment.roomId,
-        actorId: attachment.userId,
         updateId: event.updateId,
         bytes: Math.floor((event.update.length * 3) / 4),
         duplicate: result.duplicate,
@@ -784,9 +914,9 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         totalMs: broadcastAt - handlerStartedAt,
       });
     } catch (error) {
+      this.resetBinaryDocument();
       console.error("collaboration_websocket_update_failed", {
         roomId: attachment.roomId,
-        actorId: attachment.userId,
         updateId: event.updateId,
         totalMs: performance.now() - handlerStartedAt,
         error: error instanceof Error ? error.message : String(error),
@@ -809,15 +939,209 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     event: CollaborationDocumentUpdateEvent,
   ): StoredAppendRoomSqliteUpdateResult {
     const result = this.sqliteDocument.append(event);
-    if (!result.duplicate && this.binaryDocument) {
+    if (result.duplicate) {
+      // Validation applies the submitted bytes optimistically. A retry with an
+      // already-used update ID may carry different bytes, so rematerialize the
+      // shadow document from the authoritative SQLite snapshot/tail.
+      this.resetBinaryDocument();
+    } else if (this.binaryDocument) {
+      // The validation pass already applied this update. Yjs application is
+      // idempotent, and this keeps the helper safe if validation is refactored.
       applyEncodedYjsUpdate(this.binaryDocument, event.update, "sqlite-live-update");
     }
     return result;
   }
 
+  private async initializeTeachingDocument(
+    input: z.infer<typeof teachingDocumentInitializationSchema>,
+  ): Promise<Response> {
+    const result = this.teachingInitializationTail.then(() =>
+      this.performTeachingInitialization(input),
+    );
+    this.teachingInitializationTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async performTeachingInitialization(
+    input: z.infer<typeof teachingDocumentInitializationSchema>,
+  ): Promise<Response> {
+    const current = this.getBinaryDocument();
+    const candidate = new Y.Doc();
+    try {
+      const beforeTeaching = validateCollaborationTeachingDocument(current);
+      const beforeProject = projectCollaborationDocument(current).project;
+      Y.applyUpdate(candidate, Y.encodeStateAsUpdate(current), "teaching-initialization-base");
+      const initializationUpdate = decodeYjsSnapshot(input.update.update);
+      let initializationTouchesTeaching = false;
+      let initializationTouchesOnlyTeaching = true;
+      const observeInitialization = (transaction: Y.Transaction) => {
+        if (transaction.changed.size === 0) return;
+        initializationTouchesTeaching ||= collaborationTransactionTouchesTeaching(
+          candidate,
+          transaction,
+        );
+        if (!collaborationTransactionTouchesOnlyTeaching(candidate, transaction)) {
+          initializationTouchesOnlyTeaching = false;
+        }
+      };
+      candidate.on("afterTransaction", observeInitialization);
+      try {
+        Y.applyUpdate(candidate, initializationUpdate, "teaching-initialization");
+      } finally {
+        candidate.off("afterTransaction", observeInitialization);
+      }
+      const afterProject = projectCollaborationDocument(candidate).project;
+      const afterTeaching = validateCollaborationTeachingDocument(candidate);
+      if (beforeTeaching.projection.initialized) {
+        const isExactRetry =
+          bytesEqual(Y.encodeStateVector(current), Y.encodeStateVector(candidate)) &&
+          JSON.stringify(beforeProject) === JSON.stringify(afterProject) &&
+          beforeTeaching.immutableFingerprint === afterTeaching.immutableFingerprint &&
+          beforeTeaching.mutableFingerprint === afterTeaching.mutableFingerprint;
+        return isExactRetry
+          ? Response.json({ initialized: true })
+          : Response.json(
+              { error: "room teaching surfaces are already initialized" },
+              { status: 409 },
+            );
+      }
+      if (!initializationTouchesTeaching || !initializationTouchesOnlyTeaching) {
+        return Response.json(
+          { error: "teaching initialization must contain only teaching-surface state" },
+          { status: 400 },
+        );
+      }
+      if (JSON.stringify(beforeProject) !== JSON.stringify(afterProject)) {
+        return Response.json(
+          { error: "teaching initialization cannot change the shared workspace" },
+          { status: 400 },
+        );
+      }
+      const teaching = afterTeaching.projection;
+      if (!teaching.initialized) {
+        return Response.json({ error: "teaching initialization is incomplete" }, { status: 400 });
+      }
+      try {
+        for (const manifest of teaching.slides.values()) {
+          const assetKey = `collaboration/rooms/${input.roomId}/assets/${manifest.asset.id}`;
+          const asset = await getCollaborationAsset(
+            this.bindings.DB,
+            input.roomId,
+            manifest.asset.id,
+          );
+          const object = await this.bindings.BUCKET.head(assetKey);
+          if (
+            !asset ||
+            asset.mime_type !== manifest.asset.mimeType ||
+            asset.size !== manifest.asset.size ||
+            !object ||
+            object.size !== manifest.asset.size ||
+            object.customMetadata?.roomId !== input.roomId ||
+            object.customMetadata?.sha256 !== manifest.asset.id ||
+            object.httpMetadata?.contentType !== manifest.asset.mimeType
+          ) {
+            return Response.json(
+              { error: "a teaching slide asset is unavailable" },
+              { status: 409 },
+            );
+          }
+        }
+      } catch {
+        return Response.json(
+          { error: "teaching slide asset verification is temporarily unavailable" },
+          { status: 503 },
+        );
+      }
+
+      // Asset checks await external services, so workspace updates may have
+      // landed since `candidate` was built. Rebase the teaching-only update on
+      // the latest durable shadow immediately before the synchronous snapshot
+      // replacement; this prevents the replacement cutoff from swallowing an
+      // interleaved workspace update that is absent from the snapshot.
+      const latest = this.getBinaryDocument();
+      const finalCandidate = new Y.Doc();
+      let snapshot: string | null = null;
+      try {
+        const latestProject = projectCollaborationDocument(latest).project;
+        Y.applyUpdate(
+          finalCandidate,
+          Y.encodeStateAsUpdate(latest),
+          "teaching-initialization-rebase",
+        );
+        Y.applyUpdate(finalCandidate, initializationUpdate, "teaching-initialization-final");
+        const finalProject = projectCollaborationDocument(finalCandidate).project;
+        const finalTeaching = validateCollaborationTeachingDocument(finalCandidate);
+        if (
+          JSON.stringify(latestProject) !== JSON.stringify(finalProject) ||
+          !finalTeaching.projection.initialized ||
+          finalTeaching.immutableFingerprint !== afterTeaching.immutableFingerprint ||
+          finalTeaching.mutableFingerprint !== afterTeaching.mutableFingerprint
+        ) {
+          return Response.json(
+            { error: "teaching initialization conflicted with the shared room" },
+            { status: 409 },
+          );
+        }
+        const snapshotUpdate = Y.encodeStateAsUpdate(finalCandidate);
+        if (snapshotUpdate.byteLength > MAX_YJS_SNAPSHOT_BYTES) {
+          return Response.json(
+            { error: "the room teaching state exceeds the snapshot limit" },
+            { status: 413 },
+          );
+        }
+        snapshot = encodeYjsSnapshotUpdate(snapshotUpdate);
+      } finally {
+        finalCandidate.destroy();
+      }
+      if (!snapshot) throw new Error("teaching initialization snapshot is unavailable");
+      try {
+        const result = this.sqliteDocument.replaceSnapshot(
+          snapshot,
+          initializationUpdate.byteLength,
+        );
+        this.resetBinaryDocument();
+        this.broadcastTeachingInitialization(
+          result.streamId,
+          input.update.updateId,
+          initializationUpdate,
+        );
+      } catch (error) {
+        return Response.json(
+          {
+            error:
+              error instanceof CollaborationRoomSqliteQuotaError
+                ? "the room teaching state exceeds the persistence quota"
+                : "teaching initialization persistence is temporarily unavailable",
+          },
+          { status: error instanceof CollaborationRoomSqliteQuotaError ? 413 : 503 },
+        );
+      }
+      return Response.json({ initialized: true });
+    } catch (error) {
+      return Response.json(
+        { error: error instanceof Error ? error.message : "invalid teaching initialization" },
+        { status: error instanceof CollaborationRoomSqliteQuotaError ? 413 : 400 },
+      );
+    } finally {
+      candidate.destroy();
+    }
+  }
+
   private getBinaryDocument(): Y.Doc {
-    if (!this.binaryDocument) this.binaryDocument = this.sqliteDocument.createDocument();
+    if (!this.binaryDocument) {
+      this.binaryDocument = this.sqliteDocument.createDocument();
+      this.binaryTeachingIntegrity = validateCollaborationTeachingDocument(this.binaryDocument);
+    }
     return this.binaryDocument;
+  }
+
+  private resetBinaryDocument(): void {
+    this.binaryDocument?.destroy();
+    this.binaryDocument = null;
+    this.binaryTeachingIntegrity = null;
   }
 
   private consumeConnectionQuota(userId: string): boolean {
@@ -898,6 +1222,24 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     }
   }
 
+  private broadcastTeachingInitialization(
+    streamId: string,
+    updateId: string,
+    update: Uint8Array,
+  ): void {
+    const binary = exactArrayBuffer(
+      encodeCollaborationServerUpdate({ streamId, updateId, update }),
+    );
+    for (const socket of this.ctx.getWebSockets()) {
+      if (!isOpen(socket)) continue;
+      try {
+        socket.send(binary);
+      } catch {
+        socket.close(1011, "teaching initialization broadcast failed");
+      }
+    }
+  }
+
   private broadcastAwareness(entry: CollaborationAwarenessProtocolEntry, except?: WebSocket): void {
     const binary = exactArrayBuffer(
       encodeCollaborationAwarenessUpdate(encodeCollaborationAwarenessProtocolUpdate([entry])),
@@ -932,7 +1274,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     this.broadcastAwareness(
       {
         clientId: attachment.awarenessClientId,
-        clock: attachment.awarenessClock + 1,
+        clock: Math.min(attachment.awarenessClock + 1, Number.MAX_SAFE_INTEGER),
         state: null,
       },
       socket,

@@ -13,6 +13,7 @@ import {
   encodeCollaborationSyncStep1,
   encodeCollaborationSyncStep2,
 } from "./binaryProtocol";
+import { collaborationAwarenessClientStateSchema } from "./protocol";
 
 const CLIENT_ID = "10000000-0000-4000-8000-000000000001";
 const UPDATE_ID = "20000000-0000-4000-8000-000000000002";
@@ -92,6 +93,41 @@ describe("collaboration binary protocol", () => {
     targetDoc.destroy();
   });
 
+  it("keeps the largest valid client view state below the 16 KiB awareness limit", () => {
+    const doc = new Y.Doc();
+    const awareness = new awarenessProtocol.Awareness(doc);
+    awareness.setLocalState(
+      collaborationAwarenessClientStateSchema.parse({
+        collaboration: {
+          kind: "state",
+          sessionId: CLIENT_ID,
+          revision: Number.MAX_SAFE_INTEGER,
+          surface: {
+            kind: "editor",
+            fileNodeId: UPDATE_ID,
+            viewport: {
+              topAnchor: "A".repeat(2_048),
+              topDeltaPx: 4_096,
+              scrollLeftPx: 1_000_000,
+            },
+          },
+          cursor: {
+            fileNodeId: UPDATE_ID,
+            anchor: "A".repeat(2_048),
+            head: "A".repeat(2_048),
+          },
+        },
+        selection: null,
+      }),
+    );
+    const update = awarenessProtocol.encodeAwarenessUpdate(awareness, [awareness.clientID]);
+    const frame = encodeCollaborationAwarenessUpdate(update);
+
+    expect(frame.byteLength).toBeLessThan(16 * 1024);
+    awareness.destroy();
+    doc.destroy();
+  });
+
   it("rejects unknown versions and trailing bytes", () => {
     expect(() => decodeCollaborationBinaryFrame(Uint8Array.of(2, 0))).toThrow(
       CollaborationBinaryProtocolError,
@@ -104,6 +140,11 @@ describe("collaboration binary protocol", () => {
     const trailing = new Uint8Array(valid.byteLength + 1);
     trailing.set(valid);
     expect(() => decodeCollaborationBinaryFrame(trailing)).toThrow(
+      CollaborationBinaryProtocolError,
+    );
+    // Frame type 4 is intentionally unassigned: live slide interactions have no
+    // binary transport in protocol v3.
+    expect(() => decodeCollaborationBinaryFrame(Uint8Array.of(3, 4))).toThrow(
       CollaborationBinaryProtocolError,
     );
   });

@@ -20,6 +20,12 @@ import {
   type CollaborationWebSocket,
 } from "./roomProvider";
 import { resetPerformanceMetricsForTests } from "../utils/performanceMetrics";
+import {
+  projectCollaborationTeachingDocument,
+  seedCollaborationTeachingDocument,
+  setCollaborationCurrentSlide,
+} from "./teachingDocument";
+import type { Slide } from "../types/slides";
 
 const ROOM_ID = "10000000-0000-4000-8000-000000000001";
 const CLIENT_ID = "20000000-0000-4000-8000-000000000001";
@@ -102,7 +108,7 @@ describe("CollaborationRoomProvider", () => {
   beforeEach(() => resetPerformanceMetricsForTests());
   afterEach(() => resetPerformanceMetricsForTests());
 
-  it("always synchronizes, publishes awareness, and exchanges updates over binary v2", async () => {
+  it("always synchronizes, publishes awareness, and exchanges updates over binary v3", async () => {
     const server = new Y.Doc();
     server.getText("source").insert(0, "start");
     const socket = new FakeWebSocket();
@@ -138,9 +144,8 @@ describe("CollaborationRoomProvider", () => {
       kind: "state",
       sessionId: provider.awarenessSessionId,
       revision: 1,
-      activeFileNodeId: null,
+      surface: { kind: "editor", fileNodeId: null, viewport: null },
       cursor: null,
-      followingHost: false,
     });
     const awarenessFrame = socket.binarySent
       .map((raw) => decodeCollaborationBinaryFrame(raw))
@@ -149,6 +154,115 @@ describe("CollaborationRoomProvider", () => {
       throw new Error("binary awareness update was not sent");
     }
     expect(decodeCollaborationAwarenessProtocolUpdate(awarenessFrame.update)).toHaveLength(1);
+
+    const standardPosition = { type: null, tname: "source", item: null, assoc: 0 };
+    provider.setAwarenessPublicationSuppressed(true);
+    const beforeSuppressedSelection = socket.binarySent.length;
+    provider.awareness.setLocalStateField("selection", {
+      anchor: standardPosition,
+      head: standardPosition,
+    });
+    expect(socket.binarySent).toHaveLength(beforeSuppressedSelection);
+    await provider.publishAwareness({
+      kind: "state",
+      sessionId: provider.awarenessSessionId,
+      revision: 2,
+      surface: { kind: "editor", fileNodeId: null, viewport: null },
+      cursor: null,
+    });
+    const suppressedHeartbeat = decodeCollaborationBinaryFrame(socket.binarySent.at(-1)!);
+    if (suppressedHeartbeat.kind !== "awareness") {
+      throw new Error("suppressed awareness heartbeat was not sent");
+    }
+    expect(
+      decodeCollaborationAwarenessProtocolUpdate(suppressedHeartbeat.update)[0]?.state,
+    ).toEqual(expect.objectContaining({ selection: null }));
+    provider.setAwarenessPublicationSuppressed(false);
+    provider.awareness.setLocalStateField("selection", {
+      anchor: { ...standardPosition, assoc: 1 },
+      head: { ...standardPosition, assoc: 1 },
+    });
+    expect(socket.binarySent.length).toBeGreaterThan(beforeSuppressedSelection + 1);
+
+    await provider.publishAwareness({
+      kind: "state",
+      sessionId: provider.awarenessSessionId,
+      revision: 3,
+      surface: { kind: "slides", isMaximized: false },
+      cursor: null,
+    });
+    const slideAwarenessFrame = decodeCollaborationBinaryFrame(socket.binarySent.at(-1)!);
+    if (slideAwarenessFrame.kind !== "awareness") {
+      throw new Error("slide awareness update was not sent");
+    }
+    expect(
+      decodeCollaborationAwarenessProtocolUpdate(slideAwarenessFrame.update)[0]?.state,
+    ).toEqual(
+      expect.objectContaining({
+        collaboration: expect.objectContaining({
+          surface: { kind: "slides", isMaximized: false },
+        }),
+        selection: null,
+      }),
+    );
+
+    await provider.publishAwareness({
+      kind: "state",
+      sessionId: provider.awarenessSessionId,
+      revision: 4,
+      surface: {
+        kind: "whiteboard",
+        isMaximized: true,
+        viewport: { scrollX: 20, scrollY: -10, zoom: 2 },
+      },
+      cursor: null,
+    });
+    const whiteboardAwarenessFrame = decodeCollaborationBinaryFrame(socket.binarySent.at(-1)!);
+    if (whiteboardAwarenessFrame.kind !== "awareness") {
+      throw new Error("whiteboard awareness update was not sent");
+    }
+    expect(
+      decodeCollaborationAwarenessProtocolUpdate(whiteboardAwarenessFrame.update)[0]?.state,
+    ).toEqual(
+      expect.objectContaining({
+        collaboration: expect.objectContaining({
+          surface: {
+            kind: "whiteboard",
+            isMaximized: true,
+            viewport: { scrollX: 20, scrollY: -10, zoom: 2 },
+          },
+        }),
+        selection: null,
+      }),
+    );
+
+    const beforeEditorReturn = socket.binarySent.length;
+    provider.awareness.setLocalStateField("selection", {
+      anchor: standardPosition,
+      head: { ...standardPosition, assoc: 1 },
+    });
+    expect(socket.binarySent).toHaveLength(beforeEditorReturn);
+    await provider.publishAwareness({
+      kind: "state",
+      sessionId: provider.awarenessSessionId,
+      revision: 5,
+      surface: { kind: "editor", fileNodeId: null, viewport: null },
+      cursor: null,
+    });
+    const returnedEditorFrame = decodeCollaborationBinaryFrame(socket.binarySent.at(-1)!);
+    if (returnedEditorFrame.kind !== "awareness") {
+      throw new Error("returned editor awareness update was not sent");
+    }
+    expect(
+      decodeCollaborationAwarenessProtocolUpdate(returnedEditorFrame.update)[0]?.state,
+    ).toEqual(
+      expect.objectContaining({
+        collaboration: expect.objectContaining({
+          surface: { kind: "editor", fileNodeId: null, viewport: null },
+        }),
+        selection: { anchor: standardPosition, head: { ...standardPosition, assoc: 1 } },
+      }),
+    );
 
     const remoteAwarenessClientId = 42;
     const remoteAwarenessEvent = {
@@ -162,9 +276,8 @@ describe("CollaborationRoomProvider", () => {
       name: null,
       avatarUrl: null,
       isHost: true,
-      activeFileNodeId: null,
+      surface: { kind: "editor", fileNodeId: null, viewport: null },
       cursor: null,
-      followingHost: false,
       occurredAt: Date.now(),
       expiresAt: Date.now() + 45_000,
     };
@@ -223,5 +336,69 @@ describe("CollaborationRoomProvider", () => {
     await waitUntil(() => provider.doc.getText("source").toString().endsWith("-remote"));
     expect(socket.sent.every((message) => message === "ping")).toBe(true);
     provider.stop();
+  });
+
+  it("lets a viewer receive shared slide state without publishing local document changes", async () => {
+    const server = new Y.Doc();
+    const slides: Slide[] = [
+      { id: "one", order: 0, content: "one", contentType: "html" },
+      { id: "two", order: 1, content: "two", contentType: "html" },
+    ];
+    seedCollaborationTeachingDocument(server, {
+      slides: slides.map((slide, index) => ({
+        slide,
+        asset: {
+          id: (index === 0 ? "a" : "b").repeat(64),
+          mimeType: "application/vnd.next-editor.slide+json",
+          size: 32,
+        },
+      })),
+      whiteboardElements: [],
+    });
+    const socket = new FakeWebSocket();
+    const api = new FakeApi();
+    api.session = roomSession("viewer");
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      clientId: CLIENT_ID,
+      batchWindowMs: 60_000,
+      webSocketFactory: () => socket,
+    });
+
+    await provider.start();
+    socket.open();
+    await waitUntil(() => socket.binarySent.length === 1);
+    const syncRequest = decodeCollaborationBinaryFrame(socket.binarySent[0]);
+    if (syncRequest.kind !== "sync") throw new Error("state-vector sync was not requested");
+    socket.message(exactArrayBuffer(encodeCollaborationSyncStep2(server, syncRequest.payload)));
+    await waitUntil(() => provider.connectionState === "live");
+
+    provider.doc.getText("viewer-local").insert(0, "must stay local");
+    await provider.flushNow();
+    expect(
+      socket.binarySent
+        .map((raw) => decodeCollaborationBinaryFrame(raw))
+        .filter((frame) => frame.kind === "client-update"),
+    ).toHaveLength(0);
+
+    const stateVector = Y.encodeStateVector(server);
+    setCollaborationCurrentSlide(server, "two");
+    socket.message(
+      exactArrayBuffer(
+        encodeCollaborationServerUpdate({
+          streamId: "2-0",
+          updateId: REMOTE_UPDATE_ID,
+          update: Y.encodeStateAsUpdate(server, stateVector),
+        }),
+      ),
+    );
+    await waitUntil(
+      () => projectCollaborationTeachingDocument(provider.doc).currentSlideId === "two",
+    );
+    expect(projectCollaborationTeachingDocument(provider.doc).currentSlideId).toBe("two");
+
+    provider.stop();
+    server.destroy();
   });
 });

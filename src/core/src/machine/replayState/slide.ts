@@ -19,11 +19,7 @@ export interface SlideReplayResult {
   nextIndex: number;
 }
 
-const SLIDE_NAVIGATION_EVENT_TYPES = new Set<SlideEvent["type"]>([
-  "slide_open",
-  "slide_change",
-  "slide_close",
-]);
+const SLIDE_VISIBILITY_EVENT_TYPES = new Set<SlideEvent["type"]>(["slide_open", "slide_close"]);
 
 const SLIDE_STRUCTURAL_EVENT_TYPES = new Set<SlideEvent["type"]>([
   "slide_maximize",
@@ -32,38 +28,37 @@ const SLIDE_STRUCTURAL_EVENT_TYPES = new Set<SlideEvent["type"]>([
 
 function buildSlideStateAtEvent(slideEvents: SlideEvent[], eventIndex: number): SlidePreviewState {
   const slideEvent = slideEvents[eventIndex];
-
-  if (slideEvent.type === "slide_close") {
-    return {
-      isOpen: false,
-      currentSlideId: null,
-      indexv: 0,
-      currentInteraction: undefined,
-    };
-  }
-
   const relevantEvents = slideEvents.slice(0, eventIndex + 1).reverse();
-  const lastNavigationEvent = relevantEvents.find((event) =>
-    SLIDE_NAVIGATION_EVENT_TYPES.has(event.type),
+  const lastVisibilityEvent = relevantEvents.find((event) =>
+    SLIDE_VISIBILITY_EVENT_TYPES.has(event.type),
   );
-  const lastStructuralEvent = relevantEvents.find((event) =>
-    SLIDE_STRUCTURAL_EVENT_TYPES.has(event.type),
+  const lastPositionEvent = relevantEvents.find((event) => Boolean(event.slideId));
+  const lastViewEvent = relevantEvents.find(
+    (event) =>
+      SLIDE_VISIBILITY_EVENT_TYPES.has(event.type) || SLIDE_STRUCTURAL_EVENT_TYPES.has(event.type),
   );
-  const targetSlideId = slideEvent.slideId || lastNavigationEvent?.slideId;
+  const targetSlideId = slideEvent.slideId || lastPositionEvent?.slideId;
   const lastIndexEvent = relevantEvents.find(
     (event) =>
       (targetSlideId ? event.slideId === targetSlideId : true) &&
       event.indexv !== undefined &&
       event.indexv !== null,
   );
+  const isOpen = lastVisibilityEvent?.type === "slide_open";
+  const isMaximized =
+    isOpen && lastViewEvent
+      ? lastViewEvent.type === "slide_maximize"
+        ? true
+        : lastViewEvent.type === "slide_open"
+          ? (lastViewEvent.isMaximized ?? false)
+          : false
+      : false;
 
   return {
-    isOpen: (lastNavigationEvent?.type || slideEvent.type) !== "slide_close",
-    isMaximized: lastStructuralEvent
-      ? lastStructuralEvent.type === "slide_maximize"
-      : (slideEvent.isMaximized ?? lastNavigationEvent?.isMaximized ?? false),
-    currentSlideId: slideEvent.slideId || lastNavigationEvent?.slideId || null,
-    indexv: slideEvent.indexv ?? lastIndexEvent?.indexv ?? lastNavigationEvent?.indexv,
+    isOpen,
+    isMaximized,
+    currentSlideId: targetSlideId || null,
+    indexv: slideEvent.type === "slide_close" ? 0 : (slideEvent.indexv ?? lastIndexEvent?.indexv),
     currentInteraction: slideEvent.interaction,
   };
 }
@@ -74,7 +69,11 @@ function createSlideReplayApplication(
   eventIndex: number,
 ): SlideReplayApplication | null {
   const slideEvent = slideEvents[eventIndex];
-  const slideIndex = slides?.findIndex((slide) => slide.id === slideEvent.slideId) ?? -1;
+  const slideState = buildSlideStateAtEvent(slideEvents, eventIndex);
+  const slideIndex =
+    slideEvent.type === "slide_close"
+      ? -1
+      : (slides?.findIndex((slide) => slide.id === slideState.currentSlideId) ?? -1);
 
   if (slideIndex === -1 && slideEvent.type !== "slide_close") {
     return null;
@@ -82,7 +81,7 @@ function createSlideReplayApplication(
 
   return {
     slideIndex,
-    slideState: buildSlideStateAtEvent(slideEvents, eventIndex),
+    slideState,
   };
 }
 

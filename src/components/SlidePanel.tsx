@@ -7,7 +7,6 @@ export default function SlidePanel() {
     slides,
     previewState,
     currentSlideIndex,
-    goToSlide,
     closePresentation,
     handleSlideEvent: onSlideEvent,
   } = useSlidesContext();
@@ -21,12 +20,10 @@ export default function SlidePanel() {
       <SlidePreview
         slides={slides}
         currentSlideIndex={currentSlideIndex}
-        onSlideChange={goToSlide}
         onSlideEvent={onSlideEvent}
         onStopPlayback={pause}
         onClose={closePresentation}
         isOpen={isPresentationVisible}
-        isMaximized={previewState.isMaximized}
         verticalIndex={previewState.indexv}
         positioning="fixed"
       />

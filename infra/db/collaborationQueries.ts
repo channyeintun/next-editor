@@ -43,6 +43,13 @@ export class CollaborationAssetQuotaError extends Error {
   }
 }
 
+export class CollaborationAssetMetadataError extends Error {
+  constructor() {
+    super("collaboration asset metadata does not match its digest");
+    this.name = "CollaborationAssetMetadataError";
+  }
+}
+
 export interface CollaborationAssetRow {
   room_id: string;
   asset_id: string;
@@ -211,8 +218,8 @@ export async function registerCollaborationAsset(
 ): Promise<{ row: CollaborationAssetRow; created: boolean }> {
   const existing = await getCollaborationAsset(db, input.roomId, input.asset.id);
   if (existing) {
-    if (existing.size !== input.asset.size) {
-      throw new Error("collaboration asset metadata does not match its digest");
+    if (existing.size !== input.asset.size || existing.mime_type !== input.asset.mimeType) {
+      throw new CollaborationAssetMetadataError();
     }
     return { row: existing, created: false };
   }
@@ -247,9 +254,10 @@ export async function registerCollaborationAsset(
   if (row) return { row, created: true };
 
   const raced = await getCollaborationAsset(db, input.roomId, input.asset.id);
-  if (raced && raced.size === input.asset.size) {
+  if (raced && raced.size === input.asset.size && raced.mime_type === input.asset.mimeType) {
     return { row: raced, created: false };
   }
+  if (raced) throw new CollaborationAssetMetadataError();
   throw new CollaborationAssetQuotaError();
 }
 

@@ -27,10 +27,14 @@ export const COLLABORATION_RECOVERY_FOLDER_NAME = "Recovered items";
 
 export const COLLABORATION_ORIGIN = {
   seed: "collaboration-seed",
+  teachingSeed: "collaboration-teaching-seed",
   localEditor: "local-editor",
   localTreeCommand: "local-tree-command",
+  localPresentation: "local-presentation",
+  localWhiteboard: "local-whiteboard",
   remoteProvider: "remote-provider",
   workspaceProjection: "workspace-projection",
+  teachingProjection: "teaching-projection",
   playback: "playback",
 } as const;
 

@@ -15,10 +15,12 @@ export const MAX_ENCODED_YJS_SNAPSHOT_LENGTH = 4 * Math.ceil(MAX_YJS_SNAPSHOT_BY
 export const MAX_COLLABORATION_ASSET_BYTES = 5 * 1024 * 1024;
 export const MAX_COLLABORATION_ROOM_ASSET_BYTES = 25 * 1024 * 1024;
 export const MAX_COLLABORATION_ROOM_ASSETS = 100;
+export const MAX_COLLABORATION_SLIDE_ID_LENGTH = 256;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const SLIDE_ID_PATTERN = /^[A-Za-z0-9._:@/-]+$/;
 
 export const collaborationIdSchema = z.string().regex(UUID_PATTERN, "expected a UUID");
 export const collaborationRoleSchema = z.enum(["owner", "editor", "viewer"]);
@@ -41,6 +43,20 @@ export const collaborationAssetDescriptorSchema = z
   .strict();
 
 export type CollaborationAssetDescriptor = z.infer<typeof collaborationAssetDescriptorSchema>;
+
+export const collaborationSlideIdSchema = z
+  .string()
+  .min(1)
+  .max(MAX_COLLABORATION_SLIDE_ID_LENGTH)
+  .regex(SLIDE_ID_PATTERN, "invalid slide ID");
+
+export const collaborationCurrentSlideCommandSchema = z
+  .object({ slideId: collaborationSlideIdSchema })
+  .strict();
+
+export type CollaborationCurrentSlideCommand = z.infer<
+  typeof collaborationCurrentSlideCommandSchema
+>;
 
 export interface CollaborationRoomDescriptor {
   id: string;
@@ -157,6 +173,20 @@ export const collaborationCreateRoomInputSchema = z
 
 export type CollaborationCreateRoomInput = z.infer<typeof collaborationCreateRoomInputSchema>;
 
+export const collaborationTeachingInitializationInputSchema = z
+  .object({
+    protocolVersion: z.literal(COLLABORATION_PROTOCOL_VERSION),
+    documentSchemaVersion: z.literal(COLLABORATION_DOCUMENT_SCHEMA_VERSION),
+    clientId: collaborationIdSchema,
+    updateId: collaborationIdSchema,
+    update: encodedYjsSnapshotSchema,
+  })
+  .strict();
+
+export type CollaborationTeachingInitializationInput = z.infer<
+  typeof collaborationTeachingInitializationInputSchema
+>;
+
 export const collaborationDocumentUpdateEventSchema = collaborationDocumentUpdateInputSchema
   .extend({
     roomId: collaborationIdSchema,
@@ -172,7 +202,7 @@ export type CollaborationDocumentUpdateEvent = z.infer<
   typeof collaborationDocumentUpdateEventSchema
 >;
 
-const encodedRelativePositionSchema = z
+export const encodedRelativePositionSchema = z
   .string()
   .min(4)
   .max(2048)
@@ -211,31 +241,125 @@ const collaborationAwarenessSelectionSchema = z
   })
   .strict();
 
+export const MAX_COLLABORATION_EDITOR_TOP_DELTA_PX = 4_096;
+export const MAX_COLLABORATION_EDITOR_SCROLL_LEFT_PX = 1_000_000;
+export const MAX_COLLABORATION_WHITEBOARD_COORDINATE = 10_000_000;
+export const MIN_COLLABORATION_WHITEBOARD_ZOOM = 0.01;
+export const MAX_COLLABORATION_WHITEBOARD_ZOOM = 100;
+
+export const collaborationEditorViewportSchema = z
+  .object({
+    topAnchor: encodedRelativePositionSchema,
+    topDeltaPx: z.number().finite().min(0).max(MAX_COLLABORATION_EDITOR_TOP_DELTA_PX),
+    scrollLeftPx: z.number().finite().min(0).max(MAX_COLLABORATION_EDITOR_SCROLL_LEFT_PX),
+  })
+  .strict();
+
+export const collaborationSurfaceSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("editor"),
+      fileNodeId: collaborationIdSchema.nullable(),
+      viewport: collaborationEditorViewportSchema.nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("slides"),
+      isMaximized: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("whiteboard"),
+      isMaximized: z.boolean(),
+      viewport: z
+        .object({
+          scrollX: z
+            .number()
+            .finite()
+            .min(-MAX_COLLABORATION_WHITEBOARD_COORDINATE)
+            .max(MAX_COLLABORATION_WHITEBOARD_COORDINATE),
+          scrollY: z
+            .number()
+            .finite()
+            .min(-MAX_COLLABORATION_WHITEBOARD_COORDINATE)
+            .max(MAX_COLLABORATION_WHITEBOARD_COORDINATE),
+          zoom: z
+            .number()
+            .finite()
+            .min(MIN_COLLABORATION_WHITEBOARD_ZOOM)
+            .max(MAX_COLLABORATION_WHITEBOARD_ZOOM),
+        })
+        .strict(),
+    })
+    .strict(),
+]);
+
+export type CollaborationEditorViewport = z.infer<typeof collaborationEditorViewportSchema>;
+export type CollaborationSurface = z.infer<typeof collaborationSurfaceSchema>;
+export type LocalCollaborationSurface = CollaborationSurface;
+
 const collaborationAwarenessStateFields = {
   sessionId: collaborationIdSchema,
-  revision: z.number().int().nonnegative(),
-  activeFileNodeId: collaborationIdSchema.nullable(),
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  surface: collaborationSurfaceSchema,
   cursor: collaborationCursorSchema.nullable(),
-  followingHost: z.boolean(),
 } as const;
 
-export const collaborationAwarenessInputSchema = z.discriminatedUnion("kind", [
+function validateAwarenessSurfaceCursor(
+  value: { surface: CollaborationSurface; cursor: CollaborationCursor | null },
+  context: z.RefinementCtx,
+): void {
+  if (value.surface.kind !== "editor" && value.cursor !== null) {
+    context.addIssue({
+      code: "custom",
+      path: ["cursor"],
+      message: "modal teaching surfaces cannot carry an editor cursor",
+    });
+  }
+  if (
+    value.surface.kind === "editor" &&
+    value.cursor !== null &&
+    value.cursor.fileNodeId !== value.surface.fileNodeId
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["cursor", "fileNodeId"],
+      message: "cursor must belong to the active editor file",
+    });
+  }
+  if (
+    value.surface.kind === "editor" &&
+    value.surface.viewport !== null &&
+    value.surface.fileNodeId === null
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["surface", "viewport"],
+      message: "an editor viewport requires a file",
+    });
+  }
+}
+
+export const collaborationAwarenessInputSchema = z.union([
   z
     .object({
       kind: z.literal("state"),
       ...collaborationAwarenessStateFields,
     })
-    .strict(),
+    .strict()
+    .superRefine(validateAwarenessSurfaceCursor),
   z
     .object({
       kind: z.literal("leave"),
       sessionId: collaborationIdSchema,
-      revision: z.number().int().nonnegative(),
+      revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     })
     .strict(),
 ]);
 
-export const collaborationAwarenessEventSchema = z.discriminatedUnion("kind", [
+export const collaborationAwarenessEventSchema = z.union([
   z
     .object({
       kind: z.literal("state"),
@@ -250,12 +374,13 @@ export const collaborationAwarenessEventSchema = z.discriminatedUnion("kind", [
       occurredAt: z.number().int().nonnegative(),
       expiresAt: z.number().int().nonnegative(),
     })
-    .strict(),
+    .strict()
+    .superRefine(validateAwarenessSurfaceCursor),
   z
     .object({
       kind: z.literal("leave"),
       sessionId: collaborationIdSchema,
-      revision: z.number().int().nonnegative(),
+      revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
       roomId: collaborationIdSchema,
       actorId: collaborationIdSchema,
       occurredAt: z.number().int().nonnegative(),
@@ -266,19 +391,41 @@ export const collaborationAwarenessEventSchema = z.discriminatedUnion("kind", [
 export type CollaborationAwarenessInput = z.infer<typeof collaborationAwarenessInputSchema>;
 export type CollaborationAwarenessEvent = z.infer<typeof collaborationAwarenessEventSchema>;
 
+function validateAwarenessSelectionSurface(
+  value: {
+    collaboration: CollaborationAwarenessInput | CollaborationAwarenessEvent;
+    selection?: z.infer<typeof collaborationAwarenessSelectionSchema> | null;
+  },
+  context: z.RefinementCtx,
+): void {
+  if (
+    value.collaboration.kind === "state" &&
+    value.collaboration.surface.kind !== "editor" &&
+    value.selection != null
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["selection"],
+      message: "modal teaching surfaces cannot carry an editor selection",
+    });
+  }
+}
+
 export const collaborationAwarenessClientStateSchema = z
   .object({
     collaboration: collaborationAwarenessInputSchema,
     selection: collaborationAwarenessSelectionSchema.nullable().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(validateAwarenessSelectionSurface);
 
 export const collaborationAwarenessServerStateSchema = z
   .object({
     collaboration: collaborationAwarenessEventSchema,
     selection: collaborationAwarenessSelectionSchema.nullable().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(validateAwarenessSelectionSurface);
 
 export const collaborationControlEventSchema = z
   .object({

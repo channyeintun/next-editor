@@ -55,8 +55,9 @@ export const EMPTY_WHITEBOARD_SCENE: WhiteboardSceneState = {
 
 /**
  * Diffs the previous captured elements array against the current one and returns
- * only what changed: `upserts` for new/changed elements (matched by `id` +
- * `version`) and `removedIds` for ids that vanished from the array entirely.
+ * only what changed: `upserts` for new/changed elements (matched by `id`,
+ * `version`, `versionNonce`, and serialized JSON) and `removedIds` for ids that
+ * vanished from the array entirely.
  * Pure and O(elements) — the caller keeps `previousElements` itself (see the
  * whiteboard store's capture path) and passes the latest array on every change.
  */
@@ -64,9 +65,9 @@ export function deriveWhiteboardDelta(
   previousElements: readonly WhiteboardElementJSON[],
   elements: readonly WhiteboardElementJSON[],
 ): { upserts: WhiteboardElementJSON[]; removedIds: string[] } {
-  const previousVersions = new Map<string, number>();
+  const previousById = new Map<string, WhiteboardElementJSON>();
   for (const element of previousElements) {
-    previousVersions.set(element.id, element.version);
+    previousById.set(element.id, element);
   }
 
   const upserts: WhiteboardElementJSON[] = [];
@@ -74,19 +75,53 @@ export function deriveWhiteboardDelta(
 
   for (const element of elements) {
     seenIds.add(element.id);
-    if (previousVersions.get(element.id) !== element.version) {
+    const previous = previousById.get(element.id);
+    if (
+      !previous ||
+      previous.version !== element.version ||
+      previous.versionNonce !== element.versionNonce ||
+      JSON.stringify(previous) !== JSON.stringify(element)
+    ) {
       upserts.push(element);
     }
   }
 
   const removedIds: string[] = [];
-  for (const id of previousVersions.keys()) {
+  for (const id of previousById.keys()) {
     if (!seenIds.has(id)) {
       removedIds.push(id);
     }
   }
 
   return { upserts, removedIds };
+}
+
+/** Applies a locally derived delta to a newer scene without removing elements
+ * that arrived after the local capture window began. */
+export function rebaseWhiteboardDelta(
+  currentElements: readonly WhiteboardElementJSON[],
+  delta: Pick<WhiteboardEvent, "upserts" | "removedIds">,
+): WhiteboardElementJSON[] {
+  const removed = new Set(delta.removedIds ?? []);
+  const byId = new Map(
+    currentElements
+      .filter((element) => !removed.has(element.id))
+      .map((element) => [element.id, element] as const),
+  );
+  for (const element of delta.upserts ?? []) byId.set(element.id, element);
+  return Array.from(byId.values()).sort((left, right) => {
+    const leftIndex = typeof left.index === "string" ? left.index : "";
+    const rightIndex = typeof right.index === "string" ? right.index : "";
+    return leftIndex < rightIndex
+      ? -1
+      : leftIndex > rightIndex
+        ? 1
+        : left.id < right.id
+          ? -1
+          : left.id > right.id
+            ? 1
+            : 0;
+  });
 }
 
 /**

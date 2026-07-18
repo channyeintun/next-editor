@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useSelector } from "@xstate/store-react";
 import {
   areWhiteboardViewsEqual,
+  rebaseWhiteboardDelta,
   snapshotWhiteboardDelta,
   type WhiteboardElementJSON,
   type WhiteboardEvent,
@@ -11,7 +12,26 @@ import { selectScene, type WhiteboardStoreInstance } from "../stores/whiteboardS
 
 interface UseWhiteboardControllerConfig {
   store: WhiteboardStoreInstance;
-  onWhiteboardEvent?: (event: WhiteboardEvent) => void;
+  onWhiteboardEvent?: (event: WhiteboardEvent) => boolean | void;
+  scopeKey?: unknown;
+}
+
+interface PendingWhiteboardController {
+  flush: () => void;
+  discard: () => void;
+}
+
+const pendingWhiteboardControllers = new WeakMap<
+  WhiteboardStoreInstance,
+  PendingWhiteboardController
+>();
+
+export function flushPendingWhiteboardChange(store: WhiteboardStoreInstance): void {
+  pendingWhiteboardControllers.get(store)?.flush();
+}
+
+export function discardPendingWhiteboardChange(store: WhiteboardStoreInstance): void {
+  pendingWhiteboardControllers.get(store)?.discard();
 }
 
 // Coalesces rapid onChange fires while a stroke is being drawn into one recorded
@@ -26,7 +46,7 @@ const CHANGE_THROTTLE_MS = 100;
  * diff/throttle state below stays singleton, matching useSlidesController.
  *
  * Read-only/replay gating is NOT tracked here: the caller (WhiteboardPanel) passes
- * `isReadOnly` fresh on every call, driven by the editor machine's own
+ * `isContentReadOnly` fresh on every call, driven by playback or room role
  * `usesPlaybackModel` state. That state already flips back to `false` the instant
  * playback stops, recording starts, or the recording unloads — mirroring it in a
  * separate store field would need the same resets duplicated and re-verified here.
@@ -34,6 +54,7 @@ const CHANGE_THROTTLE_MS = 100;
 export const useWhiteboardController = ({
   store,
   onWhiteboardEvent,
+  scopeKey,
 }: UseWhiteboardControllerConfig) => {
   const scene = useSelector(store, (snapshot) => selectScene(snapshot.context));
 
@@ -44,20 +65,30 @@ export const useWhiteboardController = ({
 
   const throttleTimeoutRef = useRef<number | null>(null);
   const pendingElementsRef = useRef<readonly WhiteboardElementJSON[] | null>(null);
+  const pendingBaseElementsRef = useRef<readonly WhiteboardElementJSON[] | null>(null);
   const pendingViewRef = useRef<WhiteboardView | undefined>(undefined);
 
-  useEffect(() => {
-    return () => {
-      if (throttleTimeoutRef.current !== null) {
-        window.clearTimeout(throttleTimeoutRef.current);
-      }
-    };
+  const discardPendingChange = useCallback(() => {
+    if (throttleTimeoutRef.current !== null) {
+      window.clearTimeout(throttleTimeoutRef.current);
+    }
+    throttleTimeoutRef.current = null;
+    pendingElementsRef.current = null;
+    pendingBaseElementsRef.current = null;
+    pendingViewRef.current = undefined;
   }, []);
 
-  const flushPendingChange = () => {
+  const flushPendingChange = useCallback(() => {
+    if (throttleTimeoutRef.current !== null) {
+      window.clearTimeout(throttleTimeoutRef.current);
+    }
     throttleTimeoutRef.current = null;
     const elements = pendingElementsRef.current;
     pendingElementsRef.current = null;
+    const baseElements = pendingBaseElementsRef.current;
+    pendingBaseElementsRef.current = null;
+    const view = pendingViewRef.current;
+    pendingViewRef.current = undefined;
     if (!elements) return;
 
     const current = store.getSnapshot().context.scene;
@@ -65,44 +96,68 @@ export const useWhiteboardController = ({
     // drawing, so the store must hold clones for the diff (and the recorded
     // upserts) to see each flush's intermediate state — that per-flush growth of
     // a stroke's points is what makes it animate on replay.
-    const snapshot = snapshotWhiteboardDelta(current.elements, elements);
-    const view = pendingViewRef.current;
+    const snapshot = snapshotWhiteboardDelta(baseElements ?? current.elements, elements);
     const viewChanged = Boolean(view) && !areWhiteboardViewsEqual(view, current.view);
 
     if (!snapshot && !viewChanged) {
       return;
     }
 
+    const event: WhiteboardEvent = {
+      timestamp: performance.now(),
+      ...(snapshot?.upserts.length ? { upserts: snapshot.upserts } : {}),
+      ...(snapshot?.removedIds.length ? { removedIds: snapshot.removedIds } : {}),
+      ...(viewChanged ? { view } : {}),
+    };
+    const accepted = onWhiteboardEventRef.current?.(event) !== false;
     store.trigger.setScene({
       scene: {
-        elements: snapshot ? snapshot.nextElements : current.elements,
+        elements: accepted
+          ? snapshot
+            ? baseElements === current.elements
+              ? snapshot.nextElements
+              : rebaseWhiteboardDelta(current.elements, snapshot)
+            : current.elements
+          : structuredClone(current.elements),
         view: viewChanged && view ? view : current.view,
         isOpen: current.isOpen,
         isMaximized: current.isMaximized,
       },
     });
+  }, [store]);
 
-    onWhiteboardEventRef.current?.({
-      timestamp: performance.now(),
-      ...(snapshot?.upserts.length ? { upserts: snapshot.upserts } : {}),
-      ...(snapshot?.removedIds.length ? { removedIds: snapshot.removedIds } : {}),
-      ...(viewChanged ? { view } : {}),
-    });
-  };
+  useLayoutEffect(() => {
+    const controller = { flush: flushPendingChange, discard: discardPendingChange };
+    pendingWhiteboardControllers.set(store, controller);
+    return () => {
+      if (pendingWhiteboardControllers.get(store) === controller) {
+        pendingWhiteboardControllers.delete(store);
+      }
+    };
+  }, [discardPendingChange, flushPendingChange, store]);
 
-  // Called from Excalidraw's onChange. `isReadOnly` must be the same value passed
-  // to Excalidraw's `viewModeEnabled` this render — while true, Excalidraw itself
-  // blocks user edits, so the only onChange fires are our own replay-driven
-  // `updateScene` calls round-tripping back; drop them here instead of re-recording
-  // the replayed state as if the presenter had drawn it live.
+  useLayoutEffect(
+    () => () => {
+      discardPendingChange();
+    },
+    [discardPendingChange, scopeKey],
+  );
+
+  // Called from Excalidraw's onChange. `isContentReadOnly` must match the value passed
+  // to Excalidraw's `viewModeEnabled` this render. Read-only mode still permits
+  // pan/zoom, so retain the fresh view while replacing its element argument with
+  // the authoritative store scene.
   const handleExcalidrawChange = (
     elements: readonly WhiteboardElementJSON[],
     view: WhiteboardView,
-    isReadOnly: boolean,
+    isContentReadOnly: boolean,
   ) => {
-    if (isReadOnly) return;
-
-    pendingElementsRef.current = elements;
+    if (pendingElementsRef.current === null) {
+      pendingBaseElementsRef.current = store.getSnapshot().context.scene.elements;
+    }
+    pendingElementsRef.current = isContentReadOnly
+      ? store.getSnapshot().context.scene.elements
+      : elements;
     pendingViewRef.current = view;
 
     if (throttleTimeoutRef.current === null) {
@@ -118,10 +173,38 @@ export const useWhiteboardController = ({
     onWhiteboardEventRef.current?.({ timestamp: performance.now(), isOpen });
   };
 
+  const setMaximized = (isMaximized: boolean) => {
+    const current = store.getSnapshot().context.scene;
+    if (current.isMaximized === isMaximized) return;
+    store.trigger.setScene({ scene: { ...current, isMaximized } });
+    onWhiteboardEventRef.current?.({ timestamp: performance.now(), isMaximized });
+  };
+
+  const applyView = (view: WhiteboardView, isMaximized: boolean) => {
+    const current = store.getSnapshot().context.scene;
+    const viewChanged = !areWhiteboardViewsEqual(current.view, view);
+    const maximizedChanged = current.isMaximized !== isMaximized;
+    if (!viewChanged && !maximizedChanged) return;
+    store.trigger.setScene({
+      scene: {
+        ...current,
+        view: viewChanged ? structuredClone(view) : current.view,
+        isMaximized,
+      },
+    });
+    onWhiteboardEventRef.current?.({
+      timestamp: performance.now(),
+      ...(viewChanged ? { view: structuredClone(view) } : {}),
+      ...(maximizedChanged ? { isMaximized } : {}),
+    });
+  };
+
   return {
     scene,
     isOpen: scene.isOpen,
     setOpen,
+    setMaximized,
+    applyView,
     handleExcalidrawChange,
   };
 };

@@ -6,7 +6,7 @@ import { collaborationIdSchema } from "./protocol";
 
 // The only supported room wire version carries document sync/update and
 // authenticated standard-awareness frames in one binary envelope.
-export const COLLABORATION_BINARY_PROTOCOL_VERSION = 2 as const;
+export const COLLABORATION_BINARY_PROTOCOL_VERSION = 3 as const;
 
 const BINARY_FRAME_SYNC = 0;
 const BINARY_FRAME_CLIENT_UPDATE = 1;

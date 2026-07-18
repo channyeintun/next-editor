@@ -10,6 +10,7 @@ import {
   claimCollaborationInvitationInputSchema,
   collaborationAssetIdSchema,
   collaborationCreateRoomInputSchema,
+  collaborationTeachingInitializationInputSchema,
   collaborationIdSchema,
   createCollaborationInvitationInputSchema,
   updateCollaborationMemberInputSchema,
@@ -40,6 +41,7 @@ import {
   type CollaborationRoomAccess,
   type CollaborationRoomRow,
   CollaborationRoomQuotaError,
+  CollaborationAssetMetadataError,
   CollaborationAssetQuotaError,
 } from "../../db/collaborationQueries";
 import { getCurrentUser } from "../auth/session";
@@ -63,11 +65,13 @@ import {
   forwardCollaborationWebSocket,
   hasCollaborationRoomBinding,
   initializeCollaborationRoomSqliteDocument,
+  initializeCollaborationRoomTeachingDocument,
   notifyCollaborationRoomControl,
 } from "../collaboration/roomDurableObject";
 import { collaborationRoomLocationHint } from "../collaboration/roomLocation";
 
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
+const MAX_TEACHING_INITIALIZATION_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
 const MAX_MAINTENANCE_REQUEST_BYTES = 2 * 1024;
 const CLOSED_ROOM_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -464,6 +468,32 @@ collaborationRoute.get("/rooms/:roomId", async (c) => {
   });
 });
 
+collaborationRoute.post("/rooms/:roomId/teaching/initialize", async (c) => {
+  const user = await getCurrentUser(c);
+  if (!user) return c.json({ error: "not signed in" }, 401);
+  const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
+  if (!roomId.success) return c.json({ error: "invalid room id" }, 400);
+  const raw = await readBoundedJson(c, MAX_TEACHING_INITIALIZATION_REQUEST_BYTES);
+  if (!raw.ok) return c.json({ error: "invalid teaching initialization" }, raw.status);
+  const update = collaborationTeachingInitializationInputSchema.safeParse(raw.body);
+  if (!update.success) return c.json({ error: "invalid teaching initialization" }, 400);
+  const access = await getCollaborationRoomAccess(c.env.DB, roomId.data, user.id);
+  if (!access || access.member_role !== "owner") return c.json({ error: "not found" }, 404);
+  if (access.status !== "active") return c.json({ error: "room is not active" }, 409);
+  const result = await initializeCollaborationRoomTeachingDocument(
+    c.env,
+    access.id,
+    user.id,
+    update.data,
+  );
+  if (!result.ok) {
+    const status =
+      result.status === 409 || result.status === 413 || result.status === 503 ? result.status : 400;
+    return c.json({ error: result.error }, status);
+  }
+  return c.json({ initialized: true }, 201);
+});
+
 collaborationRoute.put("/rooms/:roomId/assets/:assetId", async (c) => {
   const user = await getCurrentUser(c);
   if (!user) return c.json({ error: "not signed in" }, 401);
@@ -495,6 +525,9 @@ collaborationRoute.put("/rooms/:roomId/assets/:assetId", async (c) => {
     if (error instanceof CollaborationAssetQuotaError) {
       return c.json({ error: "collaboration room asset quota exceeded" }, 413);
     }
+    if (error instanceof CollaborationAssetMetadataError) {
+      return c.json({ error: "asset metadata conflicts with its content digest" }, 409);
+    }
     throw error;
   }
 
@@ -513,7 +546,6 @@ collaborationRoute.put("/rooms/:roomId/assets/:assetId", async (c) => {
     }
     console.error("Failed to store collaboration asset", {
       roomId: access.id,
-      assetId: assetId.data,
       error: error instanceof Error ? error.message : String(error),
     });
     return c.json({ error: "failed to store collaboration asset" }, 503);
@@ -834,7 +866,12 @@ collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
   }
   const requestedBinaryProtocol = c.req.query("binaryProtocolVersion");
   if (requestedBinaryProtocol !== String(COLLABORATION_BINARY_PROTOCOL_VERSION)) {
-    return c.json({ error: "binary collaboration protocol v2 is required" }, 409);
+    return c.json(
+      {
+        error: `binary collaboration protocol v${COLLABORATION_BINARY_PROTOCOL_VERSION} is required`,
+      },
+      409,
+    );
   }
   return forwardCollaborationWebSocket(c.env, c.req.raw, {
     roomId: access.id,

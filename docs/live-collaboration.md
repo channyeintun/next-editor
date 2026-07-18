@@ -1,17 +1,18 @@
 # Live Collaboration Feature Plan
 
-Status: Cloudflare-native MVP implementation complete; deployment and multi-browser load validation pending
+Status: Cloudflare-native collaboration and cross-surface following implemented; deployment and
+three-profile validation pending
 
 Deployment evaluations:
 
 - [Cloudflare-native Deployment](./live-collaboration-cloudflare.md)
 
-Improvement plans:
+Implemented extension design:
 
 - [P0 Collaborator Following](./collaborator-following-plan.md)
 
 Deployment status: every room uses a hibernating Cloudflare Durable Object WebSocket coordinator
-with a room-local SQLite update log and alarm compaction. Binary collaboration protocol v2 is
+with a room-local SQLite update log and alarm compaction. Binary collaboration protocol v3 is
 mandatory; there is no SSE, HTTP update, JSON awareness, or Redis downgrade path.
 
 ## Implemented MVP
@@ -22,8 +23,13 @@ The repository now contains the complete provider, control-plane, and editor int
 - Authenticated binary WebSocket rooms with room-local Durable Object SQLite persistence.
 - D1 rooms, invitations, owner/editor/viewer ACLs, role revocation, audit events, and room quotas.
 - Durable Object WebSocket hibernation, immediate connected-role enforcement, ephemeral awareness
-  fan-out, participants, named relative remote cursors/selections, active-file state, and
-  follow-host UI.
+  fan-out, participants, named relative remote cursors/selections, bounded active-surface state,
+  and person-centered following across the editor, slides, and whiteboard.
+- An optional schema-1 `project.teaching` subtree containing an immutable room-start deck
+  manifest, shared current slide ID, and convergent whiteboard element records/tombstones. Slide
+  payloads remain private content-addressed R2 assets rather than Yjs content.
+- Room-scoped slide/whiteboard projection with exact standalone-store restoration and
+  presentation-only slide controls for the lifetime of a room.
 - Offline update retention, state-vector reconnect sync, SQLite alarm
   compaction, seven-day closed-room retention, QStash-signed cleanup, and owner recovery export.
 - Content-addressed binary project assets in private R2. Yjs stores only digest/MIME/size
@@ -44,8 +50,8 @@ recording model, but the collaboration protocol must be a separate data plane.
 
 - Use a CRDT document as the source of truth for a connected room. Yjs is the recommended
   initial implementation.
-- Use an ephemeral awareness channel for participants, cursors, selections, and follow-host
-  state.
+- Use an ephemeral awareness channel for participants, cursors, selections, and each session's
+  bounded editor/slides/whiteboard view. The locally selected follow target is never published.
 - Keep `workspaceStore` as the local UI projection of the shared document while connected.
 - Keep `editorMachine` responsible for browser-local recording and playback orchestration.
 - Keep SCR3 as a single-writer recording and replay format. Only the room host may record. For the
@@ -64,8 +70,10 @@ resolving concurrent edits.
 - Converge text and file-tree changes after concurrent edits, disconnects, and reconnects.
 - Show participant identity, connection status, active file, cursor, and selection in real time.
 - Support owner, editor, and viewer permissions.
-- Allow participants to follow the designated host's active file. Preview/runtime process state
-  remains local in the MVP.
+- Allow participants to follow any exact online session across editor file/viewport, slide
+  visibility, and whiteboard visibility/viewport. Preview/runtime process state remains local.
+- Distribute the creator's immutable room deck, shared whole-slide position, and whiteboard
+  element changes to every participant independently of following.
 - Preserve the existing standalone editor when no collaboration room is configured.
 - Record the resulting collaborative session in the room host's browser through the existing
   recording pipeline.
@@ -114,10 +122,10 @@ flowchart LR
     DO -->|transaction before acknowledgement| SQL[(Room-local SQLite log and snapshot)]
     Worker[Hono collaboration routes] -->|upgrade, export, and control| DO
     Worker <--> D1[(D1 rooms and membership)]
-    Alarm[Durable Object alarm] -->|compact v2 tail| DO
+    Alarm[Durable Object alarm] -->|compact update tail| DO
     QStash[QStash] -->|delayed closed-room cleanup| Worker
 
-    Awareness[Presence and awareness] <-->|ephemeral messages| Provider
+    Awareness[Presence and surface awareness] <-->|ephemeral binary v3 messages| Provider
     UI <--> Awareness
 
     Doc --> Adapter[Workspace projection adapter]
@@ -131,23 +139,27 @@ flowchart LR
 
 Each client owns a CRDT document and receives the same durable room updates. The room service
 persists updates and enforces access. Awareness messages use the same connection but are not
-stored as project history. Every client keeps its own UI and WebContainer; only project data and
-explicit host-follow signals are shared.
+stored as project history. Every client keeps its own UI and WebContainer. Durable project and
+teaching content is room-wide; follow selection remains tab-local and filters only ephemeral view
+application.
 
 ## State ownership
 
-| Data                                             | Source of truth while connected                     | Persistence              |
-| ------------------------------------------------ | --------------------------------------------------- | ------------------------ |
-| File text                                        | CRDT text value keyed by stable file ID             | Room document            |
-| File/folder names, parents, and order            | CRDT project tree                                   | Room document            |
-| Project-level collaborative settings             | CRDT project metadata                               | Room document            |
-| Active file, panels, collapsed folders           | Local client                                        | Existing local state     |
-| Participant name, cursor, selection, active file | Awareness state                                     | Ephemeral with a TTL     |
-| Room membership and role                         | Collaboration service                               | Server ACL/session       |
-| Binary project asset bytes                       | Private R2 object keyed by room and SHA-256         | Seven-day room retention |
-| Preview/runtime output                           | Each client; host is authoritative for follow mode  | Not durable by default   |
-| Recording timeline and capture state             | Room host's `editorMachine`                         | Browser-local SCR3       |
-| Playback workspace                               | `editorMachine` projection while playback is active | Loaded SCR3              |
+| Data                                         | Source of truth while connected                          | Persistence              |
+| -------------------------------------------- | -------------------------------------------------------- | ------------------------ |
+| File text                                    | CRDT text value keyed by stable file ID                  | Room document            |
+| File/folder names, parents, and order        | CRDT project tree                                        | Room document            |
+| Project-level collaborative settings         | CRDT project metadata                                    | Room document            |
+| Immutable deck manifest and current slide ID | Optional CRDT teaching subtree + private R2 payloads     | Room document/assets     |
+| Whiteboard element snapshots and tombstones  | Optional CRDT teaching subtree                           | Room document            |
+| Local surface visibility and viewport        | Per-session awareness                                    | Ephemeral with a TTL     |
+| Selected participant to follow               | Current browser tab                                      | Never persisted/shared   |
+| Standalone deck and whiteboard               | Browser-local stores, suspended and restored during room | Existing local state     |
+| Room membership and role                     | Collaboration service                                    | Server ACL/session       |
+| Binary project and slide asset bytes         | Private R2 object keyed by room and SHA-256              | Seven-day room retention |
+| Preview/runtime output                       | Each client                                              | Not durable by default   |
+| Recording timeline and capture state         | Room host's `editorMachine`                              | Browser-local SCR3       |
+| Playback workspace                           | `editorMachine` projection while playback is active      | Loaded SCR3              |
 
 Outside a room, the current ownership rules remain unchanged. Inside a room, the CRDT document
 becomes authoritative for collaborative project fields and `workspaceStore` becomes their local
@@ -168,7 +180,19 @@ project
   metadata
   nodes: nodeId -> { kind, name, parentId, orderKey, deleted, encoding, asset descriptor? }
   texts: fileNodeId -> collaborative text
+  teaching (optional)
+    initialized
+    slideOrder
+    slides: slideId -> immutable manifest + private asset descriptor
+    presentation: currentSlideId + revision
+    whiteboardElements: elementId -> version candidates/tombstone
 ```
+
+The optional teaching subtree does not change document schema version 1. Old rooms remain readable
+and show an owner-only explicit initialization action; a joining client never seeds its local deck
+implicitly. Once initialized, the manifest and order cannot change. Owner/editor transactions may
+change only the current slide ID and bounded whiteboard records. Slide open state, build steps,
+iframe interaction, whiteboard viewport, and the follow target never enter durable state.
 
 The adapter derives the path-based `Project` shape expected by the current store. Tree operations
 must be transactions over stable node IDs. Concurrent sibling-name collisions need one
@@ -195,8 +219,9 @@ create duplicate stable IDs.
 The provider-neutral protocol has three logical message classes:
 
 1. **Document:** binary CRDT sync and update messages. These are durable and replayable.
-2. **Awareness:** participant, cursor, selection, active-file, and follow-host messages. These are
-   ephemeral, replaceable, rate-limited, and expire after disconnect.
+2. **Awareness:** participant identity plus one strict editor/slides/whiteboard surface, relative
+   editor cursor/selection, and bounded viewport. These are ephemeral, replaceable, rate-limited,
+   and expire after disconnect. Binary v3 rejects v2 clients rather than reinterpreting them.
 3. **Control:** protocol/schema versions, effective role, host assignment, room closure, and
    recoverable errors.
 
@@ -282,20 +307,30 @@ Projection should be incremental and batched per CRDT transaction. Rebuilding th
 path-based project on every inserted character would create unnecessary store notifications,
 WebContainer writes, and recording events.
 
+Teaching-only transactions bypass workspace projection. The Durable Object likewise caches the
+validated teaching fingerprint across workspace-only updates and revalidates the bounded teaching
+tree only when that subtree changes.
+
 Remote changes to inactive files must update the store and WebContainer mirror. They must also be
 visible to the room host's recorder; relying only on Monaco's active model would omit those edits
 from the recording.
 
-### Runtime and follow-host behavior
+### Runtime and participant-following behavior
 
 Every participant runs the project in a separate local WebContainer. For the first release:
 
-- The host's active file, preview route, and run/restart intent may be published as awareness or
-  control state.
-- A participant opts into follow mode; follow signals never overwrite that participant's local
-  project data.
+- Any owner, editor, or viewer may follow one exact remote `sessionId`; following grants no write
+  permission and is not persisted or sent to the room.
+- Editor awareness carries the active file plus a CRDT-relative vertical anchor and bounded
+  horizontal scroll. Slide awareness carries only visibility/maximize state. Whiteboard awareness
+  carries only visibility/maximize state and pan/zoom.
+- Room-wide slide position and whiteboard elements apply to everyone without a follow target.
+- Intentional local editor, file, slide, whiteboard, or surface input stops following before the
+  action. The first `Escape` is consumed by follow mode and leaves the current surface open.
+- Reconnect suspends view application while retaining the exact target session. Target leave/TTL,
+  room replacement, terminal connection failure, and playback stop following.
 - Runtime logs, terminal input, and process state are not merged.
-- The designated host is authoritative for runtime events captured into the recording.
+- Runtime and preview events are not part of cross-surface following.
 - Only the effective host sees enabled recording controls. For a recorded MVP session, the owner
   remains host until recording has stopped and the local SCR3 has been finalized.
 
@@ -350,6 +385,11 @@ For the first release:
 - Do not stream SCR3 through the collaboration provider or upload it before the live session ends.
 - Do not hand recording between clients. If the host disconnects, local recovery or finalization
   remains that host browser's responsibility.
+- Feed shared whole-slide changes and whiteboard element deltas to the host recorder once from the
+  canonical room projection. If the host follows someone, record the host-visible slide/whiteboard
+  open/close and whiteboard view changes once as local view events.
+- A shared `slide_change` updates retained replay position but never synthesizes `slide_open`;
+  build-step indices and iframe interactions remain local/recording-only.
 
 A future optional collaboration track could store participant attribution or normalized CRDT
 transactions. It must be backward-compatible and is not required for shared editing.
@@ -363,7 +403,10 @@ The collaboration UI should provide:
 - Connection states for connecting, syncing, reconnecting, offline changes, and failure.
 - Participant list with stable colors and host/role indicators.
 - Remote cursor and selection decorations only for the file currently visible locally.
-- Active-file indicators and an explicit follow-host toggle.
+- A keyboard-accessible `Follow` action for each remote session, surface-aware labels, and a global
+  `Following … · Esc to stop` indicator above editor and modal surfaces.
+- Presentation-toggle-only room controls. Deck add/edit/delete/reorder/import UI is unavailable
+  until the participant leaves the room.
 - Conflict and missing-asset indicators that do not block unrelated editing.
 - A clear read-only state that disables commands rather than allowing edits that will be rejected.
 
@@ -402,7 +445,7 @@ Status: implemented with private R2 assets and recoverable client hydration.
 
 Status: implemented. Recording remains host-only and browser-local.
 
-- Add host assignment and follow-host behavior.
+- Add host assignment and host-only recording behavior.
 - Capture remote and inactive-file changes through the room host's recorder.
 - Guard recording controls by effective host and prohibit host transfer while recording is active.
 - Keep SCR3 browser-local and present the existing post-recording upload modal after live ends.
@@ -415,6 +458,17 @@ Status: implementation complete; deployed load/latency validation remains a rele
 - Add rate limits, quotas, audit events, operational dashboards, and load tests.
 - Test long-lived rooms, large projects, reconnect storms, role changes, and recorder loss.
 - Decide whether author-attributed replay or a collaboration-specific SCR3 track is valuable.
+
+### Phase 6: teaching surfaces and person-centered following
+
+Status: implemented; targeted tests pass, while the three-profile deployed smoke test remains a
+release gate.
+
+- Capture one immutable room deck through private content-addressed slide assets.
+- Converge whole-slide position and bounded whiteboard element/tombstone transactions for every
+  participant while preserving standalone browser stores.
+- Use exact-session participant following across editor, slides, and whiteboard.
+- Use binary awareness v3 and deploy Worker/browser revisions together.
 
 ## MVP acceptance criteria
 
@@ -432,6 +486,11 @@ Status: implementation complete; deployed load/latency validation remains a rele
   live session ends through an explicit action in the post-recording modal.
 - Playback-origin workspace writes are never transmitted into the live room.
 - Leaving or switching rooms releases the provider, observers, timers, and awareness state.
+- Prepared room slides and whiteboard content converge without following; viewers receive but
+  cannot publish current-slide or whiteboard changes.
+- Following any exact remote session mirrors only its editor/slides/whiteboard view. Local input,
+  target loss, room change, and playback stop following without changing permissions.
+- Leaving a room restores the exact standalone slide deck and whiteboard scene.
 - Standalone editing, recording, saved-file playback, and one-producer live streaming continue to
   work when collaboration is not configured.
 
@@ -443,8 +502,9 @@ Status: implementation complete; deployed load/latency validation remains a rele
   events.
 - Run deterministic multi-document tests with concurrent, duplicated, reordered, and delayed
   updates.
-- Run focused two-browser tests for text, tree operations, awareness, offline recovery, host
-  following, playback isolation, and teardown.
+- Run focused three-profile tests for text/tree operations, immutable deck hydration, shared slide
+  position, whiteboard convergence, all three follow surfaces, viewer rejection, reconnect,
+  playback isolation, recording, and teardown.
 - Add recorder integration tests proving remote inactive-file changes become workspace events and
   that the existing streaming decoder accepts the result.
 - Verify collaboration transports receive no SCR3 payload and the post-session recording can be
@@ -461,6 +521,8 @@ Status: implementation complete; deployed load/latency validation remains a rele
 - Apply room size, update size, awareness frequency, document size, and asset quotas.
 - Validate protocol/schema versions and reject unsupported clients before accepting updates.
 - Treat awareness fields as untrusted input, cap their size, and render names as plain text.
+- Accept only bounded renderable whiteboard drawing/frame element shapes; reject image, iframe,
+  embeddable, magic-frame, malformed, and non-finite records before they reach Excalidraw.
 - Encrypt transport, define document and asset retention, and avoid logging source content or
   cursor payloads.
 - Record operational metadata for sync latency, update bytes, reconnect count, compaction time,
@@ -476,8 +538,8 @@ Status: implementation complete; deployed load/latency validation remains a rele
 | Permissions        | Owner/editor/viewer, enforced by server                  | Granular file-level permissions, if ever needed   |
 | Tree conflicts     | Stable node IDs with deterministic display-name suffixes | Exact suffix UX and tombstone retention           |
 | Undo               | Per-user, origin-scoped text undo                        | Whether tree undo is included in MVP              |
-| Assets             | Content-addressed external blobs                         | Storage provider, quotas, and offline behavior    |
-| Runtime            | Local per client; explicit host for follow mode          | Host selection outside recorded sessions          |
+| Assets             | Private content-addressed R2 blobs with bounded quotas   | Offline hydration and long-term export policy     |
+| Runtime            | Local per client; excluded from participant following    | Shared-runtime product requirements, if ever      |
 | Recording          | Host browser; owner remains host while recording         | Local crash and recovery UX                       |
 | Playback           | Mutually exclusive with live projection                  | Whether to add a second workspace instance        |
 | Replay attribution | Not included in initial SCR3 output                      | Optional collaboration track and privacy controls |

@@ -1,6 +1,6 @@
 # Collaboration Deployment and Operations
 
-Status: implementation complete; deployed multi-browser and load validation pending
+Status: implementation complete; deployed three-profile and load validation pending
 
 Live collaboration has one production topology:
 
@@ -8,11 +8,11 @@ Live collaboration has one production topology:
 - D1 stores rooms, memberships, invitations, roles, audit events, and asset metadata;
 - one hibernating Durable Object per room owns the binary WebSocket session and SQLite Yjs log;
 - Durable Object Alarms compact each room's update tail;
-- R2 stores private content-addressed workspace assets;
+- R2 stores private content-addressed workspace assets and immutable normalized slide payloads;
 - QStash schedules the seven-day purge of closed room data and assets.
 
 There is no Redis, Realtime SSE, HTTP document-update, JSON awareness, or binary-protocol downgrade
-path. Collaboration protocol version 2 and binary envelope version 2 are mandatory.
+path. Collaboration protocol version 2 and binary envelope version 3 are mandatory.
 
 ## Required Cloudflare resources
 
@@ -56,9 +56,13 @@ The direct Monaco/Yjs binding can be disabled for diagnosis with
 2. Deploy the Durable Object class migration and binding.
 3. Deploy the Worker routes and static client from the same revision.
 4. Confirm the room creation request initializes its named Durable Object from the creator's edge.
-5. Confirm the WebSocket upgrade includes `binaryProtocolVersion=2`; missing or mismatched values
+5. Confirm the WebSocket upgrade includes `binaryProtocolVersion=3`; missing or mismatched values
    must return `409`.
-6. Create, use, close, export, and purge a disposable room before opening collaboration broadly.
+6. Confirm the owner-only teaching initialization route verifies registered slide assets and
+   atomically installs the optional schema-1 teaching subtree. Repeat the exact request and confirm
+   the idempotent retry succeeds without replacing the deck or losing an interleaved workspace
+   update.
+7. Create, use, close, export, and purge a disposable room before opening collaboration broadly.
 
 The creator's request supplies a bounded location hint derived from Cloudflare continent and
 coordinate metadata. Durable Object placement is fixed after first access, so do not prewarm new
@@ -66,21 +70,33 @@ room IDs from a centralized cron or operator location.
 
 ## Functional smoke test
 
-Use two signed-in browser profiles and a separate viewer invitation:
+Use three signed-in browser profiles: owner, editor, and viewer. This validation is still pending
+for the current implementation and must be completed before broad rollout:
 
-1. The owner creates a room containing text files and at least one binary asset.
-2. Confirm the initial Yjs snapshot already contains the asset descriptor and the R2 bytes upload
-   completes before the room URL is exposed.
+1. The owner creates a room containing text files, at least one binary workspace asset, a deck,
+   and a whiteboard scene. Confirm the slide manager closes and presentation-only mode begins as
+   soon as room creation starts, before asset uploads finish.
+2. Confirm workspace and normalized slide assets upload before the room URL is exposed, teaching
+   initialization succeeds only after their R2 registrations exist, and slide payload bytes are
+   absent from the Yjs snapshot. Confirm clients reject same-length payload corruption by digest
+   and reuse one verified download for manifests that share the same payload hash.
 3. Join as an editor and viewer. Confirm all three synchronize through binary state-vector frames.
 4. Type normally, paste 64 KiB, use multi-cursor and IME input, format the document, rename a file,
    add/delete files, and edit different files concurrently.
 5. Confirm the viewer is read-only and a role downgrade takes effect on the existing socket.
 6. Disconnect an editor for one minute, edit offline, reconnect, and verify convergence without a
    full HTTP bootstrap.
-7. Confirm remote selections, participant labels, active-file presence, and follow-host state.
-8. Start recording as host; verify collaboration continues while SCR3 bytes remain browser-local.
-9. Export the room as owner, close it, and confirm connected clients receive the close control.
-10. Verify the signed QStash cleanup job is scheduled for seven days later.
+7. Switch the shared slide and concurrently upsert/delete whiteboard elements. Confirm all three
+   converge, the room deck stays presentation-only, and the viewer can pan/zoom but cannot edit.
+8. From both non-owner profiles, follow exact owner/editor sessions through editor, slides, and
+   whiteboard. Confirm viewports apply, whiteboard wins if both modal surfaces are open, first
+   intentional local input stops following, target leave/TTL stops it, and reconnect suspends then
+   resumes only the same session within the grace window.
+9. Start recording as host. Confirm room-wide slide/whiteboard content changes are recorded once,
+   follower-applied views remain local view events, and SCR3 bytes remain browser-local.
+10. Export the room as owner, close it, and confirm connected clients receive the close control.
+11. Verify the signed QStash cleanup job is scheduled for seven days later and removes both
+    workspace and slide assets after retention expires.
 
 ## Performance and release gate
 
@@ -112,6 +128,8 @@ Retain structured logs for:
 - state-vector synchronization failures;
 - alarm compaction duration and retained tail size;
 - asset upload/download integrity failures;
+- aggregate teaching initialization and follow start/stop/surface-kind outcomes, without participant
+  or session identifiers;
 - QStash publish, signature, retry, and purge outcomes.
 
 Never log Yjs payloads, workspace content, invitation tokens, session cookies, asset bytes, or SCR3
@@ -125,8 +143,8 @@ recordings.
   for bounded reconnect retries.
 - Protocol mismatch: reject the WebSocket upgrade or frame; do not reinterpret it as JSON.
 - D1 unavailable: reject membership-sensitive operations and new upgrades.
-- R2 unavailable: preserve the descriptor, surface a retryable asset error, and never substitute
-  base64 content into Yjs.
+- R2 unavailable: preserve existing descriptors, reject or retry teaching initialization, surface
+  a retryable asset error, and never substitute slide or workspace bytes into Yjs.
 - QStash unavailable: closing the room still succeeds, but alert that delayed cleanup was not
   scheduled.
 
@@ -136,6 +154,9 @@ Rollback means deploying the previous application revision while preserving the 
 binding, SQLite data, D1 metadata, and R2 assets. It does not mean switching a room to another
 transport or persistence layer.
 
-Because there is no compatibility protocol, deploy the Worker and browser client together. If a
-bad release must be withdrawn, close affected rooms or require clients to reload onto the matching
-revision rather than accepting mixed protocol behavior.
+Because there is no binary-envelope compatibility protocol, deploy the Worker and browser client
+together. Never roll back only one side from v3 to v2. If a bad release must be withdrawn, close
+affected rooms or require clients to reload onto the matching revision rather than accepting mixed
+protocol behavior. A previous schema-1 client may ignore the optional `project.teaching` subtree,
+but it must preserve that subtree byte-for-byte; rollback is unsafe if the target revision rebuilds
+or drops unknown project fields.

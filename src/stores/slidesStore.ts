@@ -95,6 +95,13 @@ const DEFAULT_PREVIEW_STATE: SlidePreviewState = {
   indexv: 0,
 };
 
+const roomScopedStores = new WeakSet<object>();
+
+export interface SlidesStoreSnapshot {
+  slides: Slide[];
+  previewState: SlidePreviewState;
+}
+
 export function createSlidesStore() {
   return createStore({
     context: {
@@ -114,12 +121,34 @@ export function createSlidesStore() {
 
 export type SlidesStoreInstance = ReturnType<typeof createSlidesStore>;
 
+export function snapshotSlidesStore(store: SlidesStoreInstance): SlidesStoreSnapshot {
+  return structuredClone(store.getSnapshot().context);
+}
+
+export function restoreSlidesStore(
+  store: SlidesStoreInstance,
+  snapshot: SlidesStoreSnapshot,
+): void {
+  store.trigger.setSlides({ slides: structuredClone(snapshot.slides) });
+  store.trigger.setPreviewState({ previewState: structuredClone(snapshot.previewState) });
+}
+
+export function setSlidesStoreRoomScoped(store: SlidesStoreInstance, scoped: boolean): void {
+  if (scoped) roomScopedStores.add(store);
+  else roomScopedStores.delete(store);
+}
+
+export function isSlidesStoreRoomScoped(store: SlidesStoreInstance): boolean {
+  return roomScopedStores.has(store);
+}
+
 /** Persist only when the slides array identity changes; preview state stays ephemeral. */
 export function subscribeSlidesPersistence(store: SlidesStoreInstance): () => void {
   let previousSlides = store.getSnapshot().context.slides;
   const subscription = store.subscribe((snapshot) => {
     if (snapshot.context.slides === previousSlides) return;
     previousSlides = snapshot.context.slides;
+    if (isSlidesStoreRoomScoped(store)) return;
     saveSlidesToStorage(previousSlides);
   });
   return () => subscription.unsubscribe();

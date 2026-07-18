@@ -5,10 +5,17 @@ import { selectPreviewState, selectSlides, type SlidesStoreInstance } from "../s
 
 interface UseSlidesControllerConfig {
   store: SlidesStoreInstance;
-  onSlideEvent?: (event: SlideEvent) => void;
+  onSlideEvent?: (event: SlideEvent) => boolean | void;
+  retainSlideOnClose?: boolean;
+  resetBuildStepOnOpen?: boolean;
 }
 
-export const useSlidesController = ({ store, onSlideEvent }: UseSlidesControllerConfig) => {
+export const useSlidesController = ({
+  store,
+  onSlideEvent,
+  retainSlideOnClose = false,
+  resetBuildStepOnOpen = false,
+}: UseSlidesControllerConfig) => {
   const slides = useSelector(store, (snapshot) => selectSlides(snapshot.context));
   const previewState = useSelector(store, (snapshot) => selectPreviewState(snapshot.context));
 
@@ -37,10 +44,10 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
   const lastViewedSlideIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (previewState.currentSlideId) {
+    if (!resetBuildStepOnOpen && previewState.currentSlideId) {
       lastViewedSlideIdRef.current = previewState.currentSlideId;
     }
-  }, [previewState.currentSlideId]);
+  }, [previewState.currentSlideId, resetBuildStepOnOpen]);
 
   const addSlide = (content: string, contentType: SlideContentType) => {
     const newSlide: Slide = {
@@ -84,8 +91,8 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
   };
 
   const handleSlideEvent = (event: SlideEvent) => {
+    if (onSlideEventRef.current?.(event) === false) return false;
     slideEventsRef.current.push(event);
-    onSlideEventRef.current?.(event);
 
     switch (event.type) {
       case "slide_open":
@@ -114,14 +121,18 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
         break;
       case "slide_close":
         setPreviewState((prev) => {
-          if (!prev.isOpen && !prev.isMaximized && prev.currentSlideId === null) {
+          if (
+            !prev.isOpen &&
+            !prev.isMaximized &&
+            (retainSlideOnClose || prev.currentSlideId === null)
+          ) {
             return prev;
           }
           return {
             ...prev,
             isOpen: false,
             isMaximized: false,
-            currentSlideId: null,
+            currentSlideId: retainSlideOnClose ? prev.currentSlideId : null,
             indexv: 0,
           };
         });
@@ -171,21 +182,29 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
         break;
     }
 
-    if (event.slideId && event.indexv !== undefined && event.indexv !== null) {
+    if (
+      !resetBuildStepOnOpen &&
+      event.slideId &&
+      event.indexv !== undefined &&
+      event.indexv !== null
+    ) {
       lastVerticalIndicesRef.current[event.slideId] = event.indexv;
     }
+    return true;
   };
 
   const openPresentation = () => {
     if (slides.length === 0) return;
 
-    const rememberedSlide = lastViewedSlideIdRef.current
+    const rememberedSlide = !resetBuildStepOnOpen && lastViewedSlideIdRef.current
       ? slides.find((slide) => slide.id === lastViewedSlideIdRef.current)
       : undefined;
     const targetSlide = rememberedSlide ?? slides[Math.max(currentSlideIndex, 0)] ?? slides[0];
     if (!targetSlide) return;
 
-    const targetIndexv = lastVerticalIndicesRef.current[targetSlide.id] ?? 0;
+    const targetIndexv = resetBuildStepOnOpen
+      ? 0
+      : (lastVerticalIndicesRef.current[targetSlide.id] ?? 0);
 
     setPreviewState({
       isOpen: true,
@@ -234,7 +253,7 @@ export const useSlidesController = ({ store, onSlideEvent }: UseSlidesController
     setPreviewState({
       isOpen: false,
       isMaximized: false,
-      currentSlideId: null,
+      currentSlideId: retainSlideOnClose ? previewState.currentSlideId : null,
       indexv: 0,
     });
   };

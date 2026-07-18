@@ -1,6 +1,7 @@
 # Live Collaboration — Cloudflare-native Deployment
 
-Status: room-local SQLite persistence and mandatory binary Yjs sync/awareness implemented
+Status: room-local SQLite persistence, teaching surfaces, and mandatory binary v3 sync/awareness
+implemented; deployed three-profile validation pending
 
 Companion documents:
 
@@ -23,7 +24,7 @@ The collaboration data plane has one deployment path:
 | Workers + Hono        | Same-origin room and membership APIs, WebSocket authentication, assets, exports, and signed maintenance endpoints |
 | Workers Static Assets | Serve the editor on the same origin so its first-party session authenticates HTTP and WebSocket requests safely   |
 | D1                    | Rooms, members, invitations, roles, asset metadata, retention state, and audit events                             |
-| R2                    | Private SHA-256-addressed binary project assets; never live SCR3 recordings                                       |
+| R2                    | Private SHA-256-addressed workspace and immutable slide-payload assets; never live SCR3 recordings                |
 | Workers KV            | Disposable public lesson/playlist cache; separate from collaboration state and credentials                        |
 | Workers Logs          | Structured update and maintenance telemetry for dashboards and alerts                                             |
 | Durable Objects       | Hibernating WebSocket coordination, room-local SQLite durability, alarm compaction, and ephemeral fan-out         |
@@ -34,9 +35,9 @@ decision is unchanged: the host keeps SCR3 locally and uses the existing post-re
 modal only after live ends.
 
 The design below also records later Cloudflare-native extensions. Room-local snapshot/update
-storage, alarm compaction, state-vector sync, raw Yjs updates, and authenticated standard awareness
-frames are implemented. Optional Queues and moving large snapshots/exports to R2 remain separate
-follow-up work.
+storage, alarm compaction, state-vector sync, raw Yjs updates, authenticated awareness frames,
+and owner-initialized teaching state are implemented. Optional Queues and moving large
+snapshots/exports to R2 remain separate follow-up work.
 
 ## Decision within this option
 
@@ -51,7 +52,8 @@ live collaboration room.
 - One Durable Object identified by `roomId` owns the room's WebSockets, update log, snapshots,
   awareness roster, effective host, and protocol state.
 - The Durable Object's private SQLite database stores document updates and compacted snapshots.
-- R2 stores binary project assets, large snapshots, and optional project exports.
+- R2 stores content-addressed workspace assets, immutable slide payloads, and optional project
+  exports. Moving oversized snapshots to R2 remains future work.
 - Durable Object Alarms perform room-local compaction and cleanup.
 - Cloudflare Queues are optional for work that should run outside the room object.
 
@@ -68,7 +70,7 @@ flowchart LR
     D1[(D1 control plane)]
     Room[CollaborationRoom Durable Object: one per room]
     SQL[(Room-local SQLite)]
-    R2[(R2 assets, large snapshots, exports)]
+    R2[(R2 workspace assets, slide payloads, exports)]
     Alarm[Durable Object Alarm]
     Queue[Optional Cloudflare Queue]
 
@@ -76,7 +78,7 @@ flowchart LR
     Worker <-->|session, room, membership, invitations| D1
     Worker <-->|WebSocket upgrade and control RPC| Room
     Room <-->|updates, snapshots, sequence, room metadata| SQL
-    Room <-->|binary assets and large artifacts| R2
+    Room <-->|registered teaching assets| R2
     Alarm -->|compact and clean| Room
     Room -.->|heavy asynchronous work| Queue
     Queue -.->|consumer invokes room/export service| Worker
@@ -96,7 +98,7 @@ between the browser and the room Durable Object. The gateway is not called once 
 | Durable Object SQLite storage | CRDT updates, snapshots, protocol version, stream sequence, durable room state        | Implemented           |
 | Durable Object WebSocket API  | Mandatory binary Yjs document/awareness frames plus JSON control and acknowledgements | Implemented           |
 | Durable Object Alarms         | Snapshot compaction and update/deduplication cleanup                                  | Implemented           |
-| R2                            | Content-addressed assets, oversized snapshots, and project exports                    | Existing              |
+| R2                            | Content-addressed workspace assets, slide payloads, and project exports               | Existing              |
 | Cloudflare Queues             | Heavy export, asset reconciliation, or cross-room maintenance                         | Optional              |
 | Workers Logs and tracing      | Connection and operational metadata, excluding editor content                         | Existing              |
 
@@ -154,18 +156,26 @@ bottleneck and failure domain.
 
 ## Connection and authorization flow
 
-### Room creation
+### Room creation and teaching initialization
 
 1. An authenticated user calls `POST /api/collaboration/rooms`.
 2. The Worker creates the D1 room and owner membership transactionally.
-3. The Worker invokes the room Durable Object to initialize its protocol version, document schema,
-   initial project snapshot, and retention settings.
-4. The object returns its initialized generation and schema version.
-5. The Worker marks the D1 room ready. A failed initialization leaves a recoverable provisioning
-   state rather than an apparently joinable empty room.
+3. The Worker invokes the room Durable Object to initialize binary protocol v3, document schema 1,
+   the initial workspace snapshot, and retention settings.
+4. Before exposing the room URL, the creator uploads every referenced workspace asset and every
+   normalized slide payload through the room asset route. Slide bytes never enter Yjs.
+5. The creator calls the owner-only teaching initialization route with a bounded Yjs update. The
+   Durable Object verifies that the workspace is unchanged, all slide assets are registered and
+   present in R2, and the teaching snapshot is within the 4 MiB application limit.
+6. The object atomically replaces its SQLite snapshot and broadcasts that initialization. A
+   same-update retry is idempotent, including when the first response was lost. A terminal failure
+   closes the newly created room so it cannot appear as a joinable partial room. The object rebases
+   the teaching-only update on any workspace edits accepted while it verifies R2 assets.
 
-Only the room service seeds an empty shared document. Multiple browsers must never import the
-same path-based project independently.
+Only the creator initializes the optional schema-1 `project.teaching` subtree. Existing rooms do
+not allow joiners to infer or auto-seed teaching state; their owner must explicitly initialize it.
+The immutable deck manifest/order and whiteboard content are durable, while slide bytes remain
+private content-addressed assets.
 
 ### Joining
 
@@ -208,9 +218,19 @@ Persist before broadcasting a document update. If persistence fails, send a reco
 and move the connection into a non-writing/reconnecting state. Never broadcast an update and then
 silently fail to store it.
 
-Binary envelope version 2 carries Yjs v13-compatible sync, raw update, and standard awareness
-messages. The client requests it explicitly during the WebSocket upgrade; a missing or mismatched
-version is rejected. There is no HTTP bootstrap, JSON document/awareness, or protocol downgrade.
+Binary envelope version 3 carries Yjs v13-compatible sync, raw update, and standard awareness
+messages. Its awareness payload is a strict editor/slides/whiteboard surface union. The client
+requests v3 explicitly during the WebSocket upgrade; a missing or mismatched version is rejected.
+There is no HTTP bootstrap, JSON document/awareness, or protocol downgrade. Browser and Worker
+must be deployed from the same revision.
+
+View and cursor changes share one fixed 75 ms coalescing window. Continuous scroll/pan input
+therefore publishes the latest bounded state throughout the gesture (below 20 updates per second)
+instead of waiting for the gesture to stop.
+
+The follow target is never part of an awareness frame or Durable Object state. A browser follows
+one exact participant session locally and consumes only that session's validated surface payload.
+The first intentional local interaction stops following before that interaction is handled.
 
 Writable collaborative Monaco models bind directly to their active `Y.Text` through `y-monaco`.
 The binding is enabled by default and can be disabled at build time with
@@ -310,7 +330,7 @@ While active, the object may keep:
 
 - The materialized Yjs document.
 - Connected participant and awareness maps.
-- The current host/follow state.
+- The effective host and current validated teaching state.
 - A pending broadcast batch.
 - Compaction counters.
 
@@ -387,20 +407,27 @@ Reuse the existing private R2 binding with namespaced, non-guessable keys:
 
 ```text
 collaboration/rooms/{roomId}/assets/{sha256}
-collaboration/rooms/{roomId}/snapshots/{generation}.yjs
 collaboration/rooms/{roomId}/exports/{exportId}.zip
 ```
 
-The CRDT stores asset IDs and metadata, never arbitrary asset bytes. Upload completes before the
-CRDT reference is published. Downloads continue through authenticated/same-origin Worker routes
-where room privacy requires it.
+The CRDT stores asset IDs and metadata, never arbitrary asset bytes. This includes each immutable
+normalized slide payload as well as workspace binaries. Upload and registration complete before
+owner-only teaching initialization publishes the corresponding manifest reference. Downloads
+continue through authenticated/same-origin Worker routes where room privacy requires it. Clients
+verify the downloaded byte length and SHA-256 digest before decoding; one verified-byte cache entry
+may serve multiple immutable slide manifests without replacing their distinct IDs/content types.
+
+Room snapshots currently remain in Durable Object SQLite and teaching mutations enforce a 4 MiB
+encoded Yjs snapshot ceiling. An R2 snapshot namespace is reserved for a future oversized-snapshot
+design; it is not a fallback that the current client or Worker can select.
 
 Do not create a collaboration-room recording key. A recording reaches R2 only after live ends and
 the host confirms upload in the post-recording modal; it uses the lesson subsystem's namespace.
 
-Use R2 Standard storage for active room assets and snapshots. Infrequent Access introduces
-retrieval charges and a minimum storage duration and is unlikely to help small, frequently opened
-rooms.
+Use R2 Standard storage for active room assets and exports. If oversized immutable snapshots are
+added later, apply the same default until measured access patterns justify another class.
+Infrequent Access introduces retrieval charges and a minimum storage duration and is unlikely to
+help small, frequently opened rooms.
 
 ## Placement, latency, and scaling
 
@@ -431,6 +458,8 @@ to separate objects.
 | SQLite write fails                       | Do not acknowledge/broadcast the update; surface reconnecting or failed state              |
 | D1 unavailable during a new join         | Reject/defer the join; existing authenticated room sockets may continue                    |
 | R2 asset missing                         | Show a recoverable placeholder; do not block unrelated text edits                          |
+| Teaching initialization asset missing    | Reject initialization; close a newly provisioning room or let a legacy owner retry         |
+| Follow target reconnects                 | Suspend locally for the same session during the grace window; stop if it expires           |
 | Compaction alarm retries                 | Resume idempotently from generation and cutoff metadata                                    |
 | Host recorder disconnects                | Browser-local recording recovery applies; the room object never receives or finalizes SCR3 |
 | Host transfer requested during recording | Reject it until the current host stops and finalizes the browser-local recording           |
@@ -447,7 +476,8 @@ snapshot recovery.
 - Immediately update or disconnect live sessions after a role downgrade.
 - Cap WebSocket frame, decoded update, room document, participant, and asset sizes.
 - Rate-limit awareness independently from document updates.
-- Treat display names, active files, selections, and follow-state values as untrusted.
+- Treat display names, active surfaces, files, selections, and viewports as untrusted.
+- Keep the selected follow session browser-local; never persist or log it.
 - Never log source payloads, snapshots, cursor positions, room tokens, or WebSocket attachments.
 - Define D1, Durable Object SQLite, R2, and audit retention separately; lesson recording retention
   belongs to the lesson subsystem.
@@ -528,8 +558,9 @@ operations. Beyond that:
 - Class B reads/metadata operations: $0.36 per million.
 - Internet egress: free.
 
-Avoid writing each CRDT update as a separate R2 object. In this option, collaboration R2 usage is
-for compacted snapshots, assets, and project exports rather than tiny high-frequency events.
+Avoid writing each CRDT update as a separate R2 object. Current collaboration R2 usage is for
+workspace assets, immutable slide payloads, and project exports rather than tiny high-frequency
+events. Compacted snapshots remain in room-local SQLite.
 
 ### Optional Queues
 
@@ -607,8 +638,9 @@ Selecting this option would require:
   asset access, export, and deletion.
 - A room service responsible for socket attachments, protocol parsing, Yjs materialization,
   update persistence, awareness, host state, and alarms.
-- R2 key namespaces and authorization for collaborative assets and large snapshots.
-- Focused Worker/Durable Object tests plus two-browser convergence and reconnect tests.
+- R2 key namespaces and authorization for workspace assets and immutable slide payloads.
+- Focused Worker/Durable Object tests plus three-profile owner/editor/viewer convergence,
+  teaching-surface, following, and reconnect tests.
 - Cost metrics for active room-hours, incoming frames, update rows/bytes, compactions, hibernation,
   D1 operations, and R2 storage.
 

@@ -1,3 +1,14 @@
+## Highest-Risk Constraint: VPS Process and Memory Safety
+
+This is the repository's highest-priority operational constraint. The VPS cannot safely absorb concurrent, lingering, or memory-heavy work:
+
+- Never create or run subagents.
+- Never run commands, tools, tests, or agents in the background, detached, or concurrently.
+- Run exactly one bounded foreground operation at a time.
+- Never use `&`, `nohup`, watch mode, detached servers, or leave a process running after a turn or interruption.
+- Treat an interrupted command as potentially still running; stop only the specifically identified process before doing further work.
+- Never run memory-heavy commands or tools; obey all additional resource limits below.
+
 ## Mandatory Workflow
 
 After completing the work, provide:

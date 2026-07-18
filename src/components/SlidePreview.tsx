@@ -1,18 +1,17 @@
 import { useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, Keyboard } from "lucide-react";
+import { ChevronLeft, ChevronRight, Keyboard, Minimize2, RefreshCw, X } from "lucide-react";
 import type { Slide, SlideEvent } from "../types/slides";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import CustomSlideRenderer from "./CustomSlideRenderer";
+import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 
 interface SlidePreviewProps {
   slides: Slide[];
   currentSlideIndex: number;
-  onSlideChange: (indexh: number, indexv?: number) => void;
-  onSlideEvent?: (event: SlideEvent) => void;
+  onSlideEvent?: (event: SlideEvent) => boolean | void;
   onStopPlayback?: () => void;
   onClose?: () => void;
   isOpen: boolean;
-  isMaximized?: boolean;
   verticalIndex?: number;
   positioning?: "fixed" | "relative" | "absolute" | "sticky";
 }
@@ -20,7 +19,6 @@ interface SlidePreviewProps {
 function SlidePreview({
   slides,
   currentSlideIndex,
-  onSlideChange,
   onSlideEvent,
   onStopPlayback,
   onClose,
@@ -29,6 +27,7 @@ function SlidePreview({
   positioning = "fixed",
 }: SlidePreviewProps) {
   const { isPlaying } = useNextEditorMetadata();
+  const collaboration = useOptionalCollaboration();
   // Check record mode from sessionStorage
   const recordMode = sessionStorage.getItem("recordMode") === "true";
 
@@ -53,7 +52,14 @@ function SlidePreview({
   };
 
   const handleClose = () => {
+    collaboration?.stopFollowing("local-slide-input");
     onClose?.();
+    onStopPlayback?.();
+  };
+
+  const handleMinimize = () => {
+    collaboration?.stopFollowing("local-slide-input");
+    emitSlideEvent("slide_minimize", currentSlide?.id, false);
     onStopPlayback?.();
   };
 
@@ -66,6 +72,7 @@ function SlidePreview({
 
       const { type, payload } = event.data || {};
       if (type === "IFRAME_INTERACTION") {
+        collaboration?.stopFollowing("local-slide-input");
         const interaction = {
           type: payload.type,
           timestamp: performance.now(),
@@ -85,7 +92,7 @@ function SlidePreview({
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [isPlaying, currentSlide?.id]);
+  }, [collaboration, isPlaying, currentSlide?.id]);
 
   // Number of build steps on a slide (0 for html/markdown slides).
   const stepCountOf = (slide?: Slide): number =>
@@ -97,39 +104,38 @@ function SlidePreview({
 
   const goToNextSlide = () => {
     if (isPlaying) return;
+    collaboration?.stopFollowing("local-slide-input");
 
     // Reveal the next build step of the current slide before advancing.
     const currentStepCount = stepCountOf(currentSlide);
     if (currentStepCount > 0 && verticalIndex < currentStepCount) {
       const nextIndexv = verticalIndex + 1;
-      onSlideChange(currentSlideIndex, nextIndexv);
       emitSlideEvent("slide_change", currentSlide?.id, true, nextIndexv);
       return;
     }
 
     if (currentSlideIndex < slides.length - 1) {
       const newIndex = currentSlideIndex + 1;
-      onSlideChange(newIndex, 0); // New slide starts with no steps revealed.
       emitSlideEvent("slide_change", slides[newIndex]?.id, true, 0);
     }
   };
 
   const goToPrevSlide = () => {
     if (isPlaying) return;
+    collaboration?.stopFollowing("local-slide-input");
 
     // Hide the last revealed build step of the current slide first.
     if (stepCountOf(currentSlide) > 0 && verticalIndex > 0) {
       const nextIndexv = verticalIndex - 1;
-      onSlideChange(currentSlideIndex, nextIndexv);
       emitSlideEvent("slide_change", currentSlide?.id, true, nextIndexv);
       return;
     }
 
     if (currentSlideIndex > 0) {
       const newIndex = currentSlideIndex - 1;
-      // Land on the previous slide fully revealed so back-stepping is symmetric.
-      const prevIndexv = stepCountOf(slides[newIndex]);
-      onSlideChange(newIndex, prevIndexv);
+      // Standalone back-stepping lands fully revealed. A room-wide slide switch
+      // always starts from the shared baseline build state.
+      const prevIndexv = collaboration?.provider ? 0 : stepCountOf(slides[newIndex]);
       emitSlideEvent("slide_change", slides[newIndex]?.id, true, prevIndexv);
     }
   };
@@ -159,8 +165,40 @@ function SlidePreview({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, goToPrevSlide, goToNextSlide, handleClose]);
 
-  if (!isOpen || !currentSlide) {
+  if (!isOpen) {
     return null;
+  }
+
+  if (!currentSlide) {
+    const loading = Boolean(collaboration?.provider && collaboration.isTeachingLoading);
+    return (
+      <>
+        <div className="fixed inset-0 z-90 bg-[#0b0d12]/90" onClick={handleClose} />
+        <div className="fixed inset-1/2 z-100 flex aspect-video w-full max-w-7xl -translate-1/2 items-center justify-center rounded-2xl bg-slate-900 text-slate-300 shadow-2xl">
+          <div className="flex flex-col items-center gap-3 text-sm" role="status">
+            <p>{loading ? "Loading shared slide…" : "Shared slide unavailable"}</p>
+            <div className="flex items-center gap-2">
+              {!loading && collaboration?.provider && collaboration.canRetryAssets ? (
+                <button
+                  type="button"
+                  onClick={() => collaboration.retryAssets()}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15"
+                >
+                  <RefreshCw size={13} /> Retry
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={handleClose}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs hover:bg-white/15"
+              >
+                <X size={13} /> Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
   }
 
   const isNavigationEnabled = !isPlaying;
@@ -190,6 +228,25 @@ function SlidePreview({
             currentSlideIndex={currentSlideIndex}
             currentVerticalIndex={verticalIndex}
           />
+
+          <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleMinimize}
+              aria-label="Minimize slides"
+              className="flex size-9 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
+            >
+              <Minimize2 className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleClose}
+              aria-label="Close slides"
+              className="flex size-9 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
 
           {isNavigationEnabled && (slides.length > 1 || stepCountOf(currentSlide) > 0) && (
             <>

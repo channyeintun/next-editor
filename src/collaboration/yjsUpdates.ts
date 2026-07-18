@@ -4,10 +4,12 @@ import {
   COLLABORATION_PROTOCOL_VERSION,
   collaborationDocumentUpdateInputSchema,
   collaborationCreateRoomInputSchema,
+  collaborationTeachingInitializationInputSchema,
   encodedYjsSnapshotSchema,
   encodedYjsUpdateSchema,
   type CollaborationDocumentUpdateInput,
   type CollaborationCreateRoomInput,
+  type CollaborationTeachingInitializationInput,
 } from "./protocol";
 
 const BINARY_CHUNK_SIZE = 0x8000;
@@ -40,6 +42,14 @@ export function decodeYjsSnapshot(encoded: string): Uint8Array {
 
 export function encodeYjsDocument(doc: Doc): string {
   const update = encodeStateAsUpdate(doc);
+  let binary = "";
+  for (let offset = 0; offset < update.length; offset += BINARY_CHUNK_SIZE) {
+    binary += String.fromCharCode(...update.subarray(offset, offset + BINARY_CHUNK_SIZE));
+  }
+  return encodedYjsSnapshotSchema.parse(btoa(binary));
+}
+
+export function encodeYjsSnapshotUpdate(update: Uint8Array): string {
   let binary = "";
   for (let offset = 0; offset < update.length; offset += BINARY_CHUNK_SIZE) {
     binary += String.fromCharCode(...update.subarray(offset, offset + BINARY_CHUNK_SIZE));
@@ -80,5 +90,19 @@ export function createCollaborationRoomSnapshot(
     clientId,
     updateId,
     snapshot: encodeYjsDocument(doc),
+  });
+}
+
+export function createCollaborationTeachingInitialization(
+  update: Uint8Array,
+  clientId: string,
+  updateId: string = crypto.randomUUID(),
+): CollaborationTeachingInitializationInput {
+  return collaborationTeachingInitializationInputSchema.parse({
+    protocolVersion: COLLABORATION_PROTOCOL_VERSION,
+    documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+    clientId,
+    updateId,
+    update: encodeYjsSnapshotUpdate(update),
   });
 }

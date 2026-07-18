@@ -666,7 +666,7 @@ describe("replayState", () => {
         slideIndex: 1,
         slideState: {
           isOpen: true,
-          isMaximized: false,
+          isMaximized: true,
           currentSlideId: "slide-2",
           indexv: 1,
           currentInteraction: undefined,

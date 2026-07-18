@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   areWhiteboardViewsEqual,
   deriveWhiteboardDelta,
+  rebaseWhiteboardDelta,
   snapshotWhiteboardDelta,
   type WhiteboardElementJSON,
 } from "./whiteboard";
@@ -33,6 +34,16 @@ describe("deriveWhiteboardDelta", () => {
     const delta = deriveWhiteboardDelta(previous, next);
 
     expect(delta.upserts).toEqual([next[1]]);
+    expect(delta.removedIds).toEqual([]);
+  });
+
+  it("upserts the deterministic winner when only versionNonce changes", () => {
+    const previous = [makeElement({ id: "a", version: 2, versionNonce: 111 })];
+    const next = [makeElement({ id: "a", version: 2, versionNonce: 999 })];
+
+    const delta = deriveWhiteboardDelta(previous, next);
+
+    expect(delta.upserts).toEqual(next);
     expect(delta.removedIds).toEqual([]);
   });
 
@@ -125,6 +136,17 @@ describe("snapshotWhiteboardDelta", () => {
     expect(secondFlush?.nextElements[1]).toBe(firstFlush!.nextElements[0]);
     // Changed element is a fresh clone, not the live reference.
     expect(secondFlush?.nextElements[0]).not.toBe(liveB);
+  });
+});
+
+describe("rebaseWhiteboardDelta", () => {
+  it("preserves a remote element that arrived during a local capture window", () => {
+    const base = [makeElement({ id: "local", index: "a0" })];
+    const liveLocal = makeElement({ id: "local", version: 2, index: "a0" });
+    const delta = snapshotWhiteboardDelta(base, [liveLocal]);
+    const remote = makeElement({ id: "remote", index: "a1" });
+
+    expect(rebaseWhiteboardDelta([...base, remote], delta!)).toEqual([liveLocal, remote]);
   });
 });
 
