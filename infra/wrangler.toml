@@ -16,7 +16,7 @@ PUBLIC_URL = "https://nexteditor.dev"
 #   wrangler secret put REALTIME_SFU_APP_SECRET --config infra/wrangler.toml
 # Use separate Cloudflare Realtime applications per environment; never commit
 # an application ID or token.
-VOICE_CHAT_ENABLED = "false"
+VOICE_CHAT_ENABLED = "true"
 # Required for authentication — auth fails at runtime without these. Set them with:
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
 #   wrangler secret put GOOGLE_CLIENT_SECRET --config infra/wrangler.toml
