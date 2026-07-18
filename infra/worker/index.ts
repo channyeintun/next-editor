@@ -92,3 +92,4 @@ app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export default app;
 export { CollaborationRoomDurableObject } from "./collaboration/roomDurableObject";
+export { CollaborationVoiceRoomDurableObject } from "./collaboration/voiceDurableObject";

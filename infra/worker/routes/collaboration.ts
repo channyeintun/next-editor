@@ -69,6 +69,18 @@ import {
   notifyCollaborationRoomControl,
 } from "../collaboration/roomDurableObject";
 import { collaborationRoomLocationHint } from "../collaboration/roomLocation";
+import {
+  VOICE_CAPABILITY_HEADER,
+  forwardCollaborationVoiceSfuRequest,
+  forwardCollaborationVoiceWebSocket,
+  isVoiceChatEnabled,
+  notifyCollaborationVoiceRoomControl,
+  type CanonicalVoiceSession,
+} from "../collaboration/voiceDurableObject";
+import {
+  MAX_VOICE_SFU_REQUEST_BYTES,
+  voiceCapabilitySchema,
+} from "../../../src/collaboration/voiceProtocol";
 
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
 const MAX_TEACHING_INITIALIZATION_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
@@ -256,11 +268,28 @@ async function dispatchControlEvent(
     targetUserId: event.targetUserId,
     occurredAt: Date.now(),
   } as const;
-  const delivered = await notifyCollaborationRoomControl(c.env, event.roomId, {
+  const command = {
     event: control,
     ...(event.targetUserId ? { targetRole: event.targetRole ?? null } : {}),
-  });
+  };
+  const delivered = await notifyCollaborationRoomControl(c.env, event.roomId, command);
   if (!delivered) throw new Error("collaboration room coordinator unavailable");
+  // Voice teardown must not block or fail the membership operation; the
+  // voice room also revalidates D1 access on every SFU gateway call.
+  if (c.env.COLLABORATION_VOICE_ROOMS) {
+    c.executionCtx.waitUntil(
+      notifyCollaborationVoiceRoomControl(c.env, event.roomId, command).then(
+        () => undefined,
+        (error: unknown) => {
+          console.error("collaboration_voice_control_failed", {
+            roomId: event.roomId,
+            kind: event.kind,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+      ),
+    );
+  }
 }
 
 function scheduleAuditEvent(
@@ -884,5 +913,99 @@ collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
     roleVersion: access.role_version,
     sessionId: sessionId.data,
     attemptId: attemptId.data,
+  });
+});
+
+// Origins allowed to open voice transports. Browsers always send Origin on
+// WebSocket upgrades and on non-GET fetches; a mismatch is rejected. Local
+// development uses the Vite proxy, so loopback origins are also accepted.
+function isAllowedVoiceOrigin(c: CollaborationContext): boolean {
+  const origin = c.req.header("Origin");
+  if (!origin) return c.req.method === "GET";
+  try {
+    const parsed = new URL(origin);
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") return true;
+    if (origin === new URL(c.env.PUBLIC_URL).origin) return true;
+    return origin === new URL(c.req.url).origin;
+  } catch {
+    return false;
+  }
+}
+
+// Loads the caller's canonical voice identity for an active room, or maps the
+// failure to a sanitized response. Voice must fail closed while the document
+// collaboration endpoints continue normally.
+async function resolveVoiceAccess(
+  c: CollaborationContext,
+  collaborationSessionId: string,
+): Promise<{ ok: true; session: CanonicalVoiceSession } | { ok: false; response: Response }> {
+  if (!isVoiceChatEnabled(c.env)) {
+    return { ok: false, response: c.json({ error: "voice chat unavailable" }, 503) };
+  }
+  if (!isAllowedVoiceOrigin(c)) {
+    return { ok: false, response: c.json({ error: "unauthorized" }, 403) };
+  }
+  const user = await getCurrentUser(c);
+  if (!user) return { ok: false, response: c.json({ error: "not signed in" }, 401) };
+  const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
+  const sessionId = collaborationIdSchema.safeParse(collaborationSessionId);
+  if (!roomId.success || !sessionId.success) {
+    return { ok: false, response: c.json({ error: "invalid voice session" }, 400) };
+  }
+  const access = await getCollaborationRoomAccess(c.env.DB, roomId.data, user.id);
+  if (!access) return { ok: false, response: c.json({ error: "not found" }, 404) };
+  if (access.status !== "active") {
+    return { ok: false, response: c.json({ error: "room is not active" }, 409) };
+  }
+  return {
+    ok: true,
+    session: {
+      roomId: access.id,
+      userId: user.id,
+      displayName: user.name?.trim() || user.username,
+      role: access.member_role,
+      collaborationSessionId: sessionId.data,
+      maxMembers: access.max_members,
+    },
+  };
+}
+
+collaborationRoute.get("/rooms/:roomId/voice/websocket", async (c) => {
+  if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
+    return c.json({ error: "expected WebSocket upgrade" }, 426);
+  }
+  const resolved = await resolveVoiceAccess(c, c.req.query("collaborationSessionId") ?? "");
+  if (!resolved.ok) return resolved.response;
+  return forwardCollaborationVoiceWebSocket(c.env, c.req.raw, resolved.session);
+});
+
+// Secured SFU gateway used by the partytracks client. The Worker
+// re-authenticates the application session and D1 membership; the voice
+// Durable Object then verifies the connection capability and the full
+// session/track/mid ownership matrix before proxying upstream.
+collaborationRoute.all("/rooms/:roomId/voice/sfu/*", async (c) => {
+  if (c.req.method !== "GET" && c.req.method !== "POST" && c.req.method !== "PUT") {
+    return c.json({ error: "unsupported operation" }, 403, { "Cache-Control": "no-store" });
+  }
+  const contentLength = Number(c.req.header("content-length") ?? "0");
+  if (!Number.isFinite(contentLength) || contentLength > MAX_VOICE_SFU_REQUEST_BYTES) {
+    return c.json({ error: "payload too large" }, 413, { "Cache-Control": "no-store" });
+  }
+  const capability = voiceCapabilitySchema.safeParse(c.req.header(VOICE_CAPABILITY_HEADER));
+  const voiceConnectionId = collaborationIdSchema.safeParse(c.req.query("voiceConnectionId"));
+  const collaborationSessionId = c.req.query("collaborationSessionId") ?? "";
+  if (!capability.success || !voiceConnectionId.success) {
+    return c.json({ error: "unauthorized" }, 403, { "Cache-Control": "no-store" });
+  }
+  const resolved = await resolveVoiceAccess(c, collaborationSessionId);
+  if (!resolved.ok) return resolved.response;
+  const path = new URL(c.req.url).pathname;
+  const marker = "/voice/sfu";
+  const subpath = path.slice(path.indexOf(marker) + marker.length);
+  return forwardCollaborationVoiceSfuRequest(c.env, c.req.raw, {
+    session: resolved.session,
+    subpath,
+    capability: capability.data,
+    voiceConnectionId: voiceConnectionId.data,
   });
 });

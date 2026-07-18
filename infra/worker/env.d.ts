@@ -8,6 +8,12 @@ export interface Env {
   SESSION_SECRET: string;
   PUBLIC_URL: string;
   COLLABORATION_ROOMS?: DurableObjectNamespace;
+  // Voice chat control plane. All four are required for voice to be enabled;
+  // isVoiceChatEnabled() fails closed when any is missing.
+  COLLABORATION_VOICE_ROOMS?: DurableObjectNamespace;
+  VOICE_CHAT_ENABLED?: string;
+  REALTIME_SFU_APP_ID?: string;
+  REALTIME_SFU_APP_SECRET?: string;
   // Cloudflare Workers KV cache (infra/worker/cache.ts). Optional in the type
   // so self-hosted/test environments can omit it and fall through to D1.
   CACHE?: KVNamespace;

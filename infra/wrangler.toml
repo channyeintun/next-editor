@@ -10,6 +10,13 @@ compatibility_flags = ["nodejs_compat"]
 # override with the real production origin once one exists.
 [vars]
 PUBLIC_URL = "https://nexteditor.dev"
+# Server-side voice chat feature flag; fails closed. Flip to "true" only after
+# the Realtime SFU secrets below are configured:
+#   wrangler secret put REALTIME_SFU_APP_ID     --config infra/wrangler.toml
+#   wrangler secret put REALTIME_SFU_APP_SECRET --config infra/wrangler.toml
+# Use separate Cloudflare Realtime applications per environment; never commit
+# an application ID or token.
+VOICE_CHAT_ENABLED = "false"
 # Required for authentication — auth fails at runtime without these. Set them with:
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
 #   wrangler secret put GOOGLE_CLIENT_SECRET --config infra/wrangler.toml
@@ -122,6 +129,18 @@ class_name = "CollaborationRoomDurableObject"
 [[migrations]]
 tag = "collaboration-room-v1"
 new_sqlite_classes = ["CollaborationRoomDurableObject"]
+
+# One ephemeral voice coordinator per live-collaboration room. Roster and SFU
+# session/track ownership live in hibernating WebSocket attachments; the
+# SQLite backend is declared because new classes require it on current plans,
+# but the object performs no storage writes.
+[[durable_objects.bindings]]
+name = "COLLABORATION_VOICE_ROOMS"
+class_name = "CollaborationVoiceRoomDurableObject"
+
+[[migrations]]
+tag = "collaboration-voice-v1"
+new_sqlite_classes = ["CollaborationVoiceRoomDurableObject"]
 
 # Workers Logs + automatic tracing (traces are open beta): queryable console.*
 # output plus auto-spans for handler lifecycle, D1/R2 binding calls, and
