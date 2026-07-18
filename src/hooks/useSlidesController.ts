@@ -196,9 +196,10 @@ export const useSlidesController = ({
   const openPresentation = () => {
     if (slides.length === 0) return;
 
-    const rememberedSlide = !resetBuildStepOnOpen && lastViewedSlideIdRef.current
-      ? slides.find((slide) => slide.id === lastViewedSlideIdRef.current)
-      : undefined;
+    const rememberedSlide =
+      !resetBuildStepOnOpen && lastViewedSlideIdRef.current
+        ? slides.find((slide) => slide.id === lastViewedSlideIdRef.current)
+        : undefined;
     const targetSlide = rememberedSlide ?? slides[Math.max(currentSlideIndex, 0)] ?? slides[0];
     if (!targetSlide) return;
 

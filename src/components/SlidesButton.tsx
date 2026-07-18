@@ -29,9 +29,7 @@ export default function SlidesButton({
   } = useSlidesContext();
 
   const hasSlides = slides.length > 0;
-  const roomPresentationOnly = Boolean(
-    collaboration?.provider || collaboration?.isCreatingRoom,
-  );
+  const roomPresentationOnly = Boolean(collaboration?.provider || collaboration?.isCreatingRoom);
   // In recording/playback/presentation states, this button should only act as a slide visibility toggle.
   const showPresentationToggle =
     presentationToggleOnly ||

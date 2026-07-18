@@ -1,9 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Slide } from "../types/slides";
+import type { useCollaboration } from "../contexts/CollaborationContext";
+import type { Slide, SlideEvent } from "../types/slides";
 
-const stopFollowing = vi.fn();
-const retryAssets = vi.fn();
+type CollaborationContextValue = ReturnType<typeof useCollaboration>;
+
+const stopFollowing = vi.fn<CollaborationContextValue["stopFollowing"]>();
+const retryAssets = vi.fn<CollaborationContextValue["retryAssets"]>();
 
 vi.mock("../contexts/CollaborationContext", () => ({
   useOptionalCollaboration: () => ({
@@ -35,8 +38,8 @@ describe("SlidePreview local follow intent", () => {
   });
 
   it("stops following before minimizing and records only local view state", () => {
-    const onSlideEvent = vi.fn();
-    const onStopPlayback = vi.fn();
+    const onSlideEvent = vi.fn<(event: SlideEvent) => boolean | void>();
+    const onStopPlayback = vi.fn<() => void>();
     render(
       <SlidePreview
         slides={slides}
@@ -59,8 +62,8 @@ describe("SlidePreview local follow intent", () => {
   });
 
   it("stops following before whole-slide arrows, close, and backdrop actions", () => {
-    const onSlideEvent = vi.fn();
-    const onClose = vi.fn();
+    const onSlideEvent = vi.fn<(event: SlideEvent) => boolean | void>();
+    const onClose = vi.fn<() => void>();
     const view = render(
       <SlidePreview
         slides={slides}
@@ -84,7 +87,7 @@ describe("SlidePreview local follow intent", () => {
   });
 
   it("keeps iframe interaction local while stopping follow first", () => {
-    const onSlideEvent = vi.fn();
+    const onSlideEvent = vi.fn<(event: SlideEvent) => boolean | void>();
     render(
       <SlidePreview slides={slides} currentSlideIndex={0} isOpen onSlideEvent={onSlideEvent} />,
     );

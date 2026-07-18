@@ -1,10 +1,14 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWhiteboardStore, type WhiteboardStoreInstance } from "../stores/whiteboardStore";
+import type { useCollaboration } from "./CollaborationContext";
+import type { NextEditorActions } from "./NextEditorContext";
+
+type CollaborationContextValue = ReturnType<typeof useCollaboration>;
 
 const mocks = vi.hoisted(() => ({
-  publishWhiteboardDelta: vi.fn(),
-  recordWhiteboardEvent: vi.fn(),
+  publishWhiteboardDelta: vi.fn<CollaborationContextValue["publishWhiteboardDelta"]>(),
+  recordWhiteboardEvent: vi.fn<NextEditorActions["handleWhiteboardEvent"]>(),
 }));
 
 let whiteboardStore: WhiteboardStoreInstance;

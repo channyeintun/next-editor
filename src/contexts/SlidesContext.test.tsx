@@ -1,10 +1,14 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSlidesStore, type SlidesStoreInstance } from "../stores/slidesStore";
+import type { useCollaboration } from "./CollaborationContext";
+import type { NextEditorActions } from "./NextEditorContext";
+
+type CollaborationContextValue = ReturnType<typeof useCollaboration>;
 
 const mocks = vi.hoisted(() => ({
-  recordSlideEvent: vi.fn(),
-  publishCurrentSlide: vi.fn(),
+  recordSlideEvent: vi.fn<NextEditorActions["handleSlideEvent"]>(),
+  publishCurrentSlide: vi.fn<CollaborationContextValue["publishCurrentSlide"]>(),
 }));
 
 let slidesStore: SlidesStoreInstance;

@@ -220,9 +220,7 @@ describe("collaboration teaching document", () => {
     expect(normalized.map(({ slide: item }) => item.id)).toEqual(["first", "same"]);
     const payload = encodeCollaborationSlidePayload(normalized[0].slide);
     expect(
-      encodeCollaborationSlidePayload(
-        slide("same-payload", 99, normalized[0].slide.content),
-      ),
+      encodeCollaborationSlidePayload(slide("same-payload", 99, normalized[0].slide.content)),
     ).toEqual(payload);
     expect(
       decodeCollaborationSlidePayload(payload, {
@@ -338,7 +336,7 @@ describe("collaboration teaching document", () => {
         ],
         whiteboardElements: [],
       }),
-    ).toThrow();
+    ).toThrow(/too big/i);
     invalidAssetDoc.destroy();
     doc.destroy();
   });

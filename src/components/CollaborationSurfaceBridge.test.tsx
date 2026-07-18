@@ -1,14 +1,24 @@
 import { act, render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { useCollaboration } from "../contexts/CollaborationContext";
+import type { useSlidesContext } from "../contexts/SlidesContext";
+import type { WorkspaceActions } from "../contexts/WorkspaceContext";
+import type { useWhiteboardContext } from "../contexts/WhiteboardContext";
+
+type CollaborationContextValue = ReturnType<typeof useCollaboration>;
+type SlidesContextValue = ReturnType<typeof useSlidesContext>;
+type WhiteboardContextValue = ReturnType<typeof useWhiteboardContext>;
 
 const mocks = vi.hoisted(() => ({
-  applyView: vi.fn(),
-  closePresentation: vi.fn(),
-  handleSlideEvent: vi.fn(),
-  publishSurface: vi.fn(),
-  runFollowApplication: vi.fn((application: () => void) => application()),
-  setActiveFilePath: vi.fn(),
-  setWhiteboardOpen: vi.fn(),
+  applyView: vi.fn<WhiteboardContextValue["applyView"]>(),
+  closePresentation: vi.fn<SlidesContextValue["closePresentation"]>(),
+  handleSlideEvent: vi.fn<SlidesContextValue["handleSlideEvent"]>(),
+  publishSurface: vi.fn<CollaborationContextValue["publishSurface"]>(),
+  runFollowApplication: vi.fn<CollaborationContextValue["runFollowApplication"]>((application) =>
+    application(),
+  ),
+  setActiveFilePath: vi.fn<WorkspaceActions["setActiveFilePath"]>(),
+  setWhiteboardOpen: vi.fn<WhiteboardContextValue["setOpen"]>(),
 }));
 
 let collaborationState: Record<string, unknown>;

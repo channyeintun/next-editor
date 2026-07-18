@@ -1,12 +1,20 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { useCollaboration } from "../contexts/CollaborationContext";
+import type { NextEditorActions } from "../contexts/NextEditorContext";
+import type { useSlidesContext } from "../contexts/SlidesContext";
+import type { useWhiteboardContext } from "../contexts/WhiteboardContext";
+
+type CollaborationContextValue = ReturnType<typeof useCollaboration>;
+type SlidesContextValue = ReturnType<typeof useSlidesContext>;
+type WhiteboardContextValue = ReturnType<typeof useWhiteboardContext>;
 
 const mocks = vi.hoisted(() => ({
-  closePresentation: vi.fn(),
-  openPresentation: vi.fn(),
-  pause: vi.fn(),
-  setWhiteboardOpen: vi.fn(),
-  stopFollowing: vi.fn(),
+  closePresentation: vi.fn<SlidesContextValue["closePresentation"]>(),
+  openPresentation: vi.fn<SlidesContextValue["openPresentation"]>(),
+  pause: vi.fn<NextEditorActions["pause"]>(),
+  setWhiteboardOpen: vi.fn<WhiteboardContextValue["setOpen"]>(),
+  stopFollowing: vi.fn<CollaborationContextValue["stopFollowing"]>(),
 }));
 
 let collaborationState: Record<string, unknown> | null;
@@ -42,9 +50,9 @@ function resetState() {
   slidesState = {
     slides: [{ id: "one", order: 0, content: "one", contentType: "html" }],
     previewState: { isOpen: false, isMaximized: false, currentSlideId: "one", indexv: 0 },
-    setSlides: vi.fn(),
+    setSlides: vi.fn<SlidesContextValue["setSlides"]>(),
     openPresentation: mocks.openPresentation,
-    startPresentation: vi.fn(),
+    startPresentation: vi.fn<SlidesContextValue["startPresentation"]>(),
     closePresentation: mocks.closePresentation,
   };
 }

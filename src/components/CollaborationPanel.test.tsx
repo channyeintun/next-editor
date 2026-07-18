@@ -1,9 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { useCollaboration } from "../contexts/CollaborationContext";
+
+type CollaborationContextValue = ReturnType<typeof useCollaboration>;
 
 const mocks = vi.hoisted(() => ({
-  followParticipant: vi.fn(),
-  stopFollowing: vi.fn(),
+  followParticipant: vi.fn<CollaborationContextValue["followParticipant"]>(),
+  stopFollowing: vi.fn<CollaborationContextValue["stopFollowing"]>(),
 }));
 
 let collaborationState: Record<string, unknown>;
@@ -120,18 +123,18 @@ function makeCollaborationState(followedSessionId: string | null = null) {
     getPathForNodeId: () => "src/index.ts",
     followParticipant: mocks.followParticipant,
     stopFollowing: mocks.stopFollowing,
-    clearError: vi.fn(),
-    createRoom: vi.fn(),
-    retry: vi.fn(),
-    initializeTeachingSurfaces: vi.fn(),
-    createInvitation: vi.fn(),
-    updateMemberRole: vi.fn(),
-    removeMember: vi.fn(),
-    revokeInvitation: vi.fn(),
-    exportRoom: vi.fn(),
-    retryAssets: vi.fn(),
-    closeRoom: vi.fn(),
-    leaveRoom: vi.fn(),
+    clearError: vi.fn<CollaborationContextValue["clearError"]>(),
+    createRoom: vi.fn<CollaborationContextValue["createRoom"]>(),
+    retry: vi.fn<CollaborationContextValue["retry"]>(),
+    initializeTeachingSurfaces: vi.fn<CollaborationContextValue["initializeTeachingSurfaces"]>(),
+    createInvitation: vi.fn<CollaborationContextValue["createInvitation"]>(),
+    updateMemberRole: vi.fn<CollaborationContextValue["updateMemberRole"]>(),
+    removeMember: vi.fn<CollaborationContextValue["removeMember"]>(),
+    revokeInvitation: vi.fn<CollaborationContextValue["revokeInvitation"]>(),
+    exportRoom: vi.fn<CollaborationContextValue["exportRoom"]>(),
+    retryAssets: vi.fn<CollaborationContextValue["retryAssets"]>(),
+    closeRoom: vi.fn<CollaborationContextValue["closeRoom"]>(),
+    leaveRoom: vi.fn<CollaborationContextValue["leaveRoom"]>(),
   };
 }
 

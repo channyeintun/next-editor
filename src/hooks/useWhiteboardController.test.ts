@@ -1,5 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { WhiteboardEvent } from "../core/src/whiteboard";
 import { createWhiteboardStore } from "../stores/whiteboardStore";
 import {
   discardPendingWhiteboardChange,
@@ -23,7 +24,7 @@ describe("useWhiteboardController", () => {
   it("flushes pending visible changes synchronously at a room boundary", () => {
     vi.useFakeTimers();
     const store = createWhiteboardStore();
-    const onWhiteboardEvent = vi.fn();
+    const onWhiteboardEvent = vi.fn<(event: WhiteboardEvent) => boolean | void>();
     const { result } = renderHook(() => useWhiteboardController({ store, onWhiteboardEvent }));
 
     act(() => {
@@ -47,7 +48,7 @@ describe("useWhiteboardController", () => {
   it("discards a pending delta when its room or playback scope is replaced", () => {
     vi.useFakeTimers();
     const store = createWhiteboardStore();
-    const onWhiteboardEvent = vi.fn();
+    const onWhiteboardEvent = vi.fn<(event: WhiteboardEvent) => boolean | void>();
     const { result, rerender } = renderHook(
       ({ scopeKey }) => useWhiteboardController({ store, onWhiteboardEvent, scopeKey }),
       { initialProps: { scopeKey: "standalone" } },
@@ -83,7 +84,7 @@ describe("useWhiteboardController", () => {
 
   it("applies and records local maximize state without changing board content", () => {
     const store = createWhiteboardStore();
-    const onWhiteboardEvent = vi.fn();
+    const onWhiteboardEvent = vi.fn<(event: WhiteboardEvent) => boolean | void>();
     const { result } = renderHook(() => useWhiteboardController({ store, onWhiteboardEvent }));
     const elements = store.getSnapshot().context.scene.elements;
 
@@ -103,7 +104,7 @@ describe("useWhiteboardController", () => {
   it("clones mutable local upserts before recording and store projection", () => {
     vi.useFakeTimers();
     const store = createWhiteboardStore();
-    const onWhiteboardEvent = vi.fn();
+    const onWhiteboardEvent = vi.fn<(event: WhiteboardEvent) => boolean | void>();
     const { result } = renderHook(() => useWhiteboardController({ store, onWhiteboardEvent }));
     const live = { ...element("stroke"), points: [[0, 0]] };
 
@@ -114,7 +115,7 @@ describe("useWhiteboardController", () => {
     live.points.push([1, 1]);
 
     const event = onWhiteboardEvent.mock.calls[0]?.[0];
-    expect(event.upserts[0].points).toEqual([[0, 0]]);
+    expect(event.upserts?.[0]?.points).toEqual([[0, 0]]);
     expect(store.getSnapshot().context.scene.elements[0]).not.toBe(live);
   });
 
@@ -157,7 +158,7 @@ describe("useWhiteboardController", () => {
     store.trigger.setScene({
       scene: { ...store.getSnapshot().context.scene, elements: [element("shared")] },
     });
-    const onWhiteboardEvent = vi.fn();
+    const onWhiteboardEvent = vi.fn<(event: WhiteboardEvent) => boolean | void>();
     const { result } = renderHook(() => useWhiteboardController({ store, onWhiteboardEvent }));
 
     act(() => {

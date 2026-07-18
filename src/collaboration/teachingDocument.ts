@@ -453,9 +453,7 @@ function parseSlideValue(value: unknown): Slide {
 export function encodeCollaborationSlidePayload(slide: Slide): Uint8Array {
   const normalized = parseSlideValue(structuredClone(slide));
   const payload = parseSlidePayloadValue(
-    Object.fromEntries(
-      Object.entries(normalized).filter(([key]) => SLIDE_PAYLOAD_KEYS.has(key)),
-    ),
+    Object.fromEntries(Object.entries(normalized).filter(([key]) => SLIDE_PAYLOAD_KEYS.has(key))),
   );
   const bytes = textEncoder.encode(JSON.stringify(payload));
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_COLLABORATION_SLIDE_PAYLOAD_BYTES) {

@@ -35,7 +35,7 @@ describe("collaboration follow lifecycle", () => {
     vi.useFakeTimers();
     try {
       let scheduled: ReturnType<typeof setTimeout> | null = null;
-      const flush = vi.fn(() => {
+      const flush = vi.fn<() => void>(() => {
         scheduled = null;
       });
       const schedule = () => {

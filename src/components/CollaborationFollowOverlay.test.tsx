@@ -1,7 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { useCollaboration } from "../contexts/CollaborationContext";
 
-const stopFollowing = vi.fn();
+type CollaborationContextValue = ReturnType<typeof useCollaboration>;
+
+const stopFollowing = vi.fn<CollaborationContextValue["stopFollowing"]>();
 let targetSurface: Record<string, unknown> = { kind: "slides", isMaximized: true };
 
 vi.mock("../contexts/CollaborationContext", () => ({

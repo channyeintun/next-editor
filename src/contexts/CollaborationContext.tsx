@@ -538,10 +538,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       const loads = projection.slideOrder.map((slideId) => {
         const manifest = projection.slides.get(slideId);
         if (!manifest) return Promise.reject(new Error("A shared slide manifest is missing."));
-        return hydrateCollaborationSlideManifest(
-          manifest,
-          teachingSlideCacheRef.current,
-          () => downloadCollaborationAsset(targetRoomId, manifest.asset.id),
+        return hydrateCollaborationSlideManifest(manifest, teachingSlideCacheRef.current, () =>
+          downloadCollaborationAsset(targetRoomId, manifest.asset.id),
         );
       });
       void Promise.all(loads)
@@ -1054,11 +1052,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         Awaited<ReturnType<typeof uploadCollaborationAsset>>
       >();
       for (const item of uniqueAssets) {
-        const asset = await uploadCollaborationAsset(
-          targetRoomId,
-          item.payload,
-          item.mimeType,
-        );
+        const asset = await uploadCollaborationAsset(targetRoomId, item.payload, item.mimeType);
         if (asset.id !== item.id || asset.size !== item.payload.byteLength) {
           throw new Error("An uploaded teaching asset did not match its source payload.");
         }
@@ -1290,14 +1284,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     await closeCollaborationRoom(current.session?.room.id ?? roomId ?? "");
     current.stop();
     updateRoomParam(null);
-  }, [
-    flushCurrentEdits,
-    isRecording,
-    roomId,
-    stopFollowing,
-    updateRoomParam,
-    whiteboardStore,
-  ]);
+  }, [flushCurrentEdits, isRecording, roomId, stopFollowing, updateRoomParam, whiteboardStore]);
 
   const publishAwarenessState = useCallback(async () => {
     const current = providerRef.current;
@@ -1489,9 +1476,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
             participant.expiresAt <= now &&
             !(
               participant.sessionId === followedSessionIdRef.current &&
-              isCollaborationFollowSuspendedConnectionState(
-                providerRef.current?.connectionState,
-              )
+              isCollaborationFollowSuspendedConnectionState(providerRef.current?.connectionState)
             )
           ) {
             next.delete(key);
@@ -1514,22 +1499,17 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     [participantsBySession],
   );
 
-  const followedParticipant = useMemo(
-    () => {
-      if (!followedSessionId) return null;
-      const participant = participants.find(
-        (candidate) => candidate.sessionId === followedSessionId,
-      );
-      if (!participant) return null;
-      if (participant.expiresAt > Date.now()) return participant;
-      return connectionState === "reconnecting" ||
-        connectionState === "connecting" ||
-        connectionState === "syncing"
-        ? participant
-        : null;
-    },
-    [connectionState, followedSessionId, participants],
-  );
+  const followedParticipant = useMemo(() => {
+    if (!followedSessionId) return null;
+    const participant = participants.find((candidate) => candidate.sessionId === followedSessionId);
+    if (!participant) return null;
+    if (participant.expiresAt > Date.now()) return participant;
+    return connectionState === "reconnecting" ||
+      connectionState === "connecting" ||
+      connectionState === "syncing"
+      ? participant
+      : null;
+  }, [connectionState, followedSessionId, participants]);
   const followAvailability = useMemo(
     () =>
       getCollaborationFollowAvailability({

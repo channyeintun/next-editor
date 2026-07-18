@@ -117,10 +117,7 @@ vi.mock("../collaboration/roomProvider", async () => {
     }
 
     emitDocumentChange() {
-      this.options.onDocumentChange?.(
-        this.doc,
-        {} as InstanceType<typeof Y.Transaction>,
-      );
+      this.options.onDocumentChange?.(this.doc, {} as InstanceType<typeof Y.Transaction>);
     }
 
     setConnectionState(state: string) {
@@ -442,5 +439,4 @@ describe("CollaborationContext follow lifecycle", () => {
     expect(whiteboardStore!.getSnapshot().context.scene).toEqual(standaloneWhiteboard);
     view.unmount();
   });
-
 });
