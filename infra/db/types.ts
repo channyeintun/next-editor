@@ -61,6 +61,21 @@ export interface PasskeyCredentialRow {
   last_used_at: number | null;
 }
 
+/** Shape returned to the owner (GET /api/auth/passkey/credentials) — no key material. */
+export interface PasskeySummary {
+  id: string;
+  createdAt: number;
+  lastUsedAt: number | null;
+}
+
+export function passkeyRowToSummary(row: PasskeyCredentialRow): PasskeySummary {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    lastUsedAt: row.last_used_at,
+  };
+}
+
 export type LessonStatus = "draft" | "published";
 
 export interface LessonRow {

@@ -4,8 +4,10 @@ import { KeyRound, LibraryBig, LogOut, Plus } from "lucide-react";
 import { useAuth, useSignOut, signInUrl, avatarProxyUrl } from "./useAuth";
 import {
   browserSupportsPasskeys,
+  isPasskeyAlreadyRegistered,
   isPasskeyCancel,
   passkeyErrorMessage,
+  usePasskeyList,
   useRegisterPasskey,
   useSignInWithPasskey,
 } from "./usePasskey";
@@ -176,15 +178,18 @@ function PasskeySignInButton() {
 
 // Lives inside the avatar dropdown. Deliberately keeps the menu open through
 // the whole flow so the pending/added/failed feedback is visible where the
-// user just clicked.
+// user just clicked. "Add another passkey" (vs "a") is the persistent signal
+// that the account already has one — the transient outcomes reset after a
+// few seconds.
 function AddPasskeyMenuItem() {
   const posthog = usePostHog();
   const register = useRegisterPasskey();
-  const [outcome, setOutcome] = useState<"idle" | "added" | "failed">("idle");
+  const { passkeys } = usePasskeyList();
+  const [outcome, setOutcome] = useState<"idle" | "added" | "duplicate" | "failed">("idle");
 
   useEffect(() => {
     if (outcome === "idle") return;
-    const timer = setTimeout(() => setOutcome("idle"), 2500);
+    const timer = setTimeout(() => setOutcome("idle"), 3000);
     return () => clearTimeout(timer);
   }, [outcome]);
 
@@ -192,9 +197,13 @@ function AddPasskeyMenuItem() {
     ? "Adding passkey…"
     : outcome === "added"
       ? "Passkey added"
-      : outcome === "failed"
-        ? "Couldn't add passkey"
-        : "Add a passkey";
+      : outcome === "duplicate"
+        ? "Already on this device"
+        : outcome === "failed"
+          ? "Couldn't add passkey"
+          : passkeys.length > 0
+            ? "Add another passkey"
+            : "Add a passkey";
 
   return (
     <button
@@ -207,7 +216,14 @@ function AddPasskeyMenuItem() {
             setOutcome("added");
             posthog?.capture("passkey_added");
           },
-          onError: (err) => setOutcome(isPasskeyCancel(err) ? "idle" : "failed"),
+          onError: (err) =>
+            setOutcome(
+              isPasskeyCancel(err)
+                ? "idle"
+                : isPasskeyAlreadyRegistered(err)
+                  ? "duplicate"
+                  : "failed",
+            ),
         });
       }}
       className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10 disabled:opacity-60"

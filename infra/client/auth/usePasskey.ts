@@ -1,13 +1,15 @@
 import axios from "axios";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { startAuthentication, startRegistration, WebAuthnError } from "@simplewebauthn/browser";
 import type {
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
-import type { AuthUser } from "../../db/types";
+import type { AuthUser, PasskeySummary } from "../../db/types";
 import { apiClient } from "../apiClient";
 import { ME_QUERY_KEY } from "./useAuth";
+
+const PASSKEY_LIST_QUERY_KEY = ["auth", "passkeys"] as const;
 
 export function browserSupportsPasskeys(): boolean {
   return typeof window !== "undefined" && !!window.PublicKeyCredential;
@@ -20,6 +22,17 @@ export function isPasskeyCancel(error: unknown): boolean {
   return error instanceof Error && error.name === "NotAllowedError";
 }
 
+// excludeCredentials doing its job: the authenticator already holds a
+// passkey for this account and refuses to mint a duplicate
+// (InvalidStateError). A statement of fact, not a failure.
+export function isPasskeyAlreadyRegistered(error: unknown): boolean {
+  return (
+    (error instanceof WebAuthnError &&
+      error.code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") ||
+    (error instanceof Error && error.name === "InvalidStateError")
+  );
+}
+
 // Prefers the server's {error} body (which says *why* — expired challenge,
 // unknown passkey, …) over axios's generic status text.
 export function passkeyErrorMessage(error: unknown, fallback: string): string {
@@ -30,8 +43,21 @@ export function passkeyErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+/** The signed-in user's registered passkeys. Only fetched where rendered (account menu). */
+export function usePasskeyList() {
+  const query = useQuery({
+    queryKey: PASSKEY_LIST_QUERY_KEY,
+    queryFn: async () =>
+      (await apiClient.get<{ passkeys: PasskeySummary[] }>("/auth/passkey/credentials")).data
+        .passkeys,
+    staleTime: 60_000,
+  });
+  return { passkeys: query.data ?? [], isLoading: query.isPending };
+}
+
 /** Adds a passkey to the signed-in account (requires a session). */
 export function useRegisterPasskey() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
       const options = (
@@ -41,6 +67,9 @@ export function useRegisterPasskey() {
       ).data;
       const response = await startRegistration({ optionsJSON: options });
       await apiClient.post("/auth/passkey/register/verify", response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: PASSKEY_LIST_QUERY_KEY });
     },
   });
 }

@@ -21,7 +21,7 @@ import {
   listPasskeyCredentials,
   updatePasskeyCredentialAfterAuth,
 } from "../../db/passkeyQueries";
-import { userRowToAuthUser } from "../../db/types";
+import { passkeyRowToSummary, userRowToAuthUser } from "../../db/types";
 import { getCurrentUser, setSessionCookie } from "./session";
 
 const RP_NAME = "Next Editor";
@@ -97,6 +97,18 @@ function parseTransports(json: string | null): AuthenticatorTransportFuture[] | 
 
 // Mounted at /api/auth/passkey in worker/index.ts.
 export const passkeyRoute = new Hono<{ Bindings: Env }>();
+
+// The signed-in user's registered passkeys — lets the account menu show
+// whether the account already has one (the WebAuthn ceremony itself can't
+// tell the page "you already registered here"; it just fails).
+passkeyRoute.get("/credentials", async (c) => {
+  const user = await getCurrentUser(c);
+  if (!user) {
+    return c.json({ error: "not signed in" }, 401);
+  }
+  const credentials = await listPasskeyCredentials(c.env.DB, user.id);
+  return c.json({ passkeys: credentials.map(passkeyRowToSummary) });
+});
 
 // Registration is adding a passkey to the signed-in account, so both
 // register endpoints require a session.
