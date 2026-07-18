@@ -5,7 +5,9 @@ Status: provider evaluation; Cloudflare remains selected and Upstash Box is not 
 This document records alternatives to the Cloudflare Workers + Durable Objects + Containers
 backend defined in [Remote Runtime Design](./remote-runtime-design.md). It does not change the
 WebContainer-compatible editor contract or the standalone implementation under
-[`remote-runtime/`](../remote-runtime/README.md).
+[`remote-runtime/`](../remote-runtime/README.md). For a market-wide pricing survey of these and
+other sandbox providers, see
+[Remote Runtime Provider Cost Comparison](./remote-runtime-cost-comparison.md).
 
 Product behavior and pricing were checked on 2026-07-16 and must be verified again before a
 provider decision or production purchase.
