@@ -301,17 +301,11 @@ export function collaborationTransactionTouchesTeaching(
     return true;
   }
   const root = projectRoot(doc);
-  if (
-    transaction.changed
-      .get(asTransactionChangedType(root))
-      ?.has(COLLABORATION_TEACHING_ROOT)
-  ) {
+  if (transaction.changed.get(asTransactionChangedType(root))?.has(COLLABORATION_TEACHING_ROOT)) {
     return true;
   }
   const teaching = optionalTeachingRoot(doc);
-  return teaching
-    ? transaction.changedParentTypes.has(asTransactionChangedType(teaching))
-    : false;
+  return teaching ? transaction.changedParentTypes.has(asTransactionChangedType(teaching)) : false;
 }
 
 export function collaborationTransactionTouchesOnlyTeaching(
