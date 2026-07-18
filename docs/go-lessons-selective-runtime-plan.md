@@ -1,10 +1,10 @@
-# Selective Go Lessons — Implementation Plan
+# Selective Go Lessons — Main-App Integration Plan
 
 > Status: **proposed**. Last reviewed 2026-07-18.
 >
-> This plan narrows the existing [remote runtime design](./remote-runtime-design.md) and
-> [implementation plan](./remote-runtime-implementation-plan.md) to one product outcome:
-> support Go lessons without replacing WebContainer for any existing lesson type.
+> This plan adds a new, app-owned Go lesson runtime directly to Next Editor. It does not integrate,
+> modify, move, copy, replace, or depend on the standalone `remote-runtime/` package. That package
+> remains preserved for a future plug-and-play runtime integration.
 
 ## 1. Decision summary
 
@@ -13,18 +13,34 @@ Next Editor will use two runtime implementations selected per workspace:
 | Workspace lesson type                           | Runtime                                  | Provisioning behavior                                        |
 | ----------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ |
 | Existing HTML, JavaScript, and TypeScript types | Browser WebContainer                     | Unchanged                                                    |
-| `go`                                            | Cloudflare remote Go runtime             | Created only after an explicit Run, Test, or Terminal action |
+| `go`                                            | App-integrated Cloudflare Go runtime     | Created only after an explicit Run, Test, or Terminal action |
 | Recorded lesson playback                        | Recorded workspace/runtime/preview state | No live runtime unless the viewer explicitly starts one      |
 
-The `RemoteContainer` compatibility surface is an internal reuse mechanism. It does **not**
-change the product default and does not route existing lessons away from WebContainer.
+The Go implementation is new code owned by the main application and its existing `infra/`
+deployment. It is not an adapter around `RemoteContainer`. WebContainer remains unchanged for all
+existing lesson types.
+
+### Protected standalone-package boundary
+
+`remote-runtime/` is explicitly out of scope for this project:
+
+- do not edit any file under `remote-runtime/`;
+- do not import it from `src/` or `infra/`;
+- do not add it as an application or Worker dependency;
+- do not move or promote its client, Worker, protocol, agent, image, tests, or migrations;
+- do not make Go lesson delivery depend on its build or deployment;
+- preserve it as a standalone package that can be evaluated later through a separate plug-and-play
+  adapter project.
+
+Its concepts may inform design review, but the deliverable in this plan must build, test, deploy,
+and operate independently of that package.
 
 ### Locked v1 choices
 
 1. Add exactly one new workspace lesson type: `go`.
 2. Keep WebContainer as the permanent default for every existing lesson type.
-3. Use the existing `remote-runtime/` implementation for live Go execution.
-4. Pin the first remote image to `go1.26.5`.
+3. Build a new Go lesson runtime directly in the main app and `infra/` deployment.
+4. Pin the first integrated Go image to `go1.26.5`.
 5. Require an authenticated application user to start an interactive Go runtime.
 6. Allow public playback of a recorded Go lesson without starting a container.
 7. Start a container only from an explicit user action; opening a lesson never incurs runtime cost.
@@ -44,10 +60,13 @@ change the product default and does not route existing lessons away from WebCont
 - Workspace edits synchronize bidirectionally between the editor and the selected runtime.
 - Switching between Go and an existing lesson tears down the old runtime and never boots both.
 - Existing lessons retain their current boot behavior, performance, offline capability, and cost.
+- The standalone `remote-runtime/` tree remains byte-for-byte unchanged by this work.
 
 ## 3. Non-goals
 
 - Replacing WebContainer for JavaScript or TypeScript projects.
+- Integrating, refactoring, packaging, or deploying `remote-runtime/`.
+- Treating `remote-runtime/` as the source tree for the new Go lesson runtime.
 - Running a native Go toolchain inside WebContainer or directly in the browser.
 - Supporting Python, Rust, Java, or arbitrary custom images in this release.
 - Persisting a remote container between browser sessions.
@@ -59,20 +78,21 @@ change the product default and does not route existing lessons away from WebCont
 
 ## 4. Current-state gaps
 
-| Area              | Current state                                                         | Required change                                             |
-| ----------------- | --------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Workspace model   | `WorkspaceLessonType` contains only browser/WebContainer types        | Add `go` and a separate runtime selector                    |
-| Runtime predicate | `lessonRunsInWebContainer()` also gates terminal and preview UI       | Separate runtime selection from runtime-capability checks   |
-| Runtime hooks     | Session and workspace-sync hooks are typed directly as `WebContainer` | Depend on the shared structural runtime surface             |
-| Runtime boot      | One shared WebContainer singleton                                     | Preserve it and add a distinct lazy remote-Go boot path     |
-| Runner defaults   | `pnpm install` / `pnpm dev`                                           | Select defaults by runtime kind                             |
-| Monaco            | `.go` falls back to plaintext                                         | Register Monaco's Go grammar and infer the `go` language id |
-| Starters          | No Go starter                                                         | Add `go.mod`, `main.go`, and `main_test.go` starter files   |
-| ZIP import        | Framework detection begins from `package.json`                        | Detect `go.mod` or Go source before JavaScript fallback     |
-| Collaboration     | Lesson-type validation enumerates existing types                      | Accept and project `go` without changing the Yjs protocol   |
-| Remote client     | Implemented in isolated `remote-runtime/` package                     | Add it as a lazy application dependency                     |
-| Go agent/image    | Implemented and unit/in-process tested                                | Complete Docker, Wrangler, and staging validation           |
-| Runtime Worker    | Implemented as a standalone control plane with temporary HMAC auth    | Integrate with the existing Worker auth and deployment      |
+| Area                 | Current state                                                         | Required change                                                 |
+| -------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Workspace model      | `WorkspaceLessonType` contains only browser/WebContainer types        | Add `go` and a separate runtime selector                        |
+| Runtime predicate    | `lessonRunsInWebContainer()` also gates terminal and preview UI       | Separate runtime selection from runtime-capability checks       |
+| Runtime hooks        | Session and workspace-sync hooks are typed directly as `WebContainer` | Depend on an app-owned structural runtime surface               |
+| Runtime boot         | One shared WebContainer singleton                                     | Preserve it and add a distinct lazy integrated-Go boot path     |
+| Runner defaults      | `pnpm install` / `pnpm dev`                                           | Select defaults by runtime kind                                 |
+| Monaco               | `.go` falls back to plaintext                                         | Register Monaco's Go grammar and infer the `go` language id     |
+| Starters             | No Go starter                                                         | Add `go.mod`, `main.go`, and `main_test.go` starter files       |
+| ZIP import           | Framework detection begins from `package.json`                        | Detect `go.mod` or Go source before JavaScript fallback         |
+| Collaboration        | Lesson-type validation enumerates existing types                      | Accept and project `go` without changing the Yjs protocol       |
+| Go lesson client     | No main-app client exists                                             | Build a lazy `GoLessonRuntimeClient` under `src/runtime/go/`    |
+| Go agent/image       | No main-infra Go lesson data plane exists                             | Build a new agent and image under `infra/runtime/go/`           |
+| Main Worker routes   | No integrated Go runtime control API exists                           | Build authenticated routes, quotas, and session ownership       |
+| Standalone prototype | `remote-runtime/` exists independently                                | Preserve it unchanged and keep it outside the application graph |
 
 ## 5. User experience
 
@@ -103,8 +123,9 @@ change the product default and does not route existing lessons away from WebCont
   actionable unavailable state.
 - Quota exhausted: preserve the workspace and show the server-provided quota message.
 - Provisioning failure: tear down any partial reservation and allow retry.
-- Lost WebSocket: use the implemented resume path; surface a terminal error if recovery expires.
-- Lesson-type switch or project replacement: destroy the remote session before activating the next
+- Lost WebSocket: use the new bounded reconnect/resume path; surface a terminal error if recovery
+  expires.
+- Lesson-type switch or project replacement: destroy the Go session before activating the next
   runtime.
 
 ## 6. Runtime selection model
@@ -112,10 +133,10 @@ change the product default and does not route existing lessons away from WebCont
 Do not expand `lessonRunsInWebContainer()` to include Go. Introduce explicit concepts instead:
 
 ```ts
-export type WorkspaceRuntimeKind = "webcontainer" | "remote-go";
+export type WorkspaceRuntimeKind = "webcontainer" | "go-container";
 
 export function runtimeKindForLessonType(lessonType: WorkspaceLessonType): WorkspaceRuntimeKind {
-  return lessonType === "go" ? "remote-go" : "webcontainer";
+  return lessonType === "go" ? "go-container" : "webcontainer";
 }
 
 export function lessonHasExecutableRuntime(lessonType: WorkspaceLessonType): boolean {
@@ -128,7 +149,7 @@ export function lessonHasExecutableRuntime(lessonType: WorkspaceLessonType): boo
 
 For v1 the mapping is derived from `lessonType`, which is already serialized in workspace snapshots,
 recordings, persistence, and collaboration metadata. Do not introduce a second persisted runtime
-field until more than one remote language or image choice exists.
+field until more than one server-side language or image choice exists.
 
 ## 7. Target architecture
 
@@ -138,11 +159,11 @@ flowchart LR
     Select -->|existing types| WC[Browser WebContainer]
     Select -->|go| Lazy{Explicit live action?}
     Lazy -->|no / playback| Recorded[Recorded workspace + runtime + preview state]
-    Lazy -->|yes| API[Existing Worker /api/runtime]
+    Lazy -->|yes| API[Main Worker /api/go-runtime]
     API --> Auth[Application session + quotas]
-    Auth --> DO[RuntimeGoSession Durable Object]
-    DO --> Container[Cloudflare Container: Go 1.26.5]
-    Container --> Agent[Go runtime agent]
+    Auth --> DO[GoLessonSession Durable Object]
+    DO --> Container[New infra/runtime/go image]
+    Container --> Agent[New app-owned Go lesson agent]
     Agent --> Tools[go run / go test / terminal / preview server]
 ```
 
@@ -156,26 +177,28 @@ Add a small generic runtime facade used by the editor hooks:
 - preview-script injection;
 - teardown.
 
-Both WebContainer and the implemented `RemoteContainer` satisfy this surface. Keep their lifecycle
-state separate:
+Both WebContainer and the new `GoLessonRuntimeClient` satisfy this app-owned surface. The new client
+lives under `src/runtime/go/`; it does not import or wrap `RemoteContainer`. Keep lifecycle state
+separate:
 
 - the existing shared WebContainer singleton remains untouched;
-- the remote Go instance is scoped to the active project/session;
+- the integrated Go instance is scoped to the active project/session;
 - changing runtime kind always tears down the previous instance;
 - only the selected implementation is dynamically imported.
 
 ### 7.2 Worker and container boundary
 
-Promote the reviewed standalone control-plane implementation into the existing `infra/` deployment,
-as the original remote-runtime design intended:
+Build the Go lesson control and data planes directly inside the existing `infra/` deployment:
 
-- mount authenticated control routes at `/api/runtime`;
-- reuse the existing application session instead of the standalone external HMAC identity token;
+- mount authenticated control routes at `/api/go-runtime`;
+- use the existing application session as the only user identity source;
 - return a short-lived session-scoped token for the runtime WebSocket;
 - add runtime quota tables through a normal D1 migration;
-- export `RuntimeGoSessionDurableObject` from the main Worker;
+- export `GoLessonSessionDurableObject` from the main Worker;
 - add the container, Durable Object, and quota bindings to `infra/wrangler.toml`;
-- preserve the current agent, protocol, client, and conformance packages rather than rewriting them.
+- build a new versioned app-owned protocol, agent, image, and integration tests under `src/` and
+  `infra/`;
+- keep every `remote-runtime/` artifact outside this dependency and deployment graph.
 
 The production preview hostname must be isolated from `nexteditor.dev`. Preview ingress must strip
 cookies and authorization, validate the session/port target, preserve HTTP and WebSocket upgrades,
@@ -183,28 +206,35 @@ inject only the approved preview recorder script, and set the documented CORP/CO
 
 ## 8. Implementation phases
 
-### Phase 0 — Validate the existing remote-runtime foundation
+### Phase 0 — Establish the new integrated Go runtime foundation
 
-This is a release prerequisite because package-level implementation exists but environment-dependent
-checks are still pending.
+This phase creates a minimal vertical slice in new main-app and `infra/` paths. It must not modify or
+consume `remote-runtime/`.
 
 Tasks:
 
-1. Build `remote-runtime/images/Dockerfile.base` for `linux/amd64`.
-2. Build `remote-runtime/Dockerfile.go1.26.5`.
-3. Run the agent health, WebSocket attach, `go version`, PTY, filesystem, port, and preview smoke tests
-   through Docker.
-4. Run the checked-in conformance suite in direct-agent mode.
-5. Run the standalone Worker under `wrangler dev` with local D1 and Docker.
-6. Run the conformance suite in full boot mode through the Worker.
+1. Define an app-owned `GoLessonRuntimeClient` contract and a versioned `go-runtime-v1` wire
+   protocol.
+2. Create a new Go agent under `infra/runtime/go/agent/` with health, filesystem, process, PTY, port,
+   and teardown primitives required by the lesson UI.
+3. Create `infra/runtime/go/Dockerfile` pinned to Go 1.26.5 and build it for `linux/amd64`.
+4. Add the smallest main-Worker route and Durable Object binding needed to provision one test
+   session through the existing application deployment.
+5. Connect a focused integration test client from `src/runtime/go/` through the main Worker to the
+   new agent.
+6. Run health, `go version`, PTY, filesystem, process, port, preview, and teardown smoke tests through
+   Docker and `wrangler dev`.
 7. Record actual image size, cold-start time, memory use, and teardown behavior.
+8. Add a repository-boundary check proving the phase has no diff under, import from, or dependency on
+   `remote-runtime/`.
 
 Acceptance:
 
-- Dockerized agent and full Worker boot conformance pass.
+- The new Dockerized agent and main-Worker vertical slice pass their focused conformance checks.
 - `go run .` opens a detected port and renders through the preview proxy.
 - A failed provision and an idle session both release their quota reservations.
-- No editor or production-infra change proceeds if these checks reveal a platform blocker.
+- `remote-runtime/` remains unchanged and is not present in the new dependency graph.
+- No broader editor integration proceeds if these checks reveal a platform blocker.
 
 ### Phase 1 — Add Go as an editable workspace type
 
@@ -239,13 +269,16 @@ Acceptance:
 - A fresh Go workspace opens with Go syntax highlighting.
 - Go projects round-trip through workspace persistence, ZIP import/export, recording snapshots, and
   collaboration projection without falling back to `html-css`.
-- Selecting Go does not boot WebContainer or a remote session.
+- Selecting Go does not boot WebContainer or an integrated Go session.
 - Existing workspace fixtures and lesson-type behavior remain unchanged.
 
 ### Phase 2 — Introduce the selective runtime facade
 
 Primary files:
 
+- `src/runtime/contracts.ts` (new app-owned runtime contract)
+- `src/runtime/go/GoLessonRuntimeClient.ts` (new)
+- `src/runtime/go/goLessonRuntimeProtocol.ts` (new)
 - `src/contexts/WebContainerRuntimeContext.ts` (split/rename toward generic runtime contracts)
 - `src/contexts/webContainerRuntimeSupport.ts`
 - `src/contexts/useWebContainerRuntimeSession.ts`
@@ -257,11 +290,11 @@ Primary files:
 
 Tasks:
 
-1. Define the structural `RuntimeContainer` and `RuntimeProcess` types at an application boundary.
+1. Define structural `RuntimeContainer` and `RuntimeProcess` types in `src/runtime/contracts.ts`.
 2. Generalize session and workspace-sync hooks from concrete `WebContainer` types to that boundary.
 3. Preserve `getOrBootSharedWebContainer()` as the only WebContainer boot path.
-4. Add a distinct `getOrBootRemoteGoContainer()` that dynamically imports
-   `@next-editor/remote-runtime`.
+4. Add a distinct `getOrBootGoLessonRuntime()` that dynamically imports only the new
+   `src/runtime/go/` implementation.
 5. Add a `RuntimeProvider` selector that activates one implementation from `lessonType`.
 6. Rename runtime contexts/hooks to generic names, using temporary compatibility re-exports only if
    required to keep the refactor reviewable.
@@ -274,9 +307,10 @@ Acceptance:
 
 - Existing lesson types still import and boot the real `@webcontainer/api` implementation.
 - Go uses no WebContainer code path.
-- The remote-runtime client is absent from normal JS lesson chunks until a Go live action occurs.
+- The integrated Go client is absent from normal JS lesson chunks until a Go live action occurs.
+- No `src/` module imports from `remote-runtime/` or an alias pointing to it.
 - Terminal, filesystem synchronization, process output, port events, and Preview work through a
-  mocked remote implementation in focused hook tests.
+  mocked `GoLessonRuntimeClient` in focused hook tests.
 
 ### Phase 3 — Integrate the runtime control plane with current infrastructure
 
@@ -285,17 +319,21 @@ Primary files:
 - `infra/wrangler.toml`
 - `infra/worker/index.ts`
 - `infra/worker/env.d.ts`
-- `infra/worker/routes/runtime.ts` (new)
-- `infra/worker/runtime/sessionDurableObject.ts` (new/promoted)
-- `infra/worker/runtime/preview.ts` (new/promoted)
-- `infra/db/migrations/0010_remote_runtime_quotas.sql` (new)
+- `infra/worker/routes/goRuntime.ts` (new)
+- `infra/worker/runtime/go/GoLessonSessionDurableObject.ts` (new)
+- `infra/worker/runtime/go/preview.ts` (new)
+- `infra/worker/runtime/go/protocol.ts` (new)
+- `infra/runtime/go/agent/` (new)
+- `infra/runtime/go/Dockerfile` (new)
+- `infra/db/migrations/0010_go_lesson_runtime_quotas.sql` (new)
 - `package.json` and `bun.lock`
 
 Tasks:
 
-1. Add the reviewed `@cloudflare/containers` dependency and container configuration.
-2. Promote the standalone session Durable Object and preview helpers without changing the RCP
-   protocol.
+1. Add `@cloudflare/containers` and the new Go lesson container configuration directly to the main
+   infrastructure package.
+2. Implement the new `GoLessonSessionDurableObject`, `go-runtime-v1` protocol, and preview proxy in
+   `infra/`; do not promote or import the standalone implementation.
 3. Authenticate session creation through `getCurrentUser()` and the existing first-party session.
 4. Keep the returned WebSocket/preview token scoped to one user and one session.
 5. Add atomic concurrent-session and daily-minute quota admission to the existing D1 database.
@@ -303,6 +341,8 @@ Tasks:
 7. Add the production preview hostname route only after its DNS/TLS choice is explicitly approved.
 8. Keep local preview paths for `wrangler dev` and automated tests.
 9. Add a server-side `GO_RUNTIME_ENABLED` kill switch that fails closed.
+10. Add dependency-boundary tests that fail if application or infrastructure code imports
+    `remote-runtime/`.
 
 Acceptance:
 
@@ -312,6 +352,8 @@ Acceptance:
 - Main app responses retain their cross-origin-isolation headers.
 - Preview responses contain no editor cookie/auth data and preserve HMR WebSockets.
 - Disabling the feature flag prevents new sessions without disrupting lesson playback.
+- The main Worker deploys the integrated Go runtime without building or publishing
+  `remote-runtime/`.
 
 ### Phase 4 — Connect live Go execution
 
@@ -319,11 +361,11 @@ Tasks:
 
 1. Add per-runtime runner defaults:
    - WebContainer: keep the existing `pnpm install` / `pnpm dev` behavior;
-   - remote Go: `go mod download` / `go run .`.
+   - integrated Go: `go mod download` / `go run .`.
 2. Do not provision from component mount, workspace load, recording load, or playback start.
 3. Provision on the first explicit Run, Test, or Terminal action.
 4. Mount the current workspace, not merely the original lesson snapshot.
-5. Run initialization once per remote session and retry safely after a failed initialization.
+5. Run initialization once per Go session and retry safely after a failed initialization.
 6. Reuse the existing runner output and terminal UI.
 7. Route detected ports into the existing Preview controller.
 8. Add a **Run tests** action executing `go test ./...`; it may initially reuse the runner output
@@ -364,8 +406,8 @@ Acceptance:
 
 Tasks:
 
-1. Run the existing reconnect, protocol fuzz, archive traversal, process-limit, and 30-minute soak
-   checks against the integrated deployment.
+1. Add and run reconnect, protocol fuzz, archive traversal, process-limit, and 30-minute soak checks
+   against the new integrated deployment.
 2. Add telemetry for requested/created/failed/stopped sessions, boot latency, active minutes, quota
    hits, reconnects, Go commands, and preview readiness. Never log source, terminal contents, or
    environment-variable values.
@@ -397,13 +439,14 @@ Acceptance:
 | Monaco                            | `src/monaco/runtime.ts`                                                           |
 | Workspace picker                  | `src/components/EditorHeader.tsx`                                                 |
 | Runtime UI gates                  | `src/components/CodeEditor.tsx`, `src/components/preview/usePreviewController.ts` |
-| Runtime facade/hooks              | `src/contexts/*Runtime*`, `src/hooks/use*Runtime*`                                |
-| Remote client                     | `remote-runtime/src/`, root dependency wiring                                     |
-| Go data plane                     | `remote-runtime/agent/`, `remote-runtime/Dockerfile.go1.26.5`                     |
-| Cloudflare control plane          | promoted `remote-runtime/worker/src/*` under `infra/worker/runtime/`              |
-| Auth/API                          | `infra/worker/routes/runtime.ts`, `infra/worker/index.ts`                         |
-| Quotas                            | new D1 migration and typed queries                                                |
+| Runtime facade/hooks              | `src/runtime/contracts.ts`, `src/contexts/*Runtime*`, `src/hooks/use*Runtime*`    |
+| Integrated Go client              | `src/runtime/go/*`                                                                |
+| Integrated Go data plane          | `infra/runtime/go/agent/*`, `infra/runtime/go/Dockerfile`                         |
+| Integrated control plane          | `infra/worker/runtime/go/*`                                                       |
+| Auth/API                          | `infra/worker/routes/goRuntime.ts`, `infra/worker/index.ts`                       |
+| Quotas                            | new Go lesson runtime D1 migration and typed queries                              |
 | Deployment                        | `infra/wrangler.toml`, deploy/runbook docs                                        |
+| Preserved standalone package      | no changes under `remote-runtime/`                                                |
 
 ## 10. Test matrix
 
@@ -411,29 +454,31 @@ Acceptance:
 | --------------------- | ------------------------------------------------------------------------------- |
 | Workspace model       | `go` validation, persistence, equality, import/export, collaboration projection |
 | Monaco                | `.go` maps to `go`; existing mappings unchanged                                 |
-| Runtime selection     | Every existing type selects WebContainer; only `go` selects remote Go           |
+| Runtime selection     | Every existing type selects WebContainer; only `go` selects integrated Go       |
 | Lazy behavior         | Load/playback produces no session request; explicit live action produces one    |
 | Shared runtime facade | Filesystem, mount, spawn, streams, PTY, ports, preview events, teardown         |
-| Go agent              | Existing unit/integration/fuzz tests plus Docker conformance                    |
+| Go agent              | New unit/integration/fuzz tests plus Docker conformance                         |
 | Worker routes         | auth, ownership, tokens, validation, quotas, cleanup, feature flag              |
 | Preview               | HTTP, headers, cookie stripping, HTML injection, WebSocket/HMR passthrough      |
 | Editor integration    | runner, tests, terminal, file sync, reverse sync, project switch, error UX      |
 | Recording             | Go capture/replay without live runtime; legacy JS/TS regression fixtures        |
 | Staging               | cold boot, warm boot, reconnect, idle stop, quota stop, 30-minute soak          |
+| Package boundary      | no `remote-runtime/` changes, imports, dependencies, builds, or deploy steps    |
 
 ## 11. Security and cost requirements
 
 - Treat all container code and preview output as untrusted.
 - Never pass Worker secrets, Google credentials, session cookies, QStash credentials, D1 bindings,
   or R2 credentials into the container.
-- Preserve the agent's workspace jail, archive traversal defenses, process/file/byte limits, and
-  protocol flow control.
+- Implement and test a workspace jail, archive traversal defenses, process/file/byte limits, and
+  protocol flow control in the new Go lesson agent.
 - Scope every control and WebSocket operation to the authenticated owner and session.
 - Use a separate preview origin; strip cookies and authorization before proxying.
-- Document and monitor the v1 outbound-internet policy (`enableInternet` is currently enabled).
-- Use Cloudflare's `basic` instance type initially, as already selected for Go compilation.
-- Keep the current configurable concurrent-session and daily-minute limits; choose production values
-  from staging measurements rather than hard-coding assumptions in the client.
+- Decide, document, and monitor the v1 outbound-internet policy before enabling general access.
+- Start with Cloudflare's `basic` instance type, then validate it against integrated Go compilation
+  measurements.
+- Add configurable concurrent-session and daily-minute limits; choose production values from staging
+  measurements rather than hard-coding assumptions in the client.
 - Destroy on explicit teardown and use idle cleanup as a backstop.
 - Never provision containers for crawlers, gallery cards, lesson detail fetches, or passive playback.
 
@@ -449,8 +494,10 @@ Acceptance:
 | Go image is too slow or large                         | Poor author/viewer experience               | Complete Phase 0 measurements before editor integration; slim/pin image         |
 | Global runner defaults remain Node-specific           | Go commands fail immediately                | Select runner profile by runtime kind                                           |
 | `go` is omitted from a duplicated validator           | Recording/collaboration silently falls back | Centralize known lesson types where practical and add round-trip tests          |
-| Remote outage blocks lesson viewing                   | Published content unavailable               | Playback must consume recordings without live compute                           |
-| Existing lessons accidentally route remote            | Cost and behavior regression                | Exhaustive selector tests over every `WorkspaceLessonType`                      |
+| Cloudflare runtime outage blocks lesson viewing       | Published content unavailable               | Playback must consume recordings without live compute                           |
+| Existing lessons accidentally route server-side       | Cost and behavior regression                | Exhaustive selector tests over every `WorkspaceLessonType`                      |
+| New code leaks into the standalone package            | Package independence and future reuse break | Protected paths plus diff, import, dependency, build, and deploy boundary tests |
+| Prototype code is promoted instead of integrated code | Main-app auth and lifecycle remain detached | Require all production paths to originate under `src/` and `infra/`             |
 
 ## 13. Definition of done
 
@@ -464,7 +511,10 @@ Selective Go lesson support is complete only when all of the following are true:
   HTTP Preview.
 - Runtime auth, ownership, quota, teardown, and preview-isolation tests pass.
 - Docker, `wrangler dev`, full conformance, staging, reconnect, and soak checks pass.
-- Production preview DNS/TLS and the remote D1 migration have been applied through separately
+- The main app and main Worker build, test, and deploy Go lessons without building or importing
+  `remote-runtime/`.
+- `remote-runtime/` has no changes, and dependency-boundary checks prevent accidental coupling.
+- Production preview DNS/TLS and the Go lesson runtime D1 migration have been applied through separately
   authorized operational steps.
 - Cost/usage telemetry and the server kill switch are live and documented.
 - Rollback disables new live execution without breaking lesson editing or recorded playback.
