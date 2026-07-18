@@ -20,6 +20,24 @@ function makeProject(): WorkspaceProject {
   };
 }
 
+function makeGoProject(): WorkspaceProject {
+  return {
+    id: "test-go",
+    name: "Test Go",
+    lessonType: "go",
+    entryFilePath: "main.go",
+    folders: [],
+    files: {
+      "main.go": {
+        path: "main.go",
+        name: "main.go",
+        language: "go",
+        content: "package main",
+      },
+    },
+  };
+}
+
 describe("buildSystemPrompt", () => {
   it("states the WebContainer-supported stack and forbids other runtimes", () => {
     const prompt = buildSystemPrompt(makeProject(), { toolNames: ["read"], hasBash: true });
@@ -30,6 +48,20 @@ describe("buildSystemPrompt", () => {
     // doesn't reach for them.
     expect(prompt).toContain("Python");
     expect(prompt).toContain("native binaries");
+  });
+
+  it("describes the Go Playground stack for go lessons without WebContainer guidance", () => {
+    const prompt = buildSystemPrompt(makeGoProject(), {
+      toolNames: ["read", "edit"],
+      hasBash: false,
+    });
+
+    expect(prompt).toContain("Supported stack: Go only");
+    expect(prompt).toContain("Go Playground");
+    expect(prompt).toContain("you cannot execute code yourself");
+    expect(prompt).toContain("Lesson type: go");
+    expect(prompt).not.toContain("WebContainer");
+    expect(prompt).not.toContain("Node.js ecosystem");
   });
 
   it("lists the enabled tools and workspace context", () => {

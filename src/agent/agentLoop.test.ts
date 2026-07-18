@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
+import type { WorkspaceLessonType } from "../types/workspace";
 import type { ChatDelta } from "../types/chat";
 import { getDmpCodec } from "../storage/dmpCodec/dmpCodec";
 import { runAgentLoop, type RunAgentLoopOptions } from "./agentLoop";
@@ -13,6 +14,7 @@ function createFakeWorkspaceStore(
       content: "<html></html>",
     },
   },
+  lessonType: WorkspaceLessonType = "html-css",
 ): WorkspaceStoreInstance {
   return {
     getSnapshot: () => ({
@@ -21,7 +23,7 @@ function createFakeWorkspaceStore(
         project: {
           id: "p1",
           name: "Test project",
-          lessonType: "html-css",
+          lessonType,
           entryFilePath: "index.html",
           folders: [],
           files,
@@ -58,6 +60,7 @@ interface FakeModelInput {
   input: unknown;
   instructions?: unknown;
   model?: unknown;
+  tools?: { name?: string; function?: { name?: string } }[];
 }
 
 function fakeCallModel(items: StreamItem[], usage?: { inputTokens: number; outputTokens: number }) {
@@ -150,6 +153,30 @@ describe("runAgentLoop", () => {
     );
     expect(deltas.some((d) => d.k === "tool_call")).toBe(false);
     expect(calls[0].instructions).not.toContain("Workspace session memory:");
+  });
+
+  it("gives go lessons a file-tools-only profile with Go Playground instructions", async () => {
+    const { deltas, ...options } = baseOptions();
+    const { callModel, calls } = fakeCallModel([messageItem("m1", "ok")]);
+
+    await runAgentLoop({
+      ...options,
+      workspace: createFakeWorkspaceStore(
+        {
+          "main.go": { path: "main.go", name: "main.go", language: "go", content: "package main" },
+        },
+        "go",
+      ),
+      prompt: "hi",
+      callModel,
+      onDelta: (d) => deltas.push(d),
+    });
+
+    expect(deltas.at(-1)).toEqual({ k: "status", status: "done" });
+    const toolNames = (calls[0].tools ?? []).map((t) => t.function?.name ?? t.name);
+    expect(toolNames).toEqual(["read", "ls", "glob", "grep", "write", "edit"]);
+    expect(calls[0].instructions).toContain("Go Playground");
+    expect(calls[0].instructions).not.toContain("Bash/WebContainer safety rules");
   });
 
   it("bypasses Myers for append-only snapshots and uses it when a provider revises text", async () => {

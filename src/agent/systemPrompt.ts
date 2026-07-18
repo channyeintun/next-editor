@@ -1,4 +1,8 @@
-import { isWorkspaceTextFile, type WorkspaceProject } from "../types/workspace";
+import {
+  executionKindForLessonType,
+  isWorkspaceTextFile,
+  type WorkspaceProject,
+} from "../types/workspace";
 
 export interface SystemPromptOptions {
   toolNames: string[];
@@ -32,7 +36,19 @@ function buildIntroduction(): string {
   return "You are an expert coding assistant embedded in a browser-based lesson editor. You read, write, search, and edit files in the user's in-browser workspace to help them build, debug, and iterate on lessons. Work collaboratively to understand their intent and provide clear explanations for your changes.";
 }
 
-function buildSupportedStack(): string {
+function buildSupportedStack(project: WorkspaceProject): string {
+  if (executionKindForLessonType(project.lessonType) === "go-playground") {
+    return (
+      "Supported stack: Go only. This lesson's Go files compile and run remotely on the " +
+      "Go Playground when the user presses Run or Format in the Go Runner panel — you " +
+      "cannot execute code yourself. There is no shell, terminal, dev server, or preview " +
+      "in this workspace: work purely through the file tools and reason about program " +
+      "behavior from the source. Keep solutions within Go Playground constraints " +
+      "(sandboxed execution, no network access, limited compute time), and do not " +
+      "introduce other languages, toolchains, or runtimes."
+    );
+  }
+
   return (
     "Supported stack: HTML, CSS, JavaScript, TypeScript, Node.js, and JS/TS libraries " +
     "and frameworks only. The workspace runs in an in-browser WebContainer, which only " +
@@ -100,7 +116,7 @@ function buildWorkspaceContext(project: WorkspaceProject): string {
 export function buildSystemPrompt(project: WorkspaceProject, options: SystemPromptOptions): string {
   const sections: string[] = [
     buildIntroduction(),
-    buildSupportedStack(),
+    buildSupportedStack(project),
     buildPathConventions(),
     buildToolList(options.toolNames),
   ];

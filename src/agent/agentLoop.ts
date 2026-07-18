@@ -7,9 +7,10 @@ import {
   type ToolConfirmationRequest,
   type ToolContext,
 } from "./types";
-import { CODING_TOOL_NAMES, createCodingTools } from "./tools/index";
+import { codingToolNamesFor, createCodingTools } from "./tools/index";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getProject } from "./tools/workspaceFs";
+import { executionKindForLessonType } from "../types/workspace";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatDelta, ChatImage, ChatItem } from "../types/chat";
 import { outputMessageText, toEasyInputMessage, toResponsesInput } from "../types/chat";
@@ -128,10 +129,13 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
     getPreviewInspection: options.getPreviewInspection,
     capturePreviewScreenshot: options.capturePreviewScreenshot,
   };
-  const tools = createCodingTools(toolContext);
+  // Go Playground lessons have no in-browser runtime, so their agent runs with
+  // file tools only — no bash and no runtime/preview observation.
+  const executionKind = executionKindForLessonType(project.lessonType);
+  const tools = createCodingTools(toolContext, executionKind);
   const systemPrompt = buildSystemPrompt(project, {
-    toolNames: CODING_TOOL_NAMES,
-    hasBash: true,
+    toolNames: codingToolNamesFor(executionKind),
+    hasBash: executionKind === "webcontainer",
   });
 
   // Emit the user's prompt as a whole message item (it's already fully typed).

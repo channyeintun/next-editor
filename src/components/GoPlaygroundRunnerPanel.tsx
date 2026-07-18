@@ -1,9 +1,11 @@
 import { useEffect, useEffectEvent, useRef } from "react";
 import { useSelector } from "@xstate/store-react";
-import { ChevronDown, ChevronUp, Diamond, Maximize2, Minimize2 } from "lucide-react";
+import { Bot, ChevronDown, ChevronUp, Diamond, Maximize2, Minimize2 } from "lucide-react";
 import { signInUrl, useAuth } from "@next-editor/infra";
+import AgentPanel from "./agent/AgentPanel";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import {
+  selectActiveTab,
   selectConsoleLines,
   selectIsCollapsed,
   selectIsFullHeight,
@@ -26,7 +28,7 @@ import {
   goRunStartedConsoleLines,
 } from "../runtime/goPlayground/console";
 import { areGoPlaygroundFilesEqual, collectGoPlaygroundFiles } from "../runtime/goPlayground/files";
-import type { RuntimeTerminalScrollLines } from "../types/runtime";
+import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
 /**
@@ -35,7 +37,9 @@ import { areStructuredDataEqual } from "../utils/equality";
  * action; there is no shell, preview, or WebContainer surface here. Console
  * output lives in the shared runtime panel store's consoleLines, so the
  * existing runtime recording snapshot captures it and playback replays it
- * without any live execution.
+ * without any live execution. The dock also hosts the Agent tab: the agent
+ * runs with file tools only in Go lessons (no bash or runtime observation —
+ * see agent/tools/index.ts).
  */
 
 const GO_CONSOLE_SCROLL_SURFACE = "go-runner";
@@ -69,7 +73,23 @@ function decorateGoConsoleLine(line: string): string {
   return `${prefixColor}${prefix}${ANSI_RESET}${ANSI_DIM}${suffix}${ANSI_RESET}`;
 }
 
+// Go lessons have no shell or preview, but the agent works on the workspace
+// files, so the dock exposes two tabs: the Playground runner and the agent.
+const GO_DOCK_TABS = [
+  {
+    id: "runner",
+    label: "Go Runner",
+    icon: <Diamond size={15} strokeWidth={2.25} />,
+  },
+  {
+    id: "agent",
+    label: "Agent",
+    icon: <Bot size={14} />,
+  },
+] as const satisfies readonly { id: RuntimeDockTab; label: string; icon: React.ReactNode }[];
+
 interface GoRuntimeEventState {
+  activeTab: RuntimeDockTab;
   isCollapsed: boolean;
   isFullHeight: boolean;
   consoleLines: string[];
@@ -78,6 +98,7 @@ interface GoRuntimeEventState {
 
 function GoPlaygroundRunnerPanel() {
   const { store: runtimePanelStore } = useRuntimePanelStore();
+  const activeTab = useSelector(runtimePanelStore, (s) => selectActiveTab(s.context));
   const isCollapsed = useSelector(runtimePanelStore, (s) => selectIsCollapsed(s.context));
   const isFullHeight = useSelector(runtimePanelStore, (s) => selectIsFullHeight(s.context));
   const consoleLines = useSelector(runtimePanelStore, (s) => selectConsoleLines(s.context));
@@ -94,6 +115,13 @@ function GoPlaygroundRunnerPanel() {
   const { isRunning, isFormatting, run, format, cancel } = useGoPlaygroundRunner();
   const previousRuntimeEventStateRef = useRef<GoRuntimeEventState | null>(null);
 
+  // The tab state is shared with the WebContainer dock's store; anything other
+  // than "agent" (including a stale "terminal"/"console" from a previous lesson)
+  // renders as the Go Runner tab.
+  const rawActiveTab = isPlaybackSnapshotActive
+    ? (recordedRuntimeSnapshot?.activeTab ?? "runner")
+    : activeTab;
+  const displayActiveTab: RuntimeDockTab = rawActiveTab === "agent" ? "agent" : "runner";
   const displayIsCollapsed = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.isCollapsed ?? false)
     : isCollapsed;
@@ -288,6 +316,7 @@ function GoPlaygroundRunnerPanel() {
   };
 
   const runtimeEventState: GoRuntimeEventState = {
+    activeTab,
     isCollapsed,
     isFullHeight,
     consoleLines,
@@ -362,10 +391,27 @@ function GoPlaygroundRunnerPanel() {
       data-cursor-replay-target="runtime-dock"
     >
       <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">
-        <div className="inline-flex items-center gap-2.5 border-b border-b-[#64a3ff] border-r border-r-[#11151d] bg-[#171b22] px-4 py-3 text-[13px] font-semibold text-white">
-          <Diamond size={15} strokeWidth={2.25} />
-          Go Runner
-        </div>
+        {GO_DOCK_TABS.map((tab) => {
+          const isActive = tab.id === displayActiveTab;
+
+          return (
+            <button
+              key={tab.id}
+              data-tour={tab.id === "agent" ? "agent" : undefined}
+              type="button"
+              disabled={isPlaybackSnapshotActive}
+              onClick={() => runtimePanelStore.trigger.setActiveTab({ tab: tab.id })}
+              className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${
+                isActive
+                  ? "border-b border-b-[#64a3ff] bg-[#171b22] text-white"
+                  : "text-slate-400 hover:bg-[#171b22] hover:text-white"
+              } disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          );
+        })}
 
         <button
           type="button"
@@ -406,7 +452,11 @@ function GoPlaygroundRunnerPanel() {
         </button>
       </div>
 
-      {!displayIsCollapsed && (
+      {!displayIsCollapsed && displayActiveTab === "agent" && (
+        <AgentPanel isFullHeight={dockContentSizeClass !== "h-72"} />
+      )}
+
+      {!displayIsCollapsed && displayActiveTab === "runner" && (
         <div className={`flex ${dockContentSizeClass} flex-col bg-[#15191f]`}>
           <div className="flex min-h-15.5 items-center justify-between border-b border-[#11151d] bg-[#191d25] px-4 py-3">
             <div className="flex min-w-0 items-center gap-2.5">
