@@ -592,12 +592,7 @@ function compareProgressiveWhiteboardStroke(
   // During one pointer gesture Excalidraw may append freehand points before it
   // advances version/versionNonce. Prefer the monotonic longer snapshot so the
   // deterministic serialized fallback cannot lock the room to the first chunk.
-  if (
-    left.type !== "freedraw" ||
-    right.type !== "freedraw" ||
-    left.isDeleted ||
-    right.isDeleted
-  ) {
+  if (left.type !== "freedraw" || right.type !== "freedraw" || left.isDeleted || right.isDeleted) {
     return 0;
   }
   const leftPoints = Array.isArray(left.points) ? left.points.length : 0;

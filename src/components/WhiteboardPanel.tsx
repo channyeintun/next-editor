@@ -27,14 +27,8 @@ function toExcalidrawElements(
 }
 
 export default function WhiteboardPanel() {
-  const {
-    scene,
-    sceneUpdateSource,
-    isOpen,
-    setOpen,
-    setMaximized,
-    handleExcalidrawChange,
-  } = useWhiteboardContext();
+  const { scene, sceneUpdateSource, isOpen, setOpen, setMaximized, handleExcalidrawChange } =
+    useWhiteboardContext();
   const { usesPlaybackModel } = useNextEditorMetadata();
   const collaboration = useOptionalCollaboration();
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);

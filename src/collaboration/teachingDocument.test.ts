@@ -399,12 +399,12 @@ describe("collaboration teaching document", () => {
     ]);
 
     applyCollaborationWhiteboardDelta(doc, { upserts: [partial] });
-    expect(
-      applyCollaborationWhiteboardDelta(doc, { upserts: [completed] })[0]?.points,
-    ).toEqual(completed.points);
-    expect(
-      applyCollaborationWhiteboardDelta(doc, { upserts: [partial] })[0]?.points,
-    ).toEqual(completed.points);
+    expect(applyCollaborationWhiteboardDelta(doc, { upserts: [completed] })[0]?.points).toEqual(
+      completed.points,
+    );
+    expect(applyCollaborationWhiteboardDelta(doc, { upserts: [partial] })[0]?.points).toEqual(
+      completed.points,
+    );
 
     doc.destroy();
   });
