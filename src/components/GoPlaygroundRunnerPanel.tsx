@@ -13,7 +13,7 @@ import XtermTerminal from "./XtermTerminal";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import { useGoPlaygroundRunner } from "../hooks/useGoPlaygroundRunner";
-import { useWorkspaceActions } from "../hooks/useWorkspace";
+import { useWorkspaceActions, useWorkspaceProjectVersion } from "../hooks/useWorkspace";
 import { isWorkspaceTextFile } from "../types/workspace";
 import {
   goRunResultToConsoleLines,
@@ -82,8 +82,9 @@ function GoPlaygroundRunnerPanel() {
   const { currentRecording, isRecording } = useNextEditorMetadata();
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
   const { getProject, saveProject } = useWorkspaceActions();
+  const projectVersion = useWorkspaceProjectVersion();
   const { isSignedIn, isLoading: isAuthLoading } = useAuth();
-  const { isRunning, run } = useGoPlaygroundRunner();
+  const { isRunning, run, cancel } = useGoPlaygroundRunner();
   const previousRuntimeEventStateRef = useRef<GoRuntimeEventState | null>(null);
 
   const displayIsCollapsed = isPlaybackSnapshotActive
@@ -104,6 +105,36 @@ function GoPlaygroundRunnerPanel() {
       runtimePanelStore.trigger.setPlaybackSnapshot({ snapshot: null });
     }
   }, [currentRecording, runtimePanelStore]);
+
+  useEffect(() => {
+    // The runtime panel store is shared by the browser and Go runners. Clear
+    // their content-specific console/scroll state at Go/project boundaries so
+    // output cannot leak into another lesson. A project change also supersedes
+    // a Run that was started against the previous main.go.
+    cancel();
+
+    const resetConsoleSurface = () => {
+      const context = runtimePanelStore.getSnapshot().context;
+      if (context.consoleLines.length > 0) {
+        runtimePanelStore.trigger.setConsoleLines({ consoleLines: [] });
+      }
+
+      if (Object.keys(context.terminalScrollLines).length > 0) {
+        runtimePanelStore.trigger.setTerminalScrollLines({
+          terminalScrollLines: {},
+        });
+      }
+    };
+
+    resetConsoleSurface();
+    return resetConsoleSurface;
+  }, [cancel, projectVersion, runtimePanelStore]);
+
+  useEffect(() => {
+    if (isPlaybackSnapshotActive) {
+      cancel();
+    }
+  }, [cancel, isPlaybackSnapshotActive]);
 
   const appendConsoleLines = (lines: string[]) => {
     if (lines.length === 0) {
@@ -164,12 +195,17 @@ function GoPlaygroundRunnerPanel() {
 
     // Read the current source at click time — never a stale copy.
     const project = getProject();
-    const goFile = [project.files[project.entryFilePath], ...Object.values(project.files)].find(
-      (file) => file && file.path.endsWith(".go") && isWorkspaceTextFile(file),
+    const goFiles = Object.values(project.files).filter(
+      (file) => file.path.endsWith(".go") && isWorkspaceTextFile(file),
     );
+    const goFile = project.files["main.go"];
 
     if (!goFile || !isWorkspaceTextFile(goFile)) {
       appendConsoleLines(["[go-run error] Add a main.go file to run this lesson"]);
+      return;
+    }
+    if (goFiles.length !== 1) {
+      appendConsoleLines(["[go-run error] Go lessons currently support exactly one main.go file"]);
       return;
     }
 

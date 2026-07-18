@@ -2,7 +2,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { goPlaygroundRoute, normalizeUpstreamCompileResponse } from "./goPlayground";
+import {
+  goPlaygroundRoute,
+  normalizeUpstreamCompileResponse,
+  validateGoLessonSource,
+} from "./goPlayground";
 import type { Env } from "../env";
 import type { UserRow } from "../../db/types";
 
@@ -95,9 +99,38 @@ describe("goPlaygroundRoute", () => {
   });
 
   it("rejects an invalid JSON body", async () => {
-    stubUpstream({});
+    const spy = stubUpstream({});
     const response = await runRequest(makeEnv(), "not json");
+
     expect(response.status).toBe(400);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("rejects JSON null instead of throwing an internal error", async () => {
+    const spy = stubUpstream({});
+    const response = await runRequest(makeEnv(), "null");
+
+    expect(response.status).toBe(400);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("bounds the request body before parsing JSON", async () => {
+    const spy = stubUpstream({});
+    const response = await runRequest(
+      makeEnv(),
+      JSON.stringify({ source: SOURCE, padding: "x".repeat(400 * 1024) }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("accepts only the documented source field", async () => {
+    const spy = stubUpstream({});
+    const response = await runRequest(makeEnv(), JSON.stringify({ source: SOURCE, extra: true }));
+
+    expect(response.status).toBe(400);
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it("rejects empty source", async () => {
@@ -126,12 +159,38 @@ describe("goPlaygroundRoute", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  it("rejects multi-file txtar and third-party imports before proxying", async () => {
+    const spy = stubUpstream({});
+    const txtarResponse = await runRequest(
+      makeEnv(),
+      JSON.stringify({ source: `${SOURCE}\n-- helper.go --\npackage main\n` }),
+    );
+    const moduleResponse = await runRequest(
+      makeEnv(),
+      JSON.stringify({
+        source: 'package main\n\nimport "github.com/example/dependency"\n\nfunc main() {}\n',
+      }),
+    );
+
+    expect(txtarResponse.status).toBe(400);
+    expect(moduleResponse.status).toBe(400);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it("returns 429 once the per-user minute window is exhausted", async () => {
     const spy = stubUpstream({});
     const windowKey = `gp:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
     const response = await runRequest(makeEnv({ CACHE: memoryKv({ [windowKey]: "10" }) }));
 
     expect(response.status).toBe(429);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the rate-limit store is unavailable", async () => {
+    const spy = stubUpstream({});
+    const response = await runRequest(makeEnv({ CACHE: undefined }));
+
+    expect(response.status).toBe(502);
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -211,6 +270,11 @@ describe("goPlaygroundRoute", () => {
     expect((await runRequest(makeEnv())).status).toBe(502);
   });
 
+  it("bounds the upstream response before parsing JSON", async () => {
+    stubUpstream({ Events: [{ Message: "x".repeat(2 * 1024 * 1024) }], Status: 0 });
+    expect((await runRequest(makeEnv())).status).toBe(502);
+  });
+
   it("returns 502 for an upstream HTTP failure", async () => {
     stubUpstream({ error: "overloaded" }, 500);
     expect((await runRequest(makeEnv())).status).toBe(502);
@@ -222,6 +286,27 @@ describe("goPlaygroundRoute", () => {
       vi.fn(async () => {
         throw new DOMException("The operation timed out", "TimeoutError");
       }),
+    );
+
+    expect((await runRequest(makeEnv())).status).toBe(504);
+  });
+
+  it("keeps the 504 mapping when the timeout interrupts the response body", async () => {
+    vi.spyOn(AbortSignal, "timeout").mockReturnValue(
+      AbortSignal.abort(new DOMException("The operation timed out", "TimeoutError")),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream({
+              pull() {
+                throw new DOMException("The operation timed out", "TimeoutError");
+              },
+            }),
+          ),
+      ),
     );
 
     expect((await runRequest(makeEnv())).status).toBe(504);
@@ -265,6 +350,63 @@ describe("normalizeUpstreamCompileResponse", () => {
   it("rejects non-object payloads", () => {
     expect(normalizeUpstreamCompileResponse(null)).toBeNull();
     expect(normalizeUpstreamCompileResponse("Events")).toBeNull();
+  });
+
+  it("rejects invalid status and test metadata values", () => {
+    expect(normalizeUpstreamCompileResponse({ Events: [], Status: -1 })).toBeNull();
+    expect(normalizeUpstreamCompileResponse({ Events: [], Status: 0, IsTest: "true" })).toBeNull();
+    expect(
+      normalizeUpstreamCompileResponse({ Events: [], Status: 0, TestsFailed: 1.5 }),
+    ).toBeNull();
+  });
+
+  it("ignores event metadata entries without a message", () => {
+    expect(
+      normalizeUpstreamCompileResponse({
+        Events: [{ Kind: "start" }, { Kind: "stdout", Message: "done\n" }],
+        Status: 0,
+      }),
+    ).toEqual({ status: "success", output: "done\n", exitCode: 0 });
+  });
+
+  it("preserves vet diagnostics without masking a non-zero runtime exit", () => {
+    expect(
+      normalizeUpstreamCompileResponse({
+        VetErrors: "prog.go:7:2: unreachable code",
+        Events: [{ Message: "panic: boom\n", Kind: "stderr" }],
+        Status: 2,
+      }),
+    ).toEqual({
+      status: "runtime-error",
+      output: "panic: boom\n",
+      vetErrors: "prog.go:7:2: unreachable code",
+      exitCode: 2,
+    });
+  });
+});
+
+describe("validateGoLessonSource", () => {
+  it("allows grouped standard-library imports", () => {
+    expect(
+      validateGoLessonSource(
+        'package main\n\nimport (\n  "fmt"\n  alias "strings"\n)\n\nfunc main() {}\n',
+      ),
+    ).toBeNull();
+  });
+
+  it("does not let comments or strings spoof the package declaration", () => {
+    expect(
+      validateGoLessonSource('// package main\npackage library\nconst text = "package main"'),
+    ).toBe("Go lessons run a single 'package main' program");
+  });
+
+  it("rejects escaped and CGO import paths", () => {
+    expect(validateGoLessonSource('package main\nimport "github.com\\x2fexample"')).toContain(
+      "escape sequences",
+    );
+    expect(validateGoLessonSource('package main\nimport "C"')).toContain(
+      "standard-library imports only",
+    );
   });
 });
 

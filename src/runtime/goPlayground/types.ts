@@ -37,7 +37,9 @@ function isOptionalString(value: unknown): value is string | undefined {
 }
 
 function isOptionalInteger(value: unknown): value is number | undefined {
-  return value === undefined || (typeof value === "number" && Number.isInteger(value));
+  return (
+    value === undefined || (typeof value === "number" && Number.isSafeInteger(value) && value >= 0)
+  );
 }
 
 /**
@@ -65,8 +67,37 @@ export function parseGoPlaygroundRunResult(value: unknown): GoPlaygroundRunResul
     return null;
   }
 
+  const status = candidate.status as GoPlaygroundRunStatus;
+  const hasCompileErrors =
+    typeof candidate.compileErrors === "string" && candidate.compileErrors.trim().length > 0;
+  const hasVetErrors =
+    typeof candidate.vetErrors === "string" && candidate.vetErrors.trim().length > 0;
+
+  // Keep the response a real discriminated contract even though diagnostics
+  // are optional at the TypeScript surface. This prevents malformed Worker or
+  // cache data from rendering a successful exit for an impossible status.
+  if (
+    (status === "success" &&
+      (candidate.exitCode !== 0 ||
+        candidate.compileErrors !== undefined ||
+        candidate.vetErrors !== undefined)) ||
+    (status === "compile-error" &&
+      (!hasCompileErrors ||
+        candidate.vetErrors !== undefined ||
+        candidate.exitCode !== undefined)) ||
+    (status === "vet-error" &&
+      (!hasVetErrors || candidate.compileErrors !== undefined || candidate.exitCode !== 0)) ||
+    (status === "runtime-error" &&
+      (candidate.compileErrors !== undefined ||
+        candidate.exitCode === undefined ||
+        candidate.exitCode === 0 ||
+        (candidate.vetErrors !== undefined && !hasVetErrors)))
+  ) {
+    return null;
+  }
+
   const result: GoPlaygroundRunResult = {
-    status: candidate.status as GoPlaygroundRunStatus,
+    status,
     output: candidate.output,
   };
 

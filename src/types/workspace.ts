@@ -84,12 +84,11 @@ export type WorkspaceLessonType =
   | "go";
 
 /**
- * Every lesson type is served by its own dev server inside the WebContainer:
- * the Vite-based SPAs (react, vue, solid, svelte) and html-css run a Vite dev
- * server, while htmx-express, alpine-express, and express-ts run an Express
- * server. This predicate keeps the runtime/preview code from special-casing
- * individual lesson types, and is the single place to update when new templates
- * are added.
+ * Every browser-runtime lesson type is served by its own dev server inside the
+ * WebContainer: the Vite-based SPAs (react, vue, solid, svelte) and html-css
+ * run a Vite dev server, while htmx-express, alpine-express, and express-ts run
+ * an Express server. Go is deliberately excluded because it uses the selective
+ * Playground execution path below.
  */
 const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "html-css",

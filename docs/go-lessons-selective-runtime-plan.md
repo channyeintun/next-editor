@@ -1,6 +1,6 @@
 # Selective Go Lessons — Go Playground API Integration Plan
 
-> Status: **implemented (Phases 1–3; Phase 4 rollout pending)**. Last reviewed 2026-07-19.
+> Status: **implemented (Phases 1–3; Phase 4 rollout pending)**. Last reviewed 2026-07-18.
 > Live execution ships behind `GO_PLAYGROUND_ENABLED = "false"` in `infra/wrangler.toml`;
 > flip it only after the Phase 0 upstream-contact checklist below is complete.
 >

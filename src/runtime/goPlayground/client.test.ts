@@ -86,6 +86,21 @@ describe("GoPlaygroundClient", () => {
     expect(error.kind).toBe("unavailable");
   });
 
+  it.each([
+    { status: "success", output: "", exitCode: 2 },
+    { status: "compile-error", output: "", compileErrors: "" },
+    { status: "vet-error", output: "", vetErrors: "warning", exitCode: 2 },
+    { status: "runtime-error", output: "panic", exitCode: 0 },
+  ])("rejects an impossible normalized result: $status", async (payload) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(payload)),
+    );
+
+    const error = await captureServiceError(new GoPlaygroundClient().run(SOURCE));
+    expect(error.kind).toBe("unavailable");
+  });
+
   it("aborts the in-flight request when a newer run supersedes it", async () => {
     const spy = vi.fn<(input: unknown, init?: RequestInit) => Promise<Response>>(
       (_input, init) =>

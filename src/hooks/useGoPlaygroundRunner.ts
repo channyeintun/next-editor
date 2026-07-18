@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   GoPlaygroundClient,
   GoPlaygroundServiceError,
@@ -38,6 +38,12 @@ export function useGoPlaygroundRunner() {
     };
   }, []);
 
+  const cancel = useCallback(() => {
+    activeRunRef.current += 1;
+    clientRef.current?.abort();
+    setIsRunning(false);
+  }, []);
+
   const run = async (source: string): Promise<GoPlaygroundRunOutcome> => {
     const client = (clientRef.current ??= new GoPlaygroundClient());
     const runId = ++activeRunRef.current;
@@ -69,5 +75,5 @@ export function useGoPlaygroundRunner() {
     }
   };
 
-  return { isRunning, run };
+  return { isRunning, run, cancel };
 }

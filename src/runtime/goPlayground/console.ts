@@ -26,9 +26,9 @@ export function goRunResultToConsoleLines(result: GoPlaygroundRunResult): string
 
   // Vet diagnostics render before and separately from program output, each
   // line carrying its own prefix so the two streams can't be conflated.
-  if (result.status === "vet-error") {
+  if (result.vetErrors?.trim()) {
     lines.push("[go-vet] Vet found issues that need attention");
-    lines.push(...splitOutputLines(result.vetErrors ?? "").map((line) => `[go-vet] ${line}`));
+    lines.push(...splitOutputLines(result.vetErrors).map((line) => `[go-vet] ${line}`));
   }
 
   const outputLines = splitOutputLines(result.output);

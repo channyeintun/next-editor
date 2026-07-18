@@ -64,6 +64,22 @@ describe("goRunResultToConsoleLines", () => {
       }),
     ).toEqual(["panic: boom", "[go-run error] Program exited with status 2"]);
   });
+
+  it("shows vet diagnostics without hiding a runtime failure", () => {
+    expect(
+      goRunResultToConsoleLines({
+        status: "runtime-error",
+        output: "panic: boom\n",
+        vetErrors: "prog.go:7:2: unreachable code",
+        exitCode: 2,
+      }),
+    ).toEqual([
+      "[go-vet] Vet found issues that need attention",
+      "[go-vet] prog.go:7:2: unreachable code",
+      "panic: boom",
+      "[go-run error] Program exited with status 2",
+    ]);
+  });
 });
 
 describe("goRunServiceErrorToConsoleLines", () => {
