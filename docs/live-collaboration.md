@@ -57,8 +57,11 @@ recording model, but the collaboration protocol must be a separate data plane.
 - Keep SCR3 as a single-writer recording and replay format. Only the room host may record. For the
   MVP, the room owner remains host throughout a recorded session, and that browser converts the
   converged room state into one ordered SCR3 stream and retains it locally until live ends.
-- Continue using an external service for audio and video calls. Call state is outside this
-  feature except for an optional room link.
+- Voice chat is provided by the separate opt-in voice feature built on the direct Cloudflare
+  Realtime SFU (see `live-collaboration-voice-cloudflare-realtime-sfu.md`). It uses its own
+  JSON coordination WebSocket and `CollaborationVoiceRoomDurableObject`; the document
+  transport, awareness state, and SCR3 recording format are unchanged by it. Video calls
+  remain outside the product.
 
 SCR3 must not be used as the multi-writer synchronization protocol. Its ordered deltas and
 prefix-decodable segments are useful after collaboration changes have converged, not for
@@ -80,7 +83,9 @@ resolving concurrent edits.
 
 ## Non-goals
 
-- Audio or video transport, recording, or conferencing.
+- Video transport or conferencing. (Audio-only voice chat ships separately over the direct
+  Cloudflare Realtime SFU — see `live-collaboration-voice-cloudflare-realtime-sfu.md`; remote
+  voice is never recorded.)
 - Using SCR3 segments to merge concurrent editor operations.
 - Running one shared WebContainer process across browsers.
 - Editing binary bytes inside the CRDT; binary files are immutable content-addressed assets.

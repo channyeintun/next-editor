@@ -111,7 +111,10 @@ Workflows, or Calls:
 - Containers belong to the separate remote-runtime feature; each collaboration client continues
   to run its own local WebContainer.
 - Workflows are unnecessary for room-local compaction that an Alarm can perform.
-- Audio and video remain outside the feature and continue to use an external calling provider.
+- Voice chat does not pass through this data plane. It uses the direct Cloudflare Realtime SFU
+  behind a separate `CollaborationVoiceRoomDurableObject` and room-scoped Worker gateway (see
+  `live-collaboration-voice-cloudflare-realtime-sfu.md`); the Yjs/SCR3 transport carries no
+  media. Video remains outside the product.
 
 ## Recording boundary
 

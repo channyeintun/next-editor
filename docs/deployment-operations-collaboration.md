@@ -160,3 +160,81 @@ affected rooms or require clients to reload onto the matching revision rather th
 protocol behavior. A previous schema-1 client may ignore the optional `project.teaching` subtree,
 but it must preserve that subtree byte-for-byte; rollback is unsafe if the target revision rebuilds
 or drops unknown project fields.
+
+## Voice chat (Cloudflare Realtime SFU)
+
+Voice chat is an opt-in, audio-only feature layered on the collaboration control plane. Its
+architecture and trust model are specified in `live-collaboration-voice-cloudflare-realtime-sfu.md`;
+this section covers deployment and operations only.
+
+### Resources and configuration
+
+- `CollaborationVoiceRoomDurableObject` bound as `COLLABORATION_VOICE_ROOMS` (SQLite class
+  declared; the object performs no storage writes — roster and SFU ownership live in hibernating
+  WebSocket attachments). No D1 migration is involved.
+- A Cloudflare Realtime SFU application **per environment** (development, staging, production),
+  created in the Cloudflare dashboard under Realtime → SFU. Never share one application across
+  environments and never commit its ID or token.
+- Secrets and flag:
+
+```text
+VOICE_CHAT_ENABLED=false            # [vars] — the server-side kill switch, defaults off
+REALTIME_SFU_APP_ID=...             # wrangler secret put REALTIME_SFU_APP_ID     --config infra/wrangler.toml
+REALTIME_SFU_APP_SECRET=...         # wrangler secret put REALTIME_SFU_APP_SECRET --config infra/wrangler.toml
+```
+
+The feature fails closed: when the flag is not `"true"` or any secret/binding is missing, voice
+routes return a sanitized 503 while document collaboration continues unchanged. The client probes
+`GET /api/collaboration/rooms/:roomId/voice/availability` and hides voice controls when disabled.
+
+ICE is STUN-only (`stun:stun.cloudflare.com:3478`). TURN is deliberately not configured; add it
+only with staging evidence of connection failures, short-lived backend-issued credentials, and the
+shared SFU/TURN egress allowance in the cost dashboard.
+
+### Deployment order
+
+1. Deploy the Worker revision containing the voice Durable Object migration
+   (`collaboration-voice-v1`) with `VOICE_CHAT_ENABLED=false`.
+2. Configure the two Realtime secrets for the environment.
+3. Flip `VOICE_CHAT_ENABLED="true"` for internal rooms/staging first; verify the smoke test
+   below; then enable in production.
+
+### Voice smoke test (staging)
+
+Two authenticated browser profiles in one active room:
+
+1. Both open the collaboration panel — no microphone prompt may appear.
+2. Both Join voice — each shows Listening; participant rows show in-voice/muted badges.
+3. One unmutes — permission prompt appears once; the other hears audio; speaking indicator moves.
+4. Mute — the OS/browser microphone indicator must turn off (source released), roster shows muted.
+5. Start a screen recording with tab audio while the remote side speaks — the saved file must
+   contain the host narration but no remote voice.
+6. Member removal and room close end voice for the affected clients within seconds.
+7. With `VOICE_CHAT_ENABLED=false` redeployed, joined clients degrade to a sanitized failure and
+   document editing continues.
+
+### Observability and cost
+
+- Gateway operations log `collaboration_voice_sfu` (room, operation kind, status, duration) and
+  `collaboration_voice_sfu_upstream_failed` (upstream status only). No SDP, ICE candidates,
+  capabilities, track identifiers, or device labels are ever logged.
+- SFU egress is billed per account: the first 1,000 GB/month of combined SFU+TURN egress is free,
+  then $0.05/GB (verify against current Cloudflare pricing). A fully active 10-person room is
+  roughly 1.3 GB/hour lower-bound. Watch Realtime usage in the Cloudflare dashboard and alert at
+  ~70/85/95% of the allowance; the allowance is shared with any other Realtime application on the
+  account.
+
+### Incident response and rollback
+
+- Primary rollback: set `VOICE_CHAT_ENABLED="false"` and deploy. New joins stop immediately;
+  existing sockets fail closed on their next authorization and clients degrade to
+  document-only collaboration.
+- Compromised SFU token: rotate the token in the Cloudflare Realtime application, update
+  `REALTIME_SFU_APP_SECRET`, redeploy. Active capabilities die with their sockets; clients rejoin
+  through the normal authenticated path.
+- SFU outage: voice reports `sfu-unavailable`; no action needed for the document plane. Monitor
+  the Cloudflare status page and Realtime changelog.
+- Cost spike: disable the flag (stops all new SFU egress) or reduce room `max_members`; both are
+  authorized for the on-call operator.
+- A voice Durable Object incident must never be mitigated by touching the room API, the Yjs
+  Durable Object, or D1 — the planes are independent by design.

@@ -1,6 +1,6 @@
 # Voice Chat for Live Collaboration with Cloudflare Realtime SFU
 
-Status: implementation plan
+Status: implemented 2026-07-18 (feature flag off; staging verification and rollout pending — see section 21)
 
 Prepared: 2026-07-18
 
@@ -950,3 +950,104 @@ Codex's follow-up review should prioritize, in order:
 6. Accessibility, browser failure states, performance, observability, and cost controls.
 
 Treat a failure in the first three areas as release-blocking.
+
+## 21. Implementation record (2026-07-18, for the Codex review handoff)
+
+### Commits
+
+- `chore(voice): validate Cloudflare SFU integration` — exact-pin `partytracks@0.0.56`
+  (+ `rxjs@7.8.2` as a direct pinned dependency), Phase 0 findings in section 14.
+- `feat(voice): define collaboration voice protocol and state` —
+  `src/collaboration/voiceProtocol.ts` (strict Zod schemas, shared client/Worker),
+  `src/voice/machine.ts` (XState lifecycle), `src/voice/types.ts`, pure tests.
+- `feat(voice): add secured SFU room control plane` —
+  `infra/worker/collaboration/voiceDurableObject.ts` (hibernating roster + capability digests +
+  session/track/mid ownership registry + gateway proxy),
+  `infra/worker/collaboration/realtimeSfuGateway.ts` (pure §6.2 authorization matrix, request and
+  response schemas, response sanitization), room-scoped routes in
+  `infra/worker/routes/collaboration.ts`, control-event fan-out to the voice room,
+  `COLLABORATION_VOICE_ROOMS` binding + `collaboration-voice-v1` migration, env types, flag.
+- `feat(voice): implement SFU audio client lifecycle` — `src/voice/partyTracksAdapter.ts`
+  (the only partytracks import), `client.ts`, `engine.ts`, `remoteAudioSink.ts`,
+  `speakingDetector.ts`, mocked-dependency engine tests.
+- `feat(voice): add live collaboration voice controls` —
+  `src/contexts/CollaborationVoiceContext.tsx`, `CollaborationPanel` voice section and
+  participant badges, availability endpoint + client API, provider mounted in `Editor.tsx`.
+- `fix(recording): exclude collaboration voice from captures` — `src/voice/recorderBridge.ts`,
+  tab-audio exclusion at `getDisplayMedia` time and mid-recording, `MediaControls` copy.
+- `docs(voice): add SFU operations and rollout guidance` — this record plus updates to the two
+  collaboration architecture documents and `deployment-operations-collaboration.md`.
+
+### Pinned versions and API assumptions
+
+`partytracks@0.0.56` exact; `rxjs@7.8.2` exact. Client/gateway HTTP contract and mute semantics
+as verified in the Phase 0 findings (section 14). Upstream base
+`https://rtc.live.cloudflare.com/v1/apps/{appId}` with bearer auth. `tracks/update` and session
+reads fail closed.
+
+### Focused checks run on the constrained VPS (single worker, one at a time)
+
+- `vp test run src/collaboration/voiceProtocol.test.ts` — 14 passed.
+- `vp test run src/voice/machine.test.ts` — 21 passed.
+- `vitest run --config infra/worker/vitest.config.ts infra/worker/collaboration/realtimeSfuGateway.test.ts` — 16 passed.
+- `vp test run src/voice/engine.test.ts` — 17 passed.
+- `vp test run src/contexts/CollaborationVoiceContext.test.tsx` — 6 passed.
+- `vp test run src/components/CollaborationPanel.voice.test.tsx` — 12 passed.
+- `vp test run src/components/CollaborationPanel.test.tsx` — 3 passed (existing suite).
+- `vp test run src/voice/recorderBridge.test.ts` — 6 passed.
+- `tsc --noEmit -p infra/worker/tsconfig.json` — clean.
+- Scoped `tsc --noEmit` over `src/voice/**` + `src/collaboration/voiceProtocol*` — clean.
+
+### Checks deliberately skipped on this VPS (record for CI/staging)
+
+- Full-repository `tsc -b tsconfig.json`, full `vp test`, full build, and `wrangler deploy`
+  dry-run: prohibited memory-heavy operations here; run in CI before merge/deploy.
+- Voice Durable Object runtime tests (hibernation attachment restoration, duplicate-generation
+  replacement, socket lifecycle): the DO imports `cloudflare:workers` and needs a workerd-based
+  test pool that this repository does not currently include. The pure authorization matrix is
+  covered by `realtimeSfuGateway.test.ts`; the DO behaviors must be exercised by the staging
+  smoke test in `deployment-operations-collaboration.md` (and a `@cloudflare/vitest-pool-workers`
+  suite is a good CI follow-up).
+- The entire section 15.2 manual browser/device/network matrix, including the
+  recording-contains-no-remote-voice release gate and mute source-release verification on real
+  devices.
+
+### Threat-model summary
+
+Every SFU operation requires: same-origin authenticated session (Worker), D1 membership on an
+active room (Worker, on the same request), a valid per-connection capability whose SHA-256 digest
+matches the caller's live hibernating socket (voice DO), and the §6.2 ownership matrix
+(`realtimeSfuGateway.ts`): one session per connection, one audio publication, pulls only of
+tracks currently published by _other_ live connections in the same room object, closes only of
+the caller's own registered mids. Negative tests cover cross-session use, guessed/cross-room
+track pulls, pulling one's own track, closing another member's mid, multi-track and non-audio
+publishes, malformed/oversized SDP, and upstream response sanitization (unknown fields and error
+descriptions never reach the browser). Capabilities exist only in client memory and as digests;
+no SDP/ICE/track identifiers/capabilities are logged.
+
+### Behavioral proofs in automated tests
+
+- Join requests no microphone: engine test asserts zero `publishMicrophone` calls and no
+  detector creation through join/ready/snapshot; provider test asserts mounting never joins.
+- Mute releases physical capture: adapter passes `retainIdleTrack:false`/`activateSource:false`
+  and calls `disableSource()` (verified against pinned source); engine test asserts release on
+  mute, on unmute-failure, and on device loss while live.
+- Recorder privacy: recorder-bridge tests prove tab audio is stripped at acquisition when voice
+  is joined and stopped mid-recording when voice joins later.
+
+### Known gaps and deferred items
+
+- TURN not enabled (STUN-only, per §13.3).
+- Output-device selection (`setSinkId`) deferred (§8.4).
+- Voice DO workerd test suite deferred to CI (above).
+- Aggregate voice metrics beyond structured logs (§16.1 counters/dashboards) and the cost-alert
+  wiring are operational follow-ups before public rollout; the kill switch, sanitized logging,
+  and runbook exist now.
+- `voice.ping`/`voice.pong` exists in the protocol but the client does not send pings; Cloudflare
+  hibernation auto-response handles keepalive.
+
+### Rollout state
+
+Shipped dark: `VOICE_CHAT_ENABLED="false"` in `infra/wrangler.toml`, no Realtime application or
+secrets configured yet. Follow `deployment-operations-collaboration.md` → “Voice chat” for
+environment setup, staged enablement, smoke test, and rollback.
