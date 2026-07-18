@@ -94,8 +94,12 @@ function VoiceControls() {
   const status = VOICE_STATUS_LABELS[state.state];
   const inVoice = state.state !== "idle";
   const canJoin = state.state === "idle";
-  const showMute = state.state === "live" || state.state === "unmuting";
-  const showUnmute = state.state === "listening" || state.state === "reconnecting";
+  const showMute =
+    state.state === "live" ||
+    state.state === "unmuting" ||
+    (state.state === "reconnecting" && state.wantsMicrophone);
+  const showUnmute =
+    state.state === "listening" || (state.state === "reconnecting" && !state.wantsMicrophone);
 
   return (
     <section

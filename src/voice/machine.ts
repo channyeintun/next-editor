@@ -118,6 +118,10 @@ export const voiceMachine = setup({
     joining: {
       on: {
         READY: { target: "listening", actions: "clearError" },
+        // The initial coordination socket can fail before voice.ready. Treat
+        // it like every other recoverable transport loss instead of leaving
+        // the UI stuck in joining forever.
+        TRANSPORT_LOST: "reconnecting",
         FAIL: { target: "failed", actions: "markFailed" },
         LEAVE: "leaving",
         SET_UNAVAILABLE: { target: "leaving", actions: "markUnavailable" },

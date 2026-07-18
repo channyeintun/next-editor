@@ -1017,9 +1017,10 @@ reads fail closed.
 Every SFU operation requires: same-origin authenticated session (Worker), D1 membership on an
 active room (Worker, on the same request), a valid per-connection capability whose SHA-256 digest
 matches the caller's live hibernating socket (voice DO), and the §6.2 ownership matrix
-(`realtimeSfuGateway.ts`): one session per connection, one audio publication, pulls only of
-tracks currently published by _other_ live connections in the same room object, closes only of
-the caller's own registered mids. Negative tests cover cross-session use, guessed/cross-room
+(`realtimeSfuGateway.ts`): one active session per connection with serialized recovery replacement,
+one audio publication, pulls only of tracks currently published by _other_ live connections in the
+same room object, and closes only of the caller's own registered mids. Negative tests cover
+cross-session use, guessed/cross-room
 track pulls, pulling one's own track, closing another member's mid, multi-track and non-audio
 publishes, malformed/oversized SDP, and upstream response sanitization (unknown fields and error
 descriptions never reach the browser). Capabilities exist only in client memory and as digests;
@@ -1043,11 +1044,56 @@ no SDP/ICE/track identifiers/capabilities are logged.
 - Aggregate voice metrics beyond structured logs (§16.1 counters/dashboards) and the cost-alert
   wiring are operational follow-ups before public rollout; the kill switch, sanitized logging,
   and runbook exist now.
-- `voice.ping`/`voice.pong` exists in the protocol but the client does not send pings; Cloudflare
-  hibernation auto-response handles keepalive.
+- `voice.ping`/`voice.pong` remains available for diagnostics, but the client deliberately avoids a
+  periodic heartbeat because every WebSocket message counts as a Durable Object request. Access
+  revocation is server-pushed and idempotently retryable; code/config deployments restart Durable
+  Objects and disconnect their WebSockets.
 
 ### Rollout state
 
 Shipped dark: `VOICE_CHAT_ENABLED="false"` in `infra/wrangler.toml`, no Realtime application or
 secrets configured yet. Follow `deployment-operations-collaboration.md` → “Voice chat” for
 environment setup, staged enablement, smoke test, and rollback.
+
+## 22. Post-implementation Codex review (2026-07-18)
+
+The review treated authorization, microphone/recording privacy, and reconnect cleanup findings as
+release-blocking. The following corrections are applied in the working tree for the implementation
+handoff:
+
+- Fixed reconnect-generation and hibernation revision ordering so a replacement participant is not
+  discarded as stale and a departure-only room revision cannot regress after wake-up.
+- Added room-wide D1 `roleVersion` ordering, synchronous voice delivery for access revocation,
+  idempotent room-close/member-removal redispatch, and message-time D1 access revalidation.
+  Production requests no longer accept arbitrary loopback origins.
+- Serialized SFU mutations per voice connection, bounded the pending queue, revalidated socket
+  ownership after every await, and preserved legacy receiving-mid ownership during attachment
+  migration.
+- Kept exactly one active media session/publication/subscription identity while permitting the
+  recovery and same-track retries PartyTracks performs. Replacements close registered mids before
+  forwarding, and malformed upstream success responses can no longer erase or invent ownership.
+- Required JSON signaling bodies, added the missing PartyTracks content type, and kept upstream
+  response descriptions/unknown fields out of browser responses.
+- Made first-socket failure recoverable, preserved microphone intent in reconnect UI, fixed
+  permission/device retry without creating a new PartyTracks publication, and require confirmed
+  physical capture before Unmute reports success.
+- Disabled PartyTracks' clamped one-entry SDP debug history explicitly. Remote sinks now stop
+  replaced tracks, tolerate synchronous autoplay exceptions, and ignore stale playback promises.
+- The existing recorder boundary remains unchanged: remote sinks are playback-only and tab/display
+  audio is stripped while voice is joined.
+
+Focused review checks (one foreground operation/worker at a time):
+
+- Worker TypeScript check — clean.
+- SFU gateway — 20 passed.
+- Voice machine — 22 passed; voice engine — 18 passed.
+- PartyTracks adapter — 2 passed; remote audio sink — 2 passed.
+- Voice context — 6 passed; voice panel — 13 passed; existing collaboration panel — 3 passed.
+- Targeted formatting and `git diff --check` — clean. A targeted combined `vp check` attempt hit a
+  native allocator panic before lint analysis on the constrained VPS; the affected client files
+  passed a file-scoped strict TypeScript check instead.
+
+Still required before enabling the flag: a workerd-based Voice Durable Object suite, the full CI
+suite/build on a normal machine, and the section 15.2 two-browser staging matrix (especially real
+mute-device release, reconnect replacement, access revocation, and proof that recorded output
+contains no remote voice).

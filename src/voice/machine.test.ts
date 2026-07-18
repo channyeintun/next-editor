@@ -35,6 +35,16 @@ describe("voice machine lifecycle", () => {
     expect(snapshot.context.roomId).toBe(ROOM_ID);
   });
 
+  it("reconnects when the initial transport fails before ready", () => {
+    const actor = startVoice([
+      { type: "SET_AVAILABLE" },
+      { type: "JOIN", roomId: ROOM_ID },
+      { type: "TRANSPORT_LOST" },
+    ]);
+    expect(actor.getSnapshot().value).toBe("reconnecting");
+    expect(actor.getSnapshot().context.wantsMicrophone).toBe(false);
+  });
+
   it("unmutes through unmuting into live and mutes back to listening", () => {
     const actor = startVoice([...toListening, { type: "UNMUTE" }]);
     expect(actor.getSnapshot().value).toBe("unmuting");

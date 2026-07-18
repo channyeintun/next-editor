@@ -28,6 +28,8 @@ export function createRemoteAudioSink(options: RemoteAudioSinkOptions): RemoteAu
 
   let track: MediaStreamTrack | null = null;
   let blocked = false;
+  let playGeneration = 0;
+  let cleanedUp = false;
 
   const setBlocked = (next: boolean) => {
     if (blocked === next) return;
@@ -36,23 +38,41 @@ export function createRemoteAudioSink(options: RemoteAudioSinkOptions): RemoteAu
   };
 
   const play = () => {
-    const result = element.play();
-    if (result && typeof result.then === "function") {
-      result.then(
-        () => setBlocked(false),
-        () => setBlocked(true),
-      );
-    } else {
-      setBlocked(false);
+    const generation = ++playGeneration;
+    const updateBlocked = (next: boolean) => {
+      if (!cleanedUp && generation === playGeneration) setBlocked(next);
+    };
+    try {
+      const result = element.play();
+      if (result && typeof result.then === "function") {
+        result.then(
+          () => updateBlocked(false),
+          () => updateBlocked(true),
+        );
+      } else {
+        updateBlocked(false);
+      }
+    } catch {
+      updateBlocked(true);
     }
   };
 
   return {
     setTrack(next) {
+      if (cleanedUp) return;
       if (track === next) return;
+      if (track) {
+        try {
+          track.stop();
+        } catch {
+          // The previous received track may already have ended.
+        }
+      }
       track = next;
       if (next === null) {
+        playGeneration += 1;
         element.srcObject = null;
+        setBlocked(false);
         return;
       }
       element.srcObject = new MediaStream([next]);
@@ -64,6 +84,9 @@ export function createRemoteAudioSink(options: RemoteAudioSinkOptions): RemoteAu
       if (element.srcObject) play();
     },
     cleanup() {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      playGeneration += 1;
       const stream = element.srcObject;
       element.srcObject = null;
       if (stream instanceof MediaStream) {

@@ -1,7 +1,16 @@
 import { PartyTracks, createAudioSink, getMic } from "partytracks/client";
 import type { MediaDevice, SinkApi, TrackMetadata } from "partytracks/client";
-import { BehaviorSubject, Subscription, firstValueFrom } from "rxjs";
-import { filter, timeout } from "rxjs/operators";
+import {
+  BehaviorSubject,
+  type Observable,
+  Subject,
+  Subscription,
+  combineLatest,
+  firstValueFrom,
+  race,
+  throwError,
+} from "rxjs";
+import { filter, map, retry, shareReplay, switchMap, take, timeout } from "rxjs/operators";
 import type { VoicePublishedTrack } from "../collaboration/voiceProtocol";
 
 // The only module allowed to import partytracks (pinned exactly at 0.0.56).
@@ -63,7 +72,10 @@ const MICROPHONE_CONSTRAINTS: MediaTrackConstraints = {
 
 export function createVoiceMediaSession(config: VoiceMediaSessionConfig): VoiceMediaSession {
   const subscriptions = new Subscription();
-  const headers = new Headers({ [config.capabilityHeaderName]: config.capability });
+  const headers = new Headers({
+    [config.capabilityHeaderName]: config.capability,
+    "Content-Type": "application/json",
+  });
   const partyTracks = new PartyTracks({
     prefix: config.prefix,
     apiExtraParams: config.apiExtraParams,
@@ -71,8 +83,15 @@ export function createVoiceMediaSession(config: VoiceMediaSessionConfig): VoiceM
     iceServers: config.iceServers,
     maxApiHistory: 0,
   });
+  // PartyTracks clamps maxApiHistory to at least one entry. Disable the
+  // public logger explicitly so SDP and SFU identifiers are not retained in
+  // its in-memory debugging history.
+  partyTracks.history.entries.length = 0;
+  partyTracks.history.log = () => undefined;
 
   let mic: MediaDevice | null = null;
+  let microphoneBroadcastTrack$: Observable<MediaStreamTrack> | null = null;
+  let microphoneRetry$: Subject<void> | null = null;
   let publishedMetadata$: BehaviorSubject<TrackMetadata | null> | null = null;
   const micTrackListeners = new Set<(track: MediaStreamTrack | null) => void>();
   const micErrorListeners = new Set<(error: Error) => void>();
@@ -89,8 +108,17 @@ export function createVoiceMediaSession(config: VoiceMediaSessionConfig): VoiceM
       retainIdleTrack: false,
       constraints: MICROPHONE_CONSTRAINTS,
     });
+    microphoneRetry$ = new Subject<void>();
+    // A capture denial/device failure terminates PartyTracks' source
+    // observable. Hold the publication open and retry that same source only
+    // after the user explicitly tries Unmute again. This preserves the
+    // stable SFU track name and makes the visible Retry action functional.
+    microphoneBroadcastTrack$ = mic.broadcastTrack$.pipe(
+      retry({ delay: () => (microphoneRetry$ as Subject<void>).pipe(take(1)) }),
+      shareReplay({ refCount: true, bufferSize: 1 }),
+    );
     subscriptions.add(
-      mic.broadcastTrack$.subscribe({
+      microphoneBroadcastTrack$.subscribe({
         next: (track) => {
           for (const listener of micTrackListeners) listener(track);
         },
@@ -114,17 +142,13 @@ export function createVoiceMediaSession(config: VoiceMediaSessionConfig): VoiceM
         const metadata$ = new BehaviorSubject<TrackMetadata | null>(null);
         publishedMetadata$ = metadata$;
         subscriptions.add(
-          partyTracks.push(device.broadcastTrack$).subscribe({
+          partyTracks.push(microphoneBroadcastTrack$ as Observable<MediaStreamTrack>).subscribe({
             next: (metadata) => metadata$.next(metadata),
             error: () => metadata$.next(null),
           }),
         );
       }
-      const errorPromise = firstValueFrom(device.error$).then((error) => {
-        throw error;
-      });
-      device.startBroadcasting();
-      const published = firstValueFrom(
+      const publicationReady$ = combineLatest([
         publishedMetadata$.pipe(
           filter(
             (metadata): metadata is TrackMetadata =>
@@ -132,14 +156,20 @@ export function createVoiceMediaSession(config: VoiceMediaSessionConfig): VoiceM
               typeof metadata.trackName === "string" &&
               typeof metadata.sessionId === "string",
           ),
-          timeout({ first: PUBLISH_TIMEOUT_MS }),
         ),
+        device.isBroadcasting$.pipe(filter((isBroadcasting) => isBroadcasting)),
+      ]).pipe(map(([metadata]) => metadata));
+      const captureFailed$ = device.error$.pipe(
+        take(1),
+        switchMap((error) => throwError(() => error)),
       );
-      // Whichever promise loses the race must not surface as an unhandled
-      // rejection later.
-      errorPromise.catch(() => undefined);
-      published.catch(() => undefined);
-      const metadata = await Promise.race([published, errorPromise]);
+      // If a prior capture attempt failed, release the retryable source from
+      // its wait before re-enabling the physical device.
+      microphoneRetry$?.next();
+      device.startBroadcasting();
+      const metadata = await firstValueFrom(
+        race(publicationReady$, captureFailed$).pipe(timeout({ first: PUBLISH_TIMEOUT_MS })),
+      );
       return {
         sessionId: metadata.sessionId as string,
         trackName: metadata.trackName as string,
@@ -211,6 +241,9 @@ export function createVoiceMediaSession(config: VoiceMediaSessionConfig): VoiceM
       micTrackListeners.clear();
       micErrorListeners.clear();
       mic?.disableSource();
+      microphoneRetry$?.complete();
+      microphoneRetry$ = null;
+      microphoneBroadcastTrack$ = null;
       // Dropping every subscription releases partytracks' refCounted
       // peer connection, mic source, and pulled tracks.
       subscriptions.unsubscribe();

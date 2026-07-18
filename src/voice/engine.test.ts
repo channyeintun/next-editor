@@ -171,7 +171,15 @@ function createHarness() {
       };
     },
     setTimer: (callback, delayMs) => {
-      const timer = { callback, delayMs, cleared: false };
+      const timer = {
+        callback: () => {
+          if (timer.cleared) return;
+          timer.cleared = true;
+          callback();
+        },
+        delayMs,
+        cleared: false,
+      };
       timers.push(timer);
       return timer as unknown as ReturnType<typeof setTimeout>;
     },
@@ -186,6 +194,10 @@ function createHarness() {
   );
   engine.setAvailability(null);
   return { engine, sockets, mediaSessions, mediaConfigs, sinks, detectors, timers };
+}
+
+function activeTimer(harness: ReturnType<typeof createHarness>, maxDelayMs = Infinity) {
+  return harness.timers.find((timer) => !timer.cleared && timer.delayMs <= maxDelayMs);
 }
 
 function remoteParticipant(overrides: Partial<VoiceParticipant> = {}): VoiceParticipant {
@@ -480,6 +492,17 @@ describe("voice engine cleanup", () => {
 });
 
 describe("voice engine reconnect", () => {
+  it("retries when the initial socket closes before voice.ready", () => {
+    const harness = createHarness();
+    harness.engine.join();
+    harness.sockets[0].emit("close", { code: 1006 });
+    expect(harness.engine.getUiState().state).toBe("reconnecting");
+    const reconnect = activeTimer(harness, 8_000);
+    expect(reconnect).toBeDefined();
+    reconnect?.callback();
+    expect(harness.sockets).toHaveLength(2);
+  });
+
   it("schedules bounded reconnects and fails after the limit", () => {
     const harness = createHarness();
     harness.engine.join();
@@ -490,9 +513,9 @@ describe("voice engine reconnect", () => {
     for (let attempt = 0; attempt < 4; attempt += 1) {
       harness.sockets[attempt].emit("close", { code: 1006 });
       expect(harness.engine.getUiState().state).toBe("reconnecting");
-      const timer = harness.timers[attempt];
+      const timer = activeTimer(harness, 8_000);
       expect(timer).toBeDefined();
-      timer.callback();
+      timer?.callback();
       expect(harness.sockets).toHaveLength(attempt + 2);
     }
     harness.sockets[4].emit("close", { code: 1006 });
@@ -509,7 +532,7 @@ describe("voice engine reconnect", () => {
     sendSnapshot(harness.sockets[0], [selfParticipant(), remoteParticipant()]);
     harness.sockets[0].emit("close", { code: 1006 });
     expect(harness.engine.getUiState().state).toBe("reconnecting");
-    harness.timers[0].callback();
+    activeTimer(harness, 8_000)?.callback();
 
     const socket = harness.sockets[1];
     sendReady(socket);

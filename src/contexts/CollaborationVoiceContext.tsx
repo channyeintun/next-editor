@@ -35,6 +35,7 @@ const UNAVAILABLE_STATE: VoiceUiState = {
   state: "unavailable",
   unavailableReason: "no-room",
   errorCode: null,
+  wantsMicrophone: false,
   autoplayBlocked: false,
   roster: [],
   isLocalSpeaking: false,

@@ -103,7 +103,9 @@ export const upstreamNewSessionResponseSchema = z.object({
 
 export const upstreamTracksResponseSchema = z.object({
   requiresImmediateRenegotiation: z.boolean().optional(),
-  tracks: z.array(upstreamTrackResultSchema).max(64).optional(),
+  // PartyTracks requires track results for both tracks/new and tracks/close,
+  // and the gateway needs them to update ownership without guessing.
+  tracks: z.array(upstreamTrackResultSchema).max(64),
   sessionDescription: upstreamSessionDescriptionSchema.optional(),
   errorCode: z.string().max(64).optional(),
 });
@@ -187,6 +189,13 @@ export interface VoiceConnectionSfuState {
   publishedTrackName: string | null;
   publishedMid: string | null;
   receivingMids: readonly string[];
+  receivingTracks: readonly ReceivingTrack[];
+}
+
+export interface ReceivingTrack {
+  sessionId: string;
+  trackName: string;
+  mid: string;
 }
 
 export interface ActivePublication {
@@ -203,10 +212,11 @@ function deny(status: 403 | 400 | 409, error: string): VoiceSfuAuthorization {
   return { ok: false, status, error };
 }
 
-export function authorizeCreateSession(state: VoiceConnectionSfuState): VoiceSfuAuthorization {
-  // One SFU session per voice connection generation. A media-level recovery
-  // that needs a brand new session must come through a new voice connection.
-  if (state.sfuSessionId !== null) return deny(409, "session already exists");
+export function authorizeCreateSession(_state: VoiceConnectionSfuState): VoiceSfuAuthorization {
+  // PartyTracks replaces its PeerConnection and creates a new SFU session
+  // after a terminal media failure. The Durable Object serializes this
+  // operation and closes every registered track in the previous session
+  // before calling sessions/new, so at most one session remains active.
   return { ok: true };
 }
 
@@ -227,11 +237,15 @@ export function authorizePushTracks(
 ): VoiceSfuAuthorization {
   const scoped = authorizeSessionScoped(state, sessionId);
   if (!scoped.ok) return scoped;
-  const track = body.tracks[0];
-  // Republishing under the same name replaces the connection's own
-  // publication (mute/unmute device reacquisition); a second distinct live
-  // publication is rejected.
-  if (state.publishedTrackName !== null && state.publishedTrackName !== track.trackName) {
+  const requested = body.tracks[0];
+  // Source mute/unmute uses RTCRtpSender.replaceTrack and does not call
+  // tracks/new. A repeated request for the same stable PartyTracks name is
+  // an upstream-response retry; the Durable Object closes the registered
+  // mid before forwarding it. A distinct second publication is rejected.
+  if (
+    (state.publishedTrackName !== null || state.publishedMid !== null) &&
+    (state.publishedTrackName !== requested.trackName || state.publishedMid === null)
+  ) {
     return deny(409, "already publishing");
   }
   if (!/^m=audio\b/m.test(body.sessionDescription.sdp)) {
@@ -252,7 +266,17 @@ export function authorizePullTracks(
 ): VoiceSfuAuthorization {
   const scoped = authorizeSessionScoped(state, sessionId);
   if (!scoped.ok) return scoped;
+  const requestedKeys = new Set<string>();
+  let newSubscriptionCount = 0;
   for (const track of body.tracks) {
+    const key = `${track.sessionId}\u0000${track.trackName}`;
+    if (requestedKeys.has(key)) return deny(409, "already subscribed");
+    requestedKeys.add(key);
+    const replacesExisting = state.receivingTracks.some(
+      (existing) =>
+        existing.sessionId === track.sessionId && existing.trackName === track.trackName,
+    );
+    if (!replacesExisting) newSubscriptionCount += 1;
     const publication = activePublications.find(
       (candidate) =>
         candidate.sessionId === track.sessionId && candidate.trackName === track.trackName,
@@ -262,6 +286,12 @@ export function authorizePullTracks(
     if (!publication || publication.ownerVoiceConnectionId === voiceConnectionId) {
       return deny(403, "unknown track");
     }
+  }
+  // receivingMids is the authoritative ownership set. receivingTracks was
+  // added later to identify safe retries and can be incomplete on an older
+  // hibernating attachment during a rolling deployment.
+  if (state.receivingMids.length + newSubscriptionCount > 64) {
+    return deny(409, "subscription limit reached");
   }
   return { ok: true };
 }
@@ -282,4 +312,36 @@ export function authorizeCloseTracks(
 
 export function buildUpstreamSfuUrl(appId: string, subpath: string): string {
   return `${REALTIME_SFU_API_BASE}/apps/${appId}${subpath}`;
+}
+
+// Durable Object events may interleave whenever a handler awaits an
+// upstream fetch. Serialize SFU mutations per voice connection so two
+// concurrent requests cannot both authorize against the same stale
+// attachment and create duplicate sessions or tracks.
+export class VoiceSfuRequestQueue {
+  private readonly tails = new Map<string, Promise<unknown>>();
+  private readonly depths = new Map<string, number>();
+
+  run<T>(voiceConnectionId: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.tails.get(voiceConnectionId) ?? Promise.resolve();
+    const current = previous.then(task, task);
+    this.tails.set(voiceConnectionId, current);
+    this.depths.set(voiceConnectionId, (this.depths.get(voiceConnectionId) ?? 0) + 1);
+    return current.finally(() => {
+      const remaining = (this.depths.get(voiceConnectionId) ?? 1) - 1;
+      if (remaining === 0) this.depths.delete(voiceConnectionId);
+      else this.depths.set(voiceConnectionId, remaining);
+      if (this.tails.get(voiceConnectionId) === current) {
+        this.tails.delete(voiceConnectionId);
+      }
+    });
+  }
+
+  pending(voiceConnectionId: string): Promise<unknown> | null {
+    return this.tails.get(voiceConnectionId) ?? null;
+  }
+
+  pendingCount(voiceConnectionId: string): number {
+    return this.depths.get(voiceConnectionId) ?? 0;
+  }
 }

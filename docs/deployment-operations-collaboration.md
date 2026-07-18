@@ -210,8 +210,9 @@ Two authenticated browser profiles in one active room:
 5. Start a screen recording with tab audio while the remote side speaks — the saved file must
    contain the host narration but no remote voice.
 6. Member removal and room close end voice for the affected clients within seconds.
-7. With `VOICE_CHAT_ENABLED=false` redeployed, joined clients degrade to a sanitized failure and
-   document editing continues.
+7. With `VOICE_CHAT_ENABLED=false` redeployed, the Durable Object restart disconnects joined voice
+   sockets; clients then fail closed while document editing continues. Cloudflare documents that
+   [code updates disconnect Durable Object WebSockets](https://developers.cloudflare.com/durable-objects/best-practices/websockets/#websocket-disconnection-on-deploy).
 
 ### Observability and cost
 
@@ -227,7 +228,7 @@ Two authenticated browser profiles in one active room:
 ### Incident response and rollback
 
 - Primary rollback: set `VOICE_CHAT_ENABLED="false"` and deploy. New joins stop immediately;
-  existing sockets fail closed on their next authorization and clients degrade to
+  the deployment disconnects existing Durable Object WebSockets, and clients degrade to
   document-only collaboration.
 - Compromised SFU token: rotate the token in the Cloudflare Realtime application, update
   `REALTIME_SFU_APP_SECRET`, redeploy. Active capabilities die with their sockets; clients rejoin

@@ -88,6 +88,7 @@ function idleVoiceState(overrides: Partial<VoiceUiState> = {}): VoiceUiState {
     state: "idle",
     unavailableReason: null,
     errorCode: null,
+    wantsMicrophone: false,
     autoplayBlocked: false,
     roster: [],
     isLocalSpeaking: false,
@@ -159,6 +160,13 @@ describe("voice controls", () => {
     openPanel();
     fireEvent.click(screen.getByRole("button", { name: "Mute" }));
     expect(voiceMocks.mute).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves the correct microphone control while reconnecting", () => {
+    voiceState = idleVoiceState({ state: "reconnecting", wantsMicrophone: true });
+    openPanel();
+    expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Unmute" })).not.toBeInTheDocument();
   });
 
   it("shows actionable copy for a denied microphone", () => {

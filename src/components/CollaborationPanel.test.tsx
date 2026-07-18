@@ -38,6 +38,7 @@ vi.mock("../contexts/CollaborationVoiceContext", () => ({
     state: "unavailable",
     unavailableReason: "feature-disabled",
     errorCode: null,
+    wantsMicrophone: false,
     autoplayBlocked: false,
     roster: [],
     isLocalSpeaking: false,

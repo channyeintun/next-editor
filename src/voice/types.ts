@@ -13,6 +13,9 @@ export interface VoiceUiState {
   state: VoiceConnectionState;
   unavailableReason: VoiceUnavailableReason | null;
   errorCode: VoiceClientErrorCode | null;
+  // The user's local microphone intent, preserved during reconnects so the
+  // UI can always offer Mute while capture may still be active.
+  wantsMicrophone: boolean;
   // True when remote audio could not start due to browser autoplay policy;
   // the UI must offer an explicit Enable audio action.
   autoplayBlocked: boolean;

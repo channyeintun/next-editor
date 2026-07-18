@@ -274,21 +274,34 @@ async function dispatchControlEvent(
   };
   const delivered = await notifyCollaborationRoomControl(c.env, event.roomId, command);
   if (!delivered) throw new Error("collaboration room coordinator unavailable");
-  // Voice teardown must not block or fail the membership operation; the
-  // voice room also revalidates D1 access on every SFU gateway call.
+  // Removal and room closure are access-revocation events: deliver them
+  // before returning so an already-negotiated media path cannot outlive D1
+  // membership merely because no further SFU API call is needed. Role-only
+  // changes remain best-effort because every gateway call revalidates D1 and
+  // voice permission is role-independent.
   if (c.env.COLLABORATION_VOICE_ROOMS) {
-    c.executionCtx.waitUntil(
-      notifyCollaborationVoiceRoomControl(c.env, event.roomId, command).then(
-        () => undefined,
-        (error: unknown) => {
-          console.error("collaboration_voice_control_failed", {
-            roomId: event.roomId,
-            kind: event.kind,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        },
-      ),
-    );
+    const revokesVoiceAccess = event.kind === "room-closed" || command.targetRole === null;
+    if (revokesVoiceAccess) {
+      const voiceDelivered = await notifyCollaborationVoiceRoomControl(
+        c.env,
+        event.roomId,
+        command,
+      );
+      if (!voiceDelivered) throw new Error("collaboration voice coordinator unavailable");
+    } else {
+      c.executionCtx.waitUntil(
+        notifyCollaborationVoiceRoomControl(c.env, event.roomId, command).then(
+          () => undefined,
+          (error: unknown) => {
+            console.error("collaboration_voice_control_failed", {
+              roomId: event.roomId,
+              kind: event.kind,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          },
+        ),
+      );
+    }
   }
 }
 
@@ -787,13 +800,19 @@ collaborationRoute.delete("/rooms/:roomId/members/:userId", async (c) => {
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   const userIdResult = collaborationIdSchema.safeParse(c.req.param("userId"));
   if (!roomIdResult.success || !userIdResult.success) return c.json({ error: "invalid id" }, 400);
+  const ownerAccess = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
+  if (!ownerAccess || ownerAccess.member_role !== "owner" || userIdResult.data === user.id) {
+    return c.json({ error: "not found" }, 404);
+  }
   const removed = await removeCollaborationMember(
     c.env.DB,
     roomIdResult.data,
     user.id,
     userIdResult.data,
   );
-  if (!removed) return c.json({ error: "not found" }, 404);
+  // Re-dispatch even when the target was already removed. The first request
+  // may have committed D1 and then failed to reach a coordinator; making the
+  // retry idempotent closes that revocation gap.
   const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
   if (access) {
     await dispatchControlEvent(c, {
@@ -804,12 +823,14 @@ collaborationRoute.delete("/rooms/:roomId/members/:userId", async (c) => {
       targetRole: null,
     });
   }
-  scheduleAuditEvent(c, {
-    roomId: roomIdResult.data,
-    actorUserId: user.id,
-    action: "member.removed",
-    targetUserId: userIdResult.data,
-  });
+  if (removed) {
+    scheduleAuditEvent(c, {
+      roomId: roomIdResult.data,
+      actorUserId: user.id,
+      action: "member.removed",
+      targetUserId: userIdResult.data,
+    });
+  }
   return c.body(null, 204);
 });
 
@@ -820,7 +841,17 @@ collaborationRoute.post("/rooms/:roomId/close", async (c) => {
   if (!roomIdResult.success) return c.json({ error: "invalid room id" }, 400);
   const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
   if (!access || access.member_role !== "owner") return c.json({ error: "not found" }, 404);
-  if (access.status === "closed") return c.json(roomResponse(access, access.member_role));
+  if (access.status === "closed") {
+    // A previous close may have committed D1 before coordinator delivery
+    // failed. Repeating the close must retry both document and voice teardown.
+    await dispatchControlEvent(c, {
+      kind: "room-closed",
+      roomId: access.id,
+      roleVersion: access.role_version,
+      targetUserId: null,
+    });
+    return c.json(roomResponse(access, access.member_role));
+  }
   const room = await setCollaborationRoomStatus(c.env.DB, access.id, "closed");
   if (!room) return c.json({ error: "not found" }, 404);
   await dispatchControlEvent(c, {
@@ -924,9 +955,14 @@ function isAllowedVoiceOrigin(c: CollaborationContext): boolean {
   if (!origin) return c.req.method === "GET";
   try {
     const parsed = new URL(origin);
-    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") return true;
+    const requestUrl = new URL(c.req.url);
+    const requestIsLoopback =
+      requestUrl.hostname === "localhost" || requestUrl.hostname === "127.0.0.1";
+    if (requestIsLoopback && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")) {
+      return true;
+    }
     if (origin === new URL(c.env.PUBLIC_URL).origin) return true;
-    return origin === new URL(c.req.url).origin;
+    return origin === requestUrl.origin;
   } catch {
     return false;
   }
@@ -964,6 +1000,7 @@ async function resolveVoiceAccess(
       userId: user.id,
       displayName: user.name?.trim() || user.username,
       role: access.member_role,
+      roleVersion: access.role_version,
       collaborationSessionId: sessionId.data,
       maxMembers: access.max_members,
     },
@@ -1000,6 +1037,14 @@ collaborationRoute.get("/rooms/:roomId/voice/websocket", async (c) => {
 collaborationRoute.all("/rooms/:roomId/voice/sfu/*", async (c) => {
   if (c.req.method !== "GET" && c.req.method !== "POST" && c.req.method !== "PUT") {
     return c.json({ error: "unsupported operation" }, 403, { "Cache-Control": "no-store" });
+  }
+  if (c.req.method !== "GET") {
+    const contentType = c.req.header("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+    if (contentType !== "application/json") {
+      return c.json({ error: "unsupported content type" }, 415, {
+        "Cache-Control": "no-store",
+      });
+    }
   }
   const contentLength = Number(c.req.header("content-length") ?? "0");
   if (!Number.isFinite(contentLength) || contentLength > MAX_VOICE_SFU_REQUEST_BYTES) {

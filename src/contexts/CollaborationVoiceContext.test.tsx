@@ -37,6 +37,7 @@ class FakeEngine {
     state: "idle" as const,
     unavailableReason: null,
     errorCode: null,
+    wantsMicrophone: false,
     autoplayBlocked: false,
     roster: [],
     isLocalSpeaking: false,

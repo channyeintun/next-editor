@@ -211,16 +211,21 @@ export class VoiceEngine {
   private openGeneration(): void {
     this.generationReady = false;
     const url = buildVoiceWebSocketUrl(this.options.roomId, this.options.collaborationSessionId);
-    const connection = connectVoiceCoordination(this.deps.createSocket, url, {
-      onOpen: () => undefined,
-      onMessage: (message) => {
-        if (this.connection === connection) this.handleServerMessage(message);
-      },
-      onClose: () => {
-        if (this.connection === connection) this.handleConnectionLost();
-      },
-    });
-    this.connection = connection;
+    try {
+      const connection = connectVoiceCoordination(this.deps.createSocket, url, {
+        onOpen: () => undefined,
+        onMessage: (message) => {
+          if (this.connection === connection) this.handleServerMessage(message);
+        },
+        onClose: () => {
+          if (this.connection === connection) this.handleConnectionLost();
+        },
+      });
+      this.connection = connection;
+    } catch {
+      this.connection = null;
+      this.handleConnectionLost();
+    }
   }
 
   private handleServerMessage(message: VoiceServerMessage): void {
@@ -339,6 +344,7 @@ export class VoiceEngine {
     }
     this.actor.send({ type: "TRANSPORT_LOST" });
     if (this.actor.getSnapshot().value !== "reconnecting") return;
+    if (this.reconnectTimer !== null) return;
     if (this.reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
       this.actor.send({ type: "FAIL", code: "network" });
       return;
@@ -494,6 +500,7 @@ export class VoiceEngine {
       state: (snapshot?.value as VoiceUiState["state"]) ?? "unavailable",
       unavailableReason: snapshot?.context.unavailableReason ?? null,
       errorCode: snapshot?.context.errorCode ?? null,
+      wantsMicrophone: snapshot?.context.wantsMicrophone ?? false,
       autoplayBlocked,
       roster,
       isLocalSpeaking: this.localSpeaking,
