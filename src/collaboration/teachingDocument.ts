@@ -283,6 +283,15 @@ function optionalTeachingRoot(doc: Y.Doc): Y.Map<unknown> | null {
   return teaching instanceof Y.Map ? teaching : null;
 }
 
+type TransactionChangedType = Y.AbstractType<Y.YEvent<any>>;
+
+// Yjs transaction maps use the invariant YEvent base type even though the
+// concrete shared types use their specialized event types. This is an
+// identity-only cast for map lookup and parent traversal.
+function asTransactionChangedType(type: Y.AbstractType<any>): TransactionChangedType {
+  return type as unknown as TransactionChangedType;
+}
+
 export function collaborationTransactionTouchesTeaching(
   doc: Y.Doc,
   transaction: Y.Transaction,
@@ -292,9 +301,17 @@ export function collaborationTransactionTouchesTeaching(
     return true;
   }
   const root = projectRoot(doc);
-  if (transaction.changed.get(root)?.has(COLLABORATION_TEACHING_ROOT)) return true;
+  if (
+    transaction.changed
+      .get(asTransactionChangedType(root))
+      ?.has(COLLABORATION_TEACHING_ROOT)
+  ) {
+    return true;
+  }
   const teaching = optionalTeachingRoot(doc);
-  return teaching ? transaction.changedParentTypes.has(teaching) : false;
+  return teaching
+    ? transaction.changedParentTypes.has(asTransactionChangedType(teaching))
+    : false;
 }
 
 export function collaborationTransactionTouchesOnlyTeaching(
@@ -306,15 +323,17 @@ export function collaborationTransactionTouchesOnlyTeaching(
   const root = projectRoot(doc);
   const teaching = optionalTeachingRoot(doc);
   if (!teaching) return false;
+  const changedRoot = asTransactionChangedType(root);
+  const changedTeaching = asTransactionChangedType(teaching);
   for (const [type, keys] of transaction.changed) {
-    if (type === root || type === sharedRoot) {
+    if (type === changedRoot || type === sharedRoot) {
       if (Array.from(keys).some((key) => key !== COLLABORATION_TEACHING_ROOT)) return false;
       continue;
     }
     let ancestor: Y.AbstractType<any> | null = type;
     let belongsToTeaching = false;
     while (ancestor) {
-      if (ancestor === teaching) {
+      if (ancestor === changedTeaching) {
         belongsToTeaching = true;
         break;
       }
@@ -853,7 +872,7 @@ export function seedCollaborationTeachingDocument(
     normalizedSlides.push({ slide: candidate.slide, asset: manifest.asset });
   }
   const whiteboardElements = applyCollaborationWhiteboardEvent([], {
-    upserts: seed.whiteboardElements,
+    upserts: [...seed.whiteboardElements],
   });
   assertWhiteboardSceneBounds(whiteboardElements);
 

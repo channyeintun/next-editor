@@ -762,32 +762,35 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       appliedFollowViewportRef.current = null;
       return;
     }
+    const targetSurface = target.surface;
     const editor = editorRef.current;
     const model = editor?.getModel();
     if (
       !collaboration?.provider ||
       collaboration.connectionState !== "live" ||
       usesPlaybackModel ||
-      target.surface.kind !== "editor" ||
-      !target.surface.fileNodeId ||
+      targetSurface.kind !== "editor" ||
+      !targetSurface.fileNodeId ||
       !editor ||
       !model ||
       model !== activeModel ||
-      collaboration.getNodeIdForPath(activeFile.path) !== target.surface.fileNodeId
+      collaboration.getNodeIdForPath(activeFile.path) !== targetSurface.fileNodeId
     ) {
       return;
     }
-    const applicationKey = `${target.sessionId}:${target.revision}:${target.surface.fileNodeId}:${model.getVersionId()}`;
+    const targetFileNodeId = targetSurface.fileNodeId;
+    const targetViewport = targetSurface.viewport;
+    const targetCursor = target.cursor;
+    const applicationKey = `${target.sessionId}:${target.revision}:${targetFileNodeId}:${model.getVersionId()}`;
     if (appliedFollowViewportRef.current === applicationKey) return;
 
     let applied = false;
     collaboration.runFollowApplication(() => {
-      const viewport = target.surface.kind === "editor" ? target.surface.viewport : null;
-      const resolved = viewport
+      const resolved = targetViewport
         ? resolveCollaborationEditorViewport(
             collaboration.provider!.doc,
-            target.surface.fileNodeId!,
-            viewport,
+            targetFileNodeId,
+            targetViewport,
           )
         : null;
       if (resolved) {
@@ -802,8 +805,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         applied = true;
         return;
       }
-      if (target.cursor?.fileNodeId === target.surface.fileNodeId) {
-        const cursor = resolveCollaborationCursor(collaboration.provider!.doc, target.cursor);
+      if (targetCursor && targetCursor.fileNodeId === targetFileNodeId) {
+        const cursor = resolveCollaborationCursor(collaboration.provider!.doc, targetCursor);
         if (cursor) {
           editor.revealPositionInCenter(
             model.getPositionAt(cursor.headOffset),
@@ -811,7 +814,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           );
           applied = true;
         }
-      } else if (!viewport) {
+      } else if (!targetViewport) {
         applied = true;
       }
     });

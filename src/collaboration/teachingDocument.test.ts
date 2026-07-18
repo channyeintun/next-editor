@@ -290,7 +290,7 @@ describe("collaboration teaching document", () => {
       encodeCollaborationSlidePayload({
         ...slide("bad-steps", 0),
         steps: [[{ elementId: "shape", durationMs: 10, delayMs: 0, tracks: [], extra: true }]],
-      } as Slide),
+      } as unknown as Slide),
     ).toThrow(/build-step/);
 
     const doc = new Y.Doc();
