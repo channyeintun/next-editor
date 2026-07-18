@@ -38,6 +38,11 @@ import { usePlaybackSettings, usePlaybackSettingsTrigger } from "../hooks/usePla
 import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
+import {
+  isVoiceJoinedState,
+  useOptionalCollaborationVoiceState,
+} from "../contexts/CollaborationVoiceContext";
+import { applyVoiceRecordingPolicy, isVoiceJoinedForRecording } from "../voice/recorderBridge";
 import { canRecordInLiveRoom } from "../collaboration/recordingPolicy";
 
 interface MediaControlsProps {
@@ -88,13 +93,15 @@ const isScreenCaptureSupported = (): boolean =>
  * The extra members below are Chromium-only hints (other browsers ignore unknown options), so they
  * are passed unconditionally via a widened options object.
  */
-const acquireDisplayStream = async (): Promise<MediaStream> => {
+const acquireDisplayStream = async (captureTabAudio: boolean): Promise<MediaStream> => {
   const displayOptions = {
     // Native surface size — downscaling screen text destroys readability; let bitrate do the work.
     video: { frameRate: { ideal: 30, max: 30 } },
     // When sharing a tab, Chromium offers "Also share tab audio", which captures app-emitted sound
     // (runtime preview, external-audio narration). Firefox/Safari return no audio track — handled.
-    audio: true,
+    // While voice chat is joined, tab audio is never requested: remote
+    // collaborators' voice plays in this tab and must not be recorded.
+    audio: captureTabAudio,
     preferCurrentTab: true,
     selfBrowserSurface: "include",
     surfaceSwitching: "include",
@@ -203,6 +210,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const { isRecording, isPlaying, currentRecording, hasEnded, recordingStartTime } =
     useNextEditorMetadata();
   const collaboration = useOptionalCollaboration();
+  const voiceState = useOptionalCollaborationVoiceState();
+  const isVoiceJoined = isVoiceJoinedState(voiceState);
   const effectiveRecordMode = canRecordInLiveRoom(
     recordMode,
     Boolean(collaboration?.provider),
@@ -391,7 +400,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     let screenStream: MediaStream | undefined;
     if (screenRecordingEnabled && isScreenSupported) {
       try {
-        screenStream = await acquireDisplayStream();
+        screenStream = applyVoiceRecordingPolicy(
+          await acquireDisplayStream(!isVoiceJoinedForRecording()),
+        );
       } catch (error) {
         console.warn("Screen capture not started; recording without it:", error);
       }
@@ -512,6 +523,14 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 <span className="hidden sm:inline">File</span>
               </button>
             </div>
+            {isVoiceJoined ? (
+              <span
+                className="hidden items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-200 shadow-sm sm:inline-flex"
+                title="Remote collaborators' voice plays in this tab, so tab audio is excluded from recordings while voice chat is active. Your microphone narration is still recorded."
+              >
+                Tab audio off while in voice chat
+              </span>
+            ) : null}
             {recordingAudioSource === "external" && selectedAudioFile ? (
               <div
                 className="hidden max-w-48 items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900/90 px-2.5 py-1 text-xs font-medium text-slate-300 shadow-sm sm:inline-flex"

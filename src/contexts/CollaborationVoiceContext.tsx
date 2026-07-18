@@ -9,10 +9,22 @@ import {
 import { getCollaborationVoiceAvailability } from "@next-editor/infra";
 import { VoiceEngine, type VoiceEngineDeps } from "../voice/engine";
 import { createVoiceMediaSession } from "../voice/partyTracksAdapter";
+import { setVoiceJoinedForRecording } from "../voice/recorderBridge";
 import { createRemoteAudioSink } from "../voice/remoteAudioSink";
 import { createSpeakingDetector } from "../voice/speakingDetector";
 import type { VoiceCommands, VoiceUiState } from "../voice/types";
 import { useOptionalCollaboration } from "./CollaborationContext";
+
+// States in which remote voice may be (or is about to be) audible in this
+// tab, so recordings must exclude tab/display audio.
+const VOICE_JOINED_STATES = new Set([
+  "joining",
+  "listening",
+  "unmuting",
+  "live",
+  "reconnecting",
+  "leaving",
+]);
 
 // React integration for collaboration voice chat. The engine owns all media
 // state; this provider only manages one engine per active room/session and
@@ -83,6 +95,13 @@ export function CollaborationVoiceProvider({
       ? createEngine({ roomId: activeRoomId, collaborationSessionId })
       : new VoiceEngine({ roomId: activeRoomId, collaborationSessionId }, browserVoiceEngineDeps());
     setEngine(nextEngine);
+    // Recorder privacy bridge: while voice is joined, tab/display audio is
+    // excluded from screen recordings (plan §11).
+    const syncRecorderBridge = () => {
+      setVoiceJoinedForRecording(VOICE_JOINED_STATES.has(nextEngine.getUiState().state));
+    };
+    const unsubscribeRecorderBridge = nextEngine.subscribe(syncRecorderBridge);
+    syncRecorderBridge();
     if (!isVoiceCapableBrowser() && !createEngine) {
       nextEngine.setAvailability("unsupported-browser");
     } else {
@@ -100,7 +119,9 @@ export function CollaborationVoiceProvider({
       // A room change or collaboration leave always tears voice down fully
       // before any new room's engine exists.
       cancelled = true;
+      unsubscribeRecorderBridge();
       nextEngine.dispose();
+      setVoiceJoinedForRecording(false);
       setEngine((current) => (current === nextEngine ? null : current));
     };
   }, [activeRoomId, collaborationSessionId, createEngine, checkAvailability]);
@@ -136,4 +157,23 @@ export function useCollaborationVoice(): CollaborationVoiceContextValue {
 export function useCollaborationVoiceState(): VoiceUiState {
   const context = useCollaborationVoice();
   return useSyncExternalStore(context.subscribe, context.getState, context.getState);
+}
+
+const NO_VOICE_SUBSCRIBE = () => () => undefined;
+const NO_VOICE_STATE = () => UNAVAILABLE_STATE;
+
+// For components (e.g. recording controls) that also render outside the
+// collaboration provider tree.
+export function useOptionalCollaborationVoiceState(): VoiceUiState | null {
+  const context = useContext(CollaborationVoiceContext);
+  const state = useSyncExternalStore(
+    context?.subscribe ?? NO_VOICE_SUBSCRIBE,
+    context?.getState ?? NO_VOICE_STATE,
+    context?.getState ?? NO_VOICE_STATE,
+  );
+  return context ? state : null;
+}
+
+export function isVoiceJoinedState(state: VoiceUiState | null): boolean {
+  return state !== null && VOICE_JOINED_STATES.has(state.state);
 }
