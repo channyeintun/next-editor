@@ -348,10 +348,7 @@ function GoPlaygroundRunnerPanel() {
   };
 
   const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
-  const consoleContent =
-    effectiveConsoleLines.length === 0
-      ? "Press Format or Run to use the Go Playground with this lesson's Go files."
-      : effectiveConsoleLines.map(decorateGoConsoleLine).join("\n");
+  const consoleContent = effectiveConsoleLines.map(decorateGoConsoleLine).join("\n");
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
   const toolLabel = isFormatting ? "gofmt *.go" : "go run *.go";
