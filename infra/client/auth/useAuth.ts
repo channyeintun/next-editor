@@ -2,8 +2,9 @@ import axios from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../apiClient";
 import type { AuthUser } from "../../db/types";
+import { disableGoogleAutoSelect } from "./googleIdentity";
 
-const ME_QUERY_KEY = ["auth", "me"] as const;
+export const ME_QUERY_KEY = ["auth", "me"] as const;
 
 // null (not undefined — Query rejects undefined) when signed out, so callers
 // can tell "not signed in" from a real fetch failure.
@@ -42,6 +43,26 @@ export function useSignOut() {
     },
     onSuccess: () => {
       queryClient.setQueryData(ME_QUERY_KEY, null);
+      // Otherwise One Tap's automatic sign-in (GoogleOneTap.tsx) would put
+      // the user straight back into a session on the next prompt.
+      disableGoogleAutoSelect();
+    },
+  });
+}
+
+// Backs Google One Tap (GoogleOneTap.tsx): posts the GIS credential JWT to
+// the JWKS-verified endpoint, which sets the same ne_session cookie as the
+// redirect flow. Updates ME_QUERY_KEY directly so every useAuth() caller
+// flips to signed-in without a round-trip.
+export function useGoogleCredentialSignIn() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (credential: string) => {
+      const res = await apiClient.post<{ user: AuthUser }>("/auth/google/onetap", { credential });
+      return res.data.user;
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData(ME_QUERY_KEY, user);
     },
   });
 }

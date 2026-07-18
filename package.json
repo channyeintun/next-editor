@@ -30,6 +30,8 @@
     "@rrweb/record": "2.1.0",
     "@rrweb/replay": "2.1.0",
     "@rrweb/types": "2.1.0",
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.2",
     "@tanstack/react-query": "^5.101.2",
     "@upstash/qstash": "^2.11.2",
     "@webcontainer/api": "^1.6.4",

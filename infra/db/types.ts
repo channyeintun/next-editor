@@ -51,6 +51,16 @@ export interface SessionRow {
   expires_at: number;
 }
 
+export interface PasskeyCredentialRow {
+  id: string;
+  user_id: string;
+  public_key: string;
+  counter: number;
+  transports: string | null;
+  created_at: number;
+  last_used_at: number | null;
+}
+
 export type LessonStatus = "draft" | "published";
 
 export interface LessonRow {

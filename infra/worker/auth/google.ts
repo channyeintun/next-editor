@@ -2,7 +2,9 @@ import { Hono } from "hono";
 import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
 import type { Env } from "../env";
 import { upsertUserByGoogleSub, createSession } from "../../db/queries";
+import { userRowToAuthUser } from "../../db/types";
 import { setSessionCookie } from "./session";
+import { verifyGoogleIdToken, type VerifiedGoogleIdToken } from "./googleIdToken";
 
 const HANDSHAKE_COOKIE = "ne_oauth";
 const HANDSHAKE_MAX_AGE_SECONDS = 10 * 60; // just long enough for the Google round trip
@@ -71,6 +73,40 @@ function decodeIdTokenPayload(idToken: string): GoogleIdTokenPayload {
 
 // Mounted at /api/auth/google in worker/index.ts.
 export const googleAuthRoute = new Hono<{ Bindings: Env }>();
+
+// The OAuth client id is public by design (it ships in every GIS snippet on
+// the web); exposing it here saves the client bundle from needing its own
+// build-time env plumbing.
+googleAuthRoute.get("/config", (c) => c.json({ clientId: c.env.GOOGLE_CLIENT_ID }));
+
+// Google One Tap sign-in. The browser posts the CredentialResponse JWT from
+// GIS's callback; unlike /callback below, this token crossed an untrusted
+// client, so it goes through full JWKS signature verification (see
+// googleIdToken.ts) before its claims are believed.
+googleAuthRoute.post("/onetap", async (c) => {
+  const body = await c.req.json<{ credential?: unknown }>().catch(() => null);
+  const credential = typeof body?.credential === "string" ? body.credential : null;
+  if (!credential) {
+    return c.json({ error: "Missing credential." }, 400);
+  }
+
+  let identity: VerifiedGoogleIdToken;
+  try {
+    identity = await verifyGoogleIdToken(credential, { clientId: c.env.GOOGLE_CLIENT_ID });
+  } catch (error) {
+    return c.json({ error: `Google sign-in failed: ${String(error)}` }, 401);
+  }
+
+  const user = await upsertUserByGoogleSub(c.env.DB, {
+    googleSub: identity.sub,
+    email: identity.email,
+    name: identity.name ?? null,
+    avatarUrl: identity.picture ?? null,
+  });
+  const session = await createSession(c.env.DB, user.id);
+  setSessionCookie(c, session.id);
+  return c.json({ user: userRowToAuthUser(user) });
+});
 
 googleAuthRoute.get("/login", async (c) => {
   const state = randomBase64Url(24);
