@@ -45,6 +45,7 @@
     "lib0": "0.2.117",
     "lucide-react": "^0.562.0",
     "marked": "^18.0.6",
+    "partytracks": "0.0.56",
     "posthog-js": "^1.404.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

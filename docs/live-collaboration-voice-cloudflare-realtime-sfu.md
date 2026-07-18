@@ -565,6 +565,60 @@ Acceptance criteria:
 
 Suggested commit: `chore(voice): validate Cloudflare SFU integration`
 
+#### Phase 0 findings (2026-07-18, constrained-VPS verification)
+
+Facts verified against the npm registry and the exact installed package source:
+
+- `partytracks@0.0.56` is still the latest published version and is now pinned
+  exactly in `package.json` (runtime deps it brings: `rxjs ^7.8.2`, `jose`,
+  `cookie`, `tiny-invariant`; exports `./client`, `./react`, `./server`).
+- Client HTTP contract of the pinned build (all relative to
+  `PartyTracksConfig.prefix`, with `apiExtraParams` appended as query string):
+  `POST {prefix}/sessions/new`, `GET {prefix}/generate-ice-servers` (called
+  only when `iceServers` is absent from the config), `POST
+{prefix}/sessions/{sessionId}/tracks/new` (push and pull), `PUT
+{prefix}/sessions/{sessionId}/renegotiate`, `PUT
+{prefix}/sessions/{sessionId}/tracks/update` (simulcast only — the gateway
+  fails it closed), `PUT {prefix}/sessions/{sessionId}/tracks/close`. Custom
+  `headers` from the config are appended to every request.
+- Upstream base URL used by Cloudflare's own server helper:
+  `https://rtc.live.cloudflare.com/v1/apps/{appId}/…` with
+  `Authorization: Bearer {token}`.
+- Mute/source-release behavior (section 8.3) verified in the pinned source:
+  `getMic` defaults to `retainIdleTrack: true` and `activateSource: true`, so
+  the adapter must pass both as `false` explicitly. `disableSource()` also
+  stops broadcasting and unsubscribes the underlying resilient
+  `getUserMedia` track, whose teardown calls `track.stop()` — the physical
+  microphone is released. `broadcastTrack$` then falls back to a shared
+  inaudible Web-Audio track, so the published SFU track remains negotiated
+  while carrying silence. `startBroadcasting()` re-enables the source and
+  reacquires the device; `push()` may re-emit `TrackMetadata`, so the
+  protocol tolerates published-track metadata replacement.
+- `TrackMetadata` shape: `{ location?, trackName?, sessionId?, mid?,
+simulcast? }`.
+- `createAudioSink({ audioElement })` returns `{ attach(track$):
+Subscription, setSinkId, devices$, cleanup, isSinkIdSupported }`.
+
+Recorded deviations:
+
+- The live one-publisher/one-subscriber browser spike and the temporary
+  authenticated route cannot run on this constrained VPS (no browser
+  automation, no dev server). They are deferred to staging and tracked in the
+  section 15.2 manual matrix; the client/gateway contract above was instead
+  verified directly from the pinned package source.
+- The server gateway is implemented as the "small equivalent gateway"
+  permitted by section 6.2 inside the Voice Durable Object rather than by
+  wrapping `routePartyTracksRequest`, because session/track/mid ownership must
+  be registered atomically with each upstream response inside the room's
+  serialized authority. `partytracks/server` is not imported by the Worker.
+- The client always receives its ICE configuration from the server-owned
+  `voice.ready` limits payload wired into `PartyTracksConfig.iceServers`
+  (STUN-only initially), so `generate-ice-servers` is answered with the same
+  STUN-only configuration and never proxied upstream.
+- Cloudflare Realtime application credentials for development/staging must be
+  created outside source control by the operator; no credential or
+  application ID is committed.
+
 ### Phase 1 — Define shared protocol and state model
 
 Tasks:
