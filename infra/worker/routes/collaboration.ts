@@ -970,6 +970,20 @@ async function resolveVoiceAccess(
   };
 }
 
+// Lets the client decide whether to render voice controls at all. Always a
+// sanitized 200 for authenticated members; the real gates re-run on every
+// voice transport request.
+collaborationRoute.get("/rooms/:roomId/voice/availability", async (c) => {
+  const user = await getCurrentUser(c);
+  if (!user) return c.json({ error: "not signed in" }, 401);
+  const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
+  if (!roomId.success) return c.json({ error: "invalid room id" }, 400);
+  const access = await getCollaborationRoomAccess(c.env.DB, roomId.data, user.id);
+  if (!access) return c.json({ error: "not found" }, 404);
+  const enabled = isVoiceChatEnabled(c.env) && access.status === "active";
+  return c.json({ enabled }, 200, { "Cache-Control": "private, no-store" });
+});
+
 collaborationRoute.get("/rooms/:roomId/voice/websocket", async (c) => {
   if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
     return c.json({ error: "expected WebSocket upgrade" }, 426);

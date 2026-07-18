@@ -24,6 +24,7 @@ export {
   downloadCollaborationAsset,
   exportCollaborationRoom,
   getCollaborationRoom,
+  getCollaborationVoiceAvailability,
   initializeCollaborationTeachingSurfaces,
   listCollaborationInvitations,
   listCollaborationMembers,

@@ -135,6 +135,14 @@ export async function closeCollaborationRoom(roomId: string): Promise<Collaborat
   return response.data;
 }
 
+export async function getCollaborationVoiceAvailability(roomId: string): Promise<boolean> {
+  const response = await apiClient.get<{ enabled: boolean }>(
+    `/collaboration/rooms/${encodeURIComponent(roomId)}/voice/availability`,
+    { headers: { "Cache-Control": "no-cache" } },
+  );
+  return response.data.enabled === true;
+}
+
 export async function exportCollaborationRoom(roomId: string): Promise<Blob> {
   const response = await apiClient.get<Blob>(
     `/collaboration/rooms/${encodeURIComponent(roomId)}/export`,

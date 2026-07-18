@@ -21,6 +21,29 @@ vi.mock("../contexts/CollaborationContext", () => ({
   useCollaboration: () => collaborationState,
 }));
 
+// Voice UI behavior has its own suite (CollaborationPanel.voice.test.tsx);
+// here voice is server-disabled so the panel renders without voice controls.
+vi.mock("../contexts/CollaborationVoiceContext", () => ({
+  useCollaborationVoice: () => ({
+    subscribe: () => () => undefined,
+    getState: () => null,
+    join: () => undefined,
+    leave: () => undefined,
+    mute: () => undefined,
+    unmute: () => undefined,
+    retry: () => undefined,
+    enableAudio: () => undefined,
+  }),
+  useCollaborationVoiceState: () => ({
+    state: "unavailable",
+    unavailableReason: "feature-disabled",
+    errorCode: null,
+    autoplayBlocked: false,
+    roster: [],
+    isLocalSpeaking: false,
+  }),
+}));
+
 import CollaborationPanel from "./CollaborationPanel";
 
 const OWN_SESSION = "10000000-0000-4000-8000-000000000001";
