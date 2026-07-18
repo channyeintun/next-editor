@@ -410,6 +410,7 @@ function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
       "htmx-express",
       "alpine-express",
       "express-ts",
+      "go",
     ].includes(value)
   );
 }

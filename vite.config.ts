@@ -217,6 +217,10 @@ export default ({ mode }: { mode: string }) => {
         // Without `dev:worker` running this proxy 500s and the import falls
         // back to /api/proxy hrefs client-side (src/googleSlides/storeImageHrefs.ts).
         "/api/slide-images": "http://localhost:8787",
+        // Go Playground compile proxy for Go lessons (auth + kill switch live
+        // in the Worker). Requires `dev:worker` plus GO_PLAYGROUND_ENABLED
+        // (e.g. in infra/.dev.vars) to actually execute.
+        "/api/go-playground": "http://localhost:8787",
         "/media": "http://localhost:8787",
         // /api/proxy is deliberately NOT proxied here — the Worker now
         // implements it too (infra/worker/routes/proxy.ts, used for Slides

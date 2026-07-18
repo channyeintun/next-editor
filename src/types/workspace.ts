@@ -80,7 +80,8 @@ export type WorkspaceLessonType =
   | "svelte"
   | "htmx-express"
   | "alpine-express"
-  | "express-ts";
+  | "express-ts"
+  | "go";
 
 /**
  * Every lesson type is served by its own dev server inside the WebContainer:
@@ -103,6 +104,34 @@ const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
 
 export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boolean {
   return WEB_CONTAINER_LESSON_TYPES.has(lessonType);
+}
+
+/**
+ * Which backend executes code for a lesson. `go` lessons compile through the
+ * Go Playground proxy on the main Worker; everything else keeps the
+ * WebContainer runtime. Derived from `lessonType` — never persisted as a
+ * second field (see docs/go-lessons-selective-runtime-plan.md §6).
+ */
+export type WorkspaceExecutionKind = "webcontainer" | "go-playground";
+
+export function executionKindForLessonType(
+  lessonType: WorkspaceLessonType,
+): WorkspaceExecutionKind {
+  return lessonType === "go" ? "go-playground" : "webcontainer";
+}
+
+// Capability predicates stay separate from the execution kind so a Go lesson
+// can expose Run and console output without exposing Terminal or Preview.
+export function lessonSupportsTerminal(lessonType: WorkspaceLessonType): boolean {
+  return lessonRunsInWebContainer(lessonType);
+}
+
+export function lessonSupportsPreview(lessonType: WorkspaceLessonType): boolean {
+  return lessonRunsInWebContainer(lessonType);
+}
+
+export function lessonSupportsCodeRun(lessonType: WorkspaceLessonType): boolean {
+  return lessonType === "go" || lessonRunsInWebContainer(lessonType);
 }
 
 export interface WorkspaceProject {
@@ -456,6 +485,10 @@ export function inferLanguageFromPath(path: string): string {
 
   if (normalizedPath.endsWith(".json")) {
     return "json";
+  }
+
+  if (normalizedPath.endsWith(".go")) {
+    return "go";
   }
 
   if (normalizedPath.endsWith(".css")) {

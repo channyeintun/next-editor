@@ -161,6 +161,7 @@ const KNOWN_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "htmx-express",
   "alpine-express",
   "express-ts",
+  "go",
 ]);
 
 function inferWorkspaceLessonType(

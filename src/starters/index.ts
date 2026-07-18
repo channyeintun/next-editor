@@ -24,6 +24,7 @@ const STARTER_LOADERS: Record<WorkspaceLessonType, () => Promise<() => Workspace
     import("./alpineExpress").then((module) => module.createStarterAlpineExpressWorkspace),
   "express-ts": () =>
     import("./expressTs").then((module) => module.createStarterExpressTsWorkspace),
+  go: () => import("./go").then((module) => module.createStarterGoWorkspace),
 };
 
 /** Lazily load and build a fresh starter workspace for the given lesson type. */

@@ -12,6 +12,7 @@ import { uploadsRoute } from "./routes/uploads";
 import { proxyRoute } from "./routes/proxy";
 import { slideImagesRoute } from "./routes/slideImages";
 import { openrouterRoute } from "./routes/openrouter";
+import { goPlaygroundRoute } from "./routes/goPlayground";
 import { collaborationRoute } from "./routes/collaboration";
 import { renderLandingResponse } from "./ssr/landing";
 
@@ -70,6 +71,7 @@ app.route("/api/auth/google", googleAuthRoute);
 app.route("/api/uploads", uploadsRoute);
 app.route("/api/proxy", proxyRoute);
 app.route("/api/openrouter", openrouterRoute);
+app.route("/api/go-playground", goPlaygroundRoute);
 app.route("/api/collaboration", collaborationRoute);
 // Slide-image R2 ingestion. The pre-/api/proxy-rename alias /api/slide-image
 // (singular) is gone: every persisted document that referenced it was

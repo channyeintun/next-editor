@@ -12,6 +12,10 @@ export interface Env {
   // isVoiceChatEnabled() fails closed when any is missing.
   COLLABORATION_VOICE_ROOMS?: DurableObjectNamespace;
   VOICE_CHAT_ENABLED?: string;
+  // Kill switch for live Go lesson execution via the Go Playground proxy
+  // (routes/goPlayground.ts). Fails closed: anything but "true" disables Run
+  // while Go editing and recorded playback keep working.
+  GO_PLAYGROUND_ENABLED?: string;
   REALTIME_SFU_APP_ID?: string;
   REALTIME_SFU_APP_SECRET?: string;
   // Cloudflare Workers KV cache (infra/worker/cache.ts). Optional in the type

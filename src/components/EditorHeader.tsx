@@ -38,7 +38,11 @@ import {
   useWorkspaceSaveStatus,
   useWorkspaceSidebarCollapsed,
 } from "../hooks/useWorkspace";
-import { lessonRunsInWebContainer, type WorkspaceLessonType } from "../types/workspace";
+import {
+  lessonRunsInWebContainer,
+  lessonSupportsPreview,
+  type WorkspaceLessonType,
+} from "../types/workspace";
 import { createStarterWorkspaceForLessonType } from "../starters";
 import SlidesButton from "./SlidesButton";
 import CollaborationPanel from "./CollaborationPanel";
@@ -58,6 +62,7 @@ const LESSON_TYPE_OPTIONS: Array<{
   { value: "htmx-express", label: "HTMX + Express" },
   { value: "alpine-express", label: "Alpine AJAX + Express" },
   { value: "express-ts", label: "Express + TypeScript" },
+  { value: "go", label: "Go" },
 ];
 
 const HEADER_ICON_BUTTON_CLASS =
@@ -679,6 +684,7 @@ interface EditorHeaderProps {
 
 function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
   const { isSaving, errorMessage } = useWorkspaceSaveStatus();
+  const lessonType = useWorkspaceLessonType();
 
   return (
     <div className="bg-[#11141c] px-4 py-1.5 flex items-center justify-between">
@@ -708,7 +714,9 @@ function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
         <div className="flex items-center gap-2">
           <WhiteboardHeaderButton />
           <SlidesButton presentationToggleOnly={!showImportExport} />
-          <PreviewHeaderButton />
+          {/* Go lessons have no preview surface — the control is absent, not
+              disabled. */}
+          {lessonSupportsPreview(lessonType) ? <PreviewHeaderButton /> : null}
         </div>
       </div>
     </div>

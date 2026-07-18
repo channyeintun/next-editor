@@ -21,7 +21,12 @@ import {
 import type { EditorSelection } from "../core/src/types";
 import type { CollaborationRoomProvider } from "../collaboration/roomProvider";
 import { selectIsCollapsed, selectIsFullHeight } from "../stores/runtimePanelStore";
-import { isWorkspaceTextFile, lessonRunsInWebContainer } from "../types/workspace";
+import {
+  executionKindForLessonType,
+  isWorkspaceTextFile,
+  lessonSupportsPreview,
+  lessonSupportsTerminal,
+} from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
 import {
   canWriteCollaborationDocument,
@@ -36,6 +41,7 @@ import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
 import BinaryFilePreview from "./BinaryFilePreview";
 import TerminalPanel from "./TerminalPanel";
+import GoPlaygroundRunnerPanel from "./GoPlaygroundRunnerPanel";
 import {
   CollaborationCursorLabelManager,
   type CollaborationCursorLabel,
@@ -1396,11 +1402,19 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
                 />
               )}
             </div>
-            {lessonRunsInWebContainer(lessonType) ? <TerminalPanel /> : null}
+            {lessonSupportsTerminal(lessonType) ? (
+              <TerminalPanel />
+            ) : executionKindForLessonType(lessonType) === "go-playground" ? (
+              <GoPlaygroundRunnerPanel />
+            ) : null}
           </div>
-          <Suspense fallback={null}>
-            <Preview />
-          </Suspense>
+          {/* Go lessons have no preview surface at all — the dock console is
+              their only runtime output. */}
+          {lessonSupportsPreview(lessonType) ? (
+            <Suspense fallback={null}>
+              <Preview />
+            </Suspense>
+          ) : null}
         </div>
       </div>
     </div>

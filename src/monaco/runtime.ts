@@ -23,6 +23,9 @@ import "monaco-editor/esm/vs/basic-languages/css/css.contribution.js";
 import "monaco-editor/esm/vs/basic-languages/html/html.contribution.js";
 // Markdown has no worker-backed service — this grammar is all it needs.
 import "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution.js";
+// Go likewise ships only a Monarch grammar (no worker service) — used by the
+// Go Playground lesson type, whose code executes remotely, not in Monaco.
+import "monaco-editor/esm/vs/basic-languages/go/go.contribution.js";
 
 // Worker-backed rich services. JSON is self-contained: language/json registers
 // its own id and tokenizes via its worker, so it needs no basic grammar.
