@@ -349,6 +349,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [teachingSlides, setTeachingSlides] = useState<Slide[] | null>(null);
   const [isTeachingLoading, setIsTeachingLoading] = useState(false);
   const teachingProjectionRef = useRef<CollaborationTeachingProjection | null>(null);
+  const localWhiteboardProjectionFingerprintRef = useRef<string | null>(null);
   const appliedPresentationRevisionRef = useRef<number | null>(null);
   const teachingHydrationGenerationRef = useRef(0);
   const teachingHydrationKeyRef = useRef<string | null>(null);
@@ -646,6 +647,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       assetHydrationGenerationRef.current += 1;
       assetFetchesRef.current.clear();
       teachingProjectionRef.current = null;
+      localWhiteboardProjectionFingerprintRef.current = null;
       appliedPresentationRevisionRef.current = null;
       teachingHydrationGenerationRef.current += 1;
       teachingHydrationKeyRef.current = null;
@@ -753,6 +755,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       applyingFollowReleaseTimerRef.current = null;
     }
     teachingProjectionRef.current = null;
+    localWhiteboardProjectionFingerprintRef.current = null;
     appliedPresentationRevisionRef.current = null;
     teachingHydrationGenerationRef.current += 1;
     teachingHydrationKeyRef.current = null;
@@ -867,6 +870,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     }
 
     const currentScene = whiteboardStore.getSnapshot().context.scene;
+    const projectedWhiteboardFingerprint = JSON.stringify(teaching.whiteboardElements);
+    const isLocalCanvasProjection =
+      localWhiteboardProjectionFingerprintRef.current === projectedWhiteboardFingerprint;
     const sameElements =
       currentScene.elements.length === teaching.whiteboardElements.length &&
       currentScene.elements.every((element, index) => {
@@ -885,8 +891,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           ...currentScene,
           elements: teaching.whiteboardElements.map((element) => structuredClone(element)),
         },
+        source: isLocalCanvasProjection ? "canvas" : "external",
       });
     }
+    if (isLocalCanvasProjection) localWhiteboardProjectionFingerprintRef.current = null;
   }, [provider, slidesStore, teaching, teachingSlides, usesPlaybackModel, whiteboardStore]);
 
   // runtimeVersion intentionally makes actor snapshots reactive without
@@ -1664,6 +1672,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       if (!(event.upserts?.length || event.removedIds?.length)) return true;
       try {
         const next = applyCollaborationWhiteboardDelta(current.doc, event);
+        // projectTeachingState runs synchronously inside the Yjs transaction,
+        // while React applies its projection effect after this callback. Tag
+        // that exact authoritative result so normalization cannot make this
+        // local canvas echo look like a remote scene update.
+        localWhiteboardProjectionFingerprintRef.current = JSON.stringify(next);
         const nextById = new Map(next.map((element) => [element.id, element] as const));
         const matchesRequestedDelta =
           (event.upserts ?? []).every((element) => {

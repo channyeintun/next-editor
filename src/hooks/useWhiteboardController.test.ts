@@ -117,6 +117,10 @@ describe("useWhiteboardController", () => {
     const event = onWhiteboardEvent.mock.calls[0]?.[0];
     expect(event.upserts?.[0]?.points).toEqual([[0, 0]]);
     expect(store.getSnapshot().context.scene.elements[0]).not.toBe(live);
+    expect(store.getSnapshot().context.sceneUpdateSource).toBe("canvas");
+
+    act(() => result.current.applyView({ scrollX: 10, scrollY: 20, zoom: 2 }, false));
+    expect(store.getSnapshot().context.sceneUpdateSource).toBe("external");
   });
 
   it("rebases a pending local stroke over a remote element that arrived during capture", () => {

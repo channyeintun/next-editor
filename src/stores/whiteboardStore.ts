@@ -3,14 +3,28 @@ import { EMPTY_WHITEBOARD_SCENE, type WhiteboardSceneState } from "../core/src/w
 
 export interface WhiteboardStoreContext {
   scene: WhiteboardSceneState;
+  sceneUpdateSource: WhiteboardSceneUpdateSource;
 }
+
+export type WhiteboardSceneUpdateSource = "canvas" | "external";
 
 export function createWhiteboardStore() {
   return createStore({
-    context: { scene: EMPTY_WHITEBOARD_SCENE } as WhiteboardStoreContext,
+    context: {
+      scene: EMPTY_WHITEBOARD_SCENE,
+      sceneUpdateSource: "external",
+    } as WhiteboardStoreContext,
     on: {
-      setScene: (context, event: { scene: WhiteboardSceneState }): WhiteboardStoreContext =>
-        event.scene === context.scene ? context : { scene: event.scene },
+      setScene: (
+        context,
+        event: { scene: WhiteboardSceneState; source?: WhiteboardSceneUpdateSource },
+      ): WhiteboardStoreContext =>
+        event.scene === context.scene
+          ? context
+          : {
+              scene: event.scene,
+              sceneUpdateSource: event.source ?? "external",
+            },
     },
   });
 }
@@ -29,3 +43,7 @@ export function restoreWhiteboardStore(
 }
 
 export const selectScene = (context: WhiteboardStoreContext): WhiteboardSceneState => context.scene;
+
+export const selectWhiteboardSceneUpdateSource = (
+  context: WhiteboardStoreContext,
+): WhiteboardSceneUpdateSource => context.sceneUpdateSource;

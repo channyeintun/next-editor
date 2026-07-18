@@ -585,6 +585,26 @@ function compareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+function compareProgressiveWhiteboardStroke(
+  left: WhiteboardElementJSON,
+  right: WhiteboardElementJSON,
+): number {
+  // During one pointer gesture Excalidraw may append freehand points before it
+  // advances version/versionNonce. Prefer the monotonic longer snapshot so the
+  // deterministic serialized fallback cannot lock the room to the first chunk.
+  if (
+    left.type !== "freedraw" ||
+    right.type !== "freedraw" ||
+    left.isDeleted ||
+    right.isDeleted
+  ) {
+    return 0;
+  }
+  const leftPoints = Array.isArray(left.points) ? left.points.length : 0;
+  const rightPoints = Array.isArray(right.points) ? right.points.length : 0;
+  return leftPoints - rightPoints;
+}
+
 export function validateCollaborationWhiteboardElement(value: unknown): WhiteboardElementJSON {
   let clone: WhiteboardElementJSON;
   try {
@@ -607,6 +627,7 @@ function compareWhiteboardElements(
     left.version - right.version ||
     left.versionNonce - right.versionNonce ||
     Number(left.isDeleted) - Number(right.isDeleted) ||
+    compareProgressiveWhiteboardStroke(left, right) ||
     compareCodeUnits(serializedElement(left), serializedElement(right))
   );
 }
@@ -642,10 +663,15 @@ function compareWhiteboardCandidates(
   left: SerializedCollaborationWhiteboardCandidate,
   right: SerializedCollaborationWhiteboardCandidate,
 ): number {
+  const progressiveStrokeOrder =
+    left.candidate.kind === "element" && right.candidate.kind === "element"
+      ? compareProgressiveWhiteboardStroke(left.candidate.element, right.candidate.element)
+      : 0;
   return (
     left.candidate.version - right.candidate.version ||
     left.candidate.versionNonce - right.candidate.versionNonce ||
     whiteboardCandidateRank(left.candidate) - whiteboardCandidateRank(right.candidate) ||
+    progressiveStrokeOrder ||
     compareCodeUnits(left.serialized, right.serialized)
   );
 }

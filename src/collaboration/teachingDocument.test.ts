@@ -63,6 +63,17 @@ function element(id: string, version = 1, index = "a0") {
   };
 }
 
+function freedraw(id: string, points: number[][]) {
+  return {
+    ...element(id),
+    type: "freedraw",
+    points,
+    pressures: points.map(() => 0.5),
+    simulatePressure: true,
+    lastCommittedPoint: null,
+  };
+}
+
 describe("collaboration teaching document", () => {
   it("initializes an empty deck and scene without inventing a current slide", () => {
     const doc = new Y.Doc();
@@ -375,6 +386,27 @@ describe("collaboration teaching document", () => {
     seed.destroy();
     left.destroy();
     right.destroy();
+  });
+
+  it("keeps the longest progressive freehand snapshot at one Excalidraw version", () => {
+    const doc = new Y.Doc();
+    seedCollaborationTeachingDocument(doc, { slides: [], whiteboardElements: [] });
+    const partial = freedraw("stroke", [[0, 0]]);
+    const completed = freedraw("stroke", [
+      [0, 0],
+      [1, 1],
+      [2, 2],
+    ]);
+
+    applyCollaborationWhiteboardDelta(doc, { upserts: [partial] });
+    expect(
+      applyCollaborationWhiteboardDelta(doc, { upserts: [completed] })[0]?.points,
+    ).toEqual(completed.points);
+    expect(
+      applyCollaborationWhiteboardDelta(doc, { upserts: [partial] })[0]?.points,
+    ).toEqual(completed.points);
+
+    doc.destroy();
   });
 
   it("converges concurrent whole-slide navigation through Yjs ordering", () => {

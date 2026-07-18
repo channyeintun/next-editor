@@ -27,19 +27,27 @@ function toExcalidrawElements(
 }
 
 export default function WhiteboardPanel() {
-  const { scene, isOpen, setOpen, setMaximized, handleExcalidrawChange } = useWhiteboardContext();
+  const {
+    scene,
+    sceneUpdateSource,
+    isOpen,
+    setOpen,
+    setMaximized,
+    handleExcalidrawChange,
+  } = useWhiteboardContext();
   const { usesPlaybackModel } = useNextEditorMetadata();
   const collaboration = useOptionalCollaboration();
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const contentReadOnly =
     usesPlaybackModel || Boolean(collaboration?.provider && !collaboration.canWrite);
 
-  // Replay drives the board through the store; push its scene into Excalidraw.
-  // Live drawing never reaches here — while `usesPlaybackModel` is false, Excalidraw
-  // is already the source of truth for its own onChange output, so pushing it back
-  // would be a redundant, self-triggering round trip.
+  // External state (remote room projection, followed viewport, playback, or a
+  // restored store) drives the mounted canvas. A canvas-origin scene is the
+  // controller's throttled snapshot of the gesture already in progress; feeding
+  // it back through updateScene would rewind that gesture to the last 100 ms
+  // checkpoint.
   useEffect(() => {
-    if (!apiRef.current || (!usesPlaybackModel && !collaboration?.provider)) return;
+    if (!apiRef.current || (!usesPlaybackModel && sceneUpdateSource === "canvas")) return;
     apiRef.current.updateScene({
       elements: toExcalidrawElements(scene.elements),
       appState: {
@@ -49,7 +57,7 @@ export default function WhiteboardPanel() {
       },
       captureUpdate: CaptureUpdateAction.NEVER,
     });
-  }, [collaboration?.provider, scene, usesPlaybackModel]);
+  }, [scene, sceneUpdateSource, usesPlaybackModel]);
 
   if (!isOpen) return null;
 

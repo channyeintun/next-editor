@@ -8,7 +8,11 @@ import {
   type WhiteboardEvent,
   type WhiteboardView,
 } from "../core/src/whiteboard";
-import { selectScene, type WhiteboardStoreInstance } from "../stores/whiteboardStore";
+import {
+  selectScene,
+  selectWhiteboardSceneUpdateSource,
+  type WhiteboardStoreInstance,
+} from "../stores/whiteboardStore";
 
 interface UseWhiteboardControllerConfig {
   store: WhiteboardStoreInstance;
@@ -57,6 +61,9 @@ export const useWhiteboardController = ({
   scopeKey,
 }: UseWhiteboardControllerConfig) => {
   const scene = useSelector(store, (snapshot) => selectScene(snapshot.context));
+  const sceneUpdateSource = useSelector(store, (snapshot) =>
+    selectWhiteboardSceneUpdateSource(snapshot.context),
+  );
 
   const onWhiteboardEventRef = useRef(onWhiteboardEvent);
   useEffect(() => {
@@ -123,6 +130,10 @@ export const useWhiteboardController = ({
         isOpen: current.isOpen,
         isMaximized: current.isMaximized,
       },
+      // This scene came from the mounted Excalidraw instance. Consumers must
+      // not feed the throttled snapshot back into that same canvas while the
+      // pointer gesture is still growing.
+      source: "canvas",
     });
   }, [store]);
 
@@ -201,6 +212,7 @@ export const useWhiteboardController = ({
 
   return {
     scene,
+    sceneUpdateSource,
     isOpen: scene.isOpen,
     setOpen,
     setMaximized,
