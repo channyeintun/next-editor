@@ -32,6 +32,7 @@
         "react": "^19.2.7",
         "react-dom": "^19.2.7",
         "react-router": "^8.2.0",
+        "rxjs": "7.8.2",
         "xstate": "5.32.2",
         "y-monaco": "0.1.6",
         "y-protocols": "1.0.7",

@@ -27,6 +27,10 @@ export const MAX_VOICE_SFU_REQUESTS_PER_SECOND = 10;
 // JavaScript memory on the client and only as a SHA-256 digest on the server.
 export const voiceCapabilitySchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 
+// Application-specific header that carries the capability on SFU gateway
+// requests. Shared so client and Worker cannot drift.
+export const VOICE_CAPABILITY_HEADER = "X-Voice-Capability";
+
 // Cloudflare SFU session identifiers and partytracks track names. Bounded,
 // printable, no whitespace; treated as access-controlled identifiers.
 export const voiceSfuSessionIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);

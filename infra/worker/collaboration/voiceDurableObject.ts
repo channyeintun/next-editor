@@ -12,6 +12,7 @@ import {
   MAX_VOICE_ROSTER_SIZE,
   MAX_VOICE_SFU_REQUESTS_PER_SECOND,
   MAX_VOICE_SFU_REQUEST_BYTES,
+  VOICE_CAPABILITY_HEADER,
   parseVoiceClientMessage,
   voiceCapabilitySchema,
   voiceServerMessageSchema,
@@ -43,7 +44,7 @@ import type { Env } from "../env";
 
 const VOICE_ORIGIN = "https://collaboration-voice.internal";
 export const VOICE_SESSION_HEADER = "X-Collaboration-Voice-Session";
-export const VOICE_CAPABILITY_HEADER = "X-Voice-Capability";
+export { VOICE_CAPABILITY_HEADER };
 export const VOICE_CONNECTION_HEADER = "X-Voice-Connection";
 const MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE = 12;
 const UPSTREAM_TIMEOUT_MS = 15_000;

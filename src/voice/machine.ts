@@ -146,6 +146,8 @@ export const voiceMachine = setup({
     live: {
       on: {
         MUTE: { target: "listening", actions: "dropMicrophoneIntent" },
+        // Microphone loss (device unplugged/revoked) while publishing.
+        UNMUTE_FAILED: { target: "listening", actions: "markUnmuteFailed" },
         TRANSPORT_LOST: "reconnecting",
         FAIL: { target: "failed", actions: "markFailed" },
         LEAVE: "leaving",
