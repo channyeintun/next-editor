@@ -4,62 +4,77 @@ import {
   GoPlaygroundServiceError,
   type GoPlaygroundServiceErrorKind,
 } from "../runtime/goPlayground/client";
-import type { GoPlaygroundFile, GoPlaygroundRunResult } from "../runtime/goPlayground/types";
+import type {
+  GoPlaygroundFile,
+  GoPlaygroundFormatResult,
+  GoPlaygroundRunResult,
+} from "../runtime/goPlayground/types";
 
-export type GoPlaygroundRunOutcome =
-  | { kind: "result"; result: GoPlaygroundRunResult }
+type GoPlaygroundRequestOutcome<Result> =
+  | { kind: "result"; result: Result }
   | {
       kind: "service-error";
       errorKind: Exclude<GoPlaygroundServiceErrorKind, "aborted">;
       message: string;
     }
-  /** A newer run (or unmount) took over; the caller must render nothing. */
+  /** A newer operation (or unmount) took over; the caller must render nothing. */
   | { kind: "superseded" };
+
+export type GoPlaygroundRunOutcome = GoPlaygroundRequestOutcome<GoPlaygroundRunResult>;
+export type GoPlaygroundFormatOutcome = GoPlaygroundRequestOutcome<GoPlaygroundFormatResult>;
 
 export interface GoPlaygroundRunnerState {
   isRunning: boolean;
+  isFormatting: boolean;
 }
 
+type GoPlaygroundOperation = "run" | "format";
+
 /**
- * Explicit-Run orchestration for Go lessons. Owns one GoPlaygroundClient so a
- * repeated Run aborts the in-flight request, and unmounting (route change,
- * switching lesson types) aborts whatever is left — nothing here ever runs
- * from lesson load or playback.
+ * Explicit Go-tool orchestration for lessons. Owns one GoPlaygroundClient so a
+ * newer Run or Format aborts the in-flight request, and unmounting (route
+ * change, switching lesson types) aborts whatever is left — nothing here ever
+ * calls the service from lesson load or playback.
  */
 export function useGoPlaygroundRunner() {
   const clientRef = useRef<GoPlaygroundClient | null>(null);
-  const activeRunRef = useRef(0);
-  const [isRunning, setIsRunning] = useState(false);
+  const activeRequestRef = useRef(0);
+  const [activeOperation, setActiveOperation] = useState<GoPlaygroundOperation | null>(null);
 
   useEffect(() => {
     return () => {
-      activeRunRef.current += 1;
+      activeRequestRef.current += 1;
       clientRef.current?.abort();
     };
   }, []);
 
   const cancel = useCallback(() => {
-    activeRunRef.current += 1;
+    activeRequestRef.current += 1;
     clientRef.current?.abort();
-    setIsRunning(false);
+    setActiveOperation(null);
   }, []);
 
-  const run = async (files: readonly GoPlaygroundFile[]): Promise<GoPlaygroundRunOutcome> => {
+  const request = async <Result>(
+    operation: GoPlaygroundOperation,
+    execute: (client: GoPlaygroundClient) => Promise<Result>,
+  ): Promise<GoPlaygroundRequestOutcome<Result>> => {
     const client = (clientRef.current ??= new GoPlaygroundClient());
-    const runId = ++activeRunRef.current;
-    setIsRunning(true);
+    const requestId = ++activeRequestRef.current;
+    setActiveOperation(operation);
 
-    const finish = (outcome: GoPlaygroundRunOutcome): GoPlaygroundRunOutcome => {
-      // Only the newest run owns the running flag; a superseded run resolving
-      // late (client.run already aborted it) must not clear the newer state.
-      if (runId === activeRunRef.current) {
-        setIsRunning(false);
+    const finish = (
+      outcome: GoPlaygroundRequestOutcome<Result>,
+    ): GoPlaygroundRequestOutcome<Result> => {
+      // Only the newest request owns the operation flag; a superseded request
+      // resolving late (the client already aborted it) must not clear newer state.
+      if (requestId === activeRequestRef.current) {
+        setActiveOperation(null);
       }
-      return runId === activeRunRef.current ? outcome : { kind: "superseded" };
+      return requestId === activeRequestRef.current ? outcome : { kind: "superseded" };
     };
 
     try {
-      return finish({ kind: "result", result: await client.run(files) });
+      return finish({ kind: "result", result: await execute(client) });
     } catch (error) {
       if (error instanceof GoPlaygroundServiceError) {
         if (error.kind === "aborted") {
@@ -70,10 +85,22 @@ export function useGoPlaygroundRunner() {
       return finish({
         kind: "service-error",
         errorKind: "unavailable",
-        message: error instanceof Error ? error.message : "The run request failed",
+        message: error instanceof Error ? error.message : `The ${operation} request failed`,
       });
     }
   };
 
-  return { isRunning, run, cancel };
+  const run = (files: readonly GoPlaygroundFile[]): Promise<GoPlaygroundRunOutcome> =>
+    request("run", (client) => client.run(files));
+
+  const format = (files: readonly GoPlaygroundFile[]): Promise<GoPlaygroundFormatOutcome> =>
+    request("format", (client) => client.format(files));
+
+  return {
+    isRunning: activeOperation === "run",
+    isFormatting: activeOperation === "format",
+    run,
+    format,
+    cancel,
+  };
 }

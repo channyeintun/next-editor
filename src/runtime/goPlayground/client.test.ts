@@ -23,7 +23,7 @@ async function captureServiceError(promise: Promise<unknown>): Promise<GoPlaygro
     (thrown: unknown) => thrown,
   );
   if (!(error instanceof GoPlaygroundServiceError)) {
-    throw new Error("expected the run to reject with a GoPlaygroundServiceError");
+    throw new Error("expected the request to reject with a GoPlaygroundServiceError");
   }
   return error;
 }
@@ -59,6 +59,36 @@ describe("GoPlaygroundClient", () => {
     });
   });
 
+  it("posts all files for formatting and returns normalized formatted sources", async () => {
+    const formattedFiles = [
+      { path: "main.go", content: "package main\n\nfunc main() {}\n" },
+      { path: "helper.go", content: "package main\n\nfunc helper() {}\n" },
+    ];
+    const inputFiles = [FILES[0], formattedFiles[1]];
+    const spy = vi.fn<(input: unknown, init?: RequestInit) => Promise<Response>>(async () =>
+      jsonResponse({ files: formattedFiles }),
+    );
+    vi.stubGlobal("fetch", spy);
+
+    await expect(new GoPlaygroundClient().format(inputFiles)).resolves.toEqual({
+      files: formattedFiles,
+    });
+
+    const [url, init] = spy.mock.calls[0];
+    expect(url).toBe("/api/go-playground/format");
+    expect(JSON.parse(String(init?.body))).toEqual({ files: inputFiles });
+  });
+
+  it("rejects a format response with a different file set", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ files: [{ path: "other.go", content: SOURCE }] })),
+    );
+
+    const error = await captureServiceError(new GoPlaygroundClient().format(FILES));
+    expect(error.kind).toBe("unavailable");
+  });
+
   it.each([
     [401, "unauthenticated"],
     [503, "disabled"],
@@ -66,6 +96,7 @@ describe("GoPlaygroundClient", () => {
     [504, "timeout"],
     [400, "invalid-source"],
     [413, "invalid-source"],
+    [422, "invalid-source"],
     [502, "unavailable"],
   ] as const)("maps HTTP %d to a %s service error", async (status, kind) => {
     vi.stubGlobal(

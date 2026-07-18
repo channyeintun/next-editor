@@ -1,10 +1,11 @@
 # Selective Go Lessons — Go Playground API Integration Plan
 
 > Status: **implemented (Phases 1–3; Phase 4 rollout pending)**. Last reviewed 2026-07-18.
-> Live execution ships behind `GO_PLAYGROUND_ENABLED = "false"` in `infra/wrangler.toml`;
-> flip it only after the Phase 0 upstream-contact checklist below is complete.
+> Live Go tool requests are guarded by `GO_PLAYGROUND_ENABLED` in `infra/wrangler.toml`; keep the
+> flag disabled until the Phase 0 upstream-contact checklist below is complete.
 >
-> This plan adds pure Go lessons to Next Editor by calling the official Go Playground compile API.
+> This plan adds pure Go lessons to Next Editor by calling the official Go Playground compile and
+> formatting APIs.
 > It does not use Cloudflare Containers and does not integrate, modify, copy, replace, or depend on
 > the standalone `remote-runtime/` package.
 
@@ -12,11 +13,11 @@
 
 Next Editor will select an execution backend from the workspace lesson type:
 
-| Workspace lesson type                           | Execution backend                  | Behavior                                          |
-| ----------------------------------------------- | ---------------------------------- | ------------------------------------------------- |
-| Existing HTML, JavaScript, and TypeScript types | Browser WebContainer               | Unchanged                                         |
-| `go`                                            | Official Go Playground compile API | Compile and run only after an explicit Run action |
-| Recorded Go lesson playback                     | Recorded sources and console state | Never calls the Playground API automatically      |
+| Workspace lesson type                           | Execution backend                  | Behavior                                         |
+| ----------------------------------------------- | ---------------------------------- | ------------------------------------------------ |
+| Existing HTML, JavaScript, and TypeScript types | Browser WebContainer               | Unchanged                                        |
+| `go`                                            | Official Go Playground APIs        | Format or run only after an explicit user action |
+| Recorded Go lesson playback                     | Recorded sources and console state | Never calls the Playground API automatically     |
 
 The Go lesson feature is intentionally narrower than a Go development environment. It supports
 small, self-contained teaching programs similar to the runnable snippets in
@@ -26,15 +27,17 @@ small, self-contained teaching programs similar to the runnable snippets in
 
 1. Add exactly one new workspace lesson type: `go`.
 2. Keep WebContainer as the permanent execution backend for every existing lesson type.
-3. Execute Go through the official `https://play.golang.org/compile` API.
+3. Execute and format Go through the official `https://play.golang.org/compile` and
+   `https://play.golang.org/fmt` APIs.
 4. Route production requests through the existing Next Editor Worker rather than calling the
    upstream API directly from the browser.
-5. Use the same request shape proven in `learn-go`: `body`, `version=2`, and `withVet=true`.
+5. Use the compile request shape proven in `learn-go`: `body`, `version=2`, and `withVet=true`;
+   send only `body` for canonical gofmt so formatting does not add or remove imports.
 6. Support up to 20 top-level `.go` files compiled together as one `package main` program.
 7. Limit v1 lessons to pure, standard-library-focused programs that communicate through stdout and
    stderr.
-8. Require an authenticated Next Editor user to execute code in v1; public playback remains
-   available without execution.
+8. Require an authenticated Next Editor user to execute or format code in v1; public playback
+   remains available without live Playground calls.
 9. Never call the API from lesson load, gallery views, recording load, or passive playback.
 10. Do not add Containers, Durable Objects, runtime D1 tables, runtime WebSockets, agents, images, or
     preview infrastructure for Go lessons.
@@ -69,6 +72,7 @@ storage, or session lifecycle cost.
 - language fundamentals, functions, methods, interfaces, generics, collections, errors, algorithms,
   and bounded concurrency examples;
 - imports from the Go standard library when compatible with the Playground sandbox;
+- explicit multi-file gofmt through the Playground's `/fmt` endpoint;
 - compiler errors, vet diagnostics, stdout, stderr, panic output, and exit status;
 - deterministic examples that finish within the Playground limits;
 - recording and replay of source changes and console results.
@@ -119,22 +123,26 @@ The Go Playground integration must build, test, deploy, and operate independentl
 1. The author selects **Go** from the workspace type menu.
 2. Next Editor loads a small multi-file Go starter locally without booting WebContainer or making an
    API call.
-3. Monaco provides Go syntax highlighting and normal editor behavior.
+3. Monaco provides Go syntax highlighting and a Playground-backed **Format Document** action.
 4. The author records editing and explanation as usual.
-5. Clicking **Run** sends the current top-level `.go` files to the first-party Worker endpoint.
-6. The runner panel displays compiling/running state followed by output or diagnostics.
-7. The recording captures the Run action and normalized console result.
-8. Publishing continues through the existing `.ne` and media upload flow.
+5. Clicking **Format** or invoking Monaco's Format Document action sends all current top-level `.go`
+   files to the first-party Worker and applies the returned gofmt result only if those files have not
+   changed while the request was in flight.
+6. Clicking **Run** sends the current top-level `.go` files to the first-party Worker endpoint.
+7. The runner panel displays formatting or compiling/running state followed by output or diagnostics.
+8. The recording captures source changes, explicit tool actions, and normalized console results.
+9. Publishing continues through the existing `.ne` and media upload flow.
 
 ### 5.2 Playback
 
 1. A viewer can load and play the recorded Go lesson without authentication and without calling the
    Playground API.
 2. Recorded sources and console results replay from the lesson timeline.
-3. Editing remains local until the viewer explicitly clicks **Run**.
-4. If the viewer is not authenticated, Run opens the existing sign-in flow without discarding edits.
-5. An authenticated Run compiles the current files as a new request; it does not reuse the author's
-   original files.
+3. Editing remains local until the viewer explicitly clicks **Format** or **Run**.
+4. If the viewer is not authenticated, the Go tools open the existing sign-in flow without
+   discarding edits.
+5. An authenticated Format or Run uses the current files as a new request; it does not reuse the
+   author's original files.
 
 ### 5.3 Failure behavior
 
@@ -143,9 +151,12 @@ The Go Playground integration must build, test, deploy, and operate independentl
 - panic or non-zero exit: show stderr/output and an error state;
 - upstream timeout: show a bounded “program timed out” result;
 - upstream unavailable or rate-limited: preserve the sources and show a retryable service message;
+- gofmt syntax failure: show the file/line diagnostic and leave every source unchanged;
+- files edited while gofmt is in flight: discard the stale response rather than overwriting newer
+  edits;
 - application kill switch disabled: keep editing and playback available while hiding or disabling
-  only live Run;
-- route change or repeated Run: abort the obsolete browser request and ignore stale responses.
+  only live Format and Run;
+- route change or a newer Format/Run: abort the obsolete browser request and ignore stale responses.
 
 ## 6. Execution selection model
 
@@ -184,15 +195,21 @@ flowchart LR
     Lesson[Workspace lessonType] --> Select{Execution selector}
     Select -->|existing types| WC[Existing WebContainer path]
     Select -->|go| Local[Monaco + in-memory Go files]
-    Local --> Intent{Explicit Run?}
+    Local --> Intent{Explicit Go tool?}
     Intent -->|no / playback| Recorded[Recorded sources + console state]
-    Intent -->|yes| Route[Main Worker /api/go-playground/run]
-    Route --> Auth[Application auth + policy checks]
-    Auth --> Cache{Program-result cache}
+    Intent -->|Format| FmtRoute[Main Worker /api/go-playground/format]
+    Intent -->|Run| RunRoute[Main Worker /api/go-playground/run]
+    FmtRoute --> Auth[Application auth + policy checks]
+    RunRoute --> Auth
+    Auth --> Operation{Requested operation}
+    Operation -->|Run| Cache{Program-result cache}
     Cache -->|hit| Result[Normalized run result]
     Cache -->|miss| API[play.golang.org/compile]
     API --> Result
     Result --> Console[Runner console + recording event]
+    Operation -->|Format| FmtAPI[play.golang.org/fmt]
+    FmtAPI --> Sources[Validated multi-file gofmt result]
+    Sources --> Local
 ```
 
 ### 7.1 Browser boundary
@@ -209,6 +226,12 @@ type GoPlaygroundRunRequest = {
   files: readonly GoPlaygroundFile[];
 };
 
+type GoPlaygroundFormatRequest = GoPlaygroundRunRequest;
+
+type GoPlaygroundFormatResult = {
+  files: GoPlaygroundFile[];
+};
+
 type GoPlaygroundRunResult = {
   status: "success" | "compile-error" | "vet-error" | "runtime-error";
   output: string;
@@ -218,8 +241,9 @@ type GoPlaygroundRunResult = {
 };
 ```
 
-`GoPlaygroundClient` performs one abortable HTTP request and has no filesystem, mount, process, PTY,
-port, preview, or teardown API. The current Go files remain in the existing workspace store.
+`GoPlaygroundClient` performs at most one abortable Run or Format request and has no filesystem,
+mount, process, PTY, port, preview, or teardown API. The current Go files remain in the existing
+workspace store.
 
 ### 7.2 Worker boundary
 
@@ -239,6 +263,12 @@ Add `POST /api/go-playground/run` to the main Worker. The route should:
 12. cache deterministic successful and compiler-error responses for at most one hour;
 13. return structured `429`, `502`, and `504` errors for policy, upstream, and timeout failures;
 14. record aggregate latency/status telemetry without logging sources or output.
+
+Add `POST /api/go-playground/format` beside it. The route reuses the same auth, file-policy, txtar,
+size, timeout, user-agent, and privacy boundaries; applies a separate per-user rate limit; posts
+`body` to the upstream `/fmt` endpoint without the `imports` option; and accepts a response only when
+it contains exactly the submitted file set in canonical txtar form. Syntax failures return a
+structured `422`. Formatted sources are not cached because that would store user code in KV.
 
 Before public production rollout, contact the Go team as requested by the Playground documentation
 and confirm the user-agent string and expected request volume.
@@ -331,9 +361,12 @@ Tasks:
 3. Set the approved unique user agent and upstream form fields.
 4. Add short-lived content-hash caching and bounded authenticated-user rate limiting.
 5. Normalize compiler, vet, event, status, and future test fields.
-6. Implement an abortable browser client against the first-party route.
-7. Ensure sources, output, and diagnostics never enter application logs or telemetry.
-8. Add a dependency-boundary test preventing imports from `remote-runtime/`.
+6. Proxy `/fmt` without import fixing, validate its txtar file set, and normalize the result into a
+   structured multi-file response.
+7. Implement an abortable browser client against both first-party routes.
+8. Ensure sources, formatted sources, output, and diagnostics never enter application logs,
+   telemetry, or the result cache.
+9. Add a dependency-boundary test preventing imports from `remote-runtime/`.
 
 Acceptance:
 
@@ -342,9 +375,11 @@ Acceptance:
 - Unauthenticated, oversized, rate-limited, timed-out, malformed, and disabled requests return the
   documented errors.
 - Identical cached requests avoid an upstream call within the TTL.
+- Multi-file format requests return exactly the submitted files in canonical gofmt form; malformed
+  archives and syntax errors never partially update the workspace.
 - No Container, Durable Object, D1 migration, agent, image, or runtime WebSocket is introduced.
 
-### Phase 3 — Connect Run, recording, and playback
+### Phase 3 — Connect Go tools, recording, and playback
 
 Primary files:
 
@@ -356,17 +391,23 @@ Primary files:
 Tasks:
 
 1. Add an explicit **Run** action for Go lessons.
-2. Read all current top-level `.go` files at click time.
-3. Show compiling/running, success, compile-error, vet-error, runtime-error, and service-error states.
-4. Abort or supersede an older request when the same lesson runs again.
-5. Feed normalized output into the existing runner-console visual language without creating a shell.
-6. Record the Run action and normalized result as implementation-neutral console state.
-7. Replay recorded console state without calling the Worker or upstream API.
-8. Preserve unsaved sources when authentication, rate limit, timeout, or upstream failure occurs.
+2. Add **Format** and Monaco Format Document actions backed by gofmt for all lesson `.go` files.
+3. Read all current top-level `.go` files at click/command time.
+4. Show formatting, compiling/running, success, compile-error, vet-error, runtime-error, and
+   service-error states.
+5. Abort or supersede an older request when a newer Go tool action starts.
+6. Reject stale format responses and apply sibling-file replacements plus the active Monaco edit as
+   one explicit user operation.
+7. Feed normalized output into the existing runner-console visual language without creating a shell.
+8. Record tool actions, source changes, and normalized results as implementation-neutral state.
+9. Replay recorded state without calling the Worker or upstream API.
+10. Preserve unsaved sources when authentication, rate limit, timeout, or upstream failure occurs.
 
 Acceptance:
 
 - Editing and running a pure multi-file `package main` program works from the lesson editor.
+- Format applies canonical gofmt to all current Go files and never overwrites an edit made during the
+  request.
 - Compile errors and panics are readable and associated with the correct Run action.
 - Opening, recording-load, and playback paths create zero Playground requests.
 - Terminal and Preview never appear for Go.
@@ -404,7 +445,7 @@ Acceptance:
 | Monaco                              | `src/monaco/runtime.ts`                                                        |
 | Workspace picker                    | `src/components/EditorHeader.tsx`                                              |
 | Go API client                       | `src/runtime/goPlayground/*`                                                   |
-| Go Run orchestration                | `src/hooks/useGoPlaygroundRunner.ts`                                           |
+| Go tool orchestration               | `src/hooks/useGoPlaygroundRunner.ts`                                           |
 | Runner console and UI gates         | `src/components/CodeEditor.tsx`, `src/components/GoPlaygroundRunnerPanel.tsx`  |
 | Worker proxy                        | `infra/worker/routes/goPlayground.ts`, `infra/worker/index.ts`                 |
 | Worker types/config                 | `infra/worker/env.d.ts`, `infra/wrangler.toml` if the flag is configured there |
@@ -416,13 +457,14 @@ Acceptance:
 | Layer               | Required coverage                                                           |
 | ------------------- | --------------------------------------------------------------------------- |
 | Workspace model     | `go` validation, persistence, equality, collaboration, recording round-trip |
-| Monaco              | `.go` maps to `go`; existing mappings remain unchanged                      |
+| Monaco              | `.go` maps to `go`; Format Document invokes multi-file gofmt                |
 | Execution selection | existing types select WebContainer; only `go` selects Playground            |
 | Capability UI       | Go has Run/console but no Terminal, Preview, or command settings            |
-| Client              | request, abort, supersede, normalized success/error parsing                 |
-| Worker auth/policy  | auth, kill switch, file/size limits, txtar, rate limit, cache, timeout      |
+| Client              | Run/Format request, abort, supersede, normalized result/error parsing       |
+| Worker auth/policy  | auth, kill switch, file/size limits, txtar, rate limits, cache, timeout     |
 | Upstream mapping    | `Errors`, `VetErrors`, `Events`, `Status`, test fields, malformed JSON      |
-| Lazy behavior       | load/playback produce no request; explicit Run produces one                 |
+| Formatting          | exact multi-file set, syntax error, malformed archive, stale-edit rejection |
+| Lazy behavior       | load/playback produce no request; explicit Format/Run produces one          |
 | Recording           | Run and result replay without live execution                                |
 | Regression          | all existing lesson types keep WebContainer behavior                        |
 | Package boundary    | no `remote-runtime/` changes, imports, dependencies, builds, or deployment  |
@@ -430,14 +472,15 @@ Acceptance:
 ## 11. Security, privacy, reliability, and cost
 
 - Treat file paths and sources as user content and validate them before proxying.
-- Tell users that Run sends the current Go sources to the Go Playground service.
+- Tell users that Format and Run send the current Go sources to the Go Playground service.
 - Never send application secrets, cookies, tokens, workspace metadata, lesson metadata, or user
   identity upstream.
 - Never log sources, filenames, output, compiler diagnostics, or panic text.
-- Require authentication for Run in v1 and apply per-user abuse controls.
+- Require authentication for Format and Run in v1 and apply separate per-user abuse controls.
 - Use a unique user agent approved through the Go project's requested contact process.
 - Keep an upstream timeout shorter than the application request ceiling.
 - Cache only content-addressed deterministic results for a short TTL.
+- Do not cache formatted-source responses because they contain user code.
 - Do not promise a specific Go patch version or upstream service-level agreement.
 - Keep editing and playback functional through an upstream outage.
 - Container cost is zero for this feature. Remaining costs are ordinary main-Worker requests,
@@ -454,6 +497,7 @@ Acceptance:
 | Unsupported API fields leak into app contracts  | Fragile client                           | Normalize at the Worker boundary and ignore unknown fields                                |
 | Sources are accidentally logged                 | Privacy exposure                         | Structured metrics only and tests that assert redaction                                   |
 | Run is called during playback                   | Unnecessary traffic and nondeterminism   | Explicit-intent invariant with request-count regression tests                             |
+| Stale gofmt response overwrites a newer edit    | Lost work                                | Compare the submitted file snapshot before applying any returned source                   |
 | Existing lessons route to Playground            | Functional regression                    | Exhaustive selector tests over every `WorkspaceLessonType`                                |
 | Container concepts remain in the implementation | Needless cost and complexity             | Definition-of-done checks prohibit runtime infrastructure                                 |
 | `remote-runtime/` becomes coupled accidentally  | Future plug-and-play independence breaks | Protected path and dependency-boundary checks                                             |
@@ -466,6 +510,8 @@ Selective Go lesson support is complete only when all of the following are true:
   published, and replayed.
 - An authenticated user can explicitly Run the current Go files together and see compiler, vet,
   stdout, stderr, panic, and exit results.
+- An authenticated user can explicitly gofmt all current Go files from the runner or Monaco Format
+  Document without stale or partial source replacement.
 - Public playback replays recorded sources and console state without a live API call.
 - Existing lesson types still use WebContainer with no runtime-selection or bundle regression.
 - Go lessons never boot WebContainer and never expose Terminal or Preview.

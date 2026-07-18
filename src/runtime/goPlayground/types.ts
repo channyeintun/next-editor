@@ -1,8 +1,8 @@
 /**
- * First-party contract between the browser Go Playground client and the main
- * Worker's /api/go-playground/run proxy route. The upstream response shape
- * never crosses this boundary — the Worker normalizes it into
- * `GoPlaygroundRunResult` (docs/go-lessons-selective-runtime-plan.md §7).
+ * First-party contracts between the browser Go Playground client and the main
+ * Worker's /api/go-playground/{run,format} proxy routes. Upstream response
+ * shapes never cross this boundary — the Worker normalizes them into the
+ * result types below (docs/go-lessons-selective-runtime-plan.md §7).
  */
 
 export type GoPlaygroundRunStatus = "success" | "compile-error" | "vet-error" | "runtime-error";
@@ -15,6 +15,14 @@ export interface GoPlaygroundFile {
 
 export interface GoPlaygroundRunRequest {
   files: readonly GoPlaygroundFile[];
+}
+
+export interface GoPlaygroundFormatRequest {
+  files: readonly GoPlaygroundFile[];
+}
+
+export interface GoPlaygroundFormatResult {
+  files: GoPlaygroundFile[];
 }
 
 export interface GoPlaygroundRunResult {
@@ -46,6 +54,41 @@ function isOptionalInteger(value: unknown): value is number | undefined {
   return (
     value === undefined || (typeof value === "number" && Number.isSafeInteger(value) && value >= 0)
   );
+}
+
+/** Validate the Worker's normalized multi-file gofmt response. */
+export function parseGoPlaygroundFormatResult(value: unknown): GoPlaygroundFormatResult | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+
+  const rawFiles = (value as Record<string, unknown>).files;
+  if (!Array.isArray(rawFiles) || rawFiles.length === 0) {
+    return null;
+  }
+
+  const files: GoPlaygroundFile[] = [];
+  const seenPaths = new Set<string>();
+  for (const rawFile of rawFiles) {
+    if (typeof rawFile !== "object" || rawFile === null) {
+      return null;
+    }
+
+    const candidate = rawFile as Record<string, unknown>;
+    if (
+      typeof candidate.path !== "string" ||
+      candidate.path.length === 0 ||
+      typeof candidate.content !== "string" ||
+      seenPaths.has(candidate.path)
+    ) {
+      return null;
+    }
+
+    seenPaths.add(candidate.path);
+    files.push({ path: candidate.path, content: candidate.content });
+  }
+
+  return { files };
 }
 
 /**

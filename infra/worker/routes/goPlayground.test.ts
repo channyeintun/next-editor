@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   goPlaygroundRoute,
   normalizeUpstreamCompileResponse,
+  normalizeUpstreamFormatResponse,
   serializeGoLessonFiles,
   validateGoLessonSource,
 } from "./goPlayground";
@@ -66,6 +67,18 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
 function runRequest(env: Env, body: BodyInit | null = JSON.stringify({ files: FILES })) {
   return goPlaygroundRoute.request(
     "http://localhost/run",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: "ne_session=session-1" },
+      body,
+    },
+    env,
+  );
+}
+
+function formatRequest(env: Env, body: BodyInit | null = JSON.stringify({ files: FILES })) {
+  return goPlaygroundRoute.request(
+    "http://localhost/format",
     {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: "ne_session=session-1" },
@@ -413,6 +426,109 @@ describe("goPlaygroundRoute", () => {
     await runRequest(env);
 
     expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("formats every submitted Go file through the Playground txtar endpoint", async () => {
+    const unformattedFiles = [
+      {
+        path: "helper.go",
+        content: 'package main\nfunc message()string{return "hi"}\n',
+      },
+      {
+        path: "main.go",
+        content: 'package main\nimport "fmt"\nfunc main(){fmt.Println(message())}\n',
+      },
+    ];
+    const formattedFiles = [
+      {
+        path: "main.go",
+        content: 'package main\n\nimport "fmt"\n\nfunc main() { fmt.Println(message()) }\n',
+      },
+      {
+        path: "helper.go",
+        content: 'package main\n\nfunc message() string { return "hi" }\n',
+      },
+    ];
+    const spy = stubUpstream({
+      Body: serializeGoLessonFiles(formattedFiles),
+      Error: "",
+    });
+
+    const response = await formatRequest(makeEnv(), JSON.stringify({ files: unformattedFiles }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ files: formattedFiles });
+    const [url, init] = spy.mock.calls[0];
+    expect(url).toBe("https://play.golang.org/fmt");
+    const form = new URLSearchParams(String(init?.body));
+    expect(form.get("body")).toBe(serializeGoLessonFiles(unformattedFiles));
+    expect(form.has("imports")).toBe(false);
+  });
+
+  it("applies the kill switch and authentication boundary to formatting", async () => {
+    const spy = stubUpstream({ Body: TXTAR_SOURCE, Error: "" });
+
+    const disabled = await formatRequest(makeEnv({ GO_PLAYGROUND_ENABLED: undefined }));
+    const signedOut = await formatRequest(makeEnv({ DB: dbWithSessionUser(null) }));
+
+    expect(disabled.status).toBe(503);
+    expect(signedOut.status).toBe(401);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("returns gofmt syntax diagnostics without changing them into a service failure", async () => {
+    stubUpstream({ Body: "", Error: "main.go:3:1: expected declaration, found '}'" });
+
+    const response = await formatRequest(makeEnv());
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      error: "main.go:3:1: expected declaration, found '}'",
+    });
+  });
+
+  it("rejects a formatted archive that omits or adds lesson files", async () => {
+    const files = [...FILES, { path: "helper.go", content: "package main\n\nfunc helper() {}\n" }];
+    stubUpstream({ Body: TXTAR_SOURCE, Error: "" });
+
+    const response = await formatRequest(makeEnv(), JSON.stringify({ files }));
+
+    expect(response.status).toBe(502);
+  });
+
+  it("rate-limits formatting independently from Run", async () => {
+    const spy = stubUpstream({ Body: TXTAR_SOURCE, Error: "" });
+    const windowKey = `gp:fmt:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
+
+    const response = await formatRequest(makeEnv({ CACHE: memoryKv({ [windowKey]: "20" }) }));
+
+    expect(response.status).toBe(429);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("does not cache formatted source responses", async () => {
+    const spy = stubUpstream({ Body: TXTAR_SOURCE, Error: "" });
+    const env = makeEnv();
+
+    await formatRequest(env);
+    await formatRequest(env);
+
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("normalizeUpstreamFormatResponse", () => {
+  it("rejects malformed success payloads and mixed body/error responses", () => {
+    expect(normalizeUpstreamFormatResponse({ Body: 42, Error: "" }, FILES)).toBeNull();
+    expect(
+      normalizeUpstreamFormatResponse({ Body: TXTAR_SOURCE, Error: "syntax error" }, FILES),
+    ).toBeNull();
+  });
+
+  it("normalizes an upstream formatting error as source feedback", () => {
+    expect(
+      normalizeUpstreamFormatResponse({ Body: "", Error: "main.go:2:1: syntax error" }, FILES),
+    ).toEqual({ kind: "source-error", error: "main.go:2:1: syntax error" });
   });
 });
 

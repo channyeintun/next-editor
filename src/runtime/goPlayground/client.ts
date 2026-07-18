@@ -1,14 +1,17 @@
 import {
+  parseGoPlaygroundFormatResult,
   parseGoPlaygroundRunResult,
+  type GoPlaygroundFormatRequest,
+  type GoPlaygroundFormatResult,
   type GoPlaygroundFile,
   type GoPlaygroundRunRequest,
   type GoPlaygroundRunResult,
 } from "./types";
 
 /**
- * Why a Run can fail without producing a run result. "aborted" means a newer
- * Run (or unmount) superseded this request — callers should ignore it rather
- * than surface an error.
+ * Why a Go tool request can fail without producing a result. "aborted" means
+ * a newer operation (or unmount) superseded it — callers should ignore that
+ * request rather than surface an error.
  */
 export type GoPlaygroundServiceErrorKind =
   | "unauthenticated"
@@ -41,6 +44,7 @@ function errorKindForStatus(status: number): GoPlaygroundServiceErrorKind {
       return "timeout";
     case 400:
     case 413:
+    case 422:
       return "invalid-source";
     default:
       return "unavailable";
@@ -48,35 +52,68 @@ function errorKindForStatus(status: number): GoPlaygroundServiceErrorKind {
 }
 
 /**
- * One abortable HTTP request against the first-party Worker proxy — no
+ * One abortable HTTP request at a time against the first-party Worker proxy — no
  * filesystem, mount, process, PTY, port, preview, or teardown surface
- * (docs/go-lessons-selective-runtime-plan.md §7.1). Starting a new run aborts
- * the previous in-flight one, so at most one request per client is live and
- * stale responses can never land after a newer Run.
+ * (docs/go-lessons-selective-runtime-plan.md §7.1). Starting a Run or Format
+ * aborts the previous in-flight operation, so stale responses can never land
+ * after a newer explicit action.
  */
 export class GoPlaygroundClient {
   private controller: AbortController | null = null;
 
   async run(files: readonly GoPlaygroundFile[]): Promise<GoPlaygroundRunResult> {
+    return this.request(
+      "run",
+      { files } satisfies GoPlaygroundRunRequest,
+      parseGoPlaygroundRunResult,
+    );
+  }
+
+  async format(files: readonly GoPlaygroundFile[]): Promise<GoPlaygroundFormatResult> {
+    const result = await this.request(
+      "format",
+      { files } satisfies GoPlaygroundFormatRequest,
+      parseGoPlaygroundFormatResult,
+    );
+    const requestedPaths = files.map((file) => file.path).sort();
+    const formattedPaths = result.files.map((file) => file.path).sort();
+    if (
+      requestedPaths.length !== formattedPaths.length ||
+      requestedPaths.some((path, index) => path !== formattedPaths[index])
+    ) {
+      throw new GoPlaygroundServiceError(
+        "unavailable",
+        "The format response did not contain the submitted Go files",
+      );
+    }
+    return result;
+  }
+
+  private async request<T>(
+    operation: "run" | "format",
+    request: GoPlaygroundRunRequest | GoPlaygroundFormatRequest,
+    parseResult: (value: unknown) => T | null,
+  ): Promise<T> {
     this.controller?.abort();
     const controller = new AbortController();
     this.controller = controller;
+    const operationLabel = operation === "run" ? "Run" : "Format";
 
     let response: Response;
     try {
-      response = await fetch("/api/go-playground/run", {
+      response = await fetch(`/api/go-playground/${operation}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files } satisfies GoPlaygroundRunRequest),
+        body: JSON.stringify(request),
         signal: controller.signal,
       });
     } catch (error) {
       if (controller.signal.aborted) {
-        throw new GoPlaygroundServiceError("aborted", "The run was superseded");
+        throw new GoPlaygroundServiceError("aborted", `The ${operation} was superseded`);
       }
       throw new GoPlaygroundServiceError(
         "unavailable",
-        error instanceof Error ? error.message : "The run request failed",
+        error instanceof Error ? error.message : `The ${operation} request failed`,
       );
     }
 
@@ -91,7 +128,7 @@ export class GoPlaygroundClient {
         .catch(() => null);
       throw new GoPlaygroundServiceError(
         kind,
-        message ?? `Run failed with HTTP ${response.status}`,
+        message ?? `${operationLabel} failed with HTTP ${response.status}`,
       );
     }
 
@@ -100,17 +137,20 @@ export class GoPlaygroundClient {
       payload = await response.json();
     } catch (error) {
       if (controller.signal.aborted) {
-        throw new GoPlaygroundServiceError("aborted", "The run was superseded");
+        throw new GoPlaygroundServiceError("aborted", `The ${operation} was superseded`);
       }
       throw new GoPlaygroundServiceError(
         "unavailable",
-        error instanceof Error ? error.message : "The run response could not be read",
+        error instanceof Error ? error.message : `The ${operation} response could not be read`,
       );
     }
 
-    const result = parseGoPlaygroundRunResult(payload);
+    const result = parseResult(payload);
     if (!result) {
-      throw new GoPlaygroundServiceError("unavailable", "The run response had an unexpected shape");
+      throw new GoPlaygroundServiceError(
+        "unavailable",
+        `The ${operation} response had an unexpected shape`,
+      );
     }
     return result;
   }

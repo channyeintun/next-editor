@@ -8,12 +8,30 @@ import type { GoPlaygroundServiceErrorKind } from "./client";
  * no Playground- or Worker-specific detail leaks into the recorded lines.
  */
 
+function summarizeFilePaths(filePaths: readonly string[]): string {
+  return filePaths.length <= 4
+    ? filePaths.join(" ")
+    : `${filePaths.slice(0, 3).join(" ")} … (${filePaths.length} files)`;
+}
+
 export function goRunStartedConsoleLines(filePaths: readonly string[]): string[] {
-  const target =
-    filePaths.length <= 4
-      ? filePaths.join(" ")
-      : `${filePaths.slice(0, 3).join(" ")} … (${filePaths.length} files)`;
-  return [`[go-run] go run ${target}`];
+  return [`[go-run] go run ${summarizeFilePaths(filePaths)}`];
+}
+
+export function goFormatStartedConsoleLines(filePaths: readonly string[]): string[] {
+  return [`[gofmt] gofmt ${summarizeFilePaths(filePaths)}`];
+}
+
+export function goFormatResultToConsoleLines(changedFilePaths: readonly string[]): string[] {
+  if (changedFilePaths.length === 0) {
+    return ["[gofmt] Files already formatted"];
+  }
+
+  return [`[gofmt] Formatted ${summarizeFilePaths(changedFilePaths)}`];
+}
+
+export function goFormatStaleConsoleLines(): string[] {
+  return ["[gofmt error] Files changed while formatting; no formatting was applied"];
 }
 
 function splitOutputLines(output: string): string[] {
@@ -63,6 +81,30 @@ export function goRunServiceErrorToConsoleLines(
   detail?: string,
 ): string[] {
   const lines = [SERVICE_ERROR_LINES[kind]];
+  if (kind === "invalid-source" && detail) {
+    lines.push(detail);
+  }
+  return lines;
+}
+
+const FORMAT_SERVICE_ERROR_LINES: Record<
+  Exclude<GoPlaygroundServiceErrorKind, "aborted">,
+  string
+> = {
+  unauthenticated: "[gofmt error] Sign in to format Go code. Your edits are kept",
+  disabled: "[gofmt error] Go formatting is currently disabled. Your code is unchanged",
+  "rate-limited": "[gofmt error] Too many format requests — wait a minute and try again",
+  timeout: "[gofmt error] Formatting took too long. Your code is unchanged",
+  "invalid-source": "[gofmt error] gofmt could not format this program",
+  unavailable:
+    "[gofmt error] The Go Playground formatter is unavailable right now — your code is unchanged",
+};
+
+export function goFormatServiceErrorToConsoleLines(
+  kind: Exclude<GoPlaygroundServiceErrorKind, "aborted">,
+  detail?: string,
+): string[] {
+  const lines = [FORMAT_SERVICE_ERROR_LINES[kind]];
   if (kind === "invalid-source" && detail) {
     lines.push(detail);
   }

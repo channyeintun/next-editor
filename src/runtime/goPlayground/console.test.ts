@@ -1,9 +1,32 @@
 import { describe, expect, it } from "vitest";
 import {
+  goFormatResultToConsoleLines,
+  goFormatServiceErrorToConsoleLines,
+  goFormatStaleConsoleLines,
+  goFormatStartedConsoleLines,
   goRunResultToConsoleLines,
   goRunServiceErrorToConsoleLines,
   goRunStartedConsoleLines,
 } from "./console";
+
+describe("gofmt console lines", () => {
+  it("reports multi-file formatting without unbounded labels", () => {
+    expect(goFormatStartedConsoleLines(["main.go", "helper.go"])).toEqual([
+      "[gofmt] gofmt main.go helper.go",
+    ]);
+    expect(goFormatResultToConsoleLines(["main.go", "helper.go"])).toEqual([
+      "[gofmt] Formatted main.go helper.go",
+    ]);
+    expect(goFormatResultToConsoleLines([])).toEqual(["[gofmt] Files already formatted"]);
+  });
+
+  it("surfaces syntax details and stale-edit protection", () => {
+    expect(goFormatServiceErrorToConsoleLines("invalid-source", "main.go:2: syntax error")).toEqual(
+      ["[gofmt error] gofmt could not format this program", "main.go:2: syntax error"],
+    );
+    expect(goFormatStaleConsoleLines()[0]).toContain("no formatting was applied");
+  });
+});
 
 describe("goRunStartedConsoleLines", () => {
   it("echoes all files in a small multi-file run", () => {

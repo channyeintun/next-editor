@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { useSelector } from "@xstate/store-react";
 import { ChevronDown, ChevronUp, Diamond, Maximize2, Minimize2 } from "lucide-react";
 import { signInUrl, useAuth } from "@next-editor/infra";
@@ -14,12 +14,18 @@ import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEdi
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import { useGoPlaygroundRunner } from "../hooks/useGoPlaygroundRunner";
 import { useWorkspaceActions, useWorkspaceProjectVersion } from "../hooks/useWorkspace";
-import { isWorkspaceTextFile } from "../types/workspace";
+import { useOptionalCollaboration } from "../contexts/CollaborationContext";
+import { monaco, workspacePathFromMonacoModelUri } from "../monaco";
 import {
+  goFormatResultToConsoleLines,
+  goFormatServiceErrorToConsoleLines,
+  goFormatStaleConsoleLines,
+  goFormatStartedConsoleLines,
   goRunResultToConsoleLines,
   goRunServiceErrorToConsoleLines,
   goRunStartedConsoleLines,
 } from "../runtime/goPlayground/console";
+import { areGoPlaygroundFilesEqual, collectGoPlaygroundFiles } from "../runtime/goPlayground/files";
 import type { RuntimeTerminalScrollLines } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
@@ -78,13 +84,14 @@ function GoPlaygroundRunnerPanel() {
   const terminalScrollLines = useSelector(runtimePanelStore, (s) =>
     selectTerminalScrollLines(s.context),
   );
-  const { handleRuntimeEvent } = useNextEditorActions();
+  const { editorRef, handleRuntimeEvent } = useNextEditorActions();
   const { currentRecording, isRecording } = useNextEditorMetadata();
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
-  const { getProject, saveProject } = useWorkspaceActions();
+  const { getProject, saveProject, updateFileContent } = useWorkspaceActions();
   const projectVersion = useWorkspaceProjectVersion();
   const { isSignedIn, isLoading: isAuthLoading } = useAuth();
-  const { isRunning, run, cancel } = useGoPlaygroundRunner();
+  const collaboration = useOptionalCollaboration();
+  const { isRunning, isFormatting, run, format, cancel } = useGoPlaygroundRunner();
   const previousRuntimeEventStateRef = useRef<GoRuntimeEventState | null>(null);
 
   const displayIsCollapsed = isPlaybackSnapshotActive
@@ -93,6 +100,7 @@ function GoPlaygroundRunnerPanel() {
   const displayIsFullHeight = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.isFullHeight ?? false)
     : isFullHeight;
+  const canFormatWorkspace = !collaboration?.provider || collaboration.canWrite;
   const effectiveConsoleLines = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.consoleLines ?? [])
     : consoleLines;
@@ -110,7 +118,7 @@ function GoPlaygroundRunnerPanel() {
     // The runtime panel store is shared by the browser and Go runners. Clear
     // their content-specific console/scroll state at Go/project boundaries so
     // output cannot leak into another lesson. A project change also supersedes
-    // a Run that was started against the previous set of Go files.
+    // a Go tool request started against the previous set of files.
     cancel();
 
     const resetConsoleSurface = () => {
@@ -142,11 +150,126 @@ function GoPlaygroundRunnerPanel() {
     }
 
     const current = runtimePanelStore.getSnapshot().context.consoleLines;
-    // Blank separator between runs keeps consecutive results readable.
-    const separator = current.length > 0 && lines[0].startsWith("[go-run] go run") ? [""] : [];
+    // Blank separator between explicit tool operations keeps results readable.
+    const startsOperation =
+      lines[0].startsWith("[go-run] go run") || lines[0].startsWith("[gofmt] gofmt");
+    const separator = current.length > 0 && startsOperation ? [""] : [];
     runtimePanelStore.trigger.setConsoleLines({
       consoleLines: [...current, ...separator, ...lines].slice(-MAX_GO_CONSOLE_LINES),
     });
+  };
+
+  const formatGoProject = async (
+    activeModel: monaco.editor.ITextModel | null = null,
+  ): Promise<monaco.languages.TextEdit[]> => {
+    if (isPlaybackSnapshotActive || isAuthLoading) {
+      return [];
+    }
+    if (!canFormatWorkspace) {
+      appendConsoleLines(["[gofmt error] This shared lesson is read-only"]);
+      return [];
+    }
+    if (!isSignedIn) {
+      appendConsoleLines(goFormatServiceErrorToConsoleLines("unauthenticated"));
+      return [];
+    }
+
+    const project = getProject();
+    const submittedFiles = collectGoPlaygroundFiles(project);
+    if (submittedFiles.length === 0) {
+      appendConsoleLines(["[gofmt error] Add at least one .go file to format this lesson"]);
+      return [];
+    }
+
+    const activePath = activeModel ? workspacePathFromMonacoModelUri(activeModel.uri) : null;
+    const activeModelVersion = activeModel?.getVersionId();
+    const submittedActiveFile = activePath
+      ? submittedFiles.find((file) => file.path === activePath)
+      : null;
+    if (
+      activeModel &&
+      (!submittedActiveFile || activeModel.getValue() !== submittedActiveFile.content)
+    ) {
+      appendConsoleLines(goFormatStaleConsoleLines());
+      return [];
+    }
+
+    appendConsoleLines(goFormatStartedConsoleLines(submittedFiles.map((file) => file.path)));
+    const outcome = await format(submittedFiles);
+    if (outcome.kind === "superseded") {
+      return [];
+    }
+    if (outcome.kind === "service-error") {
+      appendConsoleLines(goFormatServiceErrorToConsoleLines(outcome.errorKind, outcome.message));
+      return [];
+    }
+
+    const currentProject = getProject();
+    const currentFiles = collectGoPlaygroundFiles(currentProject);
+    if (
+      currentProject.id !== project.id ||
+      !areGoPlaygroundFilesEqual(currentFiles, submittedFiles) ||
+      activeModel?.isDisposed() ||
+      (activeModel && activeModel.getVersionId() !== activeModelVersion) ||
+      (activeModel && activeModel.getValue() !== submittedActiveFile?.content)
+    ) {
+      appendConsoleLines(goFormatStaleConsoleLines());
+      return [];
+    }
+
+    const submittedContent = new Map(submittedFiles.map((file) => [file.path, file.content]));
+    const changedFiles = outcome.result.files.filter(
+      (file) => submittedContent.get(file.path) !== file.content,
+    );
+
+    for (const file of changedFiles) {
+      if (!activeModel || file.path !== activePath) {
+        updateFileContent(file.path, file.content);
+      }
+    }
+    appendConsoleLines(goFormatResultToConsoleLines(changedFiles.map((file) => file.path)));
+
+    const formattedActiveFile = activePath
+      ? outcome.result.files.find((file) => file.path === activePath)
+      : null;
+    return activeModel &&
+      formattedActiveFile &&
+      formattedActiveFile.content !== submittedActiveFile?.content
+      ? [{ range: activeModel.getFullModelRange(), text: formattedActiveFile.content }]
+      : [];
+  };
+
+  const provideGoFormattingEdits = useEffectEvent(
+    async (
+      model: monaco.editor.ITextModel,
+      _options: monaco.languages.FormattingOptions,
+      token: monaco.CancellationToken,
+    ) => {
+      if (token.isCancellationRequested) {
+        return [];
+      }
+      return formatGoProject(model);
+    },
+  );
+
+  useEffect(() => {
+    const disposable = monaco.languages.registerDocumentFormattingEditProvider("go", {
+      displayName: "gofmt (Go Playground)",
+      provideDocumentFormattingEdits: provideGoFormattingEdits,
+    });
+    return () => disposable.dispose();
+  }, [provideGoFormattingEdits]);
+
+  const handleFormat = async () => {
+    const editor = editorRef.current;
+    if (editor?.getModel()?.getLanguageId() === "go") {
+      const action = editor.getAction("editor.action.formatDocument");
+      if (action) {
+        await action.run();
+        return;
+      }
+    }
+    await formatGoProject();
   };
 
   const updateScrollLine = (scrollLine: number) => {
@@ -195,14 +318,7 @@ function GoPlaygroundRunnerPanel() {
 
     // Read every current Go source file at click time — never a stale copy.
     const project = getProject();
-    const goFiles = Object.values(project.files)
-      .filter(isWorkspaceTextFile)
-      .filter((file) => file.path.endsWith(".go"))
-      .sort((left, right) => {
-        if (left.path === "main.go") return right.path === "main.go" ? 0 : -1;
-        if (right.path === "main.go") return 1;
-        return left.path.localeCompare(right.path);
-      });
+    const goFiles = collectGoPlaygroundFiles(project);
 
     if (goFiles.length === 0) {
       appendConsoleLines(["[go-run error] Add at least one .go file to run this lesson"]);
@@ -210,7 +326,7 @@ function GoPlaygroundRunnerPanel() {
     }
 
     appendConsoleLines(goRunStartedConsoleLines(goFiles.map((file) => file.path)));
-    const outcome = await run(goFiles.map((file) => ({ path: file.path, content: file.content })));
+    const outcome = await run(goFiles);
 
     // A newer Run owns the console from here on.
     if (outcome.kind === "superseded") {
@@ -234,10 +350,12 @@ function GoPlaygroundRunnerPanel() {
   const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
   const consoleContent =
     effectiveConsoleLines.length === 0
-      ? "Press Run to compile and run this lesson's Go program with the Go Playground."
+      ? "Press Format or Run to use the Go Playground with this lesson's Go files."
       : effectiveConsoleLines.map(decorateGoConsoleLine).join("\n");
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
+  const toolLabel = isFormatting ? "gofmt *.go" : "go run *.go";
+  const isToolActive = isRunning || isFormatting;
 
   return (
     <div
@@ -296,11 +414,11 @@ function GoPlaygroundRunnerPanel() {
           <div className="flex min-h-15.5 items-center justify-between border-b border-[#11151d] bg-[#191d25] px-4 py-3">
             <div className="flex min-w-0 items-center gap-2.5">
               <p className="truncate font-mono text-[13px] font-semibold text-slate-400">
-                go run *.go
+                {toolLabel}
               </p>
-              {isRunning ? (
+              {isToolActive ? (
                 <span
-                  aria-label="Program is compiling and running"
+                  aria-label={isFormatting ? "Go files are formatting" : "Program is running"}
                   className="inline-block size-2.5 shrink-0 animate-spin rounded-full border-2 border-[#d48a37] border-t-transparent"
                 />
               ) : null}
@@ -314,19 +432,32 @@ function GoPlaygroundRunnerPanel() {
                   }}
                   className="rounded-md bg-[#173925] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6]"
                 >
-                  Sign in to Run
+                  Sign in for Go tools
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleRun();
-                  }}
-                  disabled={isPlaybackSnapshotActive || isAuthLoading}
-                  className="rounded-md bg-[#173925] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6] disabled:cursor-not-allowed disabled:bg-[#17241e] disabled:text-[#4f8e68]"
-                >
-                  Run
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleFormat();
+                    }}
+                    disabled={isPlaybackSnapshotActive || isAuthLoading || !canFormatWorkspace}
+                    className="rounded-md bg-[#222d3b] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] hover:text-[#b5d5ff] disabled:cursor-not-allowed disabled:bg-[#1d232c] disabled:text-[#5c6a7c]"
+                    title="Format every Go file with gofmt (Shift+Alt+F)"
+                  >
+                    Format
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleRun();
+                    }}
+                    disabled={isPlaybackSnapshotActive || isAuthLoading}
+                    className="rounded-md bg-[#173925] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6] disabled:cursor-not-allowed disabled:bg-[#17241e] disabled:text-[#4f8e68]"
+                  >
+                    Run
+                  </button>
+                </>
               )}
             </div>
           </div>

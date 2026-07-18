@@ -3,13 +3,14 @@ import type { Env } from "../env";
 import { getCurrentUser } from "../auth/session";
 import { getCache } from "../cache";
 import {
+  type GoPlaygroundFormatResult,
   parseGoPlaygroundRunResult,
   type GoPlaygroundFile,
   type GoPlaygroundRunResult,
 } from "../../../src/runtime/goPlayground/types";
 
 // Mounted at /api/go-playground in worker/index.ts. First-party proxy in
-// front of the official Go Playground compile API for pure Go lessons
+// front of the official Go Playground compile and format APIs for pure Go lessons
 // (docs/go-lessons-selective-runtime-plan.md §7.2). The browser never calls
 // the upstream service directly: this route owns the kill switch,
 // authentication, file/program-size checks, per-user rate limiting, content-hash
@@ -21,6 +22,7 @@ import {
 // application-specific (cookies, tokens, user identity) is sent upstream.
 
 const UPSTREAM_COMPILE_URL = "https://play.golang.org/compile";
+const UPSTREAM_FORMAT_URL = "https://play.golang.org/fmt";
 // Identifies Next Editor traffic as the Go project asks of third-party
 // clients. Confirm this string with the Playground maintainers before public
 // production rollout (plan §8 Phase 0).
@@ -42,8 +44,11 @@ const MAX_OUTPUT_CHARS = 256 * 1024;
 // Bound upstream JSON before decoding it. JSON escaping can expand each output
 // character to six bytes; the remainder leaves room for diagnostics/metadata.
 const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS * 6 + 64 * 1024;
+const MAX_UPSTREAM_FORMAT_RESPONSE_BYTES = MAX_SOURCE_BYTES * 6 + 64 * 1024;
+const MAX_FORMAT_ERROR_CHARS = 16 * 1024;
 const CACHE_TTL_SECONDS = 60 * 60;
 const RATE_LIMIT_RUNS_PER_MINUTE = 10;
+const RATE_LIMIT_FORMATS_PER_MINUTE = 20;
 
 type LimitedBody =
   | { status: "ok"; text: string }
@@ -264,6 +269,192 @@ export function serializeGoLessonFiles(files: readonly GoPlaygroundFile[]): stri
     .join("");
 }
 
+type GoLessonRequestValidation =
+  | {
+      ok: true;
+      files: GoPlaygroundFile[];
+      source: string;
+      sourceBytes: number;
+    }
+  | { ok: false; status: 400 | 413; error: string };
+
+async function validateGoLessonRequest(request: Request): Promise<GoLessonRequestValidation> {
+  const requestBody = await readBodyWithLimit(request, MAX_REQUEST_BYTES);
+  if (requestBody.status === "too-large") {
+    return { ok: false, status: 413, error: `request body exceeds ${MAX_REQUEST_BYTES} bytes` };
+  }
+  if (requestBody.status === "read-error") {
+    return { ok: false, status: 400, error: "request body could not be read" };
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(requestBody.text);
+  } catch {
+    return { ok: false, status: 400, error: "invalid JSON body" };
+  }
+
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return { ok: false, status: 400, error: "JSON body must be an object" };
+  }
+
+  const bodyKeys = Object.keys(body);
+  if (bodyKeys.length !== 1 || bodyKeys[0] !== "files") {
+    return { ok: false, status: 400, error: "'files' is the only supported field" };
+  }
+
+  const rawFiles = (body as Record<string, unknown>).files;
+  if (!Array.isArray(rawFiles) || rawFiles.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: "'files' must contain at least one Go source file",
+    };
+  }
+  if (rawFiles.length > MAX_GO_FILES) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Go lessons support at most ${MAX_GO_FILES} files`,
+    };
+  }
+
+  const files: GoPlaygroundFile[] = [];
+  const seenPaths = new Set<string>();
+  for (const [index, rawFile] of rawFiles.entries()) {
+    if (typeof rawFile !== "object" || rawFile === null || Array.isArray(rawFile)) {
+      return { ok: false, status: 400, error: `files[${index}] must be an object` };
+    }
+
+    const fileRecord = rawFile as Record<string, unknown>;
+    const fileKeys = Object.keys(fileRecord);
+    if (fileKeys.length !== 2 || !fileKeys.includes("path") || !fileKeys.includes("content")) {
+      return {
+        ok: false,
+        status: 400,
+        error: `files[${index}] must contain only 'path' and 'content'`,
+      };
+    }
+    if (typeof fileRecord.path !== "string") {
+      return { ok: false, status: 400, error: `files[${index}].path must be a string` };
+    }
+    if (typeof fileRecord.content !== "string") {
+      return { ok: false, status: 400, error: `files[${index}].content must be a string` };
+    }
+
+    const pathError = validateGoLessonFilePath(fileRecord.path);
+    if (pathError) {
+      return { ok: false, status: 400, error: pathError };
+    }
+    if (seenPaths.has(fileRecord.path)) {
+      return { ok: false, status: 400, error: "Go lesson file paths must be unique" };
+    }
+    if (TXTAR_MARKER_LINE.test(fileRecord.content)) {
+      return {
+        ok: false,
+        status: 400,
+        error: `${fileRecord.path} contains a reserved txtar marker line`,
+      };
+    }
+
+    const sourcePolicyError = validateGoLessonSource(fileRecord.content);
+    if (sourcePolicyError) {
+      return { ok: false, status: 400, error: `${fileRecord.path}: ${sourcePolicyError}` };
+    }
+
+    seenPaths.add(fileRecord.path);
+    files.push({ path: fileRecord.path, content: fileRecord.content });
+  }
+
+  const source = serializeGoLessonFiles(files);
+  const sourceBytes = new TextEncoder().encode(source).byteLength;
+  if (sourceBytes > MAX_SOURCE_BYTES) {
+    return {
+      ok: false,
+      status: 413,
+      error: `serialized Go program exceeds ${MAX_SOURCE_BYTES} bytes`,
+    };
+  }
+
+  return { ok: true, files, source, sourceBytes };
+}
+
+const TXTAR_FILE_HEADER = /^-- ([^\r\n]+) --\r?\n/gm;
+
+function parseFormattedGoLessonFiles(
+  source: string,
+  submittedFiles: readonly GoPlaygroundFile[],
+): GoPlaygroundFile[] | null {
+  if (new TextEncoder().encode(source).byteLength > MAX_SOURCE_BYTES) {
+    return null;
+  }
+
+  const headers: Array<{ index: number; contentStart: number; path: string }> = [];
+  for (const match of source.matchAll(TXTAR_FILE_HEADER)) {
+    if (match.index === undefined) {
+      return null;
+    }
+    headers.push({
+      index: match.index,
+      contentStart: match.index + match[0].length,
+      path: match[1],
+    });
+  }
+
+  const expectedFiles = [...submittedFiles].sort((left, right) => {
+    if (left.path === "main.go") return right.path === "main.go" ? 0 : -1;
+    if (right.path === "main.go") return 1;
+    return left.path < right.path ? -1 : left.path > right.path ? 1 : 0;
+  });
+  if (
+    headers.length !== expectedFiles.length ||
+    headers[0]?.index !== 0 ||
+    headers.some((header, index) => header.path !== expectedFiles[index]?.path)
+  ) {
+    return null;
+  }
+
+  const files: GoPlaygroundFile[] = [];
+  for (const [index, header] of headers.entries()) {
+    const content = source.slice(header.contentStart, headers[index + 1]?.index ?? source.length);
+    if (TXTAR_MARKER_LINE.test(content) || validateGoLessonSource(content) !== null) {
+      return null;
+    }
+    files.push({ path: header.path, content });
+  }
+
+  // Reject upstream additions, omissions, trailing data, or a changed archive
+  // representation before any returned source can reach the workspace.
+  return serializeGoLessonFiles(files) === source ? files : null;
+}
+
+export function normalizeUpstreamFormatResponse(
+  payload: unknown,
+  submittedFiles: readonly GoPlaygroundFile[],
+):
+  | { kind: "result"; result: GoPlaygroundFormatResult }
+  | { kind: "source-error"; error: string }
+  | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+
+  const body = payload as Record<string, unknown>;
+  if (typeof body.Body !== "string" || typeof body.Error !== "string") {
+    return null;
+  }
+
+  if (body.Error.trim()) {
+    if (body.Body !== "" || body.Error.length > MAX_FORMAT_ERROR_CHARS) {
+      return null;
+    }
+    return { kind: "source-error", error: body.Error };
+  }
+
+  const files = parseFormattedGoLessonFiles(body.Body, submittedFiles);
+  return files ? { kind: "result", result: { files } } : null;
+}
+
 /**
  * Normalize the upstream compile response. Only the fields `learn-go` proved
  * out are read (Errors, VetErrors, Events[].Message, Status, IsTest,
@@ -370,18 +561,20 @@ type RateLimitDecision = "allowed" | "limited" | "unavailable";
 async function checkRateLimit(
   cache: KVNamespace | null,
   userId: string,
+  keyPrefix: "gp:rl" | "gp:fmt:rl",
+  limit: number,
 ): Promise<RateLimitDecision> {
   if (!cache) {
     return "unavailable";
   }
-  const windowKey = `gp:rl:${userId}:${Math.floor(Date.now() / 60_000)}`;
+  const windowKey = `${keyPrefix}:${userId}:${Math.floor(Date.now() / 60_000)}`;
   try {
     const count = Number((await cache.get(windowKey)) ?? "0");
     if (!Number.isSafeInteger(count) || count < 0) {
       console.error("Go Playground rate-limit state was invalid");
       return "unavailable";
     }
-    if (count >= RATE_LIMIT_RUNS_PER_MINUTE) {
+    if (count >= limit) {
       return "limited";
     }
     await cache.put(windowKey, String(count + 1), { expirationTtl: 120 });
@@ -432,12 +625,19 @@ function logRun(entry: {
   console.log("go-playground-run", entry);
 }
 
+function logFormat(entry: {
+  outcome: "success" | "source-error" | "upstream-error" | "upstream-timeout";
+  sourceBytes: number;
+  durationMs: number;
+}): void {
+  console.log("go-playground-format", entry);
+}
+
 export const goPlaygroundRoute = new Hono<{ Bindings: Env }>();
 
 goPlaygroundRoute.post("/run", async (c) => {
-  // Kill switch fails closed: live execution off unless explicitly enabled.
-  // Editing and recorded playback never touch this route, so flipping the
-  // flag only disables live Run.
+  // Shared Go-tool kill switch fails closed unless explicitly enabled.
+  // Editing and recorded playback never touch either live route.
   if (c.env.GO_PLAYGROUND_ENABLED !== "true") {
     return c.json({ error: "Go Playground execution is disabled" }, 503);
   }
@@ -447,86 +647,21 @@ goPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "not signed in" }, 401);
   }
 
-  const requestBody = await readBodyWithLimit(c.req.raw, MAX_REQUEST_BYTES);
-  if (requestBody.status === "too-large") {
-    return c.json({ error: `request body exceeds ${MAX_REQUEST_BYTES} bytes` }, 413);
+  const request = await validateGoLessonRequest(c.req.raw);
+  if (!request.ok) {
+    return request.status === 413
+      ? c.json({ error: request.error }, 413)
+      : c.json({ error: request.error }, 400);
   }
-  if (requestBody.status === "read-error") {
-    return c.json({ error: "request body could not be read" }, 400);
-  }
-
-  let body: unknown;
-  try {
-    body = JSON.parse(requestBody.text);
-  } catch {
-    return c.json({ error: "invalid JSON body" }, 400);
-  }
-
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return c.json({ error: "JSON body must be an object" }, 400);
-  }
-
-  const bodyKeys = Object.keys(body);
-  if (bodyKeys.length !== 1 || bodyKeys[0] !== "files") {
-    return c.json({ error: "'files' is the only supported field" }, 400);
-  }
-
-  const rawFiles = (body as Record<string, unknown>).files;
-  if (!Array.isArray(rawFiles) || rawFiles.length === 0) {
-    return c.json({ error: "'files' must contain at least one Go source file" }, 400);
-  }
-  if (rawFiles.length > MAX_GO_FILES) {
-    return c.json({ error: `Go lessons support at most ${MAX_GO_FILES} files` }, 400);
-  }
-
-  const files: GoPlaygroundFile[] = [];
-  const seenPaths = new Set<string>();
-  for (const [index, rawFile] of rawFiles.entries()) {
-    if (typeof rawFile !== "object" || rawFile === null || Array.isArray(rawFile)) {
-      return c.json({ error: `files[${index}] must be an object` }, 400);
-    }
-
-    const fileRecord = rawFile as Record<string, unknown>;
-    const fileKeys = Object.keys(fileRecord);
-    if (fileKeys.length !== 2 || !fileKeys.includes("path") || !fileKeys.includes("content")) {
-      return c.json({ error: `files[${index}] must contain only 'path' and 'content'` }, 400);
-    }
-    if (typeof fileRecord.path !== "string") {
-      return c.json({ error: `files[${index}].path must be a string` }, 400);
-    }
-    if (typeof fileRecord.content !== "string") {
-      return c.json({ error: `files[${index}].content must be a string` }, 400);
-    }
-
-    const pathError = validateGoLessonFilePath(fileRecord.path);
-    if (pathError) {
-      return c.json({ error: pathError }, 400);
-    }
-    if (seenPaths.has(fileRecord.path)) {
-      return c.json({ error: "Go lesson file paths must be unique" }, 400);
-    }
-    if (TXTAR_MARKER_LINE.test(fileRecord.content)) {
-      return c.json({ error: `${fileRecord.path} contains a reserved txtar marker line` }, 400);
-    }
-
-    const sourcePolicyError = validateGoLessonSource(fileRecord.content);
-    if (sourcePolicyError) {
-      return c.json({ error: `${fileRecord.path}: ${sourcePolicyError}` }, 400);
-    }
-
-    seenPaths.add(fileRecord.path);
-    files.push({ path: fileRecord.path, content: fileRecord.content });
-  }
-
-  const source = serializeGoLessonFiles(files);
-
-  const sourceBytes = new TextEncoder().encode(source).byteLength;
-  if (sourceBytes > MAX_SOURCE_BYTES) {
-    return c.json({ error: `serialized Go program exceeds ${MAX_SOURCE_BYTES} bytes` }, 413);
-  }
+  const { source, sourceBytes } = request;
 
   const cache = getCache(c.env);
-  const rateLimitDecision = await checkRateLimit(cache, user.id);
+  const rateLimitDecision = await checkRateLimit(
+    cache,
+    user.id,
+    "gp:rl",
+    RATE_LIMIT_RUNS_PER_MINUTE,
+  );
   if (rateLimitDecision === "limited") {
     return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
   }
@@ -617,4 +752,112 @@ goPlaygroundRoute.post("/run", async (c) => {
     durationMs: Date.now() - startedAt,
   });
   return c.json(result);
+});
+
+goPlaygroundRoute.post("/format", async (c) => {
+  if (c.env.GO_PLAYGROUND_ENABLED !== "true") {
+    return c.json({ error: "Go Playground tools are disabled" }, 503);
+  }
+
+  const user = await getCurrentUser(c);
+  if (!user) {
+    return c.json({ error: "not signed in" }, 401);
+  }
+
+  const request = await validateGoLessonRequest(c.req.raw);
+  if (!request.ok) {
+    return request.status === 413
+      ? c.json({ error: request.error }, 413)
+      : c.json({ error: request.error }, 400);
+  }
+
+  const cache = getCache(c.env);
+  const rateLimitDecision = await checkRateLimit(
+    cache,
+    user.id,
+    "gp:fmt:rl",
+    RATE_LIMIT_FORMATS_PER_MINUTE,
+  );
+  if (rateLimitDecision === "limited") {
+    return c.json({ error: "format rate limit exceeded; retry in a minute" }, 429);
+  }
+  if (rateLimitDecision === "unavailable") {
+    return c.json({ error: "Go Playground formatting policy is unavailable" }, 502);
+  }
+
+  const startedAt = Date.now();
+  const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
+  let upstreamResponse: Response;
+  try {
+    upstreamResponse = await fetch(UPSTREAM_FORMAT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": UPSTREAM_USER_AGENT,
+      },
+      // Deliberately omit `imports`: this is canonical gofmt, not goimports,
+      // whose upstream implementation cannot resolve symbols in sibling files.
+      body: new URLSearchParams({ body: request.source }).toString(),
+      signal: upstreamSignal,
+    });
+  } catch (error) {
+    const timedOut =
+      upstreamSignal.aborted || (error instanceof Error && error.name === "TimeoutError");
+    logFormat({
+      outcome: timedOut ? "upstream-timeout" : "upstream-error",
+      sourceBytes: request.sourceBytes,
+      durationMs: Date.now() - startedAt,
+    });
+    return timedOut
+      ? c.json({ error: "formatting took too long" }, 504)
+      : c.json({ error: "the Go Playground formatter is unavailable" }, 502);
+  }
+
+  let normalized: ReturnType<typeof normalizeUpstreamFormatResponse> = null;
+  if (upstreamResponse.ok) {
+    const upstreamBody = await readBodyWithLimit(
+      upstreamResponse,
+      MAX_UPSTREAM_FORMAT_RESPONSE_BYTES,
+    );
+    if (upstreamBody.status === "read-error" && upstreamSignal.aborted) {
+      logFormat({
+        outcome: "upstream-timeout",
+        sourceBytes: request.sourceBytes,
+        durationMs: Date.now() - startedAt,
+      });
+      return c.json({ error: "formatting took too long" }, 504);
+    }
+    if (upstreamBody.status === "ok") {
+      try {
+        normalized = normalizeUpstreamFormatResponse(JSON.parse(upstreamBody.text), request.files);
+      } catch {
+        normalized = null;
+      }
+    }
+  }
+
+  if (!normalized) {
+    logFormat({
+      outcome: "upstream-error",
+      sourceBytes: request.sourceBytes,
+      durationMs: Date.now() - startedAt,
+    });
+    return c.json({ error: "the Go Playground formatter returned an unexpected response" }, 502);
+  }
+
+  if (normalized.kind === "source-error") {
+    logFormat({
+      outcome: "source-error",
+      sourceBytes: request.sourceBytes,
+      durationMs: Date.now() - startedAt,
+    });
+    return c.json({ error: normalized.error }, 422);
+  }
+
+  logFormat({
+    outcome: "success",
+    sourceBytes: request.sourceBytes,
+    durationMs: Date.now() - startedAt,
+  });
+  return c.json(normalized.result);
 });
