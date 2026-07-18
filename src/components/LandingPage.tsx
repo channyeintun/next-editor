@@ -15,6 +15,10 @@ import { Link } from "react-router";
 import Navbar from "./Navbar";
 import { useState, useEffect, useRef } from "react";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
+import {
+  DEMO_CONTROLS_SIZE_MESSAGE_TYPE,
+  DEMO_EMBED_READY_MESSAGE_TYPE,
+} from "../utils/demoEmbedControls";
 
 export type LandingAnalyticsEvent =
   | "start_creating_clicked"
@@ -151,6 +155,7 @@ const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true&la
 
 const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   // The demo iframe boots a SECOND full copy of the editor (Monaco + recording
@@ -208,6 +213,30 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
       document.removeEventListener("webkitfullscreenchange", handleChange);
     };
   }, []);
+
+  // The embed boots with ?largeControls=true (legible at ~0.45x scale), but
+  // fullscreen renders it at native size where those controls are giant. Push the
+  // size on every fullscreen flip, and again whenever the embed announces its
+  // listener is ready — the announce covers a toggle made while the editor bundle
+  // was still loading. Same-origin on both ends: targetOrigin pins delivery and
+  // origin/source checks pin receipt.
+  useEffect(() => {
+    const sendControlsSize = () => {
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: DEMO_CONTROLS_SIZE_MESSAGE_TYPE, large: !isFullscreen },
+        window.location.origin,
+      );
+    };
+    sendControlsSize();
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
+      if ((event.data as { type?: unknown } | null)?.type !== DEMO_EMBED_READY_MESSAGE_TYPE) return;
+      sendControlsSize();
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [isFullscreen]);
 
   const toggleFullscreen = () => {
     const node = containerRef.current as
@@ -392,15 +421,25 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                         </a>
                       ) : (
                         <iframe
+                          ref={iframeRef}
                           src={DEMO_IFRAME_SRC}
-                          className="absolute border-0 origin-top-left"
-                          style={{
-                            width: DEMO_IFRAME_WIDTH,
-                            height: DEMO_IFRAME_HEIGHT,
-                            left: offsetX,
-                            top: offsetY,
-                            transform: `scale(${scale})`,
-                          }}
+                          className={`absolute border-0 ${
+                            isFullscreen ? "inset-0 size-full" : "origin-top-left"
+                          }`}
+                          // Fullscreen drops the fixed-size + scale treatment and lets
+                          // the editor lay out at the screen's native resolution, so
+                          // text stays crisp and the (regular-size) controls render 1:1.
+                          style={
+                            isFullscreen
+                              ? undefined
+                              : {
+                                  width: DEMO_IFRAME_WIDTH,
+                                  height: DEMO_IFRAME_HEIGHT,
+                                  left: offsetX,
+                                  top: offsetY,
+                                  transform: `scale(${scale})`,
+                                }
+                          }
                           title="Next Editor Live Demo"
                         />
                       )}

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { usePostHog } from "@posthog/react";
@@ -32,6 +32,10 @@ import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
+import {
+  DEMO_CONTROLS_SIZE_MESSAGE_TYPE,
+  DEMO_EMBED_READY_MESSAGE_TYPE,
+} from "../utils/demoEmbedControls";
 import CameraOverlay from "./CameraOverlay";
 import CaptionsOverlay from "./CaptionsOverlay";
 import CursorComponent from "./Cursor.tsx";
@@ -115,8 +119,34 @@ export function EditorLayout({
   // source of truth with the rest of the app and react to in-app param changes.
   const [searchParams] = useSearchParams();
   const readOnly = readOnlyProp ?? searchParams.get("readOnly") === "true";
+
+  // A same-origin parent frame (the landing page's demo embed) can retune the
+  // control size at runtime: it boots us with ?largeControls=true while scaled
+  // down, then asks for regular controls when its fullscreen mode shows us at
+  // native size. Announce readiness after subscribing so a size change from
+  // before this (lazily loaded) component mounted gets re-delivered. A
+  // cross-origin parent never gets the announce (targetOrigin mismatch drops it)
+  // and its messages fail the origin check.
+  const [largeControlsOverride, setLargeControlsOverride] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (window.parent === window) return;
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.source !== window.parent) return;
+      const data = event.data as { type?: unknown; large?: unknown } | null;
+      if (data?.type !== DEMO_CONTROLS_SIZE_MESSAGE_TYPE || typeof data.large !== "boolean") {
+        return;
+      }
+      setLargeControlsOverride(data.large);
+    };
+    window.addEventListener("message", handleMessage);
+    window.parent.postMessage({ type: DEMO_EMBED_READY_MESSAGE_TYPE }, window.location.origin);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
   // Enlarge the playback controls for small embeds (e.g. a scaled-down demo iframe).
-  const largeControls = largeControlsProp ?? searchParams.get("largeControls") === "true";
+  const largeControls =
+    largeControlsOverride ?? largeControlsProp ?? searchParams.get("largeControls") === "true";
 
   const tourStartedRef = useRef(false);
 
