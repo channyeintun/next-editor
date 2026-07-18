@@ -8,8 +8,12 @@ import type { GoPlaygroundServiceErrorKind } from "./client";
  * no Playground- or Worker-specific detail leaks into the recorded lines.
  */
 
-export function goRunStartedConsoleLines(fileName: string): string[] {
-  return [`[go-run] go run ${fileName}`];
+export function goRunStartedConsoleLines(filePaths: readonly string[]): string[] {
+  const target =
+    filePaths.length <= 4
+      ? filePaths.join(" ")
+      : `${filePaths.slice(0, 3).join(" ")} … (${filePaths.length} files)`;
+  return [`[go-run] go run ${target}`];
 }
 
 function splitOutputLines(output: string): string[] {

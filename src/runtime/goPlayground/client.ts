@@ -1,4 +1,9 @@
-import { parseGoPlaygroundRunResult, type GoPlaygroundRunResult } from "./types";
+import {
+  parseGoPlaygroundRunResult,
+  type GoPlaygroundFile,
+  type GoPlaygroundRunRequest,
+  type GoPlaygroundRunResult,
+} from "./types";
 
 /**
  * Why a Run can fail without producing a run result. "aborted" means a newer
@@ -52,7 +57,7 @@ function errorKindForStatus(status: number): GoPlaygroundServiceErrorKind {
 export class GoPlaygroundClient {
   private controller: AbortController | null = null;
 
-  async run(source: string): Promise<GoPlaygroundRunResult> {
+  async run(files: readonly GoPlaygroundFile[]): Promise<GoPlaygroundRunResult> {
     this.controller?.abort();
     const controller = new AbortController();
     this.controller = controller;
@@ -62,7 +67,7 @@ export class GoPlaygroundClient {
       response = await fetch("/api/go-playground/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source }),
+        body: JSON.stringify({ files } satisfies GoPlaygroundRunRequest),
         signal: controller.signal,
       });
     } catch (error) {

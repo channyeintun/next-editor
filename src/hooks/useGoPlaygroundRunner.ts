@@ -4,7 +4,7 @@ import {
   GoPlaygroundServiceError,
   type GoPlaygroundServiceErrorKind,
 } from "../runtime/goPlayground/client";
-import type { GoPlaygroundRunResult } from "../runtime/goPlayground/types";
+import type { GoPlaygroundFile, GoPlaygroundRunResult } from "../runtime/goPlayground/types";
 
 export type GoPlaygroundRunOutcome =
   | { kind: "result"; result: GoPlaygroundRunResult }
@@ -44,7 +44,7 @@ export function useGoPlaygroundRunner() {
     setIsRunning(false);
   }, []);
 
-  const run = async (source: string): Promise<GoPlaygroundRunOutcome> => {
+  const run = async (files: readonly GoPlaygroundFile[]): Promise<GoPlaygroundRunOutcome> => {
     const client = (clientRef.current ??= new GoPlaygroundClient());
     const runId = ++activeRunRef.current;
     setIsRunning(true);
@@ -59,7 +59,7 @@ export function useGoPlaygroundRunner() {
     };
 
     try {
-      return finish({ kind: "result", result: await client.run(source) });
+      return finish({ kind: "result", result: await client.run(files) });
     } catch (error) {
       if (error instanceof GoPlaygroundServiceError) {
         if (error.kind === "aborted") {

@@ -70,5 +70,7 @@ describe("go workspace model", () => {
     expect(normalized.entryFilePath).toBe("main.go");
     expect(normalized.files["main.go"].language).toBe("go");
     expect(normalized.files["main.go"].content).toContain("package main");
+    expect(normalized.files["main.go"].content).toContain("square(i)");
+    expect(normalized.files["square.go"].content).toContain("func square");
   });
 });

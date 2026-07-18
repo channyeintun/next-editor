@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   goPlaygroundRoute,
   normalizeUpstreamCompileResponse,
+  serializeGoLessonFiles,
   validateGoLessonSource,
 } from "./goPlayground";
 import type { Env } from "../env";
@@ -16,6 +17,9 @@ afterEach(() => {
 });
 
 const SOURCE = 'package main\n\nimport "fmt"\n\nfunc main() { fmt.Println("hi") }\n';
+const HELPER_SOURCE = 'package main\n\nfunc message() string { return "hi" }\n';
+const FILES = [{ path: "main.go", content: SOURCE }];
+const TXTAR_SOURCE = `-- main.go --\n${SOURCE}`;
 
 const USER: UserRow = {
   id: "user-1",
@@ -59,7 +63,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
   } as Env;
 }
 
-function runRequest(env: Env, body: BodyInit | null = JSON.stringify({ source: SOURCE })) {
+function runRequest(env: Env, body: BodyInit | null = JSON.stringify({ files: FILES })) {
   return goPlaygroundRoute.request(
     "http://localhost/run",
     {
@@ -118,62 +122,125 @@ describe("goPlaygroundRoute", () => {
     const spy = stubUpstream({});
     const response = await runRequest(
       makeEnv(),
-      JSON.stringify({ source: SOURCE, padding: "x".repeat(400 * 1024) }),
+      JSON.stringify({ files: FILES, padding: "x".repeat(450 * 1024) }),
     );
 
     expect(response.status).toBe(413);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("accepts only the documented source field", async () => {
+  it("accepts only the documented files field", async () => {
     const spy = stubUpstream({});
-    const response = await runRequest(makeEnv(), JSON.stringify({ source: SOURCE, extra: true }));
+    const response = await runRequest(makeEnv(), JSON.stringify({ files: FILES, extra: true }));
 
     expect(response.status).toBe(400);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("rejects empty source", async () => {
-    stubUpstream({});
-    const response = await runRequest(makeEnv(), JSON.stringify({ source: "   " }));
+  it("requires at least one Go file", async () => {
+    const spy = stubUpstream({});
+    const response = await runRequest(makeEnv(), JSON.stringify({ files: [] }));
+
     expect(response.status).toBe(400);
+    expect(spy).not.toHaveBeenCalled();
   });
 
-  it("rejects source over the size limit before proxying", async () => {
+  it("rejects more files than the Playground limit", async () => {
+    const spy = stubUpstream({});
+    const files = Array.from({ length: 21 }, (_, index) => ({
+      path: `file${index}.go`,
+      content: "package main\n",
+    }));
+    const response = await runRequest(makeEnv(), JSON.stringify({ files }));
+
+    expect(response.status).toBe(400);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("rejects the serialized program over the size limit before proxying", async () => {
     const spy = stubUpstream({});
     const oversized = `package main\n// ${"x".repeat(64 * 1024)}`;
-    const response = await runRequest(makeEnv(), JSON.stringify({ source: oversized }));
+    const response = await runRequest(
+      makeEnv(),
+      JSON.stringify({ files: [{ path: "main.go", content: oversized }] }),
+    );
 
     expect(response.status).toBe(413);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("rejects source without a main package", async () => {
+  it("requires every file to use package main", async () => {
     const spy = stubUpstream({});
     const response = await runRequest(
       makeEnv(),
-      JSON.stringify({ source: "package library\n\nfunc Add(a, b int) int { return a + b }" }),
+      JSON.stringify({
+        files: [
+          ...FILES,
+          {
+            path: "helper.go",
+            content: "package library\n\nfunc Add(a, b int) int { return a + b }",
+          },
+        ],
+      }),
     );
 
     expect(response.status).toBe(400);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("rejects multi-file txtar and third-party imports before proxying", async () => {
+  it("rejects third-party imports in any file before proxying", async () => {
     const spy = stubUpstream({});
-    const txtarResponse = await runRequest(
-      makeEnv(),
-      JSON.stringify({ source: `${SOURCE}\n-- helper.go --\npackage main\n` }),
-    );
     const moduleResponse = await runRequest(
       makeEnv(),
       JSON.stringify({
-        source: 'package main\n\nimport "github.com/example/dependency"\n\nfunc main() {}\n',
+        files: [
+          ...FILES,
+          {
+            path: "helper.go",
+            content: 'package main\n\nimport "github.com/example/dependency"\n\nfunc helper() {}\n',
+          },
+        ],
       }),
     );
 
-    expect(txtarResponse.status).toBe(400);
     expect(moduleResponse.status).toBe(400);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it.each(["nested/helper.go", "helper.ts", "_helper.go", "helper test.go", "helper_test.go"])(
+    "rejects unsupported Go lesson path %s",
+    async (path) => {
+      const spy = stubUpstream({});
+      const response = await runRequest(
+        makeEnv(),
+        JSON.stringify({ files: [{ path, content: "package main\n" }] }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(spy).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects duplicate paths and content containing txtar marker lines", async () => {
+    const spy = stubUpstream({});
+    const duplicateResponse = await runRequest(
+      makeEnv(),
+      JSON.stringify({ files: [...FILES, ...FILES] }),
+    );
+    const markerResponse = await runRequest(
+      makeEnv(),
+      JSON.stringify({
+        files: [
+          {
+            path: "main.go",
+            content: "package main\n\nvar text = `start\n-- injected.go --\nend`\n",
+          },
+        ],
+      }),
+    );
+
+    expect(duplicateResponse.status).toBe(400);
+    expect(markerResponse.status).toBe(400);
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -192,6 +259,21 @@ describe("goPlaygroundRoute", () => {
 
     expect(response.status).toBe(502);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("serializes multiple files as deterministic txtar before proxying", async () => {
+    const spy = stubUpstream({ Events: [{ Message: "hi\n", Kind: "stdout" }], Status: 0 });
+    const files = [
+      { path: "helper.go", content: HELPER_SOURCE },
+      { path: "main.go", content: SOURCE },
+    ];
+
+    const response = await runRequest(makeEnv(), JSON.stringify({ files }));
+
+    expect(response.status).toBe(200);
+    const form = new URLSearchParams(String(spy.mock.calls[0][1]?.body));
+    expect(form.get("body")).toBe(`-- main.go --\n${SOURCE}-- helper.go --\n${HELPER_SOURCE}`);
+    expect(form.get("body")).toBe(serializeGoLessonFiles(files));
   });
 
   it("proxies with the fixed form fields and unique user agent, and normalizes success", async () => {
@@ -213,7 +295,7 @@ describe("goPlaygroundRoute", () => {
     const form = new URLSearchParams(String(init?.body));
     expect(form.get("version")).toBe("2");
     expect(form.get("withVet")).toBe("true");
-    expect(form.get("body")).toBe(SOURCE);
+    expect(form.get("body")).toBe(TXTAR_SOURCE);
     expect(new Headers(init?.headers).get("User-Agent")).toContain("NextEditor-GoPlayground");
   });
 
@@ -397,7 +479,7 @@ describe("validateGoLessonSource", () => {
   it("does not let comments or strings spoof the package declaration", () => {
     expect(
       validateGoLessonSource('// package main\npackage library\nconst text = "package main"'),
-    ).toBe("Go lessons run a single 'package main' program");
+    ).toBe("Every Go lesson file must use 'package main'");
   });
 
   it("rejects escaped and CGO import paths", () => {

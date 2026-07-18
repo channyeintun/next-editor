@@ -110,7 +110,7 @@ function GoPlaygroundRunnerPanel() {
     // The runtime panel store is shared by the browser and Go runners. Clear
     // their content-specific console/scroll state at Go/project boundaries so
     // output cannot leak into another lesson. A project change also supersedes
-    // a Run that was started against the previous main.go.
+    // a Run that was started against the previous set of Go files.
     cancel();
 
     const resetConsoleSurface = () => {
@@ -193,24 +193,23 @@ function GoPlaygroundRunnerPanel() {
       return;
     }
 
-    // Read the current source at click time — never a stale copy.
+    // Read every current Go source file at click time — never a stale copy.
     const project = getProject();
-    const goFiles = Object.values(project.files).filter(
-      (file) => file.path.endsWith(".go") && isWorkspaceTextFile(file),
-    );
-    const goFile = project.files["main.go"];
+    const goFiles = Object.values(project.files)
+      .filter((file) => file.path.endsWith(".go") && isWorkspaceTextFile(file))
+      .sort((left, right) => {
+        if (left.path === "main.go") return right.path === "main.go" ? 0 : -1;
+        if (right.path === "main.go") return 1;
+        return left.path.localeCompare(right.path);
+      });
 
-    if (!goFile || !isWorkspaceTextFile(goFile)) {
-      appendConsoleLines(["[go-run error] Add a main.go file to run this lesson"]);
+    if (goFiles.length === 0) {
+      appendConsoleLines(["[go-run error] Add at least one .go file to run this lesson"]);
       return;
     }
-    if (goFiles.length !== 1) {
-      appendConsoleLines(["[go-run error] Go lessons currently support exactly one main.go file"]);
-      return;
-    }
 
-    appendConsoleLines(goRunStartedConsoleLines(goFile.name));
-    const outcome = await run(goFile.content);
+    appendConsoleLines(goRunStartedConsoleLines(goFiles.map((file) => file.path)));
+    const outcome = await run(goFiles.map((file) => ({ path: file.path, content: file.content })));
 
     // A newer Run owns the console from here on.
     if (outcome.kind === "superseded") {
@@ -226,7 +225,7 @@ function GoPlaygroundRunnerPanel() {
 
   const handleSignIn = async () => {
     // Persist edits before the full-page OAuth navigation so Run-after-sign-in
-    // resumes with the same source.
+    // resumes with the same sources.
     await saveProject();
     window.location.assign(signInUrl(`${window.location.pathname}${window.location.search}`));
   };
@@ -296,7 +295,7 @@ function GoPlaygroundRunnerPanel() {
           <div className="flex min-h-15.5 items-center justify-between border-b border-[#11151d] bg-[#191d25] px-4 py-3">
             <div className="flex min-w-0 items-center gap-2.5">
               <p className="truncate font-mono text-[13px] font-semibold text-slate-400">
-                go run main.go
+                go run *.go
               </p>
               {isRunning ? (
                 <span

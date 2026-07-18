@@ -7,8 +7,14 @@
 
 export type GoPlaygroundRunStatus = "success" | "compile-error" | "vet-error" | "runtime-error";
 
+export interface GoPlaygroundFile {
+  /** Top-level `.go` path in the lesson workspace. */
+  path: string;
+  content: string;
+}
+
 export interface GoPlaygroundRunRequest {
-  source: string;
+  files: readonly GoPlaygroundFile[];
 }
 
 export interface GoPlaygroundRunResult {

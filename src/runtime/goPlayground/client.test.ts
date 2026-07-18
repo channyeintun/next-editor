@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GoPlaygroundClient, GoPlaygroundServiceError } from "./client";
-import type { GoPlaygroundRunResult } from "./types";
+import type { GoPlaygroundFile, GoPlaygroundRunResult } from "./types";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -8,6 +8,7 @@ afterEach(() => {
 });
 
 const SOURCE = 'package main\n\nimport "fmt"\n\nfunc main() { fmt.Println("hi") }\n';
+const FILES: GoPlaygroundFile[] = [{ path: "main.go", content: SOURCE }];
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -28,19 +29,19 @@ async function captureServiceError(promise: Promise<unknown>): Promise<GoPlaygro
 }
 
 describe("GoPlaygroundClient", () => {
-  it("posts the source to the first-party route and returns the parsed result", async () => {
+  it("posts all Go files to the first-party route and returns the parsed result", async () => {
     const result: GoPlaygroundRunResult = { status: "success", output: "hi\n", exitCode: 0 };
     const spy = vi.fn<(input: unknown, init?: RequestInit) => Promise<Response>>(async () =>
       jsonResponse(result),
     );
     vi.stubGlobal("fetch", spy);
 
-    await expect(new GoPlaygroundClient().run(SOURCE)).resolves.toEqual(result);
+    await expect(new GoPlaygroundClient().run(FILES)).resolves.toEqual(result);
 
     expect(spy).toHaveBeenCalledTimes(1);
     const [url, init] = spy.mock.calls[0];
     expect(url).toBe("/api/go-playground/run");
-    expect(JSON.parse(String(init?.body))).toEqual({ source: SOURCE });
+    expect(JSON.parse(String(init?.body))).toEqual({ files: FILES });
   });
 
   it("drops unknown extra fields from the response", async () => {
@@ -51,7 +52,7 @@ describe("GoPlaygroundClient", () => {
       ),
     );
 
-    await expect(new GoPlaygroundClient().run(SOURCE)).resolves.toEqual({
+    await expect(new GoPlaygroundClient().run(FILES)).resolves.toEqual({
       status: "success",
       output: "",
       exitCode: 0,
@@ -72,7 +73,7 @@ describe("GoPlaygroundClient", () => {
       vi.fn(async () => jsonResponse({ error: "nope" }, status)),
     );
 
-    const error = await captureServiceError(new GoPlaygroundClient().run(SOURCE));
+    const error = await captureServiceError(new GoPlaygroundClient().run(FILES));
     expect(error.kind).toBe(kind);
   });
 
@@ -82,7 +83,7 @@ describe("GoPlaygroundClient", () => {
       vi.fn(async () => jsonResponse({ status: "success", output: 42 })),
     );
 
-    const error = await captureServiceError(new GoPlaygroundClient().run(SOURCE));
+    const error = await captureServiceError(new GoPlaygroundClient().run(FILES));
     expect(error.kind).toBe("unavailable");
   });
 
@@ -97,7 +98,7 @@ describe("GoPlaygroundClient", () => {
       vi.fn(async () => jsonResponse(payload)),
     );
 
-    const error = await captureServiceError(new GoPlaygroundClient().run(SOURCE));
+    const error = await captureServiceError(new GoPlaygroundClient().run(FILES));
     expect(error.kind).toBe("unavailable");
   });
 
@@ -117,8 +118,11 @@ describe("GoPlaygroundClient", () => {
     vi.stubGlobal("fetch", spy);
 
     const client = new GoPlaygroundClient();
-    const first = client.run(SOURCE);
-    const second = client.run(`${SOURCE}\n`);
+    const first = client.run(FILES);
+    const second = client.run([
+      ...FILES,
+      { path: "helper.go", content: "package main\n\nfunc helper() {}\n" },
+    ]);
 
     expect((await captureServiceError(first)).kind).toBe("aborted");
     await expect(second).resolves.toMatchObject({ output: "second\n" });
@@ -138,7 +142,7 @@ describe("GoPlaygroundClient", () => {
     );
 
     const client = new GoPlaygroundClient();
-    const pending = client.run(SOURCE);
+    const pending = client.run(FILES);
     client.abort();
 
     expect((await captureServiceError(pending)).kind).toBe("aborted");

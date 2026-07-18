@@ -4,6 +4,7 @@ import { getCurrentUser } from "../auth/session";
 import { getCache } from "../cache";
 import {
   parseGoPlaygroundRunResult,
+  type GoPlaygroundFile,
   type GoPlaygroundRunResult,
 } from "../../../src/runtime/goPlayground/types";
 
@@ -11,11 +12,11 @@ import {
 // front of the official Go Playground compile API for pure Go lessons
 // (docs/go-lessons-selective-runtime-plan.md §7.2). The browser never calls
 // the upstream service directly: this route owns the kill switch,
-// authentication, source-size checks, per-user rate limiting, content-hash
+// authentication, file/program-size checks, per-user rate limiting, content-hash
 // caching, the unique user agent, the upstream timeout, and normalization of
 // the upstream response into the app's GoPlaygroundRunResult contract.
 //
-// Privacy invariant: user source, program output, and diagnostics must never
+// Privacy invariant: user sources, filenames, program output, and diagnostics must never
 // be logged — telemetry is aggregate fields only (see logRun below). Nothing
 // application-specific (cookies, tokens, user identity) is sent upstream.
 
@@ -27,11 +28,14 @@ const UPSTREAM_USER_AGENT = "NextEditor-GoPlayground/1.0 (+https://nexteditor.de
 // Shorter than the application request ceiling so a hung upstream surfaces as
 // a bounded 504 instead of an opaque Worker timeout.
 const UPSTREAM_TIMEOUT_MS = 20_000;
+const MAX_GO_FILES = 20;
+const MAX_FILE_PATH_BYTES = 200;
 const MAX_SOURCE_BYTES = 64 * 1024;
 // JSON escaping can expand one source byte to six bytes (for example, a
-// control character encoded as \u0000). Bound the request before parsing while
-// still allowing every source that fits MAX_SOURCE_BYTES.
-const MAX_REQUEST_BYTES = MAX_SOURCE_BYTES * 6 + 1024;
+// control character encoded as \u0000). Leave bounded room for the structured
+// file paths and object syntax while allowing every valid serialized program.
+const MAX_REQUEST_BYTES =
+  MAX_SOURCE_BYTES * 6 + MAX_GO_FILES * (MAX_FILE_PATH_BYTES * 6 + 64) + 1024;
 // Defensive bound on concatenated event output; the Playground applies its
 // own output limits well below this.
 const MAX_OUTPUT_CHARS = 256 * 1024;
@@ -205,14 +209,8 @@ function collectImportPathTokens(tokens: GoSourceToken[]): GoSourceToken[] {
   return importPaths;
 }
 
-/** Return a user-facing policy error, or null when source fits the pure v1 contract. */
+/** Return a user-facing policy error, or null when one file fits the pure contract. */
 export function validateGoLessonSource(source: string): string | null {
-  // The Playground treats txtar separators as additional files. Reject them
-  // before tokenization so v1 remains one editable main.go.
-  if (/^-- [^\r\n]+ --[ \t]*\r?$/m.test(source)) {
-    return "Go lessons support one main.go file; multi-file txtar input is not enabled";
-  }
-
   const tokens = tokenizeGoSource(source);
   if (
     tokens[0]?.kind !== "identifier" ||
@@ -220,7 +218,7 @@ export function validateGoLessonSource(source: string): string | null {
     tokens[1]?.kind !== "identifier" ||
     tokens[1].value !== "main"
   ) {
-    return "Go lessons run a single 'package main' program";
+    return "Every Go lesson file must use 'package main'";
   }
 
   for (const importPath of collectImportPathTokens(tokens)) {
@@ -235,6 +233,35 @@ export function validateGoLessonSource(source: string): string | null {
   }
 
   return null;
+}
+
+const TXTAR_MARKER_LINE = /^-- [^\r\n]+ --[ \t]*\r?$/m;
+const GO_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*\.go$/;
+
+function validateGoLessonFilePath(filePath: string): string | null {
+  if (new TextEncoder().encode(filePath).byteLength > MAX_FILE_PATH_BYTES) {
+    return `Go file paths cannot exceed ${MAX_FILE_PATH_BYTES} bytes`;
+  }
+  if (!GO_FILE_NAME.test(filePath)) {
+    return "Go lessons support top-level .go files with simple ASCII names only";
+  }
+  if (filePath.endsWith("_test.go")) {
+    return "Go test files are not enabled for lessons yet";
+  }
+  return null;
+}
+
+/** Serialize validated lesson files into the txtar body understood by the Playground. */
+export function serializeGoLessonFiles(files: readonly GoPlaygroundFile[]): string {
+  const sortedFiles = [...files].sort((left, right) => {
+    if (left.path === "main.go") return right.path === "main.go" ? 0 : -1;
+    if (right.path === "main.go") return 1;
+    return left.path < right.path ? -1 : left.path > right.path ? 1 : 0;
+  });
+
+  return sortedFiles
+    .map(({ path, content }) => `-- ${path} --\n${content}${content.endsWith("\n") ? "" : "\n"}`)
+    .join("");
 }
 
 /**
@@ -395,7 +422,7 @@ async function writeCachedResult(
   }
 }
 
-// Aggregate telemetry only — never source, output, or diagnostics text.
+// Aggregate telemetry only — never sources, filenames, output, or diagnostics text.
 function logRun(entry: {
   outcome: GoPlaygroundRunResult["status"] | "upstream-error" | "upstream-timeout";
   sourceBytes: number;
@@ -440,23 +467,62 @@ goPlaygroundRoute.post("/run", async (c) => {
   }
 
   const bodyKeys = Object.keys(body);
-  if (bodyKeys.length !== 1 || bodyKeys[0] !== "source") {
-    return c.json({ error: "'source' is the only supported field" }, 400);
+  if (bodyKeys.length !== 1 || bodyKeys[0] !== "files") {
+    return c.json({ error: "'files' is the only supported field" }, 400);
   }
 
-  const source = (body as Record<string, unknown>).source;
-  if (typeof source !== "string" || source.trim().length === 0) {
-    return c.json({ error: "'source' must be a non-empty string" }, 400);
+  const rawFiles = (body as Record<string, unknown>).files;
+  if (!Array.isArray(rawFiles) || rawFiles.length === 0) {
+    return c.json({ error: "'files' must contain at least one Go source file" }, 400);
   }
+  if (rawFiles.length > MAX_GO_FILES) {
+    return c.json({ error: `Go lessons support at most ${MAX_GO_FILES} files` }, 400);
+  }
+
+  const files: GoPlaygroundFile[] = [];
+  const seenPaths = new Set<string>();
+  for (const [index, rawFile] of rawFiles.entries()) {
+    if (typeof rawFile !== "object" || rawFile === null || Array.isArray(rawFile)) {
+      return c.json({ error: `files[${index}] must be an object` }, 400);
+    }
+
+    const fileRecord = rawFile as Record<string, unknown>;
+    const fileKeys = Object.keys(fileRecord);
+    if (fileKeys.length !== 2 || !fileKeys.includes("path") || !fileKeys.includes("content")) {
+      return c.json({ error: `files[${index}] must contain only 'path' and 'content'` }, 400);
+    }
+    if (typeof fileRecord.path !== "string") {
+      return c.json({ error: `files[${index}].path must be a string` }, 400);
+    }
+    if (typeof fileRecord.content !== "string") {
+      return c.json({ error: `files[${index}].content must be a string` }, 400);
+    }
+
+    const pathError = validateGoLessonFilePath(fileRecord.path);
+    if (pathError) {
+      return c.json({ error: pathError }, 400);
+    }
+    if (seenPaths.has(fileRecord.path)) {
+      return c.json({ error: "Go lesson file paths must be unique" }, 400);
+    }
+    if (TXTAR_MARKER_LINE.test(fileRecord.content)) {
+      return c.json({ error: `${fileRecord.path} contains a reserved txtar marker line` }, 400);
+    }
+
+    const sourcePolicyError = validateGoLessonSource(fileRecord.content);
+    if (sourcePolicyError) {
+      return c.json({ error: `${fileRecord.path}: ${sourcePolicyError}` }, 400);
+    }
+
+    seenPaths.add(fileRecord.path);
+    files.push({ path: fileRecord.path, content: fileRecord.content });
+  }
+
+  const source = serializeGoLessonFiles(files);
 
   const sourceBytes = new TextEncoder().encode(source).byteLength;
   if (sourceBytes > MAX_SOURCE_BYTES) {
-    return c.json({ error: `source exceeds ${MAX_SOURCE_BYTES} bytes` }, 413);
-  }
-
-  const sourcePolicyError = validateGoLessonSource(source);
-  if (sourcePolicyError) {
-    return c.json({ error: sourcePolicyError }, 400);
+    return c.json({ error: `serialized Go program exceeds ${MAX_SOURCE_BYTES} bytes` }, 413);
   }
 
   const cache = getCache(c.env);

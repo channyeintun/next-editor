@@ -6,8 +6,16 @@ import {
 } from "./console";
 
 describe("goRunStartedConsoleLines", () => {
-  it("echoes the run action for the recorded console", () => {
-    expect(goRunStartedConsoleLines("main.go")).toEqual(["[go-run] go run main.go"]);
+  it("echoes all files in a small multi-file run", () => {
+    expect(goRunStartedConsoleLines(["main.go", "helper.go"])).toEqual([
+      "[go-run] go run main.go helper.go",
+    ]);
+  });
+
+  it("bounds the label for larger file sets", () => {
+    expect(
+      goRunStartedConsoleLines(["main.go", "one.go", "two.go", "three.go", "four.go"]),
+    ).toEqual(["[go-run] go run main.go one.go two.go … (5 files)"]);
   });
 });
 
