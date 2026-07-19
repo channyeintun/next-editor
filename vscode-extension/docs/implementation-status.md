@@ -13,8 +13,8 @@ not modified without explicit approval.
 | 0     | Preflight and decision recording                 | Done (2026-07-20)                 |
 | 1     | Isolated extension scaffold                      | Done (2026-07-20)                 |
 | 2     | Capture topology and text-change feasibility     | Done (2026-07-20)                 |
-| 3     | Renderer benchmark and decision                  | Not started                       |
-| 4     | Versioned model, journal, and checkpoints        | Not started                       |
+| 3     | Renderer benchmark and decision                  | Done (2026-07-20)                 |
+| 4     | Versioned model, journal, and checkpoints        | Done (2026-07-20)                 |
 | 5     | Native visual recording vertical slice           | Not started                       |
 | 6     | Artifact finalization and read-only playback     | Not started                       |
 | 7     | Recovery, security, privacy, and scale hardening | Not started                       |
@@ -179,6 +179,55 @@ Capture feasibility proven against a real Extension Development Host
 - No API gaps found that block the plan; group/tab identity required the
   structural fallback exactly as the research predicted.
 
+## Phase 3 evidence (2026-07-20)
+
+- Pure playback reducer (`SessionReducer`) + renderer contract
+  (`Renderer.ts`) + deterministic seeded fixture generator implemented;
+  reducer determinism, ground-truth final texts, checkpoint-restore seek
+  equivalence, and envelope invariants covered by unit tests.
+- Minimal faithful Monaco and CodeMirror 6 adapters implemented against
+  the same contract; benchmark harness runs both in a **real VS Code
+  webview** (EDH) via `bun run benchmark:renderer`; report at
+  `.artifacts/renderer-benchmark.json`.
+- **Decision: Monaco** — meets every §11.4 budget (worst seek p95 187 ms
+  on the 60-min/250k fixture); CodeMirror fails the seek budget (980 ms
+  p95 long-session; 252 ms multi-surface), replays the long fixture 17×
+  slower, and degrades at 20 surfaces (134 ms vs 38 ms). Full tables,
+  methodology, and caveats (incl. the surrogate-split fixture bug found
+  and fixed during the first run) in `docs/adr/0002-player-renderer.md`.
+- `@codemirror/*` demoted to devDependencies, referenced only by the
+  dev-only benchmark bundle (`dist/benchmark`, excluded from VSIX).
+- Note: this phase's commit also lands the completed v1 event union in
+  `model/events.ts` (audio + session lifecycle types) because the reducer
+  compiles against it; runtime validators land with Phase 4.
+
+## Phase 4 evidence (2026-07-20)
+
+- `zod` 4.4.3 added as the runtime-validator source (`model/schemas.ts`):
+  full v1 event union, ManifestV1, session metadata, seek index. Type
+  equivalence pinned by compile-time assignability (SessionEvent →
+  wire event) plus runtime samples of all 29 event types; fixture streams
+  validate end-to-end.
+- `OrderedJournalWriter`: single-owner append handle, bounded queue with
+  soft-limit overload signal (never drops content events), 100 ms/64 KiB
+  flush, 1 s fdatasync, `lastDurableSeq` advances only after sync, and
+  ordered **barriers** so checkpoint bodies are durable before their
+  journaled reference (plan §9.4).
+- `JournalReader`: streaming NDJSON with recovery semantics — one
+  discardable tail line; malformed pre-tail line stops at last verified
+  seq with recorded corruption; seq/tUs invariants enforced; byte offsets
+  captured for the seek index.
+- `CheckpointStore` (atomic, hash-verified), `SessionMetadataStore`
+  (temp+fsync+rename), `SessionPaths`, `RecoveryService` (scan/inspect/
+  guarded discard), `SeekIndexBuilder` (1 s buckets), pure
+  `validateSessionReplay` (sequence/time/IDs/bounds/hash chains).
+- Crash simulation: journal truncation at 44 byte positions including
+  mid-line cuts recovers exactly the durable prefix (test
+  `journalRecovery.test.ts`); corruption, gap, and decreasing-time cases
+  covered; checkpoint corruption detected on verified read.
+- Working-session + artifact format documented in
+  `docs/artifact-format-v1.md` (draft until Phase 6 declares v1 stable).
+
 ## Verification log
 
 | Date       | Phase | Commands                                                                                                                   | Result   |
@@ -186,3 +235,5 @@ Capture feasibility proven against a real Extension Development Host
 | 2026-07-20 | 0     | (docs only — no source yet)                                                                                                | n/a      |
 | 2026-07-20 | 1     | `bun run check` equivalent (format:check, lint, typecheck, verify:boundaries, test:unit, build, test:integration, package) | all pass |
 | 2026-07-20 | 2     | typecheck, lint, verify:boundaries, test:unit (15), build, test:integration (12 incl. 9 capture scenarios)                 | all pass |
+| 2026-07-20 | 3     | typecheck, lint, test:unit, benchmark:renderer (12 renderer×fixture runs, all correctness pass)                            | all pass |
+| 2026-07-20 | 4     | typecheck, lint, verify:boundaries, test:unit + test/recovery (49 tests), build, test:integration                          | all pass |
