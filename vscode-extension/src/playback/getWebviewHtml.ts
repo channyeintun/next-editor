@@ -19,10 +19,13 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
 
   const csp = [
     "default-src 'none'",
-    `style-src ${webview.cspSource}`,
+    // Monaco injects <style> elements at runtime; no remote styles exist.
+    `style-src ${webview.cspSource} 'unsafe-inline'`,
     `script-src 'nonce-${nonce}'`,
     `img-src ${webview.cspSource} data:`,
     `font-src ${webview.cspSource}`,
+    // Monaco's editor worker ships inlined and boots from a blob URL.
+    "worker-src blob: data:",
     // Audio playback (Phase 8) will require media-src from the local cache.
   ].join("; ");
 

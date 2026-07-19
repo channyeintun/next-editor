@@ -6,6 +6,8 @@ import { CaptureSession } from "../capture/CaptureSession";
 import { InMemoryEventSink } from "../capture/EventSink";
 import type { RecordingCoordinator } from "../capture/RecordingCoordinator";
 import { COMMAND_NAMESPACE } from "../model/ids";
+import { PlaybackDataService } from "../playback/PlaybackDataService";
+import { RecordingEditorProvider } from "../playback/RecordingEditorProvider";
 import { RecoveryService } from "../storage/RecoveryService";
 import { SessionPaths } from "../storage/SessionPaths";
 import { acknowledgePrivacyDisclosure } from "../ui/notifications";
@@ -160,6 +162,50 @@ export function registerDevCommands(
     vscode.commands.registerCommand(`${ns}.recoveryDiscard`, async (sessionId: string) => {
       const service = new RecoveryService(context.globalStorageUri.fsPath);
       await service.discard(new SessionPaths(context.globalStorageUri.fsPath, sessionId));
+    }),
+
+    vscode.commands.registerCommand(`${ns}.playerStatus`, () => ({
+      webviewReadyCount: RecordingEditorProvider.webviewReadyCount,
+    })),
+
+    // Opens an artifact through the real reader stack and summarizes it
+    // (integration-test hook for the host data plane).
+    vscode.commands.registerCommand(`${ns}.readArtifact`, async (artifactPath: string) => {
+      const service = await PlaybackDataService.open(
+        artifactPath,
+        artifactPath.split("/").pop() ?? artifactPath,
+      );
+      try {
+        const metadata = service.metadata();
+        const firstWindow = await service.eventWindow(0, 100);
+        const firstDocument = metadata.documents[0];
+        let checkpointLength: number | null = null;
+        if (firstDocument) {
+          for (const event of firstWindow.events) {
+            if (
+              event.type === "document.enrolled" &&
+              event.payload.descriptor.documentId === firstDocument.documentId
+            ) {
+              const text = await service.checkpoint(
+                firstDocument.documentId,
+                event.payload.descriptor.initialCheckpointId,
+              );
+              checkpointLength = text.length;
+              break;
+            }
+          }
+        }
+        return {
+          eventCount: metadata.eventCount,
+          durationUs: metadata.durationUs,
+          documents: metadata.documents.map((doc) => doc.displayName),
+          workspaceRoots: metadata.workspaceRoots.length,
+          firstWindowSize: firstWindow.events.length,
+          checkpointLength,
+        };
+      } finally {
+        await service.dispose();
+      }
     }),
   );
 }

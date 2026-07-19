@@ -1,32 +1,45 @@
-import { useEffect, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { acquireBridge } from "./bridge/acquireBridge";
-import { PROTOCOL_VERSION, type RecordingMetadataPayload } from "./bridge/protocol";
+import { ErrorView } from "./components/ErrorView";
+import { RecordedWorkspace } from "./components/RecordedWorkspace";
+import { Transport } from "./components/Transport";
+import { MonacoRenderer } from "./player/monaco/MonacoRenderer";
+import { PlaybackEngine } from "./player/PlaybackEngine";
 
 export function App() {
-  const [metadata, setMetadata] = useState<RecordingMetadataPayload | null>(null);
+  const engine = useMemo(() => new PlaybackEngine(acquireBridge(), new MonacoRenderer()), []);
+  const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot);
 
-  useEffect(() => {
-    const bridge = acquireBridge();
-    const unsubscribe = bridge.onMessage((message) => {
-      if (message.type === "recording.metadata") {
-        setMetadata(message.payload);
-      }
-    });
-    bridge.post({ type: "webview.ready", protocolVersion: PROTOCOL_VERSION });
-    return unsubscribe;
-  }, []);
+  if (snapshot.phase === "error") {
+    return <ErrorView message={snapshot.error ?? "unknown error"} />;
+  }
+
+  if (snapshot.phase === "connecting" || snapshot.phase === "loading") {
+    const progress =
+      snapshot.totalEvents > 0
+        ? ` (${snapshot.loadedEvents.toLocaleString()} / ${snapshot.totalEvents.toLocaleString()} events)`
+        : "";
+    return (
+      <div className="loading-view">
+        <h2>Loading recording…</h2>
+        <p>
+          {snapshot.fileName}
+          {progress}
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <main className="placeholder">
-      <h1>Next Recording Player</h1>
-      {metadata ? (
-        <p>
-          Loaded <code>{metadata.fileName}</code> ({metadata.byteLength} bytes). Playback arrives in
-          a later phase.
-        </p>
-      ) : (
-        <p>Waiting for recording metadata…</p>
-      )}
-    </main>
+    <div className="player">
+      {/* structureVersion drives workspace re-render on topology changes */}
+      <RecordedWorkspace key={snapshot.structureVersion} engine={engine} />
+      <Transport
+        snapshot={snapshot}
+        onPlayPause={() => (snapshot.playing ? engine.pause() : engine.play())}
+        onSeek={(tUs) => void engine.seekTo(tUs)}
+        onRate={(rate) => engine.setRate(rate)}
+      />
+    </div>
   );
 }

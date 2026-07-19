@@ -1,4 +1,4 @@
-import type { HostToWebviewMessage, WebviewToHostMessage } from "./protocol";
+import { parseHostMessage, type HostToWebviewMessage, type WebviewToHostMessage } from "./protocol";
 
 type VsCodeApi = {
   postMessage(message: unknown): void;
@@ -17,7 +17,8 @@ export type Bridge = {
 
 let bridge: Bridge | undefined;
 
-// acquireVsCodeApi may only be called once per webview session.
+// acquireVsCodeApi may only be called once per webview session. Every
+// incoming message is schema-validated; invalid input is dropped.
 export function acquireBridge(): Bridge {
   if (bridge) {
     return bridge;
@@ -27,9 +28,9 @@ export function acquireBridge(): Bridge {
     post: (message) => api.postMessage(message),
     onMessage: (handler) => {
       const listener = (event: MessageEvent) => {
-        const data: unknown = event.data;
-        if (typeof data === "object" && data !== null && "type" in data) {
-          handler(data as HostToWebviewMessage);
+        const message = parseHostMessage(event.data);
+        if (message) {
+          handler(message);
         }
       };
       window.addEventListener("message", listener);

@@ -1,4 +1,4 @@
-import { createRequire } from "node:module";
+import { builtinModules, createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import esbuild from "esbuild";
@@ -16,7 +16,11 @@ const nodeResolveBare = {
   name: "node-resolve-bare",
   setup(build) {
     build.onResolve({ filter: /^[^./]/ }, (args) => {
-      if (args.path === "vscode" || args.path.startsWith("node:")) {
+      if (
+        args.path === "vscode" ||
+        args.path.startsWith("node:") ||
+        builtinModules.includes(args.path)
+      ) {
         return { external: true, path: args.path };
       }
       try {

@@ -22,6 +22,7 @@ export interface PlaybackRenderer {
 
   /** Create an editor surface bound to a document, in a container. */
   createSurface(surfaceId: string, documentId: string, container: HTMLElement): void;
+  hasSurface(surfaceId: string): boolean;
   disposeSurface(surfaceId: string): void;
 
   /** Independent per-surface view state. */

@@ -6,6 +6,8 @@ import { CheckpointStore } from "../storage/CheckpointStore";
 import { readJournal } from "../storage/JournalReader";
 import { OrderedJournalWriter } from "../storage/OrderedJournalWriter";
 import { atomicWriteJson } from "../storage/atomicFile";
+import { writeArtifact } from "../storage/ArtifactWriter";
+import { RecordingLibrary } from "../storage/RecordingLibrary";
 import { validateSessionReplay } from "../storage/replayValidation";
 import { SessionMetadataStore } from "../storage/SessionMetadataStore";
 import { SessionPaths } from "../storage/SessionPaths";
@@ -30,6 +32,7 @@ export type StopResult =
       checkpoints: number;
       shadowMismatches: number;
       sessionDir: string;
+      artifactPath: string;
     }
   | { ok: false; code: "not-recording" | "failed"; message: string };
 
@@ -207,11 +210,22 @@ export class RecordingCoordinator {
       const finalized = session.emitFinalized();
       await journal.close();
 
+      // 6. Package the versioned artifact (streams, validates by
+      //    reopening, atomically renames — plan §9.5).
+      const library = new RecordingLibrary(this.context.globalStorageUri.fsPath);
+      const artifactPath = library.artifactPathFor(session.sessionId, new Date());
+      const artifact = await writeArtifact({
+        paths,
+        metadata: metadata.metadata,
+        outputPath: artifactPath,
+      });
+
       await atomicWriteJson(paths.finalizedFile, {
         finalizedAt: new Date().toISOString(),
         eventCount: finalized.eventCount,
         durationUs: finalized.durationUs,
         validatedEventCount: journalRead.events.length,
+        artifactPath: artifact.artifactPath,
         documents: [...validation.finalDocuments.entries()].map(([id, doc]) => ({
           documentId: id,
           sha256: doc.sha256,
@@ -221,6 +235,7 @@ export class RecordingCoordinator {
       await metadata.update({
         state: "finalized",
         lastDurableSeq: journal.lastDurableSeq,
+        artifactPath: artifact.artifactPath,
       });
 
       const counters = session.countersSnapshot();
@@ -235,6 +250,7 @@ export class RecordingCoordinator {
         checkpoints: counters.checkpoints,
         shadowMismatches: counters.shadowMismatches,
         sessionDir: paths.sessionDir,
+        artifactPath: artifact.artifactPath,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

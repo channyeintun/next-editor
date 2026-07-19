@@ -88,6 +88,10 @@ export class MonacoRenderer implements PlaybackRenderer {
     this.surfaces.set(surfaceId, { editor, documentId, viewState: null });
   }
 
+  hasSurface(surfaceId: string): boolean {
+    return this.surfaces.has(surfaceId);
+  }
+
   disposeSurface(surfaceId: string): void {
     const entry = this.surfaces.get(surfaceId);
     entry?.editor?.dispose();

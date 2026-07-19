@@ -16,7 +16,7 @@ not modified without explicit approval.
 | 3     | Renderer benchmark and decision                  | Done (2026-07-20)                 |
 | 4     | Versioned model, journal, and checkpoints        | Done (2026-07-20)                 |
 | 5     | Native visual recording vertical slice           | Done (2026-07-20)                 |
-| 6     | Artifact finalization and read-only playback     | Not started                       |
+| 6     | Artifact finalization and read-only playback     | Done (2026-07-20)                 |
 | 7     | Recovery, security, privacy, and scale hardening | Not started                       |
 | 8     | Audio feasibility and integration                | Deferred (gated per plan §12/§15) |
 | 9     | Release candidate and handoff                    | Not started                       |
@@ -267,6 +267,46 @@ Capture feasibility proven against a real Extension Development Host
   checkpoint bodies into memory during finalization; streaming validation
   is part of scale hardening.
 
+## Phase 6 evidence (2026-07-20)
+
+- **Artifact pipeline**: `writeArtifact` derives the ManifestV1 tables from
+  the validated journal, builds the 1-second seek index with journal byte
+  offsets, hashes every entry (SHA-256), streams the ZIP via `yazl` to a
+  temp path, fsyncs, **revalidates by reopening with the real reader**
+  (manifest, entries, hashes, `session.finalized` tail, event count), then
+  atomically renames into the recording library. Wired into the
+  coordinator's stop path; `finalized.json` and session metadata record
+  the artifact path.
+- **Reader safety (plan §13.2)**: `openArtifact` enforces, before any
+  content is served — entry count, traversal/absolute/drive-letter paths,
+  duplicate names, directory/symlink entry types, per-entry declared
+  sizes, decompression ratio, manifest/index size caps, format-version
+  fail-closed, and per-entry hash verification on read. 12 hostile-archive
+  unit tests (hand-built raw ZIPs with valid CRCs plus a deflate bomb)
+  all fail closed; tampered checkpoint bodies are detected at read time.
+- **Recording library**: artifacts live under extension storage;
+  `nextRecording.open` lists/opens them (no workspace required);
+  `nextRecording.export` copies to a user-chosen destination (streamed
+  local copy; size-bounded remote fallback with a warning); the stop
+  notification offers Open/Export.
+- **Playback**: versioned zod-validated protocol on both sides
+  (PROTOCOL_VERSION 2, request IDs, duplicate/late-response safe, chunked
+  20k-event windows, checkpoints on demand); `PlaybackEngine` (pure TS)
+  with the §10.4 visual clock, checkpoint-plan seeks, deterministic
+  group→surface assignment; Monaco renderer per ADR 0002; reconstructed
+  equal-width group layout with tab bars, unsupported-surface
+  placeholders, error view; pause-on-hide + compact state persistence
+  (`setState` playhead/rate). CSP: nonce script, `worker-src blob:` for
+  Monaco's inlined worker, no remote origins.
+- **EDH evidence (19 integration tests passing)**: a real recorded
+  session produces an artifact that passes the reader stack in-host;
+  opening the player never changes any workspace document version and
+  dirties nothing; the ready handshake proves the player bundle (incl.
+  Monaco) boots under the CSP; a garbage `.nextrecording` fails closed.
+- Deferred to the manual matrix (plan §16.6): visual confirmation of
+  play/pause/seek interactions and hide/reopen playhead restore (engine
+  logic covered by unit tests; the repo owner prefers eyeballing UI).
+
 ## Verification log
 
 | Date       | Phase | Commands                                                                                                                   | Result   |
@@ -277,3 +317,4 @@ Capture feasibility proven against a real Extension Development Host
 | 2026-07-20 | 3     | typecheck, lint, test:unit, benchmark:renderer (12 renderer×fixture runs, all correctness pass)                            | all pass |
 | 2026-07-20 | 4     | typecheck, lint, verify:boundaries, test:unit + test/recovery (49 tests), build, test:integration                          | all pass |
 | 2026-07-20 | 5     | typecheck, lint, test:unit (55), build, test:integration (16 incl. 4 recording-lifecycle scenarios, multi-root workspace)  | all pass |
+| 2026-07-20 | 6     | typecheck, lint, test:unit (73 incl. 12 artifact + 3 protocol), build (Monaco player 3.1 MB), test:integration (19)        | all pass |

@@ -98,6 +98,10 @@ export class CodeMirrorRenderer implements PlaybackRenderer {
     this.surfaces.set(surfaceId, { view, documentId, savedSelections: [] });
   }
 
+  hasSurface(surfaceId: string): boolean {
+    return this.surfaces.has(surfaceId);
+  }
+
   disposeSurface(surfaceId: string): void {
     this.surfaces.get(surfaceId)?.view?.destroy();
     this.surfaces.delete(surfaceId);
