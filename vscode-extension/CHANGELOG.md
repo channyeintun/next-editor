@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Phase 9: release candidate — dev/diagnostic commands excluded from
+  production builds, ADR 0003 (container), committed reproduction
+  fixtures + generator, VSIX content audit (benchmark bundle excluded),
+  clean-profile install smoke test.
+- Phase 7: activation-time recovery (finalize/inspect/discard interrupted
+  sessions, idempotent), diagnostics output channel, playback.defaultSpeed
+  and diagnostics.level settings, failure-injection and 250k-event scale
+  tests.
 - Phase 6: `.nextrecording` v1 artifact (streaming ZIP, integrity hashes,
   fail-closed reader), recording library with Open/Export, Monaco-based
   read-only player (play/pause/seek/speed, reconstructed group layout,

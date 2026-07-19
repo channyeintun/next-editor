@@ -15,7 +15,11 @@ export function activate(context: vscode.ExtensionContext): void {
   new RecordingStatusBar(coordinator, context);
   registerCommands(context, coordinator);
   registerRecoverCommand(context);
-  registerDevCommands(context, coordinator);
+  // Diagnostic/test commands never ship in the installed product
+  // (plan §15 Phase 9); EDH runs in Development/Test mode and keeps them.
+  if (context.extensionMode !== vscode.ExtensionMode.Production) {
+    registerDevCommands(context, coordinator);
+  }
   context.subscriptions.push(RecordingEditorProvider.register(context));
   context.subscriptions.push(
     coordinator.onDidChangeState((state) => logDiagnostic("info", "recorder.state", { state })),

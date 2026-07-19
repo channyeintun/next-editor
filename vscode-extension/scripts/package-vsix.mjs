@@ -1,6 +1,6 @@
 // Builds the extension and packages a VSIX into .artifacts/.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +19,13 @@ function run(command, args) {
 }
 
 mkdirSync(path.join(extensionRoot, ".artifacts"), { recursive: true });
+
+// The dev-only benchmark bundle must never ship (ADR 0002); vsce's
+// re-exclusion after a `!dist/**` whitelist is unreliable, so remove it.
+rmSync(path.join(extensionRoot, "dist", "benchmark"), {
+  recursive: true,
+  force: true,
+});
 
 const vsce = path.join(extensionRoot, "node_modules", ".bin", "vsce");
 const outFile = path.join(".artifacts", `${packageJson.name}-${packageJson.version}.vsix`);

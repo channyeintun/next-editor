@@ -1,7 +1,9 @@
 # Recording format v1 — working session and artifact
 
-Status: draft during Phases 4–6; declared stable only when Phase 6 ships a
-validated `.nextrecording` writer/reader pair (plan §9.5).
+Status: **implemented and stable** as of 2026-07-20 (writer/reader pair
+shipped with round-trip, hostile-input, and 250k-event scale validation;
+reproduction fixtures under `fixtures/recordings/`). Any breaking change
+requires a `formatVersion` bump.
 
 ## 1. Common concepts
 
