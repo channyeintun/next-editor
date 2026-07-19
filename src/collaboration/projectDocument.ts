@@ -411,6 +411,7 @@ function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
       "alpine-express",
       "express-ts",
       "go",
+      "kotlin",
     ].includes(value)
   );
 }

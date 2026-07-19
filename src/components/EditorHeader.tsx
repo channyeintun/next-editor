@@ -63,6 +63,7 @@ const LESSON_TYPE_OPTIONS: Array<{
   { value: "alpine-express", label: "Alpine AJAX + Express" },
   { value: "express-ts", label: "Express + TypeScript" },
   { value: "go", label: "Go" },
+  { value: "kotlin", label: "Kotlin" },
 ];
 
 const HEADER_ICON_BUTTON_CLASS =

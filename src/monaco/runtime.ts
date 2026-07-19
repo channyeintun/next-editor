@@ -26,6 +26,8 @@ import "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution.js";
 // Go likewise ships only a Monarch grammar (no worker service) — used by the
 // Go Playground lesson type, whose code executes remotely, not in Monaco.
 import "monaco-editor/esm/vs/basic-languages/go/go.contribution.js";
+// Kotlin: same story, for the Kotlin Playground lesson type.
+import "monaco-editor/esm/vs/basic-languages/kotlin/kotlin.contribution.js";
 
 // Worker-backed rich services. JSON is self-contained: language/json registers
 // its own id and tokenizes via its worker, so it needs no basic grammar.

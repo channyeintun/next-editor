@@ -42,6 +42,7 @@ import FileSidebar from "./FileSidebar";
 import BinaryFilePreview from "./BinaryFilePreview";
 import TerminalPanel from "./TerminalPanel";
 import GoPlaygroundRunnerPanel from "./GoPlaygroundRunnerPanel";
+import KotlinPlaygroundRunnerPanel from "./KotlinPlaygroundRunnerPanel";
 import {
   CollaborationCursorLabelManager,
   type CollaborationCursorLabel,
@@ -1406,10 +1407,12 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               <TerminalPanel />
             ) : executionKindForLessonType(lessonType) === "go-playground" ? (
               <GoPlaygroundRunnerPanel />
+            ) : executionKindForLessonType(lessonType) === "kotlin-playground" ? (
+              <KotlinPlaygroundRunnerPanel />
             ) : null}
           </div>
-          {/* Go lessons have no preview surface at all — the dock console is
-              their only runtime output. */}
+          {/* Go and Kotlin lessons have no preview surface at all — the dock
+              console is their only runtime output. */}
           {lessonSupportsPreview(lessonType) ? (
             <Suspense fallback={null}>
               <Preview />

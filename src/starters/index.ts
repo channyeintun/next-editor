@@ -10,7 +10,7 @@ import type { WorkspaceLessonType, WorkspaceProject } from "../types/workspace";
  * `html-css` and `react` are also imported statically by the workspace store
  * (they are the boot default and the empty-workspace fallback), so the bundler
  * keeps them in the main bundle — only `vue`, `solid`, `svelte`, `htmx-express`,
- * `alpine-express`, `express-ts`, and `go` become lazily loaded chunks.
+ * `alpine-express`, `express-ts`, `go`, and `kotlin` become lazily loaded chunks.
  */
 const STARTER_LOADERS: Record<WorkspaceLessonType, () => Promise<() => WorkspaceProject>> = {
   "html-css": () => import("./htmlCss").then((module) => module.createStarterHtmlCssWorkspace),
@@ -25,6 +25,7 @@ const STARTER_LOADERS: Record<WorkspaceLessonType, () => Promise<() => Workspace
   "express-ts": () =>
     import("./expressTs").then((module) => module.createStarterExpressTsWorkspace),
   go: () => import("./go").then((module) => module.createStarterGoWorkspace),
+  kotlin: () => import("./kotlin").then((module) => module.createStarterKotlinWorkspace),
 };
 
 /** Lazily load and build a fresh starter workspace for the given lesson type. */

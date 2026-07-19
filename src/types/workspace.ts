@@ -81,14 +81,15 @@ export type WorkspaceLessonType =
   | "htmx-express"
   | "alpine-express"
   | "express-ts"
-  | "go";
+  | "go"
+  | "kotlin";
 
 /**
  * Every browser-runtime lesson type is served by its own dev server inside the
  * WebContainer: the Vite-based SPAs (react, vue, solid, svelte) and html-css
  * run a Vite dev server, while htmx-express, alpine-express, and express-ts run
- * an Express server. Go is deliberately excluded because it uses the selective
- * Playground execution path below.
+ * an Express server. Go and Kotlin are deliberately excluded because they use
+ * the selective Playground execution paths below.
  */
 const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "html-css",
@@ -107,16 +108,21 @@ export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boole
 
 /**
  * Which backend executes code for a lesson. `go` lessons compile through the
- * Go Playground proxy on the main Worker; everything else keeps the
- * WebContainer runtime. Derived from `lessonType` — never persisted as a
- * second field (see docs/go-lessons-selective-runtime-plan.md §6).
+ * Go Playground proxy and `kotlin` lessons through the Kotlin Playground
+ * proxy, both on the main Worker; everything else keeps the WebContainer
+ * runtime. Derived from `lessonType` — never persisted as a second field
+ * (see docs/go-lessons-selective-runtime-plan.md §6).
  */
-export type WorkspaceExecutionKind = "webcontainer" | "go-playground";
+export type WorkspaceExecutionKind = "webcontainer" | "go-playground" | "kotlin-playground";
 
 export function executionKindForLessonType(
   lessonType: WorkspaceLessonType,
 ): WorkspaceExecutionKind {
-  return lessonType === "go" ? "go-playground" : "webcontainer";
+  return lessonType === "go"
+    ? "go-playground"
+    : lessonType === "kotlin"
+      ? "kotlin-playground"
+      : "webcontainer";
 }
 
 // Capability predicates stay separate from the execution kind so a Go lesson
@@ -130,7 +136,7 @@ export function lessonSupportsPreview(lessonType: WorkspaceLessonType): boolean 
 }
 
 export function lessonSupportsCodeRun(lessonType: WorkspaceLessonType): boolean {
-  return lessonType === "go" || lessonRunsInWebContainer(lessonType);
+  return lessonType === "go" || lessonType === "kotlin" || lessonRunsInWebContainer(lessonType);
 }
 
 export interface WorkspaceProject {
@@ -488,6 +494,10 @@ export function inferLanguageFromPath(path: string): string {
 
   if (normalizedPath.endsWith(".go")) {
     return "go";
+  }
+
+  if (normalizedPath.endsWith(".kt") || normalizedPath.endsWith(".kts")) {
+    return "kotlin";
   }
 
   if (normalizedPath.endsWith(".css")) {

@@ -37,6 +37,19 @@ function buildIntroduction(): string {
 }
 
 function buildSupportedStack(project: WorkspaceProject): string {
+  if (executionKindForLessonType(project.lessonType) === "kotlin-playground") {
+    return (
+      "Supported stack: Kotlin only. This lesson's Kotlin files compile and run remotely " +
+      "on the Kotlin Playground (JVM target) when the user presses Run in the Kotlin " +
+      "Runner panel — you cannot execute code yourself. There is no shell, terminal, dev " +
+      "server, or preview in this workspace: work purely through the file tools and " +
+      "reason about program behavior from the source. Keep solutions within Kotlin " +
+      "Playground constraints (sandboxed execution, no network access, no stdin, only the " +
+      "Kotlin/Java standard library, limited compute time), and do not introduce other " +
+      "languages, toolchains, or runtimes."
+    );
+  }
+
   if (executionKindForLessonType(project.lessonType) === "go-playground") {
     return (
       "Supported stack: Go only. This lesson's Go files compile and run remotely on the " +

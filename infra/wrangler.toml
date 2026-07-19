@@ -24,6 +24,11 @@ VOICE_CHAT_ENABLED = "true"
 # sends authenticated users' Run requests to play.golang.org. Go editing and
 # recorded playback work regardless of this flag.
 GO_PLAYGROUND_ENABLED = "true"
+# Kill switch for live Kotlin lesson execution (worker/routes/kotlinPlayground.ts).
+# Fails closed. Runs proxy to api.kotlinlang.org — the same public compiler
+# service JetBrains' embeddable kotlin-playground widget uses from any origin.
+# Kotlin editing and recorded playback work regardless of this flag.
+KOTLIN_PLAYGROUND_ENABLED = "true"
 # Required for authentication — auth fails at runtime without these. Set them with:
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
 #   wrangler secret put GOOGLE_CLIENT_SECRET --config infra/wrangler.toml
