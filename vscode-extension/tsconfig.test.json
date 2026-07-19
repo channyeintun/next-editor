@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist-test",
+    "rootDir": "test/integration",
+    "types": ["node", "vscode", "mocha"],
+    "lib": ["ES2022"]
+  },
+  "include": ["test/integration/**/*.ts"]
+}

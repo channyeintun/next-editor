@@ -1,0 +1,9 @@
+{
+  "nextRecording.category": "Next Recording",
+  "nextRecording.start.title": "Start Recording",
+  "nextRecording.stop.title": "Stop Recording",
+  "nextRecording.recover.title": "Recover Interrupted Recording",
+  "nextRecording.open.title": "Open Recording",
+  "nextRecording.export.title": "Export Recording",
+  "nextRecording.player.displayName": "Next Recording Player"
+}

@@ -1,0 +1,16 @@
+body {
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  margin: 0;
+  padding: 0;
+}
+
+.placeholder {
+  padding: 2rem;
+}
+
+.placeholder code {
+  font-family: var(--vscode-editor-font-family);
+}

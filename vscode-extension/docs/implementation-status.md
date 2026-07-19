@@ -10,8 +10,8 @@ not modified without explicit approval.
 
 | Phase | Description                                      | Status                            |
 | ----- | ------------------------------------------------ | --------------------------------- |
-| 0     | Preflight and decision recording                 | In progress (2026-07-20)          |
-| 1     | Isolated extension scaffold                      | Not started                       |
+| 0     | Preflight and decision recording                 | Done (2026-07-20)                 |
+| 1     | Isolated extension scaffold                      | Done (2026-07-20)                 |
 | 2     | Capture topology and text-change feasibility     | Not started                       |
 | 3     | Renderer benchmark and decision                  | Not started                       |
 | 4     | Versioned model, journal, and checkpoints        | Not started                       |
@@ -115,8 +115,34 @@ plus `README.md` record the change.
   `.ne` interoperability, screen/camera capture, horizontal scroll, exact
   fold state, mouse coordinates.
 
+## Phase 1 evidence (2026-07-20)
+
+- Independent package installed with Bun 1.3.14; `vscode-extension/bun.lock`
+  created; root lockfile untouched (verified via `git status`).
+- Version adjustments against the registry during install:
+  `@types/react` 19.2.17, `@types/react-dom` 19.2.3 (the react runtime
+  version numbers do not exist for the types packages), `typescript` pinned
+  to 5.9.3 (7.x is the new native compiler line; 5.9 is the mature LTS
+  semantics the toolchain here is known-good with).
+- Acceptance gate results:
+  - `bun run typecheck` — pass (host, webview, test configs, strict).
+  - `bun run lint`, `bun run format:check` — pass.
+  - `bun run verify:boundaries` — pass.
+  - `bun run test:unit` — 2 tests pass.
+  - `bun run build` — host bundle 3.3 kB, webview bundle 190.6 kB.
+  - `bun run test:integration` — 3 tests pass in a real Extension
+    Development Host (VS Code 1.129.1, darwin-arm64): activation,
+    command registration, and opening a synthetic `.nextrecording` in the
+    placeholder custom editor (`vscode.TabInputCustom` with viewType
+    `nextRecording.player`).
+  - `bun run package` — VSIX 9 files / 64 kB; contents audited: only
+    `dist/`, `package.json`, `package.nls.json`, README, CHANGELOG.
+- Note: current stable VS Code observed at integration time is 1.129.1;
+  the 1.86 engine floor stands.
+
 ## Verification log
 
-| Date       | Phase | Commands                    | Result |
-| ---------- | ----- | --------------------------- | ------ |
-| 2026-07-20 | 0     | (docs only — no source yet) | n/a    |
+| Date       | Phase | Commands                                                                                                                   | Result   |
+| ---------- | ----- | -------------------------------------------------------------------------------------------------------------------------- | -------- |
+| 2026-07-20 | 0     | (docs only — no source yet)                                                                                                | n/a      |
+| 2026-07-20 | 1     | `bun run check` equivalent (format:check, lint, typecheck, verify:boundaries, test:unit, build, test:integration, package) | all pass |

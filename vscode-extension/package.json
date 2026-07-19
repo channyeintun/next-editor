@@ -1,0 +1,123 @@
+{
+  "name": "next-recording",
+  "displayName": "Next Recording",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Record and replay multi-document VS Code editing sessions.",
+  "categories": [
+    "Other"
+  ],
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/channyeintun/next-editor",
+    "directory": "vscode-extension"
+  },
+  "publisher": "channyeintun",
+  "main": "./dist/extension.js",
+  "scripts": {
+    "vscode:prepublish": "bun run build",
+    "build": "bun run build:extension && bun run build:webview",
+    "build:extension": "node esbuild.mjs --production",
+    "build:webview": "vite build",
+    "typecheck": "tsc -p tsconfig.extension.json && tsc -p tsconfig.webview.json && tsc -p tsconfig.test.json --noEmit",
+    "lint": "oxlint src test scripts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify:boundaries": "node scripts/verify-boundaries.mjs",
+    "test:unit": "vitest run",
+    "test:integration": "tsc -p tsconfig.test.json && node dist-test/runTest.js",
+    "package": "node scripts/package-vsix.mjs",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run verify:boundaries && bun run test:unit && bun run build && bun run test:integration"
+  },
+  "dependencies": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@types/mocha": "10.0.10",
+    "@types/node": "18.19.130",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@types/vscode": "1.86.0",
+    "@vscode/test-electron": "3.0.0",
+    "@vscode/vsce": "3.9.2",
+    "esbuild": "0.28.1",
+    "mocha": "11.7.6",
+    "oxlint": "1.74.0",
+    "prettier": "3.9.5",
+    "typescript": "5.9.3",
+    "vite": "8.1.5",
+    "vitest": "4.1.10"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "nextRecording.start",
+        "title": "%nextRecording.start.title%",
+        "category": "%nextRecording.category%"
+      },
+      {
+        "command": "nextRecording.stop",
+        "title": "%nextRecording.stop.title%",
+        "category": "%nextRecording.category%"
+      },
+      {
+        "command": "nextRecording.recover",
+        "title": "%nextRecording.recover.title%",
+        "category": "%nextRecording.category%"
+      },
+      {
+        "command": "nextRecording.open",
+        "title": "%nextRecording.open.title%",
+        "category": "%nextRecording.category%"
+      },
+      {
+        "command": "nextRecording.export",
+        "title": "%nextRecording.export.title%",
+        "category": "%nextRecording.category%"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "nextRecording.player",
+        "displayName": "%nextRecording.player.displayName%",
+        "selector": [
+          {
+            "filenamePattern": "*.nextrecording"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "nextRecording.stop",
+          "when": "nextRecording.isRecording"
+        },
+        {
+          "command": "nextRecording.recover",
+          "when": "nextRecording.hasRecoverableSession"
+        }
+      ]
+    }
+  },
+  "activationEvents": [],
+  "extensionKind": [
+    "ui"
+  ],
+  "engines": {
+    "vscode": "^1.86.0"
+  },
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": "limited",
+      "description": "Text documents in virtual workspaces can be recorded; recordings are always stored on the local machine."
+    },
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "The extension never executes workspace code. It records visible text documents and replays recordings in a read-only player."
+    }
+  }
+}
