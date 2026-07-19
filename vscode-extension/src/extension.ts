@@ -1,9 +1,11 @@
 import * as vscode from "vscode";
 import { registerCommands } from "./commands/registerCommands";
+import { registerDevCommands } from "./commands/devCommands";
 import { RecordingEditorProvider } from "./playback/RecordingEditorProvider";
 
 export function activate(context: vscode.ExtensionContext): void {
   registerCommands(context);
+  registerDevCommands(context);
   context.subscriptions.push(RecordingEditorProvider.register(context));
 }
 

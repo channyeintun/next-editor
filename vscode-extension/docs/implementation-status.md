@@ -12,7 +12,7 @@ not modified without explicit approval.
 | ----- | ------------------------------------------------ | --------------------------------- |
 | 0     | Preflight and decision recording                 | Done (2026-07-20)                 |
 | 1     | Isolated extension scaffold                      | Done (2026-07-20)                 |
-| 2     | Capture topology and text-change feasibility     | Not started                       |
+| 2     | Capture topology and text-change feasibility     | Done (2026-07-20)                 |
 | 3     | Renderer benchmark and decision                  | Not started                       |
 | 4     | Versioned model, journal, and checkpoints        | Not started                       |
 | 5     | Native visual recording vertical slice           | Not started                       |
@@ -140,9 +140,49 @@ plus `README.md` record the change.
 - Note: current stable VS Code observed at integration time is 1.129.1;
   the 1.86 engine floor stands.
 
+## Phase 2 evidence (2026-07-20)
+
+Capture feasibility proven against a real Extension Development Host
+(VS Code 1.129.1, darwin-arm64).
+
+- Components: `EventClock` (hrtime-based, seq authority), in-memory
+  `EventSink`, `DocumentRegistry` (visible-first enrollment, reopen
+  identity reuse), `DocumentShadow` (UTF-16 evolving-buffer application +
+  full-text verification + SHA-256), `SurfaceRegistry`
+  (`WeakMap<TextEditor>`), `TopologyTracker` (weak identity first,
+  structural reconciliation fallback, microtask burst reconcile, snapshot
+  dedupe, explicit discontinuity flag), `CapturePolicy` (scheme
+  classification + size pre-filter), `CaptureSession` orchestrator,
+  diagnostic dev commands (`nextRecording.dev.*`, removed at Phase 9).
+- Unit tests (15): shadow surrogate pairs/combining marks/CRLF/EOL-only
+  transactions/mismatch reset/out-of-bounds + 200-round randomized
+  non-overlapping multi-change property test; event clock ordering and
+  clamped coalesce timestamps; identifier invariants.
+- Integration scenarios (9 new, all passing):
+  - Two documents edited alternately — exact shadow hashes, initial
+    checkpoint content verified.
+  - Same document in two groups — one `documentId`, two `surfaceId`s,
+    selection events isolated to one surface, both groups in topology.
+  - Multi-cursor edit — exactly one atomic patch with 3 changes.
+  - Undo/redo — patch `reason` recorded.
+  - Workspace-edit full replace — shadow consistent.
+  - Untitled document — `rootId: null`, scheme `untitled`, checkpoint text.
+  - Diff editor — `capability.unsupportedSurface` (kind `textDiff`) +
+    topology tab, never treated as a text surface.
+  - 120-edit rapid burst — **zero lost transactions**, unbroken
+    beforeVersion/afterVersion and hash chains, zero shadow mismatches,
+    textChange callback mean < 10 ms budget.
+  - Topology snapshots deduplicated; structural coherence (unique
+    group/tab IDs, active refs valid, ordered view columns).
+- Envelope invariants asserted on every trace: `seq` contiguous from 0,
+  `tUs` nondecreasing.
+- No API gaps found that block the plan; group/tab identity required the
+  structural fallback exactly as the research predicted.
+
 ## Verification log
 
 | Date       | Phase | Commands                                                                                                                   | Result   |
 | ---------- | ----- | -------------------------------------------------------------------------------------------------------------------------- | -------- |
 | 2026-07-20 | 0     | (docs only — no source yet)                                                                                                | n/a      |
 | 2026-07-20 | 1     | `bun run check` equivalent (format:check, lint, typecheck, verify:boundaries, test:unit, build, test:integration, package) | all pass |
+| 2026-07-20 | 2     | typecheck, lint, verify:boundaries, test:unit (15), build, test:integration (12 incl. 9 capture scenarios)                 | all pass |

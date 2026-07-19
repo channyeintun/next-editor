@@ -1,0 +1,597 @@
+import * as vscode from "vscode";
+import type {
+  CheckpointMeta,
+  CheckpointReason,
+  ContentChange,
+  PatchReason,
+  SelectionKind,
+  SelectionRange,
+  SessionEvent,
+  VisibleLineRange,
+} from "../model/events";
+import {
+  newCheckpointId,
+  newSessionId,
+  type DocumentId,
+  type SessionId,
+  type SurfaceId,
+} from "../model/ids";
+import { LIMITS } from "../model/limits";
+import { CaptureMetrics } from "./CaptureMetrics";
+import { evaluateDocumentPolicy, exactSizeExceedsLimit } from "./CapturePolicy";
+import { installCaptureSubscriptions } from "./CaptureSubscriptions";
+import {
+  DocumentRegistry,
+  resourceKeyOf,
+  toEolMode,
+  type EnrolledDocument,
+} from "./DocumentRegistry";
+import { EventClock } from "./EventClock";
+import type { EventSink } from "./EventSink";
+import { sha256Hex, utf8ByteLength } from "./hash";
+import { SurfaceRegistry } from "./SurfaceRegistry";
+import { TopologyTracker } from "./TopologyTracker";
+
+type PendingViewport = {
+  documentId: DocumentId;
+  documentVersion: number;
+  firstObservedTUs: number;
+  visibleRanges: VisibleLineRange[];
+  timer: ReturnType<typeof setTimeout>;
+};
+
+export type CaptureCounters = {
+  patches: number;
+  checkpoints: number;
+  shadowMismatches: number;
+  excludedDocuments: number;
+};
+
+// Phase 2 capture engine: registries + subscriptions + ordered emission.
+// The Phase 5 RecordingCoordinator wraps this with the durable lifecycle.
+export class CaptureSession {
+  readonly sessionId: SessionId = newSessionId();
+  readonly clock = new EventClock();
+  readonly metrics = new CaptureMetrics();
+  readonly documents = new DocumentRegistry();
+  readonly surfaces = new SurfaceRegistry();
+  readonly topology = new TopologyTracker();
+
+  private readonly counters: CaptureCounters = {
+    patches: 0,
+    checkpoints: 0,
+    shadowMismatches: 0,
+    excludedDocuments: 0,
+  };
+  private readonly excludedResources = new Set<string>();
+  private readonly pendingViewports = new Map<SurfaceId, PendingViewport>();
+  private readonly lastSelection = new Map<SurfaceId, { json: string; seq: number }>();
+  private readonly lastSurfaceEventSeq = new Map<SurfaceId, number>();
+  private topologyScheduled = false;
+  private topologyEarliestTUs = 0;
+  private subscriptions: vscode.Disposable[] = [];
+  private stopped = false;
+
+  constructor(
+    private readonly sink: EventSink,
+    private readonly extensionVersion: string,
+  ) {}
+
+  start(): void {
+    // Subscriptions first, then the initial snapshot (plan §8.1).
+    this.subscriptions = installCaptureSubscriptions(this);
+
+    this.emit("session.started", {
+      sessionId: this.sessionId,
+      extensionVersion: this.extensionVersion,
+      vscodeVersion: vscode.version,
+      platform: process.platform,
+      architecture: process.arch,
+    });
+    this.emit("roots.snapshot", { roots: this.documents.snapshotRoots() });
+
+    for (const editor of vscode.window.visibleTextEditors) {
+      this.ensureSurface(editor);
+    }
+    const active = vscode.window.activeTextEditor;
+    if (active) {
+      const record = this.ensureSurface(active);
+      if (record) {
+        this.emitSurfaceEvent(record.surfaceId, "surface.focused", {
+          surfaceId: record.surfaceId,
+        });
+      }
+    }
+    this.flushTopology();
+  }
+
+  stop(): void {
+    if (this.stopped) {
+      return;
+    }
+    this.stopped = true;
+    for (const disposable of this.subscriptions) {
+      disposable.dispose();
+    }
+    this.subscriptions = [];
+    for (const [surfaceId, pending] of this.pendingViewports) {
+      clearTimeout(pending.timer);
+      this.flushViewport(surfaceId, pending);
+    }
+    this.pendingViewports.clear();
+  }
+
+  get isStopped(): boolean {
+    return this.stopped;
+  }
+
+  countersSnapshot(): CaptureCounters {
+    return { ...this.counters };
+  }
+
+  // ---- emission helpers ----------------------------------------------
+
+  private emit<T extends SessionEvent["type"]>(
+    type: T,
+    payload: Extract<SessionEvent, { type: T }>["payload"],
+    preferredTUs?: number,
+  ): Extract<SessionEvent, { type: T }> {
+    const stamp = preferredTUs === undefined ? this.clock.next() : this.clock.nextAt(preferredTUs);
+    const event = { ...stamp, type, payload } as Extract<SessionEvent, { type: T }>;
+    this.sink.append(event as SessionEvent);
+    return event;
+  }
+
+  private emitSurfaceEvent<T extends SessionEvent["type"]>(
+    surfaceId: SurfaceId,
+    type: T,
+    payload: Extract<SessionEvent, { type: T }>["payload"],
+    preferredTUs?: number,
+  ): void {
+    // Cast: TS cannot correlate the nested generic parameter with emit's.
+    const event = this.emit(type, payload as never, preferredTUs);
+    this.lastSurfaceEventSeq.set(surfaceId, event.seq);
+  }
+
+  private measure<T>(name: string, fn: () => T): T {
+    const startUs = this.clock.nowUs();
+    try {
+      return fn();
+    } finally {
+      this.metrics.record(name, this.clock.nowUs() - startUs);
+    }
+  }
+
+  // ---- documents -------------------------------------------------------
+
+  private enrollIfEligible(document: vscode.TextDocument): EnrolledDocument | undefined {
+    const existing = this.documents.get(document);
+    if (existing) {
+      return existing.droppedReason === null ? existing : undefined;
+    }
+    const decision = evaluateDocumentPolicy(document);
+    const resourceKey = resourceKeyOf(document.uri);
+    if (!decision.capture) {
+      if (!this.excludedResources.has(resourceKey)) {
+        this.excludedResources.add(resourceKey);
+        this.counters.excludedDocuments += 1;
+        this.emit("marker", {
+          label: `document.excluded:${decision.schemeClass}:${decision.reason}`,
+        });
+      }
+      return undefined;
+    }
+    const nowTUs = this.clock.nowUs();
+    const { entry, descriptor, checkpointId } = this.documents.enroll(
+      document,
+      decision.schemeClass,
+      nowTUs,
+    );
+    if (exactSizeExceedsLimit(descriptor.byteLength)) {
+      // Too large after exact measurement: record the exclusion, forget it.
+      this.excludedResources.add(resourceKey);
+      this.counters.excludedDocuments += 1;
+      entry.droppedReason = "limit";
+      this.emit("marker", {
+        label: `document.excluded:${decision.schemeClass}:size`,
+      });
+      return undefined;
+    }
+    this.emit("document.enrolled", { descriptor });
+    this.writeCheckpoint(entry, "enrollment", checkpointId);
+    return entry;
+  }
+
+  private writeCheckpoint(
+    entry: EnrolledDocument,
+    reason: CheckpointReason,
+    checkpointId = newCheckpointId(),
+  ): void {
+    const meta: CheckpointMeta = {
+      checkpointId,
+      documentId: entry.documentId,
+      reason,
+      version: entry.shadow.version,
+      eol: entry.shadow.eol,
+      byteLength: utf8ByteLength(entry.shadow.text),
+      sha256: entry.shadow.sha256,
+    };
+    this.sink.storeCheckpoint(meta, entry.shadow.text);
+    this.emit("document.checkpoint", meta);
+    entry.shadow.markCheckpoint(this.clock.nowUs());
+    this.counters.checkpoints += 1;
+  }
+
+  handleTextDocumentChange(event: vscode.TextDocumentChangeEvent): void {
+    this.measure("textChange", () => {
+      const entry = this.documents.get(event.document);
+      if (!entry || entry.droppedReason !== null) {
+        return;
+      }
+
+      const observedEol = toEolMode(event.document.eol);
+      const changes: ContentChange[] = event.contentChanges.map((change) => ({
+        rangeOffsetUtf16: change.rangeOffset,
+        rangeLengthUtf16: change.rangeLength,
+        text: change.text,
+      }));
+
+      if (changes.length === 0 && observedEol === entry.shadow.eol) {
+        // Version-only bump with no observable change; keep the shadow in
+        // step so the next patch's before-version matches.
+        entry.shadow.version = event.document.version;
+        return;
+      }
+
+      const reason: PatchReason =
+        event.reason === vscode.TextDocumentChangeReason.Undo
+          ? "undo"
+          : event.reason === vscode.TextDocumentChangeReason.Redo
+            ? "redo"
+            : "unknown";
+
+      const observedText = event.document.getText();
+      const result = entry.shadow.applyTransaction(
+        changes,
+        event.document.version,
+        observedText,
+        observedEol,
+      );
+
+      if (!result.ok) {
+        this.counters.shadowMismatches += 1;
+        this.emit("capture.shadowMismatch", {
+          documentId: entry.documentId,
+          expectedSha256: result.expectedSha256,
+          observedSha256: result.observedSha256,
+          version: event.document.version,
+        });
+        // Shadow already reset to observed state; contain with a checkpoint.
+        this.writeCheckpoint(entry, "mismatch");
+        return;
+      }
+
+      const payloadBytes = changes.reduce((sum, change) => sum + utf8ByteLength(change.text), 0);
+
+      if (changes.length === 0) {
+        this.emit("document.eolChanged", {
+          documentId: entry.documentId,
+          eol: observedEol,
+          version: event.document.version,
+        });
+        return;
+      }
+
+      if (exactSizeExceedsLimit(utf8ByteLength(observedText))) {
+        // Document grew past the capture limit: checkpoint, then stop
+        // capturing this document with an explicit marker (plan §13.1).
+        this.writeCheckpoint(entry, "limit");
+        entry.droppedReason = "limit";
+        this.emit("marker", { label: "document.captureStopped:size-limit" });
+        return;
+      }
+
+      if (payloadBytes > LIMITS.maxEventTextPayloadBytes) {
+        // Never truncate a patch; a full checkpoint carries the state.
+        this.writeCheckpoint(entry, "limit");
+        return;
+      }
+
+      this.emit("document.patch", {
+        documentId: entry.documentId,
+        beforeVersion: result.beforeVersion,
+        afterVersion: result.afterVersion,
+        reason,
+        changes,
+        beforeHash: result.beforeHash,
+        afterHash: result.afterHash,
+        eolBefore: result.eolBefore,
+        eolAfter: result.eolAfter,
+      });
+      this.counters.patches += 1;
+
+      if (entry.shadow.shouldCheckpoint(this.clock.nowUs())) {
+        this.writeCheckpoint(entry, "interval");
+      }
+    });
+  }
+
+  handleOpenTextDocument(document: vscode.TextDocument): void {
+    this.measure("openDocument", () => {
+      const reopened = this.documents.markReopened(document);
+      if (!reopened) {
+        // Never-visible documents are ignored until they become visible.
+        return;
+      }
+      const { entry, contentChanged, languageChanged } = reopened;
+      this.emit("document.resumed", {
+        documentId: entry.documentId,
+        version: document.version,
+      });
+      if (languageChanged) {
+        this.emit("document.languageChanged", {
+          documentId: entry.documentId,
+          languageId: document.languageId,
+        });
+      }
+      if (contentChanged) {
+        entry.shadow.text = document.getText();
+        entry.shadow.sha256 = sha256Hex(entry.shadow.text);
+        entry.shadow.version = document.version;
+        entry.shadow.eol = toEolMode(document.eol);
+        this.writeCheckpoint(entry, "resume");
+      } else {
+        entry.shadow.version = document.version;
+        entry.shadow.eol = toEolMode(document.eol);
+      }
+    });
+  }
+
+  handleCloseTextDocument(document: vscode.TextDocument): void {
+    this.measure("closeDocument", () => {
+      const entry = this.documents.markClosed(document);
+      if (entry) {
+        this.emit("document.closed", { documentId: entry.documentId });
+      }
+    });
+  }
+
+  handleSaveTextDocument(document: vscode.TextDocument): void {
+    this.measure("saveDocument", () => {
+      const entry = this.documents.get(document);
+      if (entry && entry.droppedReason === null) {
+        this.emit("document.saved", {
+          documentId: entry.documentId,
+          version: document.version,
+        });
+      }
+    });
+  }
+
+  handleWorkspaceFoldersChanged(): void {
+    this.measure("workspaceFolders", () => {
+      this.emit("roots.snapshot", { roots: this.documents.snapshotRoots() });
+      this.scheduleTopology();
+    });
+  }
+
+  // ---- surfaces --------------------------------------------------------
+
+  private ensureSurface(editor: vscode.TextEditor) {
+    const entry = this.enrollIfEligible(editor.document);
+    if (!entry) {
+      return undefined;
+    }
+    const known = this.surfaces.known(editor);
+    if (known) {
+      const record = this.surfaces.get(known);
+      if (record) {
+        record.visible = true;
+        return record;
+      }
+    }
+    const record = this.surfaces.register(editor, entry.documentId);
+    this.emitSurfaceEvent(record.surfaceId, "surface.opened", {
+      surfaceId: record.surfaceId,
+      documentId: entry.documentId,
+      groupId: null,
+      viewColumn: editor.viewColumn ?? null,
+      selections: editor.selections.map((selection) =>
+        toSelectionRange(editor.document, selection),
+      ),
+      visibleRanges: editor.visibleRanges.map(toVisibleLineRange),
+      isActive: vscode.window.activeTextEditor === editor,
+    });
+    return record;
+  }
+
+  handleVisibleEditorsChanged(editors: readonly vscode.TextEditor[]): void {
+    this.measure("visibleEditors", () => {
+      const previouslyVisible = this.surfaces.visibleSurfaceIds();
+      const nowVisible = new Set<SurfaceId>();
+      for (const editor of editors) {
+        const record = this.ensureSurface(editor);
+        if (record) {
+          nowVisible.add(record.surfaceId);
+        }
+      }
+      for (const surfaceId of previouslyVisible) {
+        if (!nowVisible.has(surfaceId)) {
+          this.surfaces.markHidden(surfaceId);
+          this.dropPendingViewport(surfaceId);
+          this.emitSurfaceEvent(surfaceId, "surface.closed", { surfaceId });
+        }
+      }
+      this.scheduleTopology();
+    });
+  }
+
+  handleActiveEditorChanged(editor: vscode.TextEditor | undefined): void {
+    this.measure("activeEditor", () => {
+      if (editor) {
+        const record = this.ensureSurface(editor);
+        if (record) {
+          this.emitSurfaceEvent(record.surfaceId, "surface.focused", {
+            surfaceId: record.surfaceId,
+          });
+        }
+      }
+      this.scheduleTopology();
+    });
+  }
+
+  handleSelectionChanged(event: vscode.TextEditorSelectionChangeEvent): void {
+    this.measure("selection", () => {
+      const record = this.ensureSurface(event.textEditor);
+      if (!record) {
+        return;
+      }
+      const selections = event.selections.map((selection) =>
+        toSelectionRange(event.textEditor.document, selection),
+      );
+      const kind = toSelectionKind(event.kind);
+      const json = JSON.stringify(selections) + kind;
+
+      // Coalesce identical consecutive selection states only when nothing
+      // else happened on this surface in between (plan §8.8).
+      const last = this.lastSelection.get(record.surfaceId);
+      const lastEventSeq = this.lastSurfaceEventSeq.get(record.surfaceId);
+      if (last && last.json === json && last.seq === lastEventSeq) {
+        return;
+      }
+
+      const payload = {
+        surfaceId: record.surfaceId,
+        documentId: record.documentId,
+        documentVersion: event.textEditor.document.version,
+        kind,
+        selections,
+      };
+      const emitted = this.emit("surface.selectionChanged", payload);
+      this.lastSurfaceEventSeq.set(record.surfaceId, emitted.seq);
+      this.lastSelection.set(record.surfaceId, { json, seq: emitted.seq });
+    });
+  }
+
+  handleVisibleRangesChanged(event: vscode.TextEditorVisibleRangesChangeEvent): void {
+    this.measure("viewport", () => {
+      const record = this.ensureSurface(event.textEditor);
+      if (!record) {
+        return;
+      }
+      const surfaceId = record.surfaceId;
+      const visibleRanges = event.visibleRanges.map(toVisibleLineRange);
+      const existing = this.pendingViewports.get(surfaceId);
+      if (existing) {
+        // Keep the first observation timestamp, latest state (plan §8.8).
+        existing.visibleRanges = visibleRanges;
+        existing.documentVersion = event.textEditor.document.version;
+        return;
+      }
+      const pending: PendingViewport = {
+        documentId: record.documentId,
+        documentVersion: event.textEditor.document.version,
+        firstObservedTUs: this.clock.nowUs(),
+        visibleRanges,
+        timer: setTimeout(() => {
+          const current = this.pendingViewports.get(surfaceId);
+          if (current) {
+            this.pendingViewports.delete(surfaceId);
+            this.flushViewport(surfaceId, current);
+          }
+        }, LIMITS.viewportCoalesceMs),
+      };
+      this.pendingViewports.set(surfaceId, pending);
+    });
+  }
+
+  private flushViewport(surfaceId: SurfaceId, pending: PendingViewport): void {
+    this.emitSurfaceEvent(
+      surfaceId,
+      "surface.viewportChanged",
+      {
+        surfaceId,
+        documentId: pending.documentId,
+        documentVersion: pending.documentVersion,
+        visibleRanges: pending.visibleRanges,
+      },
+      pending.firstObservedTUs,
+    );
+  }
+
+  private dropPendingViewport(surfaceId: SurfaceId): void {
+    const pending = this.pendingViewports.get(surfaceId);
+    if (pending) {
+      clearTimeout(pending.timer);
+      this.pendingViewports.delete(surfaceId);
+      this.flushViewport(surfaceId, pending);
+    }
+  }
+
+  handleWindowStateChanged(state: vscode.WindowState): void {
+    this.measure("windowState", () => {
+      this.emit("window.focusChanged", { focused: state.focused });
+    });
+  }
+
+  // ---- topology --------------------------------------------------------
+
+  scheduleTopology(): void {
+    if (this.topologyScheduled || this.stopped) {
+      return;
+    }
+    this.topologyScheduled = true;
+    this.topologyEarliestTUs = this.clock.nowUs();
+    // Reconcile after the current burst of tab/group events (plan §8.7).
+    queueMicrotask(() => {
+      this.topologyScheduled = false;
+      if (!this.stopped) {
+        this.flushTopology(this.topologyEarliestTUs);
+      }
+    });
+  }
+
+  private flushTopology(preferredTUs?: number): void {
+    this.measure("topology", () => {
+      const result = this.topology.snapshot(this.documents);
+      for (const unsupported of result.newUnsupported) {
+        this.emit("capability.unsupportedSurface", unsupported, preferredTUs);
+      }
+      if (result.changed) {
+        this.emit("topology.snapshot", result.payload, preferredTUs);
+      }
+    });
+  }
+}
+
+function toSelectionRange(
+  document: vscode.TextDocument,
+  selection: vscode.Selection,
+): SelectionRange {
+  return {
+    anchorOffsetUtf16: document.offsetAt(selection.anchor),
+    activeOffsetUtf16: document.offsetAt(selection.active),
+  };
+}
+
+function toVisibleLineRange(range: vscode.Range): VisibleLineRange {
+  return {
+    startLine: range.start.line,
+    startCharacter: range.start.character,
+    endLine: range.end.line,
+    endCharacter: range.end.character,
+  };
+}
+
+function toSelectionKind(kind: vscode.TextEditorSelectionChangeKind | undefined): SelectionKind {
+  switch (kind) {
+    case vscode.TextEditorSelectionChangeKind.Keyboard:
+      return "keyboard";
+    case vscode.TextEditorSelectionChangeKind.Mouse:
+      return "mouse";
+    case vscode.TextEditorSelectionChangeKind.Command:
+      return "command";
+    default:
+      return "unknown";
+  }
+}
