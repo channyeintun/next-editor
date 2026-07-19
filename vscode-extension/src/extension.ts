@@ -2,7 +2,9 @@ import * as vscode from "vscode";
 import { RecordingCoordinator } from "./capture/RecordingCoordinator";
 import { registerCommands } from "./commands/registerCommands";
 import { registerDevCommands } from "./commands/devCommands";
+import { announceRecoverableSessions, registerRecoverCommand } from "./commands/recoverCommand";
 import { RecordingEditorProvider } from "./playback/RecordingEditorProvider";
+import { disposeDiagnostics, logDiagnostic } from "./ui/diagnostics";
 import { RecordingStatusBar } from "./ui/RecordingStatusBar";
 
 let coordinator: RecordingCoordinator | undefined;
@@ -12,8 +14,19 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(coordinator);
   new RecordingStatusBar(coordinator, context);
   registerCommands(context, coordinator);
+  registerRecoverCommand(context);
   registerDevCommands(context, coordinator);
   context.subscriptions.push(RecordingEditorProvider.register(context));
+  context.subscriptions.push(
+    coordinator.onDidChangeState((state) => logDiagnostic("info", "recorder.state", { state })),
+  );
+
+  // Non-blocking activation-time recovery discovery (plan §9.8).
+  void announceRecoverableSessions(context).catch((error) => {
+    logDiagnostic("info", "recovery.scanFailed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
 }
 
 export function deactivate(): void {
@@ -21,4 +34,5 @@ export function deactivate(): void {
   // guarantee no data loss on abrupt shutdown (plan §9.8).
   coordinator?.dispose();
   coordinator = undefined;
+  disposeDiagnostics();
 }

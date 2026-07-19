@@ -141,6 +141,27 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Capture remote/virtual documents. Read when a recording starts."
+        },
+        "nextRecording.playback.defaultSpeed": {
+          "type": "number",
+          "default": 1,
+          "enum": [
+            0.5,
+            1,
+            1.5,
+            2
+          ],
+          "markdownDescription": "Initial playback speed for newly opened recordings."
+        },
+        "nextRecording.diagnostics.level": {
+          "type": "string",
+          "enum": [
+            "off",
+            "info",
+            "debug"
+          ],
+          "default": "off",
+          "markdownDescription": "Diagnostic logging level for the Next Recording output channel. Logs never contain captured source text."
         }
       }
     }

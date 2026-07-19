@@ -19,7 +19,7 @@ export class PlaybackDataService {
     return new PlaybackDataService(reader, fileName);
   }
 
-  metadata(): RecordingMetadataPayload {
+  metadata(defaultSpeed = 1): RecordingMetadataPayload {
     const manifest = this.reader.manifest;
     return {
       fileName: this.fileName,
@@ -27,6 +27,7 @@ export class PlaybackDataService {
       durationUs: manifest.durationUs,
       eventCount: manifest.eventJournalRef.eventCount,
       hasAudio: manifest.capabilities.audio,
+      defaultSpeed,
       documents: manifest.documents.map((doc) => ({
         documentId: doc.documentId,
         displayName: doc.displayName,

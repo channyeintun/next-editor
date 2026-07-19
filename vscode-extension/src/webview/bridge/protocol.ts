@@ -20,6 +20,7 @@ export const recordingMetadataSchema = z.object({
   durationUs: z.number().int().nonnegative(),
   eventCount: z.number().int().nonnegative(),
   hasAudio: z.boolean(),
+  defaultSpeed: z.number().positive(),
   documents: z.array(documentSummary),
   workspaceRoots: z.array(z.object({ rootId: z.string(), name: z.string() })),
 });

@@ -15,10 +15,6 @@ export function registerCommands(
   context: vscode.ExtensionContext,
   coordinator: RecordingCoordinator,
 ): void {
-  const notYet = (what: string) => () => {
-    void vscode.window.showInformationMessage(`Next Recording: ${what} is not implemented yet.`);
-  };
-
   context.subscriptions.push(
     vscode.commands.registerCommand(COMMANDS.start, async (): Promise<StartResult> => {
       if (coordinator.state !== "idle") {
@@ -71,8 +67,6 @@ export function registerCommands(
       }
       return result;
     }),
-
-    vscode.commands.registerCommand(COMMANDS.recover, notYet("recovery")),
 
     // Recording library (plan §9.7): list and open local recordings.
     // Opening a recording never requires a workspace.

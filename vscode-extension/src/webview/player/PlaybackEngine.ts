@@ -229,9 +229,10 @@ export class PlaybackEngine {
         }
       }
 
-      // Restore persisted playhead (webview hide/reopen — plan §10.1).
+      // Restore persisted playhead (webview hide/reopen — plan §10.1);
+      // fall back to the configured default speed for fresh opens.
       const persisted = (this.bridge.getState() ?? {}) as PersistedState;
-      this.rate = persisted.rate ?? 1;
+      this.rate = persisted.rate ?? metadata.defaultSpeed ?? 1;
       this.publish({ phase: "ready", rate: this.rate });
       await this.seekTo(persisted.playheadUs ?? 0);
     } catch (error) {

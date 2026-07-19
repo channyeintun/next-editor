@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { CONTEXT_KEYS, PLAYER_VIEW_TYPE } from "../model/ids";
+import { CONFIG_NAMESPACE, CONTEXT_KEYS, PLAYER_VIEW_TYPE } from "../model/ids";
 import { parseWebviewMessage, PROTOCOL_VERSION } from "../webview/bridge/protocol";
 import { getWebviewHtml } from "./getWebviewHtml";
 import { PlaybackDataService } from "./PlaybackDataService";
@@ -87,7 +87,11 @@ export class RecordingEditorProvider implements vscode.CustomReadonlyEditorProvi
           }
           post({
             type: "recording.metadata",
-            payload: document.service.metadata(),
+            payload: document.service.metadata(
+              vscode.workspace
+                .getConfiguration(CONFIG_NAMESPACE)
+                .get<number>("playback.defaultSpeed") ?? 1,
+            ),
           });
           break;
         }

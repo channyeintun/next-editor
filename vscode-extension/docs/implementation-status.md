@@ -17,7 +17,7 @@ not modified without explicit approval.
 | 4     | Versioned model, journal, and checkpoints        | Done (2026-07-20)                 |
 | 5     | Native visual recording vertical slice           | Done (2026-07-20)                 |
 | 6     | Artifact finalization and read-only playback     | Done (2026-07-20)                 |
-| 7     | Recovery, security, privacy, and scale hardening | Not started                       |
+| 7     | Recovery, security, privacy, and scale hardening | Done (2026-07-20)                 |
 | 8     | Audio feasibility and integration                | Deferred (gated per plan §12/§15) |
 | 9     | Release candidate and handoff                    | Not started                       |
 
@@ -307,6 +307,39 @@ Capture feasibility proven against a real Extension Development Host
   play/pause/seek interactions and hide/reopen playhead restore (engine
   logic covered by unit tests; the repo owner prefers eyeballing UI).
 
+## Phase 7 evidence (2026-07-20)
+
+- **Recovery UX**: activation scans only the extension's session
+  directory; a non-blocking notification offers "Recover…"; the real
+  `nextRecording.recover` command lists interrupted sessions with
+  Finalize / Inspect / Discard / Defer (plan §9.8). Context key
+  `hasRecoverableSession` kept current.
+- **Idempotent finalization**: `finalizeRecoveredSession` recovers the
+  durable journal prefix, drops truncated tails, truncates at pre-tail
+  corruption (recorded in `finalized.json`), appends explicit
+  `session.recovered` + `session.finalized` events, revalidates the full
+  replay, rewrites the journal atomically, and packages through the same
+  artifact writer. Re-running returns the existing artifact. Validation
+  refusal and packaging failures record `failed` + message in session
+  metadata and preserve the working directory.
+- **Failure injection tests** (all passing): journal write failure after
+  the handle dies (drain resolves, later enqueues ignored, durable prefix
+  intact); truncated tail; pre-tail corruption; missing checkpoint body;
+  discarded-session refusal; idempotency; EDH end-to-end crash → finalize
+  → artifact passes the fail-closed reader → rescan shows non-recoverable.
+- **Scale**: the 60-minute/250k-event fixture flows through the real
+  journal writer → artifact writer → reader end-to-end with bounded heap
+  growth (asserted) and a >3000-bucket seek index.
+- **Diagnostics (plan §17.3)**: "Next Recording" output channel,
+  `nextRecording.diagnostics.level` (`off`/`info`/`debug`), structured
+  primitive-field formatter (audited by test — no document text, no
+  absolute paths can flow through the API shape).
+- **Config surface complete (plan §18)**: capture.* (Phase 5) plus
+  `playback.defaultSpeed` (flows through recording.metadata into the
+  player; persisted webview state wins on reopen) and
+  `diagnostics.level`.
+- EDH total: 20 integration tests passing.
+
 ## Verification log
 
 | Date       | Phase | Commands                                                                                                                   | Result   |
@@ -318,3 +351,4 @@ Capture feasibility proven against a real Extension Development Host
 | 2026-07-20 | 4     | typecheck, lint, verify:boundaries, test:unit + test/recovery (49 tests), build, test:integration                          | all pass |
 | 2026-07-20 | 5     | typecheck, lint, test:unit (55), build, test:integration (16 incl. 4 recording-lifecycle scenarios, multi-root workspace)  | all pass |
 | 2026-07-20 | 6     | typecheck, lint, test:unit (73 incl. 12 artifact + 3 protocol), build (Monaco player 3.1 MB), test:integration (19)        | all pass |
+| 2026-07-20 | 7     | typecheck, lint, test:unit (83 incl. recovery-finalizer, writer-failure, 250k-event scale), test:integration (20)          | all pass |

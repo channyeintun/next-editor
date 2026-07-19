@@ -192,6 +192,59 @@ suite("native recording lifecycle", function () {
     assert.ok(!rescan.some((candidate) => candidate.sessionId === sessionId));
   });
 
+  test("abandoned session can be finalized into a playable artifact", async () => {
+    const uri = createFile(rootPath(0), "recover-me.txt", "recover this\n");
+    const start = (await vscode.commands.executeCommand("nextRecording.start")) as StartResult;
+    assert.strictEqual(start.ok, true);
+    const sessionId = start.sessionId!;
+
+    const editor = await vscode.window.showTextDocument(uri, {
+      preview: false,
+    });
+    await editor.edit((builder) => builder.insert(new vscode.Position(0, 0), "OK "));
+    await sleep(1500); // journal sync interval
+
+    await vscode.commands.executeCommand("nextRecording.dev.simulateCrash");
+
+    const result = (await vscode.commands.executeCommand(
+      "nextRecording.dev.recoveryFinalize",
+      sessionId,
+    )) as {
+      ok: boolean;
+      artifactPath?: string;
+      recoveredEvents?: number;
+      message?: string;
+    };
+    assert.strictEqual(result.ok, true, `finalize failed: ${result.message}`);
+    assert.ok((result.recoveredEvents ?? 0) > 0);
+    assert.ok(fs.existsSync(result.artifactPath!), "recovered artifact missing");
+
+    // The recovered artifact passes the fail-closed reader stack.
+    const summary = (await vscode.commands.executeCommand(
+      "nextRecording.dev.readArtifact",
+      result.artifactPath,
+    )) as { eventCount: number; documents: string[] };
+    assert.strictEqual(summary.eventCount, result.recoveredEvents);
+    assert.ok(summary.documents.includes("recover-me.txt"));
+
+    // Idempotent: a second finalize returns the same artifact.
+    const again = (await vscode.commands.executeCommand(
+      "nextRecording.dev.recoveryFinalize",
+      sessionId,
+    )) as { ok: boolean; alreadyFinalized?: boolean; artifactPath?: string };
+    assert.strictEqual(again.ok, true);
+    assert.strictEqual(again.alreadyFinalized, true);
+    assert.strictEqual(again.artifactPath, result.artifactPath);
+
+    // The session no longer shows as recoverable.
+    const scan = (await vscode.commands.executeCommand(
+      "nextRecording.dev.recoveryScan",
+    )) as ScanEntry[];
+    const entry = scan.find((candidate) => candidate.sessionId === sessionId);
+    assert.ok(entry, "session directory disappeared unexpectedly");
+    assert.strictEqual(entry.recoverable, false);
+  });
+
   test("excluded globs are honored", async () => {
     const config = vscode.workspace.getConfiguration("nextRecording");
     await config.update("capture.exclude", ["**/*.secret"], vscode.ConfigurationTarget.Global);

@@ -8,6 +8,7 @@ import type { RecordingCoordinator } from "../capture/RecordingCoordinator";
 import { COMMAND_NAMESPACE } from "../model/ids";
 import { PlaybackDataService } from "../playback/PlaybackDataService";
 import { RecordingEditorProvider } from "../playback/RecordingEditorProvider";
+import { finalizeRecoveredSession } from "../storage/RecoveryFinalizer";
 import { RecoveryService } from "../storage/RecoveryService";
 import { SessionPaths } from "../storage/SessionPaths";
 import { acknowledgePrivacyDisclosure } from "../ui/notifications";
@@ -163,6 +164,10 @@ export function registerDevCommands(
       const service = new RecoveryService(context.globalStorageUri.fsPath);
       await service.discard(new SessionPaths(context.globalStorageUri.fsPath, sessionId));
     }),
+
+    vscode.commands.registerCommand(`${ns}.recoveryFinalize`, async (sessionId: string) =>
+      finalizeRecoveredSession(context.globalStorageUri.fsPath, sessionId),
+    ),
 
     vscode.commands.registerCommand(`${ns}.playerStatus`, () => ({
       webviewReadyCount: RecordingEditorProvider.webviewReadyCount,
