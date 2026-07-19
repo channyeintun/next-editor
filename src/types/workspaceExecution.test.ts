@@ -70,7 +70,43 @@ describe("go workspace model", () => {
     expect(normalized.entryFilePath).toBe("main.go");
     expect(normalized.files["main.go"].language).toBe("go");
     expect(normalized.files["main.go"].content).toContain("package main");
-    expect(normalized.files["main.go"].content).toContain("square(i)");
-    expect(normalized.files["square.go"].content).toContain("func square");
+    expect(normalized.files["main.go"].content).toContain("const currentLesson");
+    expect(normalized.files["m03_collections_pointers.go"].content).toContain("slices.Clone");
+    expect(normalized.files["COURSE.md"].language).toBe("markdown");
+  });
+
+  it("keeps main.go a thin runner with no lesson titles or ordering", () => {
+    const starter = createStarterGoWorkspace();
+    const runner = starter.files["main.go"].content as string;
+
+    expect(runner).toContain("func register(");
+    expect(runner).toContain("func main()");
+    // Keys, titles, and ordering live in the module files' init funcs.
+    expect(runner).not.toMatch(/register\("/);
+    expect(runner).not.toContain("Read a Go File Top-Down");
+    expect(runner).not.toContain("lessonOrder");
+  });
+
+  it("registers one runnable demo per course lesson (25 lessons)", () => {
+    const starter = createStarterGoWorkspace();
+    const moduleFiles = Object.keys(starter.files).filter((path) => /^m\d{2}_.*\.go$/.test(path));
+    expect(moduleFiles).toHaveLength(10);
+
+    const registeredKeys: string[] = [];
+    for (const path of moduleFiles) {
+      const content = starter.files[path].content as string;
+      const keys = [...content.matchAll(/register\("(\d+\.\d+)", "/g)].map((match) => match[1]);
+
+      // Every module file registers its own lessons, under its own number.
+      expect(keys.length).toBeGreaterThan(0);
+      const moduleNumber = String(Number(path.slice(1, 3)));
+      for (const key of keys) {
+        expect(key.split(".")[0]).toBe(moduleNumber);
+      }
+      registeredKeys.push(...keys);
+    }
+
+    expect(registeredKeys).toHaveLength(25);
+    expect(new Set(registeredKeys).size).toBe(25);
   });
 });
