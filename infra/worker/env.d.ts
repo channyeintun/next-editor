@@ -19,6 +19,9 @@ export interface Env {
   // Same kill-switch contract for Kotlin lessons via the Kotlin Playground
   // proxy (routes/kotlinPlayground.ts).
   KOTLIN_PLAYGROUND_ENABLED?: string;
+  // Same kill-switch contract for Rust lessons via the Rust Playground proxy
+  // (routes/rustPlayground.ts).
+  RUST_PLAYGROUND_ENABLED?: string;
   REALTIME_SFU_APP_ID?: string;
   REALTIME_SFU_APP_SECRET?: string;
   // Cloudflare Workers KV cache (infra/worker/cache.ts). Optional in the type

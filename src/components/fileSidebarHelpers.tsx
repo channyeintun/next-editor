@@ -353,6 +353,10 @@ export function getFileIcon(file: WorkspaceTreeFile): ReactElement {
     return langBadge("#3776AB", "#fff", "PY");
   }
 
+  if (file.language === "rust") {
+    return langBadge("#B7410E", "#fff", "RS");
+  }
+
   if (file.language === "css") {
     return (
       <svg width={13} height={13} viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">

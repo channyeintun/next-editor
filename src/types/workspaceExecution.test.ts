@@ -13,6 +13,7 @@ import { normalizeProject } from "../stores/workspaceProjectSupport";
 import { createStarterGoWorkspace } from "../starters/go";
 import { createStarterKotlinWorkspace } from "../starters/kotlin";
 import { createStarterPythonWorkspace } from "../starters/python";
+import { createStarterRustWorkspace } from "../starters/rust";
 
 // Record keys make this exhaustive at compile time: adding a lesson type
 // without deciding its execution backend fails the typecheck, not just a test.
@@ -28,9 +29,10 @@ const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKin
   go: "go-playground",
   kotlin: "kotlin-playground",
   python: "webcontainer",
+  rust: "rust-playground",
 };
 
-const PLAYGROUND_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set(["go", "kotlin"]);
+const PLAYGROUND_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set(["go", "kotlin", "rust"]);
 
 // WebContainer lessons whose runner is a script that exits instead of a dev
 // server — they keep Run and Terminal but have no preview surface.
@@ -72,6 +74,24 @@ describe("lesson capabilities", () => {
         !CONSOLE_ONLY_WEB_CONTAINER_LESSON_TYPES.has(lessonType),
       );
     }
+  });
+});
+
+describe("rust workspace model", () => {
+  it("maps .rs files to Monaco's rust language id", () => {
+    expect(inferLanguageFromPath("main.rs")).toBe("rust");
+    expect(inferLanguageFromPath("src/lib.rs")).toBe("rust");
+  });
+
+  it("round-trips a rust starter through project normalization without falling back", () => {
+    const starter = createStarterRustWorkspace();
+    const normalized = normalizeProject(starter);
+
+    expect(normalized.lessonType).toBe("rust");
+    expect(normalized.entryFilePath).toBe("main.rs");
+    expect(normalized.files["main.rs"].language).toBe("rust");
+    expect(normalized.files["main.rs"].content).toContain("fn main()");
+    expect(normalized.files["README.md"].language).toBe("markdown");
   });
 });
 

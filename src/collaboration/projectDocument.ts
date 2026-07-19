@@ -413,6 +413,7 @@ function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
       "go",
       "kotlin",
       "python",
+      "rust",
     ].includes(value)
   );
 }

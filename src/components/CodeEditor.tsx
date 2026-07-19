@@ -43,6 +43,7 @@ import BinaryFilePreview from "./BinaryFilePreview";
 import TerminalPanel from "./TerminalPanel";
 import GoPlaygroundRunnerPanel from "./GoPlaygroundRunnerPanel";
 import KotlinPlaygroundRunnerPanel from "./KotlinPlaygroundRunnerPanel";
+import RustPlaygroundRunnerPanel from "./RustPlaygroundRunnerPanel";
 import {
   CollaborationCursorLabelManager,
   type CollaborationCursorLabel,
@@ -1409,6 +1410,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               <GoPlaygroundRunnerPanel />
             ) : executionKindForLessonType(lessonType) === "kotlin-playground" ? (
               <KotlinPlaygroundRunnerPanel />
+            ) : executionKindForLessonType(lessonType) === "rust-playground" ? (
+              <RustPlaygroundRunnerPanel />
             ) : null}
           </div>
           {/* Go, Kotlin, and Python lessons have no preview surface at all —

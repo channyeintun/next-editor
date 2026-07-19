@@ -50,6 +50,20 @@ function buildSupportedStack(project: WorkspaceProject): string {
     );
   }
 
+  if (executionKindForLessonType(project.lessonType) === "rust-playground") {
+    return (
+      "Supported stack: Rust only. This lesson's single main.rs compiles and runs remotely " +
+      "on the Rust Playground (stable channel, 2024 edition, debug profile) when the user " +
+      "presses Run or Format in the Rust Runner panel — you cannot execute code yourself. " +
+      "There is no shell, terminal, dev server, or preview in this workspace: work purely " +
+      "through the file tools and reason about program behavior from the source. The " +
+      "whole program lives in main.rs (use inline `mod` blocks for structure), and " +
+      "solutions must stay within Rust Playground constraints (sandboxed execution, no " +
+      "network access, no stdin, standard library plus the playground's built-in crates, " +
+      "limited compute time). Do not introduce other languages, toolchains, or runtimes."
+    );
+  }
+
   if (executionKindForLessonType(project.lessonType) === "go-playground") {
     return (
       "Supported stack: Go only. This lesson's Go files compile and run remotely on the " +
