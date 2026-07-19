@@ -28,6 +28,9 @@ import "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution.js";
 import "monaco-editor/esm/vs/basic-languages/go/go.contribution.js";
 // Kotlin: same story, for the Kotlin Playground lesson type.
 import "monaco-editor/esm/vs/basic-languages/kotlin/kotlin.contribution.js";
+// Python: grammar only, for the WebContainer python lesson type — execution
+// happens through the container's WASI interpreter, not Monaco.
+import "monaco-editor/esm/vs/basic-languages/python/python.contribution.js";
 
 // Worker-backed rich services. JSON is self-contained: language/json registers
 // its own id and tokenizes via its worker, so it needs no basic grammar.

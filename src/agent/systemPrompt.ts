@@ -62,6 +62,20 @@ function buildSupportedStack(project: WorkspaceProject): string {
     );
   }
 
+  if (project.lessonType === "python") {
+    return (
+      "Supported stack: Python 3 (standard library only). This lesson runs inside the " +
+      "in-browser WebContainer's experimental WASI Python interpreter: the workspace " +
+      "runner executes `python3 main.py` and streams stdout to the Runner console, and " +
+      "the shell provides the same `python3` command for short, bounded script runs. " +
+      "There is no pip and no way to install third-party packages, network sockets are " +
+      "unavailable (no http.server, Flask, or any listening server), and there is no " +
+      "preview surface — programs communicate through stdout. Keep every solution " +
+      "within the Python standard library and do not introduce other languages, " +
+      "package managers, or runtimes."
+    );
+  }
+
   return (
     "Supported stack: HTML, CSS, JavaScript, TypeScript, Node.js, and JS/TS libraries " +
     "and frameworks only. The workspace runs in an in-browser WebContainer, which only " +

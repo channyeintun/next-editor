@@ -12,6 +12,7 @@ import {
 import { normalizeProject } from "../stores/workspaceProjectSupport";
 import { createStarterGoWorkspace } from "../starters/go";
 import { createStarterKotlinWorkspace } from "../starters/kotlin";
+import { createStarterPythonWorkspace } from "../starters/python";
 
 // Record keys make this exhaustive at compile time: adding a lesson type
 // without deciding its execution backend fails the typecheck, not just a test.
@@ -26,9 +27,16 @@ const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKin
   "express-ts": "webcontainer",
   go: "go-playground",
   kotlin: "kotlin-playground",
+  python: "webcontainer",
 };
 
 const PLAYGROUND_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set(["go", "kotlin"]);
+
+// WebContainer lessons whose runner is a script that exits instead of a dev
+// server — they keep Run and Terminal but have no preview surface.
+const CONSOLE_ONLY_WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
+  "python",
+]);
 
 const ALL_LESSON_TYPES = Object.keys(EXPECTED_EXECUTION_KIND) as WorkspaceLessonType[];
 
@@ -60,7 +68,9 @@ describe("lesson capabilities", () => {
     )) {
       expect(lessonSupportsCodeRun(lessonType)).toBe(true);
       expect(lessonSupportsTerminal(lessonType)).toBe(true);
-      expect(lessonSupportsPreview(lessonType)).toBe(true);
+      expect(lessonSupportsPreview(lessonType)).toBe(
+        !CONSOLE_ONLY_WEB_CONTAINER_LESSON_TYPES.has(lessonType),
+      );
     }
   });
 });
@@ -80,6 +90,36 @@ describe("kotlin workspace model", () => {
     expect(normalized.files["Main.kt"].language).toBe("kotlin");
     expect(normalized.files["Main.kt"].content).toContain("fun main()");
     expect(normalized.files["README.md"].language).toBe("markdown");
+  });
+});
+
+describe("python workspace model", () => {
+  it("maps .py files to Monaco's python language id", () => {
+    expect(inferLanguageFromPath("main.py")).toBe("python");
+    expect(inferLanguageFromPath("src/helpers.py")).toBe("python");
+  });
+
+  it("round-trips a python starter through project normalization without falling back", () => {
+    const starter = createStarterPythonWorkspace();
+    const normalized = normalizeProject(starter);
+
+    expect(normalized.lessonType).toBe("python");
+    expect(normalized.entryFilePath).toBe("main.py");
+    expect(normalized.files["main.py"].language).toBe("python");
+    expect(normalized.files["main.py"].content).toContain("describe_squares");
+    expect(normalized.files["helpers.py"].content).toContain("def greet");
+  });
+
+  it("wires the runner's dev script to the WebContainer python interpreter", () => {
+    const starter = createStarterPythonWorkspace();
+    const packageJson = JSON.parse(starter.files["package.json"].content as string) as {
+      scripts?: Record<string, string>;
+      dependencies?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.dev).toBe("python3 main.py");
+    // Stdlib-only: `pnpm install` must stay a no-op with nothing to resolve.
+    expect(packageJson.dependencies).toBeUndefined();
   });
 });
 

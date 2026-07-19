@@ -1411,8 +1411,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               <KotlinPlaygroundRunnerPanel />
             ) : null}
           </div>
-          {/* Go and Kotlin lessons have no preview surface at all — the dock
-              console is their only runtime output. */}
+          {/* Go, Kotlin, and Python lessons have no preview surface at all —
+              the dock console is their only runtime output. */}
           {lessonSupportsPreview(lessonType) ? (
             <Suspense fallback={null}>
               <Preview />

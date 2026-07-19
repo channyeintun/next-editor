@@ -412,6 +412,7 @@ function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
       "express-ts",
       "go",
       "kotlin",
+      "python",
     ].includes(value)
   );
 }

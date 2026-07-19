@@ -64,6 +64,7 @@ const LESSON_TYPE_OPTIONS: Array<{
   { value: "express-ts", label: "Express + TypeScript" },
   { value: "go", label: "Go" },
   { value: "kotlin", label: "Kotlin" },
+  { value: "python", label: "Python" },
 ];
 
 const HEADER_ICON_BUTTON_CLASS =
@@ -715,8 +716,8 @@ function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
         <div className="flex items-center gap-2">
           <WhiteboardHeaderButton />
           <SlidesButton presentationToggleOnly={!showImportExport} />
-          {/* Go lessons have no preview surface — the control is absent, not
-              disabled. */}
+          {/* Go, Kotlin, and Python lessons have no preview surface — the
+              control is absent, not disabled. */}
           {lessonSupportsPreview(lessonType) ? <PreviewHeaderButton /> : null}
         </div>
       </div>

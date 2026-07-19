@@ -82,14 +82,17 @@ export type WorkspaceLessonType =
   | "alpine-express"
   | "express-ts"
   | "go"
-  | "kotlin";
+  | "kotlin"
+  | "python";
 
 /**
  * Every browser-runtime lesson type is served by its own dev server inside the
  * WebContainer: the Vite-based SPAs (react, vue, solid, svelte) and html-css
  * run a Vite dev server, while htmx-express, alpine-express, and express-ts run
- * an Express server. Go and Kotlin are deliberately excluded because they use
- * the selective Playground execution paths below.
+ * an Express server. Python also runs in the WebContainer, but through its
+ * experimental WASI interpreter — the runner executes the script and exits
+ * instead of keeping a server alive. Go and Kotlin are deliberately excluded
+ * because they use the selective Playground execution paths below.
  */
 const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "html-css",
@@ -100,6 +103,7 @@ const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "htmx-express",
   "alpine-express",
   "express-ts",
+  "python",
 ]);
 
 export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boolean {
@@ -132,7 +136,9 @@ export function lessonSupportsTerminal(lessonType: WorkspaceLessonType): boolean
 }
 
 export function lessonSupportsPreview(lessonType: WorkspaceLessonType): boolean {
-  return lessonRunsInWebContainer(lessonType);
+  // WebContainer's WASI Python cannot bind server sockets, so a python lesson
+  // never produces a previewable URL — its only output surface is the console.
+  return lessonRunsInWebContainer(lessonType) && lessonType !== "python";
 }
 
 export function lessonSupportsCodeRun(lessonType: WorkspaceLessonType): boolean {
@@ -498,6 +504,10 @@ export function inferLanguageFromPath(path: string): string {
 
   if (normalizedPath.endsWith(".kt") || normalizedPath.endsWith(".kts")) {
     return "kotlin";
+  }
+
+  if (normalizedPath.endsWith(".py")) {
+    return "python";
   }
 
   if (normalizedPath.endsWith(".css")) {

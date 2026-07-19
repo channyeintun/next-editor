@@ -163,6 +163,7 @@ const KNOWN_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "express-ts",
   "go",
   "kotlin",
+  "python",
 ]);
 
 function inferWorkspaceLessonType(
