@@ -31,7 +31,20 @@ export default function GoogleOneTap() {
         auto_select: true,
         use_fedcm_for_prompt: true,
       });
-      accountsId.prompt();
+      // Makes "why is One Tap not showing" answerable from the console.
+      // Google suppresses the prompt with an escalating per-site cooldown
+      // after dismissals (suppressed_by_user), and only shows it at all when
+      // the browser holds a signed-in Google session. Chrome's FedCM mode
+      // deliberately reports opaque reasons (anti-fingerprinting); Safari and
+      // Firefox report specific ones.
+      accountsId.prompt((moment) => {
+        if (moment.isNotDisplayed() || moment.isSkippedMoment()) {
+          console.info(
+            "[one-tap] prompt not shown:",
+            moment.getNotDisplayedReason() ?? moment.getSkippedReason() ?? "no reason reported",
+          );
+        }
+      });
     });
     return () => {
       cancelled = true;

@@ -16,9 +16,19 @@ interface GoogleIdConfiguration {
   cancel_on_tap_outside?: boolean;
 }
 
+export interface GooglePromptMomentNotification {
+  isNotDisplayed(): boolean;
+  isSkippedMoment(): boolean;
+  isDismissedMoment(): boolean;
+  getNotDisplayedReason(): string | undefined;
+  getSkippedReason(): string | undefined;
+  getDismissedReason(): string | undefined;
+  getMomentType(): string;
+}
+
 export interface GoogleAccountsId {
   initialize(config: GoogleIdConfiguration): void;
-  prompt(): void;
+  prompt(listener?: (notification: GooglePromptMomentNotification) => void): void;
   cancel(): void;
   disableAutoSelect(): void;
 }
