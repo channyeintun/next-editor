@@ -15,7 +15,7 @@ not modified without explicit approval.
 | 2     | Capture topology and text-change feasibility     | Done (2026-07-20)                 |
 | 3     | Renderer benchmark and decision                  | Done (2026-07-20)                 |
 | 4     | Versioned model, journal, and checkpoints        | Done (2026-07-20)                 |
-| 5     | Native visual recording vertical slice           | Not started                       |
+| 5     | Native visual recording vertical slice           | Done (2026-07-20)                 |
 | 6     | Artifact finalization and read-only playback     | Not started                       |
 | 7     | Recovery, security, privacy, and scale hardening | Not started                       |
 | 8     | Audio feasibility and integration                | Deferred (gated per plan §12/§15) |
@@ -228,6 +228,45 @@ Capture feasibility proven against a real Extension Development Host
 - Working-session + artifact format documented in
   `docs/artifact-format-v1.md` (draft until Phase 6 declares v1 stable).
 
+## Phase 5 evidence (2026-07-20)
+
+- `RecordingCoordinator` implements the plan §8.1 lifecycle
+  (idle → preparing → recording → stopping → finalizing → idle; failures
+  recorded in session metadata, session dir left recoverable). Context
+  keys and the status bar update only on successful transitions.
+- Capture events flow into the durable journal via `DurableSessionSink`;
+  checkpoint bodies ride the same ordered pipeline as barriers, so a
+  journaled checkpoint reference is never durable before its body.
+- Stop sequence: subscriptions off → final checkpoints for dirty docs →
+  `session.stopping` → journal drain+sync → full headless replay
+  validation (schema, seq/tUs, IDs, patch bounds, every hash) →
+  `session.finalized` → `finalized.json` + metadata `finalized`.
+- `CapturePolicy` honors user configuration snapshotted at recording
+  start (`capture.exclude` globs, `maxDocumentBytes`, `includeUntitled`,
+  `includeRemote`); configuration contributions added to the manifest.
+- Privacy disclosure shown once (modal) before the first recording.
+- Status bar: red REC + elapsed + click-to-stop; saving spinner while
+  finalizing; hidden when idle.
+- Integration tests run in a **multi-root** workspace now; new scenarios
+  (all passing in EDH, 16 total):
+  - multi-root + untitled session via real `nextRecording.start/stop`;
+    metadata `finalized`; journal shows 2 rootIds, untitled descriptor,
+    `session.finalized` as last event; zero shadow mismatches.
+  - double-start rejected; stop idempotent; state returns to idle.
+  - simulated crash (abandoned session) → recovery scan finds it
+    (`recoverable: true`, durable events > 0, no corruption) → explicit
+    discard removes it.
+  - excluded glob (`**/*.secret`): no enrollment, exclusion marker
+    present, excluded content provably absent from the journal.
+- Machine note: a stale `~/.pnp.cjs` on this workstation makes esbuild's
+  automatic Yarn PnP detection reject dependencies; `esbuild.mjs` now
+  resolves bare imports with standard Node resolution (kept as a build
+  workaround, consistent with the repo's existing PnP alias convention;
+  the user's manifest is not touched).
+- Deferred to Phase 7 (noted): validation currently preloads all
+  checkpoint bodies into memory during finalization; streaming validation
+  is part of scale hardening.
+
 ## Verification log
 
 | Date       | Phase | Commands                                                                                                                   | Result   |
@@ -237,3 +276,4 @@ Capture feasibility proven against a real Extension Development Host
 | 2026-07-20 | 2     | typecheck, lint, verify:boundaries, test:unit (15), build, test:integration (12 incl. 9 capture scenarios)                 | all pass |
 | 2026-07-20 | 3     | typecheck, lint, test:unit, benchmark:renderer (12 renderer×fixture runs, all correctness pass)                            | all pass |
 | 2026-07-20 | 4     | typecheck, lint, verify:boundaries, test:unit + test/recovery (49 tests), build, test:integration                          | all pass |
+| 2026-07-20 | 5     | typecheck, lint, test:unit (55), build, test:integration (16 incl. 4 recording-lifecycle scenarios, multi-root workspace)  | all pass |

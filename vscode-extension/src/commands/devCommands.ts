@@ -4,7 +4,11 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { CaptureSession } from "../capture/CaptureSession";
 import { InMemoryEventSink } from "../capture/EventSink";
+import type { RecordingCoordinator } from "../capture/RecordingCoordinator";
 import { COMMAND_NAMESPACE } from "../model/ids";
+import { RecoveryService } from "../storage/RecoveryService";
+import { SessionPaths } from "../storage/SessionPaths";
+import { acknowledgePrivacyDisclosure } from "../ui/notifications";
 
 // Phase 2 diagnostic commands (not contributed to the palette): drive a
 // capture spike session and inspect its trace. Removed before release
@@ -49,7 +53,10 @@ function buildTrace(): CaptureTrace | null {
   };
 }
 
-export function registerDevCommands(context: vscode.ExtensionContext): void {
+export function registerDevCommands(
+  context: vscode.ExtensionContext,
+  coordinator: RecordingCoordinator,
+): void {
   const ns = `${COMMAND_NAMESPACE}.dev`;
   context.subscriptions.push(
     vscode.commands.registerCommand(`${ns}.captureStart`, () => {
@@ -109,6 +116,50 @@ export function registerDevCommands(context: vscode.ExtensionContext): void {
         activeSpike.session.stop();
         activeSpike = null;
       }
+    }),
+
+    // ---- Phase 5+ test hooks (never contributed to the palette) --------
+
+    vscode.commands.registerCommand(`${ns}.ackPrivacyDisclosure`, async () => {
+      await acknowledgePrivacyDisclosure(context);
+    }),
+
+    vscode.commands.registerCommand(`${ns}.recorderState`, () => ({
+      state: coordinator.state,
+      sessionId: coordinator.activeSessionId,
+      sessionDir: coordinator.activeSessionDir,
+      lastError: coordinator.lastError,
+    })),
+
+    vscode.commands.registerCommand(`${ns}.simulateCrash`, () => coordinator.abandonForTest()),
+
+    vscode.commands.registerCommand(`${ns}.recoveryScan`, async () => {
+      const service = new RecoveryService(context.globalStorageUri.fsPath);
+      const sessions = await service.scan();
+      return sessions.map((session) => ({
+        sessionId: session.sessionId,
+        state: session.metadata?.state ?? null,
+        recoverable: session.recoverable,
+        sessionDir: session.paths.sessionDir,
+      }));
+    }),
+
+    vscode.commands.registerCommand(`${ns}.recoveryInspect`, async (sessionId: string) => {
+      const service = new RecoveryService(context.globalStorageUri.fsPath);
+      const paths = new SessionPaths(context.globalStorageUri.fsPath, sessionId);
+      const inspection = await service.inspect(paths);
+      return {
+        state: inspection.metadata?.state ?? null,
+        eventCount: inspection.journal.events.length,
+        truncatedTailBytes: inspection.journal.truncatedTailBytes,
+        corruption: inspection.journal.corruption,
+        lastEventType: inspection.lastEvent?.type ?? null,
+      };
+    }),
+
+    vscode.commands.registerCommand(`${ns}.recoveryDiscard`, async (sessionId: string) => {
+      const service = new RecoveryService(context.globalStorageUri.fsPath);
+      await service.discard(new SessionPaths(context.globalStorageUri.fsPath, sessionId));
     }),
   );
 }

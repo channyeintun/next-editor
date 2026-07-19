@@ -18,7 +18,7 @@ import {
 } from "../model/ids";
 import { LIMITS } from "../model/limits";
 import { CaptureMetrics } from "./CaptureMetrics";
-import { evaluateDocumentPolicy, exactSizeExceedsLimit } from "./CapturePolicy";
+import { CapturePolicy } from "./CapturePolicy";
 import { installCaptureSubscriptions } from "./CaptureSubscriptions";
 import {
   DocumentRegistry,
@@ -50,7 +50,7 @@ export type CaptureCounters = {
 // Phase 2 capture engine: registries + subscriptions + ordered emission.
 // The Phase 5 RecordingCoordinator wraps this with the durable lifecycle.
 export class CaptureSession {
-  readonly sessionId: SessionId = newSessionId();
+  readonly sessionId: SessionId;
   readonly clock = new EventClock();
   readonly metrics = new CaptureMetrics();
   readonly documents = new DocumentRegistry();
@@ -75,7 +75,11 @@ export class CaptureSession {
   constructor(
     private readonly sink: EventSink,
     private readonly extensionVersion: string,
-  ) {}
+    private readonly policy: CapturePolicy = new CapturePolicy(),
+    sessionId: SessionId = newSessionId(),
+  ) {
+    this.sessionId = sessionId;
+  }
 
   start(): void {
     // Subscriptions first, then the initial snapshot (plan §8.1).
@@ -129,6 +133,35 @@ export class CaptureSession {
     return { ...this.counters };
   }
 
+  // ---- lifecycle emission (used by the RecordingCoordinator) -----------
+
+  /** Final checkpoints for every document dirty since its last checkpoint. */
+  finalizeCheckpoints(): void {
+    for (const entry of this.documents.all()) {
+      if (entry.droppedReason === null && entry.shadow.transactionsSinceCheckpoint > 0) {
+        this.writeCheckpoint(entry, "stop");
+      }
+    }
+  }
+
+  emitStopping(reason: "user" | "failure" | "shutdown"): void {
+    this.emit("session.stopping", { reason });
+  }
+
+  emitFinalized(): { eventCount: number; durationUs: number } {
+    const payload = {
+      // This event's own seq is allocatedCount, so the total including it:
+      eventCount: this.clock.allocatedCount + 1,
+      durationUs: this.clock.nowUs(),
+    };
+    this.emit("session.finalized", payload);
+    return payload;
+  }
+
+  noteOverload(queuedEvents: number, note: string): void {
+    this.emit("capture.overload", { queuedEvents, note });
+  }
+
   // ---- emission helpers ----------------------------------------------
 
   private emit<T extends SessionEvent["type"]>(
@@ -169,7 +202,7 @@ export class CaptureSession {
     if (existing) {
       return existing.droppedReason === null ? existing : undefined;
     }
-    const decision = evaluateDocumentPolicy(document);
+    const decision = this.policy.evaluate(document);
     const resourceKey = resourceKeyOf(document.uri);
     if (!decision.capture) {
       if (!this.excludedResources.has(resourceKey)) {
@@ -187,7 +220,7 @@ export class CaptureSession {
       decision.schemeClass,
       nowTUs,
     );
-    if (exactSizeExceedsLimit(descriptor.byteLength)) {
+    if (this.policy.exactSizeExceedsLimit(descriptor.byteLength)) {
       // Too large after exact measurement: record the exclusion, forget it.
       this.excludedResources.add(resourceKey);
       this.counters.excludedDocuments += 1;
@@ -282,7 +315,7 @@ export class CaptureSession {
         return;
       }
 
-      if (exactSizeExceedsLimit(utf8ByteLength(observedText))) {
+      if (this.policy.exactSizeExceedsLimit(utf8ByteLength(observedText))) {
         // Document grew past the capture limit: checkpoint, then stop
         // capturing this document with an explicit marker (plan §13.1).
         this.writeCheckpoint(entry, "limit");

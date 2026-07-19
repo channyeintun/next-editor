@@ -9,8 +9,16 @@ async function main(): Promise<void> {
   const extensionTestsPath = path.resolve(__dirname, "suite", "index.js");
   const cachePath = path.join(extensionDevelopmentPath, ".test-vscode");
 
-  // A disposable workspace keeps integration runs deterministic.
+  // A disposable multi-root workspace (plan §15 Phase 5: exercise
+  // multi-root scenarios) keeps integration runs deterministic.
   const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), "next-recording-itest-"));
+  fs.mkdirSync(path.join(workspacePath, "root-a"));
+  fs.mkdirSync(path.join(workspacePath, "root-b"));
+  const workspaceFile = path.join(workspacePath, "itest.code-workspace");
+  fs.writeFileSync(
+    workspaceFile,
+    JSON.stringify({ folders: [{ path: "root-a" }, { path: "root-b" }] }),
+  );
 
   try {
     await runTests({
@@ -18,7 +26,7 @@ async function main(): Promise<void> {
       extensionDevelopmentPath,
       extensionTestsPath,
       launchArgs: [
-        workspacePath,
+        workspaceFile,
         "--disable-extensions",
         "--disable-workspace-trust",
         "--skip-welcome",

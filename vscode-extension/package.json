@@ -98,6 +98,10 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "nextRecording.start",
+          "when": "!nextRecording.isRecording && !nextRecording.isPreparing && !nextRecording.isStopping"
+        },
+        {
           "command": "nextRecording.stop",
           "when": "nextRecording.isRecording"
         },
@@ -106,6 +110,35 @@
           "when": "nextRecording.hasRecoverableSession"
         }
       ]
+    },
+    "configuration": {
+      "title": "Next Recording",
+      "properties": {
+        "nextRecording.capture.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Glob patterns (matched against the root-relative path and file name) for documents that must never be captured. Read when a recording starts."
+        },
+        "nextRecording.capture.maxDocumentBytes": {
+          "type": "number",
+          "default": 10485760,
+          "minimum": 1024,
+          "markdownDescription": "Documents larger than this (UTF-8 bytes) are excluded from capture. Read when a recording starts."
+        },
+        "nextRecording.capture.includeUntitled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Capture untitled documents. Read when a recording starts."
+        },
+        "nextRecording.capture.includeRemote": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Capture remote/virtual documents. Read when a recording starts."
+        }
+      }
     }
   },
   "activationEvents": [],

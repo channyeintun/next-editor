@@ -1,6 +1,8 @@
-import type * as vscode from "vscode";
+import * as vscode from "vscode";
 import type { UriSchemeClass } from "../model/events";
+import { CONFIG_NAMESPACE } from "../model/ids";
 import { LIMITS } from "../model/limits";
+import { globToRegExp } from "./glob";
 
 // Schemes that are pure editor noise and must never be enrolled even when
 // they appear in a visible editor (output panels, diff sides, etc. keep
@@ -38,23 +40,80 @@ export function classifyScheme(uri: vscode.Uri): UriSchemeClass {
 
 export type PolicyDecision =
   | { capture: true; schemeClass: UriSchemeClass }
-  | { capture: false; schemeClass: UriSchemeClass; reason: "scheme" | "size" };
+  | {
+      capture: false;
+      schemeClass: UriSchemeClass;
+      reason: "scheme" | "size" | "excluded" | "setting";
+    };
 
-// Phase 2 defaults; the user-facing configuration surface (exclusion globs,
-// includeUntitled, includeRemote) is wired in Phase 5/7 (plan §13.4, §18).
-export function evaluateDocumentPolicy(document: vscode.TextDocument): PolicyDecision {
-  const schemeClass = classifyScheme(document.uri);
-  if (schemeClass === "other" || NOISE_SCHEMES.has(document.uri.scheme)) {
-    return { capture: false, schemeClass, reason: "scheme" };
+export type CapturePolicyOptions = {
+  excludeGlobs: string[];
+  maxDocumentBytes: number;
+  includeUntitled: boolean;
+  includeRemote: boolean;
+};
+
+export const DEFAULT_POLICY_OPTIONS: CapturePolicyOptions = {
+  excludeGlobs: [],
+  maxDocumentBytes: LIMITS.maxCapturedDocumentBytes,
+  includeUntitled: true,
+  includeRemote: true,
+};
+
+export class CapturePolicy {
+  private readonly excludePatterns: RegExp[];
+
+  constructor(readonly options: CapturePolicyOptions = DEFAULT_POLICY_OPTIONS) {
+    this.excludePatterns = options.excludeGlobs.map(globToRegExp);
   }
-  // Size pre-filter before reading full text (plan §8.3). UTF-8 length is
-  // always >= UTF-16 code-unit count, so a document whose UTF-16 length
-  // already exceeds the byte limit is certainly oversized. The exact UTF-8
-  // check happens at enrollment.
-  if (approximateDocumentUtf16Length(document) > LIMITS.maxCapturedDocumentBytes) {
-    return { capture: false, schemeClass, reason: "size" };
+
+  /** Snapshot of user configuration; frozen for the whole session (§18). */
+  static fromConfiguration(): CapturePolicy {
+    const config = vscode.workspace.getConfiguration(CONFIG_NAMESPACE);
+    return new CapturePolicy({
+      excludeGlobs: config.get<string[]>("capture.exclude") ?? [],
+      maxDocumentBytes:
+        config.get<number>("capture.maxDocumentBytes") ?? LIMITS.maxCapturedDocumentBytes,
+      includeUntitled: config.get<boolean>("capture.includeUntitled") ?? true,
+      includeRemote: config.get<boolean>("capture.includeRemote") ?? true,
+    });
   }
-  return { capture: true, schemeClass };
+
+  evaluate(document: vscode.TextDocument): PolicyDecision {
+    const schemeClass = classifyScheme(document.uri);
+    if (schemeClass === "other" || NOISE_SCHEMES.has(document.uri.scheme)) {
+      return { capture: false, schemeClass, reason: "scheme" };
+    }
+    if (schemeClass === "untitled" && !this.options.includeUntitled) {
+      return { capture: false, schemeClass, reason: "setting" };
+    }
+    if ((schemeClass === "remote" || schemeClass === "virtual") && !this.options.includeRemote) {
+      return { capture: false, schemeClass, reason: "setting" };
+    }
+
+    if (this.excludePatterns.length > 0) {
+      const relative = vscode.workspace.asRelativePath(document.uri, false).replace(/\\/g, "/");
+      const baseName = relative.split("/").pop() ?? relative;
+      for (const pattern of this.excludePatterns) {
+        if (pattern.test(relative) || pattern.test(baseName)) {
+          return { capture: false, schemeClass, reason: "excluded" };
+        }
+      }
+    }
+
+    // Size pre-filter before reading full text (plan §8.3). UTF-8 length is
+    // always >= UTF-16 code-unit count, so a document whose UTF-16 length
+    // already exceeds the byte limit is certainly oversized. The exact
+    // UTF-8 check happens at enrollment.
+    if (approximateDocumentUtf16Length(document) > this.options.maxDocumentBytes) {
+      return { capture: false, schemeClass, reason: "size" };
+    }
+    return { capture: true, schemeClass };
+  }
+
+  exactSizeExceedsLimit(byteLength: number): boolean {
+    return byteLength > this.options.maxDocumentBytes;
+  }
 }
 
 function approximateDocumentUtf16Length(document: vscode.TextDocument): number {
@@ -63,8 +122,4 @@ function approximateDocumentUtf16Length(document: vscode.TextDocument): number {
   const lastLine = document.lineCount - 1;
   const end = document.lineAt(lastLine).range.end;
   return document.offsetAt(end);
-}
-
-export function exactSizeExceedsLimit(byteLength: number): boolean {
-  return byteLength > LIMITS.maxCapturedDocumentBytes;
 }
