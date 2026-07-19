@@ -27,14 +27,19 @@
     "verify:boundaries": "node scripts/verify-boundaries.mjs",
     "test:unit": "vitest run",
     "test:integration": "tsc -p tsconfig.test.json && node dist-test/runTest.js",
+    "benchmark:renderer": "node scripts/benchmark-renderer.mjs",
     "package": "node scripts/package-vsix.mjs",
     "check": "bun run format:check && bun run lint && bun run typecheck && bun run verify:boundaries && bun run test:unit && bun run build && bun run test:integration"
   },
   "dependencies": {
+    "monaco-editor": "0.55.1",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "zod": "4.4.3"
   },
   "devDependencies": {
+    "@codemirror/state": "6.7.1",
+    "@codemirror/view": "6.43.6",
     "@types/mocha": "10.0.10",
     "@types/node": "18.19.130",
     "@types/react": "19.2.17",

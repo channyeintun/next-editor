@@ -1,4 +1,13 @@
-import type { CheckpointId, DocumentId, GroupId, RootId, SessionId, SurfaceId, TabId } from "./ids";
+import type {
+  AudioTrackId,
+  CheckpointId,
+  DocumentId,
+  GroupId,
+  RootId,
+  SessionId,
+  SurfaceId,
+  TabId,
+} from "./ids";
 
 // Core envelope (plan §7.2). `seq` starts at 0 and increases by exactly 1;
 // `tUs` is session-relative microseconds, nondecreasing; `seq` breaks ties.
@@ -180,6 +189,27 @@ export type SessionEvent =
         version: number;
       }
     >
+  | EventEnvelope<
+      "audio.started",
+      { audioTrackId: AudioTrackId; sampleRate: number; channels: number }
+    >
+  | EventEnvelope<
+      "audio.calibration",
+      {
+        audioTrackId: AudioTrackId;
+        offsetUs: number;
+        drift: number;
+        points: number;
+        uncertaintyUsP50: number;
+        uncertaintyUsP95: number;
+      }
+    >
+  | EventEnvelope<"audio.discontinuity", { audioTrackId: AudioTrackId; reason: string }>
+  | EventEnvelope<"audio.stopped", { audioTrackId: AudioTrackId; sampleFrames: number }>
+  | EventEnvelope<"session.stopping", { reason: "user" | "failure" | "shutdown" }>
+  | EventEnvelope<"session.finalized", { eventCount: number; durationUs: number }>
+  | EventEnvelope<"session.recovered", { recoveredThroughSeq: number }>
+  | EventEnvelope<"session.failed", { message: string }>
   | EventEnvelope<"marker", { label: string }>;
 
 export type SessionEventType = SessionEvent["type"];
