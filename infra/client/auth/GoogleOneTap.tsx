@@ -33,16 +33,23 @@ export default function GoogleOneTap() {
       });
       // Makes "why is One Tap not showing" answerable from the console.
       // Google suppresses the prompt with an escalating per-site cooldown
-      // after dismissals (suppressed_by_user), and only shows it at all when
-      // the browser holds a signed-in Google session. Chrome's FedCM mode
-      // deliberately reports opaque reasons (anti-fingerprinting); Safari and
-      // Firefox report specific ones.
+      // after dismissals, and Chrome can disable FedCM for the site outright
+      // (re-enable via the icon left of the URL bar → Third-party sign-in).
+      // Only the FedCM-era moment methods are used here — the display-moment
+      // getters (isNotDisplayed/getNotDisplayedReason) are deprecated and
+      // trigger a GSI_LOGGER warning. Reasons are deliberately coarse in
+      // Chrome (anti-fingerprinting); Safari/Firefox report specific ones.
       accountsId.prompt((moment) => {
-        if (moment.isNotDisplayed() || moment.isSkippedMoment()) {
+        if (moment.isSkippedMoment()) {
           console.info(
-            "[one-tap] prompt not shown:",
-            moment.getNotDisplayedReason() ?? moment.getSkippedReason() ?? "no reason reported",
+            "[one-tap] prompt skipped:",
+            moment.getSkippedReason() ?? "no reason reported",
           );
+        } else if (moment.isDismissedMoment()) {
+          const reason = moment.getDismissedReason();
+          if (reason && reason !== "credential_returned") {
+            console.info("[one-tap] prompt dismissed:", reason);
+          }
         }
       });
     });
