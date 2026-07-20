@@ -108,6 +108,44 @@ function htmlReferences(files: Record<string, WorkspaceFile>, needle: string): b
   );
 }
 
+/**
+ * Playground lesson shapes carry no package.json manifest: their sources are
+ * compiled remotely by the language's playground proxy. Ordered so the
+ * canonical entry file decides first when an archive mixes languages, matching
+ * the runner collectors in src/runtime/{go,rust,kotlin}Playground/files.ts.
+ */
+const PLAYGROUND_LESSON_RULES: ReadonlyArray<{
+  lessonType: Extract<WorkspaceLessonType, "go" | "rust" | "kotlin">;
+  entryPath: string;
+  extension: string;
+}> = [
+  { lessonType: "go", entryPath: "main.go", extension: ".go" },
+  { lessonType: "rust", entryPath: "main.rs", extension: ".rs" },
+  { lessonType: "kotlin", entryPath: "Main.kt", extension: ".kt" },
+];
+
+function detectPlaygroundLessonType(
+  files: Record<string, WorkspaceFile>,
+): WorkspaceLessonType | null {
+  for (const rule of PLAYGROUND_LESSON_RULES) {
+    const entry = files[rule.entryPath];
+    if (entry && isWorkspaceTextFile(entry)) {
+      return rule.lessonType;
+    }
+  }
+
+  for (const rule of PLAYGROUND_LESSON_RULES) {
+    const hasSource = Object.values(files).some(
+      (file) => isWorkspaceTextFile(file) && file.path.endsWith(rule.extension),
+    );
+    if (hasSource) {
+      return rule.lessonType;
+    }
+  }
+
+  return null;
+}
+
 /** Detect the closest supported framework from an imported project's manifest. */
 export function detectImportedLessonType(
   files: Record<string, WorkspaceFile>,
@@ -115,7 +153,7 @@ export function detectImportedLessonType(
   const packageJsonFile = files["package.json"];
 
   if (!packageJsonFile || !isWorkspaceTextFile(packageJsonFile)) {
-    return "html-css";
+    return detectPlaygroundLessonType(files) ?? "html-css";
   }
 
   try {
@@ -171,7 +209,26 @@ export function detectImportedLessonType(
   return "html-css";
 }
 
-function pickEntryFilePath(files: Record<string, WorkspaceFile>): string {
+function pickEntryFilePath(
+  files: Record<string, WorkspaceFile>,
+  lessonType: WorkspaceLessonType,
+): string {
+  const playgroundRule = PLAYGROUND_LESSON_RULES.find((rule) => rule.lessonType === lessonType);
+  if (playgroundRule) {
+    if (files[playgroundRule.entryPath]) {
+      return playgroundRule.entryPath;
+    }
+
+    const sourcePaths = Object.values(files)
+      .filter(isWorkspaceTextFile)
+      .map((file) => file.path)
+      .filter((path) => path.endsWith(playgroundRule.extension))
+      .sort((left, right) => left.localeCompare(right));
+    if (sourcePaths[0]) {
+      return sourcePaths[0];
+    }
+  }
+
   for (const candidate of ENTRY_FILE_CANDIDATES) {
     if (files[candidate]) {
       return candidate;
@@ -342,12 +399,13 @@ export async function importWorkspaceProjectFromZip(file: File): Promise<Workspa
   const fileRecord = Object.fromEntries(files);
 
   const name = deriveProjectNameFromFileName(file.name);
+  const lessonType = detectImportedLessonType(fileRecord);
 
   return {
     id: toProjectId(name),
     name,
-    lessonType: detectImportedLessonType(fileRecord),
-    entryFilePath: pickEntryFilePath(fileRecord),
+    lessonType,
+    entryFilePath: pickEntryFilePath(fileRecord, lessonType),
     folders: collectWorkspaceFolders(Object.keys(fileRecord)),
     files: fileRecord,
   };

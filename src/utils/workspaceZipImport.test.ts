@@ -101,6 +101,47 @@ describe("detectImportedLessonType", () => {
     ).toBe("alpine-express");
   });
 
+  it("detects playground lessons from their canonical entry files", () => {
+    expect(detectImportedLessonType({ "main.go": textFile("main.go", "package main\n") })).toBe(
+      "go",
+    );
+    expect(detectImportedLessonType({ "main.rs": textFile("main.rs", "fn main() {}\n") })).toBe(
+      "rust",
+    );
+    expect(detectImportedLessonType({ "Main.kt": textFile("Main.kt", "fun main() {}\n") })).toBe(
+      "kotlin",
+    );
+  });
+
+  it("detects playground lessons from sources without a canonical entry", () => {
+    expect(
+      detectImportedLessonType({
+        "01-basics.go": textFile("01-basics.go", "package main\n"),
+        "README.md": textFile("README.md", "# Lessons"),
+      }),
+    ).toBe("go");
+    expect(detectImportedLessonType({ "lib.rs": textFile("lib.rs", "") })).toBe("rust");
+    expect(detectImportedLessonType({ "Greeting.kt": textFile("Greeting.kt", "") })).toBe("kotlin");
+  });
+
+  it("lets the canonical entry decide when an archive mixes playground languages", () => {
+    expect(
+      detectImportedLessonType({
+        "Main.kt": textFile("Main.kt", "fun main() {}\n"),
+        "notes.go": textFile("notes.go", "package main\n"),
+      }),
+    ).toBe("kotlin");
+  });
+
+  it("keeps manifest detection ahead of playground sources", () => {
+    expect(
+      detectImportedLessonType({
+        ...withPackageJson({ dependencies: { react: "^19.0.0" } }),
+        "main.go": textFile("main.go", "package main\n"),
+      }),
+    ).toBe("react");
+  });
+
   it("falls back to html-css without a manifest or recognized framework", () => {
     expect(detectImportedLessonType({})).toBe("html-css");
     expect(detectImportedLessonType(withPackageJson({ dependencies: { lodash: "^4.0.0" } }))).toBe(
@@ -157,6 +198,39 @@ describe("importWorkspaceProjectFromZip", () => {
     const project = await importWorkspaceProjectFromZip(file);
 
     expect(Object.keys(project.files).sort()).toEqual(["index.html", "styles.css"]);
+  });
+
+  it("imports a wrapped Go lesson zip as a go workspace entered at main.go", async () => {
+    const file = createZipFile("go-tour-lessons.zip", [
+      { path: "go-tour-lessons/01-packages.go", content: "package main\n" },
+      { path: "go-tour-lessons/main.go", content: "package main\n\nfunc main() {}\n" },
+    ]);
+
+    const project = await importWorkspaceProjectFromZip(file);
+
+    expect(project.lessonType).toBe("go");
+    expect(project.entryFilePath).toBe("main.go");
+    expect(Object.keys(project.files).sort()).toEqual(["01-packages.go", "main.go"]);
+  });
+
+  it("imports Rust and Kotlin lesson zips with their canonical entries", async () => {
+    const rust = await importWorkspaceProjectFromZip(
+      createZipFile("rust-lesson.zip", [
+        { path: "main.rs", content: "fn main() {}\n" },
+        { path: "README.md", content: "# Rust\n" },
+      ]),
+    );
+    expect(rust.lessonType).toBe("rust");
+    expect(rust.entryFilePath).toBe("main.rs");
+
+    const kotlin = await importWorkspaceProjectFromZip(
+      createZipFile("kotlin-lesson.zip", [
+        { path: "Greeting.kt", content: "fun greet() {}\n" },
+        { path: "Main.kt", content: "fun main() {}\n" },
+      ]),
+    );
+    expect(kotlin.lessonType).toBe("kotlin");
+    expect(kotlin.entryFilePath).toBe("Main.kt");
   });
 
   it("stores binary assets behind descriptors and excludes dev artifacts", async () => {
