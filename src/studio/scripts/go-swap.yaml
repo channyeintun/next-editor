@@ -23,7 +23,7 @@ lesson:
         }
 
 build:
-  voiceProfile: kokoro-af-heart-v1
+  voiceProfile: pocket-alba-v1
   seed: 11
 
 runtime:

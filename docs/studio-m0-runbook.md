@@ -90,15 +90,21 @@ marker resolution and dialog segmentation, runs the advisory critic, and emits
 
 Narration is produced **in the page** at render time by the in-page Director
 (`src/studio/inPageDirector.ts`): the narration splits at every `[[mark:…]]`
-into dialogs; each dialog synthesizes with **Kokoro-82M over onnxruntime-web**
-(WASM by default — bit-reproducible; `?tts=webgpu` opts into the faster
-backend) through a per-dialog content-addressed cache in the browser's Cache
-storage; the scheduler then places dialogs **around the actions** (narration
-waits while typing finishes — marker times are exact by construction, no
-word-level alignment in the timing path) and stitches the segments into the
-single WAV the recorder consumes. Editing one sentence re-synthesizes only
-that dialog. The ~90MB model downloads once into the browser cache; the repo
-carries no narration audio (the archived M0 fixture aside).
+into dialogs; each dialog synthesizes with **pocket-tts (Kyutai) exported to
+ONNX and run over onnxruntime-web** — KevinAHM's export, pinned to an
+immutable revision, ported as a typed engine in `src/studio/tts/pocket/` with
+one deliberate change: the flow-matching noise is **seeded** from the build
+seed + dialog text, so a dialog's audio is byte-reproducible even across a
+cleared cache (upstream uses `Math.random()`). Synthesis goes through a
+per-dialog content-addressed cache in the browser's Cache storage; the
+scheduler then places dialogs **around the actions** (narration waits while
+typing finishes — marker times are exact by construction) and stitches the
+segments into the single WAV the recorder consumes. Editing one sentence
+re-synthesizes only that dialog. The ~125MB bundle (int8 ONNX + voices)
+downloads once into the browser cache; the repo carries no narration audio
+(the archived M0 fixture aside). Voices come precomputed in the bundle
+(`alba` default; azelma, cosette, eponine, fantine, javert, jean, marius);
+a Kokoro-82M profile (`kokoro-af-heart-v1`) remains as a fallback provider.
 
 Anchors are narration-relative only (`{mark, offsetMs}`, `{scene: start}`,
 `{afterAction}`); absolute times are forbidden in scripts. Unknown marks fail

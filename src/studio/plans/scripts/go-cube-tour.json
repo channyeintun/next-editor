@@ -1,7 +1,7 @@
 {
   "build": {
     "seed": 7,
-    "voiceProfile": "kokoro-af-heart-v1"
+    "voiceProfile": "pocket-alba-v1"
   },
   "checks": [
     {

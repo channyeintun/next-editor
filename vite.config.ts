@@ -122,7 +122,7 @@ export default ({ mode }: { mode: string }) => {
       },
     },
     fmt: {
-      ignorePatterns: ["dist/**", "public/**"],
+      ignorePatterns: ["dist/**", "public/**", "src/studio/tts/pocket/vendor/**"],
     },
     lint: {
       jsPlugins: ["oxlint-tailwindcss"],
@@ -144,7 +144,9 @@ export default ({ mode }: { mode: string }) => {
         "tailwindcss/enforce-shorthand": "warn",
         "tailwindcss/no-unnecessary-arbitrary-value": "warn",
       },
-      ignorePatterns: ["dist/**", "public/**"],
+      // The studio's vendored sentencepiece build (third-party, generated) is
+      // excluded — it is not first-party code and never will lint clean.
+      ignorePatterns: ["dist/**", "public/**", "src/studio/tts/pocket/vendor/**"],
       options: {
         denyWarnings: true,
       },

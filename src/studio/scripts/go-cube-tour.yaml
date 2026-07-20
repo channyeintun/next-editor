@@ -60,7 +60,7 @@ lesson:
       fontSize: 24
 
 build:
-  voiceProfile: kokoro-af-heart-v1
+  voiceProfile: pocket-alba-v1
   seed: 7
 
 runtime:

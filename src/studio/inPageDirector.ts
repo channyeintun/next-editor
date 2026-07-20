@@ -13,8 +13,8 @@ import {
   synthesizeKokoroWav,
   type KokoroDevice,
 } from "./tts/kokoroSynth";
-import { requireVoiceProfile } from "./tts/profiles";
-import { ttsRequestHash } from "./tts/profiles";
+import { preloadPocket, synthesizePocketWav } from "./tts/pocketSynth";
+import { requireVoiceProfile, ttsRequestHash, type VoiceProfile } from "./tts/profiles";
 import { stitchWavSegments, wavDurationMs } from "./tts/wav";
 
 /**
@@ -48,16 +48,51 @@ export interface InPageDirectorOptions {
   onPhase?: (phase: string) => void;
 }
 
+interface InPageSynthProvider {
+  sampleRate: number;
+  mimeType: string;
+  preload(): Promise<unknown>;
+  synthesize(speechText: string): Promise<Uint8Array>;
+  /** Seed folded into each dialog's request hash (undefined = unseeded provider). */
+  seed: number | undefined;
+}
+
+function providerFor(
+  profile: VoiceProfile,
+  buildSeed: number,
+  device: KokoroDevice,
+  onPhase?: (phase: string) => void,
+): InPageSynthProvider {
+  switch (profile.providerId) {
+    case "pocket-tts-web":
+      return {
+        sampleRate: profile.sampleRate,
+        mimeType: profile.mimeType,
+        seed: buildSeed,
+        preload: () => preloadPocket(profile, onPhase),
+        synthesize: (speechText) => synthesizePocketWav(profile, speechText, buildSeed),
+      };
+    case "kokoro-js":
+      return {
+        sampleRate: profile.sampleRate,
+        mimeType: profile.mimeType,
+        seed: undefined,
+        preload: () => preloadKokoro(profile, device),
+        synthesize: (speechText) => synthesizeKokoroWav(profile, speechText, device),
+      };
+    default:
+      throw new Error(
+        `Voice profile "${profile.id}" (${profile.providerId}) cannot synthesize in the page`,
+      );
+  }
+}
+
 export async function buildPlanFromScript(
   script: LessonScript,
   { device = defaultKokoroDevice(), onPhase }: InPageDirectorOptions = {},
 ): Promise<InPageDirectorResult> {
   const profile = requireVoiceProfile(script.build.voiceProfile);
-  if (profile.providerId !== "kokoro-js") {
-    throw new Error(
-      `Voice profile "${profile.id}" (${profile.providerId}) cannot synthesize in the page — use a kokoro-js profile`,
-    );
-  }
+  const provider = providerFor(profile, script.build.seed, device, onPhase);
 
   const extracted = extractNarration(
     script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
@@ -65,7 +100,7 @@ export async function buildPlanFromScript(
   const dialogs = splitIntoDialogs(extracted);
 
   onPhase?.("tts-model");
-  await preloadKokoro(profile, device);
+  await provider.preload();
 
   // ---- Per-dialog synthesis through the content-addressed cache -----------
   const segments: Uint8Array[] = [];
@@ -79,12 +114,13 @@ export async function buildPlanFromScript(
       profile,
       speechText,
       lexiconVersion: LEXICON_V1.version,
+      seed: provider.seed,
     });
     dialogHashes.push(requestHash);
 
     let wav = await getCachedDialogWav(requestHash);
     if (!wav) {
-      wav = await synthesizeKokoroWav(profile, speechText, device);
+      wav = await provider.synthesize(speechText);
       await putCachedDialogWav(requestHash, wav);
       synthesizedCount += 1;
     }
@@ -108,7 +144,7 @@ export async function buildPlanFromScript(
       startMs: entry.startMs,
     })),
     schedule.totalDurationMs,
-    profile.sampleRate,
+    provider.sampleRate,
   );
   const audioSha256 = await sha256Hex(stitched);
   const narrationKey = await sha256HexOfJson({
@@ -124,7 +160,7 @@ export async function buildPlanFromScript(
     alignment: schedule.alignment,
     narration: {
       audioPath: `studio-tts://${narrationKey.slice(0, 16)}`,
-      mimeType: profile.mimeType,
+      mimeType: provider.mimeType,
       durationMs: schedule.totalDurationMs,
     },
   });
@@ -132,7 +168,7 @@ export async function buildPlanFromScript(
   return {
     plan,
     narration: {
-      blob: new Blob([stitched.slice() as BlobPart], { type: profile.mimeType }),
+      blob: new Blob([stitched.slice() as BlobPart], { type: provider.mimeType }),
       bytes: stitched,
       durationMs: schedule.totalDurationMs,
       audioSha256,
