@@ -31,6 +31,7 @@ export class OrderedJournalWriter {
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private syncTimer: ReturnType<typeof setInterval> | null = null;
   private syncing: Promise<void> = Promise.resolve();
+  private terminalPromise: Promise<void> | null = null;
 
   private constructor(
     private readonly handle: fs.FileHandle,
@@ -69,6 +70,31 @@ export class OrderedJournalWriter {
     return this.failed;
   }
 
+  private throwIfFailed(): void {
+    if (this.failed) {
+      throw this.failed;
+    }
+  }
+
+  private notifyError(error: Error): void {
+    try {
+      this.options.onError?.(error);
+    } catch {
+      // Observer failures must not replace the underlying storage error.
+    }
+  }
+
+  private stopTimers(): void {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+    if (this.syncTimer) {
+      clearInterval(this.syncTimer);
+      this.syncTimer = null;
+    }
+  }
+
   /** Synchronous, callback-safe. Never awaits filesystem work. */
   enqueue(event: SessionEvent): void {
     if (this.closed || this.failed) {
@@ -82,7 +108,11 @@ export class OrderedJournalWriter {
       // Soft limit: never drop content events; signal so the capture layer
       // records an explicit overload marker (plan §8.8, §13.1).
       this.overloadSignaled = true;
-      this.options.onOverload?.(this.queuedBytes);
+      try {
+        this.options.onOverload?.(this.queuedBytes);
+      } catch {
+        // Queue ownership and ordering cannot depend on an observer.
+      }
     }
     if (this.queuedBytes >= this.options.flushBytes) {
       void this.pump();
@@ -137,7 +167,7 @@ export class OrderedJournalWriter {
       }
     } catch (error) {
       this.failed = error instanceof Error ? error : new Error(String(error));
-      this.options.onError?.(this.failed);
+      this.notifyError(this.failed);
     } finally {
       this.pumping = false;
     }
@@ -155,7 +185,7 @@ export class OrderedJournalWriter {
         this.lastSyncedSeq = target;
       } catch (error) {
         this.failed = error instanceof Error ? error : new Error(String(error));
-        this.options.onError?.(this.failed);
+        this.notifyError(this.failed);
       }
     });
     await this.syncing;
@@ -163,29 +193,53 @@ export class OrderedJournalWriter {
 
   /** Flush the queue and make everything written durable. */
   async drain(): Promise<void> {
+    this.throwIfFailed();
     await this.pump();
+    this.throwIfFailed();
     while (this.queue.length > 0 || this.pumping) {
       await this.pump();
+      this.throwIfFailed();
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     await this.syncNow();
+    this.throwIfFailed();
   }
 
-  async close(): Promise<void> {
-    if (this.closed) {
-      return;
+  close(): Promise<void> {
+    if (this.terminalPromise) {
+      return this.terminalPromise;
     }
     this.closed = true;
-    if (this.flushTimer) {
-      clearInterval(this.flushTimer);
+    this.stopTimers();
+    this.terminalPromise = Promise.resolve().then(async () => {
+      try {
+        await this.drain();
+      } finally {
+        await this.handle.close();
+      }
+    });
+    return this.terminalPromise;
+  }
+
+  /** Test-only crash simulation: release resources without draining pending entries. */
+  abandonForTest(): Promise<void> {
+    if (this.terminalPromise) {
+      return this.terminalPromise;
     }
-    if (this.syncTimer) {
-      clearInterval(this.syncTimer);
-    }
-    try {
-      await this.drain();
-    } finally {
+    this.closed = true;
+    this.stopTimers();
+    this.queue = [];
+    this.queuedBytes = 0;
+
+    this.terminalPromise = Promise.resolve().then(async () => {
+      // Let already-started filesystem calls finish before closing their handle,
+      // but do not start another pump or durability sync.
+      while (this.pumping) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      await this.syncing.catch(() => {});
       await this.handle.close();
-    }
+    });
+    return this.terminalPromise;
   }
 }

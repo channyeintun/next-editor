@@ -92,6 +92,41 @@ describe("journal crash recovery", () => {
     expect(result.truncatedTailBytes).toBeGreaterThan(0);
   });
 
+  it("reports a malformed newline-terminated final record as corruption", async () => {
+    const file = path.join(dir, "terminated-corrupt.ndjson");
+    await fs.writeFile(file, `${JSON.stringify(makeEvent(0))}\n{not json}\n`);
+    const result = await readJournal(file);
+    expect(result.events).toHaveLength(1);
+    expect(result.truncatedTailBytes).toBe(0);
+    expect(result.corruption?.message).toContain("invalid JSON");
+  });
+
+  it("preserves UTF-8 characters split across the stream chunk boundary", async () => {
+    const file = path.join(dir, "unicode-boundary.ndjson");
+    let line = "";
+    for (let padding = 65_400; padding < 65_600; padding++) {
+      const candidate = JSON.stringify({
+        seq: 0,
+        tUs: 0,
+        type: "marker",
+        payload: { label: `${"x".repeat(padding)}😀` },
+      });
+      if (Buffer.from(candidate).indexOf(Buffer.from("😀")) === 65_535) {
+        line = candidate;
+        break;
+      }
+    }
+    expect(line).not.toBe("");
+    await fs.writeFile(file, `${line}\n`);
+    const result = await readJournal(file);
+    expect(result.corruption).toBeNull();
+    const event = result.events[0];
+    expect(event?.type).toBe("marker");
+    const markerLabel = event?.type === "marker" ? event.payload.label : "";
+    expect(markerLabel.endsWith("😀")).toBe(true);
+    expect(markerLabel.includes("�")).toBe(false);
+  });
+
   it("detects sequence gaps", async () => {
     const file = path.join(dir, "gap.ndjson");
     const lines = [

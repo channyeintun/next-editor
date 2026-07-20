@@ -22,7 +22,9 @@ export function installCaptureSubscriptions(session: CaptureSession): vscode.Dis
     vscode.window.onDidChangeTextEditorVisibleRanges((event) =>
       session.handleVisibleRangesChanged(event),
     ),
-    vscode.window.onDidChangeTextEditorViewColumn(() => session.scheduleTopology()),
+    vscode.window.onDidChangeTextEditorViewColumn((event) =>
+      session.handleEditorViewColumnChanged(event),
+    ),
     vscode.window.tabGroups.onDidChangeTabs(() => session.scheduleTopology()),
     vscode.window.tabGroups.onDidChangeTabGroups(() => session.scheduleTopology()),
     vscode.window.onDidChangeWindowState((state) => session.handleWindowStateChanged(state)),

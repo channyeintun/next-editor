@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Post-implementation hardening: extension-owned XState 5 recording
+  coordinator, immediate capture stop boundary, stale-operation guards,
+  capture-size privacy enforcement, stronger replay/artifact validation,
+  explicit Monaco EOL projection, bounded playback caches, TypeScript 7.0.2,
+  and lifecycle/seek/failure regression coverage.
 - Phase 9: release candidate — dev/diagnostic commands excluded from
   production builds, ADR 0003 (container), committed reproduction
   fixtures + generator, VSIX content audit (benchmark bundle excluded),

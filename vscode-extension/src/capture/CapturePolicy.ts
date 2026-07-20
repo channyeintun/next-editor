@@ -61,10 +61,22 @@ export const DEFAULT_POLICY_OPTIONS: CapturePolicyOptions = {
 };
 
 export class CapturePolicy {
+  readonly options: CapturePolicyOptions;
   private readonly excludePatterns: RegExp[];
 
-  constructor(readonly options: CapturePolicyOptions = DEFAULT_POLICY_OPTIONS) {
-    this.excludePatterns = options.excludeGlobs.map(globToRegExp);
+  constructor(options: CapturePolicyOptions = DEFAULT_POLICY_OPTIONS) {
+    const requestedMax = Number.isFinite(options.maxDocumentBytes)
+      ? options.maxDocumentBytes
+      : DEFAULT_POLICY_OPTIONS.maxDocumentBytes;
+    this.options = {
+      ...options,
+      // A captured document must always fit in one artifact checkpoint.
+      // Clamp programmatic/configuration values as well as declaring the
+      // same maximum in package.json so a malformed setting cannot create
+      // a recording that is impossible to finalize.
+      maxDocumentBytes: Math.max(1024, Math.min(requestedMax, LIMITS.maxCheckpointBytes)),
+    };
+    this.excludePatterns = this.options.excludeGlobs.map(globToRegExp);
   }
 
   /** Snapshot of user configuration; frozen for the whole session (§18). */

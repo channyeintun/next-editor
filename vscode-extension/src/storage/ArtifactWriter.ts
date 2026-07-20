@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -91,7 +91,12 @@ export async function writeArtifact(options: {
   const integrityEntries: Record<string, string> = {};
   integrityEntries[ARCHIVE_ENTRIES.events] = await sha256File(paths.journalFile);
 
-  const checkpointFiles: { entry: string; file: string }[] = [];
+  const checkpointFiles: {
+    entry: string;
+    file: string;
+    documentId: string;
+    checkpointId: string;
+  }[] = [];
   for (const [checkpointId, documentId] of checkpointDocs) {
     const file = checkpoints.fileFor(checkpointId);
     try {
@@ -100,7 +105,7 @@ export async function writeArtifact(options: {
       throw new Error(`checkpoint body missing for ${checkpointId}`);
     }
     const entry = ARCHIVE_ENTRIES.checkpoint(documentId, checkpointId);
-    checkpointFiles.push({ entry, file });
+    checkpointFiles.push({ entry, file, documentId, checkpointId });
     integrityEntries[entry] = await sha256File(file);
   }
 
@@ -155,43 +160,51 @@ export async function writeArtifact(options: {
 
   // --- stream the archive --------------------------------------------------
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
-  const tempPath = `${outputPath}.tmp-${process.pid}`;
-  const zip = new yazl.ZipFile();
-  zip.addBuffer(manifestBuffer, ARCHIVE_ENTRIES.manifest);
-  zip.addFile(paths.journalFile, ARCHIVE_ENTRIES.events);
-  zip.addBuffer(indexBuffer, ARCHIVE_ENTRIES.index);
-  for (const { entry, file } of checkpointFiles) {
-    zip.addFile(file, entry);
-  }
-  zip.addBuffer(integrityBuffer, ARCHIVE_ENTRIES.integrity);
-  zip.end();
-  await pipeline(zip.outputStream, createWriteStream(tempPath));
-
-  // Sync the finished archive before validating and renaming.
-  const handle = await fs.open(tempPath, "r+");
+  const tempPath = `${outputPath}.tmp-${process.pid}-${randomBytes(8).toString("hex")}`;
   try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-
-  // --- reopen and validate before the atomic rename ------------------------
-  const reader = await openArtifact(tempPath);
-  try {
-    const readBack = await reader.readEvents();
-    if (readBack.length !== events.length) {
-      throw new Error(
-        `artifact validation failed: event count ${readBack.length} != ${events.length}`,
-      );
+    const zip = new yazl.ZipFile();
+    zip.addBuffer(manifestBuffer, ARCHIVE_ENTRIES.manifest);
+    zip.addFile(paths.journalFile, ARCHIVE_ENTRIES.events);
+    zip.addBuffer(indexBuffer, ARCHIVE_ENTRIES.index);
+    for (const { entry, file } of checkpointFiles) {
+      zip.addFile(file, entry);
     }
-    const tail = readBack[readBack.length - 1];
-    if (tail?.type !== "session.finalized") {
-      throw new Error("artifact validation failed: journal tail is not session.finalized");
-    }
-  } finally {
-    await reader.close();
-  }
+    zip.addBuffer(integrityBuffer, ARCHIVE_ENTRIES.integrity);
+    zip.end();
+    await pipeline(zip.outputStream, createWriteStream(tempPath, { flags: "wx" }));
 
-  await fs.rename(tempPath, outputPath);
+    // Sync the finished archive before validating and renaming.
+    const handle = await fs.open(tempPath, "r+");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+
+    // --- reopen and validate before the atomic rename ----------------------
+    const reader = await openArtifact(tempPath);
+    try {
+      const readBack = await reader.readEvents();
+      if (readBack.length !== events.length) {
+        throw new Error(
+          `artifact validation failed: event count ${readBack.length} != ${events.length}`,
+        );
+      }
+      const tail = readBack[readBack.length - 1];
+      if (tail?.type !== "session.finalized") {
+        throw new Error("artifact validation failed: journal tail is not session.finalized");
+      }
+      for (const { documentId, checkpointId } of checkpointFiles) {
+        await reader.readCheckpoint(documentId, checkpointId);
+      }
+    } finally {
+      await reader.close();
+    }
+
+    await fs.rename(tempPath, outputPath);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true }).catch(() => {});
+    throw error;
+  }
   return { artifactPath: outputPath, manifest };
 }

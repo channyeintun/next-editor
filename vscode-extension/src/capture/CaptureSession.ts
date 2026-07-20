@@ -113,7 +113,6 @@ export class CaptureSession {
     if (this.stopped) {
       return;
     }
-    this.stopped = true;
     for (const disposable of this.subscriptions) {
       disposable.dispose();
     }
@@ -123,6 +122,11 @@ export class CaptureSession {
       this.flushViewport(surfaceId, pending);
     }
     this.pendingViewports.clear();
+    if (this.topologyScheduled) {
+      this.topologyScheduled = false;
+      this.flushTopology(this.topologyEarliestTUs);
+    }
+    this.stopped = true;
   }
 
   get isStopped(): boolean {
@@ -198,12 +202,15 @@ export class CaptureSession {
   // ---- documents -------------------------------------------------------
 
   private enrollIfEligible(document: vscode.TextDocument): EnrolledDocument | undefined {
+    const resourceKey = resourceKeyOf(document.uri);
+    if (this.excludedResources.has(resourceKey)) {
+      return undefined;
+    }
     const existing = this.documents.get(document);
     if (existing) {
       return existing.droppedReason === null ? existing : undefined;
     }
     const decision = this.policy.evaluate(document);
-    const resourceKey = resourceKeyOf(document.uri);
     if (!decision.capture) {
       if (!this.excludedResources.has(resourceKey)) {
         this.excludedResources.add(resourceKey);
@@ -221,10 +228,11 @@ export class CaptureSession {
       nowTUs,
     );
     if (this.policy.exactSizeExceedsLimit(descriptor.byteLength)) {
-      // Too large after exact measurement: record the exclusion, forget it.
+      // Too large after exact measurement: the provisional registry entry
+      // was never emitted and must not leak into topology snapshots.
       this.excludedResources.add(resourceKey);
       this.counters.excludedDocuments += 1;
-      entry.droppedReason = "limit";
+      this.documents.forget(document);
       this.emit("marker", {
         label: `document.excluded:${decision.schemeClass}:size`,
       });
@@ -270,9 +278,12 @@ export class CaptureSession {
       }));
 
       if (changes.length === 0 && observedEol === entry.shadow.eol) {
-        // Version-only bump with no observable change; keep the shadow in
-        // step so the next patch's before-version matches.
-        entry.shadow.version = event.document.version;
+        // A version-only bump still has to be represented in the stream or
+        // the next patch's beforeVersion cannot validate during replay.
+        if (entry.shadow.version !== event.document.version) {
+          entry.shadow.version = event.document.version;
+          this.writeCheckpoint(entry, "mismatch");
+        }
         return;
       }
 
@@ -284,6 +295,15 @@ export class CaptureSession {
             : "unknown";
 
       const observedText = event.document.getText();
+      if (this.policy.exactSizeExceedsLimit(utf8ByteLength(observedText))) {
+        // The configured limit is a capture/privacy boundary. Preserve the
+        // last in-policy state, then stop this document; never checkpoint
+        // the oversized post-edit text merely to describe the transition.
+        this.writeCheckpoint(entry, "limit");
+        entry.droppedReason = "limit";
+        this.emit("marker", { label: "document.captureStopped:size-limit" });
+        return;
+      }
       const result = entry.shadow.applyTransaction(
         changes,
         event.document.version,
@@ -312,15 +332,6 @@ export class CaptureSession {
           eol: observedEol,
           version: event.document.version,
         });
-        return;
-      }
-
-      if (this.policy.exactSizeExceedsLimit(utf8ByteLength(observedText))) {
-        // Document grew past the capture limit: checkpoint, then stop
-        // capturing this document with an explicit marker (plan §13.1).
-        this.writeCheckpoint(entry, "limit");
-        entry.droppedReason = "limit";
-        this.emit("marker", { label: "document.captureStopped:size-limit" });
         return;
       }
 
@@ -356,7 +367,7 @@ export class CaptureSession {
         // Never-visible documents are ignored until they become visible.
         return;
       }
-      const { entry, contentChanged, languageChanged } = reopened;
+      const { entry, contentChanged, languageChanged, eolChanged } = reopened;
       this.emit("document.resumed", {
         documentId: entry.documentId,
         version: document.version,
@@ -376,6 +387,13 @@ export class CaptureSession {
       } else {
         entry.shadow.version = document.version;
         entry.shadow.eol = toEolMode(document.eol);
+        if (eolChanged) {
+          this.emit("document.eolChanged", {
+            documentId: entry.documentId,
+            eol: entry.shadow.eol,
+            version: document.version,
+          });
+        }
       }
     });
   }
@@ -416,26 +434,47 @@ export class CaptureSession {
       return undefined;
     }
     const known = this.surfaces.known(editor);
+    const viewColumn = editor.viewColumn ?? null;
+    const groupId = this.topology.groupIdForViewColumn(editor.viewColumn);
     if (known) {
       const record = this.surfaces.get(known);
       if (record) {
+        const wasVisible = record.visible;
+        const moved = this.surfaces.updatePlacement(record.surfaceId, groupId, viewColumn);
         record.visible = true;
+        if (!wasVisible || moved) {
+          this.emitSurfaceOpened(record, editor);
+        }
         return record;
       }
     }
-    const record = this.surfaces.register(editor, entry.documentId);
+    const record = this.surfaces.register(editor, entry.documentId, groupId, viewColumn);
+    this.emitSurfaceOpened(record, editor);
+    return record;
+  }
+
+  private emitSurfaceOpened(
+    record: ReturnType<SurfaceRegistry["register"]>,
+    editor: vscode.TextEditor,
+  ): void {
     this.emitSurfaceEvent(record.surfaceId, "surface.opened", {
       surfaceId: record.surfaceId,
-      documentId: entry.documentId,
-      groupId: null,
-      viewColumn: editor.viewColumn ?? null,
+      documentId: record.documentId,
+      groupId: record.groupId,
+      viewColumn: record.viewColumn,
       selections: editor.selections.map((selection) =>
         toSelectionRange(editor.document, selection),
       ),
       visibleRanges: editor.visibleRanges.map(toVisibleLineRange),
       isActive: vscode.window.activeTextEditor === editor,
     });
-    return record;
+  }
+
+  handleEditorViewColumnChanged(event: vscode.TextEditorViewColumnChangeEvent): void {
+    this.measure("viewColumn", () => {
+      this.ensureSurface(event.textEditor);
+      this.scheduleTopology();
+    });
   }
 
   handleVisibleEditorsChanged(editors: readonly vscode.TextEditor[]): void {
@@ -587,6 +626,12 @@ export class CaptureSession {
   private flushTopology(preferredTUs?: number): void {
     this.measure("topology", () => {
       const result = this.topology.snapshot(this.documents);
+      // The tab-group API can settle one microtask after a visible-editor
+      // callback. Re-resolve placement after reconciliation so an editor
+      // first observed with groupId=null receives a corrected opened event.
+      for (const editor of vscode.window.visibleTextEditors) {
+        this.ensureSurface(editor);
+      }
       for (const unsupported of result.newUnsupported) {
         this.emit("capability.unsupportedSurface", unsupported, preferredTUs);
       }

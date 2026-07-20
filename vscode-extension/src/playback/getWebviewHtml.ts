@@ -1,12 +1,8 @@
+import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 
 function makeNonce(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let nonce = "";
-  for (let i = 0; i < 32; i++) {
-    nonce += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return nonce;
+  return randomBytes(24).toString("base64");
 }
 
 // The webview HTML is generated here (no shipped index.html) so the CSP
@@ -25,7 +21,7 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
     `img-src ${webview.cspSource} data:`,
     `font-src ${webview.cspSource}`,
     // Monaco's editor worker ships inlined and boots from a blob URL.
-    "worker-src blob: data:",
+    "worker-src blob:",
     // Audio playback (Phase 8) will require media-src from the local cache.
   ].join("; ");
 

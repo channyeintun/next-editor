@@ -5,6 +5,8 @@ import { LIMITS } from "../model/limits";
 export const ARTIFACT_LIMITS = {
   maxEntries: LIMITS.maxArtifactEntries,
   maxManifestBytes: LIMITS.maxManifestBytes,
+  maxIntegrityBytes: LIMITS.maxIntegrityBytes,
+  maxEventJournalBytes: LIMITS.maxEventJournalBytes,
   maxCheckpointBytes: LIMITS.maxCheckpointBytes,
   maxTotalExtractedBytes: LIMITS.maxTotalExtractedBytes,
   maxDecompressionRatio: LIMITS.maxDecompressionRatio,
@@ -22,6 +24,12 @@ export function validateEntrySizes(
 ): EntrySizeVerdict {
   if (uncompressedSize < 0 || compressedSize < 0) {
     return { ok: false, reason: `${entryName}: negative size` };
+  }
+  if (uncompressedSize > 0 && compressedSize === 0) {
+    return {
+      ok: false,
+      reason: `${entryName}: non-empty entry has zero compressed size`,
+    };
   }
   if (
     compressedSize > 0 &&

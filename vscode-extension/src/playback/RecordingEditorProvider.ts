@@ -75,6 +75,14 @@ export class RecordingEditorProvider implements vscode.CustomReadonlyEditorProvi
       }
       switch (message.type) {
         case "webview.ready": {
+          if (message.protocolVersion !== PROTOCOL_VERSION) {
+            post({
+              type: "request.failed",
+              requestId: "open",
+              message: `player protocol ${message.protocolVersion} is unsupported (expected ${PROTOCOL_VERSION})`,
+            });
+            return;
+          }
           RecordingEditorProvider.webviewReadyCount += 1;
           post({ type: "host.hello", protocolVersion: PROTOCOL_VERSION });
           if (document.loadError !== null || !document.service) {

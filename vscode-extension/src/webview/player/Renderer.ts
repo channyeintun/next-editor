@@ -1,6 +1,6 @@
 // Shared renderer contract (plan §11.1). The playback engine owns truth;
 // a renderer is a disposable projection of PlaybackSessionState.
-import type { ContentChange, SelectionRange, VisibleLineRange } from "../../model/events";
+import type { ContentChange, EolMode, SelectionRange, VisibleLineRange } from "../../model/events";
 
 export type RendererId = "monaco" | "codemirror";
 
@@ -10,6 +10,8 @@ export interface PlaybackRenderer {
   /** Create a document model. */
   createDocument(documentId: string, text: string, languageId: string): void;
   disposeDocument(documentId: string): void;
+  setDocumentLanguage(documentId: string, languageId: string): void;
+  setDocumentEol(documentId: string, eol: EolMode): void;
 
   /** Apply one atomic change batch to a document model. */
   applyChanges(documentId: string, changes: readonly ContentChange[]): void;

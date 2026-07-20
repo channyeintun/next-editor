@@ -141,8 +141,22 @@ nearest checkpoint per document, and the applicable topology snapshot seq.
 
 ### 3.3 Reader safety limits (plan §13)
 
-Enforced before extraction: entry count ≤ 100,000; manifest ≤ 2 MiB;
-individual checkpoint ≤ 20 MiB; total extracted non-audio ≤ 1 GiB;
-per-entry decompression ratio bound; path normalization with rejection of
-absolute paths, drive letters, `..` traversal, symlinks, and unsupported
-entry types. Hashes verified before content reaches the player.
+Enforced before or during extraction: entry count ≤ 100,000; manifest ≤
+2 MiB; integrity table ≤ 32 MiB; seek index ≤ 64 MiB; event journal ≤
+512 MiB; individual checkpoint ≤ 20 MiB; total extracted content ≤ 1 GiB;
+and a per-entry decompression-ratio bound. Paths reject absolute names,
+drive letters, `..` traversal, symlinks, and unsupported entry types. V1
+uses the canonical `events.ndjson` and `index.json` names, requires every
+payload entry to be covered by matching manifest/`integrity.json` digests,
+uses `integrity.json` to cover the manifest, rejects invalid UTF-8, and
+cross-checks checkpoint hashes and byte lengths against the journal before
+text reaches the player.
+
+The capture setting for maximum document size is capped at the same 20 MiB
+checkpoint ceiling. If an edit crosses the selected limit, capture retains a
+checkpoint of the last in-limit state and records an explicit stop marker; the
+oversized post-edit text is not persisted.
+
+Runtime caches have separate bounds: the extension host retains at most
+64 MiB of checkpoint text, and the webview refuses checkpoint sets above
+64 Mi UTF-16 code units (roughly 128 MiB for two-byte strings).

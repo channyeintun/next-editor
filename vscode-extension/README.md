@@ -21,6 +21,9 @@ repository (see `docs/adr/0001-package-boundary.md`).
 Everything is stored locally under the extension's own storage. Nothing is
 uploaded.
 
+The recording lifecycle is owned by a fresh extension-specific XState 5
+machine. It does not import or reuse the main application's machines.
+
 ## Commands
 
 - `Next Recording: Start Recording` — one-time privacy disclosure, then a
@@ -39,7 +42,7 @@ uploaded.
 | Setting                                  | Default | Meaning                                                                                                   |
 | ---------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
 | `nextRecording.capture.exclude`          | `[]`    | Glob patterns never captured (matched against root-relative path and file name). Read at recording start. |
-| `nextRecording.capture.maxDocumentBytes` | 10 MiB  | Larger documents are excluded with an explicit marker.                                                    |
+| `nextRecording.capture.maxDocumentBytes` | 10 MiB  | Larger documents are excluded with an explicit marker; allowed range is 1 KiB–20 MiB.                     |
 | `nextRecording.capture.includeUntitled`  | `true`  | Capture untitled documents.                                                                               |
 | `nextRecording.capture.includeRemote`    | `true`  | Capture remote/virtual documents.                                                                         |
 | `nextRecording.playback.defaultSpeed`    | `1`     | Initial player speed.                                                                                     |
@@ -61,7 +64,8 @@ order (labeled reconstruction, plan §10.6).
 journal, per-document checkpoints, a seek index, and SHA-256 integrity
 tables. Imported recordings are treated as untrusted: the reader enforces
 path, size, count, and decompression-ratio limits and verifies every hash
-before content reaches the player. See `docs/artifact-format-v1.md` and
+and checkpoint's journal metadata before content reaches the player.
+Checkpoint caches are memory-bounded. See `docs/artifact-format-v1.md` and
 `docs/adr/0003-recording-container.md`.
 
 ## Known limitations (v1)

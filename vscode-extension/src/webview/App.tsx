@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { acquireBridge } from "./bridge/acquireBridge";
 import { ErrorView } from "./components/ErrorView";
 import { RecordedWorkspace } from "./components/RecordedWorkspace";
@@ -9,6 +9,8 @@ import { PlaybackEngine } from "./player/PlaybackEngine";
 export function App() {
   const engine = useMemo(() => new PlaybackEngine(acquireBridge(), new MonacoRenderer()), []);
   const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot);
+
+  useEffect(() => () => engine.dispose(), [engine]);
 
   if (snapshot.phase === "error") {
     return <ErrorView message={snapshot.error ?? "unknown error"} />;

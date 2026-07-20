@@ -1,12 +1,252 @@
 import { sha256Hex, utf8ByteLength } from "../capture/hash";
+import type { EolMode, SessionEvent } from "../model/events";
 import { applyContentChanges } from "../webview/player/PlaybackState";
-import type { SessionEvent } from "../model/events";
+
+type FinalDocument = {
+  text: string;
+  version: number;
+  eol: EolMode;
+  sha256: string;
+};
 
 export type ReplayValidationResult = {
   ok: boolean;
   errors: string[];
-  finalDocuments: Map<string, { text: string; version: number; sha256: string }>;
+  finalDocuments: Map<string, FinalDocument>;
 };
+
+class ReplayValidationMachine {
+  private readonly errors: string[] = [];
+  private readonly documents = new Map<string, FinalDocument>();
+  private readonly surfaces = new Map<string, string>();
+  private expectedSeq = 0;
+  private lastTUs = -1;
+
+  /** Returns false only when a sequence gap makes later replay ambiguous. */
+  apply(event: SessionEvent, checkpointText?: string): boolean {
+    if (event.seq !== this.expectedSeq) {
+      this.error(event.seq, `sequence gap (expected ${this.expectedSeq})`);
+      return false;
+    }
+    this.expectedSeq += 1;
+    if (event.tUs < this.lastTUs) {
+      this.error(event.seq, "decreasing timestamp");
+    }
+    this.lastTUs = event.tUs;
+
+    switch (event.type) {
+      case "document.enrolled": {
+        const descriptor = event.payload.descriptor;
+        if (this.documents.has(descriptor.documentId)) {
+          this.error(event.seq, `duplicate document enrollment ${descriptor.documentId}`);
+          break;
+        }
+        if (checkpointText === undefined) {
+          this.error(event.seq, `missing initial checkpoint ${descriptor.initialCheckpointId}`);
+          break;
+        }
+        const digest = sha256Hex(checkpointText);
+        if (descriptor.sha256 && digest !== descriptor.sha256) {
+          this.error(event.seq, `initial checkpoint hash mismatch for ${descriptor.documentId}`);
+        }
+        if (utf8ByteLength(checkpointText) !== descriptor.byteLength) {
+          this.error(
+            event.seq,
+            `initial checkpoint byte length mismatch for ${descriptor.documentId}`,
+          );
+        }
+        this.documents.set(descriptor.documentId, {
+          text: checkpointText,
+          version: descriptor.initialVersion,
+          eol: descriptor.eol,
+          sha256: digest,
+        });
+        break;
+      }
+      case "document.patch": {
+        const document = this.documents.get(event.payload.documentId);
+        if (!document) {
+          this.error(event.seq, `patch for unknown document ${event.payload.documentId}`);
+          break;
+        }
+        if (event.payload.beforeVersion !== document.version) {
+          this.error(
+            event.seq,
+            `version mismatch: patch before=${event.payload.beforeVersion}, state=${document.version}`,
+          );
+        }
+        if (event.payload.afterVersion <= event.payload.beforeVersion) {
+          this.error(event.seq, "patch afterVersion must advance");
+        }
+        if (event.payload.eolBefore !== document.eol) {
+          this.error(
+            event.seq,
+            `EOL mismatch: patch before=${event.payload.eolBefore}, state=${document.eol}`,
+          );
+        }
+        if (event.payload.beforeHash && event.payload.beforeHash !== document.sha256) {
+          this.error(event.seq, "beforeHash mismatch");
+        }
+        let text = document.text;
+        let valid = true;
+        for (const change of event.payload.changes) {
+          try {
+            text = applyContentChanges(text, [change]);
+          } catch {
+            this.error(event.seq, "change range out of bounds");
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) {
+          break;
+        }
+        const after = sha256Hex(text);
+        if (event.payload.afterHash && event.payload.afterHash !== after) {
+          this.error(event.seq, "afterHash mismatch");
+        }
+        document.text = text;
+        document.version = event.payload.afterVersion;
+        document.eol = event.payload.eolAfter;
+        document.sha256 = after;
+        break;
+      }
+      case "document.eolChanged": {
+        const document = this.documents.get(event.payload.documentId);
+        if (!document) {
+          this.error(event.seq, "eolChanged for unknown document");
+          break;
+        }
+        document.text = document.text.replace(
+          /\r\n|\r|\n/g,
+          event.payload.eol === "CRLF" ? "\r\n" : "\n",
+        );
+        document.version = event.payload.version;
+        document.eol = event.payload.eol;
+        document.sha256 = sha256Hex(document.text);
+        break;
+      }
+      case "document.checkpoint": {
+        const document = this.documents.get(event.payload.documentId);
+        if (!document) {
+          this.error(event.seq, "checkpoint for unknown document");
+          break;
+        }
+        if (checkpointText === undefined) {
+          this.error(event.seq, `missing checkpoint body ${event.payload.checkpointId}`);
+          break;
+        }
+        const digest = sha256Hex(checkpointText);
+        if (event.payload.sha256 && digest !== event.payload.sha256) {
+          this.error(event.seq, `checkpoint body hash mismatch ${event.payload.checkpointId}`);
+        }
+        if (utf8ByteLength(checkpointText) !== event.payload.byteLength) {
+          this.error(event.seq, `checkpoint byte length mismatch ${event.payload.checkpointId}`);
+        }
+        if (
+          event.payload.reason === "enrollment" ||
+          event.payload.reason === "interval" ||
+          event.payload.reason === "stop"
+        ) {
+          if (event.payload.version !== document.version) {
+            this.error(
+              event.seq,
+              `continuous checkpoint version ${event.payload.version} != state ${document.version}`,
+            );
+          }
+          if (event.payload.eol !== document.eol) {
+            this.error(
+              event.seq,
+              `continuous checkpoint EOL ${event.payload.eol} != state ${document.eol}`,
+            );
+          }
+          if (digest !== document.sha256) {
+            this.error(event.seq, "continuous checkpoint does not match replay state");
+          }
+        }
+        document.text = checkpointText;
+        document.version = event.payload.version;
+        document.eol = event.payload.eol;
+        document.sha256 = digest;
+        break;
+      }
+      case "document.resumed": {
+        const document = this.documents.get(event.payload.documentId);
+        if (!document) {
+          this.error(event.seq, `${event.type} for unknown document`);
+        } else {
+          document.version = event.payload.version;
+        }
+        break;
+      }
+      case "document.saved":
+      case "document.closed":
+      case "document.languageChanged": {
+        if (!this.documents.has(event.payload.documentId)) {
+          this.error(event.seq, `${event.type} for unknown document`);
+        }
+        break;
+      }
+      case "surface.opened": {
+        if (!this.documents.has(event.payload.documentId)) {
+          this.error(event.seq, "surface.opened for unknown document");
+        }
+        const existingDocumentId = this.surfaces.get(event.payload.surfaceId);
+        if (existingDocumentId !== undefined && existingDocumentId !== event.payload.documentId) {
+          this.error(event.seq, "surface reopened for a different document");
+        }
+        this.surfaces.set(event.payload.surfaceId, event.payload.documentId);
+        break;
+      }
+      case "surface.closed":
+      case "surface.focused": {
+        if (!this.surfaces.has(event.payload.surfaceId)) {
+          this.error(event.seq, `${event.type} for unknown surface`);
+        }
+        break;
+      }
+      case "surface.selectionChanged":
+      case "surface.viewportChanged": {
+        const documentId = this.surfaces.get(event.payload.surfaceId);
+        if (documentId === undefined) {
+          this.error(event.seq, `${event.type} for unknown surface`);
+        } else if (documentId !== event.payload.documentId) {
+          this.error(event.seq, `${event.type} document does not match surface`);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+    return true;
+  }
+
+  expects(event: SessionEvent): boolean {
+    return event.seq === this.expectedSeq;
+  }
+
+  result(): ReplayValidationResult {
+    return {
+      ok: this.errors.length === 0,
+      errors: this.errors,
+      finalDocuments: this.documents,
+    };
+  }
+
+  private error(seq: number, message: string): void {
+    this.errors.push(`seq ${seq}: ${message}`);
+  }
+}
+
+function checkpointIdFor(event: SessionEvent): string | undefined {
+  if (event.type === "document.enrolled") {
+    return event.payload.descriptor.initialCheckpointId;
+  }
+  if (event.type === "document.checkpoint") {
+    return event.payload.checkpointId;
+  }
+  return undefined;
+}
 
 // Pure replay validation (plan §9.3 / Phase 4): verifies sequence and time
 // invariants, referenced IDs, patch application bounds, and every recorded
@@ -15,148 +255,30 @@ export function validateSessionReplay(
   events: readonly SessionEvent[],
   getCheckpointText: (checkpointId: string) => string | undefined,
 ): ReplayValidationResult {
-  const errors: string[] = [];
-  const documents = new Map<string, { text: string; version: number; sha256: string }>();
-  const knownSurfaces = new Set<string>();
-  let expectedSeq = 0;
-  let lastTUs = -1;
-
-  const err = (seq: number, message: string) => {
-    errors.push(`seq ${seq}: ${message}`);
-  };
-
+  const machine = new ReplayValidationMachine();
   for (const event of events) {
-    if (event.seq !== expectedSeq) {
-      err(event.seq, `sequence gap (expected ${expectedSeq})`);
+    const checkpointId = machine.expects(event) ? checkpointIdFor(event) : undefined;
+    const checkpointText = checkpointId === undefined ? undefined : getCheckpointText(checkpointId);
+    if (!machine.apply(event, checkpointText)) {
       break;
     }
-    expectedSeq += 1;
-    if (event.tUs < lastTUs) {
-      err(event.seq, "decreasing timestamp");
-    }
-    lastTUs = event.tUs;
+  }
+  return machine.result();
+}
 
-    switch (event.type) {
-      case "document.enrolled": {
-        const d = event.payload.descriptor;
-        const text = getCheckpointText(d.initialCheckpointId);
-        if (text === undefined) {
-          err(event.seq, `missing initial checkpoint ${d.initialCheckpointId}`);
-          break;
-        }
-        if (d.sha256 && sha256Hex(text) !== d.sha256) {
-          err(event.seq, `initial checkpoint hash mismatch for ${d.documentId}`);
-        }
-        documents.set(d.documentId, {
-          text,
-          version: d.initialVersion,
-          sha256: sha256Hex(text),
-        });
-        break;
-      }
-      case "document.patch": {
-        const doc = documents.get(event.payload.documentId);
-        if (!doc) {
-          err(event.seq, `patch for unknown document ${event.payload.documentId}`);
-          break;
-        }
-        if (event.payload.beforeVersion !== doc.version) {
-          err(
-            event.seq,
-            `version mismatch: patch before=${event.payload.beforeVersion}, state=${doc.version}`,
-          );
-        }
-        if (event.payload.beforeHash && event.payload.beforeHash !== doc.sha256) {
-          err(event.seq, "beforeHash mismatch");
-        }
-        let text = doc.text;
-        let valid = true;
-        for (const change of event.payload.changes) {
-          if (
-            change.rangeOffsetUtf16 < 0 ||
-            change.rangeLengthUtf16 < 0 ||
-            change.rangeOffsetUtf16 + change.rangeLengthUtf16 > text.length
-          ) {
-            err(event.seq, "change range out of bounds");
-            valid = false;
-            break;
-          }
-          text = applyContentChanges(text, [change]);
-        }
-        if (!valid) {
-          break;
-        }
-        const after = sha256Hex(text);
-        if (event.payload.afterHash && event.payload.afterHash !== after) {
-          err(event.seq, "afterHash mismatch");
-        }
-        doc.text = text;
-        doc.version = event.payload.afterVersion;
-        doc.sha256 = after;
-        break;
-      }
-      case "document.eolChanged": {
-        const doc = documents.get(event.payload.documentId);
-        if (!doc) {
-          err(event.seq, "eolChanged for unknown document");
-          break;
-        }
-        doc.text = doc.text.replace(/\r\n|\r|\n/g, event.payload.eol === "CRLF" ? "\r\n" : "\n");
-        doc.version = event.payload.version;
-        doc.sha256 = sha256Hex(doc.text);
-        break;
-      }
-      case "document.checkpoint": {
-        const doc = documents.get(event.payload.documentId);
-        if (!doc) {
-          err(event.seq, "checkpoint for unknown document");
-          break;
-        }
-        const text = getCheckpointText(event.payload.checkpointId);
-        if (text === undefined) {
-          err(event.seq, `missing checkpoint body ${event.payload.checkpointId}`);
-          break;
-        }
-        if (event.payload.sha256 && sha256Hex(text) !== event.payload.sha256) {
-          err(event.seq, `checkpoint body hash mismatch ${event.payload.checkpointId}`);
-        }
-        if (event.payload.sha256 && utf8ByteLength(text) !== event.payload.byteLength) {
-          err(event.seq, `checkpoint byte length mismatch ${event.payload.checkpointId}`);
-        }
-        doc.text = text;
-        doc.version = event.payload.version;
-        doc.sha256 = sha256Hex(text);
-        break;
-      }
-      case "document.saved":
-      case "document.closed":
-      case "document.resumed":
-      case "document.languageChanged": {
-        if (!documents.has(event.payload.documentId)) {
-          err(event.seq, `${event.type} for unknown document`);
-        }
-        break;
-      }
-      case "surface.opened": {
-        if (!documents.has(event.payload.documentId)) {
-          err(event.seq, "surface.opened for unknown document");
-        }
-        knownSurfaces.add(event.payload.surfaceId);
-        break;
-      }
-      case "surface.closed":
-      case "surface.focused":
-      case "surface.selectionChanged":
-      case "surface.viewportChanged": {
-        if (!knownSurfaces.has(event.payload.surfaceId)) {
-          err(event.seq, `${event.type} for unknown surface`);
-        }
-        break;
-      }
-      default:
-        break;
+/** Memory-bounded variant for finalization: checkpoint bodies are read on demand. */
+export async function validateSessionReplayAsync(
+  events: readonly SessionEvent[],
+  getCheckpointText: (checkpointId: string) => Promise<string | undefined>,
+): Promise<ReplayValidationResult> {
+  const machine = new ReplayValidationMachine();
+  for (const event of events) {
+    const checkpointId = machine.expects(event) ? checkpointIdFor(event) : undefined;
+    const checkpointText =
+      checkpointId === undefined ? undefined : await getCheckpointText(checkpointId);
+    if (!machine.apply(event, checkpointText)) {
+      break;
     }
   }
-
-  return { ok: errors.length === 0, errors, finalDocuments: documents };
+  return machine.result();
 }

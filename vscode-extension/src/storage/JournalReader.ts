@@ -1,5 +1,6 @@
 import { createReadStream } from "node:fs";
 import type { SessionEvent } from "../model/events";
+import { LIMITS } from "../model/limits";
 
 export type JournalReadResult = {
   events: SessionEvent[];
@@ -14,8 +15,8 @@ export type JournalReadResult = {
 export type EventValidator = (raw: unknown) => string | null;
 
 // Streaming NDJSON reader with recovery semantics (plan §9.3): one
-// discardable incomplete final line; a malformed line before the tail ends
-// recovery at the last verified sequence and records corruption.
+// discardable unterminated final line; any malformed newline-terminated
+// record ends recovery at the last verified sequence and records corruption.
 export async function readJournal(
   file: string,
   validate?: EventValidator,
@@ -27,101 +28,94 @@ export async function readJournal(
     corruption: null,
   };
 
-  const lines: { text: string; offset: number; terminated: boolean }[] = [];
+  let expectedSeq = 0;
+  let lastTUs = -1;
+  let lineNumber = 0;
+
+  const acceptLine = (text: string, offset: number, terminated: boolean): void => {
+    if (result.corruption) {
+      return;
+    }
+    const currentLine = lineNumber++;
+    const tailBytes = Buffer.byteLength(text, "utf8");
+    const fail = (message: string): void => {
+      if (!terminated) {
+        result.truncatedTailBytes = tailBytes;
+      } else {
+        result.corruption = { line: currentLine, message };
+      }
+    };
+
+    if (text.trim() === "") {
+      fail("empty line inside journal");
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      fail("invalid JSON");
+      return;
+    }
+    const validationError = validate ? validate(parsed) : null;
+    if (validationError !== null) {
+      fail(`schema: ${validationError}`);
+      return;
+    }
+
+    const event = parsed as SessionEvent;
+    if (event.seq !== expectedSeq) {
+      fail(`sequence gap: expected ${expectedSeq}, got ${String(event.seq)}`);
+      return;
+    }
+    if (event.tUs < lastTUs) {
+      fail(`decreasing timestamp at seq ${event.seq}`);
+      return;
+    }
+    if (result.events.length >= LIMITS.maxEventsPerSession) {
+      fail(`event count exceeds ${LIMITS.maxEventsPerSession}`);
+      return;
+    }
+
+    result.events.push(event);
+    result.byteOffsets.push(offset);
+    expectedSeq += 1;
+    lastTUs = event.tUs;
+  };
+
   await new Promise<void>((resolve, reject) => {
     const stream = createReadStream(file);
+    stream.setEncoding("utf8");
     let pending = "";
     let pendingOffset = 0;
-    let byteOffset = 0;
-    stream.on("data", (chunk: string | Buffer) => {
-      const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    stream.on("data", (text: string) => {
+      if (result.corruption) {
+        return;
+      }
       pending += text;
       let newlineIndex = pending.indexOf("\n");
       while (newlineIndex !== -1) {
         const line = pending.slice(0, newlineIndex);
-        lines.push({ text: line, offset: pendingOffset, terminated: true });
+        acceptLine(line, pendingOffset, true);
+        if (result.corruption) {
+          pending = "";
+          break;
+        }
         const consumed = Buffer.byteLength(line, "utf8") + 1;
         pendingOffset += consumed;
         pending = pending.slice(newlineIndex + 1);
         newlineIndex = pending.indexOf("\n");
       }
-      byteOffset += Buffer.byteLength(text, "utf8");
-      void byteOffset;
     });
     stream.on("end", () => {
-      if (pending.length > 0) {
-        lines.push({ text: pending, offset: pendingOffset, terminated: false });
+      if (!result.corruption && pending.length > 0) {
+        acceptLine(pending, pendingOffset, false);
       }
       resolve();
     });
     stream.on("error", reject);
   });
-
-  let expectedSeq = 0;
-  let lastTUs = -1;
-
-  for (let i = 0; i < lines.length; i++) {
-    const entry = lines[i] as {
-      text: string;
-      offset: number;
-      terminated: boolean;
-    };
-    const isLast = i === lines.length - 1;
-    if (entry.text.trim() === "") {
-      if (!isLast) {
-        result.corruption = { line: i, message: "empty line inside journal" };
-        return result;
-      }
-      continue;
-    }
-
-    const fail = (message: string): boolean => {
-      if (isLast) {
-        // Discardable tail: a crash may cut mid-line (plan §9.3).
-        result.truncatedTailBytes = Buffer.byteLength(entry.text, "utf8");
-        return false;
-      }
-      result.corruption = { line: i, message };
-      return true;
-    };
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(entry.text);
-    } catch {
-      if (fail("invalid JSON")) {
-        return result;
-      }
-      continue;
-    }
-
-    const validationError = validate ? validate(parsed) : null;
-    if (validationError !== null) {
-      if (fail(`schema: ${validationError}`)) {
-        return result;
-      }
-      continue;
-    }
-
-    const event = parsed as SessionEvent;
-    if (typeof event.seq !== "number" || event.seq !== expectedSeq) {
-      if (fail(`sequence gap: expected ${expectedSeq}, got ${String(event.seq)}`)) {
-        return result;
-      }
-      continue;
-    }
-    if (typeof event.tUs !== "number" || event.tUs < lastTUs) {
-      if (fail(`decreasing timestamp at seq ${event.seq}`)) {
-        return result;
-      }
-      continue;
-    }
-
-    result.events.push(event);
-    result.byteOffsets.push(entry.offset);
-    expectedSeq += 1;
-    lastTUs = event.tUs;
-  }
 
   return result;
 }

@@ -37,13 +37,13 @@ describe("journal writer failure (disk errors)", () => {
     await (writer as unknown as { handle: { close(): Promise<void> } }).handle.close();
 
     writer.enqueue(makeEvent(1));
-    await writer.drain(); // must resolve, not hang
+    await expect(writer.drain()).rejects.toThrow(/./); // must reject, not hang
     expect(errors.length).toBeGreaterThan(0);
     expect(writer.error).not.toBeNull();
 
     // Later enqueues are ignored after failure; durable seq is unchanged.
     writer.enqueue(makeEvent(2));
-    await writer.drain();
+    await expect(writer.drain()).rejects.toThrow(/./);
     expect(writer.lastDurableSeq).toBe(0);
 
     await writer.close().catch(() => {});

@@ -170,6 +170,14 @@ suite("capture model", function () {
     );
     const surfaceIds = new Set(opened.map((event) => event.payload.surfaceId));
     assert.ok(surfaceIds.size >= 2, `expected >=2 surfaces, got ${surfaceIds.size}`);
+    const latestOpenedBySurface = new Map(
+      opened.map((event) => [event.payload.surfaceId, event.payload] as const),
+    );
+    const recordedGroupIds = new Set(
+      [...latestOpenedBySurface.values()].map((surface) => surface.groupId),
+    );
+    assert.ok(!recordedGroupIds.has(null), "a visible surface has no recorded groupId");
+    assert.ok(recordedGroupIds.size >= 2, "the two surfaces were assigned to one group");
 
     // Topology: two groups, each containing a text tab for this document.
     const topologies = eventsOf(trace, "topology.snapshot");
@@ -180,6 +188,9 @@ suite("capture model", function () {
       group.tabs.some((tab: any) => tab.documentId === documentId),
     );
     assert.strictEqual(groupsWithDoc.length, 2, "document not visible in two groups");
+    for (const group of groupsWithDoc) {
+      assert.ok(recordedGroupIds.has(group.groupId), `surface missing for group ${group.groupId}`);
+    }
 
     // The selection change targeted exactly one surface.
     const selectionEvents = eventsOf(trace, "surface.selectionChanged").filter(

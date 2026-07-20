@@ -81,6 +81,7 @@ export function generateFixture(config: GenConfig): BenchmarkFixture {
   const texts = new Map<string, string>();
   const documentIds: string[] = [];
   const surfaceIds: string[] = [];
+  const surfaceDocuments = new Map<string, string>();
 
   push("session.started", {
     sessionId: `fixture-${config.name}`,
@@ -122,10 +123,12 @@ export function generateFixture(config: GenConfig): BenchmarkFixture {
     const count = config.surfacesPerDoc[d] ?? 1;
     for (let s = 0; s < count; s++) {
       const surfaceId = `surface-${surfaceIndex++}`;
+      const documentId = `doc-${d}`;
       surfaceIds.push(surfaceId);
+      surfaceDocuments.set(surfaceId, documentId);
       push("surface.opened", {
         surfaceId,
-        documentId: `doc-${d}`,
+        documentId,
         groupId: `group-${surfaceIndex % config.groupCount}`,
         viewColumn: (surfaceIndex % config.groupCount) + 1,
         selections: [{ anchorOffsetUtf16: 0, activeOffsetUtf16: 0 }],
@@ -160,6 +163,7 @@ export function generateFixture(config: GenConfig): BenchmarkFixture {
     const roll = rand();
     const documentId = documentIds[Math.floor(rand() * documentIds.length)] as string;
     const surfaceId = surfaceIds[Math.floor(rand() * surfaceIds.length)] as string;
+    const surfaceDocumentId = surfaceDocuments.get(surfaceId) as string;
 
     if (roll < 0.55) {
       // Document patch: insert/replace a short run near a position.
@@ -198,12 +202,12 @@ export function generateFixture(config: GenConfig): BenchmarkFixture {
         eolAfter: "LF",
       } as never);
     } else if (roll < 0.8) {
-      const docOfSurface = texts.get(documentId) as string;
+      const docOfSurface = texts.get(surfaceDocumentId) as string;
       const anchor = Math.floor(rand() * (docOfSurface.length + 1));
       push("surface.selectionChanged", {
         surfaceId,
-        documentId,
-        documentVersion: versions.get(documentId) as number,
+        documentId: surfaceDocumentId,
+        documentVersion: versions.get(surfaceDocumentId) as number,
         kind: "keyboard",
         selections: [
           {
@@ -216,8 +220,8 @@ export function generateFixture(config: GenConfig): BenchmarkFixture {
       const startLine = Math.floor(rand() * config.initialLines);
       push("surface.viewportChanged", {
         surfaceId,
-        documentId,
-        documentVersion: versions.get(documentId) as number,
+        documentId: surfaceDocumentId,
+        documentVersion: versions.get(surfaceDocumentId) as number,
         visibleRanges: [
           {
             startLine,

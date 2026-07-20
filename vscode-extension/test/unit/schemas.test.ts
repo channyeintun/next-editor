@@ -9,6 +9,7 @@ import {
   type WireSessionEvent,
 } from "../../src/model/schemas";
 import type { ManifestV1 } from "../../src/model/manifest";
+import { LIMITS } from "../../src/model/limits";
 import { buildSeekIndex } from "../../src/storage/SeekIndexBuilder";
 import { benchmarkFixtureConfigs, generateFixture } from "../../src/webview/player/fixtures";
 
@@ -191,6 +192,26 @@ describe("v1 schemas", () => {
         payload: { documentId: "d" },
       }),
     ).not.toBeNull();
+  });
+
+  it("rejects unsafe identifiers and oversized aggregate patch text", () => {
+    const enrolled = structuredClone(samples[2]);
+    if (enrolled?.type !== "document.enrolled") {
+      throw new Error("document enrollment fixture missing");
+    }
+    enrolled.payload.descriptor.documentId = "../outside" as never;
+    expect(validateSessionEventRaw(enrolled)).not.toBeNull();
+
+    const patch = structuredClone(samples[3]);
+    if (patch?.type !== "document.patch") {
+      throw new Error("document patch fixture missing");
+    }
+    const half = "x".repeat(Math.floor(LIMITS.maxEventTextPayloadBytes / 2) + 1);
+    patch.payload.changes = [
+      { rangeOffsetUtf16: 0, rangeLengthUtf16: 0, text: half },
+      { rangeOffsetUtf16: 0, rangeLengthUtf16: 0, text: half },
+    ];
+    expect(validateSessionEventRaw(patch)).not.toBeNull();
   });
 
   it("accepts every event of a generated fixture", () => {

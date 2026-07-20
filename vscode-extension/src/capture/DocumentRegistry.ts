@@ -79,6 +79,11 @@ export class DocumentRegistry {
     return this.byResourceKey.get(resourceKeyOf(uri));
   }
 
+  /** Remove a provisional enrollment before any descriptor was emitted. */
+  forget(document: vscode.TextDocument): void {
+    this.byResourceKey.delete(resourceKeyOf(document.uri));
+  }
+
   isEnrolled(document: vscode.TextDocument): boolean {
     const entry = this.get(document);
     return entry !== undefined && entry.droppedReason === null;
@@ -141,7 +146,9 @@ export class DocumentRegistry {
     const entry = this.get(document);
     if (entry && entry.open) {
       entry.open = false;
-      return entry;
+      // Once capture was explicitly stopped for a document, later open/
+      // close churn must not restart its event stream.
+      return entry.droppedReason === null ? entry : undefined;
     }
     return undefined;
   }
@@ -156,6 +163,7 @@ export class DocumentRegistry {
         entry: EnrolledDocument;
         contentChanged: boolean;
         languageChanged: boolean;
+        eolChanged: boolean;
       }
     | undefined {
     const entry = this.get(document);
@@ -163,11 +171,15 @@ export class DocumentRegistry {
       return undefined;
     }
     entry.open = true;
+    if (entry.droppedReason !== null) {
+      return undefined;
+    }
     const observed = document.getText();
     const contentChanged = sha256Hex(observed) !== entry.shadow.sha256;
     const languageChanged = document.languageId !== entry.languageId;
+    const eolChanged = toEolMode(document.eol) !== entry.shadow.eol;
     entry.languageId = document.languageId;
-    return { entry, contentChanged, languageChanged };
+    return { entry, contentChanged, languageChanged, eolChanged };
   }
 }
 

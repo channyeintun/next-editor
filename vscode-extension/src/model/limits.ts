@@ -24,7 +24,15 @@ export const LIMITS = {
   // Artifact safety (used from Phase 6 on).
   maxArtifactEntries: 100_000,
   maxManifestBytes: 2 * 1024 * 1024,
+  maxIntegrityBytes: 32 * 1024 * 1024,
+  maxEventJournalBytes: 512 * 1024 * 1024,
   maxCheckpointBytes: 20 * 1024 * 1024,
   maxTotalExtractedBytes: 1024 * 1024 * 1024,
   maxDecompressionRatio: 200,
+
+  // Runtime playback memory. JavaScript strings can use two bytes per
+  // UTF-16 code unit, so this bounds cached checkpoint text separately
+  // from archive byte limits.
+  maxHostCheckpointCacheBytes: 64 * 1024 * 1024,
+  maxPlayerCheckpointCodeUnits: 64 * 1024 * 1024,
 } as const;

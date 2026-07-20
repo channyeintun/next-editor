@@ -61,6 +61,13 @@ export class RecordingStatusBar {
         this.item.tooltip = "Next Recording: finalizing";
         this.item.show();
         break;
+      case "failed":
+        this.item.text = "$(error) Recording failed — preserving recovery data…";
+        this.item.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
+        this.item.command = undefined;
+        this.item.tooltip = "Next Recording: stopping after a failure";
+        this.item.show();
+        break;
     }
   }
 

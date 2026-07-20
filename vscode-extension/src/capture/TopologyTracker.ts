@@ -68,6 +68,46 @@ export class TopologyTracker {
   private knownGroupColumns = new Map<GroupId, number>();
   private readonly announcedUnsupported = new Set<TabId>();
   private lastSnapshotKey: string | null = null;
+  private pendingDiscontinuity = false;
+
+  /** Resolve the stable session group for a visible editor view. */
+  groupIdForViewColumn(viewColumn: number | undefined): GroupId | null {
+    if (viewColumn === undefined) {
+      return null;
+    }
+    const group = vscode.window.tabGroups.all.find(
+      (candidate) => candidate.viewColumn === viewColumn,
+    );
+    if (!group) {
+      return null;
+    }
+    const existing = this.groupIds.get(group);
+    if (existing) {
+      return existing;
+    }
+
+    const claimed = new Set<GroupId>();
+    for (const live of vscode.window.tabGroups.all) {
+      const id = this.groupIds.get(live);
+      if (id) {
+        claimed.add(id);
+      }
+    }
+    const candidates = [...this.knownGroupColumns.entries()].filter(
+      ([id, column]) => !claimed.has(id) && column === viewColumn,
+    );
+    let groupId: GroupId;
+    if (candidates.length === 1 && candidates[0]) {
+      groupId = candidates[0][0];
+    } else {
+      if (candidates.length > 1) {
+        this.pendingDiscontinuity = true;
+      }
+      groupId = newGroupId();
+    }
+    this.groupIds.set(group, groupId);
+    return groupId;
+  }
 
   /**
    * Reconcile the live tab/group state into a coherent snapshot. Weak object
@@ -75,7 +115,8 @@ export class TopologyTracker {
    * an ambiguous match allocates fresh IDs and flags a discontinuity.
    */
   snapshot(documents: DocumentRegistry): TopologyResult {
-    let discontinuity = false;
+    let discontinuity = this.pendingDiscontinuity;
+    this.pendingDiscontinuity = false;
     const groups: GroupSnapshot[] = [];
     const newUnsupported: TopologyResult["newUnsupported"] = [];
     const nextKnownTabs = new Map<TabId, KnownTab>();

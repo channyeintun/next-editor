@@ -111,4 +111,32 @@ describe("OrderedJournalWriter", () => {
       expect(JSON.parse(slice.slice(0, slice.indexOf("\n"))).seq).toBe(event.seq);
     });
   });
+
+  it("abandons a crash-test writer without draining queued events", async () => {
+    const file = path.join(dir, "events.ndjson");
+    const writer = await OrderedJournalWriter.open(file, {
+      flushIntervalMs: 10_000,
+      syncIntervalMs: 10_000,
+    });
+    writer.enqueue(makeEvent(0));
+
+    await writer.abandonForTest();
+
+    expect(await fs.readFile(file, "utf8")).toBe("");
+    writer.enqueue(makeEvent(1));
+    expect(await fs.readFile(file, "utf8")).toBe("");
+  });
+
+  it("shares one terminal operation across concurrent close calls", async () => {
+    const file = path.join(dir, "events.ndjson");
+    const writer = await OrderedJournalWriter.open(file);
+    writer.enqueue(makeEvent(0));
+
+    const first = writer.close();
+    const second = writer.close();
+
+    expect(second).toBe(first);
+    await first;
+    expect((await readJournal(file)).events).toHaveLength(1);
+  });
 });

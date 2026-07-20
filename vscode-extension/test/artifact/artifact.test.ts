@@ -266,6 +266,14 @@ describe("artifact round trip", () => {
         name: "documents/doc-1/checkpoints/cp-init-doc-1.txt",
         data: "TAMPERED CONTENT",
       },
+      {
+        name: "documents/doc-2/checkpoints/cp-init-doc-2.txt",
+        data: DOC2_INITIAL,
+      },
+      {
+        name: "documents/doc-1/checkpoints/cp-stop-1.txt",
+        data: DOC1_AFTER,
+      },
       { name: "integrity.json", data: integrityStr },
     ];
     const tampered = path.join(dir, "tampered.nextrecording");
@@ -276,6 +284,52 @@ describe("artifact round trip", () => {
       await expect(reader.readCheckpoint("doc-1", "cp-init-doc-1")).rejects.toThrow(
         /hash mismatch/,
       );
+    } finally {
+      await reader.close();
+    }
+  });
+
+  it("cross-checks checkpoint bodies against journal metadata", async () => {
+    const { paths, metadata } = await buildWorkingSession();
+    const outputPath = path.join(dir, "out.nextrecording");
+    const { manifest } = await writeArtifact({ paths, metadata, outputPath });
+    const journalBytes = await fs.readFile(paths.journalFile);
+    const journalRead = await readJournal(paths.journalFile);
+    const indexStr = JSON.stringify(buildSeekIndex(journalRead.events, journalRead.byteOffsets));
+    const checkpointEntry = "documents/doc-1/checkpoints/cp-init-doc-1.txt";
+    const inconsistentBody = "different but archive-hashed";
+    const inconsistentManifest = structuredClone(manifest);
+    inconsistentManifest.integrity.entries[checkpointEntry] = sha256Hex(inconsistentBody);
+    const manifestStr = JSON.stringify(inconsistentManifest);
+    const integrityStr = JSON.stringify({
+      entries: {
+        ...inconsistentManifest.integrity.entries,
+        "manifest.json": sha256Hex(manifestStr),
+      },
+    });
+    const file = path.join(dir, "inconsistent-checkpoint.nextrecording");
+    await fs.writeFile(
+      file,
+      buildRawZip([
+        { name: "manifest.json", data: manifestStr },
+        { name: "events.ndjson", data: journalBytes },
+        { name: "index.json", data: indexStr },
+        { name: checkpointEntry, data: inconsistentBody },
+        {
+          name: "documents/doc-2/checkpoints/cp-init-doc-2.txt",
+          data: DOC2_INITIAL,
+        },
+        {
+          name: "documents/doc-1/checkpoints/cp-stop-1.txt",
+          data: DOC1_AFTER,
+        },
+        { name: "integrity.json", data: integrityStr },
+      ]),
+    );
+
+    const reader = await openArtifact(file);
+    try {
+      await expect(reader.readCheckpoint("doc-1", "cp-init-doc-1")).rejects.toThrow(/journal/);
     } finally {
       await reader.close();
     }

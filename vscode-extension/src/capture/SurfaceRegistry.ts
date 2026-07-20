@@ -1,9 +1,11 @@
 import type * as vscode from "vscode";
-import { newSurfaceId, type DocumentId, type SurfaceId } from "../model/ids";
+import { newSurfaceId, type DocumentId, type GroupId, type SurfaceId } from "../model/ids";
 
 export type SurfaceRecord = {
   surfaceId: SurfaceId;
   documentId: DocumentId;
+  groupId: GroupId | null;
+  viewColumn: number | null;
   visible: boolean;
 };
 
@@ -17,7 +19,12 @@ export class SurfaceRegistry {
     return this.byEditor.get(editor);
   }
 
-  register(editor: vscode.TextEditor, documentId: DocumentId): SurfaceRecord {
+  register(
+    editor: vscode.TextEditor,
+    documentId: DocumentId,
+    groupId: GroupId | null,
+    viewColumn: number | null,
+  ): SurfaceRecord {
     const existingId = this.byEditor.get(editor);
     if (existingId) {
       const record = this.records.get(existingId);
@@ -29,6 +36,8 @@ export class SurfaceRegistry {
     const record: SurfaceRecord = {
       surfaceId: newSurfaceId(),
       documentId,
+      groupId,
+      viewColumn,
       visible: true,
     };
     this.byEditor.set(editor, record.surfaceId);
@@ -45,6 +54,20 @@ export class SurfaceRegistry {
     if (record) {
       record.visible = false;
     }
+  }
+
+  updatePlacement(
+    surfaceId: SurfaceId,
+    groupId: GroupId | null,
+    viewColumn: number | null,
+  ): boolean {
+    const record = this.records.get(surfaceId);
+    if (!record || (record.groupId === groupId && record.viewColumn === viewColumn)) {
+      return false;
+    }
+    record.groupId = groupId;
+    record.viewColumn = viewColumn;
+    return true;
   }
 
   visibleSurfaceIds(): Set<SurfaceId> {

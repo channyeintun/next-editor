@@ -8,7 +8,7 @@ import { readJournal } from "./JournalReader";
 import { RecordingLibrary } from "./RecordingLibrary";
 import { SessionMetadataStore } from "./SessionMetadataStore";
 import { SessionPaths } from "./SessionPaths";
-import { validateSessionReplay } from "./replayValidation";
+import { validateSessionReplayAsync } from "./replayValidation";
 
 export type RecoveryFinalizeResult =
   | {
@@ -86,11 +86,13 @@ export async function finalizeRecoveredSession(
 
     // 3. Validate the recovered stream before packaging.
     const checkpoints = new CheckpointStore(paths.checkpointsDir);
-    const checkpointTexts = new Map<string, string>();
-    for (const id of await checkpoints.list()) {
-      checkpointTexts.set(id, await checkpoints.read(id));
-    }
-    const validation = validateSessionReplay(events, (id) => checkpointTexts.get(id));
+    const validation = await validateSessionReplayAsync(events, async (id) => {
+      try {
+        return await checkpoints.read(id);
+      } catch {
+        return undefined;
+      }
+    });
     if (!validation.ok) {
       const message = `recovered session fails validation: ${validation.errors.slice(0, 3).join("; ")}`;
       // Keep failure information in recovery metadata (plan §8.1) while

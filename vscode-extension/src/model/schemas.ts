@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LIMITS } from "./limits";
 
 // Runtime validators for format v1 (plan §7). The TypeScript types in
 // events.ts/manifest.ts are the authoring source; these schemas are the
@@ -6,7 +7,11 @@ import { z } from "zod";
 // (every produced event/manifest parses; type-level assignability is
 // asserted for the payload shapes).
 
-const id = z.string().min(1).max(256);
+const id = z
+  .string()
+  .min(1)
+  .max(256)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "identifier contains unsafe characters");
 const isoDate = z.string().min(4);
 const nonNegInt = z.number().int().nonnegative();
 const hash = z.string(); // empty string allowed for synthetic fixtures
@@ -30,8 +35,20 @@ const tabKind = z.enum([
 const contentChange = z.object({
   rangeOffsetUtf16: nonNegInt,
   rangeLengthUtf16: nonNegInt,
-  text: z.string(),
+  text: z.string().max(LIMITS.maxEventTextPayloadBytes),
 });
+const contentChanges = z
+  .array(contentChange)
+  .max(100_000)
+  .superRefine((changes, context) => {
+    const totalTextLength = changes.reduce((sum, change) => sum + change.text.length, 0);
+    if (totalTextLength > LIMITS.maxEventTextPayloadBytes) {
+      context.addIssue({
+        code: "custom",
+        message: "content-change batch exceeds the event text limit",
+      });
+    }
+  });
 
 const selectionRange = z.object({
   anchorOffsetUtf16: nonNegInt,
@@ -132,7 +149,7 @@ export const sessionEventSchema = z.discriminatedUnion("type", [
       beforeVersion: nonNegInt,
       afterVersion: nonNegInt,
       reason: patchReason,
-      changes: z.array(contentChange),
+      changes: contentChanges,
       beforeHash: hash,
       afterHash: hash,
       eolBefore: eolMode,
@@ -269,7 +286,10 @@ export const manifestSchema = z.object({
   documents: z.array(documentDescriptor),
   tabs: z.array(tabDescriptor),
   initialTopologyRef: z.object({ eventSeq: nonNegInt }).nullable(),
-  eventJournalRef: z.object({ entry: z.string(), eventCount: nonNegInt }),
+  eventJournalRef: z.object({
+    entry: z.string(),
+    eventCount: nonNegInt.max(LIMITS.maxEventsPerSession),
+  }),
   seekIndexRef: z.object({ entry: z.string() }),
   audioTracks: z.array(audioTrackMetadataSchema),
   integrity: z.object({ entries: z.record(z.string(), hash) }),

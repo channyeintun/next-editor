@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "../../src/capture/hash";
 import type { SessionEvent } from "../../src/model/events";
-import { validateSessionReplay } from "../../src/storage/replayValidation";
+import {
+  validateSessionReplay,
+  validateSessionReplayAsync,
+} from "../../src/storage/replayValidation";
 
 // Hand-built journal with real hashes, exercising the full validation path.
 function buildSession() {
@@ -84,6 +87,16 @@ describe("validateSessionReplay", () => {
     expect(result.finalDocuments.get("doc-1")?.text).toBe(afterPatch);
   });
 
+  it("keeps synchronous and streaming checkpoint validation equivalent", async () => {
+    const { events, checkpoints } = buildSession();
+    const synchronous = validateSessionReplay(events, (id) => checkpoints.get(id));
+    const streaming = await validateSessionReplayAsync(events, async (id) => checkpoints.get(id));
+    expect(streaming.errors).toEqual(synchronous.errors);
+    expect([...streaming.finalDocuments.entries()]).toEqual([
+      ...synchronous.finalDocuments.entries(),
+    ]);
+  });
+
   it("rejects a tampered afterHash", () => {
     const { events, checkpoints } = buildSession();
     const patch = events[3] as Extract<SessionEvent, { type: "document.patch" }>;
@@ -91,6 +104,39 @@ describe("validateSessionReplay", () => {
     const result = validateSessionReplay(events, (id) => checkpoints.get(id));
     expect(result.ok).toBe(false);
     expect(result.errors.join()).toContain("afterHash mismatch");
+  });
+
+  it("rejects non-advancing patch versions and an incorrect EOL chain", () => {
+    const { events, checkpoints } = buildSession();
+    const patch = events[3] as Extract<SessionEvent, { type: "document.patch" }>;
+    patch.payload.afterVersion = patch.payload.beforeVersion;
+    patch.payload.eolBefore = "CRLF";
+    const result = validateSessionReplay(events, (id) => checkpoints.get(id));
+    expect(result.ok).toBe(false);
+    expect(result.errors.join()).toContain("afterVersion must advance");
+    expect(result.errors.join()).toContain("EOL mismatch");
+  });
+
+  it("rejects a continuous checkpoint that rewrites replay state", () => {
+    const { events, checkpoints } = buildSession();
+    checkpoints.set("cp-interval", "unrelated\n");
+    events.push({
+      seq: 4,
+      tUs: 40,
+      type: "document.checkpoint",
+      payload: {
+        checkpointId: "cp-interval",
+        documentId: "doc-1",
+        reason: "interval",
+        version: 2,
+        eol: "LF",
+        byteLength: Buffer.byteLength("unrelated\n"),
+        sha256: sha256Hex("unrelated\n"),
+      },
+    } as SessionEvent);
+    const result = validateSessionReplay(events, (id) => checkpoints.get(id));
+    expect(result.ok).toBe(false);
+    expect(result.errors.join()).toContain("does not match replay state");
   });
 
   it("rejects a missing checkpoint body", () => {
@@ -133,5 +179,24 @@ describe("validateSessionReplay", () => {
     const result = validateSessionReplay(events, (id) => checkpoints.get(id));
     expect(result.ok).toBe(false);
     expect(result.errors.join()).toContain("sequence gap");
+  });
+
+  it("continues the version chain after a document resume", () => {
+    const { events, checkpoints } = buildSession();
+    const patch = events[3] as Extract<SessionEvent, { type: "document.patch" }>;
+    events[3] = {
+      seq: 3,
+      tUs: 25,
+      type: "document.resumed",
+      payload: { documentId: "doc-1", version: 7 },
+    } as SessionEvent;
+    patch.seq = 4;
+    patch.payload.beforeVersion = 7;
+    patch.payload.afterVersion = 8;
+    events.push(patch);
+
+    const result = validateSessionReplay(events, (id) => checkpoints.get(id));
+    expect(result.errors).toEqual([]);
+    expect(result.finalDocuments.get("doc-1")?.version).toBe(8);
   });
 });

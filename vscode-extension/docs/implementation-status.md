@@ -52,7 +52,8 @@ Exact versions are pinned in `vscode-extension/package.json` +
 
 | Purpose                 | Package                                                                                              | Version verified                                | Rationale                                                                                                                 |
 | ----------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Extension-host language | `typescript` (strict)                                                                                | 7.0.2                                           | Plan §6.1 requires strict TypeScript.                                                                                     |
+| Extension-host language | `typescript` (strict)                                                                                | 7.0.2                                           | Current registry `latest`, pinned exactly under the extension's latest-toolchain policy.                                  |
+| Lifecycle statechart    | `xstate`                                                                                             | 5.32.2                                          | Independently pinned for the extension's fresh coordinator machine; no main-app machine implementation is imported.       |
 | Host bundle             | `esbuild`                                                                                            | 0.28.1                                          | Node-targeted CJS bundle for the extension host; fast, zero-config, standard for extensions.                              |
 | Webview bundle          | `vite`                                                                                               | 8.1.5                                           | Plan §6.1 mandates Vite for the webview bundle.                                                                           |
 | Unit/protocol tests     | `vitest`                                                                                             | 4.1.10                                          | Plan §6.1 mandates Vitest for pure tests.                                                                                 |
@@ -119,11 +120,11 @@ plus `README.md` record the change.
 
 - Independent package installed with Bun 1.3.14; `vscode-extension/bun.lock`
   created; root lockfile untouched (verified via `git status`).
-- Version adjustments against the registry during install:
-  `@types/react` 19.2.17, `@types/react-dom` 19.2.3 (the react runtime
-  version numbers do not exist for the types packages), `typescript` pinned
-  to 5.9.3 (7.x is the new native compiler line; 5.9 is the mature LTS
-  semantics the toolchain here is known-good with).
+- Version adjustments against the registry during the original install:
+  `@types/react` 19.2.17 and `@types/react-dom` 19.2.3 (the React runtime
+  version numbers do not exist for the types packages). TypeScript was
+  initially pinned to 5.9.3; the post-review toolchain policy now requires
+  registry `latest`, so the current package and lockfile use 7.0.2.
 - Acceptance gate results:
   - `bun run typecheck` — pass (host, webview, test configs, strict).
   - `bun run lint`, `bun run format:check` — pass.
@@ -230,10 +231,13 @@ Capture feasibility proven against a real Extension Development Host
 
 ## Phase 5 evidence (2026-07-20)
 
-- `RecordingCoordinator` implements the plan §8.1 lifecycle
-  (idle → preparing → recording → stopping → finalizing → idle; failures
-  recorded in session metadata, session dir left recoverable). Context
-  keys and the status bar update only on successful transitions.
+- An extension-owned XState 5 coordinator implements the plan §8.1
+  lifecycle (idle → preparing → recording → stopping → finalizing → idle;
+  active failures pass through an explicit failed/cleanup state). Session
+  IDs guard stale asynchronous completions. No main-app machine code is
+  imported. Entering stopping synchronously removes capture subscriptions
+  and enqueues final state before the first filesystem await; context keys
+  and status UI update only after legal machine transitions.
 - Capture events flow into the durable journal via `DurableSessionSink`;
   checkpoint bodies ride the same ordered pipeline as barriers, so a
   journaled checkpoint reference is never durable before its body.
@@ -263,9 +267,10 @@ Capture feasibility proven against a real Extension Development Host
   resolves bare imports with standard Node resolution (kept as a build
   workaround, consistent with the repo's existing PnP alias convention;
   the user's manifest is not touched).
-- Deferred to Phase 7 (noted): validation currently preloads all
-  checkpoint bodies into memory during finalization; streaming validation
-  is part of scale hardening.
+- Finalization originally preloaded all checkpoint bodies. The
+  post-implementation review below replaces that with on-demand,
+  one-checkpoint-at-a-time replay validation for normal and recovered
+  sessions.
 
 ## Phase 6 evidence (2026-07-20)
 
@@ -322,9 +327,10 @@ Capture feasibility proven against a real Extension Development Host
   artifact writer. Re-running returns the existing artifact. Validation
   refusal and packaging failures record `failed` + message in session
   metadata and preserve the working directory.
-- **Failure injection tests** (all passing): journal write failure after
-  the handle dies (drain resolves, later enqueues ignored, durable prefix
-  intact); truncated tail; pre-tail corruption; missing checkpoint body;
+- **Failure injection tests** (all passing at the Phase 7 gate): journal
+  write failure after the handle dies (the reviewed implementation now
+  makes drain reject promptly; later enqueues are ignored and the durable
+  prefix remains intact); truncated tail; pre-tail corruption; missing checkpoint body;
   discarded-session refusal; idempotency; EDH end-to-end crash → finalize
   → artifact passes the fail-closed reader → rescan shows non-recoverable.
 - **Scale**: the 60-minute/250k-event fixture flows through the real
@@ -371,6 +377,118 @@ Capture feasibility proven against a real Extension Development Host
   starts). Manual-matrix items (§16.6): visual eyeballing of the player,
   extension-host reload during recording, remote SSH/Dev Container rows,
   light/dark theme pass.
+
+## Post-implementation review (2026-07-20)
+
+This pass reviewed the implementation against its own format, capture,
+recovery, and playback invariants. It does not change the approved plan or
+the main application.
+
+### Corrections applied
+
+- **Capture continuity:** pending topology is flushed at stop; visible
+  surfaces now retain stable recorded group/view-column placement and emit
+  corrected state after tab-group reconciliation or a view move. Reopened
+  documents preserve version and EOL transitions, and version-only changes
+  produce an explicit state checkpoint instead of breaking the next patch
+  chain.
+- **Capture limits:** initially oversized documents no longer leave a
+  provisional ID that can leak into topology. If an edit crosses the selected
+  size limit, capture checkpoints the last in-limit state and never persists
+  the oversized text. The public setting is capped at the artifact's 20 MiB
+  checkpoint ceiling.
+- **Playback correctness:** `resume`, shadow-mismatch, and size-limit
+  checkpoints are available during forward playback; seek reconstruction
+  now includes patch, EOL, resume, version, and language state. Patch bounds
+  and version chains fail closed. Rapid asynchronous seeks are generation
+  guarded so an older result cannot overwrite a newer slider position.
+  Recorded group IDs drive same-document split-surface assignment.
+- **Lifecycle and memory:** the player unsubscribes, rejects pending
+  requests, disposes Monaco, and clears caches on teardown. The host releases
+  its full event array after the last window is copied to the webview,
+  checkpoint caches are byte/code-unit bounded, and finalization/recovery
+  validate checkpoint bodies one at a time rather than preloading every
+  historical body. Failure cleanup resolves the prior operation before
+  publishing `idle`, preventing a re-entrant start from inheriting an old
+  resolver.
+- **Journal durability:** writer failures now make `drain()`/`close()` fail
+  instead of silently succeeding; the coordinator records failure metadata
+  and stops capture. A queue overload triggers a controlled failure-reason
+  stop, including when it first occurs during preparation. The reader uses
+  streaming UTF-8 decoding, distinguishes an unterminated crash tail from a
+  malformed newline-terminated record, and caps event counts. Concurrent
+  closes share one terminal operation, while the crash-test path releases
+  timers and the file handle without draining queued events.
+- **Artifact hardening:** manifest, integrity, index, event-journal, and
+  checkpoint reads have explicit limits; canonical v1 entry names and
+  agreeing integrity tables are enforced; uncovered entries, unsafe IDs,
+  invalid UTF-8, inconsistent manifest document tables, and checkpoint
+  metadata/body mismatches fail closed. Repeated reads no longer consume the
+  extraction budget repeatedly. Artifact construction removes failed temp
+  files and reopens every checkpoint before the atomic rename.
+- **Protocol/UI details:** both sides enforce protocol version 2 and bounded
+  payloads, response types are correlated with request IDs, CSP nonces use
+  cryptographic randomness, language and explicit EOL state reach Monaco,
+  resumed surfaces use the same renderer options, and cancelling a remote
+  export no longer reports a successful export.
+- **Lifecycle authority:** the hand-written transition flags were replaced by
+  an independently pinned XState 5 machine. Stale operation events are
+  rejected by session ID, failure cleanup is explicit, and the stop boundary
+  now closes capture synchronously before metadata I/O.
+- **Toolchain currency:** the extension's independently pinned TypeScript
+  compiler was upgraded to the registry `latest`, 7.0.2.
+- **Atomic outputs:** metadata/checkpoint and artifact temporary names use
+  exclusive randomized files, and failed writes remove their temporary
+  output.
+- **Regression coverage added:** UTF-8 chunk boundaries, malformed final
+  journal records, writer rejection, resume/version replay, invalid patch
+  bounds, aggregate payload limits, checkpoint journal cross-checks,
+  split-group capture mapping, state-carrying forward playback, stale
+  asynchronous seek cancellation, capture-size boundary behavior, explicit
+  EOL projection, replay continuity checks, and XState lifecycle/stale-event
+  transitions. Synthetic surface events now preserve their surface/document
+  association, so the strengthened reducer checks exercise valid topology.
+
+### Remaining high-risk assumptions
+
+- The webview still materializes the complete event stream to support its
+  current binary-search/checkpoint seek plan. The host no longer retains a
+  duplicate after transfer, but multi-million-event recordings need a paged
+  or worker-backed event store before the configured five-million-event
+  ceiling can be considered a safe practical limit.
+- Surface-to-group correction depends on VS Code's public tab-group view
+  settling by the scheduled topology reconciliation. The strengthened EDH
+  split-editor assertion must be run on the macOS workstation across the
+  supported VS Code floor/current versions.
+- The new cache ceiling intentionally reports a player error instead of
+  risking webview OOM when required checkpoint text exceeds 64 Mi UTF-16
+  code units. A true large-session player would need eviction plus async
+  prefetch, not a larger unbounded cache.
+- Audio remains deferred, and the existing manual visual/reload/remote/theme
+  matrix is still outstanding.
+
+### Review verification status
+
+- `git diff --check` — pass on the Linux VPS.
+- `node vscode-extension/scripts/verify-boundaries.mjs` — pass; the extension
+  remains isolated from main-app source and machines.
+- npm registry `latest` resolves to TypeScript 7.0.2; the extension package
+  and lockfile pin it exactly, and that compiler accepts the host, webview,
+  and integration-test tsconfigs via `--showConfig`.
+- Bun syntax transpilation of all 43 changed TypeScript/TSX files — pass
+  (parse-only; not a typecheck or bundle).
+- Strict targeted TypeScript 7.0.2 checks — pass for the extension-owned
+  XState machine, ordered journal writer, replay reducer/fixtures, playback
+  engine, and replay validator.
+- Focused Bun tests — 46 pass across the XState lifecycle, ordered writer,
+  injected writer failure, journal recovery, schemas, session reducer, replay
+  validation, and playback engine.
+- The artifact test could not load because this VPS checkout does not have the
+  extension dependency `yazl` installed. Full format/lint/typecheck/unit/
+  build/EDH/package verification remains intentionally deferred under the
+  low-memory VPS policy. Run `bun run check` and the manual matrix on the
+  macOS workstation before release; the historical green results below
+  predate this review patch set.
 
 ## Verification log
 

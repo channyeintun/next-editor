@@ -118,10 +118,12 @@ export function registerCommands(
         return;
       }
       try {
-        await exportArtifact(sourcePath, target);
-        void vscode.window.showInformationMessage(
-          `Next Recording: exported to ${target.fsPath || target.toString()}.`,
-        );
+        const exported = await exportArtifact(sourcePath, target);
+        if (exported) {
+          void vscode.window.showInformationMessage(
+            `Next Recording: exported to ${target.fsPath || target.toString()}.`,
+          );
+        }
       } catch (error) {
         void vscode.window.showErrorMessage(
           `Next Recording: export failed — ${error instanceof Error ? error.message : String(error)}`,
@@ -143,10 +145,10 @@ async function openRecordingInPlayer(artifactPath: string): Promise<void> {
 // destinations (workspace.fs has no streaming API) — plan §9.7.
 const MAX_REMOTE_EXPORT_BYTES = 256 * 1024 * 1024;
 
-async function exportArtifact(sourcePath: string, target: vscode.Uri): Promise<void> {
+async function exportArtifact(sourcePath: string, target: vscode.Uri): Promise<boolean> {
   if (target.scheme === "file") {
     await fs.promises.copyFile(sourcePath, target.fsPath);
-    return;
+    return true;
   }
   const stat = await fs.promises.stat(sourcePath);
   if (stat.size > MAX_REMOTE_EXPORT_BYTES) {
@@ -160,8 +162,9 @@ async function exportArtifact(sourcePath: string, target: vscode.Uri): Promise<v
     "Export",
   );
   if (proceed !== "Export") {
-    return;
+    return false;
   }
   const data = await fs.promises.readFile(sourcePath);
   await vscode.workspace.fs.writeFile(target, data);
+  return true;
 }

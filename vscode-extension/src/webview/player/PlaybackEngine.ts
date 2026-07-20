@@ -1,6 +1,7 @@
-import type { SessionEvent } from "../../model/events";
+import type { EolMode, SessionEvent } from "../../model/events";
+import { LIMITS } from "../../model/limits";
 import type { Bridge } from "../bridge/acquireBridge";
-import type { RecordingMetadataPayload } from "../bridge/protocol";
+import { PROTOCOL_VERSION, type RecordingMetadataPayload } from "../bridge/protocol";
 import type { PlaybackRenderer } from "./Renderer";
 import { SessionReducer } from "./SessionReducer";
 import { applyContentChanges } from "./PlaybackState";
@@ -32,7 +33,7 @@ export class PlaybackEngine {
   private events: SessionEvent[] = [];
   private nextIndex = 0;
   private readonly checkpoints = new Map<string, string>();
-  private readonly checkpointDocs = new Map<string, string>();
+  private checkpointCodeUnits = 0;
   private metadata: RecordingMetadataPayload | null = null;
 
   private playing = false;
@@ -57,40 +58,64 @@ export class PlaybackEngine {
   private readonly listeners = new Set<() => void>();
 
   // Seek plan (built once after load).
-  private checkpointIdxByDoc = new Map<string, { index: number; checkpointId: string }[]>();
-  private patchIdxByDoc = new Map<string, number[]>();
+  private checkpointIdxByDoc = new Map<
+    string,
+    { index: number; checkpointId: string; version: number; eol: EolMode }[]
+  >();
+  private documentStateIdxByDoc = new Map<string, number[]>();
 
   // Request correlation: duplicates and late responses are ignored.
   private requestCounter = 0;
   private readonly pending = new Map<
     string,
-    { resolve: (value: unknown) => void; reject: (error: Error) => void }
+    {
+      expected: "recording.eventWindow" | "recording.checkpoint";
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+    }
   >();
   private readonly surfaceAssignments = new Map<string, string>();
+  private readonly rendererDocuments = new Set<string>();
+  private readonly unsubscribeBridge: () => void;
+  private seekGeneration = 0;
+  private resumeAfterSeek = false;
   private disposed = false;
 
   constructor(
     private readonly bridge: Bridge,
     private readonly renderer: PlaybackRenderer,
   ) {
-    bridge.onMessage((message) => {
+    this.unsubscribeBridge = bridge.onMessage((message) => {
+      if (this.disposed) {
+        return;
+      }
       switch (message.type) {
         case "recording.metadata":
           void this.beginLoad(message.payload);
           break;
         case "recording.eventWindow": {
           const entry = this.pending.get(message.requestId);
-          if (entry) {
+          if (entry?.expected === message.type) {
             this.pending.delete(message.requestId);
-            entry.resolve({ events: message.events, done: message.done });
+            entry.resolve({
+              fromSeq: message.fromSeq,
+              events: message.events,
+              done: message.done,
+            });
+          } else if (entry) {
+            this.pending.delete(message.requestId);
+            entry.reject(new Error(`unexpected ${message.type} response`));
           }
           break;
         }
         case "recording.checkpoint": {
           const entry = this.pending.get(message.requestId);
-          if (entry) {
+          if (entry?.expected === message.type) {
             this.pending.delete(message.requestId);
             entry.resolve(message.text);
+          } else if (entry) {
+            this.pending.delete(message.requestId);
+            entry.reject(new Error(`unexpected ${message.type} response`));
           }
           break;
         }
@@ -108,10 +133,15 @@ export class PlaybackEngine {
           this.pause();
           break;
         case "host.hello":
+          if (message.protocolVersion !== PROTOCOL_VERSION) {
+            this.setError(
+              `host protocol ${message.protocolVersion} is unsupported (expected ${PROTOCOL_VERSION})`,
+            );
+          }
           break;
       }
     });
-    bridge.post({ type: "webview.ready", protocolVersion: 2 });
+    bridge.post({ type: "webview.ready", protocolVersion: PROTOCOL_VERSION });
   }
 
   // ---- store interface ---------------------------------------------------
@@ -131,6 +161,8 @@ export class PlaybackEngine {
   }
 
   private setError(message: string): void {
+    this.resumeAfterSeek = false;
+    this.stopClock();
     this.publish({ phase: "error", error: message });
   }
 
@@ -141,9 +173,21 @@ export class PlaybackEngine {
 
   // ---- loading -------------------------------------------------------------
 
-  private request<T>(message: { requestId: string } & Record<string, unknown>): Promise<T> {
+  private request<T>(
+    message: {
+      type: "recording.requestWindow" | "recording.requestCheckpoint";
+      requestId: string;
+    } & Record<string, unknown>,
+  ): Promise<T> {
+    if (this.disposed) {
+      return Promise.reject(new Error("playback engine is disposed"));
+    }
     return new Promise<T>((resolve, reject) => {
       this.pending.set(message.requestId, {
+        expected:
+          message.type === "recording.requestWindow"
+            ? "recording.eventWindow"
+            : "recording.checkpoint",
         resolve: resolve as (value: unknown) => void,
         reject,
       });
@@ -166,13 +210,23 @@ export class PlaybackEngine {
       documentId,
       checkpointId,
     });
+    const raced = this.checkpoints.get(checkpointId);
+    if (raced !== undefined) {
+      return raced;
+    }
+    if (this.checkpointCodeUnits + text.length > LIMITS.maxPlayerCheckpointCodeUnits) {
+      throw new Error(
+        `checkpoint cache exceeds ${LIMITS.maxPlayerCheckpointCodeUnits} UTF-16 code units`,
+      );
+    }
     this.checkpoints.set(checkpointId, text);
+    this.checkpointCodeUnits += text.length;
     return text;
   }
 
   private async beginLoad(metadata: RecordingMetadataPayload): Promise<void> {
-    if (this.metadata) {
-      return; // duplicate metadata messages are safe no-ops
+    if (this.metadata || this.snapshot.phase === "error") {
+      return; // duplicate metadata and post-failure retries are safe no-ops
     }
     this.metadata = metadata;
     this.publish({
@@ -185,6 +239,7 @@ export class PlaybackEngine {
       let fromSeq = 0;
       for (;;) {
         const window = await this.request<{
+          fromSeq: number;
           events: SessionEvent[];
           done: boolean;
         }>({
@@ -193,6 +248,9 @@ export class PlaybackEngine {
           fromSeq,
           maxCount: WINDOW_SIZE,
         });
+        if (window.fromSeq !== fromSeq) {
+          throw new Error(`event window starts at ${window.fromSeq}, expected sequence ${fromSeq}`);
+        }
         this.events.push(...window.events);
         fromSeq += window.events.length;
         this.publish({ loadedEvents: this.events.length });
@@ -200,32 +258,56 @@ export class PlaybackEngine {
           break;
         }
       }
+      if (this.events.length !== metadata.eventCount) {
+        throw new Error(
+          `loaded event count ${this.events.length} does not match metadata ${metadata.eventCount}`,
+        );
+      }
 
       // Seek plan + checkpoint→document mapping.
       this.events.forEach((event, index) => {
         if (event.type === "document.enrolled") {
           const d = event.payload.descriptor;
           this.checkpointIdxByDoc.set(d.documentId, [
-            { index, checkpointId: d.initialCheckpointId },
+            {
+              index,
+              checkpointId: d.initialCheckpointId,
+              version: d.initialVersion,
+              eol: d.eol,
+            },
           ]);
-          this.checkpointDocs.set(d.initialCheckpointId, d.documentId);
         } else if (event.type === "document.checkpoint") {
-          this.checkpointIdxByDoc
-            .get(event.payload.documentId)
-            ?.push({ index, checkpointId: event.payload.checkpointId });
-          this.checkpointDocs.set(event.payload.checkpointId, event.payload.documentId);
-        } else if (event.type === "document.patch") {
-          const list = this.patchIdxByDoc.get(event.payload.documentId) ?? [];
+          this.checkpointIdxByDoc.get(event.payload.documentId)?.push({
+            index,
+            checkpointId: event.payload.checkpointId,
+            version: event.payload.version,
+            eol: event.payload.eol,
+          });
+        } else if (
+          event.type === "document.patch" ||
+          event.type === "document.eolChanged" ||
+          event.type === "document.resumed"
+        ) {
+          const list = this.documentStateIdxByDoc.get(event.payload.documentId) ?? [];
           list.push(index);
-          this.patchIdxByDoc.set(event.payload.documentId, list);
+          this.documentStateIdxByDoc.set(event.payload.documentId, list);
         }
       });
 
-      // Prefetch initial checkpoints so enrollment applies synchronously.
+      // Prefetch checkpoints that can carry state not represented by a
+      // patch. Interval/stop checkpoints are redundant during linear
+      // forward playback and remain lazy for memory efficiency.
       for (const event of this.events) {
         if (event.type === "document.enrolled") {
           const d = event.payload.descriptor;
           await this.fetchCheckpoint(d.documentId, d.initialCheckpointId);
+        } else if (
+          event.type === "document.checkpoint" &&
+          (event.payload.reason === "resume" ||
+            event.payload.reason === "mismatch" ||
+            event.payload.reason === "limit")
+        ) {
+          await this.fetchCheckpoint(event.payload.documentId, event.payload.checkpointId);
         }
       }
 
@@ -236,7 +318,9 @@ export class PlaybackEngine {
       this.publish({ phase: "ready", rate: this.rate });
       await this.seekTo(persisted.playheadUs ?? 0);
     } catch (error) {
-      this.setError(error instanceof Error ? error.message : String(error));
+      if (!this.disposed) {
+        this.setError(error instanceof Error ? error.message : String(error));
+      }
     }
   }
 
@@ -268,7 +352,12 @@ export class PlaybackEngine {
       const desired =
         this.anchorPlayheadUs + (performance.now() - this.anchorWallMs) * 1000 * this.rate;
       const clamped = Math.min(desired, this.snapshot.durationUs);
-      this.applyForwardTo(clamped);
+      try {
+        this.applyForwardTo(clamped);
+      } catch (error) {
+        this.setError(error instanceof Error ? error.message : String(error));
+        return;
+      }
       this.playheadUs = clamped;
       this.publish({ playheadUs: clamped });
       if (clamped >= this.snapshot.durationUs) {
@@ -281,6 +370,11 @@ export class PlaybackEngine {
   }
 
   pause(): void {
+    this.resumeAfterSeek = false;
+    this.stopClock();
+  }
+
+  private stopClock(): void {
     if (!this.playing) {
       return;
     }
@@ -323,21 +417,45 @@ export class PlaybackEngine {
     }
   }
 
+  private ensureRendererDocument(
+    documentId: string,
+    text: string,
+    languageId: string,
+    eol: EolMode,
+  ): void {
+    if (this.rendererDocuments.has(documentId)) {
+      this.renderer.setDocumentText(documentId, text);
+      this.renderer.setDocumentLanguage(documentId, languageId);
+      this.renderer.setDocumentEol(documentId, eol);
+      return;
+    }
+    this.renderer.createDocument(documentId, text, languageId);
+    this.renderer.setDocumentEol(documentId, eol);
+    this.rendererDocuments.add(documentId);
+  }
+
   private applyEvent(event: SessionEvent): void {
+    const issueCount = this.reducer.issues.length;
     this.reducer.apply(event);
+    if (this.reducer.issues.length > issueCount) {
+      const issue = this.reducer.issues[this.reducer.issues.length - 1];
+      throw new Error(issue?.message ?? `invalid event at seq ${event.seq}`);
+    }
     switch (event.type) {
       case "document.enrolled": {
         const d = event.payload.descriptor;
-        this.renderer.createDocument(
+        this.ensureRendererDocument(
           d.documentId,
           this.checkpoints.get(d.initialCheckpointId) ?? "",
           d.languageId,
+          d.eol,
         );
         this.bumpStructure();
         break;
       }
       case "document.patch":
         this.renderer.applyChanges(event.payload.documentId, event.payload.changes);
+        this.renderer.setDocumentEol(event.payload.documentId, event.payload.eolAfter);
         break;
       case "document.checkpoint": {
         // Forward playback already has the exact text via patches; restore
@@ -346,12 +464,17 @@ export class PlaybackEngine {
         if (text !== undefined) {
           this.renderer.setDocumentText(event.payload.documentId, text);
         }
+        this.renderer.setDocumentEol(event.payload.documentId, event.payload.eol);
         break;
       }
+      case "document.languageChanged":
+        this.renderer.setDocumentLanguage(event.payload.documentId, event.payload.languageId);
+        break;
       case "document.eolChanged": {
         const doc = this.reducer.state.documents.get(event.payload.documentId);
         if (doc) {
           this.renderer.setDocumentText(event.payload.documentId, doc.text);
+          this.renderer.setDocumentEol(event.payload.documentId, event.payload.eol);
         }
         break;
       }
@@ -375,9 +498,10 @@ export class PlaybackEngine {
   // ---- seek (plan §10.3) ------------------------------------------------------
 
   async seekTo(targetUs: number): Promise<void> {
-    if (this.snapshot.phase !== "ready") {
+    if (this.snapshot.phase !== "ready" || this.disposed) {
       return;
     }
+    const generation = ++this.seekGeneration;
     const clamped = Math.max(0, Math.min(this.snapshot.durationUs, targetUs));
     // Binary search: last event index with tUs <= clamped.
     let lo = 0;
@@ -393,37 +517,57 @@ export class PlaybackEngine {
       }
     }
 
-    const wasPlaying = this.playing;
-    this.pause();
-
-    if (
-      targetIndex >= this.nextIndex - 1 &&
-      targetIndex - this.nextIndex < FORWARD_SEEK_CHEAP_LIMIT
-    ) {
-      this.applyForwardTo(clamped);
-    } else {
-      await this.rebuildAt(targetIndex);
+    if (this.playing) {
+      this.resumeAfterSeek = true;
     }
+    this.stopClock();
 
-    this.playheadUs = clamped;
-    this.anchorPlayheadUs = clamped;
-    this.anchorWallMs = performance.now();
-    this.persist();
-    this.publish({ playheadUs: clamped });
-    if (wasPlaying) {
-      this.play();
+    try {
+      if (
+        targetIndex >= this.nextIndex - 1 &&
+        targetIndex - this.nextIndex < FORWARD_SEEK_CHEAP_LIMIT
+      ) {
+        this.applyForwardTo(clamped);
+      } else if (!(await this.rebuildAt(targetIndex, generation))) {
+        return;
+      }
+
+      if (generation !== this.seekGeneration || this.disposed) {
+        return;
+      }
+      this.playheadUs = clamped;
+      this.anchorPlayheadUs = clamped;
+      this.anchorWallMs = performance.now();
+      this.persist();
+      this.publish({ playheadUs: clamped });
+      const shouldResume = this.resumeAfterSeek;
+      this.resumeAfterSeek = false;
+      if (shouldResume) {
+        this.play();
+      }
+    } catch (error) {
+      if (generation === this.seekGeneration && !this.disposed) {
+        this.setError(error instanceof Error ? error.message : String(error));
+      }
     }
   }
 
-  private async rebuildAt(targetIndex: number): Promise<void> {
+  private async rebuildAt(targetIndex: number, generation: number): Promise<boolean> {
     // Fetch every checkpoint body the rebuild needs before touching state.
     const needed: {
       documentId: string;
       checkpointId: string;
       index: number;
+      version: number;
+      eol: EolMode;
     }[] = [];
     for (const [documentId, checkpoints] of this.checkpointIdxByDoc) {
-      let latest: { index: number; checkpointId: string } | null = null;
+      let latest: {
+        index: number;
+        checkpointId: string;
+        version: number;
+        eol: EolMode;
+      } | null = null;
       for (const candidate of checkpoints) {
         if (candidate.index <= targetIndex) {
           latest = candidate;
@@ -436,49 +580,90 @@ export class PlaybackEngine {
           documentId,
           checkpointId: latest.checkpointId,
           index: latest.index,
+          version: latest.version,
+          eol: latest.eol,
         });
       }
     }
     for (const item of needed) {
       await this.fetchCheckpoint(item.documentId, item.checkpointId);
+      if (generation !== this.seekGeneration || this.disposed) {
+        return false;
+      }
     }
 
-    // Rebuild reducer state without patch text application (cheap pass).
+    // Rebuild structural state without mutating document text. Document
+    // state is reconstructed from the latest checkpoint plus subsequent
+    // patch/EOL/resume events below.
     const reducer = new SessionReducer((id) => this.checkpoints.get(id));
     for (let i = 0; i <= targetIndex; i++) {
       const event = this.events[i] as SessionEvent;
-      if (event.type === "document.patch" || event.type === "document.checkpoint") {
-        // Text state is reconstructed from the checkpoint plan below;
-        // versions are fixed up there as well.
+      if (
+        event.type === "document.patch" ||
+        event.type === "document.checkpoint" ||
+        event.type === "document.eolChanged" ||
+        event.type === "document.resumed"
+      ) {
+        if (!reducer.state.documents.has(event.payload.documentId)) {
+          throw new Error(`${event.type} for unknown document at seq ${event.seq}`);
+        }
         reducer.state.appliedSeq = event.seq;
         reducer.state.timeUs = event.tUs;
         continue;
       }
       reducer.apply(event);
+      const issue = reducer.issues[reducer.issues.length - 1];
+      if (issue?.seq === event.seq) {
+        throw new Error(issue.message);
+      }
     }
 
-    // Restore document texts: checkpoint body + forward patches.
+    // Restore exact document state from checkpoint bodies plus every
+    // subsequent state-changing event for that document.
     for (const item of needed) {
       let text = this.checkpoints.get(item.checkpointId) as string;
-      let version = 0;
-      const patchIndexes = this.patchIdxByDoc.get(item.documentId) ?? [];
-      for (const index of patchIndexes) {
+      let version = item.version;
+      let eol = item.eol;
+      const stateIndexes = this.documentStateIdxByDoc.get(item.documentId) ?? [];
+      for (const index of stateIndexes) {
         if (index > item.index && index <= targetIndex) {
-          const patch = this.events[index] as Extract<SessionEvent, { type: "document.patch" }>;
-          text = applyContentChanges(text, patch.payload.changes);
-          version = patch.payload.afterVersion;
+          const event = this.events[index] as SessionEvent;
+          if (event.type === "document.patch") {
+            if (event.payload.beforeVersion !== version) {
+              throw new Error(
+                `version mismatch at seq ${event.seq}: patch before=${event.payload.beforeVersion}, state=${version}`,
+              );
+            }
+            text = applyContentChanges(text, event.payload.changes);
+            version = event.payload.afterVersion;
+            eol = event.payload.eolAfter;
+          } else if (event.type === "document.eolChanged") {
+            text = text.replace(/\r\n|\r|\n/g, event.payload.eol === "CRLF" ? "\r\n" : "\n");
+            version = event.payload.version;
+            eol = event.payload.eol;
+          } else if (event.type === "document.resumed") {
+            version = event.payload.version;
+          }
         }
       }
       const doc = reducer.state.documents.get(item.documentId);
       if (doc) {
         doc.text = text;
-        if (version > 0) {
-          doc.version = version;
-        }
-        this.renderer.setDocumentText(item.documentId, text);
+        doc.version = version;
+        doc.eol = eol;
       }
     }
 
+    if (generation !== this.seekGeneration || this.disposed) {
+      return false;
+    }
+
+    // Commit the rebuilt state and renderer projection only after every
+    // async checkpoint request has completed and this is still the latest
+    // seek. Older rapid-slider seeks cannot overwrite a newer result.
+    for (const doc of reducer.state.documents.values()) {
+      this.ensureRendererDocument(doc.documentId, doc.text, doc.languageId, doc.eol);
+    }
     this.reducer = reducer;
     this.nextIndex = targetIndex + 1;
 
@@ -488,6 +673,7 @@ export class PlaybackEngine {
       this.renderer.setViewport(surface.surfaceId, surface.visibleRanges);
     }
     this.bumpStructure();
+    return true;
   }
 
   // ---- surface hosting --------------------------------------------------------
@@ -503,7 +689,9 @@ export class PlaybackEngine {
     const candidates = [...this.reducer.state.surfaces.values()]
       .filter((s) => s.open && s.documentId === documentId && !claimed.has(s.surfaceId))
       .sort((a, b) => a.surfaceId.localeCompare(b.surfaceId));
-    const surfaceId = candidates[0]?.surfaceId ?? `view-${groupId}-${documentId}`;
+    const exact = candidates.find((surface) => surface.groupId === groupId);
+    const surfaceId =
+      exact?.surfaceId ?? candidates[0]?.surfaceId ?? `view-${groupId}-${documentId}`;
     this.surfaceAssignments.set(key, surfaceId);
     return surfaceId;
   }
@@ -531,9 +719,25 @@ export class PlaybackEngine {
   }
 
   dispose(): void {
-    this.pause();
+    if (this.disposed) {
+      return;
+    }
+    this.seekGeneration += 1;
+    this.resumeAfterSeek = false;
+    this.stopClock();
     this.disposed = true;
+    this.unsubscribeBridge();
+    for (const entry of this.pending.values()) {
+      entry.reject(new Error("playback engine disposed"));
+    }
+    this.pending.clear();
     this.renderer.dispose();
+    this.events = [];
+    this.checkpointIdxByDoc.clear();
+    this.documentStateIdxByDoc.clear();
+    this.checkpoints.clear();
+    this.checkpointCodeUnits = 0;
+    this.rendererDocuments.clear();
     this.listeners.clear();
   }
 }

@@ -43,6 +43,145 @@ describe("SessionReducer", () => {
     expect(reducerA.state.activeSurfaceId).toBe(reducerB.state.activeSurfaceId);
   });
 
+  it("tracks resume versions and surface-to-group placement", () => {
+    const checkpoints: Record<string, string> = { cp0: "hello\n" };
+    const reducer = new SessionReducer((id) => checkpoints[id]);
+    const events: SessionEvent[] = [
+      {
+        seq: 0,
+        tUs: 0,
+        type: "document.enrolled",
+        payload: {
+          descriptor: {
+            documentId: "doc-1",
+            rootId: null,
+            logicalPath: "one.txt",
+            displayName: "one.txt",
+            schemeClass: "untitled",
+            languageId: "plaintext",
+            eol: "LF",
+            initialVersion: 1,
+            initialCheckpointId: "cp0",
+            byteLength: 6,
+            sha256: "",
+          },
+        },
+      },
+      {
+        seq: 1,
+        tUs: 1,
+        type: "document.resumed",
+        payload: { documentId: "doc-1", version: 7 },
+      },
+      {
+        seq: 2,
+        tUs: 2,
+        type: "surface.opened",
+        payload: {
+          surfaceId: "surface-1",
+          documentId: "doc-1",
+          groupId: "group-2",
+          viewColumn: 2,
+          selections: [],
+          visibleRanges: [],
+          isActive: true,
+        },
+      },
+    ];
+    for (const event of events) {
+      reducer.apply(event);
+    }
+    expect(reducer.state.documents.get("doc-1")?.version).toBe(7);
+    expect(reducer.state.surfaces.get("surface-1")).toMatchObject({
+      groupId: "group-2",
+      viewColumn: 2,
+    });
+  });
+
+  it("rejects out-of-bounds patches instead of silently slicing", () => {
+    const reducer = new SessionReducer((id) => (id === "cp0" ? "abc" : undefined));
+    reducer.apply({
+      seq: 0,
+      tUs: 0,
+      type: "document.enrolled",
+      payload: {
+        descriptor: {
+          documentId: "doc-1",
+          rootId: null,
+          logicalPath: "one.txt",
+          displayName: "one.txt",
+          schemeClass: "untitled",
+          languageId: "plaintext",
+          eol: "LF",
+          initialVersion: 1,
+          initialCheckpointId: "cp0",
+          byteLength: 3,
+          sha256: "",
+        },
+      },
+    });
+    reducer.apply({
+      seq: 1,
+      tUs: 1,
+      type: "document.patch",
+      payload: {
+        documentId: "doc-1",
+        beforeVersion: 1,
+        afterVersion: 2,
+        reason: "unknown",
+        changes: [{ rangeOffsetUtf16: 10, rangeLengthUtf16: 1, text: "x" }],
+        beforeHash: "",
+        afterHash: "",
+        eolBefore: "LF",
+        eolAfter: "LF",
+      },
+    });
+    expect(reducer.state.documents.get("doc-1")?.text).toBe("abc");
+    expect(reducer.issues.at(-1)?.message).toContain("outside document bounds");
+  });
+
+  it("rejects a patch whose beforeVersion does not match replay state", () => {
+    const reducer = new SessionReducer((id) => (id === "cp0" ? "abc" : undefined));
+    reducer.apply({
+      seq: 0,
+      tUs: 0,
+      type: "document.enrolled",
+      payload: {
+        descriptor: {
+          documentId: "doc-1",
+          rootId: null,
+          logicalPath: "one.txt",
+          displayName: "one.txt",
+          schemeClass: "untitled",
+          languageId: "plaintext",
+          eol: "LF",
+          initialVersion: 1,
+          initialCheckpointId: "cp0",
+          byteLength: 3,
+          sha256: "",
+        },
+      },
+    });
+    reducer.apply({
+      seq: 1,
+      tUs: 1,
+      type: "document.patch",
+      payload: {
+        documentId: "doc-1",
+        beforeVersion: 9,
+        afterVersion: 10,
+        reason: "unknown",
+        changes: [{ rangeOffsetUtf16: 3, rangeLengthUtf16: 0, text: "x" }],
+        beforeHash: "",
+        afterHash: "",
+        eolBefore: "LF",
+        eolAfter: "LF",
+      },
+    });
+    expect(reducer.state.documents.get("doc-1")?.text).toBe("abc");
+    expect(reducer.issues.at(-1)?.message).toContain("version mismatch");
+  });
+
   it("checkpoint restore + forward patches equals linear prefix replay (seek strategy)", () => {
     const fixture = generateFixture(smallConfig());
     const target = fixture.seekPoints[10]!;
@@ -105,7 +244,7 @@ describe("SessionReducer", () => {
         lastTUs = event.tUs;
       });
     }
-  });
+  }, 15_000);
 
   it("large-file fixture initial text is around 5 MiB", () => {
     const config = benchmarkFixtureConfigs().find((c) => c.name === "large-file")!;

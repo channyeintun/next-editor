@@ -285,4 +285,74 @@ suite("native recording lifecycle", function () {
       await config.update("capture.exclude", undefined, vscode.ConfigurationTarget.Global);
     }
   });
+
+  test("document size limits never persist oversized text or leak provisional IDs", async () => {
+    const config = vscode.workspace.getConfiguration("nextRecording");
+    await config.update("capture.maxDocumentBytes", 1024, vscode.ConfigurationTarget.Global);
+    try {
+      const initiallyTooLarge = createFile(rootPath(0), "initial-too-large.txt", "x".repeat(1100));
+      const crossesLimit = createFile(rootPath(0), "crosses-limit.txt", "a".repeat(1000));
+      const start = (await vscode.commands.executeCommand("nextRecording.start")) as StartResult;
+      assert.strictEqual(start.ok, true);
+
+      await vscode.window.showTextDocument(initiallyTooLarge, { preview: false });
+      const editor = await vscode.window.showTextDocument(crossesLimit, { preview: false });
+      await editor.edit((builder) => builder.insert(new vscode.Position(0, 1000), "b".repeat(100)));
+      await sleep(250);
+
+      const stop = (await vscode.commands.executeCommand("nextRecording.stop")) as StopResult;
+      assert.strictEqual(stop.ok, true, `stop failed: ${JSON.stringify(stop)}`);
+      const journal = fs
+        .readFileSync(path.join(stop.sessionDir!, "events.ndjson"), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+
+      assert.ok(
+        !journal.some(
+          (event) =>
+            event.type === "document.enrolled" &&
+            event.payload.descriptor.displayName === "initial-too-large.txt",
+        ),
+        "initially oversized document was enrolled",
+      );
+      for (const event of journal.filter((candidate) => candidate.type === "topology.snapshot")) {
+        const tabs = event.payload.groups.flatMap(
+          (group: { tabs: { label: string; documentId: string | null }[] }) => group.tabs,
+        );
+        for (const tab of tabs) {
+          if (tab.label === "initial-too-large.txt") {
+            assert.strictEqual(tab.documentId, null, "provisional documentId leaked into topology");
+          }
+        }
+      }
+
+      const enrolled = journal.find(
+        (event) =>
+          event.type === "document.enrolled" &&
+          event.payload.descriptor.displayName === "crosses-limit.txt",
+      );
+      assert.ok(enrolled, "in-policy document was not enrolled");
+      const documentId = enrolled.payload.descriptor.documentId;
+      assert.ok(
+        !journal.some(
+          (event) => event.type === "document.patch" && event.payload.documentId === documentId,
+        ),
+        "oversized transition was persisted as a patch",
+      );
+      assert.ok(
+        journal.some(
+          (event) =>
+            event.type === "document.checkpoint" &&
+            event.payload.documentId === documentId &&
+            event.payload.reason === "limit" &&
+            event.payload.byteLength === 1000,
+        ),
+        "last in-policy checkpoint was not retained",
+      );
+      assert.ok(!JSON.stringify(journal).includes("b".repeat(100)), "oversized text leaked");
+    } finally {
+      await config.update("capture.maxDocumentBytes", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
 });

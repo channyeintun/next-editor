@@ -1,7 +1,12 @@
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 // Inline worker so it loads under the webview CSP (worker-src blob:).
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker&inline";
-import type { ContentChange, SelectionRange, VisibleLineRange } from "../../../model/events";
+import type {
+  ContentChange,
+  EolMode,
+  SelectionRange,
+  VisibleLineRange,
+} from "../../../model/events";
 import type { PlaybackRenderer } from "../Renderer";
 
 declare global {
@@ -47,6 +52,16 @@ export class MonacoRenderer implements PlaybackRenderer {
     this.models.delete(documentId);
   }
 
+  setDocumentLanguage(documentId: string, languageId: string): void {
+    monaco.editor.setModelLanguage(this.model(documentId), languageId);
+  }
+
+  setDocumentEol(documentId: string, eol: EolMode): void {
+    this.model(documentId).setEOL(
+      eol === "CRLF" ? monaco.editor.EndOfLineSequence.CRLF : monaco.editor.EndOfLineSequence.LF,
+    );
+  }
+
   private model(documentId: string): monaco.editor.ITextModel {
     const model = this.models.get(documentId);
     if (!model) {
@@ -75,7 +90,12 @@ export class MonacoRenderer implements PlaybackRenderer {
   }
 
   createSurface(surfaceId: string, documentId: string, container: HTMLElement): void {
-    const editor = monaco.editor.create(container, {
+    const editor = monaco.editor.create(container, this.editorOptions(documentId));
+    this.surfaces.set(surfaceId, { editor, documentId, viewState: null });
+  }
+
+  private editorOptions(documentId: string): monaco.editor.IStandaloneEditorConstructionOptions {
+    return {
       model: this.model(documentId),
       readOnly: true,
       minimap: { enabled: false },
@@ -84,8 +104,7 @@ export class MonacoRenderer implements PlaybackRenderer {
       renderWhitespace: "none",
       wordWrap: "off",
       contextmenu: false,
-    });
-    this.surfaces.set(surfaceId, { editor, documentId, viewState: null });
+    };
   }
 
   hasSurface(surfaceId: string): boolean {
@@ -150,13 +169,7 @@ export class MonacoRenderer implements PlaybackRenderer {
     if (!entry || entry.editor) {
       return;
     }
-    entry.editor = monaco.editor.create(container, {
-      model: this.model(entry.documentId),
-      readOnly: true,
-      minimap: { enabled: false },
-      automaticLayout: true,
-      contextmenu: false,
-    });
+    entry.editor = monaco.editor.create(container, this.editorOptions(entry.documentId));
     if (entry.viewState) {
       entry.editor.restoreViewState(entry.viewState);
     }

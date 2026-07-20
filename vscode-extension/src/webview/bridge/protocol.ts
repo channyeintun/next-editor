@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LIMITS } from "../../model/limits";
 import { sessionEventSchema } from "../../model/schemas";
 
 // Versioned, discriminated host<->webview protocol (plan §10.2). Both
@@ -18,7 +19,7 @@ export const recordingMetadataSchema = z.object({
   fileName: z.string(),
   sessionId: z.string(),
   durationUs: z.number().int().nonnegative(),
-  eventCount: z.number().int().nonnegative(),
+  eventCount: z.number().int().nonnegative().max(LIMITS.maxEventsPerSession),
   hasAudio: z.boolean(),
   defaultSpeed: z.number().positive(),
   documents: z.array(documentSummary),
@@ -39,7 +40,7 @@ export const hostToWebviewSchema = z.discriminatedUnion("type", [
     type: z.literal("recording.eventWindow"),
     requestId,
     fromSeq: z.number().int().nonnegative(),
-    events: z.array(sessionEventSchema),
+    events: z.array(sessionEventSchema).max(50_000),
     done: z.boolean(),
   }),
   z.object({
@@ -47,12 +48,12 @@ export const hostToWebviewSchema = z.discriminatedUnion("type", [
     requestId,
     documentId: z.string(),
     checkpointId: z.string(),
-    text: z.string(),
+    text: z.string().max(LIMITS.maxCheckpointBytes),
   }),
   z.object({
     type: z.literal("request.failed"),
     requestId,
-    message: z.string(),
+    message: z.string().max(4000),
   }),
   z.object({ type: z.literal("player.pause") }),
 ]);

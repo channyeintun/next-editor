@@ -3,6 +3,7 @@
 // projections (plan §11.1).
 import type {
   ContentChange,
+  EolMode,
   SelectionRange,
   TopologySnapshotPayload,
   VisibleLineRange,
@@ -12,6 +13,7 @@ export type PlaybackDocumentState = {
   documentId: string;
   text: string;
   version: number;
+  eol: EolMode;
   languageId: string;
   displayName: string;
 };
@@ -19,6 +21,8 @@ export type PlaybackDocumentState = {
 export type PlaybackSurfaceState = {
   surfaceId: string;
   documentId: string;
+  groupId: string | null;
+  viewColumn: number | null;
   selections: SelectionRange[];
   visibleRanges: VisibleLineRange[];
   open: boolean;
@@ -47,6 +51,15 @@ export function createEmptySessionState(): PlaybackSessionState {
 export function applyContentChanges(text: string, changes: readonly ContentChange[]): string {
   let next = text;
   for (const change of changes) {
+    if (
+      change.rangeOffsetUtf16 < 0 ||
+      change.rangeLengthUtf16 < 0 ||
+      change.rangeOffsetUtf16 + change.rangeLengthUtf16 > next.length
+    ) {
+      throw new Error(
+        `content change outside document bounds: ${change.rangeOffsetUtf16}+${change.rangeLengthUtf16} > ${next.length}`,
+      );
+    }
     next =
       next.slice(0, change.rangeOffsetUtf16) +
       change.text +

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
@@ -8,16 +9,21 @@ export async function atomicWriteFile(file: string, data: string | Buffer): Prom
   await fs.mkdir(dir, { recursive: true });
   const temp = path.join(
     dir,
-    `.${path.basename(file)}.tmp-${process.pid}-${Date.now().toString(36)}`,
+    `.${path.basename(file)}.tmp-${process.pid}-${randomBytes(8).toString("hex")}`,
   );
-  const handle = await fs.open(temp, "w");
   try {
-    await handle.writeFile(data);
-    await handle.sync();
-  } finally {
-    await handle.close();
+    const handle = await fs.open(temp, "wx");
+    try {
+      await handle.writeFile(data);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await fs.rename(temp, file);
+  } catch (error) {
+    await fs.rm(temp, { force: true }).catch(() => {});
+    throw error;
   }
-  await fs.rename(temp, file);
 }
 
 export async function atomicWriteJson(file: string, value: unknown): Promise<void> {

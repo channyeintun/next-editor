@@ -36,11 +36,20 @@ export class SessionReducer {
     switch (event.type) {
       case "document.enrolled": {
         const d = event.payload.descriptor;
+        if (state.documents.has(d.documentId)) {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: `duplicate document enrollment ${d.documentId}`,
+          });
+          break;
+        }
         const text = this.checkpointText(d.initialCheckpointId);
         state.documents.set(d.documentId, {
           documentId: d.documentId,
           text: text ?? "",
           version: d.initialVersion,
+          eol: d.eol,
           languageId: d.languageId,
           displayName: d.displayName,
         });
@@ -63,16 +72,50 @@ export class SessionReducer {
           });
           break;
         }
-        doc.text = applyContentChanges(doc.text, event.payload.changes);
-        doc.version = event.payload.afterVersion;
+        if (event.payload.beforeVersion !== doc.version) {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: `version mismatch: patch before=${event.payload.beforeVersion}, state=${doc.version}`,
+          });
+          break;
+        }
+        try {
+          doc.text = applyContentChanges(doc.text, event.payload.changes);
+          doc.version = event.payload.afterVersion;
+          doc.eol = event.payload.eolAfter;
+        } catch (error) {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
         break;
       }
       case "document.checkpoint": {
         const doc = state.documents.get(event.payload.documentId);
         const text = this.checkpointText(event.payload.checkpointId);
-        if (doc && text !== undefined) {
+        if (!doc) {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: "checkpoint for unknown document",
+          });
+        } else if (text !== undefined) {
           doc.text = text;
           doc.version = event.payload.version;
+          doc.eol = event.payload.eol;
+        } else if (
+          event.payload.reason === "resume" ||
+          event.payload.reason === "mismatch" ||
+          event.payload.reason === "limit"
+        ) {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: `missing state checkpoint ${event.payload.checkpointId}`,
+          });
         }
         break;
       }
@@ -80,6 +123,25 @@ export class SessionReducer {
         const doc = state.documents.get(event.payload.documentId);
         if (doc) {
           doc.languageId = event.payload.languageId;
+        } else {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: "language change for unknown document",
+          });
+        }
+        break;
+      }
+      case "document.resumed": {
+        const doc = state.documents.get(event.payload.documentId);
+        if (doc) {
+          doc.version = event.payload.version;
+        } else {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: "resume for unknown document",
+          });
         }
         break;
       }
@@ -88,13 +150,41 @@ export class SessionReducer {
         if (doc) {
           doc.text = doc.text.replace(/\r\n|\r|\n/g, event.payload.eol === "CRLF" ? "\r\n" : "\n");
           doc.version = event.payload.version;
+          doc.eol = event.payload.eol;
+        } else {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: "EOL change for unknown document",
+          });
+        }
+        break;
+      }
+      case "document.saved":
+      case "document.closed": {
+        if (!state.documents.has(event.payload.documentId)) {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: `${event.type} for unknown document`,
+          });
         }
         break;
       }
       case "surface.opened": {
+        if (!state.documents.has(event.payload.documentId)) {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: "surface opened for unknown document",
+          });
+          break;
+        }
         state.surfaces.set(event.payload.surfaceId, {
           surfaceId: event.payload.surfaceId,
           documentId: event.payload.documentId,
+          groupId: event.payload.groupId,
+          viewColumn: event.payload.viewColumn,
           selections: event.payload.selections,
           visibleRanges: event.payload.visibleRanges,
           open: true,
@@ -108,6 +198,12 @@ export class SessionReducer {
         const surface = state.surfaces.get(event.payload.surfaceId);
         if (surface) {
           surface.open = false;
+        } else {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: "close for unknown surface",
+          });
         }
         if (state.activeSurfaceId === event.payload.surfaceId) {
           state.activeSurfaceId = null;
@@ -115,20 +211,40 @@ export class SessionReducer {
         break;
       }
       case "surface.focused": {
-        state.activeSurfaceId = event.payload.surfaceId;
+        if (state.surfaces.has(event.payload.surfaceId)) {
+          state.activeSurfaceId = event.payload.surfaceId;
+        } else {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: "focus for unknown surface",
+          });
+        }
         break;
       }
       case "surface.selectionChanged": {
         const surface = state.surfaces.get(event.payload.surfaceId);
-        if (surface) {
+        if (surface && surface.documentId === event.payload.documentId) {
           surface.selections = event.payload.selections;
+        } else {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: "selection for unknown or mismatched surface",
+          });
         }
         break;
       }
       case "surface.viewportChanged": {
         const surface = state.surfaces.get(event.payload.surfaceId);
-        if (surface) {
+        if (surface && surface.documentId === event.payload.documentId) {
           surface.visibleRanges = event.payload.visibleRanges;
+        } else {
+          this.issues.push({
+            seq: event.seq,
+            type: event.type,
+            message: "viewport for unknown or mismatched surface",
+          });
         }
         break;
       }
@@ -144,9 +260,6 @@ export class SessionReducer {
       case "session.recovered":
       case "session.failed":
       case "roots.snapshot":
-      case "document.saved":
-      case "document.closed":
-      case "document.resumed":
       case "window.focusChanged":
       case "capability.unsupportedSurface":
       case "capture.overload":

@@ -1,6 +1,11 @@
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView, drawSelection, lineNumbers } from "@codemirror/view";
-import type { ContentChange, SelectionRange, VisibleLineRange } from "../../../model/events";
+import type {
+  ContentChange,
+  EolMode,
+  SelectionRange,
+  VisibleLineRange,
+} from "../../../model/events";
 import { applyContentChanges } from "../PlaybackState";
 import type { PlaybackRenderer } from "../Renderer";
 
@@ -33,6 +38,16 @@ export class CodeMirrorRenderer implements PlaybackRenderer {
 
   disposeDocument(documentId: string): void {
     this.texts.delete(documentId);
+  }
+
+  setDocumentLanguage(_documentId: string, _languageId: string): void {
+    // This development-only benchmark adapter ships no language packages.
+    // Canonical language state remains in the playback reducer.
+  }
+
+  setDocumentEol(_documentId: string, _eol: EolMode): void {
+    // CodeMirror stores the exact canonical string and does not keep a
+    // separate model-level EOL preference.
   }
 
   private text(documentId: string): string {
