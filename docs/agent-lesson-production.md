@@ -1,6 +1,6 @@
 # Agent Lesson Production — Architecture and Delivery Plan
 
-- **Status:** proposal; implementation has not started
+- **Status:** M0 vertical slice implemented (2026-07-21) in `src/studio/` — see [studio-m0-runbook.md](./studio-m0-runbook.md); M1+ not started
 - **Repository audit:** 2026-07-20 at `2a7ec794ecbc`
 - **Primary decision:** build a versioned `LessonScript`, compile it into a content-addressed plan, and run that plan through a deterministic in-app Performer while the existing recorder captures the lesson
 - **Release policy:** generated lessons remain drafts until a human reviews and publishes them

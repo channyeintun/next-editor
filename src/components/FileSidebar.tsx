@@ -24,6 +24,7 @@ import {
   MIN_FILE_SIDEBAR_WIDTH,
 } from "../utils/sidebarLayout";
 import { dispatchRecordedCursorVisibility } from "../utils/recordedCursorVisibility";
+import { STUDIO_TARGET_ATTRIBUTE, studioTargetIdForFile } from "../studio/targets";
 import {
   buildWorkspaceTree,
   CONTEXT_MENU_FALLBACK_HEIGHT,
@@ -691,6 +692,7 @@ function FileSidebarPanel() {
       <div key={node.path} className="px-1.5">
         <button
           type="button"
+          {...{ [STUDIO_TARGET_ATTRIBUTE]: studioTargetIdForFile(node.path) }}
           onClick={() => openFile(node.path)}
           onContextMenu={(event) => handleRowContextMenu(event, "file", node.path)}
           className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5 transition-colors ${

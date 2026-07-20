@@ -28,6 +28,12 @@ import {
   goRunStartedConsoleLines,
 } from "../runtime/goPlayground/console";
 import { areGoPlaygroundFilesEqual, collectGoPlaygroundFiles } from "../runtime/goPlayground/files";
+import { appendGoConsoleLines } from "../runtime/goPlayground/consoleStore";
+import {
+  STUDIO_TARGET_ATTRIBUTE,
+  STUDIO_RUN_BUTTON_TARGET_ID,
+  STUDIO_GO_DOCK_TARGET_ID,
+} from "../studio/targets";
 import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
@@ -43,9 +49,6 @@ import { areStructuredDataEqual } from "../utils/equality";
  */
 
 const GO_CONSOLE_SCROLL_SURFACE = "go-runner";
-// Bounds the recorded console state — every runtime recording event snapshots
-// the full line array, so an unbounded log would bloat .ne recordings.
-const MAX_GO_CONSOLE_LINES = 200;
 
 const ANSI_RESET = "\u001b[0m";
 const ANSI_DIM = "\u001b[90m";
@@ -173,18 +176,7 @@ function GoPlaygroundRunnerPanel() {
   }, [cancel, isPlaybackSnapshotActive]);
 
   const appendConsoleLines = (lines: string[]) => {
-    if (lines.length === 0) {
-      return;
-    }
-
-    const current = runtimePanelStore.getSnapshot().context.consoleLines;
-    // Blank separator between explicit tool operations keeps results readable.
-    const startsOperation =
-      lines[0].startsWith("[go-run] go run") || lines[0].startsWith("[gofmt] gofmt");
-    const separator = current.length > 0 && startsOperation ? [""] : [];
-    runtimePanelStore.trigger.setConsoleLines({
-      consoleLines: [...current, ...separator, ...lines].slice(-MAX_GO_CONSOLE_LINES),
-    });
+    appendGoConsoleLines(runtimePanelStore, lines);
   };
 
   const formatGoProject = async (
@@ -389,6 +381,7 @@ function GoPlaygroundRunnerPanel() {
         displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "shrink-0"
       }`}
       data-cursor-replay-target="runtime-dock"
+      {...{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_GO_DOCK_TARGET_ID }}
     >
       <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">
         {GO_DOCK_TABS.map((tab) => {
@@ -496,6 +489,7 @@ function GoPlaygroundRunnerPanel() {
                   </button>
                   <button
                     type="button"
+                    {...{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_RUN_BUTTON_TARGET_ID }}
                     onClick={() => {
                       void handleRun();
                     }}

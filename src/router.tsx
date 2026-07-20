@@ -180,6 +180,19 @@ export const router = createBrowserRouter([
     HydrateFallback: RouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
+  // Dev-only lesson production studio (docs/agent-lesson-production.md). The
+  // conditional spread keeps the route — and its chunk — out of production
+  // builds entirely.
+  ...(import.meta.env.DEV
+    ? [
+        {
+          path: "/studio",
+          lazy: lazyRoute(() => import("./studio/StudioRoute"), "/studio"),
+          HydrateFallback: RouteHydrateFallback,
+          ErrorBoundary: RouteErrorBoundary,
+        },
+      ]
+    : []),
   {
     path: "/learn",
     lazy: lazyRoute(() => import("@next-editor/tube"), "/learn"),

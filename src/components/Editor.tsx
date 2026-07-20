@@ -87,6 +87,10 @@ export interface EditorProps {
   /** One-shot force-autoplay, independent of the persisted Autoplay setting — set by
    *  the playlist auto-advance flow so the next lesson always starts playing. */
   autoplayOverride?: boolean;
+  /** Extra UI mounted inside the full provider stack, as a sibling of the editor
+   *  layout — the dev-only studio render console uses this to reach the editor,
+   *  workspace, and runtime contexts without duplicating the provider tree. */
+  overlay?: ReactNode;
 }
 
 export function EditorLayout({
@@ -324,7 +328,7 @@ export function EditorLayout({
   );
 }
 
-export default function Editor(props: EditorProps = {}) {
+export default function Editor({ overlay, ...props }: EditorProps = {}) {
   return (
     <WorkspaceProvider>
       <WebContainerRuntimeProvider>
@@ -342,6 +346,7 @@ export default function Editor(props: EditorProps = {}) {
                               <PreviewPanelProvider>
                                 <CollaborationSurfaceBridge />
                                 <EditorLayout {...props} />
+                                {overlay}
                               </PreviewPanelProvider>
                             </WhiteboardProvider>
                           </SlidesProvider>
