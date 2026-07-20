@@ -16,10 +16,10 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
 
 1. **Read** `docs/lesson-script-authoring.md`, `docs/studio-persona.md`, and
    `src/studio/scripts/go-swap.yaml`.
-2. **Design before writing**: one concept; the exact final code (pinned files
-   - your insertions); mentally run it and transcribe the exact program
-     output for the fixture; then write narration that speaks _while_ each
-     action happens, placing `[[mark:…]]` where actions begin.
+2. **Design before writing**: one concept; work out the exact final code
+   (pinned files plus your insertions); mentally run it and transcribe the
+   exact program output for the fixture; then write narration that speaks
+   _while_ each action happens, placing `[[mark:…]]` where actions begin.
 3. **Write** the YAML. Discipline points that break renders when sloppy:
    - `editor.type` anchors (`after`) must match file content byte-for-byte
      (tabs `\t`, newlines `\n`; use double-quoted YAML strings).
