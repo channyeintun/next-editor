@@ -85,8 +85,15 @@ bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml
 
 The Director CLI validates the script (`src/studio/script/schema.ts`), checks
 marker resolution and dialog segmentation, runs the advisory critic, and emits
-`src/studio/plans/scripts/<slug>.json` (+ critique). Register new slugs in
-`src/studio/plans/index.ts`, then render at `/studio?plan=<slug>`.
+`src/studio/plans/scripts/<slug>.json` (+ critique). Emitted scripts
+**auto-register by filename** — no code edit; render at `/studio?plan=<slug>`.
+Running the Director with no arguments compiles every script.
+
+**Agents author lessons too**: the complete authoring contract is
+[lesson-script-authoring.md](./lesson-script-authoring.md), and Claude Code
+sessions in this repo have the `lesson-script` skill
+(`.claude/skills/lesson-script/`) that wraps it — ask for a lesson on a
+concept and the agent writes, compiles, and renders the script.
 
 Narration is produced **in the page** at render time by the in-page Director
 (`src/studio/inPageDirector.ts`): the narration splits at every `[[mark:…]]`

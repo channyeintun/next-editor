@@ -1,0 +1,228 @@
+# LessonScript Authoring Contract
+
+The complete, self-contained specification for writing studio lesson scripts.
+Written for **agents** (Claude Code, Codex, or any coding agent) as much as for
+humans: following this document end-to-end produces a lesson that compiles,
+renders unattended, and passes every mechanical gate — without reading the
+studio's source code. The editorial rules live in
+[studio-persona.md](./studio-persona.md); the operational runbook in
+[studio-m0-runbook.md](./studio-m0-runbook.md).
+
+## What you are producing
+
+One YAML file at `src/studio/scripts/<slug>.yaml`. It fully determines a
+narrated, replayable coding lesson: the starter workspace, the spoken
+narration, every editor/slide/whiteboard/runtime action, and the assertions
+that gate the build. Nothing else is hand-edited — **never** edit the emitted
+JSON under `src/studio/plans/scripts/` (build artifacts) and never touch
+`src/studio/plans/index.ts` (scripts auto-register by filename).
+
+## The mental model (read this before writing)
+
+1. Narration is written per **scene**, with `[[mark:name]]` tokens embedded in
+   the prose. Each mark is an **anchor**: the text splits at every mark into
+   **dialogs**, each dialog is synthesized to audio separately (pocket-tts, in
+   the render page), and actions fire at the mark they reference.
+2. The scheduler places dialogs **around the actions**: narration waits until
+   an anchored typing action finishes before the next dialog starts. You do
+   not compute timings — you place marks where things should happen and let
+   the compiler schedule. It fails (before any render) on impossibilities and
+   warns when your actions force more than ~2.5s of silence ("add narration
+   here or shorten the action").
+3. The whole performance is recorded live in the editor, then mechanically
+   verified: the run output must appear in the recorded console, edited files
+   must contain what you asserted, action start times must hit their plan
+   times within the timing gate. A render that fails any gate produces no
+   lesson.
+
+## Workflow
+
+```text
+1. Write   src/studio/scripts/<slug>.yaml
+2. Compile bun scripts/studio-director.ts                # validates ALL scripts
+                                                         # (or pass one path)
+   → fix schema/marker errors it reports; weigh critic notes (advisory)
+   → emits src/studio/plans/scripts/<slug>.json (+ .critique.json)
+3. Render  bun run dev   (separate terminal, keep running)
+           bun scripts/studio-render.ts <slug>           # 2 renders + gates
+   → exit 0 = every check and the repeatability comparison passed
+   → artifacts in studio-out/<slug>-<timestamp>/ (reports, bundle, screenshots)
+4. A human watches the lesson (/studio?plan=<slug>) and decides on a draft.
+```
+
+Renders need Chrome installed and network for the one-time TTS bundle
+download. If you cannot run step 3 in your environment, stop after step 2 and
+report that the render is pending.
+
+## Schema reference
+
+Top level:
+
+```yaml
+schemaVersion: 1 # literal
+lesson:
+  slug: kebab-case # unique; becomes the filename and render id
+  title: "…"
+  locale: en-US
+  workspace: # the PINNED starter state (exact file contents)
+    lessonType: go # the only supported execution kind today
+    name: Go Lesson
+    entryFilePath: main.go
+    files:
+      main.go: | # exact content, tabs for Go indentation
+        package main
+        …
+  slides: [] # optional, see Slides
+  whiteboardAssets: [] # optional, see Whiteboard
+build:
+  voiceProfile: pocket-alba-v1 # see src/studio/tts/profiles.ts for ids
+  seed: 11 # any int ≥ 0; drives typing cadence + narration noise
+runtime:
+  kind: go-playground
+  defaultMode: fixture # fixture = offline deterministic; live = real service
+  fixture:
+    latencyMs: 1200
+    transientErrorKinds: [] # e.g. [unavailable] to exercise the retry path
+    result:
+      status: success
+      exitCode: 0
+      output: "line one\nline two\n"
+scenes: […] # see Scenes
+checks:
+  - { type: timing.p95Ms, max: 300 } # recommended on every script
+```
+
+### Scenes, narration, and marks
+
+```yaml
+scenes:
+  - id: unique-scene-id
+    narration: >
+      Prose the voice speaks. [[mark:do-it]] More prose after the anchor.
+    sources: # ≥1 per scene or the critic flags it
+      - { title: "…", url: "https://…" }
+    actions: […]
+```
+
+Marker rules:
+
+- `[[mark:name]]` — kebab/alphanumeric names, **globally unique** across all
+  scenes, removed before synthesis and captions.
+- A mark anchors to the word that follows it. Place a mark exactly where the
+  related action should begin. Marks at sentence boundaries sound best (each
+  inter-mark span is synthesized as one utterance).
+- Every mark referenced by an action must exist; unreferenced marks only
+  produce a critic note.
+
+Narration is also the caption text — write it clean (the persona guide's
+sentence-length and banned-phrase rules apply; the critic enforces them as
+advisory notes).
+
+### Actions
+
+Common fields: `id` (globally unique), `at` (anchor), optional `timeoutMs`
+(default 10000; the command must acknowledge within it).
+
+Anchors (`at`) — narration-relative only, never absolute times:
+
+- `{ mark: name }` or `{ mark: name, offsetMs: -400 }` — at a mark, optionally
+  shifted (negative = start before the words are spoken; small values only).
+- `{ scene: start }` — at the scene's first spoken word.
+- `{ afterAction: other-id }` — after that action completes (use for
+  `expect.*` gates that follow `runtime.run`).
+
+Action catalog:
+
+| type                 | fields                                                                 | notes                                                                                                                                                                                                                                                                                                   |
+| -------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspace.openFile` | `path`                                                                 | Path must exist in `workspace.files`. A cursor tween to the file row is derived automatically.                                                                                                                                                                                                          |
+| `editor.type`        | `target: {file, after, occurrence}`, `text`, `cadence: fast-explainer` | **Insert-only.** `after` is an exact substring of the file's _current_ content; insertion happens at the end of its `occurrence`-th match (`after: ""` = start of file). The file must already be open (`workspace.openFile` first). Typed `text` is inserted verbatim — include leading `\n` and tabs. |
+| `runtime.run`        | —                                                                      | Runs every top-level `.go` file. Give it `timeoutMs: 15000`. Retries transient service failures once, silently.                                                                                                                                                                                         |
+| `slide.show`         | `slideId`, `maximized` (default true)                                  | `slideId` must be in `lesson.slides`.                                                                                                                                                                                                                                                                   |
+| `slide.close`        | —                                                                      |                                                                                                                                                                                                                                                                                                         |
+| `whiteboard.apply`   | `open?`, `maximized?`, `upsertIds: []`                                 | Ids from `lesson.whiteboardAssets`. Must open, change maximize, or upsert ≥1 asset.                                                                                                                                                                                                                     |
+| `expect.output`      | `contains`, `timeoutMs`                                                | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` line fails it. Anchor with `afterAction: run`.                                                                                                                                                        |
+| `expect.file`        | `path`, `contains`                                                     | Asserts the final workspace file contains the string.                                                                                                                                                                                                                                                   |
+
+Critical `editor.type` discipline:
+
+- Compute `after` against the file content **as it will be at that moment**
+  (pinned content plus any earlier insertions in the same file).
+- The anchor must match exactly — byte-for-byte, including `\n` and `\t`. In
+  YAML, prefer double-quoted strings with escapes for anchors and typed text:
+  `after: "\treturn value * value\n}\n"`.
+- There is no delete/replace. Design lessons as additive edits.
+- Typing takes real time (~16 chars/sec + line pauses). The scheduler makes
+  narration wait for it, so long insertions stretch the lesson — keep typed
+  blocks short and narrate what they mean.
+
+### The fixture must be the truth
+
+`fixture.result.output` must be **exactly** what the real program prints
+(every line, `\n`-terminated). Two reasons: `expect.output` runs against it in
+fixture mode, and a later `--runtime=live` render runs the real Playground —
+if your pinned program and fixture disagree, live renders fail. Mentally
+execute the final code (pinned files + your insertions) and transcribe its
+output.
+
+### Slides
+
+```yaml
+slides:
+  - id: intro
+    contentType: markdown # or html
+    name: Optional label
+    content: |
+      # Title
+      `code` and short lines render well.
+```
+
+### Whiteboard assets
+
+```yaml
+whiteboardAssets:
+  - { id: box, kind: rectangle, x: 320, y: 200, width: 420, height: 150, strokeColor: "#7dd3fc" }
+  - {
+      id: label,
+      kind: text,
+      x: 350,
+      y: 250,
+      width: 360,
+      height: 40,
+      text: "value × value × value",
+      strokeColor: "#e2e8f0",
+      fontSize: 24,
+    }
+```
+
+Kinds: `rectangle`, `ellipse`, `text`. Coordinates are canvas pixels; keep
+content roughly within (250,150)–(1100,650) so it is visible unzoomed.
+
+## Editorial requirements (summary — full text in studio-persona.md)
+
+- **One concept per lesson**, 20–100 seconds of narration.
+- Sentences under ~20 words (hard ceiling 24). No filler: _simply, obviously,
+  easy, delve, in this video, don't worry_ etc. are flagged.
+- Every scene cites ≥1 source (official docs/spec/tour URLs preferred).
+- Narrate _why_; the typed code shows _what_. No fake mistakes.
+- The critic (`✎` lines from the director) is advisory — address the notes or
+  consciously keep the text, but never ignore a `sources.missing`.
+
+## Failure → fix table
+
+| Symptom                                         | Fix                                                                                                     |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `Invalid lesson script: …`                      | Schema violation; the path in the message names the field.                                              |
+| `Unknown marker "x" — known markers: …`         | An action references a mark not present in narration.                                                   |
+| `Typing action "…" overlaps "…"` (compile)      | Two authored actions collide; move the later mark or add `offsetMs`.                                    |
+| `⚠ …ms of silence inserted before dialog …`     | Your action outlasts the narration around it; add a sentence there or shorten the typed text.           |
+| `Anchor occurrence N of "…" not found` (render) | The `after` string doesn't match the file at perform time — check tabs/newlines and earlier insertions. |
+| `checkpoint.output.… never contains …`          | Fixture output and `expect.output` disagree, or the program doesn't print it.                           |
+| `timing.p95 — … (max 300ms)` failure            | Usually a squeezed action; check the receipts in the render report for the late action.                 |
+| Repeatability FAIL on `repeat.audio`            | Should not happen (synthesis is seeded); report it as a bug rather than working around it.              |
+
+## A complete minimal example
+
+`src/studio/scripts/go-swap.yaml` in this repo is the canonical small example
+(two scenes, two insertions, run + gates). `go-cube-tour.yaml` shows slides,
+whiteboard, and the retry fixture. Start from a copy of `go-swap.yaml`.

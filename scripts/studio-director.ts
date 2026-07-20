@@ -16,7 +16,7 @@
  * this file is the thin I/O shell.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
@@ -90,12 +90,22 @@ async function directScript(scriptPath: string): Promise<void> {
   console.log(`  emitted sha256 ${emittedHash.slice(0, 16)}… → ${scriptFile}`);
 }
 
+const scriptsDir = join(repoRoot, "src", "studio", "scripts");
 const args = process.argv.slice(2);
-if (args.length === 0) {
-  fail("usage: bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml [...more]");
+// No arguments → compile every script, so agents and CI have one command.
+const targets =
+  args.length > 0
+    ? args.map((arg) => resolve(arg))
+    : readdirSync(scriptsDir)
+        .filter((name) => name.endsWith(".yaml"))
+        .sort()
+        .map((name) => join(scriptsDir, name));
+
+if (targets.length === 0) {
+  fail(`no scripts found in ${scriptsDir}`);
 }
 
-for (const arg of args) {
-  await directScript(resolve(arg));
+for (const target of targets) {
+  await directScript(target);
 }
 console.log("\nDone.");

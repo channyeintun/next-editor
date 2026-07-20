@@ -18,6 +18,15 @@ On the VPS, this is the repository's highest-priority operational constraint. Th
 - Do not run a full-repo-wide typecheck or test command. Scope typecheck/test/lint runs to the specific file(s) or package(s) you changed, using the smallest targeted check possible (e.g. `tsc --noEmit <file>` or one test file) with a single worker/thread whenever supported.
 - If verification cannot be performed on the VPS without a memory-heavy operation, do not run it there. Report the skipped check so it can be run on the workstation or in CI.
 
+## Studio Lessons (agent-authorable)
+
+When asked to create or fix a narrated studio lesson (a "LessonScript"),
+follow `docs/lesson-script-authoring.md` — the complete authoring contract
+(YAML at `src/studio/scripts/<slug>.yaml` → `bun scripts/studio-director.ts`
+→ `bun scripts/studio-render.ts <slug>`). Claude Code sessions also have the
+`lesson-script` skill for this. Never hand-edit the emitted JSON under
+`src/studio/plans/scripts/`.
+
 ## Mandatory Workflow (all machines)
 
 After completing the work, provide:
