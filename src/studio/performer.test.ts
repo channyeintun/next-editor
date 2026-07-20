@@ -30,6 +30,18 @@ function makePlan(overrides?: { failRun?: boolean }): {
       }
       return { status: "success" };
     },
+    async showSlide({ slideId }) {
+      calls.push(`slide:${slideId}`);
+      return { slideId };
+    },
+    async closeSlide() {
+      calls.push("slide-close");
+      return {};
+    },
+    async applyWhiteboard({ upsertIds }) {
+      calls.push(`whiteboard:${upsertIds.join(",")}`);
+      return {};
+    },
     async waitForOutput({ contains }) {
       calls.push(`wait:${contains}`);
       return { matchedLine: contains };

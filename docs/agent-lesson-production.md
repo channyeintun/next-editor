@@ -1,6 +1,6 @@
 # Agent Lesson Production — Architecture and Delivery Plan
 
-- **Status:** M0–M1 implemented (2026-07-21) in `src/studio/` — see [studio-m0-runbook.md](./studio-m0-runbook.md); M1 adds the YAML `LessonScript`, marker compiler, say-based TTS adapter with a content-addressed cache, and the Director CLI (`scripts/studio-director.ts`)
+- **Status:** M0–M2 implemented (2026-07-21) in `src/studio/` — see [studio-m0-runbook.md](./studio-m0-runbook.md). M1: YAML `LessonScript`, marker compiler, TTS cache, Director CLI. M2: slide/whiteboard surfaces, silent runtime retry, and the unattended render command (`scripts/studio-render.ts`; the go-cube-tour pilot passed 2× headless with repeatability PASS and a survived transient runtime failure)
 - **Repository audit:** 2026-07-20 at `2a7ec794ecbc`
 - **Primary decision:** build a versioned `LessonScript`, compile it into a content-addressed plan, and run that plan through a deterministic in-app Performer while the existing recorder captures the lesson
 - **Release policy:** generated lessons remain drafts until a human reviews and publishes them

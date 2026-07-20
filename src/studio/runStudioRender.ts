@@ -3,6 +3,9 @@ import type { EditorActorRef } from "../core/src/useNextEditor";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
 import type { WorkspaceActions } from "../contexts/WorkspaceContext";
 import type { RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
+import type { SlidesStoreInstance } from "../stores/slidesStore";
+import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
+import { EMPTY_WHITEBOARD_SCENE } from "../core/src/whiteboard";
 import { buildRecordingFiles } from "../storage/RecordingStorage";
 import { collectWorkspaceFolders, type WorkspaceProject } from "../types/workspace";
 import { createWorkspaceFile } from "../starters/shared";
@@ -40,10 +43,14 @@ export interface StudioRunDeps {
     | "clearRecording"
     | "addCaptionTrack"
     | "handleWorkspaceEvent"
+    | "handleSlideEvent"
+    | "handleWhiteboardEvent"
   >;
   getEditor: StudioDriverDeps["getEditor"];
   workspace: Pick<WorkspaceActions, "getFile" | "getProject" | "setActiveFilePath" | "loadProject">;
   runtimePanelStore: RuntimePanelStoreInstance;
+  slidesStore: SlidesStoreInstance;
+  whiteboardStore: WhiteboardStoreInstance;
   isSignedIn: boolean;
   onProgress?: (receipt: ActionReceipt) => void;
   onPhase?: (phase: string) => void;
@@ -149,10 +156,25 @@ export async function runStudioRender(
     type: plan.narration.mimeType,
   });
 
-  // ---- Pin the workspace ---------------------------------------------------
+  // ---- Pin the workspace + surface assets ----------------------------------
   phase("prepare-workspace");
   deps.nextEditor.clearRecording();
   deps.workspace.loadProject(workspaceProjectFromPlan(plan), plan.workspace.entryFilePath);
+  // Slides/whiteboard start from a clean, closed state holding exactly the
+  // plan's pinned assets — repeat renders must not inherit the previous run's.
+  deps.slidesStore.trigger.setSlides({
+    slides: plan.slides.map((slide, index) => ({
+      id: slide.id,
+      content: slide.content,
+      contentType: slide.contentType,
+      name: slide.name,
+      order: index,
+    })),
+  });
+  deps.slidesStore.trigger.setPreviewState({
+    previewState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
+  });
+  deps.whiteboardStore.trigger.setScene({ scene: EMPTY_WHITEBOARD_SCENE });
   try {
     await waitUntil(
       () => {
@@ -223,8 +245,14 @@ export async function runStudioRender(
     workspace: deps.workspace,
     notifyWorkspaceEvent: () => deps.nextEditor.handleWorkspaceEvent(),
     runtimePanelStore: deps.runtimePanelStore,
+    slidesStore: deps.slidesStore,
+    whiteboardStore: deps.whiteboardStore,
+    notifySlideEvent: (event) => deps.nextEditor.handleSlideEvent(event),
+    notifyWhiteboardEvent: (event) => deps.nextEditor.handleWhiteboardEvent(event),
     runtimeMode,
     runFixture: plan.runtime.fixture,
+    planSeed: plan.seed,
+    whiteboardAssets: plan.whiteboardAssets,
     signal,
   });
 

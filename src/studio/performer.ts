@@ -45,6 +45,16 @@ async function invokeAction(
       return driver.typeText({ path: action.path, anchor: action.anchor, chunks: action.chunks });
     case "runtime.run":
       return driver.runWorkspace(action.timeoutMs);
+    case "slide.show":
+      return driver.showSlide({ slideId: action.slideId, maximized: action.maximized });
+    case "slide.close":
+      return driver.closeSlide();
+    case "whiteboard.apply":
+      return driver.applyWhiteboard({
+        open: action.open,
+        maximized: action.maximized,
+        upsertIds: action.upsertIds,
+      });
     case "expect.output":
       return driver.waitForOutput({ contains: action.contains, timeoutMs: action.timeoutMs });
     case "expect.file":

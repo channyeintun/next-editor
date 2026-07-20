@@ -4,6 +4,8 @@ import { useAuth } from "@next-editor/infra";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
+import { useSlidesStore } from "../contexts/SlidesStoreContext";
+import { useWhiteboardStore } from "../contexts/WhiteboardStoreContext";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
 import { markTourSeen } from "../components/tour/productTour";
 import { canonicalJson } from "./hash";
@@ -99,6 +101,8 @@ export default function StudioController() {
   const nextEditor = useNextEditorActions();
   const workspace = useWorkspaceActions();
   const { store: runtimePanelStore } = useRuntimePanelStore();
+  const { store: slidesStore } = useSlidesStore();
+  const { store: whiteboardStore } = useWhiteboardStore();
   const { isSignedIn, isLoading: authLoading } = useAuth();
 
   const planSlug = searchParams.get("plan") ?? DEFAULT_STUDIO_PLAN_SLUG;
@@ -145,6 +149,8 @@ export default function StudioController() {
         getEditor: () => nextEditor.editorRef.current,
         workspace,
         runtimePanelStore,
+        slidesStore,
+        whiteboardStore,
         isSignedIn,
         onPhase: setPhase,
         onProgress: (receipt) => setReceipts((current) => [...current, receipt]),

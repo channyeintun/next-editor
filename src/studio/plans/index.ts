@@ -1,6 +1,7 @@
 import { parseStudioPlan, type StudioPlan } from "../plan";
 import { M0_GO_HELLO_SLUG, createM0GoHelloPlan } from "./m0GoHello";
 import goCubeCompiled from "./compiled/go-cube.json";
+import goCubeTourCompiled from "./compiled/go-cube-tour.json";
 
 /**
  * Checked-in plans the studio route can render, by lesson slug: the M0
@@ -12,6 +13,7 @@ import goCubeCompiled from "./compiled/go-cube.json";
 export const STUDIO_PLANS: Record<string, () => StudioPlan> = {
   [M0_GO_HELLO_SLUG]: createM0GoHelloPlan,
   "go-cube": () => parseStudioPlan(goCubeCompiled),
+  "go-cube-tour": () => parseStudioPlan(goCubeTourCompiled),
 };
 
 export const DEFAULT_STUDIO_PLAN_SLUG = M0_GO_HELLO_SLUG;

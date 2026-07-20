@@ -1,11 +1,29 @@
-# Studio Runbook — Deterministic Lesson Renders (M0/M1)
+# Studio Runbook — Deterministic Lesson Renders (M0–M2)
 
-Implements **M0 and M1** of [agent-lesson-production.md](./agent-lesson-production.md)
+Implements **M0–M2** of [agent-lesson-production.md](./agent-lesson-production.md)
 §12: a deterministic in-app Performer renders checked-in plans against pre-generated
 narration, records through the real recorder, and gates the artifact with mechanical
 QA plus a two-render repeatability comparison. M1 adds the authored `LessonScript`
 path: YAML scripts with `[[mark:…]]` narration anchors compile through the Director
-into the same plan format the M0 fixture hard-codes.
+into the same plan format the M0 fixture hard-codes. M2 adds the slide and
+whiteboard surfaces, a declared-idempotent silent retry for transient Go-run
+failures, and the unattended render command below.
+
+## Unattended renders (M2)
+
+```text
+bun run dev                       # in one terminal
+bun scripts/studio-render.ts go-cube-tour            # two renders + comparison
+bun scripts/studio-render.ts <slug> --runtime=live --runs=2 --out=studio-out
+```
+
+Drives `/studio` in headless system Chrome (playwright-core, no browser
+download), saves per-run reports/manifests, the repeatability verdict, the
+downloaded lesson bundle, and diagnostic screenshots under `studio-out/`, and
+exits non-zero unless every render passed and the comparison is clean. The
+`go-cube-tour` pilot exercises six surfaces (editor, cursor, workspace,
+runtime, slides, whiteboard) and simulates a transient Playground failure, so
+a passing run also demonstrates the retry path (`run` receipt: `attempts: 2`).
 
 ## Authoring a lesson (M1 path)
 

@@ -1,0 +1,978 @@
+{
+  "actions": [
+    {
+      "at": 3393,
+      "id": "show-intro",
+      "maximized": true,
+      "slideId": "intro",
+      "timeoutMs": 10000,
+      "type": "slide.show"
+    },
+    {
+      "at": 9526,
+      "id": "close-intro",
+      "timeoutMs": 10000,
+      "type": "slide.close"
+    },
+    {
+      "at": 11076,
+      "id": "open-board",
+      "open": true,
+      "timeoutMs": 10000,
+      "type": "whiteboard.apply",
+      "upsertIds": ["cube-box"]
+    },
+    {
+      "at": 15165,
+      "id": "label-board",
+      "timeoutMs": 10000,
+      "type": "whiteboard.apply",
+      "upsertIds": ["cube-label"]
+    },
+    {
+      "at": 19888,
+      "id": "close-board",
+      "open": false,
+      "timeoutMs": 10000,
+      "type": "whiteboard.apply",
+      "upsertIds": []
+    },
+    {
+      "at": 20367,
+      "durationMs": 520,
+      "id": "cursor-open-square",
+      "target": {
+        "kind": "file",
+        "path": "square.go"
+      },
+      "timeoutMs": 5000,
+      "type": "cursor.moveTo"
+    },
+    {
+      "at": 21087,
+      "id": "open-square",
+      "path": "square.go",
+      "timeoutMs": 10000,
+      "type": "workspace.openFile"
+    },
+    {
+      "at": 24342,
+      "durationMs": 656,
+      "id": "cursor-type-cube",
+      "target": {
+        "kind": "editor"
+      },
+      "timeoutMs": 5000,
+      "type": "cursor.moveTo"
+    },
+    {
+      "anchor": {
+        "after": "\treturn value * value\n}\n",
+        "occurrence": 1
+      },
+      "at": 25198,
+      "chunks": [
+        {
+          "delayMs": 265,
+          "text": "\n"
+        },
+        {
+          "delayMs": 233,
+          "text": "func"
+        },
+        {
+          "delayMs": 196,
+          "text": " cub"
+        },
+        {
+          "delayMs": 194,
+          "text": "e(va"
+        },
+        {
+          "delayMs": 192,
+          "text": "lue "
+        },
+        {
+          "delayMs": 188,
+          "text": "int)"
+        },
+        {
+          "delayMs": 199,
+          "text": " int"
+        },
+        {
+          "delayMs": 374,
+          "text": " {\n"
+        },
+        {
+          "delayMs": 257,
+          "text": "\tret"
+        },
+        {
+          "delayMs": 296,
+          "text": "urn "
+        },
+        {
+          "delayMs": 269,
+          "text": "valu"
+        },
+        {
+          "delayMs": 282,
+          "text": "e * "
+        },
+        {
+          "delayMs": 224,
+          "text": "valu"
+        },
+        {
+          "delayMs": 208,
+          "text": "e * "
+        },
+        {
+          "delayMs": 258,
+          "text": "valu"
+        },
+        {
+          "delayMs": 317,
+          "text": "e\n"
+        },
+        {
+          "delayMs": 330,
+          "text": "}\n"
+        }
+      ],
+      "id": "type-cube",
+      "path": "square.go",
+      "timeoutMs": 10000,
+      "type": "editor.type"
+    },
+    {
+      "at": 29480,
+      "durationMs": 266,
+      "id": "cursor-open-main",
+      "target": {
+        "kind": "file",
+        "path": "main.go"
+      },
+      "timeoutMs": 5000,
+      "type": "cursor.moveTo"
+    },
+    {
+      "at": 29946,
+      "id": "open-main",
+      "path": "main.go",
+      "timeoutMs": 10000,
+      "type": "workspace.openFile"
+    },
+    {
+      "anchor": {
+        "after": ", square(i))\n\t}\n",
+        "occurrence": 1
+      },
+      "at": 30346,
+      "chunks": [
+        {
+          "delayMs": 254,
+          "text": "\n"
+        },
+        {
+          "delayMs": 238,
+          "text": "\tfmt"
+        },
+        {
+          "delayMs": 238,
+          "text": ".Pri"
+        },
+        {
+          "delayMs": 243,
+          "text": "ntln"
+        },
+        {
+          "delayMs": 215,
+          "text": "(\"3 "
+        },
+        {
+          "delayMs": 270,
+          "text": "cube"
+        },
+        {
+          "delayMs": 305,
+          "text": "d is"
+        },
+        {
+          "delayMs": 226,
+          "text": "\", c"
+        },
+        {
+          "delayMs": 196,
+          "text": "ube("
+        },
+        {
+          "delayMs": 435,
+          "text": "3))\n"
+        }
+      ],
+      "id": "type-call",
+      "path": "main.go",
+      "timeoutMs": 10000,
+      "type": "editor.type"
+    },
+    {
+      "at": 33266,
+      "durationMs": 522,
+      "id": "cursor-run",
+      "target": {
+        "id": "go-runner-dock",
+        "kind": "target-id"
+      },
+      "timeoutMs": 5000,
+      "type": "cursor.moveTo"
+    },
+    {
+      "at": 33988,
+      "id": "run",
+      "timeoutMs": 15000,
+      "type": "runtime.run"
+    },
+    {
+      "at": 33988,
+      "contains": "cube(3)",
+      "id": "expect-file-main",
+      "path": "main.go",
+      "timeoutMs": 10000,
+      "type": "expect.file"
+    },
+    {
+      "at": 33988,
+      "contains": "3 cubed is 27",
+      "id": "expect-output",
+      "timeoutMs": 8000,
+      "type": "expect.output"
+    }
+  ],
+  "gates": {
+    "timingP95MaxMs": 300
+  },
+  "lesson": {
+    "locale": "en-US",
+    "slug": "go-cube-tour",
+    "title": "Cube a number in Go — full-surface tour"
+  },
+  "narration": {
+    "audioPath": "/studio-fixtures/cache/2f32b96f0d19aeec08cf93bec905296daf2a20fc97d476c9bef2feecff8cca40.m4a",
+    "captions": {
+      "cues": [
+        {
+          "end": 1912,
+          "start": 150,
+          "text": "Here's today's one idea:",
+          "words": [
+            {
+              "end": 502,
+              "start": 150,
+              "text": "Here's"
+            },
+            {
+              "end": 925,
+              "start": 502,
+              "text": "today's"
+            },
+            {
+              "end": 1137,
+              "start": 925,
+              "text": "one"
+            },
+            {
+              "end": 1912,
+              "start": 1137,
+              "text": "idea:"
+            }
+          ]
+        },
+        {
+          "end": 3393,
+          "start": 1912,
+          "text": "cubing a number.",
+          "words": [
+            {
+              "end": 2335,
+              "start": 1912,
+              "text": "cubing"
+            },
+            {
+              "end": 2476,
+              "start": 2335,
+              "text": "a"
+            },
+            {
+              "end": 3393,
+              "start": 2476,
+              "text": "number."
+            }
+          ]
+        },
+        {
+          "end": 8680,
+          "start": 3393,
+          "text": "A cube is just a value multiplied by itself twice more, value, times value, times",
+          "words": [
+            {
+              "end": 3534,
+              "start": 3393,
+              "text": "A"
+            },
+            {
+              "end": 3816,
+              "start": 3534,
+              "text": "cube"
+            },
+            {
+              "end": 3957,
+              "start": 3816,
+              "text": "is"
+            },
+            {
+              "end": 4239,
+              "start": 3957,
+              "text": "just"
+            },
+            {
+              "end": 4380,
+              "start": 4239,
+              "text": "a"
+            },
+            {
+              "end": 4732,
+              "start": 4380,
+              "text": "value"
+            },
+            {
+              "end": 5437,
+              "start": 4732,
+              "text": "multiplied"
+            },
+            {
+              "end": 5578,
+              "start": 5437,
+              "text": "by"
+            },
+            {
+              "end": 6001,
+              "start": 5578,
+              "text": "itself"
+            },
+            {
+              "end": 6353,
+              "start": 6001,
+              "text": "twice"
+            },
+            {
+              "end": 6847,
+              "start": 6353,
+              "text": "more,"
+            },
+            {
+              "end": 7411,
+              "start": 6847,
+              "text": "value,"
+            },
+            {
+              "end": 7763,
+              "start": 7411,
+              "text": "times"
+            },
+            {
+              "end": 8327,
+              "start": 7763,
+              "text": "value,"
+            },
+            {
+              "end": 8680,
+              "start": 8327,
+              "text": "times"
+            }
+          ]
+        },
+        {
+          "end": 9526,
+          "start": 8680,
+          "text": "value.",
+          "words": [
+            {
+              "end": 9526,
+              "start": 8680,
+              "text": "value."
+            }
+          ]
+        },
+        {
+          "end": 11076,
+          "start": 9526,
+          "text": "Let's build it in Go.",
+          "words": [
+            {
+              "end": 9808,
+              "start": 9526,
+              "text": "Let's"
+            },
+            {
+              "end": 10160,
+              "start": 9808,
+              "text": "build"
+            },
+            {
+              "end": 10301,
+              "start": 10160,
+              "text": "it"
+            },
+            {
+              "end": 10442,
+              "start": 10301,
+              "text": "in"
+            },
+            {
+              "end": 11076,
+              "start": 10442,
+              "text": "Go."
+            }
+          ]
+        },
+        {
+          "end": 12486,
+          "start": 11076,
+          "text": "Sketch it first.",
+          "words": [
+            {
+              "end": 11499,
+              "start": 11076,
+              "text": "Sketch"
+            },
+            {
+              "end": 11640,
+              "start": 11499,
+              "text": "it"
+            },
+            {
+              "end": 12486,
+              "start": 11640,
+              "text": "first."
+            }
+          ]
+        },
+        {
+          "end": 17703,
+          "start": 12486,
+          "text": "Square multiplies a value by itself once; cube adds one more multiplication.",
+          "words": [
+            {
+              "end": 12909,
+              "start": 12486,
+              "text": "Square"
+            },
+            {
+              "end": 13614,
+              "start": 12909,
+              "text": "multiplies"
+            },
+            {
+              "end": 13755,
+              "start": 13614,
+              "text": "a"
+            },
+            {
+              "end": 14108,
+              "start": 13755,
+              "text": "value"
+            },
+            {
+              "end": 14249,
+              "start": 14108,
+              "text": "by"
+            },
+            {
+              "end": 14672,
+              "start": 14249,
+              "text": "itself"
+            },
+            {
+              "end": 15165,
+              "start": 14672,
+              "text": "once;"
+            },
+            {
+              "end": 15447,
+              "start": 15165,
+              "text": "cube"
+            },
+            {
+              "end": 15729,
+              "start": 15447,
+              "text": "adds"
+            },
+            {
+              "end": 15940,
+              "start": 15729,
+              "text": "one"
+            },
+            {
+              "end": 16222,
+              "start": 15940,
+              "text": "more"
+            },
+            {
+              "end": 17703,
+              "start": 16222,
+              "text": "multiplication."
+            }
+          ]
+        },
+        {
+          "end": 19888,
+          "start": 17703,
+          "text": "Same shape, one extra step.",
+          "words": [
+            {
+              "end": 17985,
+              "start": 17703,
+              "text": "Same"
+            },
+            {
+              "end": 18549,
+              "start": 17985,
+              "text": "shape,"
+            },
+            {
+              "end": 18760,
+              "start": 18549,
+              "text": "one"
+            },
+            {
+              "end": 19113,
+              "start": 18760,
+              "text": "extra"
+            },
+            {
+              "end": 19888,
+              "start": 19113,
+              "text": "step."
+            }
+          ]
+        },
+        {
+          "end": 21087,
+          "start": 19888,
+          "text": "Now the code.",
+          "words": [
+            {
+              "end": 20100,
+              "start": 19888,
+              "text": "Now"
+            },
+            {
+              "end": 20311,
+              "start": 20100,
+              "text": "the"
+            },
+            {
+              "end": 21087,
+              "start": 20311,
+              "text": "code."
+            }
+          ]
+        },
+        {
+          "end": 25598,
+          "start": 21087,
+          "text": "Square lives in its own file, and any file in the package can call it.",
+          "words": [
+            {
+              "end": 21509,
+              "start": 21087,
+              "text": "Square"
+            },
+            {
+              "end": 21862,
+              "start": 21509,
+              "text": "lives"
+            },
+            {
+              "end": 22003,
+              "start": 21862,
+              "text": "in"
+            },
+            {
+              "end": 22214,
+              "start": 22003,
+              "text": "its"
+            },
+            {
+              "end": 22426,
+              "start": 22214,
+              "text": "own"
+            },
+            {
+              "end": 22919,
+              "start": 22426,
+              "text": "file,"
+            },
+            {
+              "end": 23131,
+              "start": 22919,
+              "text": "and"
+            },
+            {
+              "end": 23342,
+              "start": 23131,
+              "text": "any"
+            },
+            {
+              "end": 23624,
+              "start": 23342,
+              "text": "file"
+            },
+            {
+              "end": 23765,
+              "start": 23624,
+              "text": "in"
+            },
+            {
+              "end": 23977,
+              "start": 23765,
+              "text": "the"
+            },
+            {
+              "end": 24470,
+              "start": 23977,
+              "text": "package"
+            },
+            {
+              "end": 24682,
+              "start": 24470,
+              "text": "can"
+            },
+            {
+              "end": 24964,
+              "start": 24682,
+              "text": "call"
+            },
+            {
+              "end": 25598,
+              "start": 24964,
+              "text": "it."
+            }
+          ]
+        },
+        {
+          "end": 29546,
+          "start": 25598,
+          "text": "Add cube right beside it, multiplying value three times.",
+          "words": [
+            {
+              "end": 25810,
+              "start": 25598,
+              "text": "Add"
+            },
+            {
+              "end": 26092,
+              "start": 25810,
+              "text": "cube"
+            },
+            {
+              "end": 26444,
+              "start": 26092,
+              "text": "right"
+            },
+            {
+              "end": 26867,
+              "start": 26444,
+              "text": "beside"
+            },
+            {
+              "end": 27219,
+              "start": 26867,
+              "text": "it,"
+            },
+            {
+              "end": 27995,
+              "start": 27219,
+              "text": "multiplying"
+            },
+            {
+              "end": 28347,
+              "start": 27995,
+              "text": "value"
+            },
+            {
+              "end": 28700,
+              "start": 28347,
+              "text": "three"
+            },
+            {
+              "end": 29546,
+              "start": 28700,
+              "text": "times."
+            }
+          ]
+        },
+        {
+          "end": 32788,
+          "start": 29546,
+          "text": "Now call cube from main, and print the result.",
+          "words": [
+            {
+              "end": 29757,
+              "start": 29546,
+              "text": "Now"
+            },
+            {
+              "end": 30039,
+              "start": 29757,
+              "text": "call"
+            },
+            {
+              "end": 30321,
+              "start": 30039,
+              "text": "cube"
+            },
+            {
+              "end": 30603,
+              "start": 30321,
+              "text": "from"
+            },
+            {
+              "end": 31097,
+              "start": 30603,
+              "text": "main,"
+            },
+            {
+              "end": 31308,
+              "start": 31097,
+              "text": "and"
+            },
+            {
+              "end": 31660,
+              "start": 31308,
+              "text": "print"
+            },
+            {
+              "end": 31872,
+              "start": 31660,
+              "text": "the"
+            },
+            {
+              "end": 32788,
+              "start": 31872,
+              "text": "result."
+            }
+          ]
+        },
+        {
+          "end": 33634,
+          "start": 32788,
+          "text": "Run it.",
+          "words": [
+            {
+              "end": 33000,
+              "start": 32788,
+              "text": "Run"
+            },
+            {
+              "end": 33634,
+              "start": 33000,
+              "text": "it."
+            }
+          ]
+        },
+        {
+          "end": 38005,
+          "start": 33634,
+          "text": "If the Playground hiccups, the studio retries once, quietly.",
+          "words": [
+            {
+              "end": 33775,
+              "start": 33634,
+              "text": "If"
+            },
+            {
+              "end": 33987,
+              "start": 33775,
+              "text": "the"
+            },
+            {
+              "end": 34692,
+              "start": 33987,
+              "text": "Playground"
+            },
+            {
+              "end": 35397,
+              "start": 34692,
+              "text": "hiccups,"
+            },
+            {
+              "end": 35608,
+              "start": 35397,
+              "text": "the"
+            },
+            {
+              "end": 36031,
+              "start": 35608,
+              "text": "studio"
+            },
+            {
+              "end": 36525,
+              "start": 36031,
+              "text": "retries"
+            },
+            {
+              "end": 37018,
+              "start": 36525,
+              "text": "once,"
+            },
+            {
+              "end": 38005,
+              "start": 37018,
+              "text": "quietly."
+            }
+          ]
+        },
+        {
+          "end": 39908,
+          "start": 38005,
+          "text": "And there it is at the end:",
+          "words": [
+            {
+              "end": 38216,
+              "start": 38005,
+              "text": "And"
+            },
+            {
+              "end": 38569,
+              "start": 38216,
+              "text": "there"
+            },
+            {
+              "end": 38710,
+              "start": 38569,
+              "text": "it"
+            },
+            {
+              "end": 38851,
+              "start": 38710,
+              "text": "is"
+            },
+            {
+              "end": 38992,
+              "start": 38851,
+              "text": "at"
+            },
+            {
+              "end": 39203,
+              "start": 38992,
+              "text": "the"
+            },
+            {
+              "end": 39908,
+              "start": 39203,
+              "text": "end:"
+            }
+          ]
+        },
+        {
+          "end": 42023,
+          "start": 39908,
+          "text": "three cubed is twenty seven.",
+          "words": [
+            {
+              "end": 40261,
+              "start": 39908,
+              "text": "three"
+            },
+            {
+              "end": 40613,
+              "start": 40261,
+              "text": "cubed"
+            },
+            {
+              "end": 40754,
+              "start": 40613,
+              "text": "is"
+            },
+            {
+              "end": 41177,
+              "start": 40754,
+              "text": "twenty"
+            },
+            {
+              "end": 42023,
+              "start": 41177,
+              "text": "seven."
+            }
+          ]
+        }
+      ],
+      "default": true,
+      "id": "studio-narration",
+      "label": "en-US",
+      "language": "en"
+    },
+    "expectedDurationMs": 42323,
+    "mimeType": "audio/mp4"
+  },
+  "runtime": {
+    "defaultMode": "fixture",
+    "fixture": {
+      "latencyMs": 1200,
+      "result": {
+        "exitCode": 0,
+        "output": "Hello, Go lessons!\n1 squared is 1\n2 squared is 4\n3 squared is 9\n4 squared is 16\n5 squared is 25\n3 cubed is 27\n",
+        "status": "success"
+      },
+      "transientErrorKinds": ["unavailable"]
+    },
+    "kind": "go-playground"
+  },
+  "schemaVersion": 1,
+  "seed": 7,
+  "slides": [
+    {
+      "content": "# Cube a number\n\n`cube(v) = v × v × v`\n\nOne function, one extra multiply.\n",
+      "contentType": "markdown",
+      "id": "intro",
+      "name": "Cube a number"
+    }
+  ],
+  "whiteboardAssets": [
+    {
+      "backgroundColor": "transparent",
+      "fontSize": 20,
+      "height": 150,
+      "id": "cube-box",
+      "kind": "rectangle",
+      "strokeColor": "#7dd3fc",
+      "width": 420,
+      "x": 320,
+      "y": 200
+    },
+    {
+      "backgroundColor": "transparent",
+      "fontSize": 24,
+      "height": 40,
+      "id": "cube-label",
+      "kind": "text",
+      "strokeColor": "#e2e8f0",
+      "text": "cube = value × value × value",
+      "width": 360,
+      "x": 350,
+      "y": 250
+    }
+  ],
+  "workspace": {
+    "entryFilePath": "main.go",
+    "files": {
+      "main.go": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"Hello, Go lessons!\")\n\n\tfor i := 1; i <= 5; i++ {\n\t\tfmt.Printf(\"%d squared is %d\\n\", i, square(i))\n\t}\n}\n",
+      "square.go": "package main\n\nfunc square(value int) int {\n\treturn value * value\n}\n"
+    },
+    "lessonType": "go",
+    "name": "Go Lesson"
+  }
+}

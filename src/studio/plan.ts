@@ -80,6 +80,30 @@ const runtimeRunActionSchema = planActionBase.extend({
   type: z.literal("runtime.run"),
 });
 
+const slideShowActionSchema = planActionBase.extend({
+  type: z.literal("slide.show"),
+  slideId: z.string().min(1),
+  maximized: z.boolean().default(true),
+});
+
+const slideCloseActionSchema = planActionBase.extend({
+  type: z.literal("slide.close"),
+});
+
+const whiteboardApplyActionSchema = planActionBase
+  .extend({
+    type: z.literal("whiteboard.apply"),
+    open: z.boolean().optional(),
+    maximized: z.boolean().optional(),
+    /** Ids from `plan.whiteboardAssets` to upsert onto the board. */
+    upsertIds: z.array(z.string().min(1)).default([]),
+  })
+  .refine(
+    (action) =>
+      action.open !== undefined || action.maximized !== undefined || action.upsertIds.length > 0,
+    { message: "whiteboard.apply must open/close, change maximize, or upsert at least one asset" },
+  );
+
 const expectOutputActionSchema = planActionBase.extend({
   type: z.literal("expect.output"),
   contains: z.string().min(1),
@@ -96,6 +120,9 @@ export const studioPlanActionSchema = z.discriminatedUnion("type", [
   cursorMoveActionSchema,
   editorTypeActionSchema,
   runtimeRunActionSchema,
+  slideShowActionSchema,
+  slideCloseActionSchema,
+  whiteboardApplyActionSchema,
   expectOutputActionSchema,
   expectFileActionSchema,
 ]);
@@ -110,6 +137,33 @@ export const studioWorkspacePinSchema = z.object({
   files: z.record(z.string().min(1), z.string()),
 });
 export type StudioWorkspacePin = z.infer<typeof studioWorkspacePinSchema>;
+
+/** Pinned native slide asset (markdown/html — no external deck fetches). */
+export const studioSlideSchema = z.object({
+  id: z.string().min(1),
+  contentType: z.enum(["markdown", "html"]),
+  content: z.string().min(1),
+  name: z.string().optional(),
+});
+export type StudioSlide = z.infer<typeof studioSlideSchema>;
+
+/**
+ * Authored whiteboard asset: a small declarative spec the driver expands into
+ * a full Excalidraw element (seeded, deterministic) at apply time.
+ */
+export const studioWhiteboardAssetSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(["rectangle", "ellipse", "text"]),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  width: z.number().finite().positive(),
+  height: z.number().finite().positive(),
+  text: z.string().optional(),
+  strokeColor: z.string().default("#e2e8f0"),
+  backgroundColor: z.string().default("transparent"),
+  fontSize: z.number().finite().positive().default(20),
+});
+export type StudioWhiteboardAsset = z.infer<typeof studioWhiteboardAssetSchema>;
 
 const captionWordSchema = z.object({
   start: nonNegativeMs,
@@ -148,6 +202,11 @@ export const studioNarrationSchema = z.object({
  */
 export const goRunFixtureSchema = z.object({
   latencyMs: positiveMs,
+  /**
+   * Transient service failures to simulate before the result, one per attempt
+   * — exercises the driver's declared-idempotent retry path deterministically.
+   */
+  transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
   result: z.object({
     status: z.enum(["success", "compile-error", "vet-error", "runtime-error"]),
     output: z.string(),
@@ -180,6 +239,8 @@ export const studioPlanSchema = z
     /** Seed the generated durations were derived from (recorded for provenance). */
     seed: z.number().int().nonnegative(),
     workspace: studioWorkspacePinSchema,
+    slides: z.array(studioSlideSchema).default([]),
+    whiteboardAssets: z.array(studioWhiteboardAssetSchema).default([]),
     narration: studioNarrationSchema,
     runtime: studioRuntimeSchema,
     /** Optional per-plan QA thresholds beyond the always-on artifact gates. */
@@ -230,6 +291,24 @@ export const studioPlanSchema = z
             code: "custom",
             message: `Action "${action.id}" points the cursor at missing file "${action.target.path}"`,
           });
+        }
+      }
+      if (action.type === "slide.show") {
+        if (!plan.slides.some((slide) => slide.id === action.slideId)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Action "${action.id}" shows slide "${action.slideId}" which is not a pinned slide asset`,
+          });
+        }
+      }
+      if (action.type === "whiteboard.apply") {
+        for (const assetId of action.upsertIds) {
+          if (!plan.whiteboardAssets.some((asset) => asset.id === assetId)) {
+            ctx.addIssue({
+              code: "custom",
+              message: `Action "${action.id}" upserts whiteboard asset "${assetId}" which is not pinned`,
+            });
+          }
         }
       }
     }

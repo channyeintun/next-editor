@@ -96,6 +96,42 @@ describe("compileLessonScript", () => {
   });
 });
 
+const TOUR_PATH = resolve(__dirname, "../scripts/go-cube-tour.yaml");
+const TOUR_DURATION_MS = 42_323;
+
+describe("multi-surface pilot (go-cube-tour)", () => {
+  function loadTourScript(): LessonScript {
+    return parseLessonScript(YAML.parse(readFileSync(TOUR_PATH, "utf8")));
+  }
+
+  it("compiles slide and whiteboard actions into the plan", () => {
+    const script = loadTourScript();
+    const { plan } = compileLessonScript(compileInputFor(script, TOUR_DURATION_MS));
+
+    const types = new Set(plan.actions.map((action) => action.type));
+    expect(types).toContain("slide.show");
+    expect(types).toContain("slide.close");
+    expect(types).toContain("whiteboard.apply");
+    expect(types).toContain("editor.type");
+    expect(types).toContain("runtime.run");
+    expect(plan.slides).toHaveLength(1);
+    expect(plan.whiteboardAssets).toHaveLength(2);
+    expect(plan.runtime.fixture.transientErrorKinds).toEqual(["unavailable"]);
+  });
+
+  it("rejects a slide.show for an unpinned slide", () => {
+    const raw = YAML.parse(readFileSync(TOUR_PATH, "utf8"));
+    raw.scenes[0].actions[0].slideId = "ghost";
+    expect(() => parseLessonScript(raw)).toThrow(/not a pinned slide asset/);
+  });
+
+  it("rejects whiteboard upserts of unpinned assets", () => {
+    const raw = YAML.parse(readFileSync(TOUR_PATH, "utf8"));
+    raw.scenes[1].actions[0].upsertIds = ["ghost"];
+    expect(() => parseLessonScript(raw)).toThrow(/not pinned/);
+  });
+});
+
 describe("lessonScriptSchema", () => {
   it("accepts the checked-in pilot", () => {
     const script = loadPilotScript();

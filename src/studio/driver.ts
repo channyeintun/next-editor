@@ -1,7 +1,12 @@
 import { monaco, workspacePathFromMonacoModelUri } from "../monaco";
 import type { WorkspaceActions } from "../contexts/WorkspaceContext";
 import type { RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
-import { GoPlaygroundClient, GoPlaygroundServiceError } from "../runtime/goPlayground/client";
+import { selectPreviewState, type SlidesStoreInstance } from "../stores/slidesStore";
+import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
+import {
+  GoPlaygroundClient,
+  type GoPlaygroundServiceErrorKind,
+} from "../runtime/goPlayground/client";
 import {
   goRunResultToConsoleLines,
   goRunServiceErrorToConsoleLines,
@@ -9,18 +14,22 @@ import {
 } from "../runtime/goPlayground/console";
 import { appendGoConsoleLines } from "../runtime/goPlayground/consoleStore";
 import { collectGoPlaygroundFiles } from "../runtime/goPlayground/files";
-import type { GoPlaygroundRunResult } from "../runtime/goPlayground/types";
+import type { SlideEvent } from "../core/src/slides";
+import type { WhiteboardEvent } from "../core/src/whiteboard";
 import { isWorkspaceTextFile } from "../types/workspace";
 import { StudioActionError, abortableSleep, resolveAnchorOffset, waitUntil } from "./async";
 import { easeInOutCubic } from "./cadence";
+import { GoRunTerminalError, runGoWithRetry } from "./goRuntimeAdapter";
 import type {
   StudioPlan,
   StudioRuntimeMode,
   StudioTargetRef,
+  StudioWhiteboardAsset,
   TextAnchor,
   TypingChunk,
 } from "./plan";
 import { describeStudioTarget, resolveStudioTarget } from "./targets";
+import { buildWhiteboardElement } from "./whiteboardAssets";
 
 export { StudioActionError, abortableSleep, resolveAnchorOffset, waitUntil };
 
@@ -38,8 +47,16 @@ export interface StudioDriverDeps {
   /** Records the active-file change on the workspace track (same call the sidebar makes). */
   notifyWorkspaceEvent: () => void;
   runtimePanelStore: RuntimePanelStoreInstance;
+  slidesStore: SlidesStoreInstance;
+  whiteboardStore: WhiteboardStoreInstance;
+  /** Records a slide event on the slide track (same send the slides controller makes). */
+  notifySlideEvent: (event: SlideEvent) => void;
+  /** Records a whiteboard event (same send the whiteboard controller makes). */
+  notifyWhiteboardEvent: (event: WhiteboardEvent) => void;
   runtimeMode: StudioRuntimeMode;
   runFixture: StudioPlan["runtime"]["fixture"];
+  planSeed: number;
+  whiteboardAssets: readonly StudioWhiteboardAsset[];
   signal: AbortSignal;
 }
 
@@ -55,6 +72,13 @@ export interface StudioDriver {
     durationMs: number;
   }): Promise<Record<string, unknown>>;
   runWorkspace(timeoutMs: number): Promise<Record<string, unknown>>;
+  showSlide(input: { slideId: string; maximized: boolean }): Promise<Record<string, unknown>>;
+  closeSlide(): Promise<Record<string, unknown>>;
+  applyWhiteboard(input: {
+    open?: boolean;
+    maximized?: boolean;
+    upsertIds: readonly string[];
+  }): Promise<Record<string, unknown>>;
   waitForOutput(input: { contains: string; timeoutMs: number }): Promise<Record<string, unknown>>;
   expectFile(input: { path: string; contains: string }): Promise<Record<string, unknown>>;
   dispose(): void;
@@ -276,55 +300,146 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         goRunStartedConsoleLines(goFiles.map((file) => file.path)),
       );
 
-      let result: GoPlaygroundRunResult;
-      if (deps.runtimeMode === "fixture") {
-        await abortableSleep(deps.runFixture.latencyMs, signal);
-        result = deps.runFixture.result;
-      } else {
-        goClient ??= new GoPlaygroundClient();
-        let deadlineHit = false;
-        const deadline = window.setTimeout(() => {
-          deadlineHit = true;
-          goClient?.abort();
-        }, timeoutMs);
-        try {
-          result = await goClient.run(goFiles);
-        } catch (error) {
-          if (error instanceof GoPlaygroundServiceError) {
-            if (error.kind === "aborted") {
-              throw new StudioActionError(
-                deadlineHit
-                  ? `The live run did not finish within ${timeoutMs}ms`
-                  : "The render was cancelled",
-              );
-            }
-            appendGoConsoleLines(
-              deps.runtimePanelStore,
-              goRunServiceErrorToConsoleLines(error.kind, error.message),
-            );
-            throw new StudioActionError(`Live run failed (${error.kind}): ${error.message}`);
-          }
-          throw new StudioActionError(
-            error instanceof Error ? error.message : "The live run failed",
-          );
-        } finally {
-          window.clearTimeout(deadline);
+      let outcome;
+      try {
+        outcome = await runGoWithRetry({
+          mode: deps.runtimeMode,
+          fixture: deps.runFixture,
+          files: goFiles,
+          timeoutMs,
+          signal,
+          getClient: () => (goClient ??= new GoPlaygroundClient()),
+          errorLinesFor: (kind, message) =>
+            goRunServiceErrorToConsoleLines(
+              kind as Exclude<GoPlaygroundServiceErrorKind, "aborted">,
+              message,
+            ),
+        });
+      } catch (error) {
+        if (error instanceof GoRunTerminalError) {
+          appendGoConsoleLines(deps.runtimePanelStore, error.consoleLines);
         }
+        throw error;
       }
 
-      appendGoConsoleLines(deps.runtimePanelStore, goRunResultToConsoleLines(result));
+      appendGoConsoleLines(deps.runtimePanelStore, goRunResultToConsoleLines(outcome.result));
 
-      if (result.status !== "success") {
+      if (outcome.result.status !== "success") {
         throw new StudioActionError(
-          `The program did not run cleanly (status ${result.status}, exit ${result.exitCode ?? "?"})`,
+          `The program did not run cleanly (status ${outcome.result.status}, exit ${outcome.result.exitCode ?? "?"})`,
         );
       }
 
       return {
         mode: deps.runtimeMode,
-        status: result.status,
-        exitCode: result.exitCode ?? 0,
+        status: outcome.result.status,
+        exitCode: outcome.result.exitCode ?? 0,
+        attempts: outcome.attempts,
+        transientFailures: outcome.transientFailures,
       };
+    },
+
+    async showSlide({ slideId, maximized }) {
+      const slides = deps.slidesStore.getSnapshot().context.slides;
+      if (!slides.some((slide) => slide.id === slideId)) {
+        throw new StudioActionError(`Slide "${slideId}" is not loaded in the slides store`);
+      }
+
+      // Same pair the slides controller performs: record the event, then move
+      // the store so the panel renders it (no collaboration in studio renders).
+      deps.notifySlideEvent({
+        type: "slide_open",
+        timestamp: performance.now(),
+        slideId,
+        isMaximized: maximized,
+        indexv: 0,
+      });
+      deps.slidesStore.trigger.setPreviewState({
+        previewState: {
+          isOpen: true,
+          isMaximized: maximized,
+          currentSlideId: slideId,
+          indexv: 0,
+        },
+      });
+
+      await waitUntil(
+        () => {
+          const previewState = selectPreviewState(deps.slidesStore.getSnapshot().context);
+          return previewState.isOpen && previewState.currentSlideId === slideId;
+        },
+        { timeoutMs: 2_000, signal, description: `slide "${slideId}" to open` },
+      );
+      return { slideId, maximized };
+    },
+
+    async closeSlide() {
+      const previewState = selectPreviewState(deps.slidesStore.getSnapshot().context);
+      deps.notifySlideEvent({
+        type: "slide_close",
+        timestamp: performance.now(),
+        slideId: previewState.currentSlideId ?? undefined,
+      });
+      deps.slidesStore.trigger.setPreviewState({
+        previewState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
+      });
+
+      await waitUntil(() => !selectPreviewState(deps.slidesStore.getSnapshot().context).isOpen, {
+        timeoutMs: 2_000,
+        signal,
+        description: "the slide panel to close",
+      });
+      return {};
+    },
+
+    async applyWhiteboard({ open, maximized, upsertIds }) {
+      const assets = upsertIds.map((assetId) => {
+        const asset = deps.whiteboardAssets.find((candidate) => candidate.id === assetId);
+        if (!asset) {
+          throw new StudioActionError(`Whiteboard asset "${assetId}" is not pinned in the plan`);
+        }
+        return asset;
+      });
+      const upserts = assets.map((asset) => buildWhiteboardElement(asset, deps.planSeed));
+
+      const current = deps.whiteboardStore.getSnapshot().context.scene;
+      const event: WhiteboardEvent = {
+        timestamp: performance.now(),
+        ...(upserts.length > 0 ? { upserts } : {}),
+        ...(open === undefined || open === current.isOpen ? {} : { isOpen: open }),
+        ...(maximized === undefined || maximized === current.isMaximized
+          ? {}
+          : { isMaximized: maximized }),
+      };
+      // Same pair the whiteboard controller's flush performs: record the delta,
+      // then publish the updated scene for the mounted panel.
+      deps.notifyWhiteboardEvent(event);
+      const upsertedIds = new Set(upserts.map((element) => element.id));
+      deps.whiteboardStore.trigger.setScene({
+        scene: {
+          elements: [
+            ...current.elements.filter((element) => !upsertedIds.has(element.id)),
+            ...upserts,
+          ],
+          view: current.view,
+          isOpen: open ?? current.isOpen,
+          isMaximized: maximized ?? current.isMaximized,
+        },
+      });
+
+      await waitUntil(
+        () => {
+          const scene = deps.whiteboardStore.getSnapshot().context.scene;
+          return (
+            (open === undefined || scene.isOpen === open) &&
+            upserts.every((element) =>
+              scene.elements.some((candidate) => candidate.id === element.id),
+            )
+          );
+        },
+        { timeoutMs: 2_000, signal, description: "the whiteboard scene to apply" },
+      );
+      return { upserted: upserts.length, open: open ?? current.isOpen };
     },
 
     async waitForOutput({ contains, timeoutMs }) {

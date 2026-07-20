@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { goRunFixtureSchema, studioWorkspacePinSchema } from "../plan";
+import {
+  goRunFixtureSchema,
+  studioSlideSchema,
+  studioWhiteboardAssetSchema,
+  studioWorkspacePinSchema,
+} from "../plan";
 
 /**
  * `LessonScript` — the authored, reviewable source of a lesson
@@ -56,6 +61,23 @@ const scriptRuntimeRunSchema = scriptActionBase.extend({
   type: z.literal("runtime.run"),
 });
 
+const scriptSlideShowSchema = scriptActionBase.extend({
+  type: z.literal("slide.show"),
+  slideId: z.string().min(1),
+  maximized: z.boolean().default(true),
+});
+
+const scriptSlideCloseSchema = scriptActionBase.extend({
+  type: z.literal("slide.close"),
+});
+
+const scriptWhiteboardApplySchema = scriptActionBase.extend({
+  type: z.literal("whiteboard.apply"),
+  open: z.boolean().optional(),
+  maximized: z.boolean().optional(),
+  upsertIds: z.array(z.string().min(1)).default([]),
+});
+
 const scriptExpectOutputSchema = scriptActionBase.extend({
   type: z.literal("expect.output"),
   contains: z.string().min(1),
@@ -71,6 +93,9 @@ export const scriptActionSchema = z.discriminatedUnion("type", [
   scriptOpenFileSchema,
   scriptEditorTypeSchema,
   scriptRuntimeRunSchema,
+  scriptSlideShowSchema,
+  scriptSlideCloseSchema,
+  scriptWhiteboardApplySchema,
   scriptExpectOutputSchema,
   scriptExpectFileSchema,
 ]);
@@ -108,6 +133,8 @@ export const lessonScriptSchema = z
       title: z.string().min(1),
       locale: z.string().min(1),
       workspace: studioWorkspacePinSchema,
+      slides: z.array(studioSlideSchema).default([]),
+      whiteboardAssets: z.array(studioWhiteboardAssetSchema).default([]),
     }),
     build: z.object({
       /** Registered voice profile id (provider + voice + settings). */
@@ -167,6 +194,24 @@ export const lessonScriptSchema = z
             code: "custom",
             message: `Action "${action.id}" checks "${action.path}" which is not in the pinned workspace`,
           });
+        }
+        if (action.type === "slide.show") {
+          if (!script.lesson.slides.some((slide) => slide.id === action.slideId)) {
+            ctx.addIssue({
+              code: "custom",
+              message: `Action "${action.id}" shows slide "${action.slideId}" which is not a pinned slide asset`,
+            });
+          }
+        }
+        if (action.type === "whiteboard.apply") {
+          for (const assetId of action.upsertIds) {
+            if (!script.lesson.whiteboardAssets.some((asset) => asset.id === assetId)) {
+              ctx.addIssue({
+                code: "custom",
+                message: `Action "${action.id}" upserts whiteboard asset "${assetId}" which is not pinned`,
+              });
+            }
+          }
         }
       }
     }

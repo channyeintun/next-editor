@@ -241,6 +241,27 @@ export function compileLessonScript({
           };
         case "runtime.run":
           return { id: action.id, type: action.type, at, timeoutMs: action.timeoutMs };
+        case "slide.show":
+          return {
+            id: action.id,
+            type: action.type,
+            at,
+            timeoutMs: action.timeoutMs,
+            slideId: action.slideId,
+            maximized: action.maximized,
+          };
+        case "slide.close":
+          return { id: action.id, type: action.type, at, timeoutMs: action.timeoutMs };
+        case "whiteboard.apply":
+          return {
+            id: action.id,
+            type: action.type,
+            at,
+            timeoutMs: action.timeoutMs,
+            open: action.open,
+            maximized: action.maximized,
+            upsertIds: action.upsertIds,
+          };
         case "expect.output":
           return {
             id: action.id,
@@ -273,6 +294,8 @@ export function compileLessonScript({
     },
     seed: script.build.seed,
     workspace: script.lesson.workspace,
+    slides: script.lesson.slides,
+    whiteboardAssets: script.lesson.whiteboardAssets,
     narration: {
       audioPath: narration.audioPath,
       mimeType: narration.mimeType,
