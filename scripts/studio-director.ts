@@ -27,6 +27,7 @@ import { displayTextOf, extractNarration } from "../src/studio/script/markers.ts
 import { LEXICON_V1, speechTextOf } from "../src/studio/script/lexicon.ts";
 import { estimateAlignment } from "../src/studio/script/alignment.ts";
 import { compileLessonScript } from "../src/studio/script/compile.ts";
+import { critiqueScript } from "../src/studio/script/critic.ts";
 import {
   requireVoiceProfile,
   ttsRequestHash,
@@ -133,11 +134,21 @@ async function directScript(scriptPath: string): Promise<void> {
     console.warn(`  ⚠ ${warning}`);
   }
 
+  // ---- Advisory critic (proposes notes; never blocks — §8) ----------------
+  const critique = critiqueScript(script, extracted, meta.durationMs);
+  for (const note of critique.notes) {
+    console.log(`  ✎ [${note.severity}] ${note.message}`);
+  }
+
   // ---- Emit the compiled plan (stable key order → reproducible bytes) -----
   mkdirSync(compiledDir, { recursive: true });
   const planJson = `${JSON.stringify(JSON.parse(canonicalJson(plan)), null, 2)}\n`;
   const planFile = join(compiledDir, `${script.lesson.slug}.json`);
   writeFileSync(planFile, planJson);
+  writeFileSync(
+    join(compiledDir, `${script.lesson.slug}.critique.json`),
+    `${JSON.stringify(critique, null, 2)}\n`,
+  );
 
   const planHash = await sha256HexOfJson(plan);
   console.log(

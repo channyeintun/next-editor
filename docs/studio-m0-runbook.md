@@ -1,4 +1,4 @@
-# Studio Runbook — Deterministic Lesson Renders (M0–M3)
+# Studio Runbook — Deterministic Lesson Renders (M0–M4)
 
 Implements **M0–M2** of [agent-lesson-production.md](./agent-lesson-production.md)
 §12: a deterministic in-app Performer renders checked-in plans against pre-generated
@@ -40,6 +40,41 @@ Mistimed builds are rejected mechanically: a script's
 and a render whose p95 |actual − planned| action start exceeds it fails QA
 (no bundle, no draft), alongside the M0 gates for corrupted or semantically
 wrong artifacts.
+
+## Authoring workflow and editorial loop (M4)
+
+The editorial contract lives in [studio-persona.md](./studio-persona.md)
+(versioned; the advisory critic in `src/studio/script/critic.ts` shares its
+version). The production loop:
+
+```text
+1. Pick one concept; write src/studio/scripts/<slug>.yaml (scenes, [[mark]]s,
+   per-scene sources — the critic flags unsourced scenes).
+2. bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml
+   → compiled plan + critique JSON; fix compile errors, weigh critic notes
+   (the critic proposes; it cannot block or approve).
+3. Register the slug in src/studio/plans/index.ts.
+4. bun scripts/studio-render.ts <slug>       # two renders + repeatability
+5. Watch the rendered lesson end-to-end (/studio playback or the bundle).
+6. Create draft… → review in the lessons UI → publish (human, separate).
+```
+
+### Pilots (all passed 2× unattended renders, repeatability PASS)
+
+| Pilot          | Role                                                  | Surfaces                           |
+| -------------- | ----------------------------------------------------- | ---------------------------------- |
+| `go-cube`      | minimal regression (mirrors the M0 hard-coded lesson) | editor, cursor, workspace, runtime |
+| `go-cube-tour` | representative multi-surface                          | + slides, whiteboard, retry path   |
+| `go-swap`      | net-new short explainer                               | editor, cursor, workspace, runtime |
+
+### Metrics to record per build (§11)
+
+Track in the pilot log (spreadsheet or issue): authoring/critic tokens, TTS
+seconds synthesized (cache hits are free), render wall time (`wallDurationMs`
+in the report), retries, artifact bytes, human review minutes, script
+revisions, and brief→draft lead time. Report p50/p95 across pilots before
+scaling. The remaining M4 exit criterion is human: watch all three pilots,
+rate them, log correction time, and decide scale / revise / stop.
 
 ## Authoring a lesson (M1 path)
 

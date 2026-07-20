@@ -1,0 +1,92 @@
+# M4 pilot 3 — net-new short explainer: Go's multiple return values, taught by
+# writing a swap function. Compile with:
+#   bun scripts/studio-director.ts src/studio/scripts/go-swap.yaml
+schemaVersion: 1
+
+lesson:
+  slug: go-swap
+  title: "Two return values, one swap"
+  locale: en-US
+  workspace:
+    lessonType: go
+    name: Go Lesson
+    entryFilePath: main.go
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        	a, b := "tea", "coffee"
+        	fmt.Println(a, b)
+        }
+
+build:
+  voiceProfile: say-samantha-v1
+  seed: 11
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 1200
+    result:
+      status: success
+      exitCode: 0
+      output: "tea coffee\ncoffee tea\n"
+
+scenes:
+  - id: swap-function
+    narration: >
+      Go functions can return two values at once. [[mark:type-swap]] Swap takes
+      two strings, and returns them in reverse order. No temporary variable, and
+      no tuple type; the function signature declares both results.
+    sources:
+      - title: "A Tour of Go — Multiple results"
+        url: "https://go.dev/tour/basics/6"
+    actions:
+      - id: type-swap
+        type: editor.type
+        at: { mark: type-swap, offsetMs: -600 }
+        target:
+          file: main.go
+          after: "import \"fmt\"\n\n"
+          occurrence: 1
+        cadence: fast-explainer
+        text: "func swap(a, b string) (string, string) {\n\treturn b, a\n}\n\n"
+
+  - id: call-and-run
+    narration: >
+      [[mark:type-call]] Assign both results at once, and print again.
+      [[mark:run]] Run it, and tea and coffee trade places.
+    sources:
+      - title: "The Go Programming Language Specification — Assignment statements"
+        url: "https://go.dev/ref/spec#Assignment_statements"
+    actions:
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call, offsetMs: -300 }
+        target:
+          file: main.go
+          after: "\tfmt.Println(a, b)\n"
+          occurrence: 1
+        cadence: fast-explainer
+        text: "\n\ta, b = swap(a, b)\n\tfmt.Println(a, b)\n"
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 1600 }
+        timeoutMs: 15000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "coffee tea"
+        timeoutMs: 6000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.go
+        contains: "swap(a, b)"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

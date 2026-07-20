@@ -591,12 +591,15 @@
         "exitCode": 0,
         "output": "Hello, Go lessons!\n1 squared is 1\n2 squared is 4\n3 squared is 9\n4 squared is 16\n5 squared is 25\n3 cubed is 27\n",
         "status": "success"
-      }
+      },
+      "transientErrorKinds": []
     },
     "kind": "go-playground"
   },
   "schemaVersion": 1,
   "seed": 42,
+  "slides": [],
+  "whiteboardAssets": [],
   "workspace": {
     "entryFilePath": "main.go",
     "files": {
