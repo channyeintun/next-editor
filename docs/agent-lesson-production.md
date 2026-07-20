@@ -1,296 +1,449 @@
-# Agent Lesson Production — Deep Research
+# Agent Lesson Production — Architecture and Delivery Plan
 
-**Goal:** a harness that lets AI agents produce complete Next Editor lessons — script, narration, code performance, whiteboard, slides, preview, cursor — with no human in the recording chair. The end state is a content channel ("Fireship for Next Editor") where agents handle production and humans only steer taste and greenlight releases.
+- **Status:** proposal; implementation has not started
+- **Repository audit:** 2026-07-20 at `2a7ec794ecbc`
+- **Primary decision:** build a versioned `LessonScript`, compile it into a content-addressed plan, and run that plan through a deterministic in-app Performer while the existing recorder captures the lesson
+- **Release policy:** generated lessons remain drafts until a human reviews and publishes them
 
-**Pipeline sketch this responds to:**
+## Goal
 
+Build a production harness that can turn approved source material into a complete Next Editor lesson—narration, captions, editor changes, cursor guidance, workspace/runtime state, preview, whiteboard, and slides—without requiring a human to perform the recording.
+
+The target operating model is:
+
+```text
+human defines curriculum and taste
+  → agents draft and revise a lesson script
+  → deterministic tooling builds and performs it
+  → automated checks reject broken artifacts
+  → a human approves the release
 ```
-transcript (captions) → direct (record) → harness (sidebar, editor, whiteboard,
-slides, preview, dock) → human-like actions (cursor, clicks, typing) → lessons
+
+### V1 success criteria
+
+A first production slice is successful when it can:
+
+1. Build a 30–100 second lesson from a checked-in script and pinned workspace.
+2. Produce a replayable `.ne`, sibling narration audio, captions, a build manifest, and a QA report.
+3. Render without an LLM or computer-use agent making decisions during performance.
+4. Execute every runnable checkpoint and fail closed on errors or timeouts.
+5. Render the same compiled plan twice with the same logical actions, final workspace hashes, captions, and media hashes; timing may vary only within an explicit tolerance.
+6. Create a Tube **draft** through the existing upload/API flow; publishing remains a separate human action.
+
+### Non-goals for V1
+
+- Fully autonomous publishing.
+- Byte-for-byte identical browser recordings.
+- An offline compiler that writes `Recording` tracks directly.
+- Scene splicing, bulk localization, or interactive learner checkpoints.
+- Imitating a living creator's voice or identity. The channel should develop an original short-form technical style.
+
+## 1. Executive summary
+
+The architecture is viable, but the original thesis needs one important qualification: Next Editor already has most **output tracks**, not most of the production system. The missing control plane—script schema, timing compiler, stable surface adapters, Performer, build manifest, QA, and render CLI—is the hard part.
+
+The recommended split is:
+
+- **Creative loop:** humans and agents plan, write, and critique `LessonScript` files.
+- **Asset build:** the Director resolves narration markers, synthesizes speech, derives captions, and freezes all generated assets by hash.
+- **Performance loop:** the Performer receives only a compiled plan and immutable inputs. It uses no generative decision-making.
+- **Release loop:** mechanical checks can reject a build; a human is the final editorial gate.
+
+This boundary is narrower and more reproducible than “`f(script, seed) → .ne`.” TTS providers can change output, browsers introduce scheduling variance, and runtime execution may be nondeterministic. The reproducible unit is therefore:
+
+```text
+perform(compiled plan, pinned workspace, pinned media, runtime profile, seed)
+  → recording bundle + report
 ```
 
-**TL;DR of the research:**
+Every input above must be content-addressed or versioned in the build manifest.
 
-1. Next Editor is structurally better positioned for this than any pixel-video pipeline, because a lesson here is a **semantic event stream**, not an MP4. Agents can author it as a reviewable artifact, a deterministic engine can render it, and QA can be mechanical.
-2. Roughly **80% of the substrate already exists** in the codebase: every track the harness needs (frames, cursor with target remapping, word-timed captions, external audio, whiteboard, slides, rrweb preview, workspace/runtime snapshots, chat) is already first-class in the `Recording` format, and playback already drives a live Monaco — i.e. the player is already an automation engine.
-3. The single most important design decision: **no LLM in the render loop.** Agents write a `LessonScript` (a compact, diffable YAML/JSON artifact); a deterministic Performer executes it through the real recorder. This is the split that made Remotion-with-agents, VHS, and Manim work, applied to an interactive IDE.
-4. Voice is a solved dependency: TTS with timing (ElevenLabs character-level, Cartesia word-level, Azure word-boundary) maps directly onto the existing `CaptionWord` type, and `audioSource: "external"` + sibling audio files means TTS output plugs into the format with zero format changes.
-5. The moat versus the AI-video wave (NotebookLM, Demosmith, Arcade/Supademo/Storylane): those emit opaque video. Next Editor lessons stay **interactive, seekable, editable, verifiable, tiny, and re-renderable per scene**. The risk is not feasibility; it is editorial quality (slop). The plan below treats taste as a first-class engineering problem.
+## 2. Verified repository baseline
 
----
+Next Editor's `Recording.version = 4` model is serialized in the SCR3 container. The repository already records and replays the following surfaces:
 
-## 1. Why Next Editor can win this
+| Capability | Exists today | Production-harness gap |
+| --- | --- | --- |
+| Editor | Keyframes plus deltas; ordinary Monaco edits can be captured as verified exact edit batches, with DMP fallback | A stable automation adapter for open/select/type/reveal actions and action acknowledgements |
+| Captions | `CaptionTrack`, `CaptionCue`, and millisecond `CaptionWord` timings | Narration-to-display token mapping, cue segmentation, and alignment validation |
+| External audio | `START_RECORDING` accepts an audio `Blob`; recordings support `audioSource: "external"`, sibling `audioFile`, resolved `audioUrl`, and `audioStartOffsetMs` | A build/export step that preserves the original audio hash and the recorder-measured offset |
+| Cursor | Target-aware samples and playback remapping through `CursorTargetSnapshot` | A supported injection seam, stable target registry, and deterministic path generator |
+| Workspace/sidebar | Timestamped project, active-file, folder, scroll, sidebar-width, and preview-dock-width snapshots | Commands that mutate state through the same path as the UI and expose completion signals |
+| Runtime/dock | Timestamped runtime and dock snapshots | Execution-kind-specific run/wait/assert adapters; arbitrary shell commands cannot be assumed |
+| Preview | rrweb initial documents and patch batches, plus API-client replay state | Readiness signals, deterministic fixtures, assertion helpers, and render-time error collection |
+| Whiteboard | Element upserts/removals plus view/open/maximize state | A supported automation adapter and an authored-asset format |
+| Slides | Native slide content/events and Google Slides ingestion | A supported show/step/close adapter and pinned slide assets |
+| Chat | Recorded chat deltas and checkpoints | Out of V1 unless a pilot explicitly requires it |
+| Publishing | Authenticated upload to R2, D1-backed draft/publish APIs, and a static seed catalog | A render-to-draft command and provenance/disclosure fields |
 
-A screen-recorded lesson is a rendering of decisions that were lost at capture time. Next Editor's `.ne` keeps the decisions:
+Playback already applies editor diffs to live Monaco and restores workspace, runtime, slide, preview, whiteboard, cursor, and chat state. That code is useful precedent, but it is not yet a Performer API.
 
-| Property             | Pixel video (YouTube, Demosmith, NotebookLM) | `.ne` lesson                                                                                          |
-| -------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Source of truth      | Final MP4                                    | Event log (frames, cursor, captions, preview…)                                                        |
-| Agent authoring unit | Prompt → opaque render                       | `LessonScript` → deterministic render                                                                 |
-| Fixing a mistake     | Reshoot / re-render whole video              | Patch script, re-render one scene                                                                     |
-| QA                   | Human watches it                             | Decode + assert: code compiles at checkpoints, preview text matches, caption/action drift < threshold |
-| Learner interaction  | Pause and squint                             | Pause, edit the actual code, run it                                                                   |
-| Size                 | 100+ MB                                      | KBs–MBs                                                                                               |
-| Localization         | Re-record or dub                             | Re-TTS the same script; captions regenerate exactly                                                   |
-| Diff/review          | Impossible                                   | `git diff` on the script                                                                              |
+### Constraints discovered during the audit
 
-That last column is exactly why "agents write code, a framework renders video" worked for [Remotion](https://www.remotion.dev/docs/ai/generate) (agent skills shipped Jan 2026) and why [VHS](https://github.com/charmbracelet/vhs) tapes became the standard for scripted terminal demos. The lesson harness is **VHS for a whole IDE, plus narration** — and unlike either of those, the output stays interactive for the learner, which is Scrimba's core insight ("the player is the editor").
+1. There is no stable “drive the studio” interface. The recorder's cursor callback and several surface handlers are internal implementation details, so the Performer needs an intentional adapter instead of reaching into XState actors or DOM internals.
+2. The in-app OpenRouter agent is not a universal beat verifier. File tools work across execution kinds, while `bash`, runtime diagnostics, and preview inspection are currently limited to WebContainer lessons. Go, Kotlin, and Rust use explicit Playground run paths.
+3. Playback uses isolated Monaco models and does not currently provide a supported “pause, fork this state into a writable workspace, and run it” learner flow. That remains a valuable product extension, not a property to claim today.
+4. The standalone Cloudflare remote runtime is implemented and reviewed, but editor integration and environment validation are still pending. V1 must work with the execution kinds available in the editor today.
+5. The repository contains one checked-in lesson, `public/lessons/introduction/introduction.ne`. The previously claimed ~41-lesson Go benchmark corpus is not present in this tree. Any external corpus must be located, licensed, inventoried, and pinned before it becomes a project dependency.
+6. Tube's lesson model has no dedicated AI-production or provenance field. Disclosure requires a small data/API/UI decision; it is not available “for free” in current metadata.
 
-Nobody occupies this square yet. Scrimba records events but still needs a human performer. Demo-automation tools (Arcade, Supademo, Storylane, Demosmith) have agents + synthetic cursors + AI voiceover, but emit product-demo MP4s/click-throughs, not runnable coding lessons. NotebookLM makes narrated slide videos at consumer scale, but nothing executes. Coursera's Course Builder generates course _outlines and text_, not performances.
+## 3. Product hypothesis
 
-## 2. What already exists in the codebase
+The durable advantage is not “AI video.” It is a structured lesson artifact whose state can be inspected and tested.
 
-The audit surprised me. Mapping the sketch's stages onto the repo:
+| Dimension | Pixel-first output | Next Editor lesson |
+| --- | --- | --- |
+| Authoring source | Prompt, timeline, or final video | Versioned script plus pinned workspace/assets |
+| Repair | Re-record or edit pixels | Patch the script or source state and rebuild |
+| Mechanical QA | Mostly audiovisual inspection | Decode tracks; execute checkpoints; assert state and output |
+| Review | Visual comparison | Script diff, build report, and playback |
+| Localization | Dub/re-render video | Potentially rebuild narration, captions, and marker-relative timing; not V1 |
+| Learner interactivity | Usually none | Structured replay today; fork-and-run checkpoints are a future extension |
 
-### 2.1 The recording format already has every track the harness needs
+This is a hypothesis to validate with pilots, not a claim that no competitor can build the same thing. The first measurement should be whether the harness reduces correction time while maintaining the quality of a human-produced lesson.
 
-From `src/core/src/types.ts` (Recording v4, SCR3 container):
+### What prior art actually validates
 
-| Sketch stage          | Existing track / type                                                            | Notes for synthesis                                                                                                                                                                                                                                                                |
-| --------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| transcript (captions) | `captions: CaptionTrack[]` with `CaptionCue.words?: CaptionWord[]`               | **Word-level timing already modeled.** TTS alignment output drops straight in. Multi-language tracks + sibling `.vtt`/`.srt` supported.                                                                                                                                            |
-| voice                 | `audioSource: "external"`, `audioFile`/`audioUrl`, `audioStartOffsetMs`          | TTS audio ships as a sibling file next to the `.ne`; `src/hooks/useUrlLoader.ts` already resolves it. No format change needed.                                                                                                                                                     |
-| code editor           | `frames: DeltaFrame[]` (keyframe+delta)                                          | v4 encodes _ordinary local Monaco edits_ as exact edit batches with integrity hashes. A performer that types through the Monaco API gets the cheapest, most faithful encoding for free.                                                                                            |
-| mouse cursor          | `cursorEvents: CursorRecordingEvent[]`                                           | Not raw pixels: `CursorTargetSnapshot` anchors samples to UI regions and playback **remaps onto the current layout** (`cursorCoordinates.ts`, `cursorReplay.ts`, tween support). A synthetic cursor authored as _targets_ is more robust than anything a screen recorder captures. |
-| whiteboard            | `whiteboardEvents: WhiteboardEvent[]` (element upserts/removes + view)           | Agents author Excalidraw element JSON directly; mermaid→excalidraw converters exist as libraries if we want diagram-as-text authoring.                                                                                                                                             |
-| slides                | `slides: Slide[]`, `slideEvents` (+ Google Slides integration, R2-hosted images) | The Go Tour lessons were already deck-driven.                                                                                                                                                                                                                                      |
-| preview               | `previewInitialDocuments` + `previewPatchBatches` (rrweb), API-client events     | The one track that requires actually running the code.                                                                                                                                                                                                                             |
-| file sidebar / dock   | `workspaceEvents` / `runtimeEvents` (timestamped snapshots)                      | Driven from `workspaceStore` and the runtime provider.                                                                                                                                                                                                                             |
-| AI chat (bonus)       | `chatEvents: ChatRecordingEvent[]` (dmp deltas + checkpoints)                    | A lesson genre nobody else can make: replayable "watch the agent work" lessons, recorded semantically.                                                                                                                                                                             |
+| System | Useful precedent | What it does not prove for this project |
+| --- | --- | --- |
+| Scrimba | Event-based coding lessons can make playback more useful than pixels alone | That autonomous lesson authoring meets an editorial quality bar |
+| VHS | A small declarative script can drive deterministic demonstrations and golden tests | Multi-surface IDE orchestration, narration sync, or interactive code playback |
+| Remotion | Coding agents can author a reviewable artifact while a separate renderer performs it | That generated lesson scripts are factually or pedagogically sound |
+| NotebookLM Video Overviews | Source-grounded input can produce narrated visual explanations at product scale | Runnable code, semantic event tracks, or mechanical code QA |
+| Demosmith | The vendor reports autonomous browser capture, narration, captions, and localization | Independent quality evidence or reproducibility suitable for coding lessons |
+| Coursera Course Builder | AI assistance can reduce curriculum and course-structure authoring work | Automated performance of a lesson inside an IDE |
 
-### 2.2 Playback is already an automation engine
+The shared lesson is architectural: keep creative output reviewable, keep execution bounded, and validate the result independently.
 
-Playback reconstructs frames and **applies diffs to a live Monaco** (`src/core/src/utils/editorDiff.ts`: `applyContentDiff` / `applyPositionDiff` / `applySelectionDiff`), restores workspace/runtime/whiteboard/slide state, and drives an rrweb `Replayer` for the preview. A Performer is conceptually "playback of a script that doesn't exist yet" — most of the muscles it needs are the ones playback already exercises daily.
+## 4. Architecture decision
 
-### 2.3 An in-app agent already acts on the harness
+### 4.1 Selected approach: a scripted Performer inside the app
 
-`src/agent/` has an OpenRouter-SDK agent loop with tools that read and mutate the workspace and observe the runtime: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `capturePreview`, `inspectPreview`, `runtimeDiagnostics`. That is the "hands" half of a performer, and — critically for QA — the **verification half of the pipeline**: an agent can already execute a beat's workspace and look at the preview to confirm the lesson's claims are true.
-
-### 2.4 Distribution exists
-
-`tube/` (`@next-editor/tube`) is the catalog app: `data/lessons.json` entries pointing at hosted `.ne` + thumbnail + author + tags. Publishing an agent-made lesson is "upload to R2, append a JSON entry."
-
-### 2.5 What does _not_ exist (the actual project)
-
-1. A **LessonScript** format (the agent-authorable artifact).
-2. A **Director** (compiler: script + TTS → timed action plan + captions + audio).
-3. A **Performer** (deterministic executor that plays the plan through the real surfaces while `START_RECORDING` capture runs).
-4. A **cursor/typing humanizer** (synthesize `cursorEvents` and keystroke cadence).
-5. A **QA harness** (decode + assert + judge) and a **render CLI** (headless farm entry point).
-6. The **authoring agents** (curriculum → script → critique) and the persona/style guide.
-
-Everything in that list composes with existing code rather than replacing it.
-
-## 3. Prior art survey
-
-**[Scrimba](https://survivejs.com/blog/scrimba-interview/)** — the format cousin. Records editor events instead of pixels; pausing drops you into the live editor ([overview](https://scrimbaguide.tech/docs/intro/), [reviews](https://www.coursefacts.com/guides/scrimba-review-2026)). Their 2025–26 AI work went into a _tutor that watches the learner_, not an _author that performs lessons_. The authoring side is still human. That's the open square.
-
-**[VHS by charmbracelet](https://github.com/charmbracelet/vhs)** — recordings as code for terminals. A `.tape` DSL (`Type "npm i"`, `Sleep 2s`, `Enter`) renders deterministic GIFs/videos, used for docs and even golden-file integration tests ([background](https://blog.ouseful.info/2022/11/09/creating-terminal-based-screenshot-movies-with-vhs/)). Proves the authoring ergonomics: humans and LLMs both write tapes happily because the DSL is tiny and declarative. The LessonScript should feel like a VHS tape with narration and structure.
-
-**[Remotion + agent skills](https://www.remotion.dev/docs/ai/coding-agents)** — the creative/render split at production quality. Remotion ships [LLM system prompts](https://www.remotion.dev/docs/ai/system-prompt) and [Agent Skills](https://www.remotion.dev/docs/ai/skills) so coding agents write compositions and the renderer stays deterministic; people already build [Fireship-style videos this way](http://blog.brightcoding.dev/2026/02/21/remotion-fireship-create-viral-videos-with-react-code). This is the strongest external validation of the architecture recommended below.
-
-**[NotebookLM Video Overviews](https://blog.google/innovation-and-ai/products/notebooklm/generate-your-own-cinematic-video-overviews-in-notebooklm/)** — sources → narrated slide video with style presets and a steering prompt, generated in the background; now with short vertical and cinematic variants ([docs](https://support.google.com/notebooklm/answer/16454555?hl=en)). Consumer-scale proof that "give me sources, get a narrated lesson" is a real interaction. Output is non-interactive video — exactly the ceiling Next Editor breaks.
-
-**Demo-automation industry** — [Arcade](https://www.arcade.software/post/best-interactive-demo-software-2026) (synthetic voiceover "Avery"), [Supademo](https://supademo.com/blog/interactive-product-demo-software), [Storylane](https://www.storylane.io/blog/supademo-alternatives) (AI voiceover + avatars), and most relevantly [Demosmith](https://demosmith.ai/blog/what-is-ai-demo-agent): an agent opens your product in a cloud browser, clicks/types/scrolls autonomously, and delivers an MP4 with voiceover, captions and zooms in ~10 minutes, 29 languages, from $40/mo. The segment is projected around [$2.1B by 2026 at ~25% CAGR](https://demosmith.ai/blog/best-ai-demo-video-generators-2026). Two lessons: (a) agent-performed screen content is commercially real _today_; (b) everyone converges on MP4, so the interactive-lesson square stays open.
-
-**[Coursera Course Builder](https://blog.coursera.org/coursera-launches-course-builder/)** — AI-assisted authoring of outlines, descriptions, objectives, assessments at enterprise scale. Validates demand at the _curriculum_ level; produces no performances.
-
-**Fireship anatomy** ([channel history](https://read.engineerscodex.com/p/how-fireship-became-youtubes-favorite), [format stats](https://grokipedia.com/page/fireship)) — the quality bar being invoked: ~200–250 words/min narration, 10–15 cuts/min, a hard "100 seconds" constraint, one concept per video, humor as pacing relief. Two implications for us: **the script is the product** (everything else is execution), and the short format is the right v1 target — less drift to QA, faster iteration, and pacing lints can literally encode "Fireship rules" (wpm bounds, beat density, max dead air).
-
-Also adjacent: Manim/3Blue1Brown (programmatic explainer video; a favorite LLM target for the same reasons as Remotion) and asciinema for terminal casts. Same pattern everywhere: _declarative artifact in, deterministic render out._
-
-## 4. Harness architecture
-
-Three candidate designs, evaluated against the constraint that renders must be reproducible, cheap, and verifiable:
-
-### Tier A — Computer-use puppeteering (agent moves a real mouse over the real UI)
-
-An LLM with computer-use drives the app pixel-by-pixel while recording runs. Most "human," and the only tier that needs zero new authoring format. Rejected as the core: model-in-the-loop latency destroys timing precision (narration sync at ±word level is impossible when every click costs an inference), renders are non-reproducible and expensive per minute, and flakiness compounds with lesson length. Demosmith works this way because their output tolerates loose timing; a narrated lesson does not.
-
-### Tier B — Scripted Performer inside the app (recommended core)
-
-A deterministic executor runs _inside the editor page_ and performs a compiled plan against the real surfaces while the ordinary recorder captures:
-
-- **Editor:** type via the Monaco API (`getEditorInstance()` → `executeEdits`, `setSelection`, reveal calls) at a humanized cadence, so v4 capture records exact local edit batches. Playback-side helpers in `editorDiff.ts` show the idiom.
-- **Workspace/dock/sidebar:** dispatch the same store events the UI dispatches (`workspaceStore`, runtime provider) — file create/switch/rename, panel focus, terminal commands.
-- **Preview:** actually run the project (WebContainer today; the Cloudflare remote runtime later). rrweb capture works unchanged.
-- **Whiteboard/slides:** apply element upserts / slide changes through the existing panel APIs; capture records them as it does for humans.
-- **Cursor:** synthesized alongside each action (see §7) and fed through the existing capture path (the machine already ingests `onMouseMove(pos: MouseCursorPosition)` samples; the performer feeds it synthetic positions with `target` snapshots).
-- **Clock:** the Director owns the timeline; the performer schedules actions against the recording clock, and TTS audio is attached as **external audio** at export (`audioSource: "external"` + sibling file), so audio/action alignment is exact by construction rather than by capture luck.
-
-Runs headless (Playwright driving a `/studio/perform?script=…` route on a render machine) or visibly in the app — the latter is also a delightful demo ("watch the studio record itself") and a debugging tool. A 10-minute lesson takes ~10 minutes to render but renders parallelize per scene and per lesson across headless instances.
-
-**Why B first:** zero format drift (the real recorder writes the bytes), the preview problem is solved for free, and every existing invariant (SCR3 encoding, offsets, checkpoint behavior) is exercised rather than reimplemented.
-
-### Tier C — Track compiler (offline synthesis, later optimization)
-
-Compile the script _directly_ to a `Recording` — frames via the dmp codec, cursor keyframes, captions, whiteboard events — without running a browser. Faster than realtime (seconds per lesson), perfectly deterministic, ideal for mass localization re-renders. Two catches: the preview track still requires a real execution pass (hybrid: synthesize editor tracks offline, capture preview by executing checkpoints in a headless runtime), and it must never drift from "what the recorder would have written" — mitigated with golden tests that render the same script via Tier B and Tier C and diff the decoded recordings. Build only after B stabilizes the semantics.
-
-**Golden rule across tiers: no LLM in the render loop.** Agents author and critique scripts; rendering is `f(script, seed) → .ne`. Same input, same lesson. All creativity is checked in as a diffable artifact.
+The Performer runs in a dedicated studio route or package, invokes typed surface commands, and lets the existing recorder create the canonical `.ne` representation.
 
 ```mermaid
 flowchart LR
-  subgraph Creative loop (LLMs)
-    Plan[Curriculum planner] --> Script[Scriptwriter]
-    Script --> Gate[Beat gate: code must run]
-    Gate --> Script
-    Critic[Critic / judge] --> Script
-  end
-  subgraph Render loop (deterministic)
-    Director[Director: TTS + align + schedule]
-    Performer[Performer: drives editor surfaces, recorder captures]
-    QA[QA: decode + assert]
-  end
-  Gate --> Director --> Performer --> QA --> Critic
-  QA --> Publish[tube: R2 + lessons.json]
+  Sources[Approved sources and starter workspace] --> Author[Human or agent authoring]
+  Author --> Script[LessonScript]
+  Script --> Director[Director and schema checks]
+  Director --> TTS[TTS and alignment cache]
+  TTS --> Plan[Compiled plan and build manifest]
+  Plan --> Performer[Deterministic Performer]
+  Performer --> Recorder[Existing recorder]
+  Recorder --> Bundle[.ne, audio, captions, report]
+  Bundle --> QA[Mechanical QA]
+  QA --> Draft[Tube draft via upload and API]
+  Draft --> Human[Human playback and publish]
+  QA -->|structured failures| Author
+  Human -->|editorial notes| Author
 ```
 
-## 5. The LessonScript IR
+The synthetic cursor is an attention track, not the mechanism that causes an action. For example, `workspace.openFile` moves the cursor toward the file target and invokes the semantic workspace command; it does not depend on a fragile pixel click.
 
-The agent-authorable artifact. Design constraints: small enough for an LLM to hold and revise whole; declarative about _intent_ (targets, anchors) not pixels; every timing expressed relative to narration so TTS re-runs (or another language) reflow automatically.
+### 4.2 Required application seam
+
+Introduce a narrow `StudioDriver` implemented by the application, rather than exposing stores or actor refs to scripts:
+
+```ts
+interface StudioDriver {
+  openFile(path: string): Promise<ActionReceipt>;
+  typeText(input: TypeTextInput): Promise<ActionReceipt>;
+  setCursorTarget(input: CursorTargetInput): Promise<ActionReceipt>;
+  runWorkspace(): Promise<RunReceipt>;
+  waitForRuntime(input: RuntimeExpectation): Promise<ActionReceipt>;
+  showSlide(input: SlideAction): Promise<ActionReceipt>;
+  applyWhiteboard(input: WhiteboardAction): Promise<ActionReceipt>;
+}
+```
+
+Each command must:
+
+- call the same domain operation used by the UI;
+- resolve only after the requested state is observable;
+- return actual start/end timestamps on the recording clock;
+- be idempotent or declare why retry is unsafe;
+- support cancellation and a bounded timeout; and
+- emit enough context for the render report to diagnose failure.
+
+The final interface will be larger than this sketch, but scripts must never import it directly. The Director compiles script actions into a closed, versioned action union.
+
+### 4.3 Alternatives
+
+| Approach | Decision | Reason |
+| --- | --- | --- |
+| Computer-use agent drives the real UI | Reject as the production core; retain only for exploratory prototypes | Inference latency, pixel targeting, and nondeterministic decisions make narration sync and repeatable retries difficult |
+| Scripted in-app Performer | **Build first** | Exercises the real capture path and every current recording invariant |
+| Offline track compiler | Defer | Faster in principle, but duplicates recorder semantics and still needs real runtime/preview execution |
+
+## 5. `LessonScript` V1
+
+Use YAML for authoring and validate it with a strict Zod schema. JSON is the canonical compiled representation. Every action is a tagged object with an ID; dotted YAML keys such as `edit.type:` should not double as the type system.
 
 ```yaml
+schemaVersion: 1
+
 lesson:
   slug: go-generics-in-100s
-  title: "Go Generics in 100 Seconds"
-  language: en
-  voice: { provider: elevenlabs, id: "<pinned-channel-voice>", speed: 1.06 }
-  persona: fireship-ne-v1 # style guide the scriptwriter obeyed; kept for provenance
-  workspace: starters/go-basic # initial files
-  seed: 42 # cadence/cursor jitter reproducibility
+  title: Go Generics in 100 Seconds
+  locale: en-US
+  persona: next-editor-short-v1
+  workspace:
+    template: starters/go-basic
+    revision: sha256:WORKSPACE_HASH
+
+build:
+  voiceProfile: next-editor-en-v1
+  seed: 42
 
 scenes:
-  - id: hook
+  - id: generic-min
     narration: >
-      Generics. The feature Go refused to ship for a decade,
-      then shipped so well you barely notice it.
+      Before generics, separate numeric types often meant duplicate helpers.
+      [[mark:type-min]] A type set lets one Min work for integers and floats.
+      The tilde also accepts named types with those underlying types.
+      [[mark:run]] Run it.
     actions:
-      - slide.show: { deck: intro, index: 0, at: start }
-      - cursor.idle: { region: editor }
+      - id: open-main
+        type: workspace.openFile
+        at: { scene: start }
+        path: main.go
 
-  - id: the-problem
-    narration: >
-      Say you want Min for ints... and floats. Before 1.18 you wrote it twice.
-      Watch.
-    actions:
-      - file.open: { path: main.go, at: start }
-      - edit.type: # typed at humanized cadence
-          target: { after: "package main\n" }
-          text: |
-            func MinInt(a, b int) int { ... }
-          at: word("twice") # anchor: starts when this word is spoken
-      - editor.select: { match: "MinInt", at: word("Watch") }
+      - id: type-min
+        type: editor.type
+        at: { mark: type-min, offsetMs: -250 }
+        target:
+          file: main.go
+          after: "package main\n\n"
+          occurrence: 1
+        cadence: fast-explainer
+        text: |
+          import "fmt"
 
-  - id: run-it
-    narration: The compiler monomorphizes this — zero runtime cost. Run it.
-    actions:
-      - runtime.exec: { cmd: "go run .", at: word("Run") }
-      - expect.preview: { contains: "3 1.5", within: 8s } # QA gate, not just choreography
-      - whiteboard.upsert: { elements_ref: diagrams/mono.excalidraw, at: word("monomorphizes") }
+          func Min[T ~int | ~float64](a, b T) T {
+            if a < b {
+              return a
+            }
+            return b
+          }
 
-checks: # lesson-level gates evaluated after render
-  - typecheck_clean_at: [the-problem, run-it]
-  - captions_drift_ms_max: 300
-  - narration_wpm: { min: 165, max: 245 }
+          func main() {
+            fmt.Println(Min(3, 7), Min(1.5, 2.5))
+          }
+
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: -150 }
+
+      - id: output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "3 1.5"
+        timeoutMs: 8000
+
+checks:
+  - { type: recording.decodes }
+  - { type: runtime.noErrors }
+  - { type: captions.anchorP95Ms, max: 300 }
 ```
 
-Mapping to existing types is direct: narration + TTS alignment → `CaptionTrack`/`CaptionWord`; `edit.type` → Monaco edits → v4 exact edit batches; `cursor.*` and per-action cursor synthesis → `cursorEvents` with `CursorTargetSnapshot`; `whiteboard.upsert` → `WhiteboardEvent`; `slide.show` → `slideEvents`; `runtime.exec` → runtime events + rrweb preview capture; `expect.*` → QA assertions recorded in a render report (not in the `.ne`).
+### Script rules
 
-Two anchor primitives cover nearly everything: `at: word("...")` / `at: cue_end` (narration-relative) and `after: <action> +ms` (action-relative). The Director resolves them against TTS timestamps into an absolute schedule.
+- `[[mark:name]]` tokens are control markers removed before TTS and captions. Each referenced marker must occur exactly once. Translators must preserve marker IDs.
+- Text targets require a file, an anchor, and an occurrence. Compilation fails on a missing or ambiguous target; the Performer never guesses.
+- The compiler calculates action durations and rejects impossible overlaps, such as a run action scheduled before a typed edit can finish.
+- `runtime.run` maps to the active execution kind. It is not synonymous with arbitrary `bash` execution.
+- `expect.*` actions are QA gates and appear in the report, not as lesson tracks.
+- `afterAction` means after the referenced action completes unless the script explicitly selects its start receipt.
+- Absolute wall-clock times are forbidden in source scripts. The compiled plan contains absolute recording-clock times.
+- Provider credentials and raw secrets never appear in the script or build manifest.
 
-## 6. Voice pipeline
+## 6. Narration, alignment, and captions
 
-**Provider reality check (verify pricing at build time):**
+Provider selection should follow a pronunciation/alignment/licensing spike, not a general “best voice” claim. Confirmed timing surfaces include:
 
-| Provider         | Timing granularity                                                                                                                                                                                          | Notes                                                       |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| ElevenLabs       | **Character-level** via `…/with-timestamps` (`alignment.characters` + start/end arrays) — fold to words trivially ([docs](https://elevenlabs.io/docs/api-reference/text-to-speech/convert-with-timestamps)) | Best-known quality/voice cloning; mid-priced                |
-| Cartesia (Sonic) | **Word-level** (`add_timestamps`, plus phoneme timestamps) over WebSocket ([docs](https://docs.cartesia.ai/api-reference/tts/websocket))                                                                    | Very low latency (irrelevant for us) but clean word timings |
-| Azure Speech     | Word-boundary events                                                                                                                                                                                        | Cheapest at volume; enterprise voices                       |
-| OpenAI TTS       | No timestamps                                                                                                                                                                                               | Would need forced alignment (WhisperX-style) as a post-pass |
+| Provider | Confirmed timing surface | Integration implication |
+| --- | --- | --- |
+| ElevenLabs | Character-level alignment from the with-timestamps endpoint; a separate forced-alignment API can return word timing | Preserve a mapping from synthesized characters back to display tokens |
+| Cartesia | Word and phoneme timestamp messages when timestamps are requested | Word timing maps closely to `CaptionWord`; still validate normalization |
+| Azure Speech | `WordBoundary` events in the Speech SDK | Collect boundary events alongside the encoded audio |
 
-Design points:
+The Director should:
 
-- **Captions become ground truth, not transcription.** Because the script is the source, `CaptionCue`/`CaptionWord` are emitted from TTS alignment — zero ASR error. This inverts the usual captioning pipeline and is only possible script-first.
-- **Audio as sibling external file.** Attach via `audioSource: "external"` + `audioFile`, `audioStartOffsetMs: 0` by construction. No change to `useUrlLoader` resolution. Inline fragments remain possible but buy nothing here.
-- **Pronunciation lexicon for code.** TTS mangles `useEffect`, `:=`, `impl`. Maintain a lexicon (per language) of token → spoken form, applied by the Director before synthesis; the caption text keeps the _written_ form. Narration style rule: read intent, not syntax (Fireship reads almost no code aloud).
-- **One pinned voice = the channel brand.** Voice ID is part of the persona config. Disclose AI narration in lesson metadata — cheap honesty that preempts backlash.
-- **Localization is a re-render, not a re-shoot.** Translate narration (LLM), re-TTS, Director reflows all `word()` anchors automatically, Tier C re-render skips even the browser. Marginal cost ≈ TTS + translation tokens. 29-language Demosmith shows the demand; we'd match it with _interactive_ lessons.
+1. Keep separate **display text** and **speech text** representations.
+2. Remove control markers while retaining their positions in the token map.
+3. Apply a versioned pronunciation lexicon to speech text only.
+4. Synthesize once, then store the audio, raw alignment, provider/model/voice/settings metadata, and request hash in a content-addressed cache.
+5. Map normalized provider output back to display tokens; reject missing, reordered, overlapping, or non-monotonic spans.
+6. Segment words into readable `CaptionCue` entries and emit millisecond `CaptionWord` values.
+7. Start recording with the generated audio blob so the existing recording clock and audio playback path own synchronization. Preserve the recorder-measured `audioStartOffsetMs`; do not assume it is always zero.
 
-## 7. Human-likeness layer
+Captions are derived from the approved script, but that does not make alignment trivial. Pronunciation substitutions, Unicode, punctuation, number expansion, and provider normalization all require explicit token mapping and tests.
 
-The point is didactic legibility, not deception — motion tells the learner where to look.
+## 7. Attention choreography
 
-- **Cursor:** synthesize per-action trajectories — eased point-to-point curves with slight overshoot-and-settle, duration from distance (Fitts-style), micro-jitter from the seeded RNG, hover pauses on the target before clicks. Author as **targets** (`CursorTargetSnapshot` region + offset), never pixels, so playback remaps to any layout — a robustness pixel video can't have. The existing tween machinery (`CursorTweenSnapshot`, `cursorReplay.ts`) already smooths sample streams.
-- **Typing:** cadence model per beat — bursts of 8–14 chars/s, longer pauses at line starts and before "hard" tokens, brief pause after completing a statement (matches where a human narrator breathes). Deliberate typos + corrections: **off by default** (clarity beats theater; Fireship doesn't fake mistakes), available as a script flag for "debugging journey" lessons where the mistake _is_ the lesson.
-- **Attention choreography:** the Director enforces "point before you speak" — cursor/selection reaches the referenced code slightly _before_ the word anchor fires (≈200–400 ms lead), mirroring how humans gesture.
-- **Pacing lints (the Fireship encoding):** wpm within band, ≥ N visual beats/min, no dead air > 2.5 s, scene length caps, one-concept-per-lesson check (judge-enforced). These run as script-time lints (cheap, pre-render) plus render-time verification.
+The purpose of synthetic motion is to guide attention, not impersonate a human.
 
-## 8. The agent pipeline (creative loop)
+- **Cursor:** generate seeded, eased paths between registered semantic targets. Use a short approach pause before activation. Micro-jitter and decorative overshoot are off by default because they add noise and event volume.
+- **Typing:** emit bounded chunks through Monaco at a cadence chosen per action. Pause at line and statement boundaries; do not add fake mistakes unless the lesson is explicitly teaching a debugging sequence.
+- **Lead time:** let a cursor or selection arrive shortly before the related narration marker. The exact lead should be measured in pilots rather than fixed globally.
+- **Reduced motion:** the Performer should support a low-motion profile, and QA should reject rapid flashing or excessive panel movement.
+- **Stable targets:** every automatable UI region needs a durable target ID. Missing targets are build failures, not reasons to fall back to coordinates.
 
-| Role                   | Model class           | Input → output                                                                                     |
-| ---------------------- | --------------------- | -------------------------------------------------------------------------------------------------- |
-| Curriculum planner     | frontier              | topic/docs → syllabus, lesson list, per-lesson objective                                           |
-| Scriptwriter           | frontier              | objective + persona style guide + starter workspace → `LessonScript`                               |
-| Beat gate (not an LLM) | —                     | executes each scene's workspace state: typecheck/run/tests must pass before the script is accepted |
-| Director               | deterministic         | script → TTS → aligned schedule                                                                    |
-| Performer              | deterministic         | schedule → `.ne` (+ audio, captions)                                                               |
-| Critic                 | frontier (multimodal) | decoded transcript + keyframe screenshots + render report → structured notes or approval           |
-| Human editor           | Chan                  | greenlight, taste corrections → persona guide updates                                              |
+The seed controls path shape and typing cadence. The compiled plan records the generated durations so replaying the plan does not re-roll them.
 
-Notes:
+## 8. Verification and release gates
 
-- **The beat gate is the anti-hallucination device.** A script isn't "reviewed for correctness" — its code is _executed_ at every checkpoint before rendering is allowed. The in-app agent tools (`bash`, `capturePreview`, `runtimeDiagnostics`) or a headless runtime do this today.
-- **The persona doc is the taste asset.** A versioned style guide (voice, humor density, sentence rhythm, code-reading rules, banned clichés) that the scriptwriter obeys and the critic scores against. Editing this doc is how the human steers the whole channel — one file, channel-wide effect.
-- **Benchmark corpus exists:** the ~41 handmade Go Tour lessons (plus the two production lessons) are ground truth. Decode them, extract pacing stats (wpm, action density, scene lengths, sync offsets), and use them for (a) calibrating the humanizer, (b) regression-testing the pipeline by _re-producing_ a few of them and comparing side by side. This is a rare asset — most teams bootstrapping AI content have no gold standard.
-- **Authoring runs outside the app** (Claude Code / SDK sessions against the repo, producing script PRs), while the in-app OpenRouter agent remains the interactive assistant. Scripts-as-PRs means the whole channel is reviewable in git — the "lessons as code" promise made literal.
-- **Revision loop is scene-scoped:** critic flags scene 3 → scriptwriter patches scene 3 → re-render scene 3's time slice and splice tracks (all tracks are time-clustered already). Never reshoot the lesson.
+| Stage | Blocking checks |
+| --- | --- |
+| Script compile | Schema version; unique scene/action IDs; marker resolution; target uniqueness; supported actions; no secrets or unapproved URLs |
+| Workspace preflight | Pinned starter hash; lockfiles where applicable; execution kind available; initial tests/run succeed; required assets exist |
+| Performance | Every command acknowledges before its deadline; runtime/preview readiness uses signals rather than sleeps; retries follow declared idempotency |
+| Artifact | SCR3 decodes; durations are finite; event and caption times are monotonic and in bounds; required tracks exist; audio/caption files resolve |
+| Semantic checkpoints | Expected files, diagnostics, console/output, preview DOM text, slide, or whiteboard state matches the script at named checkpoints |
+| Timing | Compare planned marker times with action receipts; start with a 300 ms p95 target and revise it using measured pilot data |
+| Repeatability | Same logical target sequence, final workspace hashes, exact caption text/audio hash, and equivalent checkpoint state; timestamps compared within tolerance rather than raw-byte equality |
+| Editorial | Automated critic may propose structured notes, but cannot approve release; a human watches the complete lesson and publishes the draft |
 
-## 9. Verification (the actual moat)
+The render report should include input hashes, environment versions, action receipts, retries, assertion results, console/runtime errors, timing percentiles, and links or paths to diagnostic screenshots.
 
-Cheap, mechanical QA is what MP4 pipelines cannot have and what keeps an autonomous channel from shipping slop:
+### Content quality
 
-1. **Decode-level:** `.ne` round-trips; track durations agree; captions monotonic; audio offset 0 ± ε.
-2. **Semantic gates:** at every `expect`/checkpoint — reconstruct workspace, run typecheck/tests/`go vet`-equivalents in the runtime, assert preview content (rrweb tree text, console error scan via existing runtime diagnostics).
-3. **Sync gates:** measured caption↔action drift (the Director's plan vs. captured timestamps) under 300 ms; pacing lints re-verified on the rendered artifact.
-4. **Determinism:** golden scripts rendered twice → decoded recordings equal modulo wall-clock metadata; Tier B vs Tier C parity (once C exists).
-5. **Judge pass:** multimodal critic watches transcript + sampled keyframes against the persona rubric (clarity, pacing, correctness of claims, joke density within bounds).
-6. **Human gate:** a person plays the lesson before `lessons.json` merge. Keep this until judge-vs-human agreement is measured and boring.
+The script is the highest-leverage artifact. Maintain a versioned persona guide that defines:
 
-## 10. Cost sketch (order-of-magnitude, verify at build time)
+- audience and prerequisite assumptions;
+- learning objective and one-concept scope;
+- sentence length, pace, and terminology;
+- humor boundaries and banned clichés;
+- when code should be narrated versus shown; and
+- required claim sourcing.
 
-Per ~100-second lesson: script authoring + revisions ≈ $0.5–3 of frontier tokens; TTS ≈ 400 words ≈ $0.05–0.50 (Azure cents, ElevenLabs tens of cents); render compute ≈ negligible locally / cents on a cloud browser; critic pass ≈ $0.2–1. **Under ~$5 per short lesson; localization ≈ TTS-only marginal cost.** A 41-lesson course re-render (new voice, new language, format tweak) is dollars, not weeks. The binding constraint is editorial quality and review bandwidth, never compute — which is the right problem to have.
+Pacing thresholds should be learned from approved internal lessons and pilot ratings. Avoid presenting unmeasured words-per-minute or cut-density figures as universal rules.
 
-## 11. Risks and mitigations
+## 9. Security and operational constraints
 
-| Risk                                                 | Mitigation                                                                                                                                                                                                      |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Slop** — technically-correct, soulless lessons     | Persona doc as versioned taste asset; judge rubric; human greenlight; small curated catalog over volume; benchmark against the handmade Go lessons                                                              |
-| TTS mangles code speech                              | Pronunciation lexicon + "narrate intent not syntax" rule; caption text stays written-form                                                                                                                       |
-| Uncanny fake-human theater                           | Motion serves attention, not deception; no fake typos by default; disclose AI narration                                                                                                                         |
-| Tier C drifts from real recorder output              | Don't build C until B is stable; golden B-vs-C parity tests                                                                                                                                                     |
-| Runtime nondeterminism (WebContainer boots, network) | Pin starter deps; forbid network in lessons (or record/replay it); per-scene retry with identical clock; the CF remote runtime plan (docs/remote-runtime-*.md) eventually gives server-side, farm-able runtimes |
-| Timing brittleness on re-TTS                         | All timings are narration-relative anchors; absolute times exist only in compiled schedules                                                                                                                     |
-| Format evolution breaks old scripts                  | Scripts declare a schema version; Director owns migrations; scripts live in git                                                                                                                                 |
-| Voice/likeness legal issues                          | Licensed/designed voice, not a clone of a real creator; per-lesson AI disclosure                                                                                                                                |
+Agent-authored scripts are untrusted build input.
 
-## 12. Roadmap
+- Run each build in a disposable workspace/runtime with CPU, memory, output, and wall-time limits.
+- Disable network egress by default. If a template requires network access, use an allowlist or recorded fixtures.
+- Keep publishing credentials, TTS credentials, and user data outside the Performer. The render job receives scoped artifact handles, not long-lived secrets.
+- Allow only action types supported by the selected lesson template. Arbitrary shell execution requires a separately reviewed policy.
+- Pin dependency locks, runtime/toolchain versions, starter workspace hash, slide/whiteboard assets, and generated media.
+- Redact environment values and tokens from logs, terminal output, screenshots, preview DOM, and the final recording.
+- On failure, stop audio/performance, terminate child processes, retain a bounded diagnostic bundle, and never create or publish a lesson automatically.
 
-- **M0 — Script + Performer skeleton (1–2 wks):** LessonScript schema (zod), Director without TTS (fixed timings), Performer driving editor + workspace only, triggered from a dev-only route; record via existing `START_RECORDING` flow; play the result. _Proves: scripts render to real lessons._
-- **M1 — Voice (1 wk):** ElevenLabs/Cartesia integration, word-anchor resolution, `CaptionTrack` emission, external sibling audio export. _Proves: transcript-first alignment._
-- **M2 — Full surface + humanizer (2 wks):** cursor synthesis with targets, whiteboard/slide/runtime actions, typing cadence, headless render CLI (Playwright → `/studio/perform`), render report.
-- **M3 — QA harness (1–2 wks):** decode assertions, semantic/sync gates, golden determinism tests; decode-and-stat the Go lessons benchmark.
-- **M4 — Authoring agents (2–3 wks):** persona doc v1, scriptwriter + beat gate + critic as Claude Code/SDK workflows producing script PRs; produce 3 pilot lessons end-to-end (suggest: re-produce 2 Go Tour lessons for A/B against the handmade ones + 1 new "X in 100 seconds").
-- **M5 — Channel operations (ongoing):** scene-scoped re-render, localization batches, tube auto-publish (R2 + `lessons.json` PR), Tier C compiler if render throughput ever matters, interactive challenge checkpoints (Scrimba-style "now you fix it" pauses — a format extension the player would need to learn, and a genuinely new pedagogic capability once scripts can emit hidden tests).
+## 10. Publishing model
 
-## 13. Open questions
+The build output is a bundle, not only a `.ne` file:
 
-1. **Voice identity:** design one channel voice (which provider/voice), or per-course voices?
-2. **Where the Performer lives:** dev-only route in the main app vs. a separate `studio/` package importing the core — affects bundle hygiene.
-3. **Disclosure posture:** "AI-produced, human-edited" label on tube lessons from day one?
-4. **Pilot picks:** which 2 Go Tour lessons make the best A/B benchmark, and what's the first net-new "100 seconds" topic?
-5. **Interactive checkpoints:** worth pulling forward (it's the most defensible learner-facing feature), or strictly after the channel ships?
+```text
+lesson.ne
+lesson.ogg (or another supported audio format)
+thumbnail.webp
+build-manifest.json
+render-report.json
+```
+
+Captions live in `Recording`. A `.vtt` may be emitted for local tooling, but the current lesson upload allowlist does not accept caption files and would need an explicit extension before publishing them as siblings.
+
+Production publishing should reuse the existing authenticated flow:
+
+1. Upload lesson media to the lesson's R2 prefix.
+2. Create or update a D1-backed lesson draft through `/api/lessons`.
+3. Attach provenance/disclosure metadata once its schema and UI are defined.
+4. Require a human owner to publish the draft.
+
+`tube/data/lessons.json` is the static seed catalog, not the production publishing database. Automation should not append to it for ordinary generated lessons.
+
+## 11. Cost and throughput measurement
+
+Do not commit to a per-lesson price before a pilot. Provider prices and model behavior change, and editorial revision is likely to dominate cash cost.
+
+Track these quantities per build:
+
+- authoring and critic input/output tokens;
+- synthesized and forced-aligned characters or seconds;
+- runtime and browser minutes, including retries;
+- artifact bytes and storage operations;
+- human review minutes;
+- number of script revisions and full re-renders; and
+- time from approved brief to publishable draft.
+
+Report p50 and p95 build time, cash cost, failure rate, and human review time across the first three pilots. Use those measurements for capacity planning.
+
+## 12. Delivery plan
+
+### M0 — vertical-slice feasibility
+
+Build one hard-coded 30-second plan that opens a file, performs a small edit, runs it through the current execution kind, asserts output, records with pre-generated external audio, and exports a playable lesson.
+
+**Exit criteria:** two consecutive headless or unattended renders pass semantic comparison; audio can start reliably in the chosen browser harness; failures produce actionable receipts and cleanup succeeds.
+
+### M1 — script, Director, and immutable assets
+
+Add the Zod schema, YAML loader, marker compiler, typed action plan, pronunciation/token mapper, one TTS provider adapter, content-addressed media cache, captions, and build manifest.
+
+**Exit criteria:** invalid markers/targets/overlaps fail before render; cached inputs reproduce the same compiled plan and media hashes; captions pass monotonicity and token-coverage tests.
+
+### M2 — production Performer surfaces
+
+Implement the `StudioDriver` adapters for editor, cursor, workspace, current runtimes, preview, slides, and whiteboard. Add timeouts, cancellation, readiness signals, and a Playwright render command.
+
+**Exit criteria:** one pilot uses at least four surfaces, survives a retryable runtime failure, and produces no unacknowledged actions.
+
+### M3 — QA and draft publishing
+
+Add artifact decoding checks, semantic checkpoint helpers, normalized repeatability comparison, diagnostic screenshots, render reports, R2 upload, and D1 draft creation.
+
+**Exit criteria:** corrupted, mistimed, or semantically wrong builds are rejected; a passing build creates a draft but cannot publish without a separate owner action.
+
+### M4 — authoring and editorial loop
+
+Add the persona guide, curriculum/scriptwriter workflow, source citation requirements, and an advisory critic. Produce three pilots: one minimal regression lesson, one representative multi-surface lesson, and one net-new short explainer.
+
+**Exit criteria:** all three pass mechanical gates and human review; revision time, build cost, failure rate, and reviewer ratings are recorded; the team decides whether to scale, revise the format, or stop.
+
+### Deferred until pilots justify them
+
+- Direct-to-`Recording` Tier C compiler.
+- Scene-level splicing and partial re-render.
+- Bulk localization.
+- Fork-and-run learner checkpoints and hidden tests.
+- Automated publishing.
+- Chat-as-performance lessons.
+
+## 13. Open decisions
+
+1. Does the Performer live in a dev-only main-app route or a separate `studio/` package that imports app adapters?
+2. Which execution kinds are supported in the first pilot, and what is the fallback when a runtime is unavailable?
+3. Which licensed voice and provider pass pronunciation, alignment, stability, and cost evaluation?
+4. Where is the claimed handmade lesson corpus, and can it be legally checked in or fetched reproducibly?
+5. Should provenance be stored on the lesson row, in a public build manifest, inside `Recording`, or in more than one place?
+6. What human rating and correction-time threshold is good enough to continue after three pilots?
 
 ## Sources
 
-Scrimba: [interview](https://survivejs.com/blog/scrimba-interview/), [guide](https://scrimbaguide.tech/docs/intro/), [2026 review](https://www.coursefacts.com/guides/scrimba-review-2026) · VHS: [repo](https://github.com/charmbracelet/vhs), [walkthrough](https://blog.ouseful.info/2022/11/09/creating-terminal-based-screenshot-movies-with-vhs/) · Remotion: [LLM generation](https://www.remotion.dev/docs/ai/generate), [coding agents](https://www.remotion.dev/docs/ai/coding-agents), [agent skills](https://www.remotion.dev/docs/ai/skills), [Fireship-style with Remotion](http://blog.brightcoding.dev/2026/02/21/remotion-fireship-create-viral-videos-with-react-code) · NotebookLM: [cinematic overviews](https://blog.google/innovation-and-ai/products/notebooklm/generate-your-own-cinematic-video-overviews-in-notebooklm/), [help doc](https://support.google.com/notebooklm/answer/16454555?hl=en) · Demo automation: [Demosmith AI demo agent](https://demosmith.ai/blog/what-is-ai-demo-agent), [market guide](https://demosmith.ai/blog/best-ai-demo-video-generators-2026), [Arcade](https://www.arcade.software/post/best-interactive-demo-software-2026), [Supademo](https://supademo.com/blog/interactive-product-demo-software), [Storylane](https://www.storylane.io/blog/supademo-alternatives) · Coursera: [Course Builder](https://blog.coursera.org/coursera-launches-course-builder/) · Fireship: [analysis](https://read.engineerscodex.com/p/how-fireship-became-youtubes-favorite), [format stats](https://grokipedia.com/page/fireship) · TTS: [ElevenLabs with-timestamps](https://elevenlabs.io/docs/api-reference/text-to-speech/convert-with-timestamps), [Cartesia WebSocket](https://docs.cartesia.ai/api-reference/tts/websocket)
+### Repository evidence
+
+- [Recording schema and track types](../src/core/src/types.ts)
+- [Recorder capture and external-audio path](../src/core/src/machine/captureActions.ts)
+- [Editor diff application](../src/core/src/utils/editorDiff.ts)
+- [Cursor coordinate remapping](../src/core/src/utils/cursorCoordinates.ts) and [cursor replay](../src/core/src/utils/cursorReplay.ts)
+- [Sibling media and caption resolution](../src/hooks/useUrlLoader.ts)
+- [Execution-kind-scoped agent tools](../src/agent/tools/index.ts)
+- [Production lesson draft/publish API](../infra/worker/routes/lessons.ts) and [upload client](../infra/client/upload/uploadLesson.ts)
+- [Static Tube seed catalog](../tube/data/lessons.json)
+- [Remote runtime status](./remote-runtime-design.md)
+
+### External primary sources
+
+- Scrimba: [interactive screencast description](https://scrimba.com/articles/scrimba-vs-frontend-masters-which-coding-platform-should-you-choose-in-2026/)
+- VHS: [repository and tape command reference](https://github.com/charmbracelet/vhs)
+- Remotion: [coding-agent workflow](https://www.remotion.dev/docs/ai/coding-agents), [Agent Skills](https://www.remotion.dev/docs/ai/skills), and [structured LLM output](https://www.remotion.dev/docs/ai/generate)
+- NotebookLM: [Video Overviews](https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-video-overviews-studio-upgrades/) and [Cinematic Video Overviews](https://blog.google/innovation-and-ai/products/notebooklm/generate-your-own-cinematic-video-overviews-in-notebooklm/)
+- Coursera: [Course Builder](https://blog.coursera.org/coursera-launches-course-builder/)
+- Demosmith: [vendor product page](https://demosmith.ai/) (capability claims are vendor-reported)
+- ElevenLabs: [TTS with timestamps](https://elevenlabs.io/docs/api-reference/text-to-speech/convert-with-timestamps) and [forced alignment](https://elevenlabs.io/docs/api-reference/forced-alignment/create)
+- Cartesia: [WebSocket TTS timestamps](https://docs.cartesia.ai/api-reference/tts/websocket)
+- Azure Speech: [speech synthesis and word-boundary events](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/how-to-speech-synthesis)
+
+External capabilities, licensing, and prices must be reverified when an implementation decision is made.
