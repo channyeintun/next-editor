@@ -1,9 +1,0 @@
-# Whitelist packaging: exclude everything, then re-include shippable files.
-**
-!dist/**
-dist/**/*.map
-dist/benchmark/**
-!package.nls.json
-!README.md
-!CHANGELOG.md
-!media/**

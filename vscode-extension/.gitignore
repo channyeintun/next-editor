@@ -1,8 +1,0 @@
-node_modules/
-dist/
-dist-test/
-.test-vscode/
-.vscode-test/
-.artifacts/
-*.vsix
-native/audio-recorder/target/
