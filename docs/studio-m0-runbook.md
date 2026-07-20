@@ -1,10 +1,33 @@
-# Studio M0 Runbook — Vertical-Slice Lesson Renders
+# Studio Runbook — Deterministic Lesson Renders (M0/M1)
 
-Implements **M0** of [agent-lesson-production.md](./agent-lesson-production.md) §12: a
-deterministic in-app Performer renders one hard-coded ~22-second Go lesson from a
-checked-in compiled plan and pre-generated narration, records it through the real
-recorder, and gates the artifact with mechanical QA plus a two-render repeatability
-comparison.
+Implements **M0 and M1** of [agent-lesson-production.md](./agent-lesson-production.md)
+§12: a deterministic in-app Performer renders checked-in plans against pre-generated
+narration, records through the real recorder, and gates the artifact with mechanical
+QA plus a two-render repeatability comparison. M1 adds the authored `LessonScript`
+path: YAML scripts with `[[mark:…]]` narration anchors compile through the Director
+into the same plan format the M0 fixture hard-codes.
+
+## Authoring a lesson (M1 path)
+
+```text
+src/studio/scripts/<slug>.yaml        # LessonScript: scenes, narration + [[mark:x]], actions
+bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml
+```
+
+The Director validates the script (`src/studio/script/schema.ts`), strips markers
+into a token map, applies the versioned pronunciation lexicon to the **speech**
+text only, synthesizes narration once into the content-addressed cache
+(`public/studio-fixtures/cache/<requestHash>.{m4a,json}` — cache hits skip
+synthesis and reproduce identical media hashes), estimates token alignment,
+derives captions and the attention-cursor choreography, and writes the compiled
+plan to `src/studio/plans/compiled/<slug>.json`. Register new slugs in
+`src/studio/plans/index.ts`, then render at `/studio?plan=<slug>`.
+
+Anchors are narration-relative only (`{mark, offsetMs}`, `{scene: start}`,
+`{afterAction}`); absolute times are forbidden in scripts. Impossible overlaps,
+unknown marks, and actions past the narration end fail at compile time with the
+offset to fix — never mid-render. Narration synthesis runs on macOS
+(`say`/`afconvert`); commit the cache so other machines build from it.
 
 ## Running a render
 

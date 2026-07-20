@@ -1,0 +1,609 @@
+{
+  "actions": [
+    {
+      "at": 1783,
+      "durationMs": 625,
+      "id": "cursor-open-square",
+      "target": {
+        "kind": "file",
+        "path": "square.go"
+      },
+      "timeoutMs": 5000,
+      "type": "cursor.moveTo"
+    },
+    {
+      "at": 2608,
+      "id": "open-square",
+      "path": "square.go",
+      "timeoutMs": 10000,
+      "type": "workspace.openFile"
+    },
+    {
+      "at": 6654,
+      "durationMs": 603,
+      "id": "cursor-type-cube",
+      "target": {
+        "kind": "editor"
+      },
+      "timeoutMs": 5000,
+      "type": "cursor.moveTo"
+    },
+    {
+      "anchor": {
+        "after": "\treturn value * value\n}\n",
+        "occurrence": 1
+      },
+      "at": 7457,
+      "chunks": [
+        {
+          "delayMs": 278,
+          "text": "\n"
+        },
+        {
+          "delayMs": 222,
+          "text": "func"
+        },
+        {
+          "delayMs": 254,
+          "text": " cub"
+        },
+        {
+          "delayMs": 195,
+          "text": "e(va"
+        },
+        {
+          "delayMs": 195,
+          "text": "lue "
+        },
+        {
+          "delayMs": 281,
+          "text": "int)"
+        },
+        {
+          "delayMs": 193,
+          "text": " int"
+        },
+        {
+          "delayMs": 346,
+          "text": " {\n"
+        },
+        {
+          "delayMs": 297,
+          "text": "\tret"
+        },
+        {
+          "delayMs": 211,
+          "text": "urn "
+        },
+        {
+          "delayMs": 220,
+          "text": "valu"
+        },
+        {
+          "delayMs": 294,
+          "text": "e * "
+        },
+        {
+          "delayMs": 304,
+          "text": "valu"
+        },
+        {
+          "delayMs": 195,
+          "text": "e * "
+        },
+        {
+          "delayMs": 245,
+          "text": "valu"
+        },
+        {
+          "delayMs": 311,
+          "text": "e\n"
+        },
+        {
+          "delayMs": 316,
+          "text": "}\n"
+        }
+      ],
+      "id": "type-cube",
+      "path": "square.go",
+      "timeoutMs": 10000,
+      "type": "editor.type"
+    },
+    {
+      "at": 11877,
+      "durationMs": 698,
+      "id": "cursor-open-main",
+      "target": {
+        "kind": "file",
+        "path": "main.go"
+      },
+      "timeoutMs": 5000,
+      "type": "cursor.moveTo"
+    },
+    {
+      "at": 12775,
+      "id": "open-main",
+      "path": "main.go",
+      "timeoutMs": 10000,
+      "type": "workspace.openFile"
+    },
+    {
+      "anchor": {
+        "after": ", square(i))\n\t}\n",
+        "occurrence": 1
+      },
+      "at": 13175,
+      "chunks": [
+        {
+          "delayMs": 248,
+          "text": "\n"
+        },
+        {
+          "delayMs": 302,
+          "text": "\tfmt"
+        },
+        {
+          "delayMs": 286,
+          "text": ".Pri"
+        },
+        {
+          "delayMs": 234,
+          "text": "ntln"
+        },
+        {
+          "delayMs": 245,
+          "text": "(\"3 "
+        },
+        {
+          "delayMs": 248,
+          "text": "cube"
+        },
+        {
+          "delayMs": 191,
+          "text": "d is"
+        },
+        {
+          "delayMs": 278,
+          "text": "\", c"
+        },
+        {
+          "delayMs": 258,
+          "text": "ube("
+        },
+        {
+          "delayMs": 482,
+          "text": "3))\n"
+        }
+      ],
+      "id": "type-call",
+      "path": "main.go",
+      "timeoutMs": 10000,
+      "type": "editor.type"
+    },
+    {
+      "at": 16212,
+      "durationMs": 520,
+      "id": "cursor-run",
+      "target": {
+        "id": "go-runner-dock",
+        "kind": "target-id"
+      },
+      "timeoutMs": 5000,
+      "type": "cursor.moveTo"
+    },
+    {
+      "at": 16932,
+      "id": "run",
+      "timeoutMs": 15000,
+      "type": "runtime.run"
+    },
+    {
+      "at": 16932,
+      "contains": "cube(3)",
+      "id": "expect-file-main",
+      "path": "main.go",
+      "timeoutMs": 10000,
+      "type": "expect.file"
+    },
+    {
+      "at": 16932,
+      "contains": "3 cubed is 27",
+      "id": "expect-output",
+      "timeoutMs": 6000,
+      "type": "expect.output"
+    }
+  ],
+  "gates": {
+    "timingP95MaxMs": 300
+  },
+  "lesson": {
+    "locale": "en-US",
+    "slug": "go-cube",
+    "title": "Go functions: square to cube (scripted)"
+  },
+  "narration": {
+    "audioPath": "/studio-fixtures/cache/e0f5ce0673676fe93d2715ee4c20e5822f1b0eac41d0201f4ba6b513930f3960.m4a",
+    "captions": {
+      "cues": [
+        {
+          "end": 5067,
+          "start": 150,
+          "text": "Go functions live at the package level, so any file in the package can call them.",
+          "words": [
+            {
+              "end": 283,
+              "start": 150,
+              "text": "Go"
+            },
+            {
+              "end": 881,
+              "start": 283,
+              "text": "functions"
+            },
+            {
+              "end": 1147,
+              "start": 881,
+              "text": "live"
+            },
+            {
+              "end": 1280,
+              "start": 1147,
+              "text": "at"
+            },
+            {
+              "end": 1479,
+              "start": 1280,
+              "text": "the"
+            },
+            {
+              "end": 1944,
+              "start": 1479,
+              "text": "package"
+            },
+            {
+              "end": 2475,
+              "start": 1944,
+              "text": "level,"
+            },
+            {
+              "end": 2608,
+              "start": 2475,
+              "text": "so"
+            },
+            {
+              "end": 2808,
+              "start": 2608,
+              "text": "any"
+            },
+            {
+              "end": 3073,
+              "start": 2808,
+              "text": "file"
+            },
+            {
+              "end": 3206,
+              "start": 3073,
+              "text": "in"
+            },
+            {
+              "end": 3406,
+              "start": 3206,
+              "text": "the"
+            },
+            {
+              "end": 3871,
+              "start": 3406,
+              "text": "package"
+            },
+            {
+              "end": 4070,
+              "start": 3871,
+              "text": "can"
+            },
+            {
+              "end": 4336,
+              "start": 4070,
+              "text": "call"
+            },
+            {
+              "end": 5067,
+              "start": 4336,
+              "text": "them."
+            }
+          ]
+        },
+        {
+          "end": 8057,
+          "start": 5067,
+          "text": "Square here takes an int, and returns an int.",
+          "words": [
+            {
+              "end": 5465,
+              "start": 5067,
+              "text": "Square"
+            },
+            {
+              "end": 5731,
+              "start": 5465,
+              "text": "here"
+            },
+            {
+              "end": 6063,
+              "start": 5731,
+              "text": "takes"
+            },
+            {
+              "end": 6196,
+              "start": 6063,
+              "text": "an"
+            },
+            {
+              "end": 6595,
+              "start": 6196,
+              "text": "int,"
+            },
+            {
+              "end": 6794,
+              "start": 6595,
+              "text": "and"
+            },
+            {
+              "end": 7259,
+              "start": 6794,
+              "text": "returns"
+            },
+            {
+              "end": 7392,
+              "start": 7259,
+              "text": "an"
+            },
+            {
+              "end": 8057,
+              "start": 7392,
+              "text": "int."
+            }
+          ]
+        },
+        {
+          "end": 12375,
+          "start": 8057,
+          "text": "Let's add a cube function beside it, multiplying value three times.",
+          "words": [
+            {
+              "end": 8322,
+              "start": 8057,
+              "text": "Let's"
+            },
+            {
+              "end": 8522,
+              "start": 8322,
+              "text": "add"
+            },
+            {
+              "end": 8655,
+              "start": 8522,
+              "text": "a"
+            },
+            {
+              "end": 8920,
+              "start": 8655,
+              "text": "cube"
+            },
+            {
+              "end": 9452,
+              "start": 8920,
+              "text": "function"
+            },
+            {
+              "end": 9851,
+              "start": 9452,
+              "text": "beside"
+            },
+            {
+              "end": 10183,
+              "start": 9851,
+              "text": "it,"
+            },
+            {
+              "end": 10914,
+              "start": 10183,
+              "text": "multiplying"
+            },
+            {
+              "end": 11246,
+              "start": 10914,
+              "text": "value"
+            },
+            {
+              "end": 11578,
+              "start": 11246,
+              "text": "three"
+            },
+            {
+              "end": 12375,
+              "start": 11578,
+              "text": "times."
+            }
+          ]
+        },
+        {
+          "end": 15432,
+          "start": 12375,
+          "text": "Now call cube from main, and print the result.",
+          "words": [
+            {
+              "end": 12575,
+              "start": 12375,
+              "text": "Now"
+            },
+            {
+              "end": 12840,
+              "start": 12575,
+              "text": "call"
+            },
+            {
+              "end": 13106,
+              "start": 12840,
+              "text": "cube"
+            },
+            {
+              "end": 13372,
+              "start": 13106,
+              "text": "from"
+            },
+            {
+              "end": 13837,
+              "start": 13372,
+              "text": "main,"
+            },
+            {
+              "end": 14036,
+              "start": 13837,
+              "text": "and"
+            },
+            {
+              "end": 14369,
+              "start": 14036,
+              "text": "print"
+            },
+            {
+              "end": 14568,
+              "start": 14369,
+              "text": "the"
+            },
+            {
+              "end": 15432,
+              "start": 14568,
+              "text": "result."
+            }
+          ]
+        },
+        {
+          "end": 16761,
+          "start": 15432,
+          "text": "Run the program.",
+          "words": [
+            {
+              "end": 15631,
+              "start": 15432,
+              "text": "Run"
+            },
+            {
+              "end": 15830,
+              "start": 15631,
+              "text": "the"
+            },
+            {
+              "end": 16761,
+              "start": 15830,
+              "text": "program."
+            }
+          ]
+        },
+        {
+          "end": 19485,
+          "start": 16761,
+          "text": "The five squares print first, and then:",
+          "words": [
+            {
+              "end": 16960,
+              "start": 16761,
+              "text": "The"
+            },
+            {
+              "end": 17226,
+              "start": 16960,
+              "text": "five"
+            },
+            {
+              "end": 17691,
+              "start": 17226,
+              "text": "squares"
+            },
+            {
+              "end": 18023,
+              "start": 17691,
+              "text": "print"
+            },
+            {
+              "end": 18555,
+              "start": 18023,
+              "text": "first,"
+            },
+            {
+              "end": 18754,
+              "start": 18555,
+              "text": "and"
+            },
+            {
+              "end": 19485,
+              "start": 18754,
+              "text": "then:"
+            }
+          ]
+        },
+        {
+          "end": 21478,
+          "start": 19485,
+          "text": "three cubed is twenty seven.",
+          "words": [
+            {
+              "end": 19817,
+              "start": 19485,
+              "text": "three"
+            },
+            {
+              "end": 20149,
+              "start": 19817,
+              "text": "cubed"
+            },
+            {
+              "end": 20282,
+              "start": 20149,
+              "text": "is"
+            },
+            {
+              "end": 20681,
+              "start": 20282,
+              "text": "twenty"
+            },
+            {
+              "end": 21478,
+              "start": 20681,
+              "text": "seven."
+            }
+          ]
+        }
+      ],
+      "default": true,
+      "id": "studio-narration",
+      "label": "en-US",
+      "language": "en"
+    },
+    "expectedDurationMs": 21778,
+    "mimeType": "audio/mp4"
+  },
+  "runtime": {
+    "defaultMode": "fixture",
+    "fixture": {
+      "latencyMs": 1200,
+      "result": {
+        "exitCode": 0,
+        "output": "Hello, Go lessons!\n1 squared is 1\n2 squared is 4\n3 squared is 9\n4 squared is 16\n5 squared is 25\n3 cubed is 27\n",
+        "status": "success"
+      }
+    },
+    "kind": "go-playground"
+  },
+  "schemaVersion": 1,
+  "seed": 42,
+  "workspace": {
+    "entryFilePath": "main.go",
+    "files": {
+      "main.go": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"Hello, Go lessons!\")\n\n\tfor i := 1; i <= 5; i++ {\n\t\tfmt.Printf(\"%d squared is %d\\n\", i, square(i))\n\t}\n}\n",
+      "square.go": "package main\n\nfunc square(value int) int {\n\treturn value * value\n}\n"
+    },
+    "lessonType": "go",
+    "name": "Go Lesson"
+  }
+}

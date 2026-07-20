@@ -182,6 +182,13 @@ export const studioPlanSchema = z
     workspace: studioWorkspacePinSchema,
     narration: studioNarrationSchema,
     runtime: studioRuntimeSchema,
+    /** Optional per-plan QA thresholds beyond the always-on artifact gates. */
+    gates: z
+      .object({
+        /** Max tolerated p95 of |actual − planned| action starts (ms). */
+        timingP95MaxMs: z.number().finite().positive().optional(),
+      })
+      .optional(),
     actions: z.array(studioPlanActionSchema).min(1),
   })
   .superRefine((plan, ctx) => {

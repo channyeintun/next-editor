@@ -1,0 +1,111 @@
+# LessonScript pilot (M1): the same square→cube lesson as the M0 hard-coded
+# plan, but authored as a script with narration markers. Compile with:
+#   bun scripts/studio-director.ts src/studio/scripts/go-cube.yaml
+schemaVersion: 1
+
+lesson:
+  slug: go-cube
+  title: "Go functions: square to cube (scripted)"
+  locale: en-US
+  workspace:
+    lessonType: go
+    name: Go Lesson
+    entryFilePath: main.go
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        	fmt.Println("Hello, Go lessons!")
+
+        	for i := 1; i <= 5; i++ {
+        		fmt.Printf("%d squared is %d\n", i, square(i))
+        	}
+        }
+      square.go: |
+        package main
+
+        func square(value int) int {
+        	return value * value
+        }
+
+build:
+  voiceProfile: say-samantha-v1
+  seed: 42
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 1200
+    result:
+      status: success
+      exitCode: 0
+      output: "Hello, Go lessons!\n1 squared is 1\n2 squared is 4\n3 squared is 9\n4 squared is 16\n5 squared is 25\n3 cubed is 27\n"
+
+scenes:
+  - id: helpers
+    narration: >
+      Go functions live at the package level, so [[mark:open-square]] any file in
+      the package can call them. Square here takes an int, and returns an int.
+      [[mark:type-cube]] Let's add a cube function beside it, multiplying value
+      three times.
+    sources:
+      - title: "The Go Programming Language Specification — Declarations and scope"
+        url: "https://go.dev/ref/spec#Declarations_and_scope"
+    actions:
+      - id: open-square
+        type: workspace.openFile
+        at: { mark: open-square }
+        path: square.go
+      - id: type-cube
+        type: editor.type
+        at: { mark: type-cube, offsetMs: -600 }
+        target:
+          file: square.go
+          after: "\treturn value * value\n}\n"
+          occurrence: 1
+        cadence: fast-explainer
+        text: "\nfunc cube(value int) int {\n\treturn value * value * value\n}\n"
+
+  - id: call-main
+    narration: >
+      [[mark:open-main]] Now call cube from main, and print the result.
+      [[mark:run]] Run the program. The five squares print first, and then:
+      three cubed is twenty seven.
+    sources:
+      - title: "A Tour of Go — Functions"
+        url: "https://go.dev/tour/basics/4"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main, offsetMs: 400 }
+        path: main.go
+      - id: type-call
+        type: editor.type
+        at: { mark: open-main, offsetMs: 800 }
+        target:
+          file: main.go
+          after: ", square(i))\n\t}\n"
+          occurrence: 1
+        cadence: fast-explainer
+        text: "\n\tfmt.Println(\"3 cubed is\", cube(3))\n"
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 1500 }
+        timeoutMs: 15000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "3 cubed is 27"
+        timeoutMs: 6000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.go
+        contains: "cube(3)"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
