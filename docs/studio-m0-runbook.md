@@ -1,4 +1,4 @@
-# Studio Runbook — Deterministic Lesson Renders (M0–M2)
+# Studio Runbook — Deterministic Lesson Renders (M0–M3)
 
 Implements **M0–M2** of [agent-lesson-production.md](./agent-lesson-production.md)
 §12: a deterministic in-app Performer renders checked-in plans against pre-generated
@@ -24,6 +24,22 @@ exits non-zero unless every render passed and the comparison is clean. The
 `go-cube-tour` pilot exercises six surfaces (editor, cursor, workspace,
 runtime, slides, whiteboard) and simulates a transient Playground failure, so
 a passing run also demonstrates the retry path (`run` receipt: `attempts: 2`).
+
+## Draft publishing (M3)
+
+A passing render's **Create draft…** button opens the standard authenticated
+upload flow (`UploadLessonModal`): media to the lesson's R2 prefix, a D1
+**draft** row via `/api/lessons`, captions as sibling `.vtt` tracks. The
+description pre-fills the AI-production disclosure plus build provenance (plan
+slug, plan hash, runtime mode) for the reviewer. Publishing remains a separate
+owner action in the lessons UI — the studio has no publish path. Requires
+`bun run dev:worker` and a signed-in session.
+
+Mistimed builds are rejected mechanically: a script's
+`{ type: timing.p95Ms, max: N }` check compiles into the plan's timing gate,
+and a render whose p95 |actual − planned| action start exceeds it fails QA
+(no bundle, no draft), alongside the M0 gates for corrupted or semantically
+wrong artifacts.
 
 ## Authoring a lesson (M1 path)
 

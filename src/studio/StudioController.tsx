@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { useAuth } from "@next-editor/infra";
+import { UploadLessonModal, useAuth } from "@next-editor/infra";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
@@ -115,6 +115,7 @@ export default function StudioController() {
   const [latest, setLatest] = useState<StudioRunEntry | null>(runHistory.at(-1) ?? null);
   const [comparison, setComparison] = useState<StudioCheckResult[] | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
+  const [showDraftModal, setShowDraftModal] = useState(false);
   const runningRef = useRef(false);
 
   // The product tour would overlay the editor mid-render in a fresh profile.
@@ -288,6 +289,16 @@ export default function StudioController() {
             Download report
           </button>
         ) : null}
+        {artifacts ? (
+          <button
+            type="button"
+            onClick={() => setShowDraftModal(true)}
+            className="rounded-md bg-[#2b2340] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#c4b0f5] transition-colors hover:bg-[#382e52]"
+            title="Upload through the standard lesson flow — creates a draft only; publishing stays a separate human action"
+          >
+            Create draft…
+          </button>
+        ) : null}
       </div>
 
       {fatal ? (
@@ -363,6 +374,20 @@ export default function StudioController() {
             </ul>
           ) : null}
         </div>
+      ) : null}
+
+      {showDraftModal && artifacts && latest ? (
+        // The standard authenticated upload flow: R2 media + a D1 draft row.
+        // Publishing remains a separate owner action in the lessons UI
+        // (docs/agent-lesson-production.md §10). The description pre-fills the
+        // AI-production disclosure + build provenance for the reviewer.
+        <UploadLessonModal
+          recording={artifacts.recording}
+          onClose={() => setShowDraftModal(false)}
+          initialTitle={STUDIO_PLANS[planSlug] ? STUDIO_PLANS[planSlug]().lesson.title : planSlug}
+          initialDescription={`AI-produced draft — rendered unattended by the Next Editor studio (plan ${latest.result.manifest.planSlug}, plan sha256 ${latest.result.manifest.planHash.slice(0, 16)}, ${latest.result.manifest.runtimeMode} runtime). Review the full lesson before publishing.`}
+          initialTags="studio, ai-produced"
+        />
       ) : null}
 
       {comparison ? (

@@ -19,6 +19,7 @@ import { performPlan } from "./performer";
 import { runArtifactChecks, finalWorkspaceHashOf } from "./qa";
 import {
   computeTimingStats,
+  timingGateCheck,
   type ActionReceipt,
   type StudioBuildManifest,
   type StudioCheckResult,
@@ -60,6 +61,8 @@ export interface StudioRunArtifacts {
   neBlob: Blob;
   audioBlob: Blob;
   audioFileName: string;
+  /** The finalized in-memory recording — the draft-upload flow consumes it. */
+  recording: Recording;
 }
 
 export interface StudioRunResult {
@@ -332,6 +335,9 @@ export async function runStudioRender(
     audioFileName = files.audio?.name ?? "";
     const neBytes = new Uint8Array(await files.ne.arrayBuffer());
     checks = await runArtifactChecks({ recording, neBytes, plan });
+    if (plan.gates?.timingP95MaxMs !== undefined) {
+      checks.push(timingGateCheck(computeTimingStats(receipts), plan.gates.timingP95MaxMs));
+    }
 
     const semantics = await extractRenderSemantics(recording, receipts, audioBytes);
     const allChecksOk = checks.every((check) => check.ok);
@@ -363,7 +369,7 @@ export async function runStudioRender(
       },
       manifest,
       semantics,
-      artifacts: allChecksOk ? { neBlob, audioBlob, audioFileName } : null,
+      artifacts: allChecksOk ? { neBlob, audioBlob, audioFileName, recording } : null,
     };
   } catch (error) {
     const failed = await failedResult(

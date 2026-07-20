@@ -79,6 +79,22 @@ export interface StudioBuildManifest {
   } | null;
 }
 
+/**
+ * The plan's timing gate (§8): reject builds whose actions started too far
+ * from their planned marks. No successful timed receipts also fails — a build
+ * that performed nothing measurable must not pass a timing gate.
+ */
+export function timingGateCheck(timing: TimingStats | null, maxP95Ms: number): StudioCheckResult {
+  if (!timing) {
+    return { id: "timing.p95", ok: false, detail: "no timed receipts to gate" };
+  }
+  return {
+    id: "timing.p95",
+    ok: timing.p95Ms <= maxP95Ms,
+    detail: `p95 |actual − planned| = ${timing.p95Ms}ms (max ${maxP95Ms}ms; worst ${timing.maxMs}ms over ${timing.samples} actions)`,
+  };
+}
+
 export function computeTimingStats(receipts: readonly ActionReceipt[]): TimingStats | null {
   const deltas = receipts
     // expect.* actions are QA gates whose start waits on prior completions,
