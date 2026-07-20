@@ -103,8 +103,8 @@ segments into the single WAV the recorder consumes. Editing one sentence
 re-synthesizes only that dialog. The ~125MB bundle (int8 ONNX + voices)
 downloads once into the browser cache; the repo carries no narration audio
 (the archived M0 fixture aside). Voices come precomputed in the bundle
-(`alba` default; azelma, cosette, eponine, fantine, javert, jean, marius);
-a Kokoro-82M profile (`kokoro-af-heart-v1`) remains as a fallback provider.
+(`alba` default; azelma, cosette, eponine, fantine, javert, jean, marius —
+a new voice is a one-line profile in `src/studio/tts/profiles.ts`).
 
 Anchors are narration-relative only (`{mark, offsetMs}`, `{scene: start}`,
 `{afterAction}`); absolute times are forbidden in scripts. Unknown marks fail

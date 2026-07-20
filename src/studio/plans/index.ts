@@ -11,7 +11,7 @@ import goSwapScript from "./scripts/go-swap.json";
  *   fixture) — rendered as-is.
  * - "script": a validated LessonScript (emitted by `scripts/studio-director.ts`
  *   from the YAML source); narration is synthesized per dialog in the page by
- *   the in-page Director (Kokoro over onnxruntime-web), scheduled around the
+ *   the in-page Director (pocket-tts over onnxruntime-web), scheduled around the
  *   actions, and compiled just before recording.
  * Both re-enter their parser at load, so a stale artifact fails here rather
  * than mid-render.

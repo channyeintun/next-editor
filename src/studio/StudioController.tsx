@@ -25,7 +25,6 @@ import {
   type StudioRunResult,
 } from "./runStudioRender";
 import type { RenderSemantics } from "./compare";
-import type { KokoroDevice } from "./tts/kokoroSynth";
 
 /**
  * Dev-only render console for the studio route: prepares the pinned workspace,
@@ -120,9 +119,6 @@ export default function StudioController() {
   const planSlug = searchParams.get("plan") ?? DEFAULT_STUDIO_PLAN_SLUG;
   const requestedMode = searchParams.get("runtime") === "live" ? "live" : null;
   const autostart = searchParams.get("autostart") === "1";
-  // Narration synthesis backend: wasm reproduces bit-identical audio across
-  // runs (repeatability hashes it); webgpu is an opt-in speedup.
-  const ttsDevice: KokoroDevice = searchParams.get("tts") === "webgpu" ? "webgpu" : "wasm";
 
   const [phase, setPhase] = useState<string>("idle");
   const [running, setRunning] = useState(false);
@@ -158,14 +154,13 @@ export default function StudioController() {
         );
       }
 
-      // Script sources run the in-page Director first: per-dialog Kokoro
-      // synthesis (cached), joint scheduling, stitching, plan compilation.
+      // Script sources run the in-page Director first: per-dialog pocket-tts
+      // synthesis (cached, seeded), joint scheduling, stitching, compilation.
       let plan: StudioPlan;
       const renderOptions: StudioRenderOptions = {};
       setBuildWarnings([]);
       if (source.kind === "script") {
         const built = await buildPlanFromScript(source.load(), {
-          device: ttsDevice,
           onPhase: setPhase,
         });
         plan = built.plan;

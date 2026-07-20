@@ -98,7 +98,7 @@ const AUDIO_DURATION_TOLERANCE_MS = 1_500;
 
 export interface StudioRenderOptions {
   /**
-   * In-memory narration from the in-page Director (per-dialog Kokoro
+   * In-memory narration from the in-page Director (per-dialog pocket-tts
    * synthesis). When present the plan's audioPath is not fetched — the studio
    * synthesized these exact bytes for this plan.
    */

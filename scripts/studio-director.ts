@@ -8,7 +8,7 @@
  * runs the advisory critic, and emits the script JSON that the /studio route's
  * in-page Director consumes (src/studio/plans/scripts/<slug>.json). Narration
  * synthesis, dialog scheduling, and plan compilation happen in the page at
- * render time — Kokoro over onnxruntime-web with a per-dialog
+ * render time — pocket-tts over onnxruntime-web with a per-dialog
  * content-addressed cache — so this CLI needs no audio toolchain and runs on
  * any platform.
  *
@@ -59,7 +59,7 @@ async function directScript(scriptPath: string): Promise<void> {
   }
   const dialogs = splitIntoDialogs(extracted);
   const profile = requireVoiceProfile(script.build.voiceProfile);
-  if (profile.providerId !== "kokoro-js") {
+  if (profile.providerId !== "pocket-tts-web") {
     console.warn(
       `  ⚠ profile "${profile.id}" is not in-page synthesizable; /studio will reject this script`,
     );

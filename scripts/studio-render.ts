@@ -131,8 +131,8 @@ try {
       await page.getByRole("button", { name: "Render again" }).click();
     }
     try {
-      // Generous: a first-ever render also downloads the ~90MB Kokoro model
-      // into the browser cache and synthesizes every dialog on WASM.
+      // Generous: a first-ever render also downloads the ~125MB pocket-tts
+      // bundle into the browser cache and synthesizes every dialog on WASM.
       finalState = await waitForRunCount(page, run, 420_000);
     } catch (error) {
       await page.screenshot({ path: join(outDir, `run-${run}-timeout.png`), fullPage: true });
