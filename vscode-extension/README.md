@@ -107,16 +107,21 @@ bun run check          # aggregate: format, lint, typecheck, boundaries, tests, 
 
 Individual steps:
 
+The dev toolchain is Vite Plus (`vp`), declared as this package's own dev
+dependency — the same formatter/linter/test runner family the repository
+pre-commit hook uses, so local checks and the hook always agree. The
+`fmt`/`lint`/`test` sections live in `vite.config.ts`.
+
 | Command                      | What it does                                                  |
 | ---------------------------- | ------------------------------------------------------------- |
-| `bun run format:check`       | Prettier check                                                |
-| `bun run lint`               | Oxlint over `src`, `test`, `scripts`                          |
+| `bun run format:check`       | `vp fmt --check` (oxfmt: code, markdown, JSON)                |
+| `bun run lint`               | `vp lint` (oxlint with the hook's plugin set)                 |
 | `bun run typecheck`          | Strict `tsc` over host, webview, and integration-test configs |
 | `bun run verify:boundaries`  | Rejects imports resolving outside `vscode-extension/`         |
-| `bun run test:unit`          | Vitest (unit, artifact, recovery, webview-protocol tests)     |
+| `bun run test:unit`          | `vp test run` (unit, artifact, recovery, webview-protocol)    |
 | `bun run test:integration`   | Extension Development Host tests via `@vscode/test-electron`  |
 | `bun run benchmark:renderer` | Renderer benchmark in a real VS Code webview (dev-only)       |
-| `bun run build`              | esbuild host bundle + Vite webview bundle into `dist/`        |
+| `bun run build`              | esbuild host bundle + `vp build` webview bundle into `dist/`  |
 | `bun run package`            | Builds and writes a VSIX into `.artifacts/`                   |
 
 `node scripts/generate-fixture.mjs` regenerates the synthetic reproduction

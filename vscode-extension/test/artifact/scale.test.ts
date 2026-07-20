@@ -28,7 +28,7 @@ describe("long-session scale", () => {
     const config = benchmarkFixtureConfigs().find((c) => c.name === "long-session")!;
     const fixture = generateFixture(config);
 
-    const paths = new SessionPaths(dir, "long-session");
+    const paths = new SessionPaths(dir, "fixture-long-session");
     await fs.mkdir(paths.checkpointsDir, { recursive: true });
 
     // Checkpoint bodies (fixture hashes are synthetic-empty, so write the
@@ -59,7 +59,7 @@ describe("long-session scale", () => {
 
     const metadata: SessionMetadata = {
       formatVersion: 1,
-      sessionId: "long-session",
+      sessionId: "fixture-long-session",
       state: "finalizing",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

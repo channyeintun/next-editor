@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as vscode from "vscode";
 import { createActor, type Actor } from "xstate";
-import { CONTEXT_KEYS, newSessionId } from "../model/ids";
+import { CONTEXT_KEYS, newSessionId, type SessionId } from "../model/ids";
 import { validateSessionEventRaw } from "../model/schemas";
 import { CheckpointStore } from "../storage/CheckpointStore";
 import { readJournal } from "../storage/JournalReader";
@@ -178,9 +178,6 @@ export class RecordingCoordinator {
         void this.finalizeSession(recording, sessionId);
         break;
       }
-      case "stopping":
-      case "failed":
-        break;
     }
   }
 
@@ -228,7 +225,9 @@ export class RecordingCoordinator {
       this.startResolver = resolve;
     });
     this.actor.send({ type: "START", sessionId });
-    if (this.stateValue !== "preparing") {
+    // Read through the getter: the send() above synchronously re-enters
+    // publishState, so the local narrowing of stateValue is stale here.
+    if (this.state !== "preparing") {
       this.completeStart({
         ok: false,
         code: "failed",
@@ -279,7 +278,9 @@ export class RecordingCoordinator {
       });
       const checkpoints = new CheckpointStore(paths.checkpointsDir);
       const sink = new DurableSessionSink(journal, checkpoints);
-      session = new CaptureSession(sink, extensionVersion, policy, sessionId);
+      // The id originated from newSessionId(); the machine context widens
+      // the brand to string on the round trip.
+      session = new CaptureSession(sink, extensionVersion, policy, sessionId as SessionId);
       recording = { session, journal, checkpoints, paths, metadata };
       this.active = recording;
 
@@ -346,7 +347,8 @@ export class RecordingCoordinator {
     });
     this.stopPromise = stopPromise;
     this.actor.send({ type: "STOP", sessionId, reason, overloadBytes });
-    if (this.stateValue !== "stopping") {
+    // Getter read: send() synchronously updates stateValue (see start()).
+    if (this.state !== "stopping") {
       this.completeStop({
         ok: false,
         code: "failed",
