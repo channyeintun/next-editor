@@ -137,6 +137,16 @@ export interface RecordingFileSet {
   camera?: { name: string; blob: Blob };
 }
 
+export interface BuildRecordingFilesOptions {
+  /**
+   * Sibling caption filenames the encoded `.ne` should declare via `captionFiles`
+   * (the caller uploads those files next to the `.ne`). Replaces any declaration
+   * already on the recording — after a re-upload under a new base filename, the
+   * new siblings are the only ones guaranteed to exist.
+   */
+  captionFiles?: string[];
+}
+
 /**
  * Serializes a recording into its `.ne` stream plus externalized sibling media
  * blobs (audio/camera) — the same encoding `RecordingStorage.exportAsFile` uses,
@@ -147,6 +157,7 @@ export interface RecordingFileSet {
 export async function buildRecordingFiles(
   recording: Recording,
   baseFilename: string,
+  options?: BuildRecordingFilesOptions,
 ): Promise<RecordingFileSet> {
   // Externalize the camera blob into a sibling video file and reference it from the `.ne`.
   const cameraBlob = recording.cameraBlob instanceof Blob ? recording.cameraBlob : null;
@@ -154,7 +165,11 @@ export async function buildRecordingFiles(
   let videoName: string | null = null;
   if (cameraBlob) {
     videoName = `${baseFilename}.${cameraExtensionFromMime(cameraBlob.type)}`;
-    recordingToEncode = { ...recordingToEncode, cameraBlob: undefined, cameraFile: videoName };
+    recordingToEncode = {
+      ...recordingToEncode,
+      cameraBlob: undefined,
+      cameraFile: videoName,
+    };
   }
 
   // Externalize the audio blob the same way (`.weba` etc., so it never collides with the
@@ -163,11 +178,24 @@ export async function buildRecordingFiles(
   let audioName: string | null = null;
   if (audioBlob && audioBlob.size > 0) {
     audioName = `${baseFilename}.${audioExtensionFromMime(audioBlob.type)}`;
-    recordingToEncode = { ...recordingToEncode, audioBlob: undefined, audioFile: audioName };
+    recordingToEncode = {
+      ...recordingToEncode,
+      audioBlob: undefined,
+      audioFile: audioName,
+    };
+  }
+
+  if (options?.captionFiles?.length) {
+    recordingToEncode = {
+      ...recordingToEncode,
+      captionFiles: options.captionFiles,
+    };
   }
 
   const streamBytes = await encodeRecordingToStream(recordingToEncode);
-  const ne = new Blob([streamBytes as BlobPart], { type: "application/octet-stream" });
+  const ne = new Blob([streamBytes as BlobPart], {
+    type: "application/octet-stream",
+  });
 
   return {
     ne,

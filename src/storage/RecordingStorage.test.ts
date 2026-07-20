@@ -79,6 +79,25 @@ describe("buildRecordingFiles", () => {
     expect(files.camera).toEqual({ name: "my-lesson.webm", blob: cameraBlob });
   });
 
+  it("declares sibling caption files in the encoded .ne, replacing any stale declaration", async () => {
+    const recording = createRecording({ captionFiles: ["stale.en.vtt"] });
+
+    const withCaptions = await buildRecordingFiles(recording, "lesson-1", {
+      captionFiles: ["lesson-1.en.vtt", "lesson-1.my.vtt"],
+    });
+    const [decodedWith] = await decompressBinaryToRecordings(
+      new Uint8Array(await withCaptions.ne.arrayBuffer()),
+    );
+    expect(decodedWith.captionFiles).toEqual(["lesson-1.en.vtt", "lesson-1.my.vtt"]);
+
+    // Without the option (the plain export path) the existing declaration is preserved.
+    const withoutOption = await buildRecordingFiles(recording, "lesson-1");
+    const [decodedWithout] = await decompressBinaryToRecordings(
+      new Uint8Array(await withoutOption.ne.arrayBuffer()),
+    );
+    expect(decodedWithout.captionFiles).toEqual(["stale.en.vtt"]);
+  });
+
   it("produces byte-identical .ne output to exportAsFile for the same recording", async () => {
     const recording = createRecording();
     const viaBuild = await buildRecordingFiles(recording, "recording-1");

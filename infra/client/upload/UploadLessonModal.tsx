@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { ImagePlus, X } from "lucide-react";
-import type { Recording } from "@app/core/src";
+import { Captions, ImagePlus, X } from "lucide-react";
+import type { CaptionCue, Recording } from "@app/core/src";
 import { copyTextToClipboard } from "@app/components/fileSidebarHelpers";
 import { useAuth, signInUrl } from "../auth/useAuth";
 import { useUploadLesson, usePublishLesson, formatDuration } from "./useUploadLesson";
 import { saveResumeIntent } from "./resumeIntent";
 import { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./thumbnailConstraints";
+import { CAPTION_ACCEPT, MAX_CAPTION_BYTES } from "./captionConstraints";
 import { resizeThumbnail } from "./resizeThumbnail";
 import GoogleIcon from "@app/components/icon/Google";
 import { usePostHog } from "@posthog/react";
@@ -23,8 +24,14 @@ export interface UploadLessonModalProps {
 
 function defaultTitle(createdAt: number): string {
   const date = new Date(createdAt);
-  const day = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const day = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  const time = date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
   return `Recording — ${day}, ${time}`;
 }
 
@@ -33,6 +40,13 @@ function parseTags(input: string): string[] {
     .split(",")
     .map((tag) => tag.trim())
     .filter(Boolean);
+}
+
+interface SelectedCaption {
+  /** Lowercase tag inferred from the filename (`subs.es.vtt` → "es"), "en" otherwise. */
+  language: string;
+  fileName: string;
+  cues: CaptionCue[];
 }
 
 // NOTE (deviation from the approved UX spec's stated default): "auto-generate
@@ -55,7 +69,10 @@ export default function UploadLessonModal({
   const [tagsInput, setTagsInput] = useState(initialTags ?? "");
   const [titleError, setTitleError] = useState<string | null>(null);
   const [lessonId] = useState(() => crypto.randomUUID());
-  const [uploadResult, setUploadResult] = useState<{ id: string; slug: string } | null>(null);
+  const [uploadResult, setUploadResult] = useState<{
+    id: string;
+    slug: string;
+  } | null>(null);
   const [copied, setCopied] = useState(false);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
@@ -63,6 +80,9 @@ export default function UploadLessonModal({
   const [useDefaultThumbnail, setUseDefaultThumbnail] = useState(false);
   const [thumbnailError, setThumbnailError] = useState<string | null>(null);
   const thumbnailInputRef = useRef<HTMLInputElement | null>(null);
+  const [captionTracks, setCaptionTracks] = useState<SelectedCaption[]>([]);
+  const [captionError, setCaptionError] = useState<string | null>(null);
+  const captionInputRef = useRef<HTMLInputElement | null>(null);
 
   const { upload, progress, isUploading, error, reset } = useUploadLesson();
   const publish = usePublishLesson();
@@ -85,7 +105,10 @@ export default function UploadLessonModal({
   const handleSignIn = async () => {
     posthog?.capture("sign_in_initiated", { trigger: "upload_modal" });
     try {
-      await saveResumeIntent({ recordingId: recording.id, returnTo: window.location.pathname });
+      await saveResumeIntent({
+        recordingId: recording.id,
+        returnTo: window.location.pathname,
+      });
     } catch (err) {
       console.error("Failed to save resume intent", err);
     }
@@ -141,6 +164,48 @@ export default function UploadLessonModal({
     setThumbnailError(null);
   };
 
+  // Applies the whole selection or none of it — a multi-file pick where one file
+  // fails should not silently attach the rest.
+  const handleSelectCaptions = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const files = Array.from(input.files ?? []);
+    // Clear the value so re-selecting the same file fires another change event.
+    input.value = "";
+    if (files.length === 0) return;
+
+    const { detectAndParse, inferLanguageFromFilename } =
+      await import("@app/captions/parseCaptions");
+
+    const next = [...captionTracks];
+    for (const file of files) {
+      if (file.size > MAX_CAPTION_BYTES) {
+        setCaptionError(`"${file.name}" is too large — 2MB max.`);
+        return;
+      }
+      const cues = detectAndParse(file.name, await file.text());
+      if (cues.length === 0) {
+        setCaptionError(`No caption cues found in "${file.name}" — expected .vtt or .srt.`);
+        return;
+      }
+      const language = inferLanguageFromFilename(file.name) ?? "en";
+      if (next.some((track) => track.language === language)) {
+        setCaptionError(
+          `A "${language}" track is already attached — name files like lesson.<lang>.vtt to set their language.`,
+        );
+        return;
+      }
+      next.push({ language, fileName: file.name, cues });
+    }
+
+    setCaptionError(null);
+    setCaptionTracks(next);
+  };
+
+  const handleRemoveCaption = (language: string) => {
+    setCaptionTracks((tracks) => tracks.filter((track) => track.language !== language));
+    setCaptionError(null);
+  };
+
   const handleUpload = async () => {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
@@ -159,6 +224,10 @@ export default function UploadLessonModal({
           tags: parseTags(tagsInput),
           thumbnail: thumbnailFile ?? undefined,
           useDefaultThumbnail,
+          captions:
+            captionTracks.length > 0
+              ? captionTracks.map(({ language, cues }) => ({ language, cues }))
+              : undefined,
         },
       });
       setUploadResult(result);
@@ -166,6 +235,7 @@ export default function UploadLessonModal({
         has_thumbnail: !!(thumbnailFile || useDefaultThumbnail),
         has_description: !!description.trim(),
         tag_count: parseTags(tagsInput).length,
+        caption_count: captionTracks.length,
         recording_duration: recording.duration,
       });
     } catch (err) {
@@ -404,6 +474,54 @@ export default function UploadLessonModal({
                 accept={THUMBNAIL_ACCEPT}
                 className="hidden"
                 onChange={handleSelectThumbnail}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="text-xs font-medium text-slate-400">Captions (optional)</span>
+              {captionTracks.length > 0 ? (
+                <ul className="space-y-1">
+                  {captionTracks.map((track) => (
+                    <li
+                      key={track.language}
+                      className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#11141c] px-3 py-1.5"
+                    >
+                      <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-200">
+                        {track.language}
+                      </span>
+                      <span className="flex-1 truncate text-xs text-slate-300">
+                        {track.fileName}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCaption(track.language)}
+                        disabled={isUploading}
+                        aria-label={`Remove ${track.language} captions`}
+                        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <X size={12} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => captionInputRef.current?.click()}
+                disabled={isUploading}
+                className="flex items-center gap-2 text-[11px] font-medium text-slate-400 underline-offset-2 transition-colors hover:text-slate-200 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Captions size={14} aria-hidden="true" />
+                Add caption file (.vtt / .srt)
+              </button>
+              {captionError ? <p className="text-xs text-rose-300">{captionError}</p> : null}
+              <input
+                ref={captionInputRef}
+                type="file"
+                accept={CAPTION_ACCEPT}
+                multiple
+                className="hidden"
+                onChange={handleSelectCaptions}
               />
             </div>
 

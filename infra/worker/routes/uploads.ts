@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import type { Env } from "../env";
 import { getLessonById } from "../../db/queries";
 import { getCurrentUser } from "../auth/session";
 import { MAX_THUMBNAIL_BYTES } from "../../client/upload/thumbnailConstraints";
+import { MAX_CAPTION_BYTES } from "../../client/upload/captionConstraints";
 
 // Mounted at /api/uploads in worker/index.ts. The client PUTs bytes through
 // this same-origin authenticated Worker route, which streams them into R2
@@ -11,6 +13,7 @@ import { MAX_THUMBNAIL_BYTES } from "../../client/upload/thumbnailConstraints";
 export const uploadsRoute = new Hono<{ Bindings: Env }>();
 
 const THUMBNAIL_FILENAME_RE = /\.(?:png|jpe?g)$/i;
+const CAPTION_FILENAME_RE = /\.vtt$/i;
 // Recordings (audio/video/.ne) are legitimately much larger than a thumbnail
 // image; this is a hard backstop against storage abuse, not a tuned product
 // limit — raise it if real recordings ever get rejected.
@@ -25,48 +28,66 @@ const MAX_MEDIA_BYTES = 200 * 1024 * 1024;
 // origin on direct navigation.
 // :id is interpolated into the R2 key, so it gets the same safe-charset
 // constraint as filename (lesson ids are client-generated UUIDs).
+const handleMediaUpload = async (c: Context<{ Bindings: Env }>) => {
+  const user = await getCurrentUser(c);
+  if (!user) {
+    return c.json({ error: "not signed in" }, 401);
+  }
+
+  const { id, filename } = c.req.param();
+
+  // A lesson row for this id may not exist yet (this is the very first
+  // upload before POST /api/lessons creates the draft) — that's fine, any
+  // signed-in user can claim a fresh id they generated themselves. But if a
+  // row DOES already exist, only its owner may write more media under it —
+  // otherwise a malicious signed-in user could extract another lesson's id
+  // from its public `ne`/`thumbnail` path and overwrite that media.
+  const existing = await getLessonById(c.env.DB, id);
+  if (existing && existing.owner_id !== user.id) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  if (!c.req.raw.body) {
+    return c.json({ error: "empty body" }, 400);
+  }
+
+  // The client always PUTs a whole Blob/File (never a chunked stream), so a
+  // real request always carries an exact Content-Length — a missing one is
+  // rejected rather than letting an unbounded stream through to R2.
+  const contentLength = Number(c.req.header("content-length"));
+  if (!Number.isFinite(contentLength) || contentLength <= 0) {
+    return c.json({ error: "content-length header is required" }, 411);
+  }
+  const limit = THUMBNAIL_FILENAME_RE.test(filename)
+    ? MAX_THUMBNAIL_BYTES
+    : CAPTION_FILENAME_RE.test(filename)
+      ? MAX_CAPTION_BYTES
+      : MAX_MEDIA_BYTES;
+  if (contentLength > limit) {
+    return c.json({ error: "file too large" }, 413);
+  }
+
+  const key = `lessons/${id}/${filename}`;
+  await c.env.BUCKET.put(key, c.req.raw.body, {
+    httpMetadata: {
+      contentType: c.req.header("content-type") ?? "application/octet-stream",
+    },
+  });
+
+  return c.json({ path: key });
+};
+
 uploadsRoute.put(
   "/:id{[\\w-]+}/media/:filename{[\\w-]+\\.(ne|ogg|weba|webm|mp4|mov|m4a|mp3|wav|png|jpg|jpeg)}",
-  async (c) => {
-    const user = await getCurrentUser(c);
-    if (!user) {
-      return c.json({ error: "not signed in" }, 401);
-    }
+  handleMediaUpload,
+);
 
-    const { id, filename } = c.req.param();
-
-    // A lesson row for this id may not exist yet (this is the very first
-    // upload before POST /api/lessons creates the draft) — that's fine, any
-    // signed-in user can claim a fresh id they generated themselves. But if a
-    // row DOES already exist, only its owner may write more media under it —
-    // otherwise a malicious signed-in user could extract another lesson's id
-    // from its public `ne`/`thumbnail` path and overwrite that media.
-    const existing = await getLessonById(c.env.DB, id);
-    if (existing && existing.owner_id !== user.id) {
-      return c.json({ error: "forbidden" }, 403);
-    }
-
-    if (!c.req.raw.body) {
-      return c.json({ error: "empty body" }, 400);
-    }
-
-    // The client always PUTs a whole Blob/File (never a chunked stream), so a
-    // real request always carries an exact Content-Length — a missing one is
-    // rejected rather than letting an unbounded stream through to R2.
-    const contentLength = Number(c.req.header("content-length"));
-    if (!Number.isFinite(contentLength) || contentLength <= 0) {
-      return c.json({ error: "content-length header is required" }, 411);
-    }
-    const limit = THUMBNAIL_FILENAME_RE.test(filename) ? MAX_THUMBNAIL_BYTES : MAX_MEDIA_BYTES;
-    if (contentLength > limit) {
-      return c.json({ error: "file too large" }, 413);
-    }
-
-    const key = `lessons/${id}/${filename}`;
-    await c.env.BUCKET.put(key, c.req.raw.body, {
-      httpMetadata: { contentType: c.req.header("content-type") ?? "application/octet-stream" },
-    });
-
-    return c.json({ path: key });
-  },
+// Sibling caption files: `<id>.<lang>.vtt` (uploadLesson.ts) — the one filename shape
+// that legitimately carries a dot inside the basename, so it gets its own pattern
+// instead of loosening the main allow-list. The optional middle segment is a
+// lowercase language tag; the charset still can't encode `/`, `..`, or a second
+// extension, and `.vtt` is served back as inert text (nosniff, see routes/media.ts).
+uploadsRoute.put(
+  "/:id{[\\w-]+}/media/:filename{[\\w-]+(?:\\.[a-z0-9-]+)?\\.vtt}",
+  handleMediaUpload,
 );

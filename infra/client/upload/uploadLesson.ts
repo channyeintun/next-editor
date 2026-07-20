@@ -1,5 +1,6 @@
-import type { Recording } from "@app/core/src";
+import type { CaptionCue, Recording } from "@app/core/src";
 import { buildRecordingFiles } from "@app/storage/RecordingStorage";
+import { serializeCuesToVtt } from "@app/captions/serializeVtt";
 import { apiClient } from "../apiClient";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 
@@ -10,6 +11,12 @@ export function formatDuration(durationMs: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+export interface UploadCaptionInput {
+  /** Lowercase language tag (e.g. "en", "pt-br") — becomes the `<id>.<lang>.vtt` name suffix. */
+  language: string;
+  cues: CaptionCue[];
+}
+
 export interface UploadLessonInput {
   recording: Recording;
   title: string;
@@ -18,6 +25,8 @@ export interface UploadLessonInput {
   thumbnail?: File;
   /** Use the built-in placeholder image instead of uploading one. Ignored if `thumbnail` is set. */
   useDefaultThumbnail?: boolean;
+  /** Caption tracks uploaded as sibling `.vtt` files and declared in the `.ne`'s `captionFiles`. */
+  captions?: UploadCaptionInput[];
 }
 
 export interface UploadedLesson {
@@ -58,7 +67,9 @@ async function uploadFile(
     `/uploads/${lessonId}/media/${target.filename}`,
     target.blob,
     {
-      headers: { "Content-Type": target.blob.type || "application/octet-stream" },
+      headers: {
+        "Content-Type": target.blob.type || "application/octet-stream",
+      },
       onUploadProgress: (event) => onLoaded(event.loaded),
     },
   );
@@ -77,11 +88,33 @@ export async function uploadLesson(
   onProgress: (progress: number) => void,
 ): Promise<UploadedLesson> {
   onProgress(0);
-  const files = await buildRecordingFiles(input.recording, lessonId);
+
+  // Captions are canonicalized to WebVTT and named `<id>.<lang>.vtt` so the URL
+  // loader can infer each track's language from the filename. Keyed by language —
+  // duplicate tags would collide on the same R2 key, so the last one wins.
+  const captionsByLanguage = new Map<string, UploadCaptionInput>();
+  for (const caption of input.captions ?? []) {
+    captionsByLanguage.set(caption.language.toLowerCase(), caption);
+  }
+  const captionTargets: UploadTarget[] = [...captionsByLanguage.entries()].map(
+    ([language, caption]) => ({
+      filename: `${lessonId}.${language}.vtt`,
+      blob: new Blob([serializeCuesToVtt(caption.cues)], { type: "text/vtt" }),
+    }),
+  );
+
+  const files = await buildRecordingFiles(
+    input.recording,
+    lessonId,
+    captionTargets.length > 0
+      ? { captionFiles: captionTargets.map((target) => target.filename) }
+      : undefined,
+  );
 
   const targets: UploadTarget[] = [{ filename: `${lessonId}.ne`, blob: files.ne }];
   if (files.audio) targets.push({ filename: files.audio.name, blob: files.audio.blob });
   if (files.camera) targets.push({ filename: files.camera.name, blob: files.camera.blob });
+  targets.push(...captionTargets);
   const thumbnailFilename = input.thumbnail
     ? `${lessonId}-thumbnail.${thumbnailExtension(input.thumbnail)}`
     : null;
@@ -140,7 +173,11 @@ export async function updateLessonThumbnail(
     const res = await apiClient.put<{ path: string }>(
       `/uploads/${lessonId}/media/${filename}`,
       thumbnail,
-      { headers: { "Content-Type": thumbnail.type || "application/octet-stream" } },
+      {
+        headers: {
+          "Content-Type": thumbnail.type || "application/octet-stream",
+        },
+      },
     );
     thumbnailPath = res.data.path;
   }

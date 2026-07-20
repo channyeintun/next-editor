@@ -62,19 +62,19 @@ Every input above must be content-addressed or versioned in the build manifest.
 
 Next Editor's `Recording.version = 4` model is serialized in the SCR3 container. The repository already records and replays the following surfaces:
 
-| Capability | Exists today | Production-harness gap |
-| --- | --- | --- |
-| Editor | Keyframes plus deltas; ordinary Monaco edits can be captured as verified exact edit batches, with DMP fallback | A stable automation adapter for open/select/type/reveal actions and action acknowledgements |
-| Captions | `CaptionTrack`, `CaptionCue`, and millisecond `CaptionWord` timings | Narration-to-display token mapping, cue segmentation, and alignment validation |
-| External audio | `START_RECORDING` accepts an audio `Blob`; recordings support `audioSource: "external"`, sibling `audioFile`, resolved `audioUrl`, and `audioStartOffsetMs` | A build/export step that preserves the original audio hash and the recorder-measured offset |
-| Cursor | Target-aware samples and playback remapping through `CursorTargetSnapshot` | A supported injection seam, stable target registry, and deterministic path generator |
-| Workspace/sidebar | Timestamped project, active-file, folder, scroll, sidebar-width, and preview-dock-width snapshots | Commands that mutate state through the same path as the UI and expose completion signals |
-| Runtime/dock | Timestamped runtime and dock snapshots | Execution-kind-specific run/wait/assert adapters; arbitrary shell commands cannot be assumed |
-| Preview | rrweb initial documents and patch batches, plus API-client replay state | Readiness signals, deterministic fixtures, assertion helpers, and render-time error collection |
-| Whiteboard | Element upserts/removals plus view/open/maximize state | A supported automation adapter and an authored-asset format |
-| Slides | Native slide content/events and Google Slides ingestion | A supported show/step/close adapter and pinned slide assets |
-| Chat | Recorded chat deltas and checkpoints | Out of V1 unless a pilot explicitly requires it |
-| Publishing | Authenticated upload to R2, D1-backed draft/publish APIs, and a static seed catalog | A render-to-draft command and provenance/disclosure fields |
+| Capability        | Exists today                                                                                                                                                | Production-harness gap                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Editor            | Keyframes plus deltas; ordinary Monaco edits can be captured as verified exact edit batches, with DMP fallback                                              | A stable automation adapter for open/select/type/reveal actions and action acknowledgements    |
+| Captions          | `CaptionTrack`, `CaptionCue`, and millisecond `CaptionWord` timings                                                                                         | Narration-to-display token mapping, cue segmentation, and alignment validation                 |
+| External audio    | `START_RECORDING` accepts an audio `Blob`; recordings support `audioSource: "external"`, sibling `audioFile`, resolved `audioUrl`, and `audioStartOffsetMs` | A build/export step that preserves the original audio hash and the recorder-measured offset    |
+| Cursor            | Target-aware samples and playback remapping through `CursorTargetSnapshot`                                                                                  | A supported injection seam, stable target registry, and deterministic path generator           |
+| Workspace/sidebar | Timestamped project, active-file, folder, scroll, sidebar-width, and preview-dock-width snapshots                                                           | Commands that mutate state through the same path as the UI and expose completion signals       |
+| Runtime/dock      | Timestamped runtime and dock snapshots                                                                                                                      | Execution-kind-specific run/wait/assert adapters; arbitrary shell commands cannot be assumed   |
+| Preview           | rrweb initial documents and patch batches, plus API-client replay state                                                                                     | Readiness signals, deterministic fixtures, assertion helpers, and render-time error collection |
+| Whiteboard        | Element upserts/removals plus view/open/maximize state                                                                                                      | A supported automation adapter and an authored-asset format                                    |
+| Slides            | Native slide content/events and Google Slides ingestion                                                                                                     | A supported show/step/close adapter and pinned slide assets                                    |
+| Chat              | Recorded chat deltas and checkpoints                                                                                                                        | Out of V1 unless a pilot explicitly requires it                                                |
+| Publishing        | Authenticated upload to R2, D1-backed draft/publish APIs, and a static seed catalog                                                                         | A render-to-draft command and provenance/disclosure fields                                     |
 
 Playback already applies editor diffs to live Monaco and restores workspace, runtime, slide, preview, whiteboard, cursor, and chat state. That code is useful precedent, but it is not yet a Performer API.
 
@@ -91,27 +91,27 @@ Playback already applies editor diffs to live Monaco and restores workspace, run
 
 The durable advantage is not “AI video.” It is a structured lesson artifact whose state can be inspected and tested.
 
-| Dimension | Pixel-first output | Next Editor lesson |
-| --- | --- | --- |
-| Authoring source | Prompt, timeline, or final video | Versioned script plus pinned workspace/assets |
-| Repair | Re-record or edit pixels | Patch the script or source state and rebuild |
-| Mechanical QA | Mostly audiovisual inspection | Decode tracks; execute checkpoints; assert state and output |
-| Review | Visual comparison | Script diff, build report, and playback |
-| Localization | Dub/re-render video | Potentially rebuild narration, captions, and marker-relative timing; not V1 |
-| Learner interactivity | Usually none | Structured replay today; fork-and-run checkpoints are a future extension |
+| Dimension             | Pixel-first output               | Next Editor lesson                                                          |
+| --------------------- | -------------------------------- | --------------------------------------------------------------------------- |
+| Authoring source      | Prompt, timeline, or final video | Versioned script plus pinned workspace/assets                               |
+| Repair                | Re-record or edit pixels         | Patch the script or source state and rebuild                                |
+| Mechanical QA         | Mostly audiovisual inspection    | Decode tracks; execute checkpoints; assert state and output                 |
+| Review                | Visual comparison                | Script diff, build report, and playback                                     |
+| Localization          | Dub/re-render video              | Potentially rebuild narration, captions, and marker-relative timing; not V1 |
+| Learner interactivity | Usually none                     | Structured replay today; fork-and-run checkpoints are a future extension    |
 
 This is a hypothesis to validate with pilots, not a claim that no competitor can build the same thing. The first measurement should be whether the harness reduces correction time while maintaining the quality of a human-produced lesson.
 
 ### What prior art actually validates
 
-| System | Useful precedent | What it does not prove for this project |
-| --- | --- | --- |
-| Scrimba | Event-based coding lessons can make playback more useful than pixels alone | That autonomous lesson authoring meets an editorial quality bar |
-| VHS | A small declarative script can drive deterministic demonstrations and golden tests | Multi-surface IDE orchestration, narration sync, or interactive code playback |
-| Remotion | Coding agents can author a reviewable artifact while a separate renderer performs it | That generated lesson scripts are factually or pedagogically sound |
-| NotebookLM Video Overviews | Source-grounded input can produce narrated visual explanations at product scale | Runnable code, semantic event tracks, or mechanical code QA |
-| Demosmith | The vendor reports autonomous browser capture, narration, captions, and localization | Independent quality evidence or reproducibility suitable for coding lessons |
-| Coursera Course Builder | AI assistance can reduce curriculum and course-structure authoring work | Automated performance of a lesson inside an IDE |
+| System                     | Useful precedent                                                                     | What it does not prove for this project                                       |
+| -------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Scrimba                    | Event-based coding lessons can make playback more useful than pixels alone           | That autonomous lesson authoring meets an editorial quality bar               |
+| VHS                        | A small declarative script can drive deterministic demonstrations and golden tests   | Multi-surface IDE orchestration, narration sync, or interactive code playback |
+| Remotion                   | Coding agents can author a reviewable artifact while a separate renderer performs it | That generated lesson scripts are factually or pedagogically sound            |
+| NotebookLM Video Overviews | Source-grounded input can produce narrated visual explanations at product scale      | Runnable code, semantic event tracks, or mechanical code QA                   |
+| Demosmith                  | The vendor reports autonomous browser capture, narration, captions, and localization | Independent quality evidence or reproducibility suitable for coding lessons   |
+| Coursera Course Builder    | AI assistance can reduce curriculum and course-structure authoring work              | Automated performance of a lesson inside an IDE                               |
 
 The shared lesson is architectural: keep creative output reviewable, keep execution bounded, and validate the result independently.
 
@@ -169,11 +169,11 @@ The final interface will be larger than this sketch, but scripts must never impo
 
 ### 4.3 Alternatives
 
-| Approach | Decision | Reason |
-| --- | --- | --- |
+| Approach                              | Decision                                                              | Reason                                                                                                                  |
+| ------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Computer-use agent drives the real UI | Reject as the production core; retain only for exploratory prototypes | Inference latency, pixel targeting, and nondeterministic decisions make narration sync and repeatable retries difficult |
-| Scripted in-app Performer | **Build first** | Exercises the real capture path and every current recording invariant |
-| Offline track compiler | Defer | Faster in principle, but duplicates recorder semantics and still needs real runtime/preview execution |
+| Scripted in-app Performer             | **Build first**                                                       | Exercises the real capture path and every current recording invariant                                                   |
+| Offline track compiler                | Defer                                                                 | Faster in principle, but duplicates recorder semantics and still needs real runtime/preview execution                   |
 
 ## 5. `LessonScript` V1
 
@@ -261,11 +261,11 @@ checks:
 
 Provider selection should follow a pronunciation/alignment/licensing spike, not a general “best voice” claim. Confirmed timing surfaces include:
 
-| Provider | Confirmed timing surface | Integration implication |
-| --- | --- | --- |
-| ElevenLabs | Character-level alignment from the with-timestamps endpoint; a separate forced-alignment API can return word timing | Preserve a mapping from synthesized characters back to display tokens |
-| Cartesia | Word and phoneme timestamp messages when timestamps are requested | Word timing maps closely to `CaptionWord`; still validate normalization |
-| Azure Speech | `WordBoundary` events in the Speech SDK | Collect boundary events alongside the encoded audio |
+| Provider     | Confirmed timing surface                                                                                            | Integration implication                                                 |
+| ------------ | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| ElevenLabs   | Character-level alignment from the with-timestamps endpoint; a separate forced-alignment API can return word timing | Preserve a mapping from synthesized characters back to display tokens   |
+| Cartesia     | Word and phoneme timestamp messages when timestamps are requested                                                   | Word timing maps closely to `CaptionWord`; still validate normalization |
+| Azure Speech | `WordBoundary` events in the Speech SDK                                                                             | Collect boundary events alongside the encoded audio                     |
 
 The Director should:
 
@@ -293,16 +293,16 @@ The seed controls path shape and typing cadence. The compiled plan records the g
 
 ## 8. Verification and release gates
 
-| Stage | Blocking checks |
-| --- | --- |
-| Script compile | Schema version; unique scene/action IDs; marker resolution; target uniqueness; supported actions; no secrets or unapproved URLs |
-| Workspace preflight | Pinned starter hash; lockfiles where applicable; execution kind available; initial tests/run succeed; required assets exist |
-| Performance | Every command acknowledges before its deadline; runtime/preview readiness uses signals rather than sleeps; retries follow declared idempotency |
-| Artifact | SCR3 decodes; durations are finite; event and caption times are monotonic and in bounds; required tracks exist; audio/caption files resolve |
-| Semantic checkpoints | Expected files, diagnostics, console/output, preview DOM text, slide, or whiteboard state matches the script at named checkpoints |
-| Timing | Compare planned marker times with action receipts; start with a 300 ms p95 target and revise it using measured pilot data |
-| Repeatability | Same logical target sequence, final workspace hashes, exact caption text/audio hash, and equivalent checkpoint state; timestamps compared within tolerance rather than raw-byte equality |
-| Editorial | Automated critic may propose structured notes, but cannot approve release; a human watches the complete lesson and publishes the draft |
+| Stage                | Blocking checks                                                                                                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Script compile       | Schema version; unique scene/action IDs; marker resolution; target uniqueness; supported actions; no secrets or unapproved URLs                                                          |
+| Workspace preflight  | Pinned starter hash; lockfiles where applicable; execution kind available; initial tests/run succeed; required assets exist                                                              |
+| Performance          | Every command acknowledges before its deadline; runtime/preview readiness uses signals rather than sleeps; retries follow declared idempotency                                           |
+| Artifact             | SCR3 decodes; durations are finite; event and caption times are monotonic and in bounds; required tracks exist; audio/caption files resolve                                              |
+| Semantic checkpoints | Expected files, diagnostics, console/output, preview DOM text, slide, or whiteboard state matches the script at named checkpoints                                                        |
+| Timing               | Compare planned marker times with action receipts; start with a 300 ms p95 target and revise it using measured pilot data                                                                |
+| Repeatability        | Same logical target sequence, final workspace hashes, exact caption text/audio hash, and equivalent checkpoint state; timestamps compared within tolerance rather than raw-byte equality |
+| Editorial            | Automated critic may propose structured notes, but cannot approve release; a human watches the complete lesson and publishes the draft                                                   |
 
 The render report should include input hashes, environment versions, action receipts, retries, assertion results, console/runtime errors, timing percentiles, and links or paths to diagnostic screenshots.
 
