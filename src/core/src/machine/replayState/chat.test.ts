@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChatRecordingEvent } from "../../../../types/chat";
+import type { ChatCheckpoint, ChatRecordingEvent } from "../../../../types/chat";
 import { createContentDelta } from "../../utils/frameDelta";
 import { getChatReplayResult } from "./chat";
 
@@ -29,6 +29,27 @@ const CHAT_EVENTS: ChatRecordingEvent[] = [
 ];
 
 describe("getChatReplayResult", () => {
+  it("restores a conversation captured when recording starts, then honors new chat", () => {
+    const initialState = {
+      items: [{ kind: "message", id: "existing", role: "assistant", text: "Already here" }],
+      status: "done",
+      draft: "follow up",
+    } satisfies ChatCheckpoint;
+    const events: ChatRecordingEvent[] = [
+      { timestamp: 0, event: { k: "checkpoint", state: initialState } },
+      { timestamp: 10, event: { k: "reset" } },
+    ];
+
+    expect(
+      getChatReplayResult({ chatEvents: events, currentTime: 0, lastAppliedIndex: -1 })
+        .snapshotToApply,
+    ).toEqual(initialState);
+    expect(
+      getChatReplayResult({ chatEvents: events, currentTime: 10, lastAppliedIndex: 0 })
+        .snapshotToApply,
+    ).toEqual({ items: [], status: "idle", draft: "" });
+  });
+
   it("replays prompt composer typing and clearing at their recorded times", () => {
     const events: ChatRecordingEvent[] = [
       { timestamp: 5, event: { k: "draft", text: "fix" } },

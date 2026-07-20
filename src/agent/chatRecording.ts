@@ -11,6 +11,11 @@ export type ChatEventHandler = (
   event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint },
 ) => void;
 
+export function createChatCheckpoint(agentStore: AgentStoreInstance): ChatCheckpoint {
+  const context = agentStore.getSnapshot().context;
+  return { items: context.items, status: context.status, draft: context.draft };
+}
+
 /**
  * Turns an agent loop's delta stream into recorded chat events. `handleChatEvent`
  * is `NextEditorActions.handleChatEvent`, which no-ops while no recording session
@@ -28,10 +33,9 @@ export function createChatRecorder(
   let deltasSinceCheckpoint = 0;
 
   const emitCheckpoint = () => {
-    const context = agentStore.getSnapshot().context;
     handleChatEvent({
       k: "checkpoint",
-      state: { items: context.items, status: context.status, draft: context.draft },
+      state: createChatCheckpoint(agentStore),
     });
     deltasSinceCheckpoint = 0;
   };

@@ -1,11 +1,17 @@
 import { createStore } from "@xstate/store-react";
 import type { ChatCheckpoint, ChatDelta, ChatImage, ChatItem, ChatStatus } from "../types/chat";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE } from "../core/src/utils/chatDelta";
+import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import { DEFAULT_AGENT_MODEL, type AgentModelId } from "./types";
 
 export interface AgentUsage {
   inputTokens: number;
   outputTokens: number;
+}
+
+export interface AgentWorkspaceScope {
+  workspace: WorkspaceStoreInstance;
+  loadVersion: number;
 }
 
 export interface AgentStoreContext {
@@ -18,6 +24,8 @@ export interface AgentStoreContext {
   usage: AgentUsage;
   /** Set by `applyChatSnapshot` during recording playback; null while live (see AgentPanel). */
   replaySnapshot: ChatCheckpoint | null;
+  /** Loaded workspace generation that owns the live transcript and retry state. */
+  workspaceScope: AgentWorkspaceScope | null;
 }
 
 function initialContext(): AgentStoreContext {
@@ -30,6 +38,7 @@ function initialContext(): AgentStoreContext {
     error: null,
     usage: { inputTokens: 0, outputTokens: 0 },
     replaySnapshot: null,
+    workspaceScope: null,
   };
 }
 
@@ -89,7 +98,22 @@ export function createAgentStore() {
         replaySnapshot: event.snapshot,
       }),
 
-      reset: (context) => ({ ...initialContext(), model: context.model }),
+      bindWorkspaceScope: (context, event: { scope: AgentWorkspaceScope }) => ({
+        ...context,
+        workspaceScope: event.scope,
+      }),
+
+      resetForWorkspace: (context, event: { scope: AgentWorkspaceScope }) => ({
+        ...initialContext(),
+        model: context.model,
+        workspaceScope: event.scope,
+      }),
+
+      reset: (context) => ({
+        ...initialContext(),
+        model: context.model,
+        workspaceScope: context.workspaceScope,
+      }),
     },
   });
 }

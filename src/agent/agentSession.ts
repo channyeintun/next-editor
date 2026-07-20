@@ -1,9 +1,9 @@
 import { createStore } from "@xstate/store-react";
 import { runAgentLoop } from "./agentLoop";
-import { getAgentStore } from "./agentStore";
+import { getAgentStore, type AgentWorkspaceScope } from "./agentStore";
 import { createChatRecorder, type ChatEventHandler } from "./chatRecording";
 import type { AgentModelId, ToolConfirmationRequest, ToolContext } from "./types";
-import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
+import { selectWorkspaceLoadVersion, type WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatImage } from "../types/chat";
 import { formatAgentError } from "./agentError";
 
@@ -107,6 +107,50 @@ function settlePendingConfirmations(approved: boolean): void {
   agentSessionStore.trigger.clear();
 }
 
+function getWorkspaceScope(workspace: WorkspaceStoreInstance): AgentWorkspaceScope {
+  return {
+    workspace,
+    loadVersion: selectWorkspaceLoadVersion(workspace.getSnapshot().context),
+  };
+}
+
+function areWorkspaceScopesEqual(
+  left: AgentWorkspaceScope | null,
+  right: AgentWorkspaceScope,
+): boolean {
+  return left?.workspace === right.workspace && left.loadVersion === right.loadVersion;
+}
+
+function isCurrentWorkspaceScope(scope: AgentWorkspaceScope): boolean {
+  return areWorkspaceScopesEqual(getAgentStore().getSnapshot().context.workspaceScope, scope);
+}
+
+/**
+ * Bind the singleton conversation to one concrete workspace load. A replacement
+ * aborts the old run, clears its transcript/retry, and prevents late deltas from
+ * leaking into the newly loaded workspace.
+ */
+export function synchronizeAgentWorkspace(workspace: WorkspaceStoreInstance): boolean {
+  const agentStore = getAgentStore();
+  const nextScope = getWorkspaceScope(workspace);
+  const currentScope = agentStore.getSnapshot().context.workspaceScope;
+
+  if (!currentScope) {
+    agentStore.trigger.bindWorkspaceScope({ scope: nextScope });
+    return false;
+  }
+
+  if (areWorkspaceScopesEqual(currentScope, nextScope)) {
+    return false;
+  }
+
+  abortController?.abort();
+  settlePendingConfirmations(false);
+  agentStore.trigger.resetForWorkspace({ scope: nextScope });
+  clearAgentRetry();
+  return true;
+}
+
 export function stopAgentRun(): void {
   abortController?.abort();
   settlePendingConfirmations(false);
@@ -132,8 +176,13 @@ export function clearAgentRetry(): void {
 export async function retryAgentRun(options: {
   apiKey: string;
   model: AgentModelId;
+  workspace: WorkspaceStoreInstance;
 }): Promise<void> {
-  if (agentSessionStore.getSnapshot().context.isRunning || !retryOptions) {
+  if (
+    synchronizeAgentWorkspace(options.workspace) ||
+    agentSessionStore.getSnapshot().context.isRunning ||
+    !retryOptions
+  ) {
     return;
   }
 
@@ -151,6 +200,8 @@ export async function retryAgentRun(options: {
 
 /** Drives one user turn; no-ops if a run is already in flight (the panel guards on `isRunning`). */
 export async function startAgentRun(options: StartAgentRunOptions): Promise<void> {
+  synchronizeAgentWorkspace(options.workspace);
+
   if (agentSessionStore.getSnapshot().context.isRunning) {
     return;
   }
@@ -161,6 +212,10 @@ export async function startAgentRun(options: StartAgentRunOptions): Promise<void
 
 async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
   const agentStore = getAgentStore();
+  const workspaceScope = agentStore.getSnapshot().context.workspaceScope;
+  if (!workspaceScope) {
+    return;
+  }
   agentStore.trigger.setError({ message: null });
 
   const controller = new AbortController();
@@ -184,14 +239,22 @@ async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
       getPreviewInspection: options.getPreviewInspection,
       capturePreviewScreenshot: options.capturePreviewScreenshot,
       onDelta: (delta) => {
+        if (!isCurrentWorkspaceScope(workspaceScope)) {
+          return;
+        }
         agentStore.trigger.applyDelta({ delta });
         recordChatDelta(delta);
       },
       onUsage: (usage) => {
-        agentStore.trigger.addUsage({ usage });
+        if (isCurrentWorkspaceScope(workspaceScope)) {
+          agentStore.trigger.addUsage({ usage });
+        }
       },
     });
   } catch (error) {
+    if (!isCurrentWorkspaceScope(workspaceScope)) {
+      return;
+    }
     agentStore.trigger.setError({
       message: formatAgentError(error),
     });
@@ -208,7 +271,9 @@ async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
     };
     agentSessionStore.trigger.setCanRetry({ canRetry: true });
   } finally {
-    abortController = null;
+    if (abortController === controller) {
+      abortController = null;
+    }
     // Settle any confirmation still pending on abort/error as declined, so a tool
     // blocked on `await requestConfirmation` unblocks instead of hanging forever.
     settlePendingConfirmations(false);

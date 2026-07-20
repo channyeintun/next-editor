@@ -62,6 +62,7 @@ export type WorkspaceState =
       sidebarCollapsed: boolean;
       collapsedFolders: string[];
       sidebarScrollTop: number;
+      workspaceLoadVersion: number;
       projectVersion: number;
       externalProjectVersion: number;
       treeVersion: number;
@@ -81,6 +82,7 @@ export type WorkspaceState =
       sidebarWidth: number;
       sidebarCollapsed: boolean;
       savedSnapshot: StoredWorkspaceSnapshot;
+      workspaceLoadVersion: number;
       projectVersion: number;
       externalProjectVersion: number;
       treeVersion: number;
@@ -547,6 +549,7 @@ function createUninitializedWorkspaceState(): WorkspaceState {
     sidebarCollapsed: readStoredFileSidebarCollapsed(),
     collapsedFolders: [],
     sidebarScrollTop: 0,
+    workspaceLoadVersion: 0,
     projectVersion: 0,
     externalProjectVersion: 0,
     treeVersion: 0,
@@ -587,6 +590,7 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
     sidebarWidth,
     sidebarCollapsed,
     savedSnapshot,
+    workspaceLoadVersion: 0,
     projectVersion: 0,
     externalProjectVersion: 0,
     treeVersion: 0,
@@ -1132,6 +1136,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
                 ? baseContext.sidebarWidth
                 : normalizeSidebarWidth(event.sidebarWidth),
             savedSnapshot: event.savedSnapshot,
+            workspaceLoadVersion: baseContext.workspaceLoadVersion + 1,
             projectVersion: baseContext.projectVersion + 1,
             treeVersion,
             previewVersion: baseContext.previewVersion + 1,
@@ -1338,6 +1343,10 @@ export const selectWorkspaceProjectName = (context: WorkspaceState): string =>
 
 export const selectWorkspaceProjectId = (context: WorkspaceState): string =>
   context.isInitialized ? context.project.id : "";
+
+/** Increments only when the store replaces the loaded workspace snapshot. */
+export const selectWorkspaceLoadVersion = (context: WorkspaceState): number =>
+  context.workspaceLoadVersion;
 
 export const selectWorkspaceProjectVersion = (context: WorkspaceState): number =>
   context.projectVersion;

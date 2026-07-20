@@ -10,16 +10,42 @@ export interface SystemPromptOptions {
 }
 
 const SESSION_MEMORY_FILENAMES = ["AGENTS.md", "CLAUDE.md"] as const;
+export const MAX_SESSION_MEMORY_FILE_CHARS = 20_000;
+export const MAX_SESSION_MEMORY_TOTAL_CHARS = 30_000;
+const SESSION_MEMORY_TRUNCATION_NOTICE = "\n\n[Session memory truncated to fit the prompt budget.]";
+
+function truncateSessionMemory(content: string, maxChars: number): string {
+  if (content.length <= maxChars) {
+    return content;
+  }
+
+  if (maxChars <= SESSION_MEMORY_TRUNCATION_NOTICE.length) {
+    return SESSION_MEMORY_TRUNCATION_NOTICE.slice(0, maxChars);
+  }
+
+  const retainedChars = maxChars - SESSION_MEMORY_TRUNCATION_NOTICE.length;
+  return `${content.slice(0, retainedChars)}${SESSION_MEMORY_TRUNCATION_NOTICE}`;
+}
 
 function buildSessionMemory(project: WorkspaceProject): string | null {
-  const files = SESSION_MEMORY_FILENAMES.flatMap((path) => {
+  let remainingChars = MAX_SESSION_MEMORY_TOTAL_CHARS;
+  const files: string[] = [];
+
+  for (const path of SESSION_MEMORY_FILENAMES) {
     const file = project.files[path];
     if (!file || !isWorkspaceTextFile(file)) {
-      return [];
+      continue;
     }
 
-    return [`<${path}>\n${file.content}\n</${path}>`];
-  });
+    const maxChars = Math.min(MAX_SESSION_MEMORY_FILE_CHARS, remainingChars);
+    if (maxChars <= 0) {
+      break;
+    }
+
+    const content = truncateSessionMemory(file.content, maxChars);
+    files.push(`<${path}>\n${content}\n</${path}>`);
+    remainingChars -= content.length;
+  }
 
   if (files.length === 0) {
     return null;

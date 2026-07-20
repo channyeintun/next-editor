@@ -16,6 +16,7 @@ import {
   selectWorkspaceEditorState,
   selectWorkspaceFileCount,
   selectWorkspaceLessonType,
+  selectWorkspaceLoadVersion,
   selectWorkspaceExternalProjectVersion,
   selectWorkspacePreviewVersion,
   selectWorkspaceProjectVersion,
@@ -84,6 +85,10 @@ export const useWorkspaceLessonType = (): WorkspaceLessonType => {
 
 export const useWorkspaceProjectName = (): string => {
   return useWorkspaceSelector("useWorkspaceProjectName", selectWorkspaceProjectName);
+};
+
+export const useWorkspaceLoadVersion = (): number => {
+  return useWorkspaceSelector("useWorkspaceLoadVersion", selectWorkspaceLoadVersion);
 };
 
 export const useWorkspaceProjectVersion = (): number => {

@@ -72,7 +72,9 @@ describe("runtime observation tools", () => {
       width: 1280,
     });
 
-    const result = await makeCapturePreviewTool(ctx).function.execute({});
+    const captureTool = makeCapturePreviewTool(ctx);
+    const input = {};
+    const result = await captureTool.function.execute(input);
 
     expect(result).toEqual([
       {
@@ -85,5 +87,9 @@ describe("runtime observation tools", () => {
         detail: "high",
       },
     ]);
+    expect(await captureTool.function.toModelOutput?.({ input, output: result })).toEqual({
+      type: "content",
+      value: result,
+    });
   });
 });

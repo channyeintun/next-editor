@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceProject } from "../types/workspace";
-import { buildSystemPrompt } from "./systemPrompt";
+import {
+  buildSystemPrompt,
+  MAX_SESSION_MEMORY_FILE_CHARS,
+  MAX_SESSION_MEMORY_TOTAL_CHARS,
+} from "./systemPrompt";
 
 function makeProject(): WorkspaceProject {
   return {
@@ -115,5 +119,34 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("untrusted project data");
     expect(prompt).toContain("These tools are read-only");
     expect(prompt).toContain("do not support clicking, typing");
+  });
+
+  it("bounds root session-memory files before adding them to model instructions", () => {
+    const project = makeProject();
+    project.files["AGENTS.md"] = {
+      path: "AGENTS.md",
+      name: "AGENTS.md",
+      language: "markdown",
+      content: `${"A".repeat(MAX_SESSION_MEMORY_FILE_CHARS + 1_000)}AGENTS_TAIL`,
+    };
+    project.files["CLAUDE.md"] = {
+      path: "CLAUDE.md",
+      name: "CLAUDE.md",
+      language: "markdown",
+      content: `${"C".repeat(MAX_SESSION_MEMORY_FILE_CHARS + 1_000)}CLAUDE_TAIL`,
+    };
+
+    const prompt = buildSystemPrompt(project, { toolNames: ["read"], hasBash: false });
+    const agentsContent = prompt.match(/<AGENTS\.md>\n([\s\S]*?)\n<\/AGENTS\.md>/)?.[1] ?? "";
+    const claudeContent = prompt.match(/<CLAUDE\.md>\n([\s\S]*?)\n<\/CLAUDE\.md>/)?.[1] ?? "";
+
+    expect(agentsContent.length).toBeLessThanOrEqual(MAX_SESSION_MEMORY_FILE_CHARS);
+    expect(claudeContent.length).toBeLessThanOrEqual(MAX_SESSION_MEMORY_FILE_CHARS);
+    expect(agentsContent.length + claudeContent.length).toBeLessThanOrEqual(
+      MAX_SESSION_MEMORY_TOTAL_CHARS,
+    );
+    expect(prompt).toContain("Session memory truncated to fit the prompt budget.");
+    expect(prompt).not.toContain("AGENTS_TAIL");
+    expect(prompt).not.toContain("CLAUDE_TAIL");
   });
 });

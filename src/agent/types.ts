@@ -49,7 +49,7 @@ export interface ToolContext {
 /** Content-array output blocks a tool may return instead of a plain string (e.g. images). */
 export type ToolOutputContent =
   | { type: "input_text"; text: string }
-  | { type: "input_image"; imageUrl: string; detail?: "auto" | "low" | "high" };
+  | { type: "input_image"; imageUrl: string; detail: "auto" | "low" | "high" };
 
 export type CredentialStorage = "memory" | "session" | "local";
 

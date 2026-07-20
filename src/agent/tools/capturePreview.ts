@@ -1,6 +1,7 @@
 import { tool } from "@openrouter/agent";
 import { z } from "zod";
 import type { ToolContext, ToolOutputContent } from "../types";
+import { toRichToolModelOutput } from "./modelOutput";
 
 export function makeCapturePreviewTool(ctx: ToolContext) {
   return tool({
@@ -37,5 +38,6 @@ export function makeCapturePreviewTool(ctx: ToolContext) {
         return `Unable to capture the preview: ${error instanceof Error ? error.message : String(error)}`;
       }
     },
+    toModelOutput: ({ output }) => toRichToolModelOutput(output),
   });
 }

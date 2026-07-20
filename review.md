@@ -126,7 +126,7 @@ The item adapter handles `message`, `function_call`, and `function_call_output` 
 
 ### F15 — SDK-native approval now exists (Info)
 
-Since this feature shipped, the SDK grew first-class `requireApproval` (tool-level and call-level), an `awaiting_approval` pause status with `getPendingToolCalls()` / `approveToolCalls` resumption, and a `StateAccessor` interface for persisting conversation state across reloads. The current hand-rolled gate (promise inside `execute`, [agentLoop.ts:109–122](src/agent/agentLoop.ts#L109)) is sound and has one real advantage — the stream stays open and ungated tools keep running in parallel — so there's no need to migrate. But if you ever want "confirmation survives a page reload" or multi-tool approval batching, the SDK path now exists and would delete code rather than add it. Details in [research.md](research.md).
+Since this feature shipped, the SDK grew first-class `requireApproval` (tool-level and call-level), an `awaiting_approval` pause status with `getPendingToolCalls()` / `approveToolCalls` resumption, and a `StateAccessor` interface for persisting conversation state across reloads. The current hand-rolled gate (promise inside `execute`, [agentLoop.ts:109–122](src/agent/agentLoop.ts#L109)) is sound and has one real advantage — the stream stays open and ungated tools keep running in parallel — so there's no need to migrate. But if you ever want "confirmation survives a page reload" or multi-tool approval batching, the SDK path now exists and would delete code rather than add it.
 
 ## Test coverage assessment
 

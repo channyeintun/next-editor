@@ -56,6 +56,9 @@ export interface ChatContentDelta {
  * in order (src/core/src/machine/replayState/chat.ts).
  */
 export type ChatDelta =
+  // Clear the live/replayed conversation and composer. This is recorded when
+  // the user starts a new chat so playback observes the same boundary.
+  | { k: "reset" }
   // Replace the text currently visible in the prompt composer. Recording this
   // separately from user messages preserves typing before a prompt is sent.
   | { k: "draft"; text: string }
@@ -73,9 +76,9 @@ export type ChatDelta =
   | { k: "status"; status: ChatStatus };
 
 /**
- * Seek keyframe only (frames-style), emitted sparsely — never the recording unit.
- * The `ChatDelta` log alone is authoritative and fully reconstructs the transcript;
- * a checkpoint just lets seeking skip replaying from zero.
+ * A sparse seek keyframe (frames-style), plus the baseline when recording starts
+ * after a conversation already exists. After that initial seed, `ChatDelta`s are
+ * the authoritative recording unit and checkpoints only bound replay work.
  */
 export interface ChatCheckpoint {
   items: ChatItem[];

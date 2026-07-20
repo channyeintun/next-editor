@@ -31,6 +31,9 @@ function lastMessageIndex(items: ChatItem[]): number {
  */
 export function applyChatDelta(state: ChatFoldState, delta: ChatDelta): ChatFoldState {
   switch (delta.k) {
+    case "reset":
+      return INITIAL_CHAT_FOLD_STATE;
+
     case "draft":
       return delta.text === state.draft ? state : { ...state, draft: delta.text };
 

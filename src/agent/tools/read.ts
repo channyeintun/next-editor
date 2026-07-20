@@ -9,6 +9,7 @@ import {
   isWorkspaceAssetFile,
 } from "../../types/workspace";
 import { getWorkspaceAssetBytes } from "../../storage/workspaceAssetStore";
+import { toRichToolModelOutput } from "./modelOutput";
 import { readFile } from "./workspaceFs";
 
 const MAX_LINES = 2000;
@@ -54,7 +55,13 @@ export function makeReadTool(ctx: ToolContext) {
           const content = isWorkspaceAssetFile(file)
             ? bytesToBase64(await getWorkspaceAssetBytes(file.content))
             : file.content;
-          return [{ type: "input_image", imageUrl: `data:${mimeType};base64,${content}` }];
+          return [
+            {
+              type: "input_image",
+              imageUrl: `data:${mimeType};base64,${content}`,
+              detail: "auto",
+            },
+          ];
         }
 
         return `${input.path} is a binary file (${mimeType}) and cannot be displayed as text.`;
@@ -66,5 +73,6 @@ export function makeReadTool(ctx: ToolContext) {
 
       return readText(file.content, input.offset, input.limit);
     },
+    toModelOutput: ({ output }) => toRichToolModelOutput(output),
   });
 }

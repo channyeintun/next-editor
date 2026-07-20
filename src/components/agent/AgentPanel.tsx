@@ -40,6 +40,7 @@ import {
   selectPending,
   startAgentRun,
   stopAgentRun,
+  synchronizeAgentWorkspace,
 } from "../../agent/agentSession";
 import type { CredentialStorage } from "../../agent/types";
 import type { ChatItem, ChatStatus } from "../../types/chat";
@@ -49,6 +50,7 @@ import {
   MAX_CHAT_IMAGES,
 } from "../../agent/imageAttachments";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
+import { useWorkspaceLoadVersion } from "../../hooks/useWorkspace";
 import { usePreviewAdapterHandle } from "../../contexts/PreviewAdapterHandleContext";
 import {
   useWebContainerRuntimeMetadata,
@@ -59,6 +61,7 @@ import {
   fetchOpenRouterModelOptions,
   filterModelOptions,
 } from "../../agent/modelCatalog";
+import { createChatCheckpoint } from "../../agent/chatRecording";
 import { formatToolResultOutput } from "./toolResultOutput";
 
 const STORAGE_OPTIONS: { id: CredentialStorage; label: string; description: string }[] = [
@@ -187,6 +190,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const previewHandle = usePreviewAdapterHandle();
   const runtimeMetadata = useWebContainerRuntimeMetadata();
   const getRuntimeSnapshot = useWebContainerRuntimeSnapshotGetter();
+  const workspaceLoadVersion = useWorkspaceLoadVersion();
 
   const liveItems = useSelector(agentStore, (s) => selectItems(s.context));
   const liveStatus = useSelector(agentStore, (s) => selectStatus(s.context));
@@ -225,11 +229,21 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const hasLoadedModelCatalogRef = useRef(false);
   const runtimeMetadataRef = useRef(runtimeMetadata);
 
-  // Seed the track with a draft that was already present when recording began.
-  // Subsequent edits are captured directly by `applyDraft` below.
+  useEffect(() => {
+    if (!workspaceStore || isReplayActive) {
+      return;
+    }
+
+    if (synchronizeAgentWorkspace(workspaceStore)) {
+      handleChatEvent({ k: "reset" });
+    }
+  }, [handleChatEvent, isReplayActive, workspaceLoadVersion, workspaceStore]);
+
+  // Seed recording with the complete conversation that is already visible.
+  // Subsequent changes are captured as deltas.
   useEffect(() => {
     if (isRecording && !wasRecordingRef.current) {
-      handleChatEvent({ k: "draft", text: agentStore.getSnapshot().context.draft });
+      handleChatEvent({ k: "checkpoint", state: createChatCheckpoint(agentStore) });
     }
     wasRecordingRef.current = isRecording;
   }, [agentStore, handleChatEvent, isRecording]);
@@ -355,10 +369,10 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   };
 
   const handleRetry = () => {
-    if (isBusy || !canRetry || !apiKey || isReplayActive) {
+    if (isBusy || !canRetry || !apiKey || !workspaceStore || isReplayActive) {
       return;
     }
-    void retryAgentRun({ apiKey, model });
+    void retryAgentRun({ apiKey, model, workspace: workspaceStore });
   };
 
   const handleNewChat = () => {
@@ -366,6 +380,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
       return;
     }
     agentStore.trigger.reset();
+    handleChatEvent({ k: "reset" });
     clearAgentRetry();
     setAttachmentError(null);
   };

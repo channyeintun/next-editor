@@ -76,8 +76,21 @@ describe("read tool", () => {
     const asset = await registerWorkspaceAsset(new TextEncoder().encode("hello"), {
       mimeType: "image/png",
     });
-    const result = await read([makeAssetFile("image.png", asset)])({ path: "image.png" });
-    expect(result).toEqual([{ type: "input_image", imageUrl: "data:image/png;base64,aGVsbG8=" }]);
+    const readTool = makeReadTool(makeCtx([makeAssetFile("image.png", asset)]));
+    const input = { path: "image.png" };
+    const result = await readTool.function.execute(input);
+    expect(result).toEqual([
+      {
+        type: "input_image",
+        imageUrl: "data:image/png;base64,aGVsbG8=",
+        detail: "auto",
+      },
+    ]);
+
+    expect(await readTool.function.toModelOutput?.({ input, output: result })).toEqual({
+      type: "content",
+      value: result,
+    });
   });
 
   it("returns a note for non-image binary files", async () => {

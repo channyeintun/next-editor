@@ -17,6 +17,17 @@ function insertDelta(prev: string, next: string) {
 }
 
 describe("applyChatDelta", () => {
+  it("resets transcript, status, and draft at a new-chat boundary", () => {
+    const populated = fold([
+      { k: "draft", text: "next prompt" },
+      { k: "message_start", id: "msg-1", role: "assistant" },
+      { k: "content", delta: insertDelta("", "Existing answer") },
+      { k: "status", status: "done" },
+    ]);
+
+    expect(fold([{ k: "reset" }], populated)).toEqual(INITIAL_CHAT_FOLD_STATE);
+  });
+
   it("tracks prompt composer edits and clearing independently from transcript items", () => {
     const typed = fold([
       { k: "draft", text: "fix" },

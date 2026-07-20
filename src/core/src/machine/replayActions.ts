@@ -95,10 +95,9 @@ export const setRecording = ({
     context.applyRuntimeSnapshot(recording.runtimeSnapshot);
   }
 
-  // A conversation never pre-exists a recording, so the chat panel always starts
-  // empty on load. Resetting here (rather than relying on the first delta) means a
-  // recording with no chat events never shows a previous replay's stale transcript
-  // — `applyChatEventsAtTime` no-ops for chat-less recordings and would leave it.
+  // Reset to an empty baseline before applying the recording's chat track. A
+  // recording that starts with an existing conversation carries it in its first
+  // checkpoint; a chat-less recording must not show a previous replay's transcript.
   if (context.applyChatSnapshot) {
     context.applyChatSnapshot({ items: [], status: "idle" });
   }
@@ -132,8 +131,7 @@ export const setRecording = ({
     lastAppliedWorkspaceEventIndex: initialWorkspaceEvent ? 0 : -1,
     lastAppliedRuntimeEventIndex: initialRuntimeEvent ? 0 : -1,
     lastAppliedWhiteboardEventIndex: -1,
-    // Chat has no time-0 seed (a conversation never pre-exists before a recording
-    // starts), so it always starts folded from empty — no `initialChatEvent` needed.
+    // The chat track folds from empty until its first delta/checkpoint is reached.
     lastAppliedChatEventIndex: -1,
     lastAppliedPreviewState: undefined,
   };
