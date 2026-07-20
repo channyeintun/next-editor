@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
+import Breadcrumb from "./Breadcrumb";
 import Editor from "./Editor";
 import { RecordingStorage } from "../storage/RecordingStorage";
 import type { Recording } from "../core/src";
@@ -99,6 +100,10 @@ export default function CodeRoute() {
   return (
     <>
       <Editor
+        // The landing page's embedded live-demo iframe also loads /code
+        // (?readOnly=true) — a "Lessons" link there would navigate the demo
+        // iframe itself to the gallery, so it keeps the plain "Editor" label.
+        breadcrumb={readOnly ? undefined : <Breadcrumb title="Editor" />}
         renderPostRecordingModal={(ctx) => (
           <UploadLessonModal recording={ctx.recording} onClose={ctx.onClose} />
         )}

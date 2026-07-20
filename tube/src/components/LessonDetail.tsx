@@ -4,7 +4,7 @@ import Editor from "@app/components/Editor";
 import { playbackSettingsStore } from "@app/stores/playbackSettingsStore";
 import type { Lesson } from "../types";
 import { usePlaylist } from "../hooks/usePlaylists";
-import Breadcrumb from "./Breadcrumb";
+import Breadcrumb from "@app/components/Breadcrumb";
 
 interface LessonDetailLocationState {
   /** Set by the "Continue to Next" auto-advance navigation so the next lesson

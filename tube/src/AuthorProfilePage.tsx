@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import Navbar from "@app/components/Navbar";
 import { AuthMenu, avatarProxyUrl, useAuth, useAuthorProfile } from "@next-editor/infra";
-import Breadcrumb from "./components/Breadcrumb";
+import Breadcrumb from "@app/components/Breadcrumb";
 import MyLibraryGrid from "./components/MyLibraryGrid";
 import LessonCard from "./components/LessonCard";
 import PlaylistSummaryCard from "./components/PlaylistSummaryCard";

@@ -1,6 +1,6 @@
 import { ListMusic } from "lucide-react";
 import type { Playlist } from "../types";
-import Breadcrumb from "./Breadcrumb";
+import Breadcrumb from "@app/components/Breadcrumb";
 import LessonCard from "./LessonCard";
 
 export default function PlaylistDetail({ playlist }: { playlist: Playlist }) {
