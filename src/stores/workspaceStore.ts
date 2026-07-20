@@ -63,6 +63,7 @@ export type WorkspaceState =
       collapsedFolders: string[];
       sidebarScrollTop: number;
       projectVersion: number;
+      externalProjectVersion: number;
       treeVersion: number;
       previewVersion: number;
       saveVersion: number;
@@ -81,6 +82,7 @@ export type WorkspaceState =
       sidebarCollapsed: boolean;
       savedSnapshot: StoredWorkspaceSnapshot;
       projectVersion: number;
+      externalProjectVersion: number;
       treeVersion: number;
       previewVersion: number;
       saveVersion: number;
@@ -546,6 +548,7 @@ function createUninitializedWorkspaceState(): WorkspaceState {
     collapsedFolders: [],
     sidebarScrollTop: 0,
     projectVersion: 0,
+    externalProjectVersion: 0,
     treeVersion: 0,
     previewVersion: 0,
     saveVersion: 0,
@@ -585,6 +588,7 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
     sidebarCollapsed,
     savedSnapshot,
     projectVersion: 0,
+    externalProjectVersion: 0,
     treeVersion: 0,
     previewVersion: 0,
     saveVersion: 0,
@@ -1162,6 +1166,9 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             project,
             activeFilePath,
             projectVersion: context.projectVersion + 1,
+            // Marks this project bump as container/collaborator-driven rather than
+            // a local user action, so playback UIs can tell the two apart.
+            externalProjectVersion: context.externalProjectVersion + 1,
             treeVersion,
             previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
@@ -1334,6 +1341,9 @@ export const selectWorkspaceProjectId = (context: WorkspaceState): string =>
 
 export const selectWorkspaceProjectVersion = (context: WorkspaceState): number =>
   context.projectVersion;
+
+export const selectWorkspaceExternalProjectVersion = (context: WorkspaceState): number =>
+  context.externalProjectVersion;
 
 export const selectWorkspaceTreeVersion = (context: WorkspaceState): number => context.treeVersion;
 

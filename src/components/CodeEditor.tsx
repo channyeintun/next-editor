@@ -8,8 +8,6 @@ import {
   useWorkspaceActions,
   useWorkspaceEditorState,
   useWorkspaceLessonType,
-  useWorkspaceProjectVersion,
-  useWorkspaceSidebarState,
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
@@ -39,6 +37,7 @@ import {
 } from "../collaboration/relativePosition";
 import EditorHeader from "./EditorHeader";
 import FileSidebar from "./FileSidebar";
+import { WorkspaceEventRecorder } from "./WorkspaceEventRecorder";
 import BinaryFilePreview from "./BinaryFilePreview";
 import TerminalPanel from "./TerminalPanel";
 import GoPlaygroundRunnerPanel from "./GoPlaygroundRunnerPanel";
@@ -99,51 +98,6 @@ interface CodeEditorProps {
   theme?: string;
   showImportExport?: boolean;
   breadcrumb?: ReactNode;
-}
-
-interface WorkspaceEventRecorderProps {
-  handleWorkspaceEvent: (event?: { sidebarWidthDelta?: number }) => void;
-  shouldTrackWorkspaceChanges: boolean;
-}
-
-function WorkspaceEventRecorder({
-  handleWorkspaceEvent,
-  shouldTrackWorkspaceChanges,
-}: WorkspaceEventRecorderProps) {
-  const sidebarState = useWorkspaceSidebarState();
-  const projectVersion = useWorkspaceProjectVersion();
-  const previousSidebarStateRef = useRef(sidebarState);
-  const previousProjectVersionRef = useRef(projectVersion);
-  const wasTrackingRef = useRef(false);
-
-  useEffect(() => {
-    if (!shouldTrackWorkspaceChanges) {
-      previousSidebarStateRef.current = sidebarState;
-      previousProjectVersionRef.current = projectVersion;
-      wasTrackingRef.current = false;
-      return;
-    }
-
-    if (!wasTrackingRef.current) {
-      previousSidebarStateRef.current = sidebarState;
-      previousProjectVersionRef.current = projectVersion;
-      wasTrackingRef.current = true;
-      return;
-    }
-
-    if (
-      previousSidebarStateRef.current !== sidebarState ||
-      previousProjectVersionRef.current !== projectVersion
-    ) {
-      const sidebarWidthDelta =
-        sidebarState.sidebarWidth - previousSidebarStateRef.current.sidebarWidth;
-      previousSidebarStateRef.current = sidebarState;
-      previousProjectVersionRef.current = projectVersion;
-      handleWorkspaceEvent({ sidebarWidthDelta });
-    }
-  }, [handleWorkspaceEvent, projectVersion, shouldTrackWorkspaceChanges, sidebarState]);
-
-  return null;
 }
 
 type StandaloneEditor = monaco.editor.IStandaloneCodeEditor;
@@ -1368,6 +1322,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     <div className="h-full flex flex-col" data-cursor-replay-target="workspace">
       <WorkspaceEventRecorder
         handleWorkspaceEvent={handleWorkspaceEvent}
+        isRecording={isRecording}
         shouldTrackWorkspaceChanges={isRecording || Boolean(currentRecording)}
       />
       <EditorHeader showImportExport={showImportExport} breadcrumb={breadcrumb} />
