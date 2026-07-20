@@ -9,11 +9,23 @@ import { useWhiteboardStore } from "../contexts/WhiteboardStoreContext";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
 import { markTourSeen } from "../components/tour/productTour";
 import { canonicalJson } from "./hash";
-import type { StudioRuntimeMode } from "./plan";
-import { DEFAULT_STUDIO_PLAN_SLUG, STUDIO_PLANS } from "./plans";
+import { buildPlanFromScript } from "./inPageDirector";
+import type { StudioPlan, StudioRuntimeMode } from "./plan";
+import {
+  DEFAULT_STUDIO_PLAN_SLUG,
+  STUDIO_SOURCES,
+  sourceRuntimeDefault,
+  sourceTitle,
+} from "./plans";
 import type { ActionReceipt, StudioCheckResult } from "./report";
-import { compareRenderSemantics, runStudioRender, type StudioRunResult } from "./runStudioRender";
+import {
+  compareRenderSemantics,
+  runStudioRender,
+  type StudioRenderOptions,
+  type StudioRunResult,
+} from "./runStudioRender";
 import type { RenderSemantics } from "./compare";
+import type { KokoroDevice } from "./tts/kokoroSynth";
 
 /**
  * Dev-only render console for the studio route: prepares the pinned workspace,
@@ -108,6 +120,9 @@ export default function StudioController() {
   const planSlug = searchParams.get("plan") ?? DEFAULT_STUDIO_PLAN_SLUG;
   const requestedMode = searchParams.get("runtime") === "live" ? "live" : null;
   const autostart = searchParams.get("autostart") === "1";
+  // Narration synthesis backend: wasm reproduces bit-identical audio across
+  // runs (repeatability hashes it); webgpu is an opt-in speedup.
+  const ttsDevice: KokoroDevice = searchParams.get("tts") === "webgpu" ? "webgpu" : "wasm";
 
   const [phase, setPhase] = useState<string>("idle");
   const [running, setRunning] = useState(false);
@@ -115,6 +130,7 @@ export default function StudioController() {
   const [latest, setLatest] = useState<StudioRunEntry | null>(runHistory.at(-1) ?? null);
   const [comparison, setComparison] = useState<StudioCheckResult[] | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
+  const [buildWarnings, setBuildWarnings] = useState<string[]>([]);
   const [showDraftModal, setShowDraftModal] = useState(false);
   const runningRef = useRef(false);
 
@@ -135,27 +151,48 @@ export default function StudioController() {
     publishWindowHandle(null, true);
 
     try {
-      const createPlan = STUDIO_PLANS[planSlug];
-      if (!createPlan) {
+      const source = STUDIO_SOURCES[planSlug];
+      if (!source) {
         throw new Error(
-          `Unknown plan "${planSlug}" — available: ${Object.keys(STUDIO_PLANS).join(", ")}`,
+          `Unknown lesson "${planSlug}" — available: ${Object.keys(STUDIO_SOURCES).join(", ")}`,
         );
       }
-      const plan = createPlan();
+
+      // Script sources run the in-page Director first: per-dialog Kokoro
+      // synthesis (cached), joint scheduling, stitching, plan compilation.
+      let plan: StudioPlan;
+      const renderOptions: StudioRenderOptions = {};
+      setBuildWarnings([]);
+      if (source.kind === "script") {
+        const built = await buildPlanFromScript(source.load(), {
+          device: ttsDevice,
+          onPhase: setPhase,
+        });
+        plan = built.plan;
+        renderOptions.narration = built.narration;
+        setBuildWarnings(built.warnings);
+      } else {
+        plan = source.load();
+      }
       const mode: StudioRuntimeMode = requestedMode ?? plan.runtime.defaultMode;
 
-      const result = await runStudioRender(plan, mode, {
-        actor,
-        nextEditor,
-        getEditor: () => nextEditor.editorRef.current,
-        workspace,
-        runtimePanelStore,
-        slidesStore,
-        whiteboardStore,
-        isSignedIn,
-        onPhase: setPhase,
-        onProgress: (receipt) => setReceipts((current) => [...current, receipt]),
-      });
+      const result = await runStudioRender(
+        plan,
+        mode,
+        {
+          actor,
+          nextEditor,
+          getEditor: () => nextEditor.editorRef.current,
+          workspace,
+          runtimePanelStore,
+          slidesStore,
+          whiteboardStore,
+          isSignedIn,
+          onPhase: setPhase,
+          onProgress: (receipt) => setReceipts((current) => [...current, receipt]),
+        },
+        renderOptions,
+      );
 
       const entry: StudioRunEntry = { index: runHistory.length + 1, mode, result };
       runHistory.push(entry);
@@ -203,9 +240,8 @@ export default function StudioController() {
 
   const report = latest?.result.report ?? null;
   const artifacts = latest?.result.artifacts ?? null;
-  const planFactory = STUDIO_PLANS[planSlug];
-  const effectiveModeLabel =
-    requestedMode ?? (planFactory ? planFactory().runtime.defaultMode : "?");
+  const source = STUDIO_SOURCES[planSlug];
+  const effectiveModeLabel = requestedMode ?? (source ? sourceRuntimeDefault(source) : "?");
 
   const downloadBundle = () => {
     if (!latest || !artifacts) {
@@ -307,6 +343,14 @@ export default function StudioController() {
         </p>
       ) : null}
 
+      {buildWarnings.length > 0 ? (
+        <ul className="mt-3 space-y-0.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
+          {buildWarnings.map((warning) => (
+            <li key={warning}>⚠ {warning}</li>
+          ))}
+        </ul>
+      ) : null}
+
       {receipts.length > 0 ? (
         <div className="mt-3">
           <h3 className="font-semibold text-slate-300">Receipts</h3>
@@ -384,7 +428,7 @@ export default function StudioController() {
         <UploadLessonModal
           recording={artifacts.recording}
           onClose={() => setShowDraftModal(false)}
-          initialTitle={STUDIO_PLANS[planSlug] ? STUDIO_PLANS[planSlug]().lesson.title : planSlug}
+          initialTitle={source ? sourceTitle(source) : planSlug}
           initialDescription={`AI-produced draft — rendered unattended by the Next Editor studio (plan ${latest.result.manifest.planSlug}, plan sha256 ${latest.result.manifest.planHash.slice(0, 16)}, ${latest.result.manifest.runtimeMode} runtime). Review the full lesson before publishing.`}
           initialTags="studio, ai-produced"
         />

@@ -1,71 +1,42 @@
 /**
- * Studio Director CLI (docs/agent-lesson-production.md §4/§6, milestone M1).
+ * Studio Director CLI — the build-time half of the Director
+ * (docs/agent-lesson-production.md §4/§6).
  *
- *   bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml
+ *   bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml [...more]
  *
- * Validates a LessonScript, derives display/speech text (markers out, lexicon
- * applied to speech only), synthesizes narration once into the
- * content-addressed cache (macOS `say` + `afconvert`; cache hits skip
- * synthesis entirely), estimates token alignment, builds captions, compiles
- * the absolute-time StudioPlan, and writes it to
- * src/studio/plans/compiled/<slug>.json for the /studio registry.
+ * Validates a LessonScript (schema, marker resolution, dialog segmentation),
+ * runs the advisory critic, and emits the script JSON that the /studio route's
+ * in-page Director consumes (src/studio/plans/scripts/<slug>.json). Narration
+ * synthesis, dialog scheduling, and plan compilation happen in the page at
+ * render time — Kokoro over onnxruntime-web with a per-dialog
+ * content-addressed cache — so this CLI needs no audio toolchain and runs on
+ * any platform.
  *
- * Runs under bun on the macOS workstation only (the one place `say` exists).
  * All pure logic lives in src/studio/** where it is type-checked and tested;
  * this file is the thin I/O shell.
  */
 
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
 import { parseLessonScript } from "../src/studio/script/schema.ts";
-import { displayTextOf, extractNarration } from "../src/studio/script/markers.ts";
-import { LEXICON_V1, speechTextOf } from "../src/studio/script/lexicon.ts";
-import { estimateAlignment } from "../src/studio/script/alignment.ts";
-import { compileLessonScript } from "../src/studio/script/compile.ts";
+import { extractNarration, requireMarker } from "../src/studio/script/markers.ts";
+import { splitIntoDialogs } from "../src/studio/script/dialogs.ts";
 import { critiqueScript } from "../src/studio/script/critic.ts";
-import {
-  requireVoiceProfile,
-  ttsRequestHash,
-  type TtsCacheMeta,
-} from "../src/studio/tts/profiles.ts";
-import { canonicalJson, sha256Hex, sha256HexOfJson, sha256HexOfText } from "../src/studio/hash.ts";
+import { requireVoiceProfile } from "../src/studio/tts/profiles.ts";
+import { canonicalJson, sha256HexOfJson, sha256HexOfText } from "../src/studio/hash.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const cacheDir = join(repoRoot, "public", "studio-fixtures", "cache");
-const compiledDir = join(repoRoot, "src", "studio", "plans", "compiled");
+const emittedDir = join(repoRoot, "src", "studio", "plans", "scripts");
+
+/** Pacing estimate for the critic before any audio exists (~140 spoken wpm). */
+const ESTIMATED_WPM = 140;
 
 function fail(message: string): never {
   console.error(`\nstudio-director: ${message}`);
   process.exit(1);
-}
-
-function measureDurationMs(audioPath: string): number {
-  const output = execFileSync("afinfo", [audioPath], { encoding: "utf8" });
-  const match = output.match(/estimated duration:\s*([0-9.]+)\s*sec/);
-  if (!match) {
-    fail(`afinfo did not report a duration for ${audioPath}`);
-  }
-  return Math.round(Number.parseFloat(match[1]) * 1000);
-}
-
-function synthesize(speechText: string, voice: string, rateWpm: number, outPath: string): void {
-  if (process.platform !== "darwin") {
-    fail(
-      "narration synthesis needs macOS (`say`); run the Director on the workstation or commit the cache from one",
-    );
-  }
-  const tmpAiff = join(tmpdir(), `studio-narration-${Date.now()}.aiff`);
-  try {
-    execFileSync("say", ["-v", voice, "-r", String(rateWpm), "-o", tmpAiff, speechText]);
-    execFileSync("afconvert", ["-f", "m4af", "-d", "aac", "-b", "64000", tmpAiff, outPath]);
-  } finally {
-    rmSync(tmpAiff, { force: true });
-  }
 }
 
 async function directScript(scriptPath: string): Promise<void> {
@@ -75,89 +46,48 @@ async function directScript(scriptPath: string): Promise<void> {
   console.log(`\n▶ ${script.lesson.slug} (${scriptPath})`);
   console.log(`  script sha256 ${scriptHash.slice(0, 16)}…`);
 
-  // ---- Narration: display vs speech text ----------------------------------
+  // Marker resolution + dialog segmentation fail here, before anything renders.
   const extracted = extractNarration(
     script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
   );
-  const displayText = displayTextOf(extracted);
-  const speechText = speechTextOf(extracted.tokens, LEXICON_V1);
-
-  // ---- Synthesize once into the content-addressed cache -------------------
+  for (const scene of script.scenes) {
+    for (const action of scene.actions) {
+      if ("mark" in action.at) {
+        requireMarker(extracted, action.at.mark);
+      }
+    }
+  }
+  const dialogs = splitIntoDialogs(extracted);
   const profile = requireVoiceProfile(script.build.voiceProfile);
-  const requestHash = await ttsRequestHash({
-    profile,
-    speechText,
-    lexiconVersion: LEXICON_V1.version,
-  });
-  mkdirSync(cacheDir, { recursive: true });
-  const audioFile = join(cacheDir, `${requestHash}.m4a`);
-  const metaFile = join(cacheDir, `${requestHash}.json`);
-
-  let meta: TtsCacheMeta;
-  if (existsSync(audioFile) && existsSync(metaFile)) {
-    meta = JSON.parse(readFileSync(metaFile, "utf8")) as TtsCacheMeta;
-    console.log(`  narration cache hit ${requestHash.slice(0, 16)}… (${meta.durationMs}ms)`);
-  } else {
-    console.log(`  synthesizing narration (${profile.providerId}, ${profile.voice})…`);
-    synthesize(speechText, profile.voice, profile.rateWpm, audioFile);
-    const audioBytes = readFileSync(audioFile);
-    meta = {
-      requestHash,
-      profileId: profile.id,
-      providerId: profile.providerId,
-      voice: profile.voice,
-      rateWpm: profile.rateWpm,
-      mimeType: profile.mimeType,
-      durationMs: measureDurationMs(audioFile),
-      audioSha256: await sha256Hex(new Uint8Array(audioBytes)),
-      speechText,
-      lexiconVersion: LEXICON_V1.version,
-      createdAtIso: new Date().toISOString(),
-    };
-    writeFileSync(metaFile, `${JSON.stringify(meta, null, 2)}\n`);
-    console.log(`  cached ${requestHash.slice(0, 16)}… (${meta.durationMs}ms)`);
+  if (profile.providerId !== "kokoro-js") {
+    console.warn(
+      `  ⚠ profile "${profile.id}" is not in-page synthesizable; /studio will reject this script`,
+    );
   }
 
-  // ---- Alignment + captions + compile -------------------------------------
-  const alignment = estimateAlignment(extracted.tokens, meta.durationMs, LEXICON_V1);
-  const { plan, warnings } = compileLessonScript({
-    script,
-    extracted,
-    alignment,
-    narration: {
-      audioPath: `/studio-fixtures/cache/${requestHash}.m4a`,
-      mimeType: profile.mimeType,
-      durationMs: meta.durationMs,
-    },
-  });
-  for (const warning of warnings) {
-    console.warn(`  ⚠ ${warning}`);
-  }
-
-  // ---- Advisory critic (proposes notes; never blocks — §8) ----------------
-  const critique = critiqueScript(script, extracted, meta.durationMs);
+  // Advisory critic (proposes notes; never blocks — §8). Duration estimated;
+  // real pacing lands in the render report once audio exists.
+  const estimatedDurationMs = Math.round((extracted.tokens.length / ESTIMATED_WPM) * 60_000);
+  const critique = critiqueScript(script, extracted, estimatedDurationMs);
   for (const note of critique.notes) {
     console.log(`  ✎ [${note.severity}] ${note.message}`);
   }
 
-  // ---- Emit the compiled plan (stable key order → reproducible bytes) -----
-  mkdirSync(compiledDir, { recursive: true });
-  const planJson = `${JSON.stringify(JSON.parse(canonicalJson(plan)), null, 2)}\n`;
-  const planFile = join(compiledDir, `${script.lesson.slug}.json`);
-  writeFileSync(planFile, planJson);
+  mkdirSync(emittedDir, { recursive: true });
+  const scriptJson = `${JSON.stringify(JSON.parse(canonicalJson(script)), null, 2)}\n`;
+  const scriptFile = join(emittedDir, `${script.lesson.slug}.json`);
+  writeFileSync(scriptFile, scriptJson);
   writeFileSync(
-    join(compiledDir, `${script.lesson.slug}.critique.json`),
+    join(emittedDir, `${script.lesson.slug}.critique.json`),
     `${JSON.stringify(critique, null, 2)}\n`,
   );
 
-  const planHash = await sha256HexOfJson(plan);
+  const emittedHash = await sha256HexOfJson(script);
   console.log(
-    `  display text: ${displayText.split(" ").length} tokens; audio ${meta.durationMs}ms`,
+    `  ${extracted.tokens.length} tokens across ${dialogs.length} dialogs (${script.scenes.length} scenes); ~${Math.round(estimatedDurationMs / 1000)}s estimated`,
   );
-  console.log(`  captions: ${plan.narration.captions.cues.length} cues`);
-  console.log(`  actions: ${plan.actions.length} (incl. derived cursor moves)`);
-  console.log(`  audio sha256 ${meta.audioSha256.slice(0, 16)}…`);
-  console.log(`  plan sha256 ${planHash.slice(0, 16)}… → ${planFile}`);
+  console.log(`  voice profile ${profile.id} (${profile.providerId})`);
+  console.log(`  emitted sha256 ${emittedHash.slice(0, 16)}… → ${scriptFile}`);
 }
 
 const args = process.argv.slice(2);

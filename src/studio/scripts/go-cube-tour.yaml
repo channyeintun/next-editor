@@ -60,7 +60,7 @@ lesson:
       fontSize: 24
 
 build:
-  voiceProfile: say-samantha-v1
+  voiceProfile: kokoro-af-heart-v1
   seed: 7
 
 runtime:

@@ -32,9 +32,18 @@ export class AlignmentError extends Error {
   }
 }
 
-/** Silence the synthesizer adds around the utterance; excluded from token spans. */
+/**
+ * Silence the synthesizer adds around an utterance; excluded from token spans.
+ * The defaults suit a whole-narration `say` file; per-dialog estimation passes
+ * smaller margins since each span is only a sentence or two.
+ */
 const LEAD_SILENCE_MS = 150;
 const TAIL_SILENCE_MS = 300;
+
+export interface AlignmentMargins {
+  leadMs: number;
+  tailMs: number;
+}
 
 const SENTENCE_END_PATTERN = /[.!?:]["')\]]*$/;
 const CLAUSE_END_PATTERN = /[,;]["')\]]*$/;
@@ -60,11 +69,12 @@ export function estimateAlignment(
   tokens: readonly string[],
   audioDurationMs: number,
   lexicon: PronunciationLexicon,
+  margins: AlignmentMargins = { leadMs: LEAD_SILENCE_MS, tailMs: TAIL_SILENCE_MS },
 ): NarrationAlignment {
   if (tokens.length === 0) {
     throw new AlignmentError("Cannot align an empty narration");
   }
-  const usableMs = audioDurationMs - LEAD_SILENCE_MS - TAIL_SILENCE_MS;
+  const usableMs = audioDurationMs - margins.leadMs - margins.tailMs;
   if (!Number.isFinite(usableMs) || usableMs <= 0) {
     throw new AlignmentError(`Audio too short to align: ${audioDurationMs}ms`);
   }
@@ -73,11 +83,11 @@ export function estimateAlignment(
   const totalWeight = weights.reduce((total, weight) => total + weight, 0);
 
   const aligned: AlignedToken[] = [];
-  let cursorMs = LEAD_SILENCE_MS;
+  let cursorMs = margins.leadMs;
   let consumedWeight = 0;
   for (let i = 0; i < tokens.length; i++) {
     consumedWeight += weights[i];
-    const endMs = Math.round(LEAD_SILENCE_MS + (usableMs * consumedWeight) / totalWeight);
+    const endMs = Math.round(margins.leadMs + (usableMs * consumedWeight) / totalWeight);
     aligned.push({ text: tokens[i], startMs: Math.round(cursorMs), endMs });
     cursorMs = endMs;
   }

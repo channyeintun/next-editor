@@ -96,10 +96,20 @@ const FINALIZE_GRACE_MS = 10_000;
 /** Max drift tolerated between the fetched audio and the plan's pinned duration. */
 const AUDIO_DURATION_TOLERANCE_MS = 1_500;
 
+export interface StudioRenderOptions {
+  /**
+   * In-memory narration from the in-page Director (per-dialog Kokoro
+   * synthesis). When present the plan's audioPath is not fetched — the studio
+   * synthesized these exact bytes for this plan.
+   */
+  narration?: { blob: Blob; bytes: Uint8Array };
+}
+
 export async function runStudioRender(
   plan: StudioPlan,
   runtimeMode: StudioRuntimeMode,
   deps: StudioRunDeps,
+  options: StudioRenderOptions = {},
 ): Promise<StudioRunResult> {
   const startedAtIso = new Date().toISOString();
   const wallStart = performance.now();
@@ -141,23 +151,29 @@ export async function runStudioRender(
   }
 
   let audioBytes: Uint8Array;
-  try {
-    const response = await fetch(plan.narration.audioPath, { signal });
-    if (!response.ok) {
+  let audioBlob: Blob;
+  if (options.narration) {
+    audioBytes = options.narration.bytes;
+    audioBlob = options.narration.blob;
+  } else {
+    try {
+      const response = await fetch(plan.narration.audioPath, { signal });
+      if (!response.ok) {
+        return failedResult(
+          `Narration fetch failed: HTTP ${response.status} for ${plan.narration.audioPath}`,
+        );
+      }
+      audioBytes = new Uint8Array(await response.arrayBuffer());
+    } catch (error) {
       return failedResult(
-        `Narration fetch failed: HTTP ${response.status} for ${plan.narration.audioPath}`,
+        `Narration fetch failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    audioBytes = new Uint8Array(await response.arrayBuffer());
-  } catch (error) {
-    return failedResult(
-      `Narration fetch failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    audioBlob = new Blob([audioBytes.slice() as BlobPart], {
+      type: plan.narration.mimeType,
+    });
   }
   audioHash = await sha256Hex(audioBytes);
-  const audioBlob = new Blob([audioBytes.slice() as BlobPart], {
-    type: plan.narration.mimeType,
-  });
 
   // ---- Pin the workspace + surface assets ----------------------------------
   phase("prepare-workspace");

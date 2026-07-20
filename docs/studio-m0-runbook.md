@@ -76,27 +76,38 @@ revisions, and brief→draft lead time. Report p50/p95 across pilots before
 scaling. The remaining M4 exit criterion is human: watch all three pilots,
 rate them, log correction time, and decide scale / revise / stop.
 
-## Authoring a lesson (M1 path)
+## Authoring a lesson
 
 ```text
 src/studio/scripts/<slug>.yaml        # LessonScript: scenes, narration + [[mark:x]], actions
 bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml
 ```
 
-The Director validates the script (`src/studio/script/schema.ts`), strips markers
-into a token map, applies the versioned pronunciation lexicon to the **speech**
-text only, synthesizes narration once into the content-addressed cache
-(`public/studio-fixtures/cache/<requestHash>.{m4a,json}` — cache hits skip
-synthesis and reproduce identical media hashes), estimates token alignment,
-derives captions and the attention-cursor choreography, and writes the compiled
-plan to `src/studio/plans/compiled/<slug>.json`. Register new slugs in
+The Director CLI validates the script (`src/studio/script/schema.ts`), checks
+marker resolution and dialog segmentation, runs the advisory critic, and emits
+`src/studio/plans/scripts/<slug>.json` (+ critique). Register new slugs in
 `src/studio/plans/index.ts`, then render at `/studio?plan=<slug>`.
 
+Narration is produced **in the page** at render time by the in-page Director
+(`src/studio/inPageDirector.ts`): the narration splits at every `[[mark:…]]`
+into dialogs; each dialog synthesizes with **Kokoro-82M over onnxruntime-web**
+(WASM by default — bit-reproducible; `?tts=webgpu` opts into the faster
+backend) through a per-dialog content-addressed cache in the browser's Cache
+storage; the scheduler then places dialogs **around the actions** (narration
+waits while typing finishes — marker times are exact by construction, no
+word-level alignment in the timing path) and stitches the segments into the
+single WAV the recorder consumes. Editing one sentence re-synthesizes only
+that dialog. The ~90MB model downloads once into the browser cache; the repo
+carries no narration audio (the archived M0 fixture aside).
+
 Anchors are narration-relative only (`{mark, offsetMs}`, `{scene: start}`,
-`{afterAction}`); absolute times are forbidden in scripts. Impossible overlaps,
-unknown marks, and actions past the narration end fail at compile time with the
-offset to fix — never mid-render. Narration synthesis runs on macOS
-(`say`/`afconvert`); commit the cache so other machines build from it.
+`{afterAction}`); absolute times are forbidden in scripts. Unknown marks fail
+in the CLI; overlaps and out-of-bounds times fail in-page at compile, before
+any recording starts. The scheduler warns when actions force more than ~2.5s
+of inserted silence — add narration there or shorten the action. The lexicon
+applies to speech text only; word timings inside a dialog remain estimated
+(bounded by that dialog's few seconds), while cue-level caption timing is
+exact.
 
 ## Running a render
 

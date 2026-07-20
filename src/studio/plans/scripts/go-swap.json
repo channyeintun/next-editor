@@ -1,0 +1,127 @@
+{
+  "build": {
+    "seed": 11,
+    "voiceProfile": "kokoro-af-heart-v1"
+  },
+  "checks": [
+    {
+      "max": 300,
+      "type": "timing.p95Ms"
+    }
+  ],
+  "lesson": {
+    "locale": "en-US",
+    "slides": [],
+    "slug": "go-swap",
+    "title": "Two return values, one swap",
+    "whiteboardAssets": [],
+    "workspace": {
+      "entryFilePath": "main.go",
+      "files": {
+        "main.go": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\ta, b := \"tea\", \"coffee\"\n\tfmt.Println(a, b)\n}\n"
+      },
+      "lessonType": "go",
+      "name": "Go Lesson"
+    }
+  },
+  "runtime": {
+    "defaultMode": "fixture",
+    "fixture": {
+      "latencyMs": 1200,
+      "result": {
+        "exitCode": 0,
+        "output": "tea coffee\ncoffee tea\n",
+        "status": "success"
+      },
+      "transientErrorKinds": []
+    },
+    "kind": "go-playground"
+  },
+  "scenes": [
+    {
+      "actions": [
+        {
+          "at": {
+            "mark": "type-swap",
+            "offsetMs": -600
+          },
+          "cadence": "fast-explainer",
+          "id": "type-swap",
+          "target": {
+            "after": "import \"fmt\"\n\n",
+            "file": "main.go",
+            "occurrence": 1
+          },
+          "text": "func swap(a, b string) (string, string) {\n\treturn b, a\n}\n\n",
+          "timeoutMs": 10000,
+          "type": "editor.type"
+        }
+      ],
+      "id": "swap-function",
+      "narration": "Go functions can return two values at once. [[mark:type-swap]] Swap takes two strings, and returns them in reverse order. No temporary variable, and no tuple type; the function signature declares both results.\n",
+      "sources": [
+        {
+          "title": "A Tour of Go — Multiple results",
+          "url": "https://go.dev/tour/basics/6"
+        }
+      ]
+    },
+    {
+      "actions": [
+        {
+          "at": {
+            "mark": "type-call",
+            "offsetMs": -300
+          },
+          "cadence": "fast-explainer",
+          "id": "type-call",
+          "target": {
+            "after": "\tfmt.Println(a, b)\n",
+            "file": "main.go",
+            "occurrence": 1
+          },
+          "text": "\n\ta, b = swap(a, b)\n\tfmt.Println(a, b)\n",
+          "timeoutMs": 10000,
+          "type": "editor.type"
+        },
+        {
+          "at": {
+            "mark": "run",
+            "offsetMs": 1600
+          },
+          "id": "run",
+          "timeoutMs": 15000,
+          "type": "runtime.run"
+        },
+        {
+          "at": {
+            "afterAction": "run"
+          },
+          "contains": "coffee tea",
+          "id": "expect-output",
+          "timeoutMs": 6000,
+          "type": "expect.output"
+        },
+        {
+          "at": {
+            "afterAction": "run"
+          },
+          "contains": "swap(a, b)",
+          "id": "expect-file-main",
+          "path": "main.go",
+          "timeoutMs": 10000,
+          "type": "expect.file"
+        }
+      ],
+      "id": "call-and-run",
+      "narration": "[[mark:type-call]] Assign both results at once, and print again. [[mark:run]] Run it, and tea and coffee trade places.\n",
+      "sources": [
+        {
+          "title": "The Go Programming Language Specification — Assignment statements",
+          "url": "https://go.dev/ref/spec#Assignment_statements"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 1
+}

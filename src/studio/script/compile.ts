@@ -81,7 +81,24 @@ function targetsEqual(left: StudioTargetRef, right: StudioTargetRef): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function typingDurationOf(action: ScriptAction, seed: number): number {
+/**
+ * Typing seeds are `build.seed + authored index` in scene order. Exported so
+ * the dialog scheduler derives byte-identical chunk schedules to the ones this
+ * compiler materializes — the two must never disagree about typing durations.
+ */
+export function typingSeedsOf(script: LessonScript): Map<string, number> {
+  const seeds = new Map<string, number>();
+  let actionIndex = 0;
+  for (const scene of script.scenes) {
+    for (const action of scene.actions) {
+      seeds.set(action.id, script.build.seed + actionIndex);
+      actionIndex += 1;
+    }
+  }
+  return seeds;
+}
+
+export function typingDurationOf(action: ScriptAction, seed: number): number {
   if (action.type !== "editor.type") {
     return 0;
   }
@@ -148,14 +165,7 @@ export function compileLessonScript({
   authored.sort((left, right) => left.at - right.at);
 
   // ---- Typing seeds (stable per authored order) + typing end times ---------
-  const typingSeed = new Map<string, number>();
-  let actionIndex = 0;
-  for (const scene of script.scenes) {
-    for (const action of scene.actions) {
-      typingSeed.set(action.id, script.build.seed + actionIndex);
-      actionIndex += 1;
-    }
-  }
+  const typingSeed = typingSeedsOf(script);
 
   // ---- Attention cursor choreography (§7) ----------------------------------
   const random = createSeededRandom(script.build.seed ^ 0x5f3759df);

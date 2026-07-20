@@ -1,0 +1,255 @@
+{
+  "build": {
+    "seed": 7,
+    "voiceProfile": "kokoro-af-heart-v1"
+  },
+  "checks": [
+    {
+      "max": 300,
+      "type": "timing.p95Ms"
+    }
+  ],
+  "lesson": {
+    "locale": "en-US",
+    "slides": [
+      {
+        "content": "# Cube a number\n\n`cube(v) = v × v × v`\n\nOne function, one extra multiply.\n",
+        "contentType": "markdown",
+        "id": "intro",
+        "name": "Cube a number"
+      }
+    ],
+    "slug": "go-cube-tour",
+    "title": "Cube a number in Go — full-surface tour",
+    "whiteboardAssets": [
+      {
+        "backgroundColor": "transparent",
+        "fontSize": 20,
+        "height": 150,
+        "id": "cube-box",
+        "kind": "rectangle",
+        "strokeColor": "#7dd3fc",
+        "width": 420,
+        "x": 320,
+        "y": 200
+      },
+      {
+        "backgroundColor": "transparent",
+        "fontSize": 24,
+        "height": 40,
+        "id": "cube-label",
+        "kind": "text",
+        "strokeColor": "#e2e8f0",
+        "text": "cube = value × value × value",
+        "width": 360,
+        "x": 350,
+        "y": 250
+      }
+    ],
+    "workspace": {
+      "entryFilePath": "main.go",
+      "files": {
+        "main.go": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"Hello, Go lessons!\")\n\n\tfor i := 1; i <= 5; i++ {\n\t\tfmt.Printf(\"%d squared is %d\\n\", i, square(i))\n\t}\n}\n",
+        "square.go": "package main\n\nfunc square(value int) int {\n\treturn value * value\n}\n"
+      },
+      "lessonType": "go",
+      "name": "Go Lesson"
+    }
+  },
+  "runtime": {
+    "defaultMode": "fixture",
+    "fixture": {
+      "latencyMs": 1200,
+      "result": {
+        "exitCode": 0,
+        "output": "Hello, Go lessons!\n1 squared is 1\n2 squared is 4\n3 squared is 9\n4 squared is 16\n5 squared is 25\n3 cubed is 27\n",
+        "status": "success"
+      },
+      "transientErrorKinds": ["unavailable"]
+    },
+    "kind": "go-playground"
+  },
+  "scenes": [
+    {
+      "actions": [
+        {
+          "at": {
+            "mark": "slide",
+            "offsetMs": 0
+          },
+          "id": "show-intro",
+          "maximized": true,
+          "slideId": "intro",
+          "timeoutMs": 10000,
+          "type": "slide.show"
+        },
+        {
+          "at": {
+            "mark": "slide-close",
+            "offsetMs": 0
+          },
+          "id": "close-intro",
+          "timeoutMs": 10000,
+          "type": "slide.close"
+        }
+      ],
+      "id": "concept",
+      "narration": "Here's today's one idea: cubing a number. [[mark:slide]] A cube is just a value multiplied by itself twice more, value, times value, times value. [[mark:slide-close]] Let's build it in Go.\n",
+      "sources": [
+        {
+          "title": "A Tour of Go — Functions",
+          "url": "https://go.dev/tour/basics/4"
+        }
+      ]
+    },
+    {
+      "actions": [
+        {
+          "at": {
+            "mark": "board",
+            "offsetMs": 0
+          },
+          "id": "open-board",
+          "open": true,
+          "timeoutMs": 10000,
+          "type": "whiteboard.apply",
+          "upsertIds": ["cube-box"]
+        },
+        {
+          "at": {
+            "mark": "board-label",
+            "offsetMs": 0
+          },
+          "id": "label-board",
+          "timeoutMs": 10000,
+          "type": "whiteboard.apply",
+          "upsertIds": ["cube-label"]
+        },
+        {
+          "at": {
+            "mark": "board-close",
+            "offsetMs": 0
+          },
+          "id": "close-board",
+          "open": false,
+          "timeoutMs": 10000,
+          "type": "whiteboard.apply",
+          "upsertIds": []
+        }
+      ],
+      "id": "sketch",
+      "narration": "[[mark:board]] Sketch it first. Square multiplies a value by itself once; [[mark:board-label]] cube adds one more multiplication. Same shape, one extra step. [[mark:board-close]] Now the code.\n",
+      "sources": [
+        {
+          "title": "The Go Programming Language Specification — Arithmetic operators",
+          "url": "https://go.dev/ref/spec#Arithmetic_operators"
+        }
+      ]
+    },
+    {
+      "actions": [
+        {
+          "at": {
+            "mark": "open-square",
+            "offsetMs": 0
+          },
+          "id": "open-square",
+          "path": "square.go",
+          "timeoutMs": 10000,
+          "type": "workspace.openFile"
+        },
+        {
+          "at": {
+            "mark": "type-cube",
+            "offsetMs": -400
+          },
+          "cadence": "fast-explainer",
+          "id": "type-cube",
+          "target": {
+            "after": "\treturn value * value\n}\n",
+            "file": "square.go",
+            "occurrence": 1
+          },
+          "text": "\nfunc cube(value int) int {\n\treturn value * value * value\n}\n",
+          "timeoutMs": 10000,
+          "type": "editor.type"
+        }
+      ],
+      "id": "helpers",
+      "narration": "[[mark:open-square]] Square lives in its own file, and any file in the package can call it. [[mark:type-cube]] Add cube right beside it, multiplying value three times.\n",
+      "sources": [
+        {
+          "title": "The Go Programming Language Specification — Declarations and scope",
+          "url": "https://go.dev/ref/spec#Declarations_and_scope"
+        }
+      ]
+    },
+    {
+      "actions": [
+        {
+          "at": {
+            "mark": "open-main",
+            "offsetMs": 400
+          },
+          "id": "open-main",
+          "path": "main.go",
+          "timeoutMs": 10000,
+          "type": "workspace.openFile"
+        },
+        {
+          "at": {
+            "mark": "open-main",
+            "offsetMs": 800
+          },
+          "cadence": "fast-explainer",
+          "id": "type-call",
+          "target": {
+            "after": ", square(i))\n\t}\n",
+            "file": "main.go",
+            "occurrence": 1
+          },
+          "text": "\n\tfmt.Println(\"3 cubed is\", cube(3))\n",
+          "timeoutMs": 10000,
+          "type": "editor.type"
+        },
+        {
+          "at": {
+            "mark": "run",
+            "offsetMs": 1200
+          },
+          "id": "run",
+          "timeoutMs": 15000,
+          "type": "runtime.run"
+        },
+        {
+          "at": {
+            "afterAction": "run"
+          },
+          "contains": "3 cubed is 27",
+          "id": "expect-output",
+          "timeoutMs": 8000,
+          "type": "expect.output"
+        },
+        {
+          "at": {
+            "afterAction": "run"
+          },
+          "contains": "cube(3)",
+          "id": "expect-file-main",
+          "path": "main.go",
+          "timeoutMs": 10000,
+          "type": "expect.file"
+        }
+      ],
+      "id": "call-and-run",
+      "narration": "[[mark:open-main]] Now call cube from main, and print the result. [[mark:run]] Run it. If the Playground hiccups, the studio retries once, quietly. And there it is at the end: three cubed is twenty seven.\n",
+      "sources": [
+        {
+          "title": "Go Playground — About",
+          "url": "https://go.dev/play/"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 1
+}
