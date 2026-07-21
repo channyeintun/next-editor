@@ -31,6 +31,12 @@ export type TypingCadence =
       lineBreakPauseMs: number;
       /** ±fraction of jitter applied to each chunk delay (0 disables). */
       jitter: number;
+      /**
+       * Press Enter first: insert the text's trailing newline(s) before typing
+       * the body, so existing code moves to the next line instead of sitting
+       * glued to the end of the line being typed.
+       */
+      openLineFirst?: boolean;
     }
   | {
       /** Incremental reveal: whole lines appear one at a time — no keystrokes. */
@@ -40,6 +46,7 @@ export type TypingCadence =
       /** Additional per-character reading time added to each line's pause. */
       msPerChar: number;
       jitter: number;
+      openLineFirst?: boolean;
     }
   | {
       /** The whole insertion appears at once after a beat. */
@@ -54,6 +61,7 @@ export const NATURAL_CADENCE: TypingCadence = {
   maxChunkChars: 3,
   lineBreakPauseMs: 380,
   jitter: 0.35,
+  openLineFirst: true,
 };
 
 /** Brisker keystrokes for dense lessons — still far from teleporting text. */
@@ -63,6 +71,7 @@ export const FAST_EXPLAINER_CADENCE: TypingCadence = {
   maxChunkChars: 4,
   lineBreakPauseMs: 260,
   jitter: 0.25,
+  openLineFirst: true,
 };
 
 /** Incremental reveal: code lands line by line at reading pace. */
@@ -71,6 +80,7 @@ export const LINE_BY_LINE_CADENCE: TypingCadence = {
   linePauseMs: 500,
   msPerChar: 14,
   jitter: 0.2,
+  openLineFirst: true,
 };
 
 /** No animation: the block appears whole after a short beat. */
@@ -98,22 +108,45 @@ export function compileTypingChunks(
     return [{ delayMs: Math.max(8, cadence.pauseMs), text }];
   }
 
+  // "Open the line first": when the insertion ends in newline(s), press Enter
+  // up front — the trailing newlines land at the anchor before any body text,
+  // so code already sitting there moves to the next line the way a developer
+  // would move it, instead of trailing the line being typed. The body chunks
+  // then carry their position within the final text (offsetInText) so the
+  // driver can place them back in front of those newlines.
+  const trailing = /\n+$/.exec(text)?.[0] ?? "";
+  const body = text.slice(0, text.length - trailing.length);
+  const openFirst = Boolean(cadence.openLineFirst) && trailing.length > 0 && body.length > 0;
+
   const random = createSeededRandom(seed);
   const chunks: TypingChunk[] = [];
+  const chunkSource = openFirst ? body : text;
+
+  if (openFirst) {
+    const enterPauseMs = cadence.mode === "lines" ? cadence.linePauseMs : cadence.lineBreakPauseMs;
+    chunks.push({
+      delayMs: Math.max(8, enterPauseMs),
+      text: trailing,
+      offsetInText: body.length,
+    });
+  }
+
+  const withOffset = (chunk: TypingChunk, index: number): TypingChunk =>
+    openFirst ? { ...chunk, offsetInText: index } : chunk;
 
   if (cadence.mode === "lines") {
     let index = 0;
-    while (index < text.length) {
-      const newlineIndex = text.indexOf("\n", index);
-      const lineEnd = newlineIndex === -1 ? text.length : newlineIndex + 1;
-      const lineText = text.slice(index, lineEnd);
+    while (index < chunkSource.length) {
+      const newlineIndex = chunkSource.indexOf("\n", index);
+      const lineEnd = newlineIndex === -1 ? chunkSource.length : newlineIndex + 1;
+      const lineText = chunkSource.slice(index, lineEnd);
       const visibleChars = lineText.replace(/\s+/g, "").length;
       const jitterFactor = 1 + (random() * 2 - 1) * cadence.jitter;
       const delayMs = Math.max(
         8,
         Math.round((cadence.linePauseMs + visibleChars * cadence.msPerChar) * jitterFactor),
       );
-      chunks.push({ delayMs, text: lineText });
+      chunks.push(withOffset({ delayMs, text: lineText }, index));
       index = lineEnd;
     }
     return chunks;
@@ -121,11 +154,11 @@ export function compileTypingChunks(
 
   const baseDelayMs = (1000 / cadence.charsPerSecond) * cadence.maxChunkChars;
   let index = 0;
-  while (index < text.length) {
-    const newlineIndex = text.indexOf("\n", index);
-    const lineEnd = newlineIndex === -1 ? text.length : newlineIndex + 1;
+  while (index < chunkSource.length) {
+    const newlineIndex = chunkSource.indexOf("\n", index);
+    const lineEnd = newlineIndex === -1 ? chunkSource.length : newlineIndex + 1;
     const chunkEnd = Math.min(index + cadence.maxChunkChars, lineEnd);
-    const chunkText = text.slice(index, chunkEnd);
+    const chunkText = chunkSource.slice(index, chunkEnd);
 
     const jitterFactor = 1 + (random() * 2 - 1) * cadence.jitter;
     const scaledDelay = baseDelayMs * (chunkText.length / cadence.maxChunkChars) * jitterFactor;
@@ -135,11 +168,46 @@ export function compileTypingChunks(
       Math.round(scaledDelay) + (endsLine ? cadence.lineBreakPauseMs : 0),
     );
 
-    chunks.push({ delayMs, text: chunkText });
+    chunks.push(withOffset({ delayMs, text: chunkText }, index));
     index = chunkEnd;
   }
 
   return chunks;
+}
+
+/**
+ * Model-offset placement for a chunk sequence: each chunk (in time order)
+ * lands at anchor + the total length of already-inserted chunks positioned
+ * before it in the final text. `expectedText` is the final inserted span.
+ */
+export function chunkPlacements(chunks: readonly TypingChunk[]): {
+  relativeOffsets: number[];
+  expectedText: string;
+} {
+  let cumulative = 0;
+  const positioned = chunks.map((chunk) => {
+    const offsetInText = chunk.offsetInText ?? cumulative;
+    cumulative += chunk.text.length;
+    return { chunk, offsetInText };
+  });
+
+  const relativeOffsets: number[] = [];
+  const inserted: { offsetInText: number; length: number }[] = [];
+  for (const entry of positioned) {
+    let before = 0;
+    for (const done of inserted) {
+      if (done.offsetInText < entry.offsetInText) before += done.length;
+    }
+    relativeOffsets.push(before);
+    inserted.push({ offsetInText: entry.offsetInText, length: entry.chunk.text.length });
+  }
+
+  const expectedText = [...positioned]
+    .sort((left, right) => left.offsetInText - right.offsetInText)
+    .map((entry) => entry.chunk.text)
+    .join("");
+
+  return { relativeOffsets, expectedText };
 }
 
 export function totalTypingDurationMs(chunks: readonly TypingChunk[]): number {

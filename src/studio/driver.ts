@@ -8,7 +8,7 @@ import type { SlideEvent } from "../core/src/slides";
 import type { WhiteboardEvent } from "../core/src/whiteboard";
 import { isWorkspaceTextFile } from "../types/workspace";
 import { StudioActionError, abortableSleep, resolveAnchorOffset, waitUntil } from "./async";
-import { easeInOutCubic } from "./cadence";
+import { chunkPlacements, easeInOutCubic } from "./cadence";
 import {
   PlaygroundTerminalError,
   preparePlaygroundRun,
@@ -172,10 +172,14 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       );
       editor.revealPositionInCenterIfOutsideViewport(startPosition);
 
-      let insertOffset = startOffset;
-      for (const chunk of chunks) {
+      // Chunks may land out of text order (offsetInText — e.g. the Enter
+      // press that opens the line before its body is typed), so each chunk's
+      // model offset is derived from what is already inserted before it.
+      const { relativeOffsets, expectedText } = chunkPlacements(chunks);
+      for (const [index, chunk] of chunks.entries()) {
         await abortableSleep(chunk.delayMs, signal);
         const { editor: liveEditor, model: liveModel } = requireEditorForPath(path);
+        const insertOffset = startOffset + relativeOffsets[index];
         const position = liveModel.getPositionAt(insertOffset);
         // executeEdits (not the "type" command) so auto-closing pairs and
         // auto-indent cannot alter the planned text; it still flows through
@@ -196,15 +200,14 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         if (!applied) {
           throw new StudioActionError(`Monaco rejected an edit in "${path}"`);
         }
-        insertOffset += chunk.text.length;
-        const caret = liveModel.getPositionAt(insertOffset);
+        const caret = liveModel.getPositionAt(insertOffset + chunk.text.length);
         liveEditor.setSelection(
           new monaco.Selection(caret.lineNumber, caret.column, caret.lineNumber, caret.column),
         );
         liveEditor.revealPositionInCenterIfOutsideViewport(caret);
       }
 
-      const expected = chunks.map((chunk) => chunk.text).join("");
+      const expected = expectedText;
       const { model: finalModel } = requireEditorForPath(path);
       const inserted = finalModel.getValue().slice(startOffset, startOffset + expected.length);
       if (inserted !== expected) {

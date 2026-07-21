@@ -4,6 +4,7 @@ import {
   FAST_EXPLAINER_CADENCE,
   LINE_BY_LINE_CADENCE,
   NATURAL_CADENCE,
+  chunkPlacements,
   compileTypingChunks,
   createSeededRandom,
   easeInOutCubic,
@@ -11,6 +12,11 @@ import {
 } from "./cadence";
 
 const SAMPLE = "func cube(v int) int {\n\treturn v * v * v\n}\n";
+
+/** The final inserted text, independent of the order chunks land in. */
+function reassembled(chunks: ReturnType<typeof compileTypingChunks>): string {
+  return chunkPlacements(chunks).expectedText;
+}
 
 describe("compileTypingChunks (chars mode)", () => {
   it("is deterministic for the same seed and diverges across seeds", () => {
@@ -24,7 +30,29 @@ describe("compileTypingChunks (chars mode)", () => {
 
   it("reassembles exactly the input text", () => {
     const chunks = compileTypingChunks(SAMPLE, FAST_EXPLAINER_CADENCE, 7);
-    expect(chunks.map((chunk) => chunk.text).join("")).toBe(SAMPLE);
+    expect(reassembled(chunks)).toBe(SAMPLE);
+  });
+
+  it("presses Enter first so existing code moves to the next line", () => {
+    const chunks = compileTypingChunks(SAMPLE, NATURAL_CADENCE, 7);
+    // The trailing newline lands before any body text is typed…
+    expect(chunks[0].text).toBe("\n");
+    expect(chunks[0].offsetInText).toBe(SAMPLE.length - 1);
+    // …and body chunks land back in front of it, at their text positions.
+    const { relativeOffsets, expectedText } = chunkPlacements(chunks);
+    expect(relativeOffsets[0]).toBe(0);
+    expect(relativeOffsets[1]).toBe(0);
+    expect(expectedText).toBe(SAMPLE);
+  });
+
+  it("keeps legacy sequential chunking for cadences without openLineFirst", () => {
+    const legacy = compileTypingChunks(
+      SAMPLE,
+      { mode: "chars", charsPerSecond: 16, maxChunkChars: 4, lineBreakPauseMs: 200, jitter: 0.25 },
+      7,
+    );
+    expect(legacy.every((chunk) => chunk.offsetInText === undefined)).toBe(true);
+    expect(legacy.map((chunk) => chunk.text).join("")).toBe(SAMPLE);
   });
 
   it("never spans a newline inside one chunk", () => {
@@ -50,11 +78,13 @@ describe("compileTypingChunks (chars mode)", () => {
 });
 
 describe("compileTypingChunks (lines mode)", () => {
-  it("emits exactly one chunk per line — an incremental reveal", () => {
+  it("emits one chunk per line after the opening Enter — an incremental reveal", () => {
     const chunks = compileTypingChunks(SAMPLE, LINE_BY_LINE_CADENCE, 7);
-    expect(chunks).toHaveLength(3);
-    expect(chunks.map((chunk) => chunk.text).join("")).toBe(SAMPLE);
-    for (const chunk of chunks) {
+    // Enter chunk first, then one chunk per body line.
+    expect(chunks).toHaveLength(4);
+    expect(chunks[0].text).toBe("\n");
+    expect(reassembled(chunks)).toBe(SAMPLE);
+    for (const chunk of chunks.slice(1, -1)) {
       expect(chunk.text.endsWith("\n")).toBe(true);
       expect(chunk.delayMs).toBeGreaterThan(0);
     }
@@ -63,7 +93,8 @@ describe("compileTypingChunks (lines mode)", () => {
   it("gives longer lines longer pauses", () => {
     const cadence = { ...LINE_BY_LINE_CADENCE, jitter: 0 } as typeof LINE_BY_LINE_CADENCE;
     const chunks = compileTypingChunks("short\nmuch longer line of code here\n", cadence, 7);
-    expect(chunks[1].delayMs).toBeGreaterThan(chunks[0].delayMs);
+    // chunks[0] is the opening Enter; compare the two body lines.
+    expect(chunks[2].delayMs).toBeGreaterThan(chunks[1].delayMs);
   });
 
   it("is deterministic per seed", () => {

@@ -82,9 +82,8 @@ scenes:
       - title: "The Rust Book — Variables and Data Interacting with Move"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-move"
     actions:
-      - id: close-rules
-        type: slide.close
-        at: { scene: start }
+      # No close first — showing another slide while one is open advances the
+      # deck in place, like moving to the next slide.
       - id: show-error
         type: slide.show
         at: { mark: show-error }

@@ -49,10 +49,17 @@ export const textAnchorSchema = z.object({
 });
 export type TextAnchor = z.infer<typeof textAnchorSchema>;
 
-/** One pre-compiled typing burst: wait `delayMs` since the previous chunk, then insert `text`. */
+/**
+ * One pre-compiled typing burst: wait `delayMs` since the previous chunk, then
+ * insert `text`. Chunks normally land in text order; `offsetInText` (the
+ * chunk's position within the action's final inserted text) lets a chunk land
+ * out of order — used to press Enter first so existing code moves to the next
+ * line before any characters are typed in front of it.
+ */
 export const typingChunkSchema = z.object({
   delayMs: nonNegativeMs,
   text: z.string().min(1),
+  offsetInText: z.number().int().nonnegative().optional(),
 });
 export type TypingChunk = z.infer<typeof typingChunkSchema>;
 
