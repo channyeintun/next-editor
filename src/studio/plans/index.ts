@@ -5,8 +5,7 @@ import { parseLessonScript, type LessonScript } from "../script/schema";
 /**
  * Renderable lessons by slug. Two source kinds:
  * - "plan": a fully compiled plan with checked-in narration audio — rendered
- *   as-is. (None registered today; the archived M0 fixture lives on as test
- *   infrastructure in ./m0GoHello.)
+ *   as-is. (None registered today.)
  * - "script": a LessonScript YAML. The checked-in scripts under
  *   `src/studio/scripts/*.yaml` auto-register by filename via the glob below
  *   — authoring a new lesson never edits this file — and users can import

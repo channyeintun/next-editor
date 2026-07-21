@@ -1,32 +1,112 @@
 import { describe, expect, it } from "vite-plus/test";
 import { parseStudioPlan, type StudioPlan } from "./plan";
-import { createM0GoHelloPlan } from "./plans/m0GoHello";
+
+/** Even per-word interpolation inside a cue, like the compiler emits. */
+function toCue(start: number, end: number, text: string) {
+  const tokens = text.split(" ").filter((token) => token.length > 0);
+  const step = (end - start) / tokens.length;
+  return {
+    start,
+    end,
+    text,
+    words: tokens.map((token, index) => ({
+      start: Math.round(start + index * step),
+      end: Math.round(start + (index + 1) * step),
+      text: token,
+    })),
+  };
+}
+
+/**
+ * Minimal valid plan the schema-gate tests mutate. Self-contained — pocket-tts
+ * narration is synthesized at render time, so the fixture only pins timings.
+ */
+function createTestPlan(): StudioPlan {
+  return parseStudioPlan({
+    schemaVersion: 1,
+    lesson: { slug: "test-plan", title: "Test plan", locale: "en-US" },
+    seed: 7,
+    workspace: {
+      lessonType: "rust",
+      name: "Rust Lesson",
+      entryFilePath: "main.rs",
+      files: { "main.rs": 'fn main() {\n    println!("ok");\n}\n' },
+    },
+    narration: {
+      audioPath: "studio-tts://test",
+      mimeType: "audio/wav",
+      expectedDurationMs: 20_000,
+      captions: {
+        id: "studio-narration",
+        language: "en",
+        label: "en-US",
+        cues: [
+          toCue(0, 9_000, "Let's add a helper function above main."),
+          toCue(9_000, 19_500, "Run it, and the program prints ok."),
+        ],
+      },
+    },
+    runtime: {
+      kind: "rust-playground",
+      defaultMode: "fixture",
+      fixture: {
+        latencyMs: 100,
+        transientErrorKinds: [],
+        result: { status: "success", stdout: "ok\n", stderr: "" },
+      },
+    },
+    actions: [
+      { id: "open-main", at: 500, type: "workspace.openFile", path: "main.rs" },
+      {
+        id: "cursor-type",
+        at: 1_000,
+        type: "cursor.moveTo",
+        target: { kind: "editor" },
+        durationMs: 600,
+      },
+      {
+        id: "type-helper",
+        at: 2_000,
+        type: "editor.type",
+        path: "main.rs",
+        anchor: { after: "", occurrence: 1 },
+        chunks: [
+          { delayMs: 120, text: "fn helper() {}" },
+          { delayMs: 150, text: "\n" },
+        ],
+      },
+      { id: "run", at: 9_000, type: "runtime.run", timeoutMs: 15_000 },
+      { id: "expect-output", at: 15_000, type: "expect.output", contains: "ok" },
+      { id: "expect-file", at: 15_500, type: "expect.file", path: "main.rs", contains: "helper" },
+    ],
+  });
+}
 
 function clonePlan(plan: StudioPlan): StudioPlan {
   return structuredClone(plan);
 }
 
 describe("studio plan schema", () => {
-  it("accepts the checked-in M0 plan", () => {
-    const plan = createM0GoHelloPlan();
-    expect(plan.lesson.slug).toBe("m0-go-hello");
+  it("accepts the reference test plan", () => {
+    const plan = createTestPlan();
+    expect(plan.lesson.slug).toBe("test-plan");
     expect(plan.actions.length).toBeGreaterThan(5);
   });
 
   it("rejects duplicate action ids", () => {
-    const plan = clonePlan(createM0GoHelloPlan());
+    const plan = clonePlan(createTestPlan());
     plan.actions[1].id = plan.actions[0].id;
     expect(() => parseStudioPlan(plan)).toThrow(/Duplicate action id/);
   });
 
   it("rejects actions scheduled out of order", () => {
-    const plan = clonePlan(createM0GoHelloPlan());
+    const plan = clonePlan(createTestPlan());
     plan.actions[1].at = plan.actions[0].at - 100;
     expect(() => parseStudioPlan(plan)).toThrow(/before its predecessor/);
   });
 
   it("rejects typing that overlaps the next action", () => {
-    const plan = clonePlan(createM0GoHelloPlan());
+    const plan = clonePlan(createTestPlan());
     const typing = plan.actions.find((action) => action.type === "editor.type");
     if (typing?.type !== "editor.type") throw new Error("fixture has no typing action");
     typing.chunks[0] = { ...typing.chunks[0], delayMs: 60_000 };
@@ -34,22 +114,22 @@ describe("studio plan schema", () => {
   });
 
   it("rejects references to files outside the pinned workspace", () => {
-    const plan = clonePlan(createM0GoHelloPlan());
+    const plan = clonePlan(createTestPlan());
     const open = plan.actions.find((action) => action.type === "workspace.openFile");
     if (open?.type !== "workspace.openFile") throw new Error("fixture has no openFile action");
-    open.path = "missing.go";
+    open.path = "missing.rs";
     expect(() => parseStudioPlan(plan)).toThrow(/not in the pinned workspace/);
   });
 
   it("rejects actions scheduled after the narration ends", () => {
-    const plan = clonePlan(createM0GoHelloPlan());
+    const plan = clonePlan(createTestPlan());
     const last = plan.actions.at(-1)!;
     last.at = plan.narration.expectedDurationMs + 1;
     expect(() => parseStudioPlan(plan)).toThrow(/after the narration ends/);
   });
 
   it("rejects overlapping caption cues", () => {
-    const plan = clonePlan(createM0GoHelloPlan());
+    const plan = clonePlan(createTestPlan());
     plan.narration.captions.cues[1].start = plan.narration.captions.cues[0].end - 50;
     // Word timings inside the shifted cue no longer matter for this test; the
     // cue-overlap issue alone must reject the plan.

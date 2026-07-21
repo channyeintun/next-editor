@@ -13,17 +13,15 @@ failures, and the unattended render command below.
 
 ```text
 bun run dev                       # in one terminal
-bun scripts/studio-render.ts go-cube-tour            # two renders + comparison
+bun scripts/studio-render.ts rust-borrow             # two renders + comparison (CI only)
 bun scripts/studio-render.ts <slug> --runtime=live --runs=2 --out=studio-out
 ```
 
 Drives `/studio` in headless system Chrome (playwright-core, no browser
 download), saves per-run reports/manifests, the repeatability verdict, the
 downloaded lesson bundle, and diagnostic screenshots under `studio-out/`, and
-exits non-zero unless every render passed and the comparison is clean. The
-`go-cube-tour` pilot exercises six surfaces (editor, cursor, workspace,
-runtime, slides, whiteboard) and simulates a transient Playground failure, so
-a passing run also demonstrates the retry path (`run` receipt: `attempts: 2`).
+exits non-zero unless every render passed and the comparison is clean. Verification of lessons happens in a real Chrome via the /studio flow; this
+harness remains for CI and repeatability audits.
 
 ## Draft publishing (M3)
 
@@ -59,13 +57,10 @@ version). The production loop:
 6. Create draft… → review in the lessons UI → publish (human, separate).
 ```
 
-### Pilots (all passed 2× unattended renders, repeatability PASS)
+### Pilots (historical — all passed 2× unattended renders, repeatability PASS)
 
-| Pilot          | Role                                                  | Surfaces                           |
-| -------------- | ----------------------------------------------------- | ---------------------------------- |
-| `go-cube`      | minimal regression (mirrors the M0 hard-coded lesson) | editor, cursor, workspace, runtime |
-| `go-cube-tour` | representative multi-surface                          | + slides, whiteboard, retry path   |
-| `go-swap`      | net-new short explainer                               | editor, cursor, workspace, runtime |
+The Go pilot scripts now live as test fixtures under
+`src/studio/script/__fixtures__/`; the shipped lesson is `rust-borrow`.
 
 ### Metrics to record per build (§11)
 
@@ -141,7 +136,7 @@ open http://localhost:5173/studio
 - Click **Render again** after the first run finishes: the panel then shows the
   normalized **Repeatability** verdict between the two runs (also compared across a
   reload within one browsing session via `sessionStorage`).
-- **Download bundle** saves `lesson-m0-go-hello.ne`, the narration `.m4a`,
+- **Download bundle** saves `lesson-<slug>.ne`, the narration audio,
   `build-manifest.json`, and `render-report.json`. A failed render only offers the
   report — failed builds never yield a lesson bundle.
 - Automation can read `window.__NEXT_EDITOR_STUDIO__` (runs, reports, manifests,
@@ -163,21 +158,20 @@ Query params: `plan` (slug from `src/studio/plans`), `runtime` (`fixture` | `liv
 
 ## What exists (map)
 
-| Piece                                                                       | Where                                                                            |
-| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Compiled-plan schema (Zod, versioned, timing/overlap/caption validation)    | `src/studio/plan.ts`                                                             |
-| Seeded cadence + easing (typing chunks materialized into the plan)          | `src/studio/cadence.ts`                                                          |
-| StudioDriver: open/type/cursor/run/wait/expect through real app seams       | `src/studio/driver.ts`                                                           |
-| Monaco-free async/anchor primitives                                         | `src/studio/async.ts`                                                            |
-| Deterministic Performer (recording-clock scheduling, receipts, fail-closed) | `src/studio/performer.ts`                                                        |
-| End-to-end render orchestration (pin → record → perform → QA → bundle)      | `src/studio/runStudioRender.ts`                                                  |
-| Artifact QA gates (decode, monotonicity, tracks, checkpoints)               | `src/studio/qa.ts`                                                               |
-| Repeatability comparison (normalized, tolerance-based)                      | `src/studio/compare.ts`                                                          |
-| Receipts / render report / build manifest types                             | `src/studio/report.ts`                                                           |
-| Durable UI target registry (`data-studio-target`)                           | `src/studio/targets.ts`                                                          |
-| M0 plan fixture                                                             | `src/studio/plans/m0GoHello.ts`                                                  |
-| Narration asset + regeneration script                                       | `public/studio-fixtures/m0-go-hello.m4a`, `scripts/generate-studio-narration.sh` |
-| Render console UI + `/studio` route                                         | `src/studio/StudioController.tsx`, `src/studio/StudioRoute.tsx`                  |
+| Piece                                                                       | Where                                                           |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Compiled-plan schema (Zod, versioned, timing/overlap/caption validation)    | `src/studio/plan.ts`                                            |
+| Seeded cadence + easing (typing chunks materialized into the plan)          | `src/studio/cadence.ts`                                         |
+| StudioDriver: open/type/cursor/run/wait/expect through real app seams       | `src/studio/driver.ts`                                          |
+| Monaco-free async/anchor primitives                                         | `src/studio/async.ts`                                           |
+| Deterministic Performer (recording-clock scheduling, receipts, fail-closed) | `src/studio/performer.ts`                                       |
+| End-to-end render orchestration (pin → record → perform → QA → bundle)      | `src/studio/runStudioRender.ts`                                 |
+| Artifact QA gates (decode, monotonicity, tracks, checkpoints)               | `src/studio/qa.ts`                                              |
+| Repeatability comparison (normalized, tolerance-based)                      | `src/studio/compare.ts`                                         |
+| Receipts / render report / build manifest types                             | `src/studio/report.ts`                                          |
+| Durable UI target registry (`data-studio-target`)                           | `src/studio/targets.ts`                                         |
+| In-page narration synthesis (pocket-tts, the only TTS)                      | `src/studio/inPageDirector.ts`, `src/studio/tts/`               |
+| Render console UI + `/studio` route                                         | `src/studio/StudioController.tsx`, `src/studio/StudioRoute.tsx` |
 
 Key seams used (not bypassed): workspace store actions (`loadProject`,
 `setActiveFilePath`), live Monaco `executeEdits` (flows through the workspace bridge

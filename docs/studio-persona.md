@@ -30,8 +30,8 @@ together.
 - Speak while showing: narration should describe what is on screen _as it
   changes_ (markers anchor actions to the words that explain them).
 - Numbers from measurement, not vibes: pacing bands live in the critic and were
-  seeded conservatively (110–170 wpm for the current `say` profile); revise them
-  from pilot ratings, not taste debates.
+  seeded conservatively (110–170 wpm for the pocket-tts voice profiles); revise
+  them from pilot ratings, not taste debates.
 
 ## Terminology and honesty
 
