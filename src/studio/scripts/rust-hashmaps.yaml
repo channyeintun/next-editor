@@ -24,57 +24,109 @@ lesson:
             scores.insert("red", 50);
             println!("teams: {}", scores.len());
         }
+  # Diagram: two key -> value pairs drawn as boxes joined by arrows
+  # ("blue" -> 10, "red" -> 50), plus the get-returns-Option note.
   whiteboardAssets:
     - id: hm-title
       kind: text
       x: 300
-      y: 185
-      width: 700
-      height: 40
-      text: "HashMap<K, V> — key → value"
+      y: 165
+      width: 760
+      height: 44
+      text: "HashMap<K, V> — look up by key"
       strokeColor: "#1e1e1e"
-      fontSize: 36
-    - id: hm-insert-card
+      fontSize: 34
+    - id: hm-kbox0
       kind: rectangle
-      x: 300
-      y: 255
-      width: 680
+      x: 370
+      y: 275
+      width: 170
+      height: 66
+      strokeColor: "#1e1e1e"
+    - id: hm-key0
+      kind: text
+      x: 398
+      y: 298
+      width: 140
+      height: 34
+      text: '"blue"'
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: hm-arrow0
+      kind: text
+      x: 558
+      y: 292
+      width: 44
+      height: 40
+      text: "→"
+      strokeColor: "#80868b"
+      fontSize: 34
+    - id: hm-vbox0
+      kind: rectangle
+      x: 616
+      y: 275
+      width: 120
       height: 66
       strokeColor: "#1971c2"
-    - id: hm-insert-text
+    - id: hm-val0
       kind: text
-      x: 322
-      y: 277
-      width: 640
-      height: 30
-      text: "insert(k, v)   ·   get(k) → Option"
+      x: 656
+      y: 298
+      width: 60
+      height: 34
+      text: "10"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: hm-kbox1
+      kind: rectangle
+      x: 370
+      y: 365
+      width: 170
+      height: 66
+      strokeColor: "#1e1e1e"
+    - id: hm-key1
+      kind: text
+      x: 398
+      y: 388
+      width: 140
+      height: 34
+      text: '"red"'
       strokeColor: "#1e1e1e"
       fontSize: 28
+    - id: hm-arrow1
+      kind: text
+      x: 558
+      y: 382
+      width: 44
+      height: 40
+      text: "→"
+      strokeColor: "#80868b"
+      fontSize: 34
+    - id: hm-vbox1
+      kind: rectangle
+      x: 616
+      y: 365
+      width: 120
+      height: 66
+      strokeColor: "#1971c2"
+    - id: hm-val1
+      kind: text
+      x: 656
+      y: 388
+      width: 60
+      height: 34
+      text: "50"
+      strokeColor: "#1971c2"
+      fontSize: 30
     - id: hm-note
       kind: text
-      x: 320
-      y: 336
-      width: 680
-      height: 30
-      text: "get returns Option — the key might be missing"
+      x: 360
+      y: 470
+      width: 740
+      height: 36
+      text: "get(key) → Option — Some(value), or None if missing"
       strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: hm-entry-card
-      kind: rectangle
-      x: 300
-      y: 386
-      width: 680
-      height: 66
-      strokeColor: "#f08c00"
-    - id: hm-entry-text
-      kind: text
-      x: 322
-      y: 408
-      width: 640
-      height: 30
-      text: "entry(k).or_insert(default)   ·   map[k]"
-      strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 26
 
 build:
   voiceProfile: pocket-alba-v1
@@ -94,10 +146,9 @@ scenes:
   - id: what-is-a-map
     narration: >
       [[mark:board]] A HashMap stores values you look up by key, not by
-      position. [[mark:insert-card]] You insert key-value pairs, and get a
-      value back by its key. [[mark:note]] But get returns an Option, because
-      the key might not be there. [[mark:entry-card]] And entry lets you update
-      a key, or set a default if it's missing. [[mark:board-close]] Let's try
+      position. [[mark:show-map]] Here, the key blue maps to ten, and red maps
+      to fifty. [[mark:show-note]] Looking a key up returns an Option — Some
+      with the value, or None if it's missing. [[mark:board-close]] Let's build
       it.
     sources:
       - title: "The Rust Book — Storing Keys with Associated Values in Hash Maps"
@@ -108,18 +159,26 @@ scenes:
         at: { mark: board }
         open: true
         upsertIds: [hm-title]
-      - id: show-insert
+      - id: show-map
         type: whiteboard.apply
-        at: { mark: insert-card }
-        upsertIds: [hm-insert-card, hm-insert-text]
+        at: { mark: show-map }
+        upsertIds:
+          [
+            hm-kbox0,
+            hm-key0,
+            hm-arrow0,
+            hm-vbox0,
+            hm-val0,
+            hm-kbox1,
+            hm-key1,
+            hm-arrow1,
+            hm-vbox1,
+            hm-val1,
+          ]
       - id: show-note
         type: whiteboard.apply
-        at: { mark: note }
+        at: { mark: show-note }
         upsertIds: [hm-note]
-      - id: show-entry
-        type: whiteboard.apply
-        at: { mark: entry-card }
-        upsertIds: [hm-entry-card, hm-entry-text]
       - id: close-board
         type: whiteboard.apply
         at: { mark: board-close }

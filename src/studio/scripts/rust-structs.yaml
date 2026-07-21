@@ -28,53 +28,89 @@ lesson:
     - id: st-title
       kind: text
       x: 300
-      y: 185
-      width: 700
-      height: 40
-      text: "A struct — named fields + methods"
+      y: 165
+      width: 780
+      height: 44
+      text: "A struct groups fields; impl adds methods"
       strokeColor: "#1e1e1e"
-      fontSize: 36
-    - id: st-fields-card
+      fontSize: 34
+    - id: st-structbox
       kind: rectangle
-      x: 300
-      y: 255
-      width: 680
-      height: 66
+      x: 340
+      y: 268
+      width: 320
+      height: 156
       strokeColor: "#1971c2"
-    - id: st-fields-text
+    - id: st-structlabel
       kind: text
-      x: 322
-      y: 277
-      width: 640
-      height: 30
-      text: "struct Rectangle { width, height }"
+      x: 362
+      y: 282
+      width: 280
+      height: 32
+      text: "Rectangle"
+      strokeColor: "#1971c2"
+      fontSize: 26
+    - id: st-field0
+      kind: text
+      x: 366
+      y: 330
+      width: 280
+      height: 34
+      text: "width:  4"
       strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: st-impl-card
+      fontSize: 26
+    - id: st-field1
+      kind: text
+      x: 366
+      y: 378
+      width: 280
+      height: 34
+      text: "height: 5"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: st-implbox
       kind: rectangle
-      x: 300
-      y: 340
-      width: 680
-      height: 66
+      x: 710
+      y: 268
+      width: 350
+      height: 156
       strokeColor: "#f08c00"
-    - id: st-impl-text
+    - id: st-impllabel
       kind: text
-      x: 322
-      y: 362
-      width: 640
-      height: 30
-      text: "impl Rectangle { fn area(&self) -> u32 }"
+      x: 732
+      y: 282
+      width: 320
+      height: 32
+      text: "impl Rectangle"
+      strokeColor: "#f08c00"
+      fontSize: 24
+    - id: st-method
+      kind: text
+      x: 736
+      y: 330
+      width: 320
+      height: 34
+      text: "fn area(&self)"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 24
+    - id: st-methodbody
+      kind: text
+      x: 736
+      y: 374
+      width: 320
+      height: 34
+      text: "→ width × height"
+      strokeColor: "#1e1e1e"
+      fontSize: 22
     - id: st-note
       kind: text
-      x: 320
-      y: 436
-      width: 680
-      height: 30
-      text: "&self — the method borrows the instance"
+      x: 340
+      y: 452
+      width: 760
+      height: 36
+      text: "area(&self) borrows the rectangle → 4 × 5 = 20"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 26
 
 build:
   voiceProfile: pocket-alba-v1
@@ -93,11 +129,12 @@ runtime:
 scenes:
   - id: anatomy
     narration: >
-      [[mark:board]] A struct groups related data under one name, with typed
-      fields. [[mark:fields]] Here, a Rectangle holds a width and a height.
-      [[mark:impl]] An impl block adds methods that work on that data.
-      [[mark:note]] Area takes &self — it borrows the rectangle to read its
-      fields. [[mark:board-close]] Let's write it.
+      [[mark:board]] A struct groups related data under one name.
+      [[mark:show-struct]] Rectangle holds two fields — a width and a height,
+      here four and five. [[mark:show-impl]] An impl block adds methods. area
+      takes a reference to self, and multiplies width by height.
+      [[mark:show-note]] So area reads the rectangle without owning it, and
+      returns twenty. [[mark:board-close]] Let's write it.
     sources:
       - title: "The Rust Book — Defining and Instantiating Structs"
         url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html"
@@ -107,17 +144,17 @@ scenes:
         at: { mark: board }
         open: true
         upsertIds: [st-title]
-      - id: show-fields
+      - id: show-struct
         type: whiteboard.apply
-        at: { mark: fields }
-        upsertIds: [st-fields-card, st-fields-text]
+        at: { mark: show-struct }
+        upsertIds: [st-structbox, st-structlabel, st-field0, st-field1]
       - id: show-impl
         type: whiteboard.apply
-        at: { mark: impl }
-        upsertIds: [st-impl-card, st-impl-text]
+        at: { mark: show-impl }
+        upsertIds: [st-implbox, st-impllabel, st-method, st-methodbody]
       - id: show-note
         type: whiteboard.apply
-        at: { mark: note }
+        at: { mark: show-note }
         upsertIds: [st-note]
       - id: close-board
         type: whiteboard.apply

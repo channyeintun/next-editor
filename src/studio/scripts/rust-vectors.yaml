@@ -22,57 +22,127 @@ lesson:
             scores.push(70);
             println!("count: {}", scores.len());
         }
+  # Diagram: the Vec drawn as a row of indexed value boxes, with a green
+  # "push" box showing it grows on the end.
   whiteboardAssets:
     - id: vec-title
       kind: text
       x: 300
-      y: 185
+      y: 170
       width: 700
-      height: 40
+      height: 44
       text: "Vec<T> — a growable list"
       strokeColor: "#1e1e1e"
-      fontSize: 36
-    - id: vec-add-card
-      kind: rectangle
-      x: 300
-      y: 255
-      width: 680
-      height: 66
-      strokeColor: "#1971c2"
-    - id: vec-add-text
+      fontSize: 34
+    - id: vec-arrlabel
       kind: text
-      x: 322
-      y: 277
-      width: 640
-      height: 30
-      text: "let mut v = Vec::new();   v.push(x)"
+      x: 360
+      y: 252
+      width: 400
+      height: 34
+      text: "scores: Vec<i32>"
       strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: vec-use-card
+      fontSize: 26
+    - id: vec-box0
       kind: rectangle
-      x: 300
-      y: 340
-      width: 680
-      height: 66
-      strokeColor: "#f08c00"
-    - id: vec-use-text
-      kind: text
-      x: 322
-      y: 362
-      width: 640
-      height: 30
-      text: "v[0] read   ·   v.len()   ·   for x in &v"
+      x: 360
+      y: 300
+      width: 92
+      height: 84
       strokeColor: "#1e1e1e"
-      fontSize: 28
+    - id: vec-box1
+      kind: rectangle
+      x: 460
+      y: 300
+      width: 92
+      height: 84
+      strokeColor: "#1e1e1e"
+    - id: vec-box2
+      kind: rectangle
+      x: 560
+      y: 300
+      width: 92
+      height: 84
+      strokeColor: "#1e1e1e"
+    - id: vec-val0
+      kind: text
+      x: 386
+      y: 324
+      width: 60
+      height: 40
+      text: "90"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: vec-val1
+      kind: text
+      x: 486
+      y: 324
+      width: 60
+      height: 40
+      text: "80"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: vec-val2
+      kind: text
+      x: 586
+      y: 324
+      width: 60
+      height: 40
+      text: "70"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: vec-idx0
+      kind: text
+      x: 400
+      y: 398
+      width: 30
+      height: 26
+      text: "0"
+      strokeColor: "#80868b"
+      fontSize: 20
+    - id: vec-idx1
+      kind: text
+      x: 500
+      y: 398
+      width: 30
+      height: 26
+      text: "1"
+      strokeColor: "#80868b"
+      fontSize: 20
+    - id: vec-idx2
+      kind: text
+      x: 600
+      y: 398
+      width: 30
+      height: 26
+      text: "2"
+      strokeColor: "#80868b"
+      fontSize: 20
+    - id: vec-boxnext
+      kind: rectangle
+      x: 672
+      y: 300
+      width: 92
+      height: 84
+      strokeColor: "#2f9e44"
+    - id: vec-pushlabel
+      kind: text
+      x: 690
+      y: 326
+      width: 90
+      height: 34
+      text: "push"
+      strokeColor: "#2f9e44"
+      fontSize: 26
     - id: vec-note
       kind: text
-      x: 320
-      y: 436
-      width: 680
-      height: 30
-      text: "grows on the heap — same type throughout"
+      x: 340
+      y: 448
+      width: 740
+      height: 36
+      text: "grows on the heap · index from 0 · len() = 3"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 26
 
 build:
   voiceProfile: pocket-alba-v1
@@ -92,10 +162,10 @@ scenes:
   - id: what-is-a-vec
     narration: >
       [[mark:board]] A Vec is a list that grows as you need it, all one type.
-      [[mark:add-card]] You start empty and push values on the end.
-      [[mark:use-card]] Then read by index, ask its length, or loop over it.
-      [[mark:note]] It lives on the heap, so it can grow at runtime.
-      [[mark:board-close]] Let's fill one.
+      [[mark:show-vec]] Here are three scores, at indices zero, one, and two.
+      [[mark:show-push]] push adds a new value onto the end — the Vec just
+      grows. [[mark:show-note]] It lives on the heap; read any slot by index, or
+      ask its length. [[mark:board-close]] Let's fill one.
     sources:
       - title: "The Rust Book — Storing Lists of Values with Vectors"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html"
@@ -104,18 +174,19 @@ scenes:
         type: whiteboard.apply
         at: { mark: board }
         open: true
-        upsertIds: [vec-title]
-      - id: show-add
+        upsertIds: [vec-title, vec-arrlabel]
+      - id: show-vec
         type: whiteboard.apply
-        at: { mark: add-card }
-        upsertIds: [vec-add-card, vec-add-text]
-      - id: show-use
+        at: { mark: show-vec }
+        upsertIds:
+          [vec-box0, vec-box1, vec-box2, vec-val0, vec-val1, vec-val2, vec-idx0, vec-idx1, vec-idx2]
+      - id: show-push
         type: whiteboard.apply
-        at: { mark: use-card }
-        upsertIds: [vec-use-card, vec-use-text]
+        at: { mark: show-push }
+        upsertIds: [vec-boxnext, vec-pushlabel]
       - id: show-note
         type: whiteboard.apply
-        at: { mark: note }
+        at: { mark: show-note }
         upsertIds: [vec-note]
       - id: close-board
         type: whiteboard.apply

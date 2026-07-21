@@ -23,46 +23,105 @@ lesson:
     - id: it-title
       kind: text
       x: 300
-      y: 185
-      width: 700
-      height: 40
+      y: 165
+      width: 720
+      height: 44
       text: "Iterators — a lazy pipeline"
       strokeColor: "#1e1e1e"
-      fontSize: 36
-    - id: it-pipe-card
+      fontSize: 34
+    - id: it-inbox
       kind: rectangle
       x: 300
-      y: 250
-      width: 680
-      height: 66
+      y: 300
+      width: 230
+      height: 74
+      strokeColor: "#1e1e1e"
+    - id: it-inval
+      kind: text
+      x: 318
+      y: 326
+      width: 210
+      height: 34
+      text: "[1,2,3,4,5,6]"
+      strokeColor: "#1e1e1e"
+      fontSize: 24
+    - id: it-op1
+      kind: text
+      x: 548
+      y: 286
+      width: 90
+      height: 30
+      text: "filter"
       strokeColor: "#1971c2"
-    - id: it-pipe-text
+      fontSize: 22
+    - id: it-arrow1
       kind: text
-      x: 322
-      y: 272
-      width: 640
-      height: 30
-      text: "iter → filter → map → collect"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: it-closure-note
+      x: 556
+      y: 320
+      width: 44
+      height: 40
+      text: "→"
+      strokeColor: "#80868b"
+      fontSize: 32
+    - id: it-midbox
+      kind: rectangle
+      x: 610
+      y: 300
+      width: 150
+      height: 74
+      strokeColor: "#1971c2"
+    - id: it-midval
       kind: text
-      x: 320
-      y: 346
-      width: 680
-      height: 30
-      text: "|n| n * 10 — a closure (inline function)"
-      strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: it-lazy-note
+      x: 632
+      y: 326
+      width: 130
+      height: 34
+      text: "[2, 4, 6]"
+      strokeColor: "#1971c2"
+      fontSize: 24
+    - id: it-op2
       kind: text
-      x: 320
-      y: 392
-      width: 680
+      x: 782
+      y: 286
+      width: 90
       height: 30
-      text: "lazy — runs only at collect or sum"
+      text: "map"
+      strokeColor: "#f08c00"
+      fontSize: 22
+    - id: it-arrow2
+      kind: text
+      x: 786
+      y: 320
+      width: 44
+      height: 40
+      text: "→"
+      strokeColor: "#80868b"
+      fontSize: 32
+    - id: it-outbox
+      kind: rectangle
+      x: 840
+      y: 300
+      width: 195
+      height: 74
+      strokeColor: "#2f9e44"
+    - id: it-outval
+      kind: text
+      x: 858
+      y: 326
+      width: 175
+      height: 34
+      text: "[20, 40, 60]"
+      strokeColor: "#2f9e44"
+      fontSize: 24
+    - id: it-note
+      kind: text
+      x: 340
+      y: 440
+      width: 760
+      height: 36
+      text: "lazy — nothing runs until collect or sum"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 26
 
 build:
   voiceProfile: pocket-alba-v1
@@ -81,12 +140,12 @@ runtime:
 scenes:
   - id: the-pipeline
     narration: >
-      [[mark:board]] Iterators let you describe a pipeline over a sequence.
-      [[mark:pipe]] Start with iter, keep only some items with filter,
-      transform each with map, then collect the results. [[mark:closure]] Those
-      bars are closures — small inline functions, like n maps to n times ten.
-      [[mark:lazy]] And it's lazy: nothing actually runs until you collect or
-      sum at the end. [[mark:board-close]] Let's chain them.
+      [[mark:board]] Iterators describe a pipeline over a sequence, and it's
+      lazy. [[mark:show-in]] Start with six numbers. [[mark:show-filter]] filter
+      keeps the even ones — two, four, six. [[mark:show-map]] map multiplies
+      each by ten — twenty, forty, sixty. [[mark:show-note]] Nothing actually
+      runs until collect gathers the result, or sum adds it up.
+      [[mark:board-close]] Let's chain them.
     sources:
       - title: "The Rust Book — Processing a Series of Items with Iterators"
         url: "https://doc.rust-lang.org/book/ch13-02-iterators.html"
@@ -96,18 +155,22 @@ scenes:
         at: { mark: board }
         open: true
         upsertIds: [it-title]
-      - id: show-pipe
+      - id: show-in
         type: whiteboard.apply
-        at: { mark: pipe }
-        upsertIds: [it-pipe-card, it-pipe-text]
-      - id: show-closure
+        at: { mark: show-in }
+        upsertIds: [it-inbox, it-inval]
+      - id: show-filter
         type: whiteboard.apply
-        at: { mark: closure }
-        upsertIds: [it-closure-note]
-      - id: show-lazy
+        at: { mark: show-filter }
+        upsertIds: [it-op1, it-arrow1, it-midbox, it-midval]
+      - id: show-map
         type: whiteboard.apply
-        at: { mark: lazy }
-        upsertIds: [it-lazy-note]
+        at: { mark: show-map }
+        upsertIds: [it-op2, it-arrow2, it-outbox, it-outval]
+      - id: show-note
+        type: whiteboard.apply
+        at: { mark: show-note }
+        upsertIds: [it-note]
       - id: close-board
         type: whiteboard.apply
         at: { mark: board-close }
