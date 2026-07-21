@@ -9,7 +9,7 @@ import type { LessonScript } from "./schema";
  * remains the editorial gate. Version-locked to the persona guide.
  */
 
-export const CRITIC_VERSION = 1;
+export const CRITIC_VERSION = 2;
 
 export type CritiqueSeverity = "note" | "suggestion";
 

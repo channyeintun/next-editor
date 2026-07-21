@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "notes": [
     {
       "id": "scope.scenes",
@@ -9,7 +9,7 @@
     {
       "id": "scope.length",
       "severity": "suggestion",
-      "message": "Narration runs 164s (guide caps at 120s)"
+      "message": "Narration runs 166s (guide caps at 120s)"
     }
   ]
 }

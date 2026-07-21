@@ -1,4 +1,4 @@
-# Studio Persona Guide — v1
+# Studio Persona Guide — v2
 
 The versioned editorial contract for studio-produced lessons
 ([agent-lesson-production.md](./agent-lesson-production.md) §8). Scripts are the
@@ -18,8 +18,15 @@ together.
 
 ## Voice and pacing
 
-- Short declarative sentences; target under ~20 words, hard ceiling 24.
-- Address the viewer as "you" sparingly; prefer describing the code's behavior.
+- **Conversational, not read-aloud** (v2): write the way a teacher talks at a
+  whiteboard, not the way a manual reads. Use contractions everywhere they are
+  natural ("that's", "doesn't", "let's", "here's"); an occasional short
+  question that the next sentence answers ("So who owns the String now?") is
+  encouraged.
+- Short sentences still rule; target under ~20 words, hard ceiling 24.
+  Conversational means natural rhythm, not rambling.
+- Address the viewer as "you", and use "let's" for shared actions — the
+  narrator is doing this _with_ the viewer.
 - Speak while showing: narration should describe what is on screen _as it
   changes_ (markers anchor actions to the words that explain them).
 - Numbers from measurement, not vibes: pacing bands live in the critic and were
