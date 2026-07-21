@@ -19,59 +19,110 @@ lesson:
             let sum = add(2, 3);
             println!("2 + 3 = {sum}");
         }
+  # Diagram: a function as a machine — inputs -> [add: a + b] -> output.
   whiteboardAssets:
     - id: ft-title
       kind: text
-      x: 320
-      y: 180
-      width: 640
+      x: 300
+      y: 165
+      width: 780
+      height: 44
+      text: "A function turns inputs into an output"
+      strokeColor: "#1e1e1e"
+      fontSize: 34
+    - id: ft-inlabel
+      kind: text
+      x: 330
+      y: 262
+      width: 140
+      height: 30
+      text: "inputs"
+      strokeColor: "#80868b"
+      fontSize: 22
+    - id: ft-in
+      kind: text
+      x: 350
+      y: 306
+      width: 120
       height: 40
-      text: "Anatomy of a function"
-      strokeColor: "#1e1e1e"
-      fontSize: 36
-    - id: ft-sig
-      kind: text
-      x: 340
-      y: 258
-      width: 640
-      height: 34
-      text: "fn add(a: i32, b: i32) -> i32"
-      strokeColor: "#1e1e1e"
-      fontSize: 32
-    - id: ft-body
-      kind: text
-      x: 340
-      y: 312
-      width: 640
-      height: 34
-      text: "{  a + b  }   value — no semicolon"
+      text: "2, 3"
       strokeColor: "#1e1e1e"
       fontSize: 30
-    - id: ft-note1
+    - id: ft-arrow1
       kind: text
-      x: 360
-      y: 384
-      width: 620
+      x: 480
+      y: 306
+      width: 44
+      height: 40
+      text: "→"
+      strokeColor: "#80868b"
+      fontSize: 34
+    - id: ft-fnlabel
+      kind: text
+      x: 560
+      y: 262
+      width: 200
       height: 30
-      text: "•  parameters must be typed"
+      text: "fn add"
+      strokeColor: "#1971c2"
+      fontSize: 22
+    - id: ft-fnbox
+      kind: rectangle
+      x: 540
+      y: 288
+      width: 220
+      height: 84
+      strokeColor: "#1971c2"
+    - id: ft-fnbody
+      kind: text
+      x: 604
+      y: 314
+      width: 160
+      height: 40
+      text: "a + b"
       strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: ft-note2
+      fontSize: 30
+    - id: ft-arrow2
       kind: text
-      x: 360
-      y: 424
-      width: 620
-      height: 30
-      text: "•  ->  gives the return type"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: ft-note3
+      x: 780
+      y: 306
+      width: 44
+      height: 40
+      text: "→"
+      strokeColor: "#80868b"
+      fontSize: 34
+    - id: ft-outlabel
       kind: text
-      x: 360
-      y: 464
-      width: 620
+      x: 850
+      y: 262
+      width: 160
       height: 30
-      text: "•  the last expression is the result"
+      text: "returns"
+      strokeColor: "#2f9e44"
+      fontSize: 22
+    - id: ft-outbox
+      kind: rectangle
+      x: 840
+      y: 288
+      width: 150
+      height: 84
+      strokeColor: "#2f9e44"
+    - id: ft-outval
+      kind: text
+      x: 902
+      y: 314
+      width: 80
+      height: 40
+      text: "5"
+      strokeColor: "#2f9e44"
+      fontSize: 30
+    - id: ft-note
+      kind: text
+      x: 340
+      y: 430
+      width: 780
+      height: 36
+      text: "the last expression — a + b, no semicolon — is returned"
       strokeColor: "#1e1e1e"
       fontSize: 26
 
@@ -92,11 +143,10 @@ runtime:
 scenes:
   - id: anatomy
     narration: >
-      [[mark:board]] A function in Rust has a clear shape. [[mark:sig]] You
-      give it a name, and every parameter needs a type. The arrow declares
-      what it returns. [[mark:body]] Then the body. Here's the part worth
-      remembering: the last expression, with no semicolon, is the value
-      returned. [[mark:notes]] So there's often no return keyword at all.
+      [[mark:board]] Think of a function as a small machine. [[mark:show-in]] It
+      takes inputs — here, two and three. [[mark:show-fn]] Inside, add computes
+      a plus b. [[mark:show-out]] And it hands back the result — five. That last
+      expression, with no semicolon, is what a function returns.
       [[mark:board-close]] Let's build one.
     sources:
       - title: "The Rust Book — Functions"
@@ -107,18 +157,18 @@ scenes:
         at: { mark: board }
         open: true
         upsertIds: [ft-title]
-      - id: show-sig
+      - id: show-in
         type: whiteboard.apply
-        at: { mark: sig }
-        upsertIds: [ft-sig]
-      - id: show-body
+        at: { mark: show-in }
+        upsertIds: [ft-inlabel, ft-in]
+      - id: show-fn
         type: whiteboard.apply
-        at: { mark: body }
-        upsertIds: [ft-body]
-      - id: show-notes
+        at: { mark: show-fn }
+        upsertIds: [ft-arrow1, ft-fnlabel, ft-fnbox, ft-fnbody]
+      - id: show-out
         type: whiteboard.apply
-        at: { mark: notes }
-        upsertIds: [ft-note1, ft-note2, ft-note3]
+        at: { mark: show-out }
+        upsertIds: [ft-arrow2, ft-outlabel, ft-outbox, ft-outval, ft-note]
       - id: close-board
         type: whiteboard.apply
         at: { mark: board-close }

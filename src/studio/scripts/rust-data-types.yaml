@@ -19,81 +19,116 @@ lesson:
             let pi = 3.14159;
             println!("year {year}, pi {pi}");
         }
+  # Tree diagram: a "Type" root branching to the Scalar and Compound families.
   whiteboardAssets:
     - id: dt-title
       kind: text
       x: 300
-      y: 175
-      width: 700
-      height: 40
+      y: 158
+      width: 720
+      height: 44
       text: "Every value has a type"
       strokeColor: "#1e1e1e"
-      fontSize: 36
+      fontSize: 34
+    - id: dt-rootbox
+      kind: rectangle
+      x: 590
+      y: 214
+      width: 160
+      height: 54
+      strokeColor: "#1e1e1e"
+    - id: dt-rootlabel
+      kind: text
+      x: 638
+      y: 228
+      width: 120
+      height: 32
+      text: "Type"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: dt-branchL
+      kind: text
+      x: 520
+      y: 278
+      width: 44
+      height: 40
+      text: "↙"
+      strokeColor: "#80868b"
+      fontSize: 34
+    - id: dt-branchR
+      kind: text
+      x: 770
+      y: 278
+      width: 44
+      height: 40
+      text: "↘"
+      strokeColor: "#80868b"
+      fontSize: 34
     - id: scalar-card
       kind: rectangle
-      x: 300
-      y: 250
-      width: 340
-      height: 250
+      x: 290
+      y: 330
+      width: 350
+      height: 210
       strokeColor: "#1971c2"
     - id: scalar-head
       kind: text
-      x: 322
-      y: 268
-      width: 300
-      height: 30
+      x: 312
+      y: 346
+      width: 320
+      height: 32
       text: "Scalar — one value"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
+      strokeColor: "#1971c2"
+      fontSize: 28
     - id: scalar-row1
       kind: text
-      x: 322
-      y: 330
+      x: 318
+      y: 404
       width: 300
-      height: 30
+      height: 34
       text: "i32        f64"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - id: scalar-row2
       kind: text
-      x: 322
-      y: 390
+      x: 318
+      y: 464
       width: 300
-      height: 30
+      height: 34
       text: "bool       char"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - id: compound-card
       kind: rectangle
       x: 700
-      y: 250
-      width: 360
-      height: 250
+      y: 330
+      width: 370
+      height: 210
       strokeColor: "#f08c00"
     - id: compound-head
       kind: text
       x: 722
-      y: 268
-      width: 320
-      height: 30
+      y: 346
+      width: 340
+      height: 32
       text: "Compound — many values"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
+      strokeColor: "#f08c00"
+      fontSize: 28
     - id: compound-row1
       kind: text
-      x: 722
-      y: 330
-      width: 320
-      height: 30
+      x: 728
+      y: 404
+      width: 330
+      height: 34
       text: "tuple — mixed types"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - id: compound-row2
       kind: text
-      x: 722
-      y: 390
-      width: 320
-      height: 30
+      x: 728
+      y: 464
+      width: 330
+      height: 34
       text: "array — same type"
       strokeColor: "#1e1e1e"
       fontSize: 28
@@ -115,12 +150,11 @@ runtime:
 scenes:
   - id: type-map
     narration: >
-      [[mark:board]] Rust is statically typed: every value has a type the
-      compiler knows. There are two families. [[mark:scalars]] Scalars hold
-      one value — whole numbers, decimals, true or false, and single
-      characters. [[mark:compound]] Compound types hold several — a tuple
-      groups mixed types, an array holds many of one type. [[mark:board-close]]
-      Let's put each on screen.
+      [[mark:board]] Every value in Rust has a type, and types come in two
+      families. [[mark:show-scalar]] Scalars hold one value — whole numbers,
+      decimals, true or false, and single characters. [[mark:show-compound]]
+      Compound types hold several — a tuple groups mixed types, an array holds
+      many of one type. [[mark:board-close]] Let's put each on screen.
     sources:
       - title: "The Rust Book — Data Types"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html"
@@ -129,15 +163,15 @@ scenes:
         type: whiteboard.apply
         at: { mark: board }
         open: true
-        upsertIds: [dt-title]
+        upsertIds: [dt-title, dt-rootbox, dt-rootlabel]
       - id: show-scalars
         type: whiteboard.apply
-        at: { mark: scalars }
-        upsertIds: [scalar-card, scalar-head, scalar-row1, scalar-row2]
+        at: { mark: show-scalar }
+        upsertIds: [dt-branchL, scalar-card, scalar-head, scalar-row1, scalar-row2]
       - id: show-compound
         type: whiteboard.apply
-        at: { mark: compound }
-        upsertIds: [compound-card, compound-head, compound-row1, compound-row2]
+        at: { mark: show-compound }
+        upsertIds: [dt-branchR, compound-card, compound-head, compound-row1, compound-row2]
       - id: close-board
         type: whiteboard.apply
         at: { mark: board-close }

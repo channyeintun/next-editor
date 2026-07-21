@@ -19,57 +19,61 @@ lesson:
             let mut greeting = String::from("hello");
             println!("start: {greeting}");
         }
+  # Diagram: String drawn as an owned heap buffer holding the text, with the
+  # &str borrowed view and the grow-ops labelled.
   whiteboardAssets:
     - id: str-title
       kind: text
       x: 300
-      y: 185
-      width: 700
-      height: 40
+      y: 165
+      width: 720
+      height: 44
       text: "String vs &str"
       strokeColor: "#1e1e1e"
-      fontSize: 36
-    - id: str-owned-card
-      kind: rectangle
-      x: 300
-      y: 255
-      width: 680
-      height: 66
+      fontSize: 34
+    - id: str-boxlabel
+      kind: text
+      x: 360
+      y: 250
+      width: 460
+      height: 32
+      text: "String — owns, grows (heap)"
       strokeColor: "#1971c2"
-    - id: str-owned-text
-      kind: text
-      x: 322
-      y: 277
-      width: 640
-      height: 30
-      text: "String — owned, growable (heap)"
-      strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: str-borrowed-card
+      fontSize: 24
+    - id: str-box
       kind: rectangle
-      x: 300
-      y: 340
-      width: 680
-      height: 66
-      strokeColor: "#f08c00"
-    - id: str-borrowed-text
+      x: 340
+      y: 288
+      width: 520
+      height: 84
+      strokeColor: "#1971c2"
+    - id: str-content
       kind: text
-      x: 322
-      y: 362
-      width: 640
-      height: 30
-      text: "&str — borrowed view (a literal)"
+      x: 366
+      y: 316
+      width: 480
+      height: 40
+      text: "hello, world!"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 30
+    - id: str-view
+      kind: text
+      x: 340
+      y: 402
+      width: 740
+      height: 34
+      text: '&str — a borrowed view, like "Rust"'
+      strokeColor: "#f08c00"
+      fontSize: 26
     - id: str-note
       kind: text
-      x: 320
-      y: 436
-      width: 680
-      height: 30
-      text: "grow with: push_str · push · format!"
+      x: 340
+      y: 450
+      width: 740
+      height: 34
+      text: "grow a String: push_str · push · format!"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 26
 
 build:
   voiceProfile: pocket-alba-v1
@@ -88,11 +92,11 @@ runtime:
 scenes:
   - id: two-string-types
     narration: >
-      [[mark:board]] Rust has two string types working together.
-      [[mark:owned-card]] String is owned and growable — it lives on the heap
-      and you can add to it. [[mark:borrowed-card]] And &str is a borrowed view
-      of text you don't own, like a literal. [[mark:note]] You grow a String
-      with push_str, push, or format. [[mark:board-close]] Let's build one up.
+      [[mark:board]] Rust has two string types. [[mark:show-string]] A String is
+      owned and growable — it lives on the heap and holds your text.
+      [[mark:show-view]] A &str is a borrowed view, like a text literal you
+      don't own. [[mark:show-note]] You grow a String with push_str, push, or
+      format. [[mark:board-close]] Let's build one up.
     sources:
       - title: "The Rust Book — Storing UTF-8 Text with Strings"
         url: "https://doc.rust-lang.org/book/ch08-02-strings.html"
@@ -102,17 +106,17 @@ scenes:
         at: { mark: board }
         open: true
         upsertIds: [str-title]
-      - id: show-owned
+      - id: show-string
         type: whiteboard.apply
-        at: { mark: owned-card }
-        upsertIds: [str-owned-card, str-owned-text]
-      - id: show-borrowed
+        at: { mark: show-string }
+        upsertIds: [str-boxlabel, str-box, str-content]
+      - id: show-view
         type: whiteboard.apply
-        at: { mark: borrowed-card }
-        upsertIds: [str-borrowed-card, str-borrowed-text]
+        at: { mark: show-view }
+        upsertIds: [str-view]
       - id: show-note
         type: whiteboard.apply
-        at: { mark: note }
+        at: { mark: show-note }
         upsertIds: [str-note]
       - id: close-board
         type: whiteboard.apply
