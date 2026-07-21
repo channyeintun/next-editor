@@ -11,6 +11,49 @@ const WAVE = 0x45564157; // "WAVE" LE
 const FMT_ = 0x20746d66; // "fmt " LE
 const DATA = 0x61746164; // "data" LE
 
+export interface TrimSilenceOptions {
+  /** Absolute amplitude below which a sample counts as silence. */
+  threshold?: number;
+  /** Silence kept before the first voiced sample (natural onset). */
+  headPadMs?: number;
+  /** Silence kept after the last voiced sample (natural release). */
+  tailPadMs?: number;
+}
+
+/**
+ * Trim leading/trailing silence around the voiced span. pocket-tts dialogs
+ * start with ~0.5s of model silence before speech onset; captions and mark
+ * anchors assume speech starts at the dialog's scheduled start, so untrimmed
+ * dialogs make text and actions lead the voice.
+ */
+export function trimSilence(
+  samples: Float32Array,
+  sampleRate: number,
+  { threshold = 0.004, headPadMs = 40, tailPadMs = 150 }: TrimSilenceOptions = {},
+): Float32Array {
+  let first = -1;
+  for (let i = 0; i < samples.length; i++) {
+    if (Math.abs(samples[i]) > threshold) {
+      first = i;
+      break;
+    }
+  }
+  if (first === -1) {
+    return samples;
+  }
+  let last = samples.length - 1;
+  for (; last > first; last--) {
+    if (Math.abs(samples[last]) > threshold) {
+      break;
+    }
+  }
+  const headPad = Math.round((headPadMs / 1000) * sampleRate);
+  const tailPad = Math.round((tailPadMs / 1000) * sampleRate);
+  const start = Math.max(0, first - headPad);
+  const end = Math.min(samples.length, last + 1 + tailPad);
+  return samples.slice(start, end);
+}
+
 export function floatTo16BitPcm(samples: Float32Array): Int16Array {
   const pcm = new Int16Array(samples.length);
   for (let i = 0; i < samples.length; i++) {

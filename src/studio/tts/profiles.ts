@@ -88,6 +88,13 @@ export interface TtsRequest {
   seed?: number;
 }
 
+/**
+ * Post-synthesis processing version, folded into every request hash: bump it
+ * whenever the audio pipeline after the model changes (v1 = per-dialog
+ * silence trimming) so cached dialogs from the old pipeline are not reused.
+ */
+export const TTS_POST_PROCESS_VERSION = 1;
+
 /** Content address of one synthesis request; the cache key for its audio. */
 export function ttsRequestHash(request: TtsRequest): Promise<string> {
   return sha256HexOfJson({
@@ -95,5 +102,6 @@ export function ttsRequestHash(request: TtsRequest): Promise<string> {
     speechText: request.speechText,
     lexiconVersion: request.lexiconVersion,
     seed: request.seed,
+    postProcessVersion: TTS_POST_PROCESS_VERSION,
   });
 }

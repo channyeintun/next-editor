@@ -4,6 +4,7 @@ import {
   encodeWavPcm16,
   floatTo16BitPcm,
   stitchWavSegments,
+  trimSilence,
   wavDurationMs,
 } from "./wav";
 
@@ -36,6 +37,33 @@ describe("wav codec", () => {
     const bytes = toneWav(100, 1);
     new DataView(bytes.buffer).setUint16(22, 2, true); // pretend stereo
     expect(() => decodeWavPcm16(bytes)).toThrow(/Unsupported WAV/);
+  });
+});
+
+describe("trimSilence", () => {
+  function padded(silenceHeadMs: number, voicedMs: number, silenceTailMs: number): Float32Array {
+    const ms = (n: number) => Math.round((n / 1000) * RATE);
+    const samples = new Float32Array(ms(silenceHeadMs) + ms(voicedMs) + ms(silenceTailMs));
+    samples.fill(0.25, ms(silenceHeadMs), ms(silenceHeadMs) + ms(voicedMs));
+    return samples;
+  }
+
+  it("trims model lead-in silence down to the head pad", () => {
+    const trimmed = trimSilence(padded(640, 1000, 500), RATE);
+    // 40ms head pad + 1000ms voice + 150ms tail pad.
+    expect(trimmed.length).toBe(Math.round((1190 / 1000) * RATE));
+    // Speech now starts at ~40ms instead of ~640ms.
+    expect(Math.abs(trimmed[Math.round((45 / 1000) * RATE)])).toBeGreaterThan(0.1);
+  });
+
+  it("keeps short pads untouched", () => {
+    const input = padded(20, 500, 100);
+    expect(trimSilence(input, RATE).length).toBe(input.length);
+  });
+
+  it("returns all-silence audio unchanged", () => {
+    const silence = new Float32Array(RATE);
+    expect(trimSilence(silence, RATE)).toBe(silence);
   });
 });
 

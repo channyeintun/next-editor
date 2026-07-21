@@ -2,7 +2,7 @@ import { getCustomVoice } from "./customVoices";
 import { PocketTtsEngine } from "./pocket/engine";
 import { deriveNoiseSeed } from "./pocket/noise";
 import type { PocketVoiceProfile } from "./profiles";
-import { encodeWavPcm16, floatTo16BitPcm } from "./wav";
+import { encodeWavPcm16, floatTo16BitPcm, trimSilence } from "./wav";
 
 /**
  * pocket-tts synthesis adapter: one engine per (bundle, voice), batch WAV out.
@@ -69,5 +69,8 @@ export async function synthesizePocketWav(
       `pocket-tts produced ${result.sampleRate}Hz audio but the profile pins ${profile.sampleRate}Hz`,
     );
   }
-  return encodeWavPcm16(floatTo16BitPcm(result.samples), result.sampleRate);
+  // Trim the model's leading/trailing silence so speech starts where the
+  // schedule (captions, mark anchors) says the dialog starts.
+  const trimmed = trimSilence(result.samples, result.sampleRate);
+  return encodeWavPcm16(floatTo16BitPcm(trimmed), result.sampleRate);
 }
