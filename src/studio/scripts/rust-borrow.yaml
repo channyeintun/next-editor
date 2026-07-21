@@ -58,9 +58,9 @@ scenes:
     narration: >
       [[mark:show-rules]] Rust manages memory through ownership, and the rules
       fit on one slide. Every value has an owner. There is only one owner at a
-      time. When the owner goes out of scope, the value is dropped. No garbage
-      collector runs behind your back — the borrow checker is the compiler
-      enforcing these rules before the program even exists.
+      time. When the owner goes out of scope, the value is dropped. There is
+      no garbage collector — the borrow checker is the compiler, checking
+      these rules before the program ever runs.
     sources:
       - title: "The Rust Book — What Is Ownership?"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"
@@ -72,12 +72,12 @@ scenes:
 
   - id: move-error
     narration: >
-      Here is what enforcement looks like when you break rule two.
-      [[mark:show-error]] Assigning s1 to s2 moves the String — s1 is dead
-      from that line on. Printing it afterwards is error E0382, borrow of
+      Here is what happens when you break rule two.
+      [[mark:show-error]] Assigning s1 to s2 moves the String — after that
+      line, s1 is no longer valid. Printing it is error E0382, borrow of
       moved value. Read the message closely. It names the move, notes that
-      String does not implement Copy, and points at the use that came too
-      late. The checker rejects this program outright. Nothing runs.
+      String does not implement Copy, and points at the line that uses s1
+      after the move. The checker rejects the whole program. Nothing runs.
     sources:
       - title: "The Rust Book — Variables and Data Interacting with Move"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-move"
@@ -91,10 +91,10 @@ scenes:
 
   - id: meet-owner
     narration: >
-      Moves are safe, but blunt. [[mark:open-main]] Our program owns one
-      String, named owner, and prints through it at the end. We want another
-      function to read that String without taking it away. That is exactly
-      what borrowing is for.
+      Moves are safe, but they take the value away from you.
+      [[mark:open-main]] Our program owns one String, named owner, and prints
+      it at the end. We want another function to read that String without
+      taking it. That is exactly what borrowing is for.
     sources:
       - title: "The Rust Book — References and Borrowing"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
@@ -130,7 +130,7 @@ scenes:
     narration: >
       [[mark:type-call]] Call measure with a reference to owner, and print the
       length it returns. The borrow starts at the ampersand and ends inside
-      the call. When it returns, owner is untouched and still in charge of the
+      the call. When the call returns, owner is unchanged and still owns the
       String.
     sources:
       - title: "std::string::String::len"
@@ -151,8 +151,8 @@ scenes:
       [[mark:show-borrow-rules]] Borrowing has one rule of its own. At any
       given time you hold either one mutable reference or any number of
       shared ones. Many readers, or a single writer — never both at once.
-      [[mark:type-readers]] Two shared references to owner can live side by
-      side, because neither one is allowed to change the String they are
+      [[mark:type-readers]] Two shared references to owner can exist at the
+      same time, because neither one is allowed to change the String they are
       reading.
     sources:
       - title: "The Rust Book — Mutable References"
@@ -179,8 +179,8 @@ scenes:
     narration: >
       [[mark:run]] Run it. Fourteen bytes measured through a borrow, two
       readers sharing one String, and the final line proves owner still owns
-      it. Every one of those accesses was checked at compile time — the
-      running program pays nothing for the proof.
+      it. Every one of those accesses was checked at compile time. The running
+      program does no extra work.
     sources:
       - title: "Rust Playground"
         url: "https://play.rust-lang.org/"
@@ -203,9 +203,9 @@ scenes:
   - id: wrap
     narration: >
       When the borrow checker rejects your code, it is pointing at one of the
-      rules you have now seen. Name the owner, find the borrows, and check who
-      outlives whom. Chapter four of the Rust Book walks this same ground in
-      more depth, moves and mutable borrows included.
+      rules you have now seen. Name the owner, find the borrows, and check how
+      long each reference lives. That is the whole method — and it is how Rust
+      stays safe without a garbage collector.
     sources:
       - title: "The Rust Book — Understanding Ownership"
         url: "https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html"

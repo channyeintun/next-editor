@@ -45,6 +45,19 @@ Filler that pads narration or condescends. The critic flags these (v1 list):
 "Just" as a verb qualifier ("just a value multiplied…") is fine; "just simply do
 X" is not.
 
+## Plain English for a global audience
+
+Learners are often non-native English speakers. Narration must use common,
+plain words — if a phrase would need a dictionary or is an idiom, rewrite it:
+
+- No idioms or figures of speech: "runs behind your back", "walks the same
+  ground", "who outlives whom", "side by side", "pays nothing for".
+- No uncommon word when a common one works: "blunt" → "not what you want",
+  "outright" → "completely", "untouched" → "unchanged".
+- Do not cite books, chapters, or external material in the spoken narration
+  ("Chapter four of the Rust Book…") — citations live in each scene's
+  `sources`, not in the audio.
+
 ## Code on screen
 
 - Narrate _why_, show _what_: the typed code is visible — read out only the part
