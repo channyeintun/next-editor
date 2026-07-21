@@ -1,6 +1,6 @@
 # Agent Lesson Production — Architecture and Delivery Plan
 
-- **Status:** M0–M4 implemented (2026-07-21) in `src/studio/` — see [studio-m0-runbook.md](./studio-m0-runbook.md) and [studio-persona.md](./studio-persona.md). M1: YAML `LessonScript`, marker compiler, TTS cache, Director CLI. M2: slide/whiteboard surfaces, silent runtime retry, unattended render command. M3: compiled timing gate + draft creation through the standard upload flow with provenance disclosure. M4: persona guide v1, advisory critic, citation requirements, three pilots (go-cube, go-cube-tour, go-swap — each passed 2× unattended renders with repeatability PASS). The remaining gates are human by design: watch/rate the pilots, publish decisions, and the scale/revise/stop call. Post-M4 (2026-07-21): narration moved to per-dialog in-page synthesis over onnxruntime-web with joint dialog/action scheduling and build-time stitching — marker timing is exact by construction and the `say`/macOS dependency is gone. Voice: **pocket-tts** (Kyutai) via KevinAHM's ONNX export, ported with seeded flow-matching noise for byte-reproducible dialogs
+- **Status:** The M0–M4 baseline is implemented (2026-07-21) in `src/studio/` — see [studio-m0-runbook.md](./studio-m0-runbook.md) and [studio-persona.md](./studio-persona.md). The JavaScript/TypeScript WebContainer and preview adapter is implemented behind a versioned runtime contract, typed acknowledged actions, artifact QA, and normalized repeatability checks. It remains a **release candidate**, not a production-supported lesson path, until its checked-in TypeScript/Vite fixture passes two clean real-Chrome renders and a human watches the full replay. Publishing always remains a separate human decision. Post-M4 narration uses per-dialog in-page synthesis over onnxruntime-web with joint dialog/action scheduling and build-time stitching; marker timing is exact by construction and the `say`/macOS dependency is gone. Voice: **pocket-tts** (Kyutai) via KevinAHM's ONNX export, ported with seeded flow-matching noise for byte-reproducible dialogs.
 - **Repository audit:** 2026-07-20 at `2a7ec794ecbc`
 - **Primary decision:** build a versioned `LessonScript`, compile it into a content-addressed plan, and run that plan through a deterministic in-app Performer while the existing recorder captures the lesson
 - **Release policy:** generated lessons remain drafts until a human reviews and publishes them
@@ -62,26 +62,26 @@ Every input above must be content-addressed or versioned in the build manifest.
 
 Next Editor's `Recording.version = 4` model is serialized in the SCR3 container. The repository already records and replays the following surfaces:
 
-| Capability        | Exists today                                                                                                                                                | Production-harness gap                                                                         |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Editor            | Keyframes plus deltas; ordinary Monaco edits can be captured as verified exact edit batches, with DMP fallback                                              | A stable automation adapter for open/select/type/reveal actions and action acknowledgements    |
-| Captions          | `CaptionTrack`, `CaptionCue`, and millisecond `CaptionWord` timings                                                                                         | Narration-to-display token mapping, cue segmentation, and alignment validation                 |
-| External audio    | `START_RECORDING` accepts an audio `Blob`; recordings support `audioSource: "external"`, sibling `audioFile`, resolved `audioUrl`, and `audioStartOffsetMs` | A build/export step that preserves the original audio hash and the recorder-measured offset    |
-| Cursor            | Target-aware samples and playback remapping through `CursorTargetSnapshot`                                                                                  | A supported injection seam, stable target registry, and deterministic path generator           |
-| Workspace/sidebar | Timestamped project, active-file, folder, scroll, sidebar-width, and preview-dock-width snapshots                                                           | Commands that mutate state through the same path as the UI and expose completion signals       |
-| Runtime/dock      | Timestamped runtime and dock snapshots                                                                                                                      | Execution-kind-specific run/wait/assert adapters; arbitrary shell commands cannot be assumed   |
-| Preview           | rrweb initial documents and patch batches, plus API-client replay state                                                                                     | Readiness signals, deterministic fixtures, assertion helpers, and render-time error collection |
-| Whiteboard        | Element upserts/removals plus view/open/maximize state                                                                                                      | A supported automation adapter and an authored-asset format                                    |
-| Slides            | Native slide content/events and Google Slides ingestion                                                                                                     | A supported show/step/close adapter and pinned slide assets                                    |
-| Chat              | Recorded chat deltas and checkpoints                                                                                                                        | Out of V1 unless a pilot explicitly requires it                                                |
-| Publishing        | Authenticated upload to R2, D1-backed draft/publish APIs, and a static seed catalog                                                                         | A render-to-draft command and provenance/disclosure fields                                     |
+| Capability        | Exists today                                                                                                                                                | Production-harness gap                                                                                                |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Editor            | Keyframes plus deltas; ordinary Monaco edits can be captured as verified exact edit batches, with DMP fallback                                              | A stable automation adapter for open/select/type/reveal actions and action acknowledgements                           |
+| Captions          | `CaptionTrack`, `CaptionCue`, and millisecond `CaptionWord` timings                                                                                         | Narration-to-display token mapping, cue segmentation, and alignment validation                                        |
+| External audio    | `START_RECORDING` accepts an audio `Blob`; recordings support `audioSource: "external"`, sibling `audioFile`, resolved `audioUrl`, and `audioStartOffsetMs` | A build/export step that preserves the original audio hash and the recorder-measured offset                           |
+| Cursor            | Target-aware samples and playback remapping through `CursorTargetSnapshot`                                                                                  | A supported injection seam, stable target registry, and deterministic path generator                                  |
+| Workspace/sidebar | Timestamped project, active-file, folder, scroll, sidebar-width, and preview-dock-width snapshots                                                           | Commands that mutate state through the same path as the UI and expose completion signals                              |
+| Runtime/dock      | Timestamped runtime and dock snapshots; Playground run actions; versioned WebContainer start/readiness actions                                              | Qualify the WebContainer contract with two clean real-Chrome renders; ad-hoc runtime shell actions remain unsupported |
+| Preview           | rrweb seed/patch capture; acknowledged test-ID actions; DOM/route checkpoints; screenshot diagnostics; normalized repeatability                             | Complete the real-Chrome and human replay acceptance gate before calling JS/TS preview production-supported           |
+| Whiteboard        | Element upserts/removals plus view/open/maximize state                                                                                                      | A supported automation adapter and an authored-asset format                                                           |
+| Slides            | Native slide content/events and Google Slides ingestion                                                                                                     | A supported show/step/close adapter and pinned slide assets                                                           |
+| Chat              | Recorded chat deltas and checkpoints                                                                                                                        | Out of V1 unless a pilot explicitly requires it                                                                       |
+| Publishing        | Authenticated upload to R2, D1-backed draft/publish APIs, and a static seed catalog                                                                         | A render-to-draft command and provenance/disclosure fields                                                            |
 
 Playback already applies editor diffs to live Monaco and restores workspace, runtime, slide, preview, whiteboard, cursor, and chat state. That code is useful precedent, but it is not yet a Performer API.
 
 ### Constraints discovered during the audit
 
-1. There is no stable “drive the studio” interface. The recorder's cursor callback and several surface handlers are internal implementation details, so the Performer needs an intentional adapter instead of reaching into XState actors or DOM internals.
-2. The in-app OpenRouter agent is not a universal beat verifier. File tools work across execution kinds, while `bash`, runtime diagnostics, and preview inspection are currently limited to WebContainer lessons. Go, Kotlin, and Rust use explicit Playground run paths.
+1. The Performer now drives supported surfaces through `StudioDriver`; scripts never reach into XState actors or DOM internals. New surfaces must extend that typed, acknowledged boundary rather than bypass it.
+2. The in-app OpenRouter agent is not a universal beat verifier. File tools work across execution kinds, while WebContainer lifecycle and preview inspection use the dedicated Studio adapter. Go, Kotlin, and Rust continue to use explicit Playground run paths.
 3. Playback uses isolated Monaco models and does not currently provide a supported “pause, fork this state into a writable workspace, and run it” learner flow. That remains a valuable product extension, not a property to claim today.
 4. The standalone Cloudflare remote runtime is implemented and reviewed, but editor integration and environment validation are still pending. V1 must work with the execution kinds available in the editor today.
 5. The repository contains one checked-in lesson, `public/lessons/introduction/introduction.ne`. The previously claimed ~41-lesson Go benchmark corpus is not present in this tree. Any external corpus must be located, licensed, inventoried, and pinned before it becomes a project dependency.
@@ -150,7 +150,14 @@ interface StudioDriver {
   typeText(input: TypeTextInput): Promise<ActionReceipt>;
   setCursorTarget(input: CursorTargetInput): Promise<ActionReceipt>;
   runWorkspace(): Promise<RunReceipt>;
-  waitForRuntime(input: RuntimeExpectation): Promise<ActionReceipt>;
+  startRuntime(input: RuntimeStartInput): Promise<ActionReceipt>;
+  waitForRuntimeReady(input: RuntimeReadyInput): Promise<ActionReceipt>;
+  openPreview(input: PreviewOpenInput): Promise<ActionReceipt>;
+  clickPreview(input: PreviewTargetInput): Promise<ActionReceipt>;
+  inputPreview(input: PreviewInput): Promise<ActionReceipt>;
+  scrollPreview(input: PreviewScrollInput): Promise<ActionReceipt>;
+  routePreview(input: PreviewRouteInput): Promise<ActionReceipt>;
+  expectPreview(input: PreviewExpectation): Promise<ActionReceipt>;
   showSlide(input: SlideAction): Promise<ActionReceipt>;
   applyWhiteboard(input: WhiteboardAction): Promise<ActionReceipt>;
 }
@@ -252,6 +259,8 @@ checks:
 - Text targets require a file, an anchor, and an occurrence. Compilation fails on a missing or ambiguous target; the Performer never guesses.
 - The compiler calculates action durations and rejects impossible overlaps, such as a run action scheduled before a typed edit can finish.
 - `runtime.run` maps to the active execution kind. It is not synonymous with arbitrary `bash` execution.
+- JavaScript and TypeScript use the versioned `webcontainer` contract: explicit start, readiness, preview interaction, and preview assertions. They do not use `runtime.run` or `expect.output`.
+- Cross-origin preview actions target author-owned `data-testid` values and complete only after the injected bridge acknowledges the command.
 - `expect.*` actions are QA gates and appear in the report, not as lesson tracks.
 - `afterAction` means after the referenced action completes unless the script explicitly selects its start receipt.
 - Absolute wall-clock times are forbidden in source scripts. The compiled plan contains absolute recording-clock times.
@@ -389,6 +398,8 @@ Add the Zod schema, YAML loader, marker compiler, typed action plan, pronunciati
 Implement the `StudioDriver` adapters for editor, cursor, workspace, current runtimes, preview, slides, and whiteboard. Add timeouts, cancellation, readiness signals, and a Playwright render command.
 
 **Exit criteria:** one pilot uses at least four surfaces, survives a retryable runtime failure, and produces no unacknowledged actions.
+
+**Current qualification:** the typed WebContainer/preview implementation and mechanical gates exist, but JS/TS preview remains release-candidate-only until the checked-in interaction fixture passes two clean real-Chrome renders and full human replay review. CI/headless evidence alone does not satisfy this gate.
 
 ### M3 — QA and draft publishing
 

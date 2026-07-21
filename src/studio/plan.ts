@@ -354,9 +354,10 @@ export const rustRunFixtureSchema = z.object({
  * Execution-kind-specific runtime declaration. "live" calls the real
  * /api/<kind> proxy (requires a signed-in session); "fixture" replays the
  * pinned result. Unattended renders default to the plan's declared mode; the
- * manifest records which one ran. Kind "none" is for the WebContainer/preview
- * lesson types, whose run surface is a pending studio adapter — such lessons
- * narrate, edit, and use slides/whiteboard, but carry no `runtime.run`.
+ * manifest records which one ran. Kind "webcontainer" is the versioned JS/TS
+ * lifecycle and preview contract. Kind "none" is reserved for lesson types
+ * (currently Python) that narrate, edit, and use slides/whiteboard without a
+ * Studio-owned execution surface.
  */
 export const studioRuntimeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("none") }),
