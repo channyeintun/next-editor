@@ -37,10 +37,12 @@ import { areWorkspaceProjectsEqual, lessonRunsInWebContainer } from "../types/wo
 
 interface WebContainerRuntimeProviderProps {
   children: React.ReactNode;
+  allowAmbientStart?: boolean;
 }
 
 export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderProps> = ({
   children,
+  allowAmbientStart = true,
 }) => {
   const { getProject, getWorkspaceRevision, reconcileExternalProject, subscribeWorkspaceSync } =
     useWorkspaceActions();
@@ -497,6 +499,13 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     persistEnvironmentVariables(normalizedVariables);
   };
 
+  const configureRuntime: WebContainerRuntimeActions["configureRuntime"] = (configuration) => {
+    const normalizedVariables = normalizeEnvironmentVariables(configuration.environmentVariables);
+    runnerConfigRef.current = configuration.runnerConfig;
+    setRunnerConfig(configuration.runnerConfig);
+    setEnvironmentVariables(normalizedVariables);
+  };
+
   const onLessonTypeChange = useEffectEvent(() => {
     hasAutoStartedRef.current = false;
     if (!lessonRunsInWebContainer(lessonType)) {
@@ -536,6 +545,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   useEffect(() => {
     if (
       !lessonRunsInWebContainer(lessonType) ||
+      !allowAmbientStart ||
       !isSupported ||
       hasAutoStartedRef.current ||
       !runnerConfig.enabled ||
@@ -555,6 +565,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     projectId,
     runnerConfig.enabled,
     runnerConfig.runOnStartup,
+    allowAmbientStart,
   ]);
 
   useEffect(() => {
@@ -630,6 +641,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     saveWorkspace,
     updateEnvironmentVariables,
     updateRunnerConfig,
+    configureRuntime,
   };
 
   const metadataValue: WebContainerRuntimeMetadata = {
@@ -648,6 +660,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     environmentVariables,
     runnerConfig,
     workspaceRoot,
+    ambientStartEnabled: allowAmbientStart,
   };
 
   return (

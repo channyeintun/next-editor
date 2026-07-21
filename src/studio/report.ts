@@ -55,7 +55,7 @@ export interface StudioRenderReport {
 }
 
 export interface StudioBuildManifest {
-  manifestVersion: 1;
+  manifestVersion: 2;
   planSlug: string;
   planTitle: string;
   planHash: string;
@@ -66,6 +66,16 @@ export interface StudioBuildManifest {
   captionsHash: string;
   runtimeKind: StudioRuntimeKind;
   runtimeMode: StudioRuntimeMode;
+  runtimeContract: {
+    kind: "webcontainer";
+    adapterVersion: 1;
+    initCommand: string;
+    runCommand: string;
+    expectedPort: number | null;
+    lockfilePath: string;
+    lockfileSha256: string;
+    environmentSha256: string;
+  } | null;
   environment: {
     userAgent: string;
     appMode: string;

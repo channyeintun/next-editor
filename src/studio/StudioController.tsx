@@ -9,6 +9,7 @@ import { useWhiteboardStore } from "../contexts/WhiteboardStoreContext";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
 import {
   useWebContainerRuntimeActions,
+  useWebContainerRuntimeMetadata,
   useWebContainerRuntimeSnapshotGetter,
 } from "../hooks/useWebContainerRuntime";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
@@ -172,15 +173,18 @@ export default function StudioController() {
   const { store: slidesStore } = useSlidesStore();
   const { store: whiteboardStore } = useWhiteboardStore();
   const webContainerRuntimeActions = useWebContainerRuntimeActions();
+  const webContainerRuntimeMetadata = useWebContainerRuntimeMetadata();
   const getWebContainerRuntimeSnapshot = useWebContainerRuntimeSnapshotGetter();
   const previewPanel = usePreviewPanel();
   const previewHandle = usePreviewAdapterHandle();
   const { isSignedIn, isLoading: authLoading } = useAuth();
   const webContainerRuntimeActionsRef = useRef(webContainerRuntimeActions);
+  const webContainerRuntimeMetadataRef = useRef(webContainerRuntimeMetadata);
 
   useLayoutEffect(() => {
     webContainerRuntimeActionsRef.current = webContainerRuntimeActions;
-  }, [webContainerRuntimeActions]);
+    webContainerRuntimeMetadataRef.current = webContainerRuntimeMetadata;
+  }, [webContainerRuntimeActions, webContainerRuntimeMetadata]);
 
   const planSlug = searchParams.get("plan") ?? DEFAULT_STUDIO_PLAN_SLUG;
   const requestedMode = searchParams.get("runtime") === "live" ? "live" : null;
@@ -410,10 +414,12 @@ export default function StudioController() {
           whiteboardStore,
           webContainerRuntime: {
             getActions: () => webContainerRuntimeActionsRef.current,
+            getMetadata: () => webContainerRuntimeMetadataRef.current,
             getSnapshot: getWebContainerRuntimeSnapshot,
           },
           preview: {
             open: (mode) => previewPanel.openPreview(mode),
+            close: previewPanel.closePreview,
             getState: () => previewHandle.snapshotGetter.current?.() ?? null,
             executeCommand: (command, options) => {
               const executor = previewHandle.previewCommandExecutor.current;

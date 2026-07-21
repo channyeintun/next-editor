@@ -161,6 +161,56 @@ export async function runStudioRender(
     return failedResult('WebContainer Studio renders require runtime mode "live"');
   }
 
+  if (plan.runtime.kind === "webcontainer") {
+    const metadata = deps.webContainerRuntime.getMetadata();
+    if (!metadata.isSupported) {
+      return failedResult(
+        "WebContainer Studio renders require a supported, cross-origin-isolated desktop browser",
+      );
+    }
+
+    phase("prepare-runtime-contract");
+    const actions = deps.webContainerRuntime.getActions();
+    actions.resetRuntime();
+    actions.configureRuntime({
+      environmentVariables: plan.runtime.environment,
+      runnerConfig: {
+        enabled: true,
+        runOnStartup: false,
+        runOnFileSave: false,
+        initCommand: plan.runtime.initCommand,
+        runCommand: plan.runtime.runCommand,
+      },
+    });
+
+    try {
+      await waitUntil(
+        () => {
+          const current = deps.webContainerRuntime.getMetadata();
+          return (
+            current.runnerConfig.enabled === true &&
+            current.runnerConfig.runOnStartup === false &&
+            current.runnerConfig.runOnFileSave === false &&
+            current.runnerConfig.initCommand === plan.runtime.initCommand &&
+            current.runnerConfig.runCommand === plan.runtime.runCommand &&
+            Object.keys(current.environmentVariables).length ===
+              Object.keys(plan.runtime.environment).length &&
+            Object.entries(plan.runtime.environment).every(
+              ([key, value]) => current.environmentVariables[key] === value,
+            )
+          );
+        },
+        {
+          timeoutMs: 2_000,
+          signal,
+          description: "the pinned WebContainer runner contract to apply",
+        },
+      );
+    } catch (error) {
+      return failedResult(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   let audioBytes: Uint8Array;
   let audioBlob: Blob;
   if (options.narration) {
@@ -189,6 +239,7 @@ export async function runStudioRender(
   // ---- Pin the workspace + surface assets ----------------------------------
   phase("prepare-workspace");
   deps.nextEditor.clearRecording();
+  deps.preview.close();
   deps.workspace.loadProject(workspaceProjectFromPlan(plan), plan.workspace.entryFilePath);
   // Slides/whiteboard start from a clean, closed state holding exactly the
   // plan's pinned assets — repeat renders must not inherit the previous run's.
@@ -225,7 +276,9 @@ export async function runStudioRender(
         }
         const model = deps.getEditor()?.getModel();
         return (
-          !!model && workspacePathFromMonacoModelUri(model.uri) === plan.workspace.entryFilePath
+          !!model &&
+          workspacePathFromMonacoModelUri(model.uri) === plan.workspace.entryFilePath &&
+          deps.preview.getState() === null
         );
       },
       {
@@ -432,8 +485,24 @@ async function baseManifest(
   audioHash: string | null,
   artifact: StudioBuildManifest["artifact"],
 ): Promise<StudioBuildManifest> {
+  const runtimeContract =
+    plan.runtime.kind === "webcontainer"
+      ? {
+          kind: "webcontainer" as const,
+          adapterVersion: plan.runtime.adapterVersion,
+          initCommand: plan.runtime.initCommand,
+          runCommand: plan.runtime.runCommand,
+          expectedPort: plan.runtime.expectedPort ?? null,
+          lockfilePath: plan.runtime.lockfilePath,
+          lockfileSha256: await sha256Hex(
+            new TextEncoder().encode(plan.workspace.files[plan.runtime.lockfilePath] ?? ""),
+          ),
+          environmentSha256: await sha256HexOfJson(plan.runtime.environment),
+        }
+      : null;
+
   return {
-    manifestVersion: 1,
+    manifestVersion: 2,
     planSlug: plan.lesson.slug,
     planTitle: plan.lesson.title,
     planHash: await sha256HexOfJson(plan),
@@ -444,6 +513,7 @@ async function baseManifest(
     captionsHash: await sha256HexOfJson(plan.narration.captions),
     runtimeKind: plan.runtime.kind,
     runtimeMode,
+    runtimeContract,
     environment: {
       userAgent: typeof navigator === "undefined" ? "unknown" : navigator.userAgent,
       appMode: import.meta.env.MODE,

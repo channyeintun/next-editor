@@ -10,6 +10,7 @@ import type { PreviewPanelMode, PreviewState } from "../types/slides";
 import { isWorkspaceTextFile } from "../types/workspace";
 import type {
   WebContainerRuntimeActions,
+  WebContainerRuntimeMetadata,
   WebContainerRuntimeRecordingSnapshot,
 } from "../contexts/WebContainerRuntimeContext";
 import type {
@@ -66,11 +67,16 @@ export interface StudioDriverDeps {
   planSeed: number;
   whiteboardAssets: readonly StudioWhiteboardAsset[];
   webContainerRuntime: {
-    getActions: () => Pick<WebContainerRuntimeActions, "startRuntime">;
+    getActions: () => Pick<
+      WebContainerRuntimeActions,
+      "startRuntime" | "resetRuntime" | "configureRuntime"
+    >;
+    getMetadata: () => WebContainerRuntimeMetadata;
     getSnapshot: () => WebContainerRuntimeRecordingSnapshot;
   };
   preview: {
     open: (mode: PreviewPanelMode) => void;
+    close: () => void;
     getState: () => PreviewState | null;
     executeCommand: PreviewCommandExecutor;
     captureScreenshot: PreviewScreenshotCapturer;
@@ -404,7 +410,14 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
           `runtime.start requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
         );
       }
-      await deps.webContainerRuntime.getActions().startRuntime();
+      try {
+        await deps.webContainerRuntime.getActions().startRuntime();
+      } catch (error) {
+        throw new StudioActionError(
+          `WebContainer startup failed: ${error instanceof Error ? error.message : String(error)}`,
+          { runtime: webContainerDiagnostic(deps.webContainerRuntime.getSnapshot()) },
+        );
+      }
       const snapshot = deps.webContainerRuntime.getSnapshot();
       assertWebContainerHealthy(snapshot);
       return {
@@ -421,25 +434,35 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
           `runtime.waitForReady requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
         );
       }
-      await waitUntil(
-        () => {
-          const snapshot = deps.webContainerRuntime.getSnapshot();
-          assertWebContainerHealthy(snapshot);
-          return (
-            snapshot.status === "ready" &&
-            Boolean(snapshot.previewUrl) &&
-            (deps.runtime.kind !== "webcontainer" ||
-              deps.runtime.expectedPort === undefined ||
-              snapshot.previewPort === deps.runtime.expectedPort)
-          );
-        },
-        {
-          timeoutMs,
-          signal,
-          description: `WebContainer server${deps.runtime.expectedPort ? ` on port ${deps.runtime.expectedPort}` : ""} to become ready`,
-          intervalMs: 50,
-        },
-      );
+      try {
+        await waitUntil(
+          () => {
+            const snapshot = deps.webContainerRuntime.getSnapshot();
+            assertWebContainerHealthy(snapshot);
+            return (
+              snapshot.status === "ready" &&
+              Boolean(snapshot.previewUrl) &&
+              (deps.runtime.kind !== "webcontainer" ||
+                deps.runtime.expectedPort === undefined ||
+                snapshot.previewPort === deps.runtime.expectedPort)
+            );
+          },
+          {
+            timeoutMs,
+            signal,
+            description: `WebContainer server${deps.runtime.expectedPort ? ` on port ${deps.runtime.expectedPort}` : ""} to become ready`,
+            intervalMs: 50,
+          },
+        );
+      } catch (error) {
+        if (error instanceof StudioActionError && error.detail) {
+          throw error;
+        }
+        const snapshot = deps.webContainerRuntime.getSnapshot();
+        throw new StudioActionError(error instanceof Error ? error.message : String(error), {
+          runtime: webContainerDiagnostic(snapshot),
+        });
+      }
       const snapshot = deps.webContainerRuntime.getSnapshot();
       return {
         status: snapshot.status,
@@ -461,10 +484,18 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         signal,
         description: `the ${mode} preview panel to open`,
       });
-      const acknowledgement = await deps.preview.executeCommand(
-        { type: "ping" },
-        { timeoutMs, signal },
-      );
+      let acknowledgement: StudioPreviewCommandResult;
+      try {
+        acknowledgement = await deps.preview.executeCommand(
+          { type: "ping" },
+          { timeoutMs, signal },
+        );
+      } catch (error) {
+        throw new StudioActionError(
+          `Preview iframe did not become ready: ${error instanceof Error ? error.message : String(error)}`,
+          { runtime: webContainerDiagnostic(deps.webContainerRuntime.getSnapshot()) },
+        );
+      }
       assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
       return { mode, bridge: "ready", route: acknowledgement.route };
     },

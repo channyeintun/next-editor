@@ -135,7 +135,7 @@ interface Harness {
   dirty: WorkspaceDirtyState | null;
 }
 
-function renderProviders() {
+function renderProviders(allowAmbientStart = true) {
   const captured: Harness = { runtime: null, workspace: null, dirty: null };
 
   function Capture() {
@@ -149,7 +149,11 @@ function renderProviders() {
     createElement(
       WorkspaceProvider,
       null,
-      createElement(WebContainerRuntimeProvider, null, createElement(Capture)),
+      createElement(
+        WebContainerRuntimeProvider,
+        { allowAmbientStart },
+        createElement(Capture),
+      ),
     ),
   );
 
@@ -175,6 +179,26 @@ describe("WebContainerRuntimeProviderImpl reverse sync", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("suppresses ambient startup while preserving explicit runtime.start", async () => {
+    const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
+    const { instance } = createFakeInstance(fakeFs);
+    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const boot = vi.mocked(getOrBootSharedWebContainer);
+    boot.mockReset();
+    boot.mockResolvedValue(instance);
+
+    const { runtime } = renderProviders(false);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(boot).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await runtime.startRuntime();
+    });
+    expect(boot).toHaveBeenCalledTimes(1);
   });
 
   it("syncs a lock file created by the init command without any terminal session existing", async () => {

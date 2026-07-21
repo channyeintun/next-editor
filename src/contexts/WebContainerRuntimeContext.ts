@@ -62,6 +62,11 @@ export interface WebContainerRuntimeActions {
   saveWorkspace: () => Promise<void>;
   updateEnvironmentVariables: (variables: EnvironmentVariables) => void;
   updateRunnerConfig: (config: Partial<RunnerConfig>) => void;
+  /** Applies an ephemeral, complete Studio contract without persisting it as a user setting. */
+  configureRuntime: (configuration: {
+    environmentVariables: EnvironmentVariables;
+    runnerConfig: RunnerConfig;
+  }) => void;
 }
 
 export interface WebContainerRuntimeMetadata {
@@ -80,6 +85,8 @@ export interface WebContainerRuntimeMetadata {
   environmentVariables: EnvironmentVariables;
   runnerConfig: RunnerConfig;
   workspaceRoot: string;
+  /** False on /studio: only typed plan actions may start the runtime there. */
+  ambientStartEnabled: boolean;
 }
 
 export interface WebContainerRuntimeRecordingSnapshot {

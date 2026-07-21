@@ -14,5 +14,11 @@ import StudioController from "./StudioController";
  * policy — start via the button when in doubt).
  */
 export default function StudioRoute() {
-  return <Editor breadcrumb={<Breadcrumb title="Studio" />} overlay={<StudioController />} />;
+  return (
+    <Editor
+      breadcrumb={<Breadcrumb title="Studio" />}
+      overlay={<StudioController />}
+      runtimeAutoStart={false}
+    />
+  );
 }

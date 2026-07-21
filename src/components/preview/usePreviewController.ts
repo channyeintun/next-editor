@@ -286,6 +286,7 @@ export function usePreviewController(): PreviewController {
     errorMessage: runtimeErrorMessage,
     isSupported: isRuntimeSupported,
     runnerConfig,
+    ambientStartEnabled,
   } = useWebContainerRuntimeMetadata();
 
   const { currentRecording, isPlaying, isRecording, usesPlaybackModel } = useNextEditorMetadata();
@@ -1016,6 +1017,7 @@ export function usePreviewController(): PreviewController {
 
     if (
       !lessonRunsInWebContainer(lessonType) ||
+      !ambientStartEnabled ||
       isPlaybackPreviewActive ||
       !isRuntimeSupported ||
       !runnerConfig.enabled ||
@@ -1038,6 +1040,7 @@ export function usePreviewController(): PreviewController {
     void startRuntime();
   }, [
     isOpen,
+    ambientStartEnabled,
     isPlaybackPreviewActive,
     isRuntimeSupported,
     lessonType,

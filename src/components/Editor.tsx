@@ -91,6 +91,8 @@ export interface EditorProps {
    *  layout — the dev-only studio render console uses this to reach the editor,
    *  workspace, and runtime contexts without duplicating the provider tree. */
   overlay?: ReactNode;
+  /** Disable runtime startup caused by workspace load or preview open (Studio owns it). */
+  runtimeAutoStart?: boolean;
 }
 
 export function EditorLayout({
@@ -328,10 +330,14 @@ export function EditorLayout({
   );
 }
 
-export default function Editor({ overlay, ...props }: EditorProps = {}) {
+export default function Editor({
+  overlay,
+  runtimeAutoStart = true,
+  ...props
+}: EditorProps = {}) {
   return (
     <WorkspaceProvider>
-      <WebContainerRuntimeProvider>
+      <WebContainerRuntimeProvider allowAmbientStart={runtimeAutoStart}>
         <SlidesStoreProvider>
           <WhiteboardStoreProvider>
             <RuntimePanelStoreProvider>
