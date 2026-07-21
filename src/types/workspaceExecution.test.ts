@@ -26,6 +26,8 @@ const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKin
   "htmx-express": "webcontainer",
   "alpine-express": "webcontainer",
   "express-ts": "webcontainer",
+  javascript: "webcontainer",
+  typescript: "webcontainer",
   go: "go-playground",
   kotlin: "kotlin-playground",
   python: "webcontainer",

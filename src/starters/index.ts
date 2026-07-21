@@ -25,6 +25,10 @@ const STARTER_LOADERS: Record<WorkspaceLessonType, () => Promise<() => Workspace
     import("./alpineExpress").then((module) => module.createStarterAlpineExpressWorkspace),
   "express-ts": () =>
     import("./expressTs").then((module) => module.createStarterExpressTsWorkspace),
+  javascript: () =>
+    import("./javascript").then((module) => module.createStarterJavascriptWorkspace),
+  typescript: () =>
+    import("./typescript").then((module) => module.createStarterTypescriptWorkspace),
   go: () => import("./go").then((module) => module.createStarterGoWorkspace),
   kotlin: () => import("./kotlin").then((module) => module.createStarterKotlinWorkspace),
   python: () => import("./python").then((module) => module.createStarterPythonWorkspace),

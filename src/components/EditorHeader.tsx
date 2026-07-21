@@ -62,6 +62,8 @@ const LESSON_TYPE_OPTIONS: Array<{
   { value: "htmx-express", label: "HTMX + Express" },
   { value: "alpine-express", label: "Alpine AJAX + Express" },
   { value: "express-ts", label: "Express + TypeScript" },
+  { value: "javascript", label: "JavaScript / Node.js" },
+  { value: "typescript", label: "TypeScript" },
   { value: "go", label: "Go" },
   { value: "kotlin", label: "Kotlin" },
   { value: "python", label: "Python" },

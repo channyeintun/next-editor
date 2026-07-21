@@ -81,6 +81,8 @@ export type WorkspaceLessonType =
   | "htmx-express"
   | "alpine-express"
   | "express-ts"
+  | "javascript"
+  | "typescript"
   | "go"
   | "kotlin"
   | "python"
@@ -90,10 +92,13 @@ export type WorkspaceLessonType =
  * Every browser-runtime lesson type is served by its own dev server inside the
  * WebContainer: the Vite-based SPAs (react, vue, solid, svelte) and html-css
  * run a Vite dev server, while htmx-express, alpine-express, and express-ts run
- * an Express server. Python also runs in the WebContainer, but through its
- * experimental WASI interpreter — the runner executes the script and exits
- * instead of keeping a server alive. Go, Kotlin, and Rust are deliberately
- * excluded because they use the selective Playground execution paths below.
+ * an Express server. The language-level javascript and typescript lessons run
+ * their entry script with Node (exit-and-rerun, like python), but keep the
+ * full Node runtime — they may install packages or start servers. Python also
+ * runs in the WebContainer, but through its experimental WASI interpreter —
+ * the runner executes the script and exits instead of keeping a server alive.
+ * Go, Kotlin, and Rust are deliberately excluded because they use the
+ * selective Playground execution paths below.
  */
 const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "html-css",
@@ -104,6 +109,8 @@ const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "htmx-express",
   "alpine-express",
   "express-ts",
+  "javascript",
+  "typescript",
   "python",
 ]);
 

@@ -77,7 +77,7 @@ lesson:
   title: "…"
   locale: en-US
   workspace: # the PINNED starter state (exact file contents)
-    lessonType: go # any workspace lesson type, see the matrix below
+    lessonType: go # one of the six languages, see the matrix below
     name: Go Lesson
     entryFilePath: main.go
     files:
@@ -106,20 +106,28 @@ checks:
 
 ### Lesson types and runtime kinds
 
-Every workspace lesson type is scriptable. `runtime.kind` is fixed by the
-lesson type — the schema rejects mismatches:
+Lesson types are the six **languages** the platform teaches — not the starter
+templates (react, vue, svelte, … are just seeded workspace conveniences for
+users; the WebContainer runs any pinned JS/TS workspace). `runtime.kind` is
+fixed by the lesson type — the schema rejects mismatches:
 
-| `lessonType`                                                                                            | `runtime.kind`      | can `runtime.run`? |
-| ------------------------------------------------------------------------------------------------------- | ------------------- | ------------------ |
-| `go`                                                                                                    | `go-playground`     | yes                |
-| `kotlin`                                                                                                | `kotlin-playground` | yes                |
-| `rust`                                                                                                  | `rust-playground`   | yes                |
-| `html-css`, `react`, `vue`, `solid`, `svelte`, `htmx-express`, `alpine-express`, `express-ts`, `python` | `none`              | no                 |
+| `lessonType`                         | `runtime.kind`      | can `runtime.run`? |
+| ------------------------------------ | ------------------- | ------------------ |
+| `go`                                 | `go-playground`     | yes                |
+| `kotlin`                             | `kotlin-playground` | yes                |
+| `rust`                               | `rust-playground`   | yes                |
+| `javascript`, `typescript`, `python` | `none`              | no                 |
+
+A `javascript` (Node.js) or `typescript` lesson pins whatever WebContainer
+workspace the lesson needs — a bare Node script, an Express server, a React or
+Vue app — the runtime is not limited to the starters. `python` runs the
+WebContainer's WASI script model. Go, Kotlin, and Rust are limited to their
+playground services.
 
 Kind `none` lessons omit the `runtime:` block entirely (or write
 `runtime: { kind: none }`) and must not use `runtime.run` or `expect.output` —
 they teach through editing, slides, whiteboard, and `expect.file` gates. Their
-WebContainer/preview execution path is not yet driven by the studio.
+WebContainer execution path is not yet driven by the studio.
 
 Per-kind fixture `result` shapes (all fields exact program truth):
 

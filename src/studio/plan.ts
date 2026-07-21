@@ -129,19 +129,19 @@ export const studioPlanActionSchema = z.discriminatedUnion("type", [
 export type StudioPlanAction = z.infer<typeof studioPlanActionSchema>;
 export type StudioPlanActionType = StudioPlanAction["type"];
 
-/** Every lesson type the workspace supports (kept in sync with `WorkspaceLessonType`). */
+/**
+ * Lesson types are the six languages the platform teaches — not the starter
+ * templates (react, vue, …), which are just seeded workspace conveniences.
+ * javascript/typescript lessons pin arbitrary WebContainer (Node) workspaces;
+ * python runs its WASI script model; go/kotlin/rust use their playgrounds.
+ * Each value is also a valid `WorkspaceLessonType` for the pinned project.
+ */
 export const studioLessonTypeSchema = z.enum([
-  "html-css",
-  "react",
-  "vue",
-  "solid",
-  "svelte",
-  "htmx-express",
-  "alpine-express",
-  "express-ts",
+  "javascript",
+  "typescript",
+  "python",
   "go",
   "kotlin",
-  "python",
   "rust",
 ]);
 export type StudioLessonType = z.infer<typeof studioLessonTypeSchema>;
@@ -291,18 +291,13 @@ export type StudioRuntimeMode = "live" | "fixture";
 
 /**
  * The one runtime kind each lesson type may declare. The three Playground
- * types execute through their selective proxies; every WebContainer/preview
- * type is "none" until the studio grows that adapter.
+ * languages execute through their selective proxies; the WebContainer
+ * languages (javascript, typescript, python) are "none" until the studio
+ * grows that adapter.
  */
 export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind> = {
-  "html-css": "none",
-  react: "none",
-  vue: "none",
-  solid: "none",
-  svelte: "none",
-  "htmx-express": "none",
-  "alpine-express": "none",
-  "express-ts": "none",
+  javascript: "none",
+  typescript: "none",
   python: "none",
   go: "go-playground",
   kotlin: "kotlin-playground",
