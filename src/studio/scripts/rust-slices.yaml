@@ -20,57 +20,168 @@ lesson:
             let word = &text[0..6];
             println!("slice: {word}");
         }
+  # Diagram: the array [10,20,30,40,50] drawn as 5 indexed boxes, with a
+  # highlighted frame over indices 1..4 (the slice) and its value + note.
   whiteboardAssets:
     - id: sl-title
       kind: text
-      x: 300
-      y: 185
-      width: 680
+      x: 320
+      y: 175
+      width: 760
+      height: 44
+      text: "A slice — a window into an array"
+      strokeColor: "#1e1e1e"
+      fontSize: 34
+    - id: sl-box0
+      kind: rectangle
+      x: 340
+      y: 300
+      width: 92
+      height: 84
+      strokeColor: "#1e1e1e"
+    - id: sl-box1
+      kind: rectangle
+      x: 440
+      y: 300
+      width: 92
+      height: 84
+      strokeColor: "#1e1e1e"
+    - id: sl-box2
+      kind: rectangle
+      x: 540
+      y: 300
+      width: 92
+      height: 84
+      strokeColor: "#1e1e1e"
+    - id: sl-box3
+      kind: rectangle
+      x: 640
+      y: 300
+      width: 92
+      height: 84
+      strokeColor: "#1e1e1e"
+    - id: sl-box4
+      kind: rectangle
+      x: 740
+      y: 300
+      width: 92
+      height: 84
+      strokeColor: "#1e1e1e"
+    - id: sl-val0
+      kind: text
+      x: 368
+      y: 324
+      width: 60
       height: 40
-      text: "A slice — a borrowed view"
+      text: "10"
       strokeColor: "#1e1e1e"
-      fontSize: 36
-    - id: sl-arr-card
+      fontSize: 30
+    - id: sl-val1
+      kind: text
+      x: 468
+      y: 324
+      width: 60
+      height: 40
+      text: "20"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: sl-val2
+      kind: text
+      x: 568
+      y: 324
+      width: 60
+      height: 40
+      text: "30"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: sl-val3
+      kind: text
+      x: 668
+      y: 324
+      width: 60
+      height: 40
+      text: "40"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: sl-val4
+      kind: text
+      x: 768
+      y: 324
+      width: 60
+      height: 40
+      text: "50"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: sl-idx0
+      kind: text
+      x: 380
+      y: 398
+      width: 30
+      height: 26
+      text: "0"
+      strokeColor: "#80868b"
+      fontSize: 20
+    - id: sl-idx1
+      kind: text
+      x: 480
+      y: 398
+      width: 30
+      height: 26
+      text: "1"
+      strokeColor: "#80868b"
+      fontSize: 20
+    - id: sl-idx2
+      kind: text
+      x: 580
+      y: 398
+      width: 30
+      height: 26
+      text: "2"
+      strokeColor: "#80868b"
+      fontSize: 20
+    - id: sl-idx3
+      kind: text
+      x: 680
+      y: 398
+      width: 30
+      height: 26
+      text: "3"
+      strokeColor: "#80868b"
+      fontSize: 20
+    - id: sl-idx4
+      kind: text
+      x: 780
+      y: 398
+      width: 30
+      height: 26
+      text: "4"
+      strokeColor: "#80868b"
+      fontSize: 20
+    - id: sl-frame
       kind: rectangle
-      x: 300
-      y: 255
-      width: 660
-      height: 66
+      x: 430
+      y: 288
+      width: 312
+      height: 108
       strokeColor: "#1971c2"
-    - id: sl-arr-text
+    - id: sl-slicelabel
       kind: text
-      x: 322
-      y: 277
-      width: 620
-      height: 30
-      text: "&numbers[1..4]   →   [20, 30, 40]"
-      strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: sl-str-card
-      kind: rectangle
-      x: 300
-      y: 340
-      width: 660
-      height: 66
-      strokeColor: "#f08c00"
-    - id: sl-str-text
-      kind: text
-      x: 322
-      y: 362
-      width: 620
-      height: 30
-      text: '&text[0..6]   →   "borrow"'
-      strokeColor: "#1e1e1e"
+      x: 430
+      y: 414
+      width: 560
+      height: 40
+      text: "&numbers[1..4]  =  [20, 30, 40]"
+      strokeColor: "#1971c2"
       fontSize: 28
     - id: sl-note
       kind: text
-      x: 320
-      y: 436
-      width: 660
-      height: 30
-      text: "just a pointer + a length — no copy"
+      x: 340
+      y: 472
+      width: 700
+      height: 36
+      text: "borrows a pointer + a length — no copy"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 26
 
 build:
   voiceProfile: pocket-alba-v1
@@ -89,12 +200,12 @@ runtime:
 scenes:
   - id: what-is-a-slice
     narration: >
-      [[mark:board]] A slice is a borrowed view into part of a collection. It
-      owns nothing. [[mark:arr]] Take a range of an array, and you get a slice.
-      Here, index one up to four gives the three middle numbers. [[mark:str]]
-      The same works on a string: a byte range gives you a string slice.
-      [[mark:note]] Inside, it's just a pointer and a length — no copying.
-      [[mark:board-close]] Let's build both.
+      [[mark:board]] A slice is a borrowed window into part of a collection.
+      [[mark:show-array]] Here's an array of five numbers, at indices zero
+      through four. [[mark:show-slice]] A slice from index one up to four takes
+      the three middle values — twenty, thirty, forty. [[mark:show-note]] It
+      borrows them through a pointer and a length; nothing is copied.
+      [[mark:board-close]] The same idea works on strings. Let's build it.
     sources:
       - title: "The Rust Book — The Slice Type"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html"
@@ -104,17 +215,34 @@ scenes:
         at: { mark: board }
         open: true
         upsertIds: [sl-title]
-      - id: show-arr
+      - id: show-array
         type: whiteboard.apply
-        at: { mark: arr }
-        upsertIds: [sl-arr-card, sl-arr-text]
-      - id: show-str
+        at: { mark: show-array }
+        upsertIds:
+          [
+            sl-box0,
+            sl-box1,
+            sl-box2,
+            sl-box3,
+            sl-box4,
+            sl-val0,
+            sl-val1,
+            sl-val2,
+            sl-val3,
+            sl-val4,
+            sl-idx0,
+            sl-idx1,
+            sl-idx2,
+            sl-idx3,
+            sl-idx4,
+          ]
+      - id: show-slice
         type: whiteboard.apply
-        at: { mark: str }
-        upsertIds: [sl-str-card, sl-str-text]
+        at: { mark: show-slice }
+        upsertIds: [sl-frame, sl-slicelabel]
       - id: show-note
         type: whiteboard.apply
-        at: { mark: note }
+        at: { mark: show-note }
         upsertIds: [sl-note]
       - id: close-board
         type: whiteboard.apply
