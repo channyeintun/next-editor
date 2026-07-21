@@ -1,0 +1,171 @@
+# One idea: recoverable errors are values — Result<T,E> is Ok or Err, and the
+# ? operator unwraps Ok or returns Err early, so you handle failure without
+# exceptions. Slides introduce Result + ?; the editor calls a parsing function
+# on good and bad input and matches both, then runs.
+# NOTE: slides are interim inline markdown — to be swapped to the branded
+# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-error-handling.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-error-handling
+  title: "Rust error handling: Result and ?"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn parse_and_double(text: &str) -> Result<i32, std::num::ParseIntError> {
+            let n: i32 = text.parse()?;
+            Ok(n * 2)
+        }
+
+        fn main() {
+        }
+  slides:
+    - id: result-slide
+      contentType: markdown
+      name: Result
+      content: |
+        # Result<T, E>
+
+        For errors you can recover from:
+
+        ```
+        enum Result<T, E> { Ok(T), Err(E) }
+        ```
+
+        You must handle **both** Ok and Err.
+    - id: question-slide
+      contentType: markdown
+      name: The ? operator
+      content: |
+        # The ? operator
+
+        ```
+        let n = text.parse()?;
+        ```
+
+        **Ok** → unwrap the value, keep going.
+
+        **Err** → return the error from this function.
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 44
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "ok: 42\ncould not parse\n"
+      stderr: ""
+
+scenes:
+  - id: result
+    narration: >
+      [[mark:show-result]] Some failures you can recover from — bad input, a
+      missing file. Rust models those with Result: a value is either Ok, holding
+      success, or Err, holding the problem. And you must handle both.
+    sources:
+      - title: "The Rust Book — Recoverable Errors with Result"
+        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"
+    actions:
+      - id: show-result
+        type: slide.show
+        at: { mark: show-result }
+        slideId: result-slide
+
+  - id: question-mark
+    narration: >
+      [[mark:show-q]] Checking every Result by hand gets noisy. The
+      question-mark operator helps: on Ok it unwraps the value and keeps going;
+      on Err it returns that error from your function early. Short, and still
+      safe.
+    sources:
+      - title: "The Rust Book — A Shortcut for Propagating Errors: the ? Operator"
+        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#a-shortcut-for-propagating-errors-the--operator"
+    actions:
+      - id: show-q
+        type: slide.show
+        at: { mark: show-q }
+        slideId: question-slide
+
+  - id: the-ok-path
+    narration: >
+      [[mark:open]] Here's a function that parses text into a number.
+      [[mark:type-ok]] See the question-mark after parse? If parsing fails, the
+      error returns right here. Otherwise we double the number and wrap it in
+      Ok. First we call it with twenty-one and match the Ok.
+    sources:
+      - title: "The Rust Book — Where the ? Operator Can Be Used"
+        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#where-the--operator-can-be-used"
+    actions:
+      - id: close-slide
+        type: slide.close
+        at: { scene: start }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-ok
+        type: editor.type
+        at: { mark: type-ok, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "fn main() {\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    match parse_and_double(\"21\") {\n        Ok(v) => println!(\"ok: {v}\"),\n        Err(e) => println!(\"error: {e}\"),\n    }\n"
+
+  - id: the-err-path
+    narration: >
+      [[mark:type-err]] Now we call it with the word oops, which can't be a
+      number. This time parse fails, the question-mark returns the error, and
+      our match lands on the Err arm instead.
+    sources:
+      - title: "The Rust Book — To panic! or Not to panic!"
+        url: "https://doc.rust-lang.org/book/ch09-03-to-panic-or-not-to-panic.html"
+    actions:
+      - id: type-err
+        type: editor.type
+        at: { mark: type-err, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "        Err(e) => println!(\"error: {e}\"),\n    }\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    match parse_and_double(\"oops\") {\n        Ok(v) => println!(\"ok: {v}\"),\n        Err(_) => println!(\"could not parse\"),\n    }\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Twenty-one doubles to forty-two; oops reports
+      it couldn't parse — and nothing crashed. Result plus the question-mark is
+      how Rust handles failure, without exceptions.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "ok: 42"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "let n: i32 = text.parse()?;"
+
+checks:
+  - { type: timing.p95Ms, max: 500 }

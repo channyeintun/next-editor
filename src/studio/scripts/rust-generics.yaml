@@ -1,0 +1,188 @@
+# One idea: generics let you write one definition that works for many types —
+# functions and structs take a type placeholder <T>, and a trait bound
+# (T: PartialOrd) says what T must support; no runtime cost. Slides introduce
+# generics + bounds; the editor reuses one largest() on numbers and words and a
+# generic Pair, then runs.
+# NOTE: slides are interim inline markdown — to be swapped to the branded
+# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-generics.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-generics
+  title: "Rust generics: one definition, many types"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        struct Pair<T> {
+            first: T,
+            second: T,
+        }
+
+        fn largest<T: PartialOrd>(list: &[T]) -> &T {
+            let mut biggest = &list[0];
+            for item in list {
+                if item > biggest {
+                    biggest = item;
+                }
+            }
+            biggest
+        }
+
+        fn main() {
+            let numbers = [3, 7, 2, 9, 4];
+            println!("largest number: {}", largest(&numbers));
+        }
+  slides:
+    - id: generics-slide
+      contentType: markdown
+      name: Generics
+      content: |
+        # Generics
+
+        Write code once, for many types.
+
+        ```
+        fn largest<T>(list: &[T]) -> &T
+        struct Pair<T> { first: T, second: T }
+        ```
+
+        `<T>` is a type placeholder.
+    - id: bounds-slide
+      contentType: markdown
+      name: Trait bounds
+      content: |
+        # Trait bounds
+
+        If `T` could be anything, what can you do with it?
+
+        ```
+        fn largest<T: PartialOrd>(...)
+        ```
+
+        **`T: PartialOrd`** — T must be comparable.
+
+        No runtime cost: a fast version is built per type.
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 45
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "largest number: 9\nlargest word: pear\npair: 1, 2\n"
+      stderr: ""
+
+scenes:
+  - id: generics
+    narration: >
+      [[mark:show-gen]] Generics let you write code once and use it with many
+      types. A function or a struct takes a type placeholder, written T in angle
+      brackets. Largest works on a slice of any T; Pair holds two values of the
+      same T.
+    sources:
+      - title: "The Rust Book — Generic Data Types"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html"
+    actions:
+      - id: show-gen
+        type: slide.show
+        at: { mark: show-gen }
+        slideId: generics-slide
+
+  - id: bounds
+    narration: >
+      [[mark:show-bounds]] But if T could be anything, what can you do with it? A
+      trait bound says what T must support. largest needs T to be comparable, so
+      we write T, colon, PartialOrd. And there's no runtime cost — the compiler
+      builds a fast version for each real type.
+    sources:
+      - title: "The Rust Book — Trait Bound Syntax"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#trait-bound-syntax"
+    actions:
+      - id: show-bounds
+        type: slide.show
+        at: { mark: show-bounds }
+        slideId: bounds-slide
+
+  - id: one-function-many-types
+    narration: >
+      [[mark:open]] Here's largest, already finding the biggest number in a
+      slice. [[mark:type-words]] The same function, unchanged, works on words
+      too — Rust compares strings alphabetically and returns the largest. One
+      function, two types.
+    sources:
+      - title: "The Rust Book — In Function Definitions"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions"
+    actions:
+      - id: close-slide
+        type: slide.close
+        at: { scene: start }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-words
+        type: editor.type
+        at: { mark: type-words, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"largest number: {}\", largest(&numbers));\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let words = [\"pear\", \"apple\", \"fig\"];\n    println!(\"largest word: {}\", largest(&words));\n"
+
+  - id: generic-struct
+    narration: >
+      [[mark:type-pair]] Structs can be generic too. Pair holds two values of
+      the same type. Here we make a Pair of integers and read both fields. Swap
+      in strings, and it would just work.
+    sources:
+      - title: "The Rust Book — In Struct Definitions"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-struct-definitions"
+    actions:
+      - id: type-pair
+        type: editor.type
+        at: { mark: type-pair, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"largest word: {}\", largest(&words));\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let p = Pair { first: 1, second: 2 };\n    println!(\"pair: {}, {}\", p.first, p.second);\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Nine is the largest number, pear the largest
+      word, and the Pair holds one and two. Generics give you one definition
+      that serves many types, all checked at compile time.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "largest word: pear"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "fn largest<T: PartialOrd>(list: &[T]) -> &T {"
+
+checks:
+  - { type: timing.p95Ms, max: 500 }

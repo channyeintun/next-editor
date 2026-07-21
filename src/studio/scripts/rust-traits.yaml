@@ -1,0 +1,184 @@
+# One idea: a trait is shared behavior many types implement (like an
+# interface), and it can supply default methods a type uses as-is or overrides.
+# Slides introduce traits + defaults; the editor has Dog use the default hello
+# and Robot override it, then runs.
+# NOTE: slides are interim inline markdown — to be swapped to the branded
+# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-traits.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-traits
+  title: "Rust traits: shared behavior"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        trait Greet {
+            fn name(&self) -> String;
+            fn hello(&self) -> String {
+                format!("Hello, {}!", self.name())
+            }
+        }
+
+        struct Dog;
+
+        impl Greet for Dog {
+            fn name(&self) -> String {
+                String::from("Rex")
+            }
+        }
+
+        fn main() {
+            let d = Dog;
+            println!("{}", d.hello());
+        }
+  slides:
+    - id: trait-slide
+      contentType: markdown
+      name: Traits
+      content: |
+        # Traits
+
+        Shared behavior many types implement — like an interface.
+
+        ```
+        trait Greet {
+            fn name(&self) -> String;
+        }
+        ```
+
+        Each type provides its own `name`.
+    - id: default-slide
+      contentType: markdown
+      name: Default methods
+      content: |
+        # Default methods
+
+        A trait can supply a **default**:
+
+        ```
+        fn hello(&self) -> String {
+            format!("Hello, {}!", self.name())
+        }
+        ```
+
+        Types use it as-is, or **override** it.
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 46
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "Hello, Rex!\nBEEP. I am Unit-7.\n"
+      stderr: ""
+
+scenes:
+  - id: traits
+    narration: >
+      [[mark:show-trait]] A trait is shared behavior that many types can
+      implement, a bit like an interface. Greet says any type that greets must
+      provide a name. Then Dog, Robot, anything, can implement it in its own way.
+    sources:
+      - title: "The Rust Book — Defining a Trait"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#defining-a-trait"
+    actions:
+      - id: show-trait
+        type: slide.show
+        at: { mark: show-trait }
+        slideId: trait-slide
+
+  - id: defaults
+    narration: >
+      [[mark:show-default]] Traits can also give a default method. Greet's hello
+      is written once, in terms of name. A type can use that default as-is, or
+      override it with its own version.
+    sources:
+      - title: "The Rust Book — Default Implementations"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#default-implementations"
+    actions:
+      - id: show-default
+        type: slide.show
+        at: { mark: show-default }
+        slideId: default-slide
+
+  - id: dog-uses-default
+    narration: >
+      [[mark:open]] Here's the Greet trait. Dog implements only name, returning
+      Rex. So Dog uses the default hello — and calling it gives Hello, Rex.
+    sources:
+      - title: "The Rust Book — Implementing a Trait on a Type"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#implementing-a-trait-on-a-type"
+    actions:
+      - id: close-slide
+        type: slide.close
+        at: { scene: start }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+
+  - id: robot-overrides
+    narration: >
+      [[mark:type-robot]] Now Robot. It implements name, returning Unit-7, and
+      this time it overrides hello with its own beeping version.
+      [[mark:type-call]] We create a Robot and call hello on it.
+    sources:
+      - title: "The Rust Book — Traits as Parameters"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters"
+    actions:
+      - id: type-robot
+        type: editor.type
+        at: { mark: type-robot, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"{}\", d.hello());\n}\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\nstruct Robot;\n\nimpl Greet for Robot {\n    fn name(&self) -> String {\n        String::from(\"Unit-7\")\n    }\n    fn hello(&self) -> String {\n        format!(\"BEEP. I am {}.\", self.name())\n    }\n}\n"
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call }
+        target:
+          file: main.rs
+          after: "    println!(\"{}\", d.hello());\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let r = Robot;\n    println!(\"{}\", r.hello());\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Dog uses the default — Hello, Rex. Robot uses
+      its override — BEEP, I am Unit-7. Traits define shared behavior; defaults
+      save repetition, and each type can still be itself.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "BEEP. I am Unit-7."
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "impl Greet for Robot {"
+
+checks:
+  - { type: timing.p95Ms, max: 500 }

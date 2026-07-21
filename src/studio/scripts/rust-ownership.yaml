@@ -1,0 +1,164 @@
+# One idea: assigning a heap value (String) MOVES ownership — the old binding
+# goes invalid (E0382); Copy types (i32) duplicate instead, and .clone() makes
+# a deep copy on purpose. Slides carry the move + the broken code (an
+# insert-only lesson can't run it); the editor builds the working clone/Copy.
+# NOTE: slides are interim inline markdown — to be swapped to the branded
+# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-ownership.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-ownership
+  title: "Rust ownership: move, Copy, and clone"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let s1 = String::from("owned");
+        }
+  slides:
+    - id: move-slide
+      contentType: markdown
+      name: Ownership moves
+      content: |
+        # Ownership moves
+
+        `let s2 = s1;` — the `String` **moves** to `s2`.
+
+        After the move, `s1` is no longer valid.
+
+        Use it again → **error E0382**, borrow of moved value.
+    - id: copy-slide
+      contentType: markdown
+      name: Copy vs. clone
+      content: |
+        # Copy vs. clone
+
+        **Copy** types — `i32`, `bool`, `char` — duplicate on assign.
+
+        **Heap** types — `String`, `Vec` — move instead.
+
+        Want a real second copy? Call **`.clone()`**.
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 42
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "s1 = owned, s2 = owned\nn = 5, m = 5\n"
+      stderr: ""
+
+scenes:
+  - id: move
+    narration: >
+      [[mark:show-move]] Every value in Rust has exactly one owner. When you
+      assign a String to a new variable, ownership moves — the old name stops
+      working. Use it after the move, and the compiler stops you with error
+      E0382.
+    sources:
+      - title: "The Rust Book — Variables and Data Interacting with Move"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-move"
+    actions:
+      - id: show-move
+        type: slide.show
+        at: { mark: show-move }
+        slideId: move-slide
+
+  - id: copy-vs-clone
+    narration: >
+      [[mark:show-copy]] Small values are different. Types like i32, bool, and
+      char are Copy — assigning them just duplicates the value, and both names
+      stay valid. For heap types like String, you copy on purpose, with clone.
+    sources:
+      - title: "The Rust Book — Stack-Only Data: Copy"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy"
+    actions:
+      - id: show-copy
+        type: slide.show
+        at: { mark: show-copy }
+        slideId: copy-slide
+
+  - id: clone-it
+    narration: >
+      [[mark:open]] So here's a String, s1. [[mark:type-clone]] We call clone to
+      make s2 a full, independent copy. Now both s1 and s2 own their own
+      String — nothing moved, and both print fine.
+    sources:
+      - title: "The Rust Book — Variables and Data Interacting with Clone"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-clone"
+    actions:
+      - id: close-slide
+        type: slide.close
+        at: { scene: start }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-clone
+        type: editor.type
+        at: { mark: type-clone, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    let s1 = String::from(\"owned\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let s2 = s1.clone();\n    println!(\"s1 = {s1}, s2 = {s2}\");\n"
+
+  - id: copy-it
+    narration: >
+      [[mark:type-copy]] Now a plain integer. n is five, and m gets a copy of
+      it. Because i32 is Copy, n is still valid afterward — nothing moved, both
+      hold five.
+    sources:
+      - title: "The Rust Book — What Is Ownership?"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"
+    actions:
+      - id: type-copy
+        type: editor.type
+        at: { mark: type-copy, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"s1 = {s1}, s2 = {s2}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let n = 5;\n    let m = n;\n    println!(\"n = {n}, m = {m}\");\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. s1 and s2 both say owned; n and m both hold
+      five. Move by default keeps ownership clear; clone and Copy are the two
+      ways values get duplicated.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "s1 = owned, s2 = owned"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "let s2 = s1.clone();"
+
+checks:
+  # 500 (not 300): slide lessons become google-svg decks whose per-slide font
+  # paint briefly stalls the main thread at each show/close.
+  - { type: timing.p95Ms, max: 500 }

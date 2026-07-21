@@ -1,0 +1,171 @@
+# One idea: an enum is a type that is exactly one of several variants, and a
+# variant can carry data; Option<T> is the standard enum (Some/None) that
+# replaces null. Slides introduce enums + Option; the editor builds a Status
+# enum matched to text, plus an Option match, then runs.
+# NOTE: slides are interim inline markdown — to be swapped to the branded
+# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-enums.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-enums
+  title: "Rust enums and Option: one of several"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        enum Status {
+            Active,
+            Away(u32),
+        }
+
+        fn main() {
+            let a = Status::Active;
+            let b = Status::Away(15);
+        }
+  slides:
+    - id: enum-slide
+      contentType: markdown
+      name: What is an enum
+      content: |
+        # Enums
+
+        A type that is **one of** a fixed set of variants.
+
+        ```
+        enum Status { Active, Away(u32) }
+        ```
+
+        A variant can carry data — here, minutes away.
+    - id: option-slide
+      contentType: markdown
+      name: Option
+      content: |
+        # Option<T> — no null
+
+        Rust has no null. Instead:
+
+        ```
+        enum Option<T> { Some(T), None }
+        ```
+
+        The compiler makes you handle **both** cases.
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 43
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "active now\naway for 15 min\nvalue 7\n"
+      stderr: ""
+
+scenes:
+  - id: what-is-an-enum
+    narration: >
+      [[mark:show-enum]] An enum is a type that's exactly one of a fixed set of
+      variants. Here a Status is either Active, or Away — and Away carries a
+      number, the minutes someone's been gone. One type, several shapes.
+    sources:
+      - title: "The Rust Book — Defining an Enum"
+        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"
+    actions:
+      - id: show-enum
+        type: slide.show
+        at: { mark: show-enum }
+        slideId: enum-slide
+
+  - id: option
+    narration: >
+      [[mark:show-option]] The most important enum is Option. Rust has no null.
+      A value is either Some, holding data, or None. Because it's an enum, the
+      compiler makes you handle both cases before you use it.
+    sources:
+      - title: "The Rust Book — The Option Enum"
+        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantages-over-null-values"
+    actions:
+      - id: show-option
+        type: slide.show
+        at: { mark: show-option }
+        slideId: option-slide
+
+  - id: match-the-enum
+    narration: >
+      [[mark:open]] Here are our two statuses. [[mark:type-describe]] describe
+      matches on the status. Active gives a fixed message. Away binds the number
+      inside the variant, so we can print how many minutes. We call it on both.
+    sources:
+      - title: "The Rust Book — The match Control Flow Construct"
+        url: "https://doc.rust-lang.org/book/ch06-02-match.html"
+    actions:
+      - id: close-slide
+        type: slide.close
+        at: { scene: start }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-describe
+        type: editor.type
+        at: { mark: type-describe, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    let b = Status::Away(15);\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    println!(\"{}\", describe(&a));\n    println!(\"{}\", describe(&b));\n}\n\nfn describe(s: &Status) -> String {\n    match s {\n        Status::Active => String::from(\"active now\"),\n        Status::Away(mins) => format!(\"away for {mins} min\"),\n    }\n"
+
+  - id: option-match
+    narration: >
+      [[mark:type-option]] Now an Option holding Some seven. We match it too:
+      Some hands us the value, None would be the empty case. There's no way to
+      forget the None — that's how Rust removes null crashes.
+    sources:
+      - title: "The Rust Book — Concise Control Flow with if let"
+        url: "https://doc.rust-lang.org/book/ch06-03-if-let.html"
+    actions:
+      - id: type-option
+        type: editor.type
+        at: { mark: type-option, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"{}\", describe(&b));\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let found: Option<i32> = Some(7);\n    match found {\n        Some(v) => println!(\"value {v}\"),\n        None => println!(\"no value\"),\n    }\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Active reads active now, Away reports fifteen
+      minutes, and the Option gives us its value, seven. Enums name a fixed set
+      of choices; Option is the one that makes null a thing of the past.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "away for 15 min"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "Status::Away(mins) => format!"
+
+checks:
+  - { type: timing.p95Ms, max: 500 }

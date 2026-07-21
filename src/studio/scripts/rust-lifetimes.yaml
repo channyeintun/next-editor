@@ -1,0 +1,150 @@
+# One idea: every reference is valid for some span (its lifetime); the compiler
+# usually infers it, but when references flow in and out of a function you add a
+# lifetime parameter ('a) tying the output to the inputs so the result can't
+# outlast what it borrows. Slides explain it; the editor builds longest(), runs.
+# NOTE: slides are interim inline markdown — to be swapped to the branded
+# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-lifetimes.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-lifetimes
+  title: "Rust lifetimes: references that stay valid"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let a = String::from("borrow checker");
+            let b = String::from("rust");
+            let result = longest(&a, &b);
+            println!("longest: {result}");
+        }
+  slides:
+    - id: lifetimes-slide
+      contentType: markdown
+      name: Lifetimes
+      content: |
+        # Lifetimes
+
+        Every reference is valid for some span — its **lifetime**.
+
+        The compiler usually figures this out for you.
+
+        With references going in and out of a function, it can need a hint.
+    - id: annotation-slide
+      contentType: markdown
+      name: The 'a annotation
+      content: |
+        # The lifetime parameter
+
+        ```
+        fn longest<'a>(x: &'a str, y: &'a str) -> &'a str
+        ```
+
+        `'a` ties the returned reference to the inputs.
+
+        Guarantee: the result never outlasts what it borrows.
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 47
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "longest: borrow checker\n"
+      stderr: ""
+
+scenes:
+  - id: lifetimes
+    narration: >
+      [[mark:show-life]] Every reference in Rust is valid for some span of the
+      program — that span is its lifetime. Most of the time the compiler works
+      this out on its own. But when references go into a function and come back
+      out, it sometimes needs a hint.
+    sources:
+      - title: "The Rust Book — Validating References with Lifetimes"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html"
+    actions:
+      - id: show-life
+        type: slide.show
+        at: { mark: show-life }
+        slideId: lifetimes-slide
+
+  - id: annotation
+    narration: >
+      [[mark:show-ann]] That hint is a lifetime parameter. It doesn't change how
+      long anything lives. It tells the compiler the returned reference comes
+      from the same place as the inputs. So the result can never last longer
+      than what it borrows.
+    sources:
+      - title: "The Rust Book — Lifetime Annotation Syntax"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-annotation-syntax"
+    actions:
+      - id: show-ann
+        type: slide.show
+        at: { mark: show-ann }
+        slideId: annotation-slide
+
+  - id: build-longest
+    narration: >
+      [[mark:open]] Here, main calls longest on two strings, but longest isn't
+      written yet. [[mark:type-longest]] There we go. The lifetime marker on x,
+      y, and the return type ties them together. Whichever string we return, it
+      stays valid as long as both inputs do.
+    sources:
+      - title: "The Rust Book — Lifetime Annotations in Function Signatures"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-annotations-in-function-signatures"
+    actions:
+      - id: close-slide
+        type: slide.close
+        at: { scene: start }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-longest
+        type: editor.type
+        at: { mark: type-longest, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"longest: {result}\");\n}\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\nfn longest<'a>(x: &'a str, y: &'a str) -> &'a str {\n    if x.len() > y.len() {\n        x\n    } else {\n        y\n    }\n}\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Borrow checker is longer than rust, so that's
+      what comes back. Lifetimes are the compiler proving your references always
+      point at valid data. Most stay silent — you annotate only when it asks.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "longest: borrow checker"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {"
+
+checks:
+  - { type: timing.p95Ms, max: 500 }
