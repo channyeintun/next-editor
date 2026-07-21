@@ -67,7 +67,6 @@ scenes:
           file: square.go
           after: "\treturn value * value\n}\n"
           occurrence: 1
-        cadence: fast-explainer
         text: "\nfunc cube(value int) int {\n\treturn value * value * value\n}\n"
 
   - id: call-main
@@ -90,7 +89,6 @@ scenes:
           file: main.go
           after: ", square(i))\n\t}\n"
           occurrence: 1
-        cadence: fast-explainer
         text: "\n\tfmt.Println(\"3 cubed is\", cube(3))\n"
       - id: run
         type: runtime.run

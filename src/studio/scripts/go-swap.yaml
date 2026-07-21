@@ -53,7 +53,6 @@ scenes:
           file: main.go
           after: "import \"fmt\"\n\n"
           occurrence: 1
-        cadence: fast-explainer
         text: "func swap(a, b string) (string, string) {\n\treturn b, a\n}\n\n"
 
   - id: call-and-run
@@ -71,7 +70,6 @@ scenes:
           file: main.go
           after: "\tfmt.Println(a, b)\n"
           occurrence: 1
-        cadence: fast-explainer
         text: "\n\ta, b = swap(a, b)\n\tfmt.Println(a, b)\n"
       - id: run
         type: runtime.run

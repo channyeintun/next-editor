@@ -53,7 +53,12 @@ const scriptOpenFileSchema = scriptActionBase.extend({
 const scriptEditorTypeSchema = scriptActionBase.extend({
   type: z.literal("editor.type"),
   target: scriptTextTargetSchema,
-  cadence: z.enum(["fast-explainer"]).default("fast-explainer"),
+  /**
+   * How the insertion appears: simulated keystrokes ("natural" default,
+   * "fast-explainer" brisker), an incremental per-line reveal with no
+   * keystrokes ("line-by-line"), or the whole block at once ("block").
+   */
+  cadence: z.enum(["natural", "fast-explainer", "line-by-line", "block"]).default("natural"),
   text: z.string().min(1),
 });
 

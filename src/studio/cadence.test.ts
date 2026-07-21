@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  BLOCK_CADENCE,
   FAST_EXPLAINER_CADENCE,
+  LINE_BY_LINE_CADENCE,
+  NATURAL_CADENCE,
   compileTypingChunks,
   createSeededRandom,
   easeInOutCubic,
@@ -9,11 +12,11 @@ import {
 
 const SAMPLE = "func cube(v int) int {\n\treturn v * v * v\n}\n";
 
-describe("compileTypingChunks", () => {
+describe("compileTypingChunks (chars mode)", () => {
   it("is deterministic for the same seed and diverges across seeds", () => {
-    const first = compileTypingChunks(SAMPLE, FAST_EXPLAINER_CADENCE, 42);
-    const second = compileTypingChunks(SAMPLE, FAST_EXPLAINER_CADENCE, 42);
-    const other = compileTypingChunks(SAMPLE, FAST_EXPLAINER_CADENCE, 43);
+    const first = compileTypingChunks(SAMPLE, NATURAL_CADENCE, 42);
+    const second = compileTypingChunks(SAMPLE, NATURAL_CADENCE, 42);
+    const other = compileTypingChunks(SAMPLE, NATURAL_CADENCE, 43);
 
     expect(second).toEqual(first);
     expect(totalTypingDurationMs(other)).not.toBe(totalTypingDurationMs(first));
@@ -25,6 +28,7 @@ describe("compileTypingChunks", () => {
   });
 
   it("never spans a newline inside one chunk", () => {
+    if (FAST_EXPLAINER_CADENCE.mode !== "chars") throw new Error("cadence changed mode");
     const chunks = compileTypingChunks(SAMPLE, FAST_EXPLAINER_CADENCE, 7);
     for (const chunk of chunks) {
       // A newline may only appear as the final character of a chunk.
@@ -34,8 +38,47 @@ describe("compileTypingChunks", () => {
     }
   });
 
+  it("natural is slower than fast-explainer for the same text", () => {
+    const natural = totalTypingDurationMs(compileTypingChunks(SAMPLE, NATURAL_CADENCE, 7));
+    const fast = totalTypingDurationMs(compileTypingChunks(SAMPLE, FAST_EXPLAINER_CADENCE, 7));
+    expect(natural).toBeGreaterThan(fast);
+  });
+
   it("returns no chunks for empty text", () => {
-    expect(compileTypingChunks("", FAST_EXPLAINER_CADENCE, 1)).toEqual([]);
+    expect(compileTypingChunks("", NATURAL_CADENCE, 1)).toEqual([]);
+  });
+});
+
+describe("compileTypingChunks (lines mode)", () => {
+  it("emits exactly one chunk per line — an incremental reveal", () => {
+    const chunks = compileTypingChunks(SAMPLE, LINE_BY_LINE_CADENCE, 7);
+    expect(chunks).toHaveLength(3);
+    expect(chunks.map((chunk) => chunk.text).join("")).toBe(SAMPLE);
+    for (const chunk of chunks) {
+      expect(chunk.text.endsWith("\n")).toBe(true);
+      expect(chunk.delayMs).toBeGreaterThan(0);
+    }
+  });
+
+  it("gives longer lines longer pauses", () => {
+    const cadence = { ...LINE_BY_LINE_CADENCE, jitter: 0 } as typeof LINE_BY_LINE_CADENCE;
+    const chunks = compileTypingChunks("short\nmuch longer line of code here\n", cadence, 7);
+    expect(chunks[1].delayMs).toBeGreaterThan(chunks[0].delayMs);
+  });
+
+  it("is deterministic per seed", () => {
+    expect(compileTypingChunks(SAMPLE, LINE_BY_LINE_CADENCE, 5)).toEqual(
+      compileTypingChunks(SAMPLE, LINE_BY_LINE_CADENCE, 5),
+    );
+  });
+});
+
+describe("compileTypingChunks (block mode)", () => {
+  it("emits the whole insertion as one chunk after a beat", () => {
+    const chunks = compileTypingChunks(SAMPLE, BLOCK_CADENCE, 7);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].text).toBe(SAMPLE);
+    expect(chunks[0].delayMs).toBe(BLOCK_CADENCE.mode === "block" ? BLOCK_CADENCE.pauseMs : -1);
   });
 });
 

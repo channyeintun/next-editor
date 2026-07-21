@@ -1,4 +1,11 @@
-import { FAST_EXPLAINER_CADENCE, compileTypingChunks, createSeededRandom } from "../cadence";
+import {
+  BLOCK_CADENCE,
+  FAST_EXPLAINER_CADENCE,
+  LINE_BY_LINE_CADENCE,
+  NATURAL_CADENCE,
+  compileTypingChunks,
+  createSeededRandom,
+} from "../cadence";
 import { parseStudioPlan, type StudioPlan, type StudioTargetRef } from "../plan";
 import { STUDIO_GO_DOCK_TARGET_ID } from "../targets";
 import {
@@ -53,7 +60,10 @@ interface TimedAction {
 }
 
 const CADENCES = {
+  natural: NATURAL_CADENCE,
   "fast-explainer": FAST_EXPLAINER_CADENCE,
+  "line-by-line": LINE_BY_LINE_CADENCE,
+  block: BLOCK_CADENCE,
 } as const;
 
 /** How long before an action its announcing cursor move should arrive. */

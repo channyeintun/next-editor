@@ -1,6 +1,20 @@
-import { FAST_EXPLAINER_CADENCE, compileTypingChunks } from "../cadence";
+import { compileTypingChunks, type TypingCadence } from "../cadence";
 import { parseStudioPlan, type StudioPlan } from "../plan";
 import { STUDIO_GO_DOCK_TARGET_ID } from "../targets";
+
+/**
+ * Frozen copy of the cadence this fixture's hand-tuned `at` times were laid
+ * out against. Deliberately NOT the shared named cadences — those evolve with
+ * editorial taste, and this archived plan must keep matching its checked-in
+ * narration audio.
+ */
+const M0_CADENCE: TypingCadence = {
+  mode: "chars",
+  charsPerSecond: 16,
+  maxChunkChars: 4,
+  lineBreakPauseMs: 200,
+  jitter: 0.25,
+};
 
 /**
  * M0 vertical-slice plan (docs/agent-lesson-production.md §12): one hard-coded
@@ -178,7 +192,7 @@ export function createM0GoHelloPlan(): StudioPlan {
         timeoutMs: 10_000,
         path: "square.go",
         anchor: { after: SQUARE_GO, occurrence: 1 },
-        chunks: compileTypingChunks(CUBE_FUNCTION, FAST_EXPLAINER_CADENCE, SEED),
+        chunks: compileTypingChunks(CUBE_FUNCTION, M0_CADENCE, SEED),
       },
       {
         id: "cursor-to-main",
@@ -202,7 +216,7 @@ export function createM0GoHelloPlan(): StudioPlan {
         timeoutMs: 10_000,
         path: "main.go",
         anchor: { after: `, square(i))\n\t}\n`, occurrence: 1 },
-        chunks: compileTypingChunks(MAIN_CALL, FAST_EXPLAINER_CADENCE, SEED + 1),
+        chunks: compileTypingChunks(MAIN_CALL, M0_CADENCE, SEED + 1),
       },
       {
         id: "cursor-to-dock",

@@ -5,8 +5,10 @@ import { describe, expect, it } from "vite-plus/test";
 import { canonicalJson } from "../hash";
 import { estimateAlignment } from "./alignment";
 import { CompileError, compileLessonScript, type CompileInput } from "./compile";
+import { splitIntoDialogs } from "./dialogs";
 import { LEXICON_V1, speechTextOf, spokenFormOf } from "./lexicon";
 import { extractNarration } from "./markers";
+import { scheduleDialogs } from "./schedule";
 import { parseLessonScript, type LessonScript } from "./schema";
 
 const PILOT_PATH = resolve(__dirname, "../scripts/go-cube.yaml");
@@ -16,6 +18,11 @@ function loadPilotScript(): LessonScript {
   return parseLessonScript(YAML.parse(readFileSync(PILOT_PATH, "utf8")));
 }
 
+/**
+ * Legacy fixed-timeline input: a whole-narration estimated alignment where
+ * dialogs cannot move. Kept for the failure-gate tests — compile must reject
+ * impossible timelines when fed one.
+ */
 function compileInputFor(script: LessonScript, durationMs = PILOT_DURATION_MS): CompileInput {
   const extracted = extractNarration(
     script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
@@ -25,6 +32,34 @@ function compileInputFor(script: LessonScript, durationMs = PILOT_DURATION_MS): 
     extracted,
     alignment: estimateAlignment(extracted.tokens, durationMs, LEXICON_V1),
     narration: { audioPath: "/studio-fixtures/cache/test.m4a", mimeType: "audio/mp4", durationMs },
+  };
+}
+
+/**
+ * The production path: dialogs scheduled around the actions (narration waits
+ * for typing), with deterministic fake per-dialog durations.
+ */
+function scheduledInputFor(script: LessonScript): CompileInput {
+  const extracted = extractNarration(
+    script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
+  );
+  const dialogs = splitIntoDialogs(extracted);
+  const schedule = scheduleDialogs({
+    script,
+    extracted,
+    dialogs,
+    durationsMs: dialogs.map((dialog) => 400 + dialog.tokens.length * 320),
+    lexicon: LEXICON_V1,
+  });
+  return {
+    script,
+    extracted,
+    alignment: schedule.alignment,
+    narration: {
+      audioPath: "studio-tts://test",
+      mimeType: "audio/wav",
+      durationMs: schedule.totalDurationMs,
+    },
   };
 }
 
@@ -44,7 +79,7 @@ describe("lexicon", () => {
 
 describe("compileLessonScript", () => {
   it("compiles the checked-in pilot script into a valid plan", () => {
-    const { plan, warnings } = compileLessonScript(compileInputFor(loadPilotScript()));
+    const { plan, warnings } = compileLessonScript(scheduledInputFor(loadPilotScript()));
 
     expect(plan.lesson.slug).toBe("go-cube");
     expect(plan.gates?.timingP95MaxMs).toBe(300);
@@ -57,8 +92,8 @@ describe("compileLessonScript", () => {
   });
 
   it("is deterministic — identical inputs produce identical plans", () => {
-    const first = compileLessonScript(compileInputFor(loadPilotScript()));
-    const second = compileLessonScript(compileInputFor(loadPilotScript()));
+    const first = compileLessonScript(scheduledInputFor(loadPilotScript()));
+    const second = compileLessonScript(scheduledInputFor(loadPilotScript()));
     expect(canonicalJson(second.plan)).toBe(canonicalJson(first.plan));
   });
 
@@ -97,7 +132,6 @@ describe("compileLessonScript", () => {
 });
 
 const TOUR_PATH = resolve(__dirname, "../scripts/go-cube-tour.yaml");
-const TOUR_DURATION_MS = 42_323;
 
 describe("multi-surface pilot (go-cube-tour)", () => {
   function loadTourScript(): LessonScript {
@@ -106,7 +140,7 @@ describe("multi-surface pilot (go-cube-tour)", () => {
 
   it("compiles slide and whiteboard actions into the plan", () => {
     const script = loadTourScript();
-    const { plan } = compileLessonScript(compileInputFor(script, TOUR_DURATION_MS));
+    const { plan } = compileLessonScript(scheduledInputFor(script));
 
     const types = new Set(plan.actions.map((action) => action.type));
     expect(types).toContain("slide.show");
