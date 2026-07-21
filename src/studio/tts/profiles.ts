@@ -84,16 +84,18 @@ export interface TtsRequest {
   profile: VoiceProfile;
   speechText: string;
   lexiconVersion: number;
-  /** Noise seed for seeded providers (pocket-tts flow matching). */
+  /** Shared narration noise seed for seeded providers (pocket-tts flow matching). */
   seed?: number;
 }
 
 /**
- * Post-synthesis processing version, folded into every request hash: bump it
- * whenever the audio pipeline after the model changes (v1 = per-dialog
- * silence trimming) so cached dialogs from the old pipeline are not reused.
+ * Synthesis pipeline version, folded into every request hash so cached dialogs
+ * are regenerated when an audio-affecting contract changes.
+ *
+ * v1: per-dialog silence trimming
+ * v2: one deterministic noise seed shared by every dialog in a render
  */
-export const TTS_POST_PROCESS_VERSION = 1;
+export const TTS_PIPELINE_VERSION = 2;
 
 /** Content address of one synthesis request; the cache key for its audio. */
 export function ttsRequestHash(request: TtsRequest): Promise<string> {
@@ -102,6 +104,6 @@ export function ttsRequestHash(request: TtsRequest): Promise<string> {
     speechText: request.speechText,
     lexiconVersion: request.lexiconVersion,
     seed: request.seed,
-    postProcessVersion: TTS_POST_PROCESS_VERSION,
+    pipelineVersion: TTS_PIPELINE_VERSION,
   });
 }

@@ -1,15 +1,14 @@
 import { getCustomVoice } from "./customVoices";
 import { PocketTtsEngine } from "./pocket/engine";
-import { deriveNoiseSeed } from "./pocket/noise";
 import type { PocketVoiceProfile } from "./profiles";
 import { encodeWavPcm16, floatTo16BitPcm, trimSilence } from "./wav";
 
 /**
  * pocket-tts synthesis adapter: one engine per (bundle, voice), batch WAV out.
- * The noise seed derives from the build seed and the dialog text, so the same
- * dialog under the same plan seed reproduces byte-identical audio — even
- * across a cleared cache. Cloned voices load their reference sample from
- * IndexedDB and derive the voice state at engine load (pocket/engine.ts).
+ * Every dialog in a render receives the same noise seed. PocketTTS noise also
+ * affects voice characteristics, so changing it per dialog can create audible
+ * pitch/timbre drift. Cloned voices load their reference sample from IndexedDB
+ * and derive the voice state at engine load (pocket/engine.ts).
  */
 
 const engines = new Map<string, Promise<PocketTtsEngine>>();
@@ -60,10 +59,10 @@ export function preloadPocket(
 export async function synthesizePocketWav(
   profile: PocketVoiceProfile,
   speechText: string,
-  baseSeed: number,
+  noiseSeed: number,
 ): Promise<Uint8Array> {
   const engine = await loadEngine(profile);
-  const result = await engine.synthesize(speechText, deriveNoiseSeed(baseSeed, speechText));
+  const result = await engine.synthesize(speechText, noiseSeed);
   if (result.sampleRate !== profile.sampleRate) {
     throw new Error(
       `pocket-tts produced ${result.sampleRate}Hz audio but the profile pins ${profile.sampleRate}Hz`,

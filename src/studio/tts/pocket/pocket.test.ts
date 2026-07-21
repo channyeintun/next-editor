@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { createSeededGaussian, deriveNoiseSeed } from "./noise";
+import { createSeededGaussian, narrationNoiseSeed } from "./noise";
 import { prepareTextPrompt, splitIntoBestSentences, type PocketTokenizer } from "./textPrep";
 import { parseNpyFloat32, parseVoiceStatesBin } from "./voicesBin";
 
@@ -29,11 +29,19 @@ describe("seeded gaussian noise", () => {
     }
   });
 
-  it("diverges for different seeds and derives stable text seeds", () => {
+  it("diverges for different seeds", () => {
     expect(createSeededGaussian(1).next()).not.toBe(createSeededGaussian(2).next());
-    expect(deriveNoiseSeed(7, "hello")).toBe(deriveNoiseSeed(7, "hello"));
-    expect(deriveNoiseSeed(7, "hello")).not.toBe(deriveNoiseSeed(8, "hello"));
-    expect(deriveNoiseSeed(7, "hello")).not.toBe(deriveNoiseSeed(7, "world"));
+  });
+
+  it("normalizes one shared seed for every narration dialog", () => {
+    const seed = narrationNoiseSeed(7);
+    const beginning = createSeededGaussian(seed);
+    const later = createSeededGaussian(seed);
+
+    for (let i = 0; i < 64; i++) {
+      expect(later.next()).toBe(beginning.next());
+    }
+    expect(narrationNoiseSeed(2 ** 32 + 7)).toBe(seed);
   });
 });
 

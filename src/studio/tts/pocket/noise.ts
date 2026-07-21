@@ -23,12 +23,11 @@ export function createSeededGaussian(seed: number): GaussianSource {
   };
 }
 
-/** Stable 32-bit seed derived from a base seed and a text (FNV-1a mix). */
-export function deriveNoiseSeed(baseSeed: number, text: string): number {
-  let hash = 2166136261 ^ baseSeed;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
+/**
+ * Normalize one plan seed for every independently synthesized dialog.
+ * PocketTTS noise affects voice characteristics, so deriving a new seed from
+ * each dialog's text can sound like the speaker changes between segments.
+ */
+export function narrationNoiseSeed(baseSeed: number): number {
+  return baseSeed >>> 0;
 }

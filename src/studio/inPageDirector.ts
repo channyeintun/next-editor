@@ -9,6 +9,7 @@ import { extractNarration } from "./script/markers";
 import { scheduleDialogs } from "./script/schedule";
 import type { LessonScript } from "./script/schema";
 import { getCachedDialogWav, putCachedDialogWav } from "./tts/dialogCache";
+import { narrationNoiseSeed } from "./tts/pocket/noise";
 import { preloadPocket, synthesizePocketWav } from "./tts/pocketSynth";
 import { requireVoiceProfile, ttsRequestHash, type VoiceProfile } from "./tts/profiles";
 import { stitchWavSegments, wavDurationMs } from "./tts/wav";
@@ -20,7 +21,8 @@ import { stitchWavSegments, wavDurationMs } from "./tts/wav";
  * schedule dialogs jointly with the actions, stitch one narration WAV, and
  * compile the absolute-time plan. Deterministic throughout: dialogs are
  * seeded, so edits only re-synthesize the changed spans and repeat builds
- * reproduce identical audio.
+ * reproduce identical audio. All dialogs share one noise seed to keep the
+ * voice's pitch and timbre stable across independently generated spans.
  */
 
 export interface BuiltNarration {
@@ -55,8 +57,8 @@ interface InPageSynthProvider {
   mimeType: string;
   preload(): Promise<unknown>;
   synthesize(speechText: string): Promise<Uint8Array>;
-  /** Seed folded into each dialog's request hash. */
-  seed: number;
+  /** Shared narration seed folded into each dialog's request hash. */
+  noiseSeed: number;
 }
 
 function providerFor(
@@ -65,14 +67,16 @@ function providerFor(
   onPhase?: (phase: string) => void,
 ): InPageSynthProvider {
   switch (profile.providerId) {
-    case "pocket-tts-web":
+    case "pocket-tts-web": {
+      const noiseSeed = narrationNoiseSeed(buildSeed);
       return {
         sampleRate: profile.sampleRate,
         mimeType: profile.mimeType,
-        seed: buildSeed,
+        noiseSeed,
         preload: () => preloadPocket(profile, onPhase),
-        synthesize: (speechText) => synthesizePocketWav(profile, speechText, buildSeed),
+        synthesize: (speechText) => synthesizePocketWav(profile, speechText, noiseSeed),
       };
+    }
     default:
       throw new Error(
         `Voice profile "${profile.id}" (${profile.providerId}) cannot synthesize in the page`,
@@ -107,7 +111,7 @@ export async function buildPlanFromScript(
       profile,
       speechText,
       lexiconVersion: LEXICON_V1.version,
-      seed: provider.seed,
+      seed: provider.noiseSeed,
     });
     dialogHashes.push(requestHash);
 

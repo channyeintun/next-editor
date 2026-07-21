@@ -95,16 +95,17 @@ Narration is produced **in the page** at render time by the in-page Director
 into dialogs; each dialog synthesizes with **pocket-tts (Kyutai) exported to
 ONNX and run over onnxruntime-web** — KevinAHM's export, pinned to an
 immutable revision, ported as a typed engine in `src/studio/tts/pocket/` with
-one deliberate change: the flow-matching noise is **seeded** from the build
-seed + dialog text, so a dialog's audio is byte-reproducible even across a
-cleared cache (upstream uses `Math.random()`). Synthesis goes through a
-per-dialog content-addressed cache in the browser's Cache storage; the
-scheduler then places dialogs **around the actions** (narration waits while
-typing finishes — marker times are exact by construction) and stitches the
-segments into the single WAV the recorder consumes. Editing one sentence
-re-synthesizes only that dialog. The ~125MB bundle (int8 ONNX + voices)
-downloads once into the browser cache; the repo carries no narration audio
-(the archived M0 fixture aside). Voices come precomputed in the bundle
+one deliberate change: the flow-matching noise is **seeded once from the build
+seed and reused for every dialog**. That keeps the voice's pitch and timbre
+stable between independently generated spans while preserving byte-identical
+rebuilds (upstream uses `Math.random()`). Synthesis goes through a per-dialog
+content-addressed cache in the browser's Cache storage; the scheduler then
+places dialogs **around the actions** (narration waits while typing finishes —
+marker times are exact by construction) and stitches the segments into the
+single WAV the recorder consumes. Editing one sentence re-synthesizes only
+that dialog. The ~125MB bundle (int8 ONNX + voices) downloads once into the
+browser cache; the repo carries no narration audio (the archived M0 fixture
+aside). Voices come precomputed in the bundle
 (`alba` default; azelma, cosette, eponine, fantine, javert, jean, marius —
 a new voice is a one-line profile in `src/studio/tts/profiles.ts`).
 
