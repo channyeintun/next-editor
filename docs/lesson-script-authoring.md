@@ -55,16 +55,18 @@ critiqued in the page), press **Start render**, watch, and **Create draft…**
    → fix schema/marker errors; weigh critic notes (advisory);
      writes <slug>.critique.json next to the YAML
 3. Render   bun run dev   (separate terminal, keep running)
-            bun scripts/studio-render.ts <slug>  # 2 headless renders + gates
-   → exit 0 = every check and the repeatability comparison passed
-   → artifacts in studio-out/<slug>-<timestamp>/ (reports, bundle, screenshots)
+            open /studio?plan=<slug> in a real Chrome, press Start render,
+            watch the performance, confirm "Checks (N/N ok)" + receipts
+   → agents with browser access drive the user's Chrome and watch live;
+     do not verify with the headless harness
+     (bun scripts/studio-render.ts exists for CI/repeatability audits only)
 4. A human watches the lesson (/studio?plan=<slug>) and decides on a draft.
 ```
 
 Step 2 is convenience — the same validation runs in the page — but it catches
-errors without a browser. Headless renders need Chrome and network for the
-one-time TTS bundle download; if your environment cannot run a browser, stop
-after step 2 and report that the render is pending.
+errors without a browser. Renders need Chrome and network for the one-time
+TTS bundle download; if your environment cannot run a browser, stop after
+step 2 and report that the render is pending.
 
 ## Schema reference
 

@@ -1,6 +1,6 @@
 ---
 name: lesson-script
-description: Author a Next Editor studio lesson — a narrated, auto-performed coding lesson defined as a LessonScript YAML. Use when asked to create/write/draft a lesson, a studio script, a narrated tutorial, or to fix a failing lesson render. Covers writing the YAML, compiling with the Director, rendering headlessly, and reading the QA gates.
+description: Author a Next Editor studio lesson — a narrated, auto-performed coding lesson defined as a LessonScript YAML. Use when asked to create/write/draft a lesson, a studio script, a narrated tutorial, or to fix a failing lesson render. Covers writing the YAML, compiling with the Director, verifying the render in Chrome, and reading the QA gates.
 ---
 
 # Author a studio LessonScript
@@ -34,13 +34,18 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
    - Scripts auto-register by filename — do not edit
      `src/studio/plans/index.ts`. The YAML is the only artifact; end users can
      alternatively import it via /studio's **Import…** on the website.
-5. **Render** (needs Chrome + network; dev server in a separate terminal):
-   - `bun run dev` (background), then `bun scripts/studio-render.ts <slug>`
-   - Exit 0 means both renders passed all gates and repeatability. On failure,
-     read `studio-out/<slug>-*/run-*-report.json` (receipts name the failing
-     action) and the failure table in the authoring doc.
-   - If the environment cannot run a browser, stop after step 4 and say the
-     render is pending.
+5. **Render — verify in the user's Chrome, never headless** (user rule):
+   - `bun run dev` (background), then drive the real Chrome via
+     claude-in-chrome: open `/studio?plan=<slug>`, press **Start render**,
+     and watch the performance live (slides, typing, run) with periodic
+     screenshots. Confirm the checks heading (e.g. "Checks (13/13 ok)") and
+     scan the receipts for drift.
+   - Do NOT run `bun scripts/studio-render.ts` for verification — the user
+     wants to see the render happen and judge its visual feel.
+   - On failure, the receipts panel names the failing action; see the failure
+     table in the authoring doc.
+   - If no browser is available (e.g. Codex on the VPS), stop after step 4
+     and say the render is pending.
 6. **Report**: slug, narration length, actions used, critic notes kept vs
    fixed, render/gate results. A human reviews the lesson before any draft is
    created — never call the lesson done, only rendered.
