@@ -13,6 +13,8 @@ function makeSemantics(overrides: Partial<RenderSemantics> = {}): RenderSemantic
     captionText: "hello\nworld",
     audioSha256: "feedbeef",
     consoleLines: ["[go-run] go run main.go", "ok", "[go-run] Program exited"],
+    previewState: { finalRoute: null, checkpoints: [] },
+    previewInteractionSequence: [],
     durationMs: 21_778,
     ...overrides,
   };
@@ -64,5 +66,27 @@ describe("compareRenderSemantics", () => {
   it("flags duration drift beyond the tolerance", () => {
     const second = makeSemantics({ durationMs: 23_000 });
     expect(failedIds(compareRenderSemantics(makeSemantics(), second))).toEqual(["repeat.duration"]);
+  });
+
+  it("flags diverged normalized preview state and interaction sequence", () => {
+    const first = makeSemantics({
+      previewState: {
+        finalRoute: "/done",
+        checkpoints: [{ actionId: "assert", route: "/done" }],
+      },
+      previewInteractionSequence: [{ type: "click", testId: "submit" }],
+    });
+    const second = makeSemantics({
+      previewState: {
+        finalRoute: "/wrong",
+        checkpoints: [{ actionId: "assert", route: "/wrong" }],
+      },
+      previewInteractionSequence: [{ type: "click", testId: "cancel" }],
+    });
+
+    expect(failedIds(compareRenderSemantics(first, second))).toEqual([
+      "repeat.previewState",
+      "repeat.previewInteractions",
+    ]);
   });
 });

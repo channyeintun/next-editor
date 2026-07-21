@@ -343,6 +343,7 @@ export async function runStudioRender(
     whiteboardStore: deps.whiteboardStore,
     notifySlideEvent: (event) => deps.nextEditor.handleSlideEvent(event),
     notifyWhiteboardEvent: (event) => deps.nextEditor.handleWhiteboardEvent(event),
+    notifyPreviewEvent: (event) => deps.nextEditor.handlePreviewEvent(event),
     runtimeMode,
     runtime: plan.runtime,
     planSeed: plan.seed,
@@ -427,7 +428,12 @@ export async function runStudioRender(
     neBlob = files.ne;
     audioFileName = files.audio?.name ?? "";
     const neBytes = new Uint8Array(await files.ne.arrayBuffer());
-    checks = await runArtifactChecks({ recording, neBytes, plan });
+    checks = await runArtifactChecks({
+      recording,
+      neBytes,
+      plan,
+      capturePreviewScreenshot: deps.preview.captureScreenshot,
+    });
     if (plan.gates?.timingP95MaxMs !== undefined) {
       checks.push(timingGateCheck(computeTimingStats(receipts), plan.gates.timingP95MaxMs));
     }

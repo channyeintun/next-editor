@@ -25,7 +25,98 @@ export interface RenderSemantics {
   captionText: string;
   audioSha256: string;
   consoleLines: string[];
+  previewState: {
+    finalRoute: string | null;
+    checkpoints: {
+      actionId: string;
+      route: string;
+      target?: {
+        attributes: Record<string, string>;
+        tagName: string;
+        testId: string;
+        text: string;
+        value: string | null;
+      };
+    }[];
+  };
+  previewInteractionSequence: {
+    type: string;
+    mode?: string;
+    route?: string;
+    testId?: string;
+    value?: string;
+    scrollTop?: number;
+    scrollLeft?: number;
+  }[];
   durationMs: number;
+}
+
+function normalizePreviewState(recording: Recording): RenderSemantics["previewState"] {
+  const events = recording.previewEvents ?? [];
+  const checkpoints = events.flatMap((event) => {
+    const checkpoint = event.checkpoint;
+    if (event.type !== "preview_checkpoint" || !checkpoint) return [];
+    const target = checkpoint.target
+      ? {
+          ...checkpoint.target,
+          attributes: Object.fromEntries(
+            Object.entries(checkpoint.target.attributes).sort(([left], [right]) =>
+              left.localeCompare(right),
+            ),
+          ),
+        }
+      : undefined;
+    return [{ actionId: checkpoint.actionId, route: checkpoint.route, target }];
+  });
+  const finalRoute =
+    events
+      .map((event) => event.checkpoint?.route ?? event.route)
+      .filter((route): route is string => typeof route === "string")
+      .at(-1) ??
+    recording.previewInitialDocuments?.at(-1)?.route ??
+    null;
+  return { finalRoute, checkpoints };
+}
+
+function normalizePreviewInteractions(
+  recording: Recording,
+): RenderSemantics["previewInteractionSequence"] {
+  return (recording.previewEvents ?? []).flatMap((event) => {
+    if (event.type === "preview_open") {
+      return [{ type: "open", mode: event.mode }];
+    }
+    if (event.type === "preview_route_change") {
+      return [{ type: "route", route: event.route }];
+    }
+    if (event.type === "preview_scroll") {
+      return [
+        {
+          type: "scroll",
+          scrollTop: event.scrollTop,
+          scrollLeft: event.scrollLeft,
+        },
+      ];
+    }
+    const interaction = event.interaction;
+    if (
+      event.type !== "preview_interaction" ||
+      !interaction ||
+      (interaction.type !== "click" &&
+        interaction.type !== "input" &&
+        interaction.type !== "scroll")
+    ) {
+      return [];
+    }
+    return [
+      {
+        type: interaction.type,
+        testId: interaction.target.testId,
+        value: interaction.data?.value,
+        scrollTop: interaction.data?.scrollTop,
+        scrollLeft: interaction.data?.scrollLeft,
+      },
+    ];
+  });
 }
 
 export async function extractRenderSemantics(
@@ -53,6 +144,8 @@ export async function extractRenderSemantics(
       .join("\n"),
     audioSha256: await sha256Hex(audioBytes),
     consoleLines: lastRuntimeSnapshot?.consoleLines ?? [],
+    previewState: normalizePreviewState(recording),
+    previewInteractionSequence: normalizePreviewInteractions(recording),
     durationMs: recording.duration,
   };
 }
@@ -128,6 +221,28 @@ export function compareRenderSemantics(
     detail: consoleEqual
       ? `${first.consoleLines.length} recorded console lines identical`
       : "recorded console lines differ",
+  });
+
+  const previewStateEqual =
+    JSON.stringify(first.previewState ?? { finalRoute: null, checkpoints: [] }) ===
+    JSON.stringify(second.previewState ?? { finalRoute: null, checkpoints: [] });
+  results.push({
+    id: "repeat.previewState",
+    ok: previewStateEqual,
+    detail: previewStateEqual
+      ? `${first.previewState?.checkpoints.length ?? 0} normalized preview checkpoints identical`
+      : "normalized preview DOM/route state differs",
+  });
+
+  const previewInteractionsEqual =
+    JSON.stringify(first.previewInteractionSequence ?? []) ===
+    JSON.stringify(second.previewInteractionSequence ?? []);
+  results.push({
+    id: "repeat.previewInteractions",
+    ok: previewInteractionsEqual,
+    detail: previewInteractionsEqual
+      ? `${first.previewInteractionSequence?.length ?? 0} preview interactions identical`
+      : "recorded preview interaction sequences differ",
   });
 
   let worstStartDeltaMs = 0;

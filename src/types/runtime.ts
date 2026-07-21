@@ -26,6 +26,20 @@ export interface RuntimeRecordingSnapshot extends RuntimePanelRecordingState {
   errorMessage?: string | null;
   terminalSessions?: RuntimeTerminalSessionSnapshot[];
   activeTerminalSessionId?: string | null;
+  latestPreviewMessage?: {
+    id: number;
+    kind: "console-error" | "uncaught-exception" | "unhandled-rejection";
+    text: string;
+    port: number | null;
+    pathname: string;
+  } | null;
+  latestLifecycleEvent?: {
+    id: number;
+    kind: "port-open" | "port-close" | "internal-error";
+    text: string;
+    port: number | null;
+    url: string | null;
+  } | null;
 }
 
 export interface RuntimeRecordingEvent {

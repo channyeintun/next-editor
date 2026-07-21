@@ -6,7 +6,7 @@ import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import { appendRunnerConsoleLines } from "../runtime/goPlayground/consoleStore";
 import type { SlideEvent } from "../core/src/slides";
 import type { WhiteboardEvent } from "../core/src/whiteboard";
-import type { PreviewPanelMode, PreviewState } from "../types/slides";
+import type { PreviewEvent, PreviewPanelMode, PreviewState } from "../types/slides";
 import { isWorkspaceTextFile } from "../types/workspace";
 import type {
   WebContainerRuntimeActions,
@@ -62,6 +62,8 @@ export interface StudioDriverDeps {
   notifySlideEvent: (event: SlideEvent) => void;
   /** Records a whiteboard event (same send the whiteboard controller makes). */
   notifyWhiteboardEvent: (event: WhiteboardEvent) => void;
+  /** Records authored DOM/route observations for artifact-level revalidation. */
+  notifyPreviewEvent: (event: PreviewEvent) => void;
   runtimeMode: StudioRuntimeMode;
   runtime: StudioRuntime;
   planSeed: number;
@@ -107,6 +109,7 @@ export interface StudioDriver {
     timeoutMs: number;
   }): Promise<Record<string, unknown>>;
   expectPreview(input: {
+    actionId: string;
     target?: StudioPreviewTarget;
     textContains?: string;
     value?: string;
@@ -520,14 +523,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       return { acknowledgement };
     },
 
-    async expectPreview({
-      target,
-      textContains,
-      value,
-      route,
-      attribute,
-      timeoutMs,
-    }) {
+    async expectPreview({ actionId, target, textContains, value, route, attribute, timeoutMs }) {
       if (deps.runtime.kind !== "webcontainer") {
         throw new StudioActionError(
           `expect.preview requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
@@ -542,7 +538,9 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         );
         const mismatches: string[] = [];
         if (route !== undefined && inspection.route !== route) {
-          mismatches.push(`route is ${JSON.stringify(inspection.route)}, expected ${JSON.stringify(route)}`);
+          mismatches.push(
+            `route is ${JSON.stringify(inspection.route)}, expected ${JSON.stringify(route)}`,
+          );
         }
         if (textContains !== undefined && !inspection.target?.text.includes(textContains)) {
           mismatches.push(`target text does not contain ${JSON.stringify(textContains)}`);
@@ -566,6 +564,15 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
           });
         }
         assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+        deps.notifyPreviewEvent({
+          type: "preview_checkpoint",
+          timestamp: performance.now(),
+          checkpoint: {
+            actionId,
+            route: inspection.route,
+            target: inspection.target,
+          },
+        });
         return { inspection };
       } catch (error) {
         let diagnosticScreenshot: Record<string, unknown> | undefined;
@@ -574,7 +581,8 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
           diagnosticScreenshot = screenshot;
         } catch (screenshotError) {
           diagnosticScreenshot = {
-            error: screenshotError instanceof Error ? screenshotError.message : String(screenshotError),
+            error:
+              screenshotError instanceof Error ? screenshotError.message : String(screenshotError),
           };
         }
         const detail = error instanceof StudioActionError ? error.detail : undefined;

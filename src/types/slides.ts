@@ -63,6 +63,7 @@ export type IframeInteractionType =
 export interface IframeInteractionTarget {
   tagName: string;
   id?: string;
+  testId?: string;
   className?: string;
   xpath: string; // For precise element targeting during playback
 }
@@ -198,6 +199,21 @@ export interface PreviewState {
   apiClientState?: ApiClientReplayState;
 }
 
+export interface PreviewCheckpointTarget {
+  attributes: Record<string, string>;
+  tagName: string;
+  testId: string;
+  text: string;
+  value: string | null;
+}
+
+/** Artifact-resident observation produced by one authored expect.preview action. */
+export interface PreviewCheckpoint {
+  actionId: string;
+  route: string;
+  target?: PreviewCheckpointTarget;
+}
+
 export interface PreviewEvent {
   type:
     | "preview_open"
@@ -211,6 +227,7 @@ export interface PreviewEvent {
     | "preview_route_change"
     | "preview_refresh"
     | "preview_resize"
+    | "preview_checkpoint"
     | "api_client_mode"
     | "api_client_request"
     | "api_client_response"
@@ -229,4 +246,5 @@ export interface PreviewEvent {
   requestTab?: ApiClientRequestTab;
   apiClientRequest?: ApiClientRecordedRequest;
   apiClientResult?: ApiClientRecordedResult;
+  checkpoint?: PreviewCheckpoint;
 }

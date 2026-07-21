@@ -13,10 +13,15 @@ class FakeElement {
   children: FakeElement[] = [];
   className = "";
   parentElement: FakeElement | null = null;
+  testId = "";
 
   constructor(tagName: string, id = "") {
     this.tagName = tagName;
     this.id = id;
+  }
+
+  getAttribute(name: string) {
+    return name === "data-testid" ? this.testId || null : null;
   }
 }
 
@@ -57,6 +62,7 @@ function createCaptureHarness() {
   const windowTarget = createListenerTarget();
   const body = new FakeElement("BODY");
   const button = new FakeElement("BUTTON", "target");
+  button.testId = "submit";
   body.children.push(button);
   button.parentElement = body;
 
@@ -224,6 +230,7 @@ describe("createIframeInteractionCaptureScript", () => {
         payload: expect.objectContaining({
           target: expect.objectContaining({
             className: "icon stroke-current",
+            testId: "submit",
           }),
           type: "click",
         }),

@@ -319,6 +319,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
         errorMessage: snapshot.errorMessage,
         terminalSessions: snapshot.terminalSessions,
         activeTerminalSessionId: snapshot.activeTerminalSessionId,
+        latestPreviewMessage: snapshot.latestPreviewMessage,
+        latestLifecycleEvent: snapshot.latestLifecycleEvent,
         ...selectRecordingState(runtimePanelStore.getSnapshot().context),
       };
     },

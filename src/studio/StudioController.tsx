@@ -431,7 +431,9 @@ export default function StudioController() {
             captureScreenshot: () => {
               const capture = previewHandle.previewScreenshotCapturer.current;
               if (!capture) {
-                return Promise.reject(new Error("The live preview screenshot bridge is not mounted"));
+                return Promise.reject(
+                  new Error("The live preview screenshot bridge is not mounted"),
+                );
               }
               return capture();
             },
@@ -798,11 +800,28 @@ export default function StudioController() {
             <ul className="mt-1 space-y-0.5 text-[12px] text-rose-300">
               {receipts
                 .filter((receipt) => receipt.error)
-                .map((receipt) => (
-                  <li key={`${receipt.actionId}-error`}>
-                    {receipt.actionId}: {receipt.error}
-                  </li>
-                ))}
+                .map((receipt) => {
+                  const screenshot = receipt.detail?.diagnosticScreenshot;
+                  const screenshotDataUrl =
+                    screenshot &&
+                    typeof screenshot === "object" &&
+                    "dataUrl" in screenshot &&
+                    typeof screenshot.dataUrl === "string"
+                      ? screenshot.dataUrl
+                      : null;
+                  return (
+                    <li key={`${receipt.actionId}-error`}>
+                      {receipt.actionId}: {receipt.error}
+                      {screenshotDataUrl ? (
+                        <img
+                          src={screenshotDataUrl}
+                          alt={`Preview diagnostic for ${receipt.actionId}`}
+                          className="mt-1 max-h-40 rounded border border-rose-400/30"
+                        />
+                      ) : null}
+                    </li>
+                  );
+                })}
             </ul>
           ) : null}
         </div>
@@ -818,12 +837,24 @@ export default function StudioController() {
             </span>
           </h3>
           <ul className="mt-1 space-y-0.5 text-[12px]">
-            {report.checks.map((check) => (
-              <li key={check.id} className={check.ok ? "text-slate-400" : "text-rose-300"}>
-                {check.ok ? "✓" : "✗"} <span className="font-mono">{check.id}</span> —{" "}
-                {check.detail}
-              </li>
-            ))}
+            {report.checks.map((check) => {
+              const screenshot = check.diagnostic?.previewScreenshot;
+              return (
+                <li key={check.id} className={check.ok ? "text-slate-400" : "text-rose-300"}>
+                  {check.ok ? "✓" : "✗"} <span className="font-mono">{check.id}</span> —{" "}
+                  {check.detail}
+                  {screenshot && "dataUrl" in screenshot ? (
+                    <img
+                      src={screenshot.dataUrl}
+                      alt={`Preview diagnostic for ${check.id}`}
+                      className="mt-1 max-h-40 rounded border border-rose-400/30"
+                    />
+                  ) : screenshot && "error" in screenshot ? (
+                    <span className="block text-rose-400">Screenshot: {screenshot.error}</span>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
           {report.errors.length > 0 ? (
             <ul className="mt-1 space-y-0.5 text-[12px] text-rose-300">

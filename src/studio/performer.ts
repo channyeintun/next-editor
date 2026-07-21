@@ -96,6 +96,7 @@ async function invokeAction(
       return driver.expectFile({ path: action.path, contains: action.contains });
     case "expect.preview":
       return driver.expectPreview({
+        actionId: action.id,
         target: action.target,
         textContains: action.textContains,
         value: action.value,

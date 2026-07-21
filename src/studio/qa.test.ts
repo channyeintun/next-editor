@@ -133,6 +133,148 @@ function makeRecording(plan: StudioPlan): Recording {
   };
 }
 
+function makePreviewPlan(): StudioPlan {
+  return parseStudioPlan({
+    schemaVersion: 1,
+    lesson: { slug: "preview-qa-test", title: "Preview QA test", locale: "en-US" },
+    seed: 2,
+    workspace: {
+      lessonType: "typescript",
+      name: "Preview",
+      entryFilePath: "src/main.ts",
+      files: {
+        "package.json": '{"scripts":{"dev":"vite --host 0.0.0.0"}}',
+        "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+        "src/main.ts": "document.body.textContent = 'Ready';\n",
+      },
+    },
+    narration: {
+      audioPath: "/preview.m4a",
+      mimeType: "audio/mp4",
+      expectedDurationMs: DURATION_MS,
+      captions: {
+        id: "studio-narration",
+        language: "en",
+        cues: [{ start: 0, end: 4_500, text: "preview" }],
+      },
+    },
+    runtime: {
+      kind: "webcontainer",
+      adapterVersion: 1,
+      defaultMode: "live",
+      initCommand: "pnpm install --frozen-lockfile",
+      runCommand: "pnpm dev",
+      expectedPort: 5173,
+      lockfilePath: "pnpm-lock.yaml",
+      environment: {},
+    },
+    actions: [
+      {
+        id: "start",
+        type: "runtime.start",
+        at: 10,
+        timeoutMs: 1_000,
+        retry: { maxAttempts: 1, delayMs: 0 },
+      },
+      {
+        id: "ready",
+        type: "runtime.waitForReady",
+        at: 20,
+        timeoutMs: 1_000,
+        retry: { maxAttempts: 2, delayMs: 10 },
+      },
+      {
+        id: "open-preview",
+        type: "preview.open",
+        at: 30,
+        timeoutMs: 1_000,
+        mode: "docked",
+        retry: { maxAttempts: 2, delayMs: 10 },
+      },
+      {
+        id: "submit",
+        type: "preview.click",
+        at: 40,
+        timeoutMs: 1_000,
+        target: { by: "testId", value: "submit" },
+        retry: { maxAttempts: 1, delayMs: 0 },
+      },
+      {
+        id: "assert-result",
+        type: "expect.preview",
+        at: 50,
+        timeoutMs: 1_000,
+        target: { by: "testId", value: "result" },
+        textContains: "Saved",
+        route: "/done",
+        retry: { maxAttempts: 2, delayMs: 10 },
+      },
+    ],
+  });
+}
+
+function makePreviewRecording(plan: StudioPlan): Recording {
+  const recording = makeRecording(plan);
+  recording.tracks = [...(recording.tracks ?? []), { id: "preview-1", kind: "preview" }];
+  recording.previewEvents = [
+    {
+      type: "preview_open",
+      timestamp: 30,
+      isOpen: true,
+      mode: "docked",
+      size: "small",
+    },
+    {
+      type: "preview_interaction",
+      timestamp: 40,
+      interaction: {
+        type: "click",
+        timestamp: 40,
+        target: { tagName: "button", testId: "submit", xpath: "/html/body/button" },
+      },
+    },
+    { type: "preview_route_change", timestamp: 45, route: "/done" },
+    {
+      type: "preview_checkpoint",
+      timestamp: 50,
+      checkpoint: {
+        actionId: "assert-result",
+        route: "/done",
+        target: {
+          attributes: { "data-testid": "result" },
+          tagName: "output",
+          testId: "result",
+          text: "Saved",
+          value: null,
+        },
+      },
+    },
+  ];
+  recording.previewInitialDocuments = [
+    {
+      version: 2,
+      time: 35,
+      documentId: "document-1",
+      route: "/",
+      events: [
+        { type: 4, data: {}, timestamp: 1_000 },
+        { type: 2, data: {}, timestamp: 1_001 },
+      ],
+    },
+  ];
+  recording.previewPatchBatches = [
+    {
+      version: 2,
+      time: 40,
+      source: "runtime-preview",
+      documentId: "document-1",
+      route: "/done",
+      events: [{ type: 3, data: {}, timestamp: 1_010 }],
+    },
+  ];
+  return recording;
+}
+
 async function checksFor(recording: Recording, plan: StudioPlan) {
   const neBytes = await encodeRecordingToStream(recording);
   return runArtifactChecks({ recording, neBytes, plan });
@@ -211,5 +353,47 @@ describe("runArtifactChecks", () => {
     recording.captions = [];
     const checks = await checksFor(recording, plan);
     expect(failedIds(checks)).toContain("captions.attached");
+  });
+
+  it("passes preview records, replay data, interactions, and DOM checkpoints", async () => {
+    const plan = makePreviewPlan();
+    expect(failedIds(await checksFor(makePreviewRecording(plan), plan))).toEqual([]);
+  });
+
+  it("fails a corrupt preview checkpoint with a diagnostic screenshot", async () => {
+    const plan = makePreviewPlan();
+    const recording = makePreviewRecording(plan);
+    recording.previewEvents!.at(-1)!.checkpoint!.target!.text = "Not saved";
+    const checks = await runArtifactChecks({
+      recording,
+      neBytes: await encodeRecordingToStream(recording),
+      plan,
+      capturePreviewScreenshot: async () => ({
+        dataUrl: "data:image/png;base64,cHJldmlldw==",
+        height: 480,
+        width: 640,
+      }),
+    });
+    const checkpoint = checks.find((check) => check.id === "checkpoint.preview.assert-result");
+    expect(checkpoint?.ok).toBe(false);
+    expect(checkpoint?.diagnostic?.previewScreenshot).toMatchObject({ width: 640, height: 480 });
+  });
+
+  it("fails when preview replay data or preview error state is missing", async () => {
+    const plan = makePreviewPlan();
+    const recording = makePreviewRecording(plan);
+    recording.previewPatchBatches = [];
+    recording.runtimeSnapshot!.latestPreviewMessage = {
+      id: 1,
+      kind: "uncaught-exception",
+      text: "boom",
+      port: 5173,
+      pathname: "/",
+    };
+    const checks = await checksFor(recording, plan);
+    const failed = failedIds(checks);
+    expect(failed).toContain("preview.records.required");
+    expect(failed).toContain("preview.replayData");
+    expect(failed).toContain("preview.noErrors");
   });
 });

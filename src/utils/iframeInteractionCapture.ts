@@ -127,6 +127,10 @@ export function createIframeInteractionCaptureScript(
         return {
           tagName: element.tagName.toLowerCase(),
           id: element.id || undefined,
+          testId:
+            typeof element.getAttribute === 'function'
+              ? element.getAttribute('data-testid') || undefined
+              : undefined,
           className: getClassName(element),
           xpath: getXPath(element),
         };

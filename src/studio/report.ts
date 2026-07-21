@@ -30,6 +30,9 @@ export interface StudioCheckResult {
   id: string;
   ok: boolean;
   detail: string;
+  diagnostic?: {
+    previewScreenshot: { dataUrl: string; height: number; width: number } | { error: string };
+  };
 }
 
 export interface TimingStats {
