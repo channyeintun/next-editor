@@ -488,6 +488,24 @@ export default function StudioController() {
     );
   };
 
+  // One surface at a time: while the draft upload is open, the render console
+  // steps aside entirely instead of stacking a modal on top of a panel.
+  if (showDraftModal && artifacts && latest) {
+    // The standard authenticated upload flow: R2 media + a D1 draft row.
+    // Publishing remains a separate owner action in the lessons UI
+    // (docs/agent-lesson-production.md §10). The description pre-fills the
+    // AI-production disclosure + build provenance for the reviewer.
+    return (
+      <UploadLessonModal
+        recording={artifacts.recording}
+        onClose={() => setShowDraftModal(false)}
+        initialTitle={source ? sourceTitle(source) : planSlug}
+        initialDescription={`AI-produced draft — rendered unattended by the Next Editor studio (plan ${latest.result.manifest.planSlug}, plan sha256 ${latest.result.manifest.planHash.slice(0, 16)}, ${latest.result.manifest.runtimeMode} runtime${renderedVoiceName ? `, narrated with the user-cloned voice "${renderedVoiceName}"` : ""}). Review the full lesson before publishing.`}
+        initialTags="studio, ai-produced"
+      />
+    );
+  }
+
   return (
     <div className="fixed right-3 top-14 z-70 w-96 max-h-[75vh] overflow-y-auto rounded-xl border border-slate-700 bg-[#0d1117]/95 p-4 text-slate-200 shadow-2xl backdrop-blur text-[13px] leading-5">
       <div className="flex items-center justify-between gap-2">
@@ -772,20 +790,6 @@ export default function StudioController() {
             </ul>
           ) : null}
         </div>
-      ) : null}
-
-      {showDraftModal && artifacts && latest ? (
-        // The standard authenticated upload flow: R2 media + a D1 draft row.
-        // Publishing remains a separate owner action in the lessons UI
-        // (docs/agent-lesson-production.md §10). The description pre-fills the
-        // AI-production disclosure + build provenance for the reviewer.
-        <UploadLessonModal
-          recording={artifacts.recording}
-          onClose={() => setShowDraftModal(false)}
-          initialTitle={source ? sourceTitle(source) : planSlug}
-          initialDescription={`AI-produced draft — rendered unattended by the Next Editor studio (plan ${latest.result.manifest.planSlug}, plan sha256 ${latest.result.manifest.planHash.slice(0, 16)}, ${latest.result.manifest.runtimeMode} runtime${renderedVoiceName ? `, narrated with the user-cloned voice "${renderedVoiceName}"` : ""}). Review the full lesson before publishing.`}
-          initialTags="studio, ai-produced"
-        />
       ) : null}
 
       {baselineNote ? <p className="mt-3 text-[12px] text-amber-300">{baselineNote}</p> : null}
